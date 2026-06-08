@@ -1,0 +1,373 @@
+import { loadCachedImage } from "../data";
+import {
+  imageSourceCacheKey,
+  imageSourceCacheLimit,
+} from "../constants/catalogue";
+
+export const imageSourceCache = new Map<string, string>();
+export const imageResolvePromises = new Map<string, Promise<string>>();
+export const screenshotPreloadCache = new Set<string>();
+// Sources that have actually finished loading at least once. Unlike
+// screenshotPreloadCache (which is set optimistically when a load starts and
+// removed on failure), this only holds sources we know decoded successfully,
+// so consumers can paint them synchronously without a flicker.
+export const loadedImageSources = new Set<string>();
+
+type ImagePreloadOptions = {
+  decode?: boolean;
+  forceRetry?: boolean;
+};
+
+type IdleWindow = Window & {
+  requestIdleCallback?: (
+    callback: () => void,
+    options?: { timeout?: number }
+  ) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+const imagePreloadPromises = new Map<string, Promise<void>>();
+const imagePreloadFailures = new Map<string, number>();
+const imagePreloadQueue: Array<() => void> = [];
+const maxConcurrentImagePreloads = 4;
+const imagePreloadRetryDelayMs = 10_000;
+let activeImagePreloads = 0;
+
+function runNextImagePreload() {
+  while (
+    activeImagePreloads < maxConcurrentImagePreloads &&
+    imagePreloadQueue.length > 0
+  ) {
+    const run = imagePreloadQueue.shift();
+    if (!run) return;
+
+    activeImagePreloads += 1;
+    run();
+  }
+}
+
+function enqueueImagePreload(task: () => Promise<void>) {
+  return new Promise<void>((resolve, reject) => {
+    imagePreloadQueue.push(() => {
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          activeImagePreloads = Math.max(0, activeImagePreloads - 1);
+          runNextImagePreload();
+        });
+    });
+
+    runNextImagePreload();
+  });
+}
+
+export function runWhenIdle(callback: () => void, timeout = 1200) {
+  if (typeof window === "undefined") {
+    callback();
+    return () => undefined;
+  }
+
+  const idleWindow = window as IdleWindow;
+
+  if (idleWindow.requestIdleCallback) {
+    const handle = idleWindow.requestIdleCallback(callback, { timeout });
+    return () => idleWindow.cancelIdleCallback?.(handle);
+  }
+
+  const handle = window.setTimeout(callback, 0);
+  return () => window.clearTimeout(handle);
+}
+
+export function readStoredImageSourceCache() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(imageSourceCacheKey) ?? "{}"
+    ) as Record<string, string>;
+
+    Object.entries(parsed).forEach(([source, cachedSource]) => {
+      if (typeof source === "string" && typeof cachedSource === "string") {
+        imageSourceCache.set(source, cachedSource);
+      }
+    });
+  } catch {
+    imageSourceCache.clear();
+  }
+}
+
+export function writeStoredImageSourceCache() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const entries = [...imageSourceCache.entries()].slice(
+      -imageSourceCacheLimit
+    );
+    imageSourceCache.clear();
+    entries.forEach(([source, cachedSource]) =>
+      imageSourceCache.set(source, cachedSource)
+    );
+    window.localStorage.setItem(
+      imageSourceCacheKey,
+      JSON.stringify(Object.fromEntries(entries))
+    );
+  } catch {
+    // File cache still works through IPC when localStorage is unavailable or full.
+  }
+}
+
+let cancelPendingCacheWrite: (() => void) | null = null;
+
+// Coalesce localStorage writes: serializing the whole cache on every resolved
+// image caused main-thread jank while scrolling the catalogue. Write at most
+// once per idle window instead.
+export function scheduleStoredImageSourceCacheWrite() {
+  if (typeof window === "undefined") {
+    writeStoredImageSourceCache();
+    return;
+  }
+
+  if (cancelPendingCacheWrite) return;
+
+  cancelPendingCacheWrite = runWhenIdle(() => {
+    cancelPendingCacheWrite = null;
+    writeStoredImageSourceCache();
+  }, 2000);
+}
+
+export function uniqueSources(sources: unknown[]) {
+  return [
+    ...new Set(
+      sources.filter(
+        (source): source is string =>
+          typeof source === "string" && source.length > 0
+      )
+    ),
+  ];
+}
+
+export function cssImageUrl(source: string) {
+  try {
+    return `url("${encodeURI(source).replace(/"/g, "%22")}")`;
+  } catch {
+    return "";
+  }
+}
+
+const steamLibraryAssetFallbackNames = new Set([
+  "library_600x900_2x.jpg",
+  "library_600x900.jpg",
+  "library_capsule_2x.jpg",
+  "library_capsule.jpg",
+  "hero_capsule.jpg",
+]);
+
+function normalizeSteamLibraryAssetName(fileName: string) {
+  if (fileName === "library_capsule.jpg") return "library_600x900.jpg";
+  if (fileName === "library_capsule_2x.jpg") return "library_600x900_2x.jpg";
+  return fileName;
+}
+
+function parseSteamAssetSource(source: string) {
+  try {
+    const url = new URL(source);
+    const proxyMatch = /\/images\/steam\/apps\/(\d+)\/([^/]+)$/i.exec(
+      url.pathname
+    );
+    if (proxyMatch) {
+      const appId = proxyMatch[1];
+      const asset = decodeURIComponent(proxyMatch[2]);
+      if (!/^[a-z0-9_]+\.(?:jpg|jpeg|png|webp)$/i.test(asset)) return null;
+
+      return { appId, asset };
+    }
+
+    if (!/steamstatic\.com$/i.test(url.hostname)) return null;
+
+    const parts = url.pathname.split("/").filter(Boolean);
+    const appsIndex = parts.findIndex(
+      (part, index) => part === "apps" && parts[index - 1] === "steam"
+    );
+    if (appsIndex === -1) return null;
+
+    const appId = parts[appsIndex + 1] ?? "";
+    const firstAssetPart = decodeURIComponent(parts[appsIndex + 2] ?? "");
+    const secondAssetPart = decodeURIComponent(parts[appsIndex + 3] ?? "");
+    const dottedAssetMatch =
+      /^[a-f0-9]{20,}\.([a-z0-9_]+\.(?:jpg|jpeg|png|webp))$/i.exec(
+        firstAssetPart
+      );
+    const asset = dottedAssetMatch
+      ? dottedAssetMatch[1]
+      : /^[a-f0-9]{20,}$/i.test(firstAssetPart)
+        ? secondAssetPart
+        : firstAssetPart;
+
+    if (!/^\d+$/.test(appId)) return null;
+    if (!/^[a-z0-9_]+\.(?:jpg|jpeg|png|webp)$/i.test(asset)) return null;
+
+    return { appId, asset };
+  } catch {
+    return null;
+  }
+}
+
+function steamCdnFallbackForSource(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (!parsed) return "";
+
+  const asset = normalizeSteamLibraryAssetName(parsed.asset);
+  return `https://cdn.cloudflare.steamstatic.com/steam/apps/${parsed.appId}/${asset}`;
+}
+
+export function isPredictableSteamAssetSource(source: string) {
+  return parseSteamAssetSource(source) !== null;
+}
+
+function canResolveSteamLibraryAssetFallback(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (!parsed) return false;
+
+  return steamLibraryAssetFallbackNames.has(parsed.asset.toLowerCase());
+}
+
+export function withCachedImageSources(sources: string[]) {
+  return uniqueSources(
+    sources.flatMap((source) => {
+      const cachedSource = imageSourceCache.get(source);
+      const cdnFallback = steamCdnFallbackForSource(source);
+      return uniqueSources([
+        ...(cachedSource && cachedSource !== source ? [cachedSource] : []),
+        source,
+        ...(cdnFallback && cdnFallback !== source ? [cdnFallback] : []),
+      ]);
+    })
+  );
+}
+
+export async function resolveCachedImageSource(
+  source: string,
+  options: { steamAssetFallback?: boolean } = {}
+) {
+  if (!/^https?:\/\//i.test(source)) return source;
+  if (
+    isPredictableSteamAssetSource(source) &&
+    !(options.steamAssetFallback && canResolveSteamLibraryAssetFallback(source))
+  ) {
+    return source;
+  }
+
+  const cachedSource = imageSourceCache.get(source);
+  if (cachedSource) {
+    return cachedSource;
+  }
+
+  const pending = imageResolvePromises.get(source);
+  if (pending) return pending;
+
+  const promise = loadCachedImage(source)
+    .then((nextSource) => {
+      if (nextSource) {
+        imageSourceCache.set(source, nextSource);
+        scheduleStoredImageSourceCacheWrite();
+        return nextSource;
+      }
+      return source;
+    })
+    .catch(() => source)
+    .finally(() => {
+      imageResolvePromises.delete(source);
+    });
+
+  imageResolvePromises.set(source, promise);
+
+  return promise;
+}
+
+export function preloadBrowserImage(
+  source: string,
+  options: ImagePreloadOptions = {}
+) {
+  if (!source || typeof Image === "undefined") return Promise.resolve();
+
+  const pending = imagePreloadPromises.get(source);
+  if (pending) return pending;
+
+  if (screenshotPreloadCache.has(source)) return Promise.resolve();
+
+  const failedAt = imagePreloadFailures.get(source);
+  if (
+    failedAt &&
+    !options.forceRetry &&
+    Date.now() - failedAt < imagePreloadRetryDelayMs
+  ) {
+    return Promise.resolve();
+  }
+
+  screenshotPreloadCache.add(source);
+
+  const promise = enqueueImagePreload(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const image = new Image();
+
+        image.decoding = "async";
+        image.onload = async () => {
+          if (options.decode && typeof image.decode === "function") {
+            await image.decode().catch(() => undefined);
+          }
+
+          imagePreloadFailures.delete(source);
+          loadedImageSources.add(source);
+          resolve();
+        };
+        image.onerror = () => {
+          screenshotPreloadCache.delete(source);
+          imagePreloadFailures.set(source, Date.now());
+          reject(new Error(`Failed to preload image: ${source}`));
+        };
+        image.src = source;
+      })
+  )
+    .catch(() => undefined)
+    .finally(() => {
+      imagePreloadPromises.delete(source);
+    });
+
+  imagePreloadPromises.set(source, promise);
+
+  return promise;
+}
+
+export function preloadImageSources(
+  sources: string[],
+  options: ImagePreloadOptions & {
+    includeCached?: boolean;
+    idle?: boolean;
+    limit?: number;
+  } = {}
+) {
+  const candidates = uniqueSources(sources).slice(
+    0,
+    options.limit ?? sources.length
+  );
+  const run = () => {
+    candidates.forEach((source) => {
+      void preloadBrowserImage(source, options);
+      if (options.includeCached === false) return;
+
+      void resolveCachedImageSource(source).then((cachedSource) => {
+        if (cachedSource !== source) {
+          void preloadBrowserImage(cachedSource, options);
+        }
+      });
+    });
+  };
+
+  if (options.idle) return runWhenIdle(run);
+
+  run();
+  return () => undefined;
+}
+
+readStoredImageSourceCache();
