@@ -1,87 +1,97 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useMemo, useState } from "react";
+import type { PirateGame } from "./data";
+import type { CatalogueFilters, CatalogueSort } from "./types";
+import {
+  cataloguePageSize,
+  emptyCatalogueFilters,
+  searchDebounceMs,
+} from "./constants/catalogue";
+import { useDebouncedValue } from "./hooks/useDebouncedValue";
+import { useGamesQuery } from "./queries/games";
+import { CataloguePage } from "./pages/CataloguePage";
+import "./app.scss";
 
-type AppStatus = {
-  name: string;
-  version: string;
-  runtime: string;
-  dev: boolean;
-};
-
-type GameDatabaseResult = {
-  games: unknown[];
-  total: number;
-  matched: number;
-  limited: boolean;
-  source: string;
-};
+function noopGame(_game: PirateGame) {
+  return undefined;
+}
 
 function App() {
-  const [status, setStatus] = useState<AppStatus | null>(null);
-  const [database, setDatabase] = useState<GameDatabaseResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [cataloguePage, setCataloguePage] = useState(1);
+  const [catalogueFilters, setCatalogueFilters] =
+    useState<CatalogueFilters>(emptyCatalogueFilters);
+  const [catalogueSort, setCatalogueSort] = useState<CatalogueSort>("popular");
+  const debouncedQuery = useDebouncedValue("", searchDebounceMs);
 
-  useEffect(() => {
-    let cancelled = false;
+  const catalogueRequest = useMemo(
+    () => ({
+      query: debouncedQuery,
+      limit: cataloguePageSize,
+      offset: (cataloguePage - 1) * cataloguePageSize,
+      filters: catalogueFilters,
+      sort: catalogueSort,
+    }),
+    [cataloguePage, debouncedQuery, catalogueFilters, catalogueSort]
+  );
 
-    async function loadStubs() {
-      try {
-        const [nextStatus, nextDatabase] = await Promise.all([
-          invoke<AppStatus>("get_app_status"),
-          invoke<GameDatabaseResult>("get_games"),
-        ]);
+  const catalogueQuery = useGamesQuery(catalogueRequest);
+  const facetsQuery = useGamesQuery(
+    {
+      query: "",
+      limit: 1,
+      offset: 0,
+      filters: emptyCatalogueFilters,
+      sort: "popular",
+      includeFacets: true,
+      facetsOnly: true,
+    },
+    { enabled: catalogueQuery.isSuccess && !catalogueQuery.isFetching }
+  );
 
-        if (cancelled) return;
-        setStatus(nextStatus);
-        setDatabase(nextDatabase);
-      } catch (caught) {
-        if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : String(caught));
-        }
-      }
-    }
-
-    void loadStubs();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const emptySet = useMemo(() => new Set<string>(), []);
+  const database = catalogueQuery.data;
+  const facets = facetsQuery.data?.facets ?? database?.facets;
+  const loading =
+    catalogueQuery.isLoading ||
+    (catalogueQuery.isFetching && !catalogueQuery.data);
+  const filtersLoading = facetsQuery.isLoading || facetsQuery.isFetching;
 
   return (
-    <main className="shell">
-      <section className="hero">
-        <p className="eyebrow">PirateBox Tauri 2</p>
-        <h1>Runtime separado criado</h1>
-        <p>
-          Esta shell valida React, Vite, Tauri 2 e os primeiros comandos Rust
-          stub. O frontend real deve ser migrado a partir da camada
-          <code> pirateboxApi</code> do app Electron.
-        </p>
-      </section>
-
-      <section className="status-grid" aria-label="Estado dos stubs Tauri">
-        <article>
-          <span>Runtime</span>
-          <strong>{status?.runtime ?? "carregando"}</strong>
-        </article>
-        <article>
-          <span>Versao</span>
-          <strong>{status?.version ?? "0.1.0"}</strong>
-        </article>
-        <article>
-          <span>Catalogo</span>
-          <strong>{database ? `${database.total} jogos` : "stub"}</strong>
-        </article>
-        <article>
-          <span>Fonte</span>
-          <strong>{database?.source ?? "tauri-stub"}</strong>
-        </article>
-      </section>
-
-      {error && <p className="error">{error}</p>}
-    </main>
+    <div className="app-shell">
+      <main className="content">
+        <CataloguePage
+          games={database?.games ?? []}
+          facets={facets}
+          filtersLoading={filtersLoading && !facets}
+          loading={loading}
+          query={debouncedQuery}
+          page={cataloguePage}
+          chunkOffset={0}
+          matched={database?.matched ?? 0}
+          filters={catalogueFilters}
+          sort={catalogueSort}
+          animateFilterPlaceholders={false}
+          onFiltersChange={setCatalogueFilters}
+          onSortChange={setCatalogueSort}
+          onPageChange={setCataloguePage}
+          onOpenGame={noopGame}
+          favoriteGameIds={emptySet}
+          addedGameAppIds={emptySet}
+          libraryGameAppIds={emptySet}
+          playableGameAppIds={emptySet}
+          addingGameId={null}
+          launchingGameId={null}
+          removingGameId={null}
+          onToggleFavorite={noopGame}
+          onAddGame={noopGame}
+          onPlayGame={noopGame}
+          onRemoveGame={noopGame}
+          userCollections={[]}
+          onAddGameToCollection={noopGame}
+          onRemoveGameFromCollection={noopGame}
+          pulseLoading={false}
+        />
+      </main>
+    </div>
   );
 }
 
