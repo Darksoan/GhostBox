@@ -218,7 +218,7 @@ Plugins usados:
 `src-tauri/src/lib.rs` ainda ficou grande. Refactor incremental iniciado:
 
 - `catalogue.rs` implementado;
-- `backup.rs` iniciado com comandos de backup root/settings, backup automático settings, pin, custom executable, open/delete e metadata refresh;
+- `backup.rs` iniciado com comandos de backup root/settings, backup automático settings, pin, custom executable, open/delete, metadata refresh, backup manual, restore manual e details;
 - `steam_appcache.rs` implementado;
 - `luatools.rs` implementado;
 - `ludusavi.rs` implementado;
@@ -226,10 +226,22 @@ Plugins usados:
 
 Ainda falta separar de `lib.rs`:
 
-- comandos e helpers de backup/restore manual restantes;
 - Steam profile/login e Steam scan;
 - window lifecycle/tray;
 - playtime/monitoramento de sessão.
+
+## Pendências Restantes Sem Validação Manual
+
+Backend:
+
+- continuar refactor técnico de `src-tauri/src/lib.rs` para módulos de Steam profile/login, Steam scan, window lifecycle/tray e playtime/monitoramento;
+- decidir se `shell_open_external` deve restringir URLs como o Electron fazia ou manter o comportamento atual do frontend/Tauri.
+
+Frontend:
+
+- melhorar UX de Ludusavi/backup com progresso, estado explícito de sidecar ausente e mensagens específicas;
+- adicionar indicador de sessão ativa em cards/listas além do `GameModal`, se desejado;
+- otimizar chunk grande de `GameModal` com lazy imports internos.
 
 ## Frontend Pendente
 

@@ -1,8 +1,15 @@
+use crate::catalogue::fetch_remote_game;
+use crate::ludusavi::{game_title, ludusavi_args, run_ludusavi};
+use crate::steam_appcache;
 use crate::util::text_value;
 use crate::{
-    backup_marker_path, backup_root_status, default_backup_output_path, get_backup_record_entries,
-    is_path_inside_or_equal, load_backup_settings, persist_backup_settings, save_backup_record,
-    save_backup_settings, selected_backup_path, to_backup_root_path, write_backup_root_marker,
+    backup_details_for_path, backup_marker_path, backup_root_status, backup_timestamp,
+    default_backup_output_path, directory_has_content, directory_size, extract_app_id,
+    get_backup_record_entries, is_path_inside_or_equal, load_backup_settings, make_backup_entry,
+    persist_backup_settings, resolve_steam_path, sanitize_folder_name, save_backup_record,
+    save_backup_settings, save_failed_backup_record, save_successful_backup_record,
+    selected_backup_entry_path, selected_backup_path, to_backup_root_path,
+    write_backup_root_marker,
 };
 
 #[tauri::command]
@@ -308,4 +315,184 @@ pub fn backup_delete_folder(
 #[tauri::command]
 pub fn backup_refresh_game_metadata(app: tauri::AppHandle, _app_id: String) -> serde_json::Value {
     load_backup_settings(&app)
+}
+
+#[tauri::command]
+pub async fn backup_get_details(
+    app: tauri::AppHandle,
+    app_id: String,
+    backup_path: Option<String>,
+    api_url: Option<String>,
+) -> Result<Option<serde_json::Value>, String> {
+    let app_id = app_id.trim().to_string();
+    let settings = load_backup_settings(&app);
+    let selected_path = selected_backup_entry_path(&settings, &app_id, backup_path);
+    if app_id.is_empty() || selected_path.is_empty() {
+        return Ok(None);
+    }
+
+    let root = std::path::PathBuf::from(text_value(settings.get("outputPath")));
+    let selected = std::path::PathBuf::from(&selected_path);
+    if !is_path_inside_or_equal(&root, &selected) || !selected.exists() {
+        return Ok(None);
+    }
+
+    let (steam_path, _) = resolve_steam_path(&app, None);
+    let remote_game = fetch_remote_game(&app, app_id.clone(), api_url).await?;
+    let steam_achievements = remote_game
+        .as_ref()
+        .and_then(|game| game.get("achievementList"))
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    backup_details_for_path(
+        &app,
+        &app_id,
+        &selected_path,
+        steam_path.as_deref().unwrap_or_default(),
+        &steam_achievements,
+    )
+    .map(Some)
+}
+
+#[tauri::command]
+pub fn backup_run_game_local(
+    app: tauri::AppHandle,
+    game: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let app_id = extract_app_id(&game);
+    let title = game_title(&game, &app_id);
+    if app_id.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": "",
+            "title": title,
+            "error": "Jogo invÃ¡lido para backup."
+        }));
+    }
+
+    let status = backup_validate_root(app.clone());
+    let settings = status
+        .get("settings")
+        .cloned()
+        .unwrap_or_else(|| load_backup_settings(&app));
+    if status.get("status").and_then(|value| value.as_str()) != Some("ok") {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "title": title,
+            "error": text_value(status.get("message")),
+            "settings": settings
+        }));
+    }
+
+    let output_root = text_value(settings.get("outputPath"));
+    let output_path = std::path::PathBuf::from(&output_root)
+        .join(sanitize_folder_name(&title))
+        .join(backup_timestamp());
+    std::fs::create_dir_all(&output_path).map_err(|error| error.to_string())?;
+    let output_path_text = output_path.to_string_lossy().to_string();
+    let args = ludusavi_args("backup", &app_id, Some(&output_path_text), false);
+
+    if let Err(error) = run_ludusavi(&app, &args) {
+        let _ = std::fs::remove_dir_all(&output_path);
+        let settings = save_failed_backup_record(&app, &app_id, &title, &output_path_text, &error)
+            .unwrap_or(settings);
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "title": title,
+            "outputPath": output_path_text,
+            "error": error,
+            "settings": settings
+        }));
+    }
+
+    if !directory_has_content(&output_path) {
+        let _ = std::fs::remove_dir_all(&output_path);
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "title": title,
+            "skipped": true,
+            "error": "Nenhum save encontrado para backup.",
+            "settings": settings
+        }));
+    }
+
+    if let Some(steam_path) = resolve_steam_path(&app, None).0 {
+        steam_appcache::backup_steam_achievement_files(&steam_path, &app_id, &output_path);
+    }
+
+    let size_bytes = directory_size(std::path::Path::new(&output_path_text)).unwrap_or(0);
+    let entry = make_backup_entry(&output_path_text, size_bytes);
+    let settings = save_successful_backup_record(&app, &app_id, &title, entry)?;
+    Ok(serde_json::json!({
+        "success": true,
+        "appId": app_id,
+        "title": title,
+        "outputPath": output_path_text,
+        "settings": settings
+    }))
+}
+
+#[tauri::command]
+pub fn backup_restore_game_local(
+    app: tauri::AppHandle,
+    game: serde_json::Value,
+    backup_path: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let app_id = extract_app_id(&game);
+    let title = game_title(&game, &app_id);
+    let settings = load_backup_settings(&app);
+    let selected_path = selected_backup_entry_path(&settings, &app_id, backup_path);
+
+    if app_id.is_empty() || selected_path.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "title": title,
+            "error": "Nenhum backup vÃ¡lido encontrado para este jogo.",
+            "settings": settings
+        }));
+    }
+
+    let root = std::path::PathBuf::from(text_value(settings.get("outputPath")));
+    let selected = std::path::PathBuf::from(&selected_path);
+    if !is_path_inside_or_equal(&root, &selected) || !selected.exists() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "title": title,
+            "backupPath": selected_path,
+            "error": "A pasta de backup estÃ¡ fora da raiz configurada ou nÃ£o existe.",
+            "settings": settings
+        }));
+    }
+
+    let args = ludusavi_args("restore", &app_id, Some(&selected_path), false);
+    if let Err(error) = run_ludusavi(&app, &args) {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "title": title,
+            "backupPath": selected_path,
+            "error": error,
+            "settings": settings
+        }));
+    }
+
+    if let Some(steam_path) = resolve_steam_path(&app, None).0 {
+        steam_appcache::restore_steam_achievement_files(&steam_path, &app_id, &selected);
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "appId": app_id,
+        "title": title,
+        "backupPath": selected_path,
+        "backupSizeBytes": directory_size(&selected).unwrap_or(0),
+        "settings": settings
+    }))
 }
