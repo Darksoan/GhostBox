@@ -215,15 +215,21 @@ Plugins usados:
 
 ### Refactor Técnico
 
-`src-tauri/src/lib.rs` ficou grande. Depois da estabilização funcional, separar em módulos:
+`src-tauri/src/lib.rs` ainda ficou grande. Refactor incremental iniciado:
 
-- `catalogue.rs`;
-- `backup.rs`;
-- `steam.rs`;
-- `steam_appcache.rs`;
-- `luatools.rs`;
-- `ludusavi.rs`;
-- `settings.rs`.
+- `catalogue.rs` implementado;
+- `backup.rs` iniciado com comandos de backup root/settings (`get`, `validate`, `ensure`, `set output path`);
+- `steam_appcache.rs` implementado;
+- `luatools.rs` implementado;
+- `ludusavi.rs` implementado;
+- `settings.rs` implementado.
+
+Ainda falta separar de `lib.rs`:
+
+- comandos e helpers de backup/restore restantes;
+- Steam profile/login e Steam scan;
+- window lifecycle/tray;
+- playtime/monitoramento de sessão.
 
 ## Frontend Pendente
 

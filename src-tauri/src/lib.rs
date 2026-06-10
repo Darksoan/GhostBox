@@ -30,6 +30,7 @@ const AUTOMATIC_BACKUP_DEBOUNCE_WINDOW_MS: u64 = 30_000;
 const AUTOMATIC_BACKUP_DELAY_AFTER_CLOSE_MS: u64 = 2_000;
 
 mod achievement_monitor;
+mod backup;
 mod catalogue;
 mod catalogue_cache;
 mod image_cache;
@@ -76,7 +77,7 @@ fn default_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
     })
 }
 
-fn default_backup_output_path(app: &tauri::AppHandle) -> String {
+pub(crate) fn default_backup_output_path(app: &tauri::AppHandle) -> String {
     use tauri::Manager;
 
     app.path()
@@ -492,7 +493,7 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
     save_steam_profile(app, profile)
 }
 
-fn to_backup_root_path(output_path: &str) -> String {
+pub(crate) fn to_backup_root_path(output_path: &str) -> String {
     let path = std::path::PathBuf::from(output_path.trim());
     if path
         .file_name()
@@ -532,11 +533,11 @@ fn normalize_backup_settings(
     })
 }
 
-fn load_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
+pub(crate) fn load_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
     normalize_backup_settings(app, read_json_file(app, BACKUP_SETTINGS_FILE))
 }
 
-fn save_backup_settings(
+pub(crate) fn save_backup_settings(
     app: &tauri::AppHandle,
     patch: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -576,11 +577,11 @@ fn emit_backup_settings_changed(app: &tauri::AppHandle, settings: &serde_json::V
     let _ = app.emit(BACKUP_SETTINGS_CHANGED_EVENT, settings.clone());
 }
 
-fn backup_marker_path(output_path: &str) -> std::path::PathBuf {
+pub(crate) fn backup_marker_path(output_path: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(output_path).join(BACKUP_ROOT_MARKER_FILE)
 }
 
-fn write_backup_root_marker(output_path: &str) -> Result<(), String> {
+pub(crate) fn write_backup_root_marker(output_path: &str) -> Result<(), String> {
     let output_path = std::path::PathBuf::from(output_path);
     std::fs::create_dir_all(&output_path).map_err(|error| error.to_string())?;
     let marker = serde_json::json!({
@@ -597,7 +598,7 @@ fn current_timestamp_string() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-fn backup_root_status(
+pub(crate) fn backup_root_status(
     status: &str,
     output_path: &str,
     settings: serde_json::Value,
@@ -2962,92 +2963,6 @@ fn steam_sign_out(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn backup_get_settings(app: tauri::AppHandle) -> serde_json::Value {
-    load_backup_settings(&app)
-}
-
-#[tauri::command]
-fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
-    let mut settings = load_backup_settings(&app);
-    let output_path = text_value(settings.get("outputPath"));
-
-    if output_path.is_empty() {
-        return backup_root_status(
-            "missing",
-            "",
-            settings,
-            "A pasta de backups ainda nÃ£o foi configurada.",
-        );
-    }
-
-    let output = std::path::PathBuf::from(&output_path);
-    if !output.exists() {
-        if output_path == default_backup_output_path(&app) {
-            match write_backup_root_marker(&output_path) {
-                Ok(()) => {
-                    if let Ok(saved) =
-                        save_backup_settings(&app, serde_json::json!({ "outputPath": output_path }))
-                    {
-                        settings = saved;
-                    }
-                    return backup_root_status(
-                        "ok",
-                        &output_path,
-                        settings,
-                        "Pasta de backups pronta.",
-                    );
-                }
-                Err(error) => {
-                    return backup_root_status(
-                        "missing",
-                        &output_path,
-                        settings,
-                        &format!("NÃ£o foi possÃ­vel criar a pasta de backups padrÃ£o: {error}"),
-                    );
-                }
-            }
-        }
-
-        return backup_root_status(
-            "missing",
-            &output_path,
-            settings,
-            "A pasta de backups configurada nÃ£o foi encontrada. Ela pode ter sido movida ou removida.",
-        );
-    }
-
-    if !backup_marker_path(&output_path).exists() {
-        return backup_root_status(
-            "invalid",
-            &output_path,
-            settings,
-            "A pasta selecionada nÃ£o parece ser uma raiz de backups do PirateBox.",
-        );
-    }
-
-    backup_root_status("ok", &output_path, settings, "Pasta de backups pronta.")
-}
-
-#[tauri::command]
-fn backup_ensure_root(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let settings = load_backup_settings(&app);
-    let output_path = to_backup_root_path(&text_value(settings.get("outputPath")));
-    write_backup_root_marker(&output_path)?;
-    let _ = save_backup_settings(&app, serde_json::json!({ "outputPath": output_path }))?;
-    Ok(backup_validate_root(app))
-}
-
-#[tauri::command]
-fn backup_set_output_path(
-    app: tauri::AppHandle,
-    output_path: String,
-) -> Result<serde_json::Value, String> {
-    let output_path = to_backup_root_path(&output_path);
-    write_backup_root_marker(&output_path)?;
-    save_backup_settings(&app, serde_json::json!({ "outputPath": output_path }))
-}
-
-#[tauri::command]
 fn backup_set_game_automatic(
     app: tauri::AppHandle,
     app_id: String,
@@ -3584,7 +3499,7 @@ fn backup_run_game_local(
         }));
     }
 
-    let status = backup_validate_root(app.clone());
+    let status = backup::backup_validate_root(app.clone());
     let settings = status
         .get("settings")
         .cloned()
@@ -3766,10 +3681,10 @@ pub fn run() {
             steam_save_profile,
             steam_sign_in,
             steam_sign_out,
-            backup_get_settings,
-            backup_validate_root,
-            backup_ensure_root,
-            backup_set_output_path,
+            backup::backup_get_settings,
+            backup::backup_validate_root,
+            backup::backup_ensure_root,
+            backup::backup_set_output_path,
             backup_set_game_automatic,
             backup_set_library_automatic,
             backup_set_entry_pinned,
