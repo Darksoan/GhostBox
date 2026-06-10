@@ -1,7 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AddGameResult,
   AppStatus,
@@ -594,6 +593,6 @@ export const pirateboxApi = {
   },
 
   openExternal(url: string): Promise<void> {
-    return openUrl(url).catch(() => undefined);
+    return invokeOr<void>("shell_open_external", { url }, undefined);
   },
 };

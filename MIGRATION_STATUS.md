@@ -231,7 +231,7 @@ Plugins usados:
 
 Backend:
 
-- decidir se `shell_open_external` deve restringir URLs como o Electron fazia ou manter o comportamento atual do frontend/Tauri.
+- `shell_open_external` restringe URLs externas no backend (`steam://`, `discord.gg`, `discord.com`) e o frontend usa esse command em vez de abrir pelo plugin diretamente.
 
 Frontend:
 

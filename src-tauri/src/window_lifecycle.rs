@@ -177,10 +177,30 @@ pub fn window_close(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Resu
     request_close_main_window(&app, &window)
 }
 
+fn is_allowed_external_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    if trimmed.starts_with("steam://") {
+        return true;
+    }
+
+    let Ok(parsed) = reqwest::Url::parse(trimmed) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+
+    matches!(parsed.host_str(), Some("discord.gg" | "discord.com"))
+}
+
 #[tauri::command]
 pub fn shell_open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
+    if !is_allowed_external_url(&url) {
+        return Err("URL externa não permitida.".to_string());
+    }
+
     app.opener()
-        .open_url(url, None::<&str>)
+        .open_url(url.trim(), None::<&str>)
         .map_err(|error| error.to_string())
 }
