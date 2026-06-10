@@ -4,9 +4,20 @@ Atualizado em: 2026-06-09
 
 ## Resumo
 
-A migração do Electron para Tauri 2 já cobre a maior parte dos fluxos funcionais principais: catálogo remoto, biblioteca Steam local, launch de jogos, backups com Ludusavi sidecar, LuaTools básico e persistência local de configurações.
+A migração do Electron para Tauri 2 está em estado **release candidate funcional** para o runtime do app: catálogo remoto, biblioteca Steam local, launch de jogos, backups com Ludusavi sidecar, LuaTools básico e persistência local de configurações.
 
-Ainda faltam principalmente: refinamentos de UX/empacotamento e validação manual em build release.
+Não declarar como completa até concluir a checklist manual de release/instalador abaixo. Tooling de geração/publicação do catálogo do repo Electron fica fora do runtime Tauri por decisão de escopo.
+
+## Critério Para Declarar Completa
+
+Declarar a migração como completa quando todos estes critérios estiverem satisfeitos:
+
+- build release/instalador validado manualmente no Windows;
+- fluxos principais abaixo marcados como aprovados;
+- nenhuma dependência runtime em Electron, preload, IPC, SQLite local ou `games.sqlite`;
+- decisões de fora de escopo documentadas nesta página.
+
+Status atual: **não completa; release candidate aguardando validação manual**.
 
 ## Já Migrado
 
@@ -260,11 +271,57 @@ Backend básico existe. Ainda pode precisar refinamento para:
 
 ## Ordem Recomendada Para Continuar
 
-1. Validar Window Lifecycle e autostart em build release/instalador.
-2. Validar Steam Profile/Login em build release/instalador.
-3. Validar achievements locais com jogos/ferramentas reais.
-4. Definir storage seguro equivalente para Morrenus fora do Windows, se necessário.
-5. Refatorar `src-tauri/src/lib.rs` em módulos.
+1. Executar a checklist manual de release/instalador.
+2. Corrigir qualquer falha encontrada na checklist.
+3. Definir storage seguro equivalente para Morrenus fora do Windows, se Linux/macOS continuarem no escopo.
+4. Refatorar `src-tauri/src/lib.rs` em módulos depois da estabilização.
+
+## Checklist Manual De Release
+
+Marcar cada item durante validação do instalador `PirateBox_0.1.0_x64-setup.exe` ou MSI gerado pelo Tauri.
+
+- [ ] Instalar em uma máquina Windows limpa ou perfil de usuário limpo.
+- [ ] Abrir pelo atalho/menu iniciar e confirmar título/produto **PirateBox**.
+- [ ] Confirmar que a Home carrega dados remotos (`popular`/`recentlyAdded`) sem SQLite local.
+- [ ] Confirmar busca, filtros, paginação e detalhes do catálogo remoto.
+- [ ] Confirmar que botão X respeita `minimizeToTray`.
+- [ ] Confirmar tray: abrir, ocultar e sair.
+- [ ] Confirmar single instance: abrir segunda instância foca a janela existente.
+- [ ] Confirmar `openAtLogin` cria/remove autostart corretamente.
+- [ ] Confirmar `startMinimized` inicia oculto/minimizado conforme configuração.
+- [ ] Confirmar notificação desktop ao esconder para tray.
+- [ ] Confirmar login Steam OpenID real: browser externo, callback local, perfil/avatar carregados.
+- [ ] Confirmar sign-out remove profile persistido.
+- [ ] Confirmar edição de perfil salva customizações locais.
+- [ ] Confirmar detecção de Steam path e scan de `libraryfolders.vdf`/`appmanifest_*.acf`.
+- [ ] Confirmar scan de jogos LuaTools via `config/stplug-in/*.lua`.
+- [ ] Confirmar launch via executável customizado.
+- [ ] Confirmar launch fallback via `steam://rungameid/{appId}`.
+- [ ] Confirmar playtime: `lastTimePlayed`, sessão ativa e duração somada após fechar jogo.
+- [ ] Confirmar backup root: selecionar pasta, validar marker e persistir settings.
+- [ ] Confirmar backup manual com Ludusavi sidecar.
+- [ ] Confirmar restore manual com Ludusavi sidecar.
+- [ ] Confirmar pin/retenção de backups preserva entradas fixadas e limita não fixadas.
+- [ ] Confirmar backup automático pós-jogo para executável customizado monitorável.
+- [ ] Confirmar backup automático pós-jogo para jogo Steam monitorado por `RunningAppID`.
+- [ ] Confirmar toasts in-app e notificações desktop de backup/restore.
+- [ ] Confirmar achievements locais por servidor loopback com token em executável customizado.
+- [ ] Confirmar merge de achievements remotos + desbloqueios locais + appcache Steam.
+- [ ] Confirmar Morrenus: salvar chave, reiniciar app, carregar chave via DPAPI e consultar stats.
+- [ ] Confirmar LuaTools add/remove baixa/extrai apenas `.manifest` e `.lua`, sem secrets.
+- [ ] Confirmar restart Steam abre instalação local ou fallback `steam://open/main` sem matar processo.
+- [ ] Confirmar que `rg "window\.piratebox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri` não retorna ocorrências.
+
+## Fora Do Escopo Do Runtime Tauri
+
+Estes itens do repo Electron continuam fora do runtime Tauri por decisão de escopo. Manter no repo Electron ou em tooling separado, não bloquear a migração do app Tauri.
+
+- Scripts de geração/publicação do catálogo: `build-games-sqlite`, `publish-games-r2`, Workers Cloudflare e jobs de popularidade.
+- Banco local `games.sqlite` e fallbacks locais de catálogo no runtime.
+- Worker thread Node usado para cache/índice local de jogos do Electron.
+- SteamCMD local e evento `steamcmd:ready`; substituído por fallback remoto de assets públicos Steam no Tauri.
+- Python RPC e binário `piratebox-native`; fluxos necessários foram reimplementados em comandos Rust/Tauri ou removidos do runtime.
+- Dependências Electron/preload/IPC (`window.piratebox`, `ipcRenderer`, `contextBridge`, `BrowserWindow`).
 
 ## Observações De Segurança
 
