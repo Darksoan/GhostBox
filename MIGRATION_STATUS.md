@@ -223,18 +223,18 @@ Plugins usados:
 - `steam_appcache.rs` implementado;
 - `luatools.rs` implementado;
 - `ludusavi.rs` implementado;
-- `settings.rs` implementado.
+- `settings.rs` implementado;
+- `window_lifecycle.rs` implementado com tray, close-to-tray, single-instance focus, startup lifecycle e commands de janela/shell.
 
 Ainda falta separar de `lib.rs`:
 
-- window lifecycle/tray;
 - playtime/monitoramento de sessão.
 
 ## Pendências Restantes Sem Validação Manual
 
 Backend:
 
-- continuar refactor técnico de `src-tauri/src/lib.rs` para módulos de window lifecycle/tray e playtime/monitoramento;
+- continuar refactor técnico de `src-tauri/src/lib.rs` para módulo de playtime/monitoramento;
 - decidir se `shell_open_external` deve restringir URLs como o Electron fazia ou manter o comportamento atual do frontend/Tauri.
 
 Frontend:
