@@ -98,7 +98,10 @@ pub fn upsert_pirate_library_game(app: &AppHandle, game: Value) -> Result<(), St
 }
 
 pub fn remove_pirate_library_game(app: &AppHandle, app_id: &str) -> Result<(), String> {
-    let app_id = app_id.chars().filter(char::is_ascii_digit).collect::<String>();
+    let app_id = app_id
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
     if app_id.is_empty() {
         return Ok(());
     }
@@ -245,9 +248,7 @@ pub fn merge_library_games(steam_games: Vec<Value>, added_games: Vec<Value>) -> 
     }
 
     let mut games = games_by_app_id.into_values().collect::<Vec<_>>();
-    games.sort_by(|left, right| {
-        text_value(left.get("title")).cmp(&text_value(right.get("title")))
-    });
+    games.sort_by(|left, right| text_value(left.get("title")).cmp(&text_value(right.get("title"))));
     games
 }
 

@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AddGameResult,
+  AppStatus,
   BackupDetails,
   BackupFolderDeletionResult,
   BackupOutputPathSelectionResult,
@@ -72,6 +73,10 @@ async function invokeOr<T>(
 }
 
 export const pirateboxApi = {
+  getAppStatus(): Promise<AppStatus | undefined> {
+    return invokeOr<AppStatus | undefined>("app_get_status", {}, undefined);
+  },
+
   getHome(): Promise<HomeResult> {
     return invokeOr<HomeResult>(
       "catalogue_get_home",
@@ -278,6 +283,30 @@ export const pirateboxApi = {
     return invokeOr<BackupRootStatus | undefined>(
       "backup_validate_root",
       {},
+      undefined
+    );
+  },
+
+  ensureBackupRoot(): Promise<BackupRootStatus | undefined> {
+    return invokeOr<BackupRootStatus | undefined>(
+      "backup_ensure_root",
+      {},
+      undefined
+    );
+  },
+
+  getBackupSettings(): Promise<BackupSettings | undefined> {
+    return invokeOr<BackupSettings | undefined>(
+      "backup_get_settings",
+      {},
+      undefined
+    );
+  },
+
+  setBackupOutputPath(outputPath: string): Promise<BackupSettings | undefined> {
+    return invokeOr<BackupSettings | undefined>(
+      "backup_set_output_path",
+      { outputPath },
       undefined
     );
   },

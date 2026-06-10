@@ -27,7 +27,10 @@ pub(crate) fn ludusavi_binary_path() -> Result<std::path::PathBuf, String> {
         .ok_or_else(|| "Sidecar do Ludusavi não encontrado.".to_string())
 }
 
-pub(crate) fn run_ludusavi(app: &tauri::AppHandle, args: &[String]) -> Result<serde_json::Value, String> {
+pub(crate) fn run_ludusavi(
+    app: &tauri::AppHandle,
+    args: &[String],
+) -> Result<serde_json::Value, String> {
     let binary = ludusavi_binary_path()?;
     let config_dir = ludusavi_config_dir(app)?;
     let output = std::process::Command::new(binary)

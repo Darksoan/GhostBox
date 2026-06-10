@@ -1,4 +1,4 @@
-﻿pub(crate) const FACETS_VERSION: &str = "facets-v11-primary-tags";
+pub(crate) const FACETS_VERSION: &str = "facets-v11-primary-tags";
 pub(crate) const RANKING_VERSION: &str = "ranking-v7";
 const BACKUP_SETTINGS_FILE: &str = "backup-settings.json";
 const STEAM_PROFILE_FILE: &str = "steam-profile.json";
@@ -16,8 +16,7 @@ const TRAY_QUIT_ID: &str = "quit";
 const APP_USER_MODEL_ID: &str = "com.piratebox.app";
 
 static IS_QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 static STEAM_SIGN_IN_ACTIVE: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 const MAX_PROFILE_AVATAR_BYTES: usize = 512 * 1024;
@@ -33,8 +32,8 @@ mod achievement_monitor;
 mod catalogue;
 mod catalogue_cache;
 mod image_cache;
-mod ludusavi;
 mod luatools;
+mod ludusavi;
 mod pirate_library;
 mod settings;
 mod steam_appcache;
@@ -43,10 +42,15 @@ mod util;
 pub(crate) use catalogue::normalize_api_url;
 pub(crate) use settings::load_startup_settings;
 
-use util::{text_value, EmptyStringExt, merge_object_defaults, object_or_empty, xml_text, escape_html};
-use settings::{read_json_file, write_json_file, remove_data_file, is_startup_setting_enabled, startup_setting_enabled, apply_autostart_settings};
-use ludusavi::{run_ludusavi, ludusavi_args, game_title};
 use catalogue::fetch_remote_game;
+use ludusavi::{game_title, ludusavi_args, run_ludusavi};
+use settings::{
+    apply_autostart_settings, is_startup_setting_enabled, read_json_file, remove_data_file,
+    startup_setting_enabled, write_json_file,
+};
+use util::{
+    escape_html, merge_object_defaults, object_or_empty, text_value, xml_text, EmptyStringExt,
+};
 
 struct AchievementServerState {
     url: String,
@@ -105,7 +109,10 @@ async fn fetch_image_data_url(url: &str, max_bytes: usize) -> String {
     };
     let Ok(response) = client
         .get(parsed)
-        .header(reqwest::header::ACCEPT, "image/avif,image/webp,image/png,image/jpeg,image/*,*/*")
+        .header(
+            reqwest::header::ACCEPT,
+            "image/avif,image/webp,image/png,image/jpeg,image/*,*/*",
+        )
         .send()
         .await
     else {
@@ -126,7 +133,10 @@ async fn fetch_image_data_url(url: &str, max_bytes: usize) -> String {
     if !content_type.starts_with("image/") {
         return String::new();
     }
-    if response.content_length().is_some_and(|length| length > max_bytes as u64) {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
         return String::new();
     }
 
@@ -206,8 +216,12 @@ fn load_steam_profile(app: &tauri::AppHandle) -> Option<serde_json::Value> {
     normalize_steam_profile(&read_json_file(app, STEAM_PROFILE_FILE)?)
 }
 
-fn save_steam_profile(app: &tauri::AppHandle, profile: serde_json::Value) -> Result<serde_json::Value, String> {
-    let profile = normalize_steam_profile(&profile).ok_or_else(|| "Steam profile is invalid".to_string())?;
+fn save_steam_profile(
+    app: &tauri::AppHandle,
+    profile: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let profile =
+        normalize_steam_profile(&profile).ok_or_else(|| "Steam profile is invalid".to_string())?;
     write_json_file(app, STEAM_PROFILE_FILE, &profile)?;
     Ok(profile)
 }
@@ -247,14 +261,20 @@ async fn validate_steam_openid(callback_url: &reqwest::Url) -> Result<bool, Stri
         .map(|(key, value)| (key.to_string(), value.to_string()))
         .collect::<Vec<_>>();
     params.retain(|(key, _)| key != "openid.mode");
-    params.push(("openid.mode".to_string(), "check_authentication".to_string()));
+    params.push((
+        "openid.mode".to_string(),
+        "check_authentication".to_string(),
+    ));
 
     let response = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|error| error.to_string())?
         .post(STEAM_OPENID_ENDPOINT)
-        .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        )
         .form(&params)
         .send()
         .await
@@ -280,7 +300,6 @@ fn steam_id_from_openid(callback_url: &reqwest::Url) -> String {
         .filter(|value| !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit()))
         .unwrap_or_default()
 }
-
 
 fn steam_login_page_html(success: bool, message: &str) -> String {
     let text = if message.trim().is_empty() {
@@ -317,14 +336,18 @@ fn accept_steam_login_callback(
 ) -> Result<(reqwest::Url, std::net::TcpStream), String> {
     use std::io::Read;
 
-    listener.set_nonblocking(true).map_err(|error| error.to_string())?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| error.to_string())?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
 
     while std::time::Instant::now() < deadline {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 let mut buffer = [0_u8; 8192];
-                let length = stream.read(&mut buffer).map_err(|error| error.to_string())?;
+                let length = stream
+                    .read(&mut buffer)
+                    .map_err(|error| error.to_string())?;
                 let request = String::from_utf8_lossy(&buffer[..length]);
                 let path = request
                     .lines()
@@ -387,17 +410,28 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
 
     let _guard = begin_steam_sign_in()?;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
-    let port = listener.local_addr().map_err(|error| error.to_string())?.port();
+    let port = listener
+        .local_addr()
+        .map_err(|error| error.to_string())?
+        .port();
     let state = uuid::Uuid::new_v4().to_string();
     let callback_url = format!("http://127.0.0.1:{port}/steam/callback?state={state}");
-    let mut login_url = reqwest::Url::parse(STEAM_OPENID_ENDPOINT).map_err(|error| error.to_string())?;
-    login_url.query_pairs_mut()
+    let mut login_url =
+        reqwest::Url::parse(STEAM_OPENID_ENDPOINT).map_err(|error| error.to_string())?;
+    login_url
+        .query_pairs_mut()
         .append_pair("openid.ns", "http://specs.openid.net/auth/2.0")
         .append_pair("openid.mode", "checkid_setup")
         .append_pair("openid.return_to", &callback_url)
         .append_pair("openid.realm", &format!("http://127.0.0.1:{port}"))
-        .append_pair("openid.identity", "http://specs.openid.net/auth/2.0/identifier_select")
-        .append_pair("openid.claimed_id", "http://specs.openid.net/auth/2.0/identifier_select");
+        .append_pair(
+            "openid.identity",
+            "http://specs.openid.net/auth/2.0/identifier_select",
+        )
+        .append_pair(
+            "openid.claimed_id",
+            "http://specs.openid.net/auth/2.0/identifier_select",
+        );
 
     app.opener()
         .open_url(login_url.as_str(), None::<&str>)
@@ -496,7 +530,6 @@ fn normalize_backup_settings(
         "customExecutables": object_or_empty(value.get("customExecutables"))
     })
 }
-
 
 fn load_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
     normalize_backup_settings(app, read_json_file(app, BACKUP_SETTINGS_FILE))
@@ -792,10 +825,7 @@ fn get_game_playtime_snapshot(app: &tauri::AppHandle) -> serde_json::Value {
         return persisted;
     }
 
-    let mut snapshot = persisted
-        .as_object()
-        .cloned()
-        .unwrap_or_default();
+    let mut snapshot = persisted.as_object().cloned().unwrap_or_default();
     let now = std::time::SystemTime::now();
 
     for (app_id, session) in sessions {
@@ -911,15 +941,13 @@ fn read_steam_running_app_id() -> Option<String> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let hex_value = stdout
-        .lines()
-        .find_map(|line| {
-            let line = line.trim();
-            if !line.starts_with("RunningAppID") {
-                return None;
-            }
-            line.split_whitespace().last().map(str::to_string)
-        })?;
+    let hex_value = stdout.lines().find_map(|line| {
+        let line = line.trim();
+        if !line.starts_with("RunningAppID") {
+            return None;
+        }
+        line.split_whitespace().last().map(str::to_string)
+    })?;
     let normalized = hex_value.trim_start_matches("0x").trim_start_matches("0X");
     let app_id = u32::from_str_radix(normalized, 16).ok()?;
     Some(app_id.to_string())
@@ -974,12 +1002,7 @@ fn open_game_playtime_session(app: &tauri::AppHandle, game: &serde_json::Value) 
     let _ = record_game_launch_playtime(app, &app_id);
     emit_game_playtimes_snapshot(app);
     if let Some(steam_path) = resolve_steam_path(app, None).0 {
-        achievement_monitor::start_local_achievement_monitor(
-            app,
-            &app_id,
-            &title,
-            &steam_path,
-        );
+        achievement_monitor::start_local_achievement_monitor(app, &app_id, &title, &steam_path);
     }
 }
 
@@ -1041,7 +1064,19 @@ fn run_automatic_backup_after_close(
         } else {
             game
         };
-        let _ = backup_run_game_local(app.clone(), backup_game);
+        match backup_run_game_local(app.clone(), backup_game) {
+            Ok(result) if result.get("success").and_then(|value| value.as_bool()) != Some(true) => {
+                let error = text_value(result.get("error"))
+                    .if_empty("Backup automÃ¡tico falhou.".to_string());
+                let output_path = text_value(result.get("outputPath"));
+                let _ =
+                    save_failed_backup_record(&app, &app_id, &title_fallback, &output_path, &error);
+            }
+            Err(error) => {
+                let _ = save_failed_backup_record(&app, &app_id, &title_fallback, "", &error);
+            }
+            _ => {}
+        }
 
         if let Ok(mut guard) = steam_monitor_state().lock() {
             guard
@@ -1080,12 +1115,7 @@ fn poll_steam_running_app_id(app: &tauri::AppHandle) {
             }
             let title = close_game_playtime_session(app, &closed_app_id).unwrap_or_default();
             let game = resolve_backup_game(&closed_app_id, &title);
-            run_automatic_backup_after_close(
-                app.clone(),
-                closed_app_id,
-                title,
-                game,
-            );
+            run_automatic_backup_after_close(app.clone(), closed_app_id, title, game);
         }
 
         let should_open_session = {
@@ -1115,16 +1145,13 @@ fn poll_steam_running_app_id(app: &tauri::AppHandle) {
         return;
     }
 
-    let closed_app_id = steam_monitor_state()
-        .lock()
-        .ok()
-        .and_then(|mut guard| {
-            let closed = guard.active_running_app_id.take();
-            if let Some(app_id) = closed.as_ref() {
-                guard.pending_games.remove(app_id);
-            }
-            closed
-        });
+    let closed_app_id = steam_monitor_state().lock().ok().and_then(|mut guard| {
+        let closed = guard.active_running_app_id.take();
+        if let Some(app_id) = closed.as_ref() {
+            guard.pending_games.remove(app_id);
+        }
+        closed
+    });
 
     let Some(closed_app_id) = closed_app_id else {
         return;
@@ -1408,8 +1435,7 @@ fn string_similarity(left: &str, right: &str) -> f64 {
         }
     }
 
-    1.0 - (distances[left_chars.len()] as f64
-        / left_chars.len().max(right_chars.len()) as f64)
+    1.0 - (distances[left_chars.len()] as f64 / left_chars.len().max(right_chars.len()) as f64)
 }
 
 fn read_persisted_achievement_stats(
@@ -1537,20 +1563,24 @@ fn mark_local_unlocked_achievements(
             let normalized_name = normalize_search_text(&name);
             let normalized_title = normalize_search_text(&title);
 
-            let backup_match = backup_unlocked.iter().find(|backup| {
-                normalize_search_text(&text_value(backup.get("name"))) == normalized_name
-                    || normalize_search_text(&text_value(backup.get("title"))) == normalized_title
-            }).or_else(|| {
-                backup_unlocked.iter().find(|backup| {
-                    if normalized_title.is_empty() {
-                        return false;
-                    }
-                    string_similarity(
-                        &normalize_search_text(&text_value(backup.get("title"))),
-                        &normalized_title,
-                    ) >= 0.72
+            let backup_match = backup_unlocked
+                .iter()
+                .find(|backup| {
+                    normalize_search_text(&text_value(backup.get("name"))) == normalized_name
+                        || normalize_search_text(&text_value(backup.get("title")))
+                            == normalized_title
                 })
-            });
+                .or_else(|| {
+                    backup_unlocked.iter().find(|backup| {
+                        if normalized_title.is_empty() {
+                            return false;
+                        }
+                        string_similarity(
+                            &normalize_search_text(&text_value(backup.get("title"))),
+                            &normalized_title,
+                        ) >= 0.72
+                    })
+                });
 
             let unlocked = backup_match.is_some()
                 || normalized_unlocked_names.contains(&normalized_name)
@@ -1626,7 +1656,10 @@ pub(crate) fn merge_game_achievement_details(
     };
 
     if let Some(object) = game.as_object_mut() {
-        object.insert("achievementList".to_string(), serde_json::json!(achievement_list));
+        object.insert(
+            "achievementList".to_string(),
+            serde_json::json!(achievement_list),
+        );
         object.insert(
             "achievements".to_string(),
             serde_json::json!({
@@ -1684,9 +1717,8 @@ fn enrich_backup_achievements_with_icons(
                     if let Some(icon) = steam_match.get("icon").filter(|value| !value.is_null()) {
                         object.insert("icon".to_string(), icon.clone());
                     }
-                    if let Some(icon_gray) = steam_match
-                        .get("iconGray")
-                        .filter(|value| !value.is_null())
+                    if let Some(icon_gray) =
+                        steam_match.get("iconGray").filter(|value| !value.is_null())
                     {
                         object.insert("iconGray".to_string(), icon_gray.clone());
                     }
@@ -1697,7 +1729,10 @@ fn enrich_backup_achievements_with_icons(
         .collect()
 }
 
-fn piratebox_achievements_backup_path(settings: &serde_json::Value, title: &str) -> std::path::PathBuf {
+fn piratebox_achievements_backup_path(
+    settings: &serde_json::Value,
+    title: &str,
+) -> std::path::PathBuf {
     std::path::PathBuf::from(text_value(settings.get("outputPath")))
         .join(sanitize_folder_name(title))
         .join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE)
@@ -1763,8 +1798,14 @@ fn read_piratebox_achievements_backup_file(
         if let Some(parent) = backup.parent() {
             candidates.push(parent.join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE));
         }
-        if let Some(record) = settings.get("backupRecords").and_then(|records| records.get(app_id)) {
-            if let Some(last_path) = record.get("lastBackupPath").and_then(|value| value.as_str()) {
+        if let Some(record) = settings
+            .get("backupRecords")
+            .and_then(|records| records.get(app_id))
+        {
+            if let Some(last_path) = record
+                .get("lastBackupPath")
+                .and_then(|value| value.as_str())
+            {
                 candidates.push(
                     std::path::PathBuf::from(last_path).join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE),
                 );
@@ -1911,9 +1952,8 @@ fn record_piratebox_steam_api_achievement_unlock(
         }));
         next
     };
-    next_unlocked.sort_by(|left, right| {
-        text_value(left.get("name")).cmp(&text_value(right.get("name")))
-    });
+    next_unlocked
+        .sort_by(|left, right| text_value(left.get("name")).cmp(&text_value(right.get("name"))));
     let total = resolve_piratebox_achievement_total(
         existing_file
             .as_ref()
@@ -1961,7 +2001,14 @@ fn write_json_http_response(stream: &mut std::net::TcpStream, status: &str, body
     let _ = stream.flush();
 }
 
-fn parse_http_request(raw: &str) -> Option<(String, String, String, std::collections::HashMap<String, String>)> {
+fn parse_http_request(
+    raw: &str,
+) -> Option<(
+    String,
+    String,
+    String,
+    std::collections::HashMap<String, String>,
+)> {
     let (head, body) = raw
         .split_once("\r\n\r\n")
         .or_else(|| raw.split_once("\n\n"))?;
@@ -2032,15 +2079,12 @@ fn handle_achievement_connection(
         return Ok(());
     }
 
-    let payload = serde_json::from_str::<serde_json::Value>(&body).unwrap_or_else(|_| serde_json::json!({}));
+    let payload =
+        serde_json::from_str::<serde_json::Value>(&body).unwrap_or_else(|_| serde_json::json!({}));
     match record_piratebox_steam_api_achievement_unlock(app, &payload) {
         Ok(result) => {
             let body = serde_json::json!({ "ok": true, "result": result });
-            write_json_http_response(
-                stream,
-                "200 OK",
-                &body.to_string(),
-            );
+            write_json_http_response(stream, "200 OK", &body.to_string());
         }
         Err(error) => write_json_http_response(
             stream,
@@ -2073,32 +2117,31 @@ fn start_piratebox_achievement_server(app: tauri::AppHandle) -> Result<(String, 
 
     let app_handle = app.clone();
     let expected_token = token.clone();
-    std::thread::spawn(move || {
-        loop {
-            if stop_rx.try_recv().is_ok() {
-                break;
-            }
-            match listener.accept() {
-                Ok((mut stream, address)) => {
-                    if !is_local_achievement_address(&address) {
-                        write_json_http_response(
-                            &mut stream,
-                            "403 Forbidden",
-                            r#"{"error":"forbidden"}"#,
-                        );
-                        continue;
-                    }
-                    let app_handle = app_handle.clone();
-                    let expected_token = expected_token.clone();
-                    std::thread::spawn(move || {
-                        let _ = handle_achievement_connection(&app_handle, &mut stream, &expected_token);
-                    });
+    std::thread::spawn(move || loop {
+        if stop_rx.try_recv().is_ok() {
+            break;
+        }
+        match listener.accept() {
+            Ok((mut stream, address)) => {
+                if !is_local_achievement_address(&address) {
+                    write_json_http_response(
+                        &mut stream,
+                        "403 Forbidden",
+                        r#"{"error":"forbidden"}"#,
+                    );
+                    continue;
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(_) => break,
+                let app_handle = app_handle.clone();
+                let expected_token = expected_token.clone();
+                std::thread::spawn(move || {
+                    let _ =
+                        handle_achievement_connection(&app_handle, &mut stream, &expected_token);
+                });
             }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => break,
         }
     });
 
@@ -2132,7 +2175,10 @@ fn get_backup_record_entries(record: Option<&serde_json::Value>) -> Vec<serde_js
     }
     let backup_path = text_value(record.get("lastBackupPath"));
     let backup_at = text_value(record.get("lastBackupAt"));
-    if record.get("lastBackupSuccess").and_then(|value| value.as_bool()) != Some(true)
+    if record
+        .get("lastBackupSuccess")
+        .and_then(|value| value.as_bool())
+        != Some(true)
         || backup_path.is_empty()
         || backup_at.is_empty()
     {
@@ -2154,14 +2200,14 @@ fn unique_backup_entries(entries: Vec<serde_json::Value>) -> Vec<serde_json::Val
         if path.is_empty() || backup_at.is_empty() {
             continue;
         }
-        entries_by_path
-            .entry(path.clone())
-            .or_insert_with(|| serde_json::json!({
+        entries_by_path.entry(path.clone()).or_insert_with(|| {
+            serde_json::json!({
                 "path": path,
                 "backupAt": backup_at,
                 "sizeBytes": entry.get("sizeBytes"),
                 "pinned": entry.get("pinned").and_then(|value| value.as_bool()).unwrap_or(false)
-            }));
+            })
+        });
     }
     let mut unique = entries_by_path.into_values().collect::<Vec<_>>();
     unique.sort_by(|left, right| {
@@ -2177,17 +2223,13 @@ fn trim_backup_entries(
     let mut kept = entries;
     let mut removed = Vec::new();
     while kept.len() > limit {
-        let remove_index = kept
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(index, entry)| {
-                if entry.get("pinned").and_then(|value| value.as_bool()) != Some(true) {
-                    Some(index)
-                } else {
-                    None
-                }
-            });
+        let remove_index = kept.iter().enumerate().rev().find_map(|(index, entry)| {
+            if entry.get("pinned").and_then(|value| value.as_bool()) != Some(true) {
+                Some(index)
+            } else {
+                None
+            }
+        });
         let Some(remove_index) = remove_index else {
             break;
         };
@@ -2206,8 +2248,10 @@ fn save_successful_backup_record(
     let current_record = settings
         .get("backupRecords")
         .and_then(|records| records.get(app_id));
-    let all_entries = unique_backup_entries([vec![entry], get_backup_record_entries(current_record)].concat());
-    let (kept_entries, removed_entries) = trim_backup_entries(all_entries, BACKUP_ENTRY_RETENTION_LIMIT);
+    let all_entries =
+        unique_backup_entries([vec![entry], get_backup_record_entries(current_record)].concat());
+    let (kept_entries, removed_entries) =
+        trim_backup_entries(all_entries, BACKUP_ENTRY_RETENTION_LIMIT);
     if kept_entries.is_empty() {
         return Ok(settings);
     }
@@ -2299,7 +2343,8 @@ fn launch_custom_executable(
             open_game_playtime_session(&app, &game);
             std::thread::spawn(move || {
                 let _ = child.wait();
-                let title = close_game_playtime_session(&app, &app_id).unwrap_or_else(|| game_title(&game, &app_id));
+                let title = close_game_playtime_session(&app, &app_id)
+                    .unwrap_or_else(|| game_title(&game, &app_id));
                 run_automatic_backup_after_close(app, app_id, title, game);
             });
 
@@ -2357,7 +2402,14 @@ fn collect_executable_candidates(
                 name.as_str(),
                 "_commonredist" | "redist" | "redistributables" | "directx"
             ) {
-                collect_executable_candidates(root, &path, depth + 1, title, install_dir, candidates);
+                collect_executable_candidates(
+                    root,
+                    &path,
+                    depth + 1,
+                    title,
+                    install_dir,
+                    candidates,
+                );
             }
             continue;
         }
@@ -2540,7 +2592,6 @@ fn directory_size(path: &std::path::Path) -> Result<u64, String> {
     Ok(total)
 }
 
-
 fn selected_backup_entry_path(
     settings: &serde_json::Value,
     app_id: &str,
@@ -2563,20 +2614,18 @@ fn backup_details_for_path(
         .and_then(|record| record.get("title"))
         .and_then(|value| value.as_str())
         .unwrap_or(app_id);
-    let mut achievements = read_piratebox_achievements_backup_file(app, app_id, title, Some(backup_path))
-        .and_then(|file| file.get("unlocked").cloned())
-        .and_then(|value| value.as_array().cloned())
-        .unwrap_or_default();
+    let mut achievements =
+        read_piratebox_achievements_backup_file(app, app_id, title, Some(backup_path))
+            .and_then(|file| file.get("unlocked").cloned())
+            .and_then(|value| value.as_array().cloned())
+            .unwrap_or_default();
 
     if achievements.is_empty() {
-        achievements = steam_appcache::read_steam_local_achievement_backup_file(
-            steam_path,
-            app_id,
-            title,
-        )
-        .and_then(|file| file.get("unlocked").cloned())
-        .and_then(|value| value.as_array().cloned())
-        .unwrap_or_default();
+        achievements =
+            steam_appcache::read_steam_local_achievement_backup_file(steam_path, app_id, title)
+                .and_then(|file| file.get("unlocked").cloned())
+                .and_then(|value| value.as_array().cloned())
+                .unwrap_or_default();
     }
 
     let achievements = enrich_backup_achievements_with_icons(achievements, steam_achievements);
@@ -2653,9 +2702,6 @@ fn backup_details_for_path(
         "achievements": achievements
     }))
 }
-
-
-
 
 #[cfg(windows)]
 fn configure_windows_app_identity() {
@@ -2827,7 +2873,6 @@ fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-
 #[tauri::command]
 fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
@@ -2916,6 +2961,15 @@ fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
     }
 
     backup_root_status("ok", &output_path, settings, "Pasta de backups pronta.")
+}
+
+#[tauri::command]
+fn backup_ensure_root(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let settings = load_backup_settings(&app);
+    let output_path = to_backup_root_path(&text_value(settings.get("outputPath")));
+    write_backup_root_marker(&output_path)?;
+    let _ = save_backup_settings(&app, serde_json::json!({ "outputPath": output_path }))?;
+    Ok(backup_validate_root(app))
 }
 
 #[tauri::command]
@@ -3070,7 +3124,9 @@ fn backup_open_folder(
     let selected_path = selected_backup_path(&settings, app_id.trim(), backup_path);
 
     if selected_path.is_empty() {
-        return Ok(serde_json::json!({ "success": false, "error": "Caminho de backup invÃ¡lido." }));
+        return Ok(
+            serde_json::json!({ "success": false, "error": "Caminho de backup invÃ¡lido." }),
+        );
     }
 
     let root = std::path::PathBuf::from(&output_path);
@@ -3223,7 +3279,10 @@ fn steam_scan_library(
         &plugin_app_ids,
         pirate_library_games,
     );
-    let added_app_id_set = added_app_ids.iter().cloned().collect::<std::collections::HashSet<_>>();
+    let added_app_id_set = added_app_ids
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
     let playtimes = load_game_playtimes(&app);
     let games = merged_games
         .into_iter()
@@ -3326,9 +3385,9 @@ fn game_launch(
                     let fallback_app_id = app_id.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_secs(20));
-                        let has_session = steam_monitor_state()
-                            .lock()
-                            .is_ok_and(|guard| guard.playtime_sessions.contains_key(&fallback_app_id));
+                        let has_session = steam_monitor_state().lock().is_ok_and(|guard| {
+                            guard.playtime_sessions.contains_key(&fallback_app_id)
+                        });
                         if !has_session {
                             monitor_game_process(
                                 app_handle,
@@ -3399,7 +3458,6 @@ fn backup_select_game_executable(
         "libraryGame": game
     }))
 }
-
 
 #[tauri::command]
 async fn backup_get_details(
@@ -3481,14 +3539,8 @@ fn backup_run_game_local(
 
     if let Err(error) = run_ludusavi(&app, &args) {
         let _ = std::fs::remove_dir_all(&output_path);
-        let settings = save_failed_backup_record(
-            &app,
-            &app_id,
-            &title,
-            &output_path_text,
-            &error,
-        )
-        .unwrap_or(settings);
+        let settings = save_failed_backup_record(&app, &app_id, &title, &output_path_text, &error)
+            .unwrap_or(settings);
         return Ok(serde_json::json!({
             "success": false,
             "appId": app_id,
@@ -3512,11 +3564,7 @@ fn backup_run_game_local(
     }
 
     if let Some(steam_path) = resolve_steam_path(&app, None).0 {
-        steam_appcache::backup_steam_achievement_files(
-            &steam_path,
-            &app_id,
-            &output_path,
-        );
+        steam_appcache::backup_steam_achievement_files(&steam_path, &app_id, &output_path);
     }
 
     let size_bytes = directory_size(std::path::Path::new(&output_path_text)).unwrap_or(0);
@@ -3578,11 +3626,7 @@ fn backup_restore_game_local(
     }
 
     if let Some(steam_path) = resolve_steam_path(&app, None).0 {
-        steam_appcache::restore_steam_achievement_files(
-            &steam_path,
-            &app_id,
-            &selected,
-        );
+        steam_appcache::restore_steam_achievement_files(&steam_path, &app_id, &selected);
     }
 
     Ok(serde_json::json!({
@@ -3654,6 +3698,7 @@ pub fn run() {
             steam_sign_out,
             backup_get_settings,
             backup_validate_root,
+            backup_ensure_root,
             backup_set_output_path,
             backup_set_game_automatic,
             backup_set_library_automatic,

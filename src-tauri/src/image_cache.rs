@@ -224,11 +224,7 @@ pub fn cleanup_image_cache(app: &AppHandle) {
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_millis())
             .unwrap_or(0);
-        files.push((
-            entry.path(),
-            metadata.len(),
-            modified,
-        ));
+        files.push((entry.path(), metadata.len(), modified));
     }
 
     files.retain(|(path, _, modified)| {

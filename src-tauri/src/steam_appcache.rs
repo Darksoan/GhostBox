@@ -22,9 +22,7 @@ fn read_binary_vdf_string(data: &[u8], offset: &mut usize) -> Option<String> {
     if *offset >= data.len() {
         return None;
     }
-    let value = std::str::from_utf8(&data[start..*offset])
-        .ok()?
-        .to_string();
+    let value = std::str::from_utf8(&data[start..*offset]).ok()?.to_string();
     *offset += 1;
     Some(value)
 }
@@ -198,10 +196,7 @@ fn local_achievement_total_from_schema(schema: &VdfObject, app_id: &str) -> u32 
 }
 
 fn local_achievement_display_title(achievement: &VdfObject) -> String {
-    let fallback = achievement
-        .get("name")
-        .map(vdf_string)
-        .unwrap_or_default();
+    let fallback = achievement.get("name").map(vdf_string).unwrap_or_default();
     let Some(display) = achievement.get("display").and_then(vdf_object) else {
         return fallback;
     };
@@ -246,10 +241,7 @@ fn local_achievement_unlocks_from_schema(
             let Some(achievement) = bits.get(bit).and_then(vdf_object) else {
                 continue;
             };
-            let name = achievement
-                .get("name")
-                .map(vdf_string)
-                .unwrap_or_default();
+            let name = achievement.get("name").map(vdf_string).unwrap_or_default();
             if name.is_empty() {
                 continue;
             }
@@ -272,7 +264,12 @@ fn local_achievement_unlocks_from_schema(
         left.get("name")
             .and_then(|value| value.as_str())
             .unwrap_or_default()
-            .cmp(right.get("name").and_then(|value| value.as_str()).unwrap_or_default())
+            .cmp(
+                right
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default(),
+            )
     });
     unlocked
 }
@@ -302,10 +299,7 @@ fn local_achievement_names_from_schema(
             let Some(achievement) = bits.get(bit).and_then(vdf_object) else {
                 continue;
             };
-            let name = achievement
-                .get("name")
-                .map(vdf_string)
-                .unwrap_or_default();
+            let name = achievement.get("name").map(vdf_string).unwrap_or_default();
             if !name.is_empty() {
                 unlocked_names.insert(name);
             }
@@ -394,18 +388,10 @@ pub fn read_local_unlocked_achievement_names(steam_path: &str, app_id: &str) -> 
         return HashSet::new();
     };
 
-    local_achievement_names_from_schema(
-        &parse_binary_vdf(&schema_buffer),
-        app_id,
-        &unlocked_bits,
-    )
+    local_achievement_names_from_schema(&parse_binary_vdf(&schema_buffer), app_id, &unlocked_bits)
 }
 
-pub fn read_local_achievement_stats(
-    steam_path: &str,
-    app_id: &str,
-    persisted: &Value,
-) -> Value {
+pub fn read_local_achievement_stats(steam_path: &str, app_id: &str, persisted: &Value) -> Value {
     let persisted_total = persisted
         .get("total")
         .and_then(|value| value.as_u64())
@@ -479,7 +465,10 @@ pub fn read_local_achievement_stats(
         )));
     }
 
-    let unlocked = unlocked_bits.len().max(persisted_unlocked as usize).min(total as usize) as u32;
+    let unlocked = unlocked_bits
+        .len()
+        .max(persisted_unlocked as usize)
+        .min(total as usize) as u32;
     json!({
         "unlocked": unlocked,
         "total": total,
@@ -491,7 +480,8 @@ pub const STEAM_ACHIEVEMENTS_BACKUP_FOLDER: &str = "piratebox-steam-achievements
 
 fn is_steam_achievement_stats_file(file_name: &str, app_id: &str) -> bool {
     file_name == format!("UserGameStatsSchema_{app_id}.bin")
-        || (file_name.starts_with("UserGameStats_") && file_name.ends_with(&format!("_{app_id}.bin")))
+        || (file_name.starts_with("UserGameStats_")
+            && file_name.ends_with(&format!("_{app_id}.bin")))
 }
 
 fn steam_achievement_stats_file_names(stats_path: &Path, app_id: &str) -> Vec<String> {

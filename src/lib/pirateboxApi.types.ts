@@ -54,6 +54,13 @@ export type GamePlaytimeEntry = {
 
 export type GamePlaytimeSnapshot = Record<string, GamePlaytimeEntry>;
 
+export type AppStatus = {
+  name: string;
+  version: string;
+  runtime: string;
+  dev: boolean;
+};
+
 export type BackupOutputPathSelectionResult = {
   status: "ok" | "cancelled";
   settings: BackupSettings;

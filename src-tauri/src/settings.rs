@@ -27,7 +27,10 @@ pub(crate) fn default_notification_settings() -> serde_json::Value {
     })
 }
 
-pub(crate) fn data_file_path(app: &tauri::AppHandle, file_name: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn data_file_path(
+    app: &tauri::AppHandle,
+    file_name: &str,
+) -> Result<std::path::PathBuf, String> {
     use tauri::Manager;
 
     let directory = app
@@ -59,7 +62,11 @@ pub(crate) fn read_binary_file(app: &tauri::AppHandle, file_name: &str) -> Resul
     std::fs::read(path).map_err(|error| error.to_string())
 }
 
-pub(crate) fn write_binary_file(app: &tauri::AppHandle, file_name: &str, value: &[u8]) -> Result<(), String> {
+pub(crate) fn write_binary_file(
+    app: &tauri::AppHandle,
+    file_name: &str,
+    value: &[u8],
+) -> Result<(), String> {
     let path = data_file_path(app, file_name)?;
     std::fs::write(path, value).map_err(|error| error.to_string())
 }
@@ -155,8 +162,7 @@ fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
         LocalFree(output_blob.pbData as _);
     }
 
-    String::from_utf8(decrypted)
-        .map_err(|_| "API key do Hubcap's Manifest inválida.".to_string())
+    String::from_utf8(decrypted).map_err(|_| "API key do Hubcap's Manifest inválida.".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -178,7 +184,10 @@ pub(crate) fn load_morrenus_api_key(app: &tauri::AppHandle) -> String {
     }
 }
 
-pub(crate) fn save_morrenus_api_key(app: &tauri::AppHandle, api_key: &str) -> Result<String, String> {
+pub(crate) fn save_morrenus_api_key(
+    app: &tauri::AppHandle,
+    api_key: &str,
+) -> Result<String, String> {
     let normalized = api_key.trim().to_string();
     if normalized.is_empty() {
         remove_data_file(app, HUBCAP_MANIFEST_API_KEY_FILE)?;
@@ -269,10 +278,7 @@ pub fn app_get_morrenus_api_key(app: tauri::AppHandle) -> String {
 }
 
 #[tauri::command]
-pub fn app_set_morrenus_api_key(
-    app: tauri::AppHandle,
-    api_key: String,
-) -> Result<String, String> {
+pub fn app_set_morrenus_api_key(app: tauri::AppHandle, api_key: String) -> Result<String, String> {
     save_morrenus_api_key(&app, &api_key)
 }
 
@@ -301,7 +307,10 @@ pub async fn app_get_morrenus_stats(api_key: String) -> serde_json::Value {
 
     let response = match client
         .get("https://hubcapmanifest.com/api/v1/user/stats")
-        .header(reqwest::header::AUTHORIZATION, format!("Bearer {normalized_api_key}"))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {normalized_api_key}"),
+        )
         .header(reqwest::header::ACCEPT, "application/json")
         .send()
         .await

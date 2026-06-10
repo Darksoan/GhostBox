@@ -43,6 +43,10 @@ Status atual: **não completa; release candidate aguardando validação manual**
   - login Steam OpenID via browser externo e callback local `127.0.0.1`;
   - fetch de profile XML e avatar Steam.
 - Backup root/settings com validação de raiz.
+- Paridade backend de backup settings com Electron:
+  - `getAppStatus` exposto na camada Tauri do frontend;
+  - `getBackupSettings`, `setBackupOutputPath` e `ensureBackupRoot` expostos;
+  - command Tauri `backup_ensure_root` cria/garante a raiz configurada antes de validar.
 - Seleção de pasta via diálogo nativo Tauri.
 - Open/delete de backups restrito ao backup root configurado.
 - Steam local scan sem profile:
@@ -66,6 +70,7 @@ Status atual: **não completa; release candidate aguardando validação manual**
 - Backup automático pós-jogo:
   - settings de backup automático por jogo e por biblioteca;
   - execução automática quando uma sessão monitorada termina;
+  - falhas retornadas pelo backup automático são persistidas no record para diagnóstico/toasts;
   - evento Tauri `backup-settings-changed` sincroniza settings na UI.
 - Backup entries com retenção (até 3) e pin de entradas protegidas.
 - Achievement server local loopback para executáveis customizados.
@@ -158,7 +163,6 @@ Ainda pode precisar refinamento:
 
 Ainda pode precisar refinamento:
 
-- persistência de falhas de backup automático no record para toasts de erro;
 - fallback de monitoramento por processo no Windows quando o registro Steam falhar.
 
 Limite conhecido: monitor Steam depende do registro `RunningAppID` no Windows. Fora do Windows, backup automático pós-jogo ainda depende de executável customizado monitorado ou heurística por processo (não-Windows).
