@@ -69,6 +69,7 @@ interface LibraryPageProps {
   onAddGameToCollection?: (game: PirateGame, collectionId: string) => void;
   backupSettings?: BackupSettings | null;
   backupRootStatus?: BackupRootStatus | null;
+  activeSessionAppIds?: Set<string>;
 }
 
 export function LibraryPage({
@@ -90,6 +91,7 @@ export function LibraryPage({
   onAddGameToCollection,
   backupSettings = null,
   backupRootStatus = null,
+  activeSessionAppIds = new Set(),
 }: LibraryPageProps) {
   const { appearance } = useSettings();
   const [sortBy, setSortBy] = useState<LibrarySortBy>(() => readStoredLibrarySortBy());
@@ -307,6 +309,7 @@ export function LibraryPage({
           showAchievements
           showBackupStatus
           hasBackupByAppId={gamesWithBackup}
+          activeSessionAppIds={activeSessionAppIds}
           backupRootStatus={backupRootStatus}
           libraryCoverFade
         />

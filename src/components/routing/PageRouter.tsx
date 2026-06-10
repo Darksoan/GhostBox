@@ -162,6 +162,7 @@ export function PageRouter({
           onAddGameToCollection={appData.addGameToUserCollection}
           backupSettings={appData.backupSettings}
           backupRootStatus={appData.backupRootStatus}
+          activeSessionAppIds={appData.activeSessionAppIds}
         />
       );
     }
@@ -253,6 +254,7 @@ export function PageRouter({
           removableGameAppIds={appData.addedLibraryGameAppIds}
           libraryGameAppIds={appData.availableLibraryGameAppIds}
           playableGameAppIds={appData.playableGameAppIds}
+          activeSessionAppIds={appData.activeSessionAppIds}
           addingGameId={appData.addingGameId}
           launchingGameId={appData.launchingGameId}
           onAddGame={appData.queueGame}

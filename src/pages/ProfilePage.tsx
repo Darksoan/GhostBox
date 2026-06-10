@@ -78,6 +78,7 @@ interface ProfilePageProps {
   removableGameAppIds: Set<string>;
   libraryGameAppIds?: Set<string>;
   playableGameAppIds?: Set<string>;
+  activeSessionAppIds?: Set<string>;
   addingGameId?: string | null;
   launchingGameId?: string | null;
   onAddGame?: (game: PirateGame) => void;
@@ -323,6 +324,7 @@ export function ProfilePage({
   removableGameAppIds,
   libraryGameAppIds = new Set(),
   playableGameAppIds = new Set(),
+  activeSessionAppIds = new Set(),
   addingGameId = null,
   launchingGameId = null,
   onAddGame,
@@ -1190,6 +1192,7 @@ export function ProfilePage({
                     onOpenGame={onOpenGame}
                     onGameContextMenu={handleGameContextMenu}
                     showAchievementSummary
+                    activeSessionAppIds={activeSessionAppIds}
                   />
                   {renderedGameCount < visibleGames.length && (
                     <div

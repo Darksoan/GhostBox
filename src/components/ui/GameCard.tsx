@@ -25,6 +25,7 @@ interface GameCardProps {
   showAchievementSummary?: boolean;
   showBackupStatus?: boolean;
   hasBackup?: boolean;
+  active?: boolean;
   backupRootStatus?: BackupRootStatus | null;
   libraryCoverFade?: boolean;
 }
@@ -38,6 +39,7 @@ export const GameCard = memo(function GameCard({
   showAchievementSummary = false,
   showBackupStatus = false,
   hasBackup = false,
+  active = false,
   backupRootStatus = null,
   libraryCoverFade = false,
 }: GameCardProps) {
@@ -115,7 +117,12 @@ export const GameCard = memo(function GameCard({
             )}
           </div>
         )}
-         {showAchievementProgress && (
+        {active && (
+          <span className="game-card__active-badge" aria-label="Playing now">
+            Playing
+          </span>
+        )}
+        {showAchievementProgress && (
           <div
             className="game-card__achievement-progress"
             aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${formatCompactPlaytime(playtimeInMilliseconds)} jogadas`}
@@ -180,6 +187,7 @@ interface GameGridProps {
   showAchievementSummary?: boolean;
   showBackupStatus?: boolean;
   hasBackupByAppId?: Set<string>;
+  activeSessionAppIds?: Set<string>;
   backupRootStatus?: BackupRootStatus | null;
   libraryCoverFade?: boolean;
 }
@@ -195,6 +203,7 @@ export function GameGrid({
   showAchievementSummary = false,
   showBackupStatus = false,
   hasBackupByAppId = new Set(),
+  activeSessionAppIds = new Set(),
   backupRootStatus = null,
   libraryCoverFade = false,
 }: GameGridProps) {
@@ -213,6 +222,7 @@ export function GameGrid({
           showAchievementSummary={showAchievementSummary}
           showBackupStatus={showBackupStatus}
           hasBackup={hasBackupByAppId.has(game.appId)}
+          active={activeSessionAppIds.has(game.appId)}
           backupRootStatus={backupRootStatus}
           libraryCoverFade={libraryCoverFade}
         />

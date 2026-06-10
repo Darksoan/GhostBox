@@ -266,6 +266,7 @@ Frontend:
 - Consome tempo ao vivo via `game-playtimes-changed` durante sessões.
 - GameModal mostra "Sessão ativa" / "Playing" e destaque visual no painel de playtime.
 - `activeSessionAppIds` exposto no AppDataContext.
+- Cards da biblioteca/perfil mostram badge "Playing" quando o jogo tem sessão ativa.
 
 ### Backup/Ludusavi UX
 
