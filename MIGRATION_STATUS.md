@@ -219,6 +219,7 @@ Plugins usados:
 
 - `catalogue.rs` implementado;
 - `backup.rs` iniciado com comandos de backup root/settings, backup automático settings, pin, custom executable, open/delete, metadata refresh, backup manual, restore manual e details;
+- `steam.rs` iniciado com Steam profile/login, persistência de profile, OpenID, callback local e sign-out;
 - `steam_appcache.rs` implementado;
 - `luatools.rs` implementado;
 - `ludusavi.rs` implementado;
@@ -226,7 +227,7 @@ Plugins usados:
 
 Ainda falta separar de `lib.rs`:
 
-- Steam profile/login e Steam scan;
+- Steam scan/path/restart;
 - window lifecycle/tray;
 - playtime/monitoramento de sessão.
 
