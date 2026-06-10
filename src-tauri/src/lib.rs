@@ -25,6 +25,7 @@ const PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
 const BACKUP_ENTRY_RETENTION_LIMIT: usize = 3;
 const STEAM_RUNNING_APP_MONITOR_INTERVAL_MS: u64 = 3000;
 const GAME_PLAYTIME_SNAPSHOT_INTERVAL_MS: u64 = 3000;
+const STEAM_PENDING_PROCESS_FALLBACK_AFTER_MS: u64 = 20_000;
 const AUTOMATIC_BACKUP_DEBOUNCE_WINDOW_MS: u64 = 30_000;
 const AUTOMATIC_BACKUP_DELAY_AFTER_CLOSE_MS: u64 = 2_000;
 
@@ -891,6 +892,8 @@ struct GamePlaytimeSession {
 struct SteamMonitorState {
     active_running_app_id: Option<String>,
     pending_games: std::collections::HashMap<String, serde_json::Value>,
+    pending_game_registered_at: std::collections::HashMap<String, u64>,
+    process_fallback_started: std::collections::HashSet<String>,
     playtime_sessions: std::collections::HashMap<String, GamePlaytimeSession>,
     backup_in_progress: std::collections::HashSet<String>,
     last_automatic_backup_at: std::collections::HashMap<String, u64>,
@@ -916,6 +919,8 @@ fn steam_monitor_state() -> &'static std::sync::Mutex<SteamMonitorState> {
         std::sync::Mutex::new(SteamMonitorState {
             active_running_app_id: None,
             pending_games: std::collections::HashMap::new(),
+            pending_game_registered_at: std::collections::HashMap::new(),
+            process_fallback_started: std::collections::HashSet::new(),
             playtime_sessions: std::collections::HashMap::new(),
             backup_in_progress: std::collections::HashSet::new(),
             last_automatic_backup_at: std::collections::HashMap::new(),
@@ -965,7 +970,10 @@ fn register_pending_steam_game(game: serde_json::Value) {
     }
 
     if let Ok(mut guard) = steam_monitor_state().lock() {
-        guard.pending_games.insert(app_id, game);
+        guard.pending_games.insert(app_id.clone(), game);
+        guard
+            .pending_game_registered_at
+            .insert(app_id, current_millis());
     }
 }
 
@@ -1112,6 +1120,8 @@ fn poll_steam_running_app_id(app: &tauri::AppHandle) {
         if let Some(closed_app_id) = closed_app_id {
             if let Ok(mut guard) = steam_monitor_state().lock() {
                 guard.pending_games.remove(&closed_app_id);
+                guard.pending_game_registered_at.remove(&closed_app_id);
+                guard.process_fallback_started.remove(&closed_app_id);
             }
             let title = close_game_playtime_session(app, &closed_app_id).unwrap_or_default();
             let game = resolve_backup_game(&closed_app_id, &title);
@@ -1149,6 +1159,8 @@ fn poll_steam_running_app_id(app: &tauri::AppHandle) {
         let closed = guard.active_running_app_id.take();
         if let Some(app_id) = closed.as_ref() {
             guard.pending_games.remove(app_id);
+            guard.pending_game_registered_at.remove(app_id);
+            guard.process_fallback_started.remove(app_id);
         }
         closed
     });
@@ -1162,6 +1174,51 @@ fn poll_steam_running_app_id(app: &tauri::AppHandle) {
     run_automatic_backup_after_close(app.clone(), closed_app_id, title, game);
 }
 
+#[cfg(windows)]
+fn poll_pending_steam_process_fallbacks(app: &tauri::AppHandle) {
+    let now = current_millis();
+    let pending = steam_monitor_state()
+        .lock()
+        .map(|guard| {
+            guard
+                .pending_games
+                .iter()
+                .filter_map(|(app_id, game)| {
+                    if guard.playtime_sessions.contains_key(app_id)
+                        || guard.process_fallback_started.contains(app_id)
+                    {
+                        return None;
+                    }
+                    let registered_at = guard.pending_game_registered_at.get(app_id).copied()?;
+                    if now.saturating_sub(registered_at) < STEAM_PENDING_PROCESS_FALLBACK_AFTER_MS {
+                        return None;
+                    }
+                    let executable_path = find_likely_game_executable(game)?;
+                    Some((app_id.clone(), game.clone(), executable_path))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    for (app_id, game, executable_path) in pending {
+        let should_start = steam_monitor_state().lock().is_ok_and(|mut guard| {
+            if guard.playtime_sessions.contains_key(&app_id)
+                || guard.process_fallback_started.contains(&app_id)
+            {
+                return false;
+            }
+            guard.process_fallback_started.insert(app_id.clone());
+            true
+        });
+        if should_start {
+            monitor_game_process(app.clone(), game, app_id, executable_path);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn poll_pending_steam_process_fallbacks(_app: &tauri::AppHandle) {}
+
 fn start_steam_running_app_monitor(app: tauri::AppHandle) {
     #[cfg(not(windows))]
     {
@@ -1172,6 +1229,7 @@ fn start_steam_running_app_monitor(app: tauri::AppHandle) {
     #[cfg(windows)]
     std::thread::spawn(move || loop {
         poll_steam_running_app_id(&app);
+        poll_pending_steam_process_fallbacks(&app);
         std::thread::sleep(std::time::Duration::from_millis(
             STEAM_RUNNING_APP_MONITOR_INTERVAL_MS,
         ));
@@ -2508,7 +2566,14 @@ fn monitor_game_process(
             std::thread::sleep(std::time::Duration::from_secs(15));
         }
 
-        if close_game_playtime_session(&app, &app_id).is_some() {
+        let session_closed = close_game_playtime_session(&app, &app_id).is_some();
+        if let Ok(mut guard) = steam_monitor_state().lock() {
+            guard.pending_games.remove(&app_id);
+            guard.pending_game_registered_at.remove(&app_id);
+            guard.process_fallback_started.remove(&app_id);
+        }
+
+        if session_closed {
             run_automatic_backup_after_close(
                 app.clone(),
                 app_id,
@@ -3389,6 +3454,11 @@ fn game_launch(
                             guard.playtime_sessions.contains_key(&fallback_app_id)
                         });
                         if !has_session {
+                            if let Ok(mut guard) = steam_monitor_state().lock() {
+                                guard
+                                    .process_fallback_started
+                                    .insert(fallback_app_id.clone());
+                            }
                             monitor_game_process(
                                 app_handle,
                                 fallback_game,

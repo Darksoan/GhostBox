@@ -71,6 +71,7 @@ Status atual: **não completa; release candidate aguardando validação manual**
   - settings de backup automático por jogo e por biblioteca;
   - execução automática quando uma sessão monitorada termina;
   - falhas retornadas pelo backup automático são persistidas no record para diagnóstico/toasts;
+  - fallback Windows por processo monitora jogos pendentes quando `RunningAppID` não abre sessão;
   - evento Tauri `backup-settings-changed` sincroniza settings na UI.
 - Backup entries com retenção (até 3) e pin de entradas protegidas.
 - Achievement server local loopback para executáveis customizados.
@@ -129,10 +130,7 @@ Ainda falta:
 - `getMorrenusApiKey`, `setMorrenusApiKey` e `getMorrenusStats` já existem no Tauri.
 - A chave não é salva em JSON puro.
 - No Windows, a persistência usa DPAPI por usuário antes de gravar `morrenus-api-key.bin`.
-
-Pendência restante:
-
-- definir estratégia equivalente para plataformas não-Windows, se continuarem no escopo.
+- Decisão de escopo: HubCap's/Morrenus é Windows-only no Tauri; storage seguro equivalente para Linux/macOS não é requisito.
 
 ### Playtime Completo
 
@@ -158,12 +156,9 @@ Ainda pode precisar refinamento:
 - Backups mantêm até 3 entradas; entradas não fixadas são removidas ao exceder o limite.
 - Entradas fixadas (`pinned`) são preservadas durante o trim.
 - Monitor Steam via `RunningAppID` (Windows) cobre jogos lançados por `steam://` sem executável detectado.
+- Watchdog Windows inicia monitoramento por processo para jogos pendentes com executável provável quando `RunningAppID` não cobre a sessão após 20s.
 - Backup automático pós-sessão usa debounce (30s) e delay (2s) antes de gravar saves.
 - Toasts in-app e notificações desktop após backup automático/manual (via `backupNotifications` + settings).
-
-Ainda pode precisar refinamento:
-
-- fallback de monitoramento por processo no Windows quando o registro Steam falhar.
 
 Limite conhecido: monitor Steam depende do registro `RunningAppID` no Windows. Fora do Windows, backup automático pós-jogo ainda depende de executável customizado monitorado ou heurística por processo (não-Windows).
 
@@ -243,7 +238,7 @@ Plugins usados:
 
 - UI chama `getMorrenusStats`.
 - A chave é carregada do backend no startup.
-- Ideal mostrar estado explícito quando storage seguro estiver indisponível fora do Windows.
+- Escopo Windows-only; não há pendência de UX para storage seguro fora do Windows.
 
 ### Backup Automático UI
 
@@ -277,8 +272,7 @@ Backend básico existe. Ainda pode precisar refinamento para:
 
 1. Executar a checklist manual de release/instalador.
 2. Corrigir qualquer falha encontrada na checklist.
-3. Definir storage seguro equivalente para Morrenus fora do Windows, se Linux/macOS continuarem no escopo.
-4. Refatorar `src-tauri/src/lib.rs` em módulos depois da estabilização.
+3. Refatorar `src-tauri/src/lib.rs` em módulos depois da estabilização.
 
 ## Checklist Manual De Release
 
