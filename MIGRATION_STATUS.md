@@ -224,17 +224,13 @@ Plugins usados:
 - `luatools.rs` implementado;
 - `ludusavi.rs` implementado;
 - `settings.rs` implementado;
+- `playtime.rs` implementado com snapshot/sessões, monitor Steam, fallback por processo e backup automático pós-jogo;
 - `window_lifecycle.rs` implementado com tray, close-to-tray, single-instance focus, startup lifecycle e commands de janela/shell.
-
-Ainda falta separar de `lib.rs`:
-
-- playtime/monitoramento de sessão.
 
 ## Pendências Restantes Sem Validação Manual
 
 Backend:
 
-- continuar refactor técnico de `src-tauri/src/lib.rs` para módulo de playtime/monitoramento;
 - decidir se `shell_open_external` deve restringir URLs como o Electron fazia ou manter o comportamento atual do frontend/Tauri.
 
 Frontend:

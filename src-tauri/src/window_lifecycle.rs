@@ -1,10 +1,11 @@
+use crate::playtime::{
+    close_all_game_playtime_sessions, start_game_playtime_snapshot_emitter,
+    start_steam_running_app_monitor,
+};
 use crate::settings::{
     apply_autostart_settings, is_startup_setting_enabled, startup_setting_enabled,
 };
-use crate::{
-    close_all_game_playtime_sessions, load_startup_settings, start_game_playtime_snapshot_emitter,
-    start_steam_running_app_monitor, stop_piratebox_achievement_server,
-};
+use crate::{load_startup_settings, stop_piratebox_achievement_server};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const WINDOW_HIDDEN_TO_TRAY_EVENT: &str = "window-hidden-to-tray";

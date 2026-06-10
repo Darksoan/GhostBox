@@ -1,10 +1,11 @@
 use crate::pirate_library;
+use crate::playtime;
 use crate::settings::{read_json_file, remove_data_file, write_json_file};
 use crate::util::{escape_html, text_value, xml_text, EmptyStringExt};
 use crate::{
-    enrich_game_with_local_achievement_stats, extract_app_id, load_game_playtimes,
-    load_saved_steam_path, merge_playtime_into_game, normalize_steam_root_path, resolve_steam_path,
-    save_steam_path, steam_asset_url, steamapps_path,
+    enrich_game_with_local_achievement_stats, extract_app_id, load_saved_steam_path,
+    merge_playtime_into_game, normalize_steam_root_path, resolve_steam_path, save_steam_path,
+    steam_asset_url, steamapps_path,
 };
 
 const STEAM_PROFILE_FILE: &str = "steam-profile.json";
@@ -630,7 +631,7 @@ pub fn steam_scan_library(
         }
 
         let stored_path = load_saved_steam_path(&app);
-        let playtimes = load_game_playtimes(&app);
+        let playtimes = playtime::load_game_playtimes(&app);
         let added_app_ids = pirate_library_games
             .iter()
             .map(extract_app_id)
@@ -666,7 +667,7 @@ pub fn steam_scan_library(
         .iter()
         .cloned()
         .collect::<std::collections::HashSet<_>>();
-    let playtimes = load_game_playtimes(&app);
+    let playtimes = playtime::load_game_playtimes(&app);
     let games = merged_games
         .into_iter()
         .map(|game| merge_playtime_into_game(game, &playtimes))

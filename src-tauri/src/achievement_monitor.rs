@@ -70,7 +70,7 @@ pub fn start_local_achievement_monitor(
             if stop.load(Ordering::Relaxed) {
                 break;
             }
-            if !crate::is_playtime_session_active(&key) {
+            if !crate::playtime::is_playtime_session_active(&key) {
                 break;
             }
             notify_new_unlocks(&app_handle, &key, &title, &steam_path);
