@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { SettingsProvider } from "./context/settings";
+import { OverlayProvider } from "./context/OverlayContext";
+import { AppDataProvider } from "./context/AppDataContext";
 import { queryClient } from "./lib/queryClient";
 
 async function waitForInterfaceFonts() {
@@ -23,7 +25,11 @@ void waitForInterfaceFonts().finally(() => {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
-          <App />
+          <OverlayProvider>
+            <AppDataProvider>
+              <App />
+            </AppDataProvider>
+          </OverlayProvider>
         </SettingsProvider>
       </QueryClientProvider>
     </React.StrictMode>

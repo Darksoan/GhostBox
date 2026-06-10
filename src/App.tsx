@@ -1,98 +1,241 @@
-import { useMemo, useState } from "react";
-import type { PirateGame } from "./data";
-import type { CatalogueFilters, CatalogueSort } from "./types";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { TitleBar } from "./components/layout/TitleBar";
+import { Sidebar } from "./components/layout/Sidebar";
+import { Header } from "./components/layout/Header";
+import { Toast } from "./components/ui/Toast";
+import { PageRouter } from "./components/routing/PageRouter";
+import { useContentOverlayState } from "./components/routing/ContentOverlay";
+import { useAppNavigation } from "./hooks/useAppNavigation";
+import { useAppShellState } from "./hooks/useAppShellState";
+import { useAppData } from "./context/AppDataContext";
+import { useOverlay } from "./context/OverlayContext";
+import { useSettings } from "./context/settings";
+import { pirateboxApi } from "./lib/pirateboxApi";
 import {
-  cataloguePageSize,
-  emptyCatalogueFilters,
-  searchDebounceMs,
-} from "./constants/catalogue";
-import { useDebouncedValue } from "./hooks/useDebouncedValue";
-import { useGamesQuery } from "./queries/games";
-import { CataloguePage } from "./pages/CataloguePage";
+  getTrayHiddenNotificationCopy,
+  showTrayHiddenDesktopNotification,
+} from "./lib/trayNotifications";
+import { clearCatalogueGamesCache } from "./utils/gameCache";
+import type { SettingsTabId } from "./features/settings/settingsTabsShared";
 import "./app.scss";
 
-function noopGame(_game: PirateGame) {
-  return undefined;
+function AppShell() {
+  const appData = useAppData();
+  const {
+    openGame,
+    toast,
+    dismissToast,
+    selectedGame,
+    achievementsView,
+    isGameModalExitPending,
+    closeGame,
+    closeContentOverlay,
+    closeAchievements,
+    modalReturnScrollTopRef,
+  } = useOverlay();
+  const { isGameModalVisible, isAchievementsViewVisible } =
+    useContentOverlayState();
+
+  const {
+    page,
+    navigate,
+    back,
+    contentRef,
+    saveScrollPosition,
+    restorePendingScroll,
+  } = useAppNavigation();
+
+  const shell = useAppShellState(page);
+  const { appearance, notifications } = useSettings();
+  const queryClient = useQueryClient();
+  const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
+
+  useEffect(() => {
+    return pirateboxApi.onCatalogueCacheUpdated(() => {
+      clearCatalogueGamesCache();
+      void queryClient.invalidateQueries({ queryKey: ["games"] });
+      void queryClient.invalidateQueries({ queryKey: ["home"] });
+    });
+  }, [queryClient]);
+
+  useEffect(() => {
+    return pirateboxApi.onWindowHiddenToTray(() => {
+      const copy = getTrayHiddenNotificationCopy(appearance.language);
+      showTrayHiddenDesktopNotification(
+        copy,
+        notifications.desktopNotificationsEnabled
+      );
+    });
+  }, [appearance.language, notifications.desktopNotificationsEnabled]);
+
+  const headerTitle = useMemo(() => {
+    if (achievementsView) return achievementsView.game.title;
+    if (page !== "favorites") return undefined;
+    if (shell.activeProfileCollectionId === "favorites") return undefined;
+    return appData.userCollections.find(
+      (collection) => collection.id === shell.activeProfileCollectionId
+    )?.name;
+  }, [
+    achievementsView,
+    appData.userCollections,
+    page,
+    shell.activeProfileCollectionId,
+  ]);
+
+  const handleNavigate = useCallback(
+    (newPage: typeof page, collectionId?: string) => {
+      saveScrollPosition();
+      closeContentOverlay();
+      if (newPage !== page) {
+        navigate(newPage);
+      }
+      shell.clearQuery();
+      if (collectionId) {
+        shell.setActiveProfileCollectionId(collectionId);
+      }
+    },
+    [closeContentOverlay, navigate, page, saveScrollPosition, shell]
+  );
+
+  const handleBack = useCallback(() => {
+    saveScrollPosition();
+    shell.clearQuery();
+    if (achievementsView) {
+      closeAchievements();
+      return;
+    }
+    if (selectedGame) {
+      closeGame();
+      return;
+    }
+    back();
+  }, [
+    achievementsView,
+    back,
+    closeAchievements,
+    closeGame,
+    saveScrollPosition,
+    selectedGame,
+    shell,
+  ]);
+
+  const handleSidebarSettingsTabChange = useCallback(
+    (tabId: SettingsTabId) => {
+      shell.setActiveSettingsTabId(tabId);
+    },
+    [shell]
+  );
+
+  useLayoutEffect(() => {
+    restorePendingScroll();
+  }, [page, restorePendingScroll]);
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    if (selectedGame || achievementsView) {
+      if (!selectedGame && !achievementsView) return;
+      if (!isGameModalExitPending) {
+        modalReturnScrollTopRef.current = content.scrollTop;
+      }
+      content.scrollTop = 0;
+    }
+  }, [
+    achievementsView,
+    contentRef,
+    isGameModalExitPending,
+    modalReturnScrollTopRef,
+    selectedGame,
+  ]);
+
+  return (
+    <div className="piratebox-shell">
+      <TitleBar />
+
+      <main className="app-main">
+        <Sidebar
+          activePage={page}
+          activeCollectionId={shell.activeProfileCollectionId}
+          steamProfile={appData.steamProfile}
+          isSteamSigningIn={appData.isSteamSigningIn}
+          favoriteGames={appData.favoriteGames}
+          addedLibraryGames={appData.addedLibraryGames}
+          userCollections={appData.userCollections}
+          onNavigate={handleNavigate}
+          onBack={handleBack}
+          onOpenProfile={() => handleNavigate("profile")}
+          onOpenGame={openGame}
+          onSteamSignIn={() => void appData.handleSteamSignIn()}
+          onSteamSignOut={() => void appData.handleSteamSignOut()}
+          onRestartSteam={appData.handleRestartSteam}
+          onCreateCollection={appData.openCreateUserCollectionModal}
+          onRemoveFavorite={appData.toggleFavoriteGame}
+          onRemoveGame={appData.removeQueuedGame}
+          onRemoveGameFromCollection={appData.removeGameFromCollection}
+          onDeleteCollection={appData.deleteCollection}
+          favoriteGameIds={appData.favoriteGameIds}
+          libraryGameAppIds={appData.availableLibraryGameAppIds}
+          removableGameAppIds={appData.addedLibraryGameAppIds}
+          playableGameAppIds={appData.playableGameAppIds}
+          addingGameId={appData.addingGameId}
+          launchingGameId={appData.launchingGameId}
+          onAddGame={appData.queueGame}
+          onPlayGame={appData.handlePlayGame}
+          onAddGameToCollection={appData.addGameToUserCollection}
+          onToggleFavorite={appData.toggleFavoriteGame}
+          activeSettingsTabId={shell.activeSettingsTabId}
+          onSettingsTabChange={handleSidebarSettingsTabChange}
+        />
+
+        <article
+          className={`container ${isGameModalVisible || isAchievementsViewVisible ? "container--modal-open" : ""}`}
+        >
+          <Header
+            page={page}
+            title={headerTitle}
+            canGoBack={
+              Boolean(selectedGame) ||
+              isAchievementsViewVisible ||
+              page !== "home"
+            }
+            query={shell.query}
+            isSearching={shell.isSearchLoading}
+            suggestions={shell.headerSearchSuggestions}
+            onQueryChange={shell.handleQueryChange}
+            onSelectSuggestion={openGame}
+            onBack={handleBack}
+            onNavigateToNotifications={() => handleNavigate("notifications")}
+          />
+
+          <section
+            ref={contentRef}
+            className={`container__content ${page === "settings" ? "container__content--settings" : ""} ${page === "catalogue" ? "container__content--catalogue" : ""} ${isGameModalVisible || isAchievementsViewVisible ? "container__content--modal-open" : ""}`}
+          >
+            <PageRouter
+              page={page}
+              debouncedQuery={shell.debouncedQuery}
+              activeSettingsTabId={shell.activeSettingsTabId}
+              activeProfileCollectionId={shell.activeProfileCollectionId}
+              setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
+              pageEnterKey={shell.pageEnterKey}
+              isMainPage={shell.isMainPage}
+              contentRef={contentRef}
+              steamPathModalLoading={steamPathModalLoading}
+              setSteamPathModalLoading={setSteamPathModalLoading}
+            />
+          </section>
+        </article>
+      </main>
+
+      <Toast toast={toast} onClose={dismissToast} />
+    </div>
+  );
 }
 
 function App() {
-  const [cataloguePage, setCataloguePage] = useState(1);
-  const [catalogueFilters, setCatalogueFilters] =
-    useState<CatalogueFilters>(emptyCatalogueFilters);
-  const [catalogueSort, setCatalogueSort] = useState<CatalogueSort>("popular");
-  const debouncedQuery = useDebouncedValue("", searchDebounceMs);
-
-  const catalogueRequest = useMemo(
-    () => ({
-      query: debouncedQuery,
-      limit: cataloguePageSize,
-      offset: (cataloguePage - 1) * cataloguePageSize,
-      filters: catalogueFilters,
-      sort: catalogueSort,
-    }),
-    [cataloguePage, debouncedQuery, catalogueFilters, catalogueSort]
-  );
-
-  const catalogueQuery = useGamesQuery(catalogueRequest);
-  const facetsQuery = useGamesQuery(
-    {
-      query: "",
-      limit: 1,
-      offset: 0,
-      filters: emptyCatalogueFilters,
-      sort: "popular",
-      includeFacets: true,
-      facetsOnly: true,
-    },
-    { enabled: catalogueQuery.isSuccess && !catalogueQuery.isFetching }
-  );
-
-  const emptySet = useMemo(() => new Set<string>(), []);
-  const database = catalogueQuery.data;
-  const facets = facetsQuery.data?.facets ?? database?.facets;
-  const loading =
-    catalogueQuery.isLoading ||
-    (catalogueQuery.isFetching && !catalogueQuery.data);
-  const filtersLoading = facetsQuery.isLoading || facetsQuery.isFetching;
-
-  return (
-    <div className="app-shell">
-      <main className="content">
-        <CataloguePage
-          games={database?.games ?? []}
-          facets={facets}
-          filtersLoading={filtersLoading && !facets}
-          loading={loading}
-          query={debouncedQuery}
-          page={cataloguePage}
-          chunkOffset={0}
-          matched={database?.matched ?? 0}
-          filters={catalogueFilters}
-          sort={catalogueSort}
-          animateFilterPlaceholders={false}
-          onFiltersChange={setCatalogueFilters}
-          onSortChange={setCatalogueSort}
-          onPageChange={setCataloguePage}
-          onOpenGame={noopGame}
-          favoriteGameIds={emptySet}
-          addedGameAppIds={emptySet}
-          libraryGameAppIds={emptySet}
-          playableGameAppIds={emptySet}
-          addingGameId={null}
-          launchingGameId={null}
-          removingGameId={null}
-          onToggleFavorite={noopGame}
-          onAddGame={noopGame}
-          onPlayGame={noopGame}
-          onRemoveGame={noopGame}
-          userCollections={[]}
-          onAddGameToCollection={noopGame}
-          onRemoveGameFromCollection={noopGame}
-          pulseLoading={false}
-        />
-      </main>
-    </div>
-  );
+  return <AppShell />;
 }
 
 export default App;

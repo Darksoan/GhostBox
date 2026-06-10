@@ -1,0 +1,148 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CatalogueFilters, CatalogueSort } from "../types";
+import {
+  catalogueChunkPageCount,
+  catalogueChunkSize,
+  cataloguePageSize,
+  emptyCatalogueFilters,
+} from "../constants/catalogue";
+import { hasSelectedCatalogueFilters } from "../utils/filters";
+import {
+  getCatalogueFiltersCacheKey,
+  getGamesCacheKey,
+  setHasLoadedCatalogueGlobally,
+} from "../utils/gameCache";
+import { useGamesQuery } from "../queries/games";
+
+export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
+  const [cataloguePage, setCataloguePage] = useState(1);
+  const [catalogueChunkOffset, setCatalogueChunkOffset] = useState(0);
+  const [catalogueFilters, setCatalogueFilters] =
+    useState<CatalogueFilters>(emptyCatalogueFilters);
+  const [catalogueSort, setCatalogueSort] = useState<CatalogueSort>("popular");
+  const [hasLoadedCatalogueOnce, setHasLoadedCatalogueOnce] = useState(false);
+
+  const catalogueFiltersCacheKey = getCatalogueFiltersCacheKey(catalogueFilters);
+
+  const catalogueRequestMeta = useMemo(() => {
+    const requestedChunkOffset =
+      Math.floor((cataloguePage - 1) / catalogueChunkPageCount) *
+      catalogueChunkSize;
+    const hasActiveCatalogueFilters =
+      hasSelectedCatalogueFilters(catalogueFilters);
+    const isFirstPageSnapshot =
+      requestedChunkOffset === 0 &&
+      cataloguePage === 1 &&
+      !debouncedQuery.trim() &&
+      !hasActiveCatalogueFilters;
+    const requestedLimit = isFirstPageSnapshot
+      ? cataloguePageSize
+      : catalogueChunkSize;
+
+    return {
+      requestedChunkOffset,
+      requestedLimit,
+      request: {
+        query: debouncedQuery,
+        limit: requestedLimit,
+        offset: requestedChunkOffset,
+        filters: catalogueFilters,
+        sort: catalogueSort,
+        includeFacets: true,
+      },
+    };
+  }, [
+    catalogueFilters,
+    cataloguePage,
+    catalogueSort,
+    debouncedQuery,
+  ]);
+
+  const catalogueQuery = useGamesQuery(catalogueRequestMeta.request, {
+    enabled,
+  });
+
+  const facetsQuery = useGamesQuery(
+    {
+      query: debouncedQuery,
+      limit: 1,
+      offset: 0,
+      filters: catalogueFilters,
+      sort: catalogueSort,
+      includeFacets: true,
+      facetsOnly: true,
+    },
+    { enabled }
+  );
+
+  useEffect(() => {
+    if (catalogueQuery.data && enabled) {
+      setHasLoadedCatalogueOnce(true);
+      setHasLoadedCatalogueGlobally(true);
+      setCatalogueChunkOffset(catalogueRequestMeta.requestedChunkOffset);
+    }
+  }, [
+    catalogueQuery.data,
+    catalogueRequestMeta.requestedChunkOffset,
+    enabled,
+  ]);
+
+  const requestedCatalogueCacheKey = getGamesCacheKey(
+    debouncedQuery,
+    catalogueRequestMeta.requestedLimit,
+    catalogueRequestMeta.requestedChunkOffset,
+    catalogueFilters,
+    catalogueSort
+  );
+
+  const hasRequestedCatalogueData = Boolean(catalogueQuery.data);
+  const isPageChunkLoading =
+    catalogueQuery.isFetching &&
+    catalogueChunkOffset !== catalogueRequestMeta.requestedChunkOffset;
+  const shouldShowCatalogueLoading =
+    !hasRequestedCatalogueData ||
+    isPageChunkLoading ||
+    !hasLoadedCatalogueOnce;
+
+  const handleCatalogueFiltersChange = useCallback(
+    (filters: CatalogueFilters) => {
+      setCatalogueFilters(filters);
+      setCataloguePage(1);
+    },
+    []
+  );
+
+  const handleCatalogueSortChange = useCallback((sort: CatalogueSort) => {
+    setCatalogueSort(sort);
+    setCataloguePage(1);
+  }, []);
+
+  const handleCataloguePageChange = useCallback((page: number) => {
+    setCataloguePage(page);
+  }, []);
+
+  return {
+    catalogueDatabase: catalogueQuery.data ?? {
+      games: [],
+      total: 0,
+      matched: 0,
+      limited: false,
+      source: "stub",
+    },
+    catalogueFacets: facetsQuery.data?.facets,
+    isLoadingCatalogueFacets: facetsQuery.isFetching,
+    shouldShowCatalogueLoading,
+    shouldPulseCatalogueLoading:
+      (isPageChunkLoading || !hasRequestedCatalogueData) &&
+      hasSelectedCatalogueFilters(catalogueFilters),
+    cataloguePage,
+    catalogueChunkOffset,
+    catalogueFilters,
+    catalogueSort,
+    catalogueFiltersCacheKey,
+    requestedCatalogueCacheKey,
+    handleCatalogueFiltersChange,
+    handleCatalogueSortChange,
+    handleCataloguePageChange,
+  };
+}

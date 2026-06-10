@@ -51,6 +51,8 @@ export type PirateGame = {
   playTimeInMilliseconds?: number;
   lastTimePlayed?: string | null;
   lastSessionRecordedAt?: string | null;
+  lastSessionDurationInMilliseconds?: number;
+  sessionActive?: boolean;
   rating: number;
   size: string;
   release: string;
@@ -113,6 +115,15 @@ export type GameDatabaseResult = {
     publishers?: string[];
     years?: string[];
   };
+};
+
+export type HomeResult = {
+  popular: PirateGame[];
+  recentlyAdded: PirateGame[];
+  total: number;
+  updatedAt?: string;
+  source: string;
+  facets?: GameDatabaseResult["facets"];
 };
 
 export type AddGameResult =

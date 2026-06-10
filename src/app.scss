@@ -7631,6 +7631,22 @@ html.no-tab-animations {
       flex: 0 0 auto;
       color: var(--text-strong);
     }
+
+    &--active {
+      color: #8fd694;
+
+      svg {
+        color: #8fd694;
+      }
+
+      .modal__playtime-label {
+        color: rgba(143, 214, 148, 0.85);
+      }
+
+      .modal__playtime-value {
+        color: #b8f0bc;
+      }
+    }
   }
 
   &__playtime-copy {

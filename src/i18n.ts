@@ -330,7 +330,7 @@ const translations: Record<Language, TranslationTree> = {
           auto: "Autoconfigurada",
           premium: "Chave opcional",
           morrenus:
-            "Fonte premium habilitada quando uma API key válida é informada.",
+            "Fonte premium do Hubcap's Manifest habilitada quando uma API key válida é informada.",
           manifest: "Fonte carregada pelo manifesto remoto do LuaTools.",
           fallback: "Fonte padrão já embutida no app como fallback.",
           openDiscord: "Abrir Discord de {source}",
@@ -653,7 +653,8 @@ const translations: Record<Language, TranslationTree> = {
             "These sources are auto-configured by the LuaTools manifest and used as fallback when available.",
           auto: "Auto-configured",
           premium: "Optional key",
-          morrenus: "Premium source enabled when a valid API key is provided.",
+          morrenus:
+            "Hubcap's Manifest premium source enabled when a valid API key is provided.",
           manifest: "Source loaded from the remote LuaTools manifest.",
           fallback: "Default source bundled in the app as fallback.",
           openDiscord: "Open {source} Discord",

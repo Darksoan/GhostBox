@@ -1,4 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AddGameResult,
@@ -12,7 +14,10 @@ import type {
   GameDatabaseResult,
   GameExecutableSelectionResult,
   GamePlaytimeSnapshot,
+  HomeResult,
+  CatalogueCacheUpdatedPayload,
   LaunchGameResult,
+  LocalAchievementsUnlockedPayload,
   LocalBackupResult,
   LocalRestoreResult,
   LudusaviBackupPreviewGame,
@@ -21,6 +26,7 @@ import type {
   PirateGame,
   RemoveGameResult,
   StartupSettings,
+  SteamRestartResult,
   SteamLibraryScanResult,
   SteamPathSelectionResult,
   SteamProfile,
@@ -30,11 +36,26 @@ function noopUnsubscribe() {
   return undefined;
 }
 
+const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
+
+function getGamesApiUrl() {
+  return (
+    import.meta.env.VITE_PIRATEBOX_GAMES_API_URL?.trim() || defaultGamesApiUrl
+  ).replace(/\/+$/, "");
+}
+
 const emptyGameDatabase: GameDatabaseResult = {
   games: [],
   total: 0,
   matched: 0,
   limited: false,
+  source: "tauri-stub",
+};
+
+const emptyHomeResult: HomeResult = {
+  popular: [],
+  recentlyAdded: [],
+  total: 0,
   source: "tauri-stub",
 };
 
@@ -51,10 +72,18 @@ async function invokeOr<T>(
 }
 
 export const pirateboxApi = {
+  getHome(): Promise<HomeResult> {
+    return invokeOr<HomeResult>(
+      "catalogue_get_home",
+      { apiUrl: getGamesApiUrl() },
+      emptyHomeResult
+    );
+  },
+
   getGames(request?: GameDatabaseRequest): Promise<GameDatabaseResult> {
     return invokeOr<GameDatabaseResult>(
       "database_get_games",
-      { request: request ?? null },
+      { request: request ?? null, apiUrl: getGamesApiUrl() },
       emptyGameDatabase
     );
   },
@@ -62,7 +91,7 @@ export const pirateboxApi = {
   getGameDetails(gameId: string): Promise<PirateGame | null> {
     return invokeOr<PirateGame | null>(
       "database_get_game_details",
-      { gameId },
+      { gameId, apiUrl: getGamesApiUrl() },
       null
     );
   },
@@ -70,7 +99,7 @@ export const pirateboxApi = {
   getGameStoreDetails(gameId: string): Promise<PirateGame | null> {
     return invokeOr<PirateGame | null>(
       "database_get_game_store_details",
-      { gameId },
+      { gameId, apiUrl: getGamesApiUrl() },
       null
     );
   },
@@ -78,68 +107,99 @@ export const pirateboxApi = {
   getGameAchievementDetails(gameId: string): Promise<PirateGame | null> {
     return invokeOr<PirateGame | null>(
       "database_get_game_achievement_details",
-      { gameId },
+      { gameId, apiUrl: getGamesApiUrl() },
       null
     );
   },
 
   getCachedImage(url: string): Promise<string> {
-    return invokeOr<string>("cache_get_image", { url }, url);
+    return invokeOr<string>("cache_get_image", { url }, url).then((result) => {
+      if (!result || result === url || /^https?:\/\//i.test(result)) {
+        return result || url;
+      }
+      return convertFileSrc(result);
+    });
   },
 
   addGameViaLuaTools(game: PirateGame): Promise<AddGameResult> {
-    void game;
-    return Promise.resolve({
-      success: false,
-      error: "PirateBox API indisponivel.",
-    });
+    return invokeOr<AddGameResult>(
+      "luatools_add_game",
+      { game },
+      { success: false, error: "Não foi possível adicionar o jogo via LuaTools." }
+    );
   },
 
   removeGameViaLuaTools(game: PirateGame): Promise<RemoveGameResult> {
-    void game;
-    return Promise.resolve({
-      success: false,
-      error: "PirateBox API indisponivel.",
-    });
+    return invokeOr<RemoveGameResult>(
+      "luatools_remove_game",
+      { game },
+      { success: false, error: "Não foi possível remover o jogo via LuaTools." }
+    );
   },
 
   getGamePlaytimes(): Promise<GamePlaytimeSnapshot> {
-    return Promise.resolve({});
+    return invokeOr<GamePlaytimeSnapshot>("game_get_playtimes", {}, {});
   },
 
   onGamePlaytimesChanged(
     callback: (snapshot: GamePlaytimeSnapshot) => void
   ): () => void {
-    void callback;
-    return noopUnsubscribe;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<GamePlaytimeSnapshot>("game-playtimes-changed", (event) => {
+      callback(event.payload);
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   },
 
   isSteamToolsInstalled(): Promise<boolean> {
-    return Promise.resolve(true);
+    return invokeOr<boolean>("app_is_steamtools_installed", {}, true);
   },
 
   installSteamTools(): Promise<{ success: boolean; error?: string }> {
-    return Promise.resolve({ success: false });
+    return invokeOr<{ success: boolean; error?: string }>(
+      "app_install_steamtools",
+      {},
+      { success: true }
+    );
   },
 
   getSteamProfile(): Promise<SteamProfile | null> {
-    return Promise.resolve(null);
+    return invokeOr<SteamProfile | null>("steam_get_profile", {}, null);
   },
 
   saveSteamProfile(profile: SteamProfile): Promise<SteamProfile> {
-    return Promise.resolve(profile);
+    return invokeOr<SteamProfile>("steam_save_profile", { profile }, profile);
   },
 
-  signInWithSteam(): Promise<SteamProfile | undefined> {
-    return Promise.resolve(undefined);
+  async signInWithSteam(): Promise<SteamProfile> {
+    const profile = await invoke<SteamProfile>("steam_sign_in", {});
+    if (!profile?.steamId) {
+      throw new Error("Steam profile is invalid");
+    }
+    return profile;
   },
 
   signOutSteam(): Promise<void> {
-    return Promise.resolve();
+    return invokeOr<void>("steam_sign_out", {}, undefined);
   },
 
-  restartSteam(): Promise<void> {
-    return Promise.resolve();
+  restartSteam(): Promise<SteamRestartResult | undefined> {
+    return invokeOr<SteamRestartResult | undefined>(
+      "steam_restart",
+      {},
+      undefined
+    );
   },
 
   scanSteamLibrary(
@@ -147,14 +207,33 @@ export const pirateboxApi = {
     forceRefreshOwnedGames?: boolean,
     includeOwnedGames?: boolean
   ): Promise<SteamLibraryScanResult | undefined> {
-    void steamPath;
-    void forceRefreshOwnedGames;
-    void includeOwnedGames;
-    return Promise.resolve(undefined);
+    return invokeOr<SteamLibraryScanResult | undefined>(
+      "steam_scan_library",
+      {
+        steamPath: steamPath ?? null,
+        forceRefreshOwnedGames: forceRefreshOwnedGames ?? false,
+        includeOwnedGames: includeOwnedGames ?? true,
+      },
+      undefined
+    );
   },
 
-  selectSteamPath(): Promise<SteamPathSelectionResult | undefined> {
-    return Promise.resolve(undefined);
+  async selectSteamPath(): Promise<SteamPathSelectionResult | undefined> {
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Selecione a pasta da Steam",
+    });
+
+    if (typeof selectedPath !== "string") {
+      return { status: "cancelled" };
+    }
+
+    return invokeOr<SteamPathSelectionResult | undefined>(
+      "steam_select_path",
+      { steamPath: selectedPath },
+      undefined
+    );
   },
 
   getStartupSettings(): Promise<StartupSettings | undefined> {
@@ -180,135 +259,301 @@ export const pirateboxApi = {
   },
 
   getMorrenusApiKey(): Promise<string | undefined> {
-    return Promise.resolve(undefined);
+    return invokeOr<string | undefined>("app_get_morrenus_api_key", {}, undefined);
   },
 
-  setMorrenusApiKey(apiKey: string): Promise<string | undefined> {
-    void apiKey;
-    return Promise.resolve(undefined);
+  setMorrenusApiKey(apiKey: string): Promise<string> {
+    return invoke<string>("app_set_morrenus_api_key", { apiKey });
   },
 
   getMorrenusStats(apiKey: string): Promise<MorrenusStatsResult | undefined> {
-    void apiKey;
-    return Promise.resolve(undefined);
+    return invokeOr<MorrenusStatsResult | undefined>(
+      "app_get_morrenus_stats",
+      { apiKey },
+      undefined
+    );
   },
 
   validateBackupRoot(): Promise<BackupRootStatus | undefined> {
-    return Promise.resolve(undefined);
+    return invokeOr<BackupRootStatus | undefined>(
+      "backup_validate_root",
+      {},
+      undefined
+    );
   },
 
   onBackupSettingsChanged(
     callback: (settings: BackupSettings) => void
   ): () => void {
-    void callback;
-    return noopUnsubscribe;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<BackupSettings>("backup-settings-changed", (event) => {
+      callback(event.payload);
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   },
 
-  selectBackupOutputPath(): Promise<BackupOutputPathSelectionResult | undefined> {
-    return Promise.resolve(undefined);
+  async selectBackupOutputPath(): Promise<BackupOutputPathSelectionResult | undefined> {
+    const settings = await invokeOr<BackupSettings | undefined>(
+      "backup_get_settings",
+      {},
+      undefined
+    );
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Selecione a pasta de backups",
+      defaultPath: settings?.outputPath,
+    });
+
+    if (typeof selectedPath !== "string") {
+      return settings ? { status: "cancelled", settings } : undefined;
+    }
+
+    const nextSettings = await invoke<BackupSettings>("backup_set_output_path", {
+      outputPath: selectedPath,
+    });
+    return { status: "ok", settings: nextSettings };
   },
 
   openBackupFolder(
     appId: string,
     backupPath?: string
   ): Promise<BackupPathActionResult> {
-    void appId;
-    void backupPath;
-    return Promise.resolve({
-      success: false,
-      error: "Reinicie o app para carregar os novos controles de backup.",
-    });
+    return invokeOr<BackupPathActionResult>(
+      "backup_open_folder",
+      { appId, backupPath: backupPath ?? null },
+      { success: false, error: "Não foi possível abrir a pasta de backup." }
+    );
   },
 
   deleteBackupFolder(
     appId: string,
     backupPath?: string
   ): Promise<BackupFolderDeletionResult> {
-    void appId;
-    void backupPath;
-    return Promise.resolve({
-      success: false,
-      error: "Reinicie o app para carregar os novos controles de backup.",
-    });
+    return invokeOr<BackupFolderDeletionResult>(
+      "backup_delete_folder",
+      { appId, backupPath: backupPath ?? null },
+      { success: false, error: "Não foi possível excluir a pasta de backup." }
+    );
   },
 
   getBackupDetails(
     appId: string,
     backupPath?: string
   ): Promise<BackupDetails | null> {
-    void appId;
-    void backupPath;
-    return Promise.resolve(null);
+    return invokeOr<BackupDetails | null>(
+      "backup_get_details",
+      { appId, backupPath: backupPath ?? null, apiUrl: getGamesApiUrl() },
+      null
+    );
   },
 
   runGameLocalBackup(
     game: LudusaviBackupPreviewGame
   ): Promise<LocalBackupResult | undefined> {
-    void game;
-    return Promise.resolve(undefined);
+    return invokeOr<LocalBackupResult | undefined>(
+      "backup_run_game_local",
+      { game },
+      undefined
+    );
   },
 
   restoreGameLocalBackup(
     game: LudusaviBackupPreviewGame,
     backupPath?: string
   ): Promise<LocalRestoreResult | undefined> {
-    void game;
-    void backupPath;
-    return Promise.resolve(undefined);
+    return invokeOr<LocalRestoreResult | undefined>(
+      "backup_restore_game_local",
+      { game, backupPath: backupPath ?? null },
+      undefined
+    );
   },
 
   setGameAutomaticBackup(
     appId: string,
     enabled: boolean
   ): Promise<BackupSettings | undefined> {
-    void appId;
-    void enabled;
-    return Promise.resolve(undefined);
+    return invokeOr<BackupSettings | undefined>(
+      "backup_set_game_automatic",
+      { appId, enabled },
+      undefined
+    );
   },
 
   setLibraryAutomaticBackups(
     enabled: boolean,
     appIds: string[]
   ): Promise<BackupSettings | undefined> {
-    void enabled;
-    void appIds;
-    return Promise.resolve(undefined);
+    return invokeOr<BackupSettings | undefined>(
+      "backup_set_library_automatic",
+      { enabled, appIds },
+      undefined
+    );
+  },
+
+  setBackupEntryPinned(
+    appId: string,
+    backupPath: string,
+    pinned: boolean
+  ): Promise<BackupSettings | undefined> {
+    return invokeOr<BackupSettings | undefined>(
+      "backup_set_entry_pinned",
+      { appId, backupPath, pinned },
+      undefined
+    );
   },
 
   refreshGameBackupMetadata(appId: string): Promise<BackupSettings | null> {
-    void appId;
-    return Promise.resolve(null);
+    return invokeOr<BackupSettings | null>(
+      "backup_refresh_game_metadata",
+      { appId },
+      null
+    );
   },
 
-  selectGameExecutable(
+  async selectGameExecutable(
     game: PirateGame
   ): Promise<GameExecutableSelectionResult | undefined> {
-    void game;
-    return Promise.resolve(undefined);
+    const executablePath = await open({
+      directory: false,
+      multiple: false,
+      title: "Selecione o executável do jogo",
+      filters: [{ name: "Executável", extensions: ["exe"] }],
+    });
+
+    if (typeof executablePath !== "string") {
+      return undefined;
+    }
+
+    return invokeOr<GameExecutableSelectionResult | undefined>(
+      "backup_select_game_executable",
+      { game, executablePath },
+      undefined
+    );
+  },
+
+  getLudusaviBackupPreviews(
+    games: LudusaviBackupPreviewGame[]
+  ): Promise<LudusaviBackupPreviewGame[]> {
+    return invokeOr<LudusaviBackupPreviewGame[]>(
+      "ludusavi_get_backup_previews",
+      { games },
+      []
+    );
   },
 
   setGameCustomExecutable(
     appId: string,
     executablePath: string | null
   ): Promise<BackupSettings | undefined> {
-    void appId;
-    void executablePath;
-    return Promise.resolve(undefined);
+    return invokeOr<BackupSettings | undefined>(
+      "backup_set_game_custom_executable",
+      { appId, executablePath },
+      undefined
+    );
   },
 
   launchGame(game: LudusaviBackupPreviewGame): Promise<LaunchGameResult | undefined> {
-    void game;
-    return Promise.resolve(undefined);
+    return invokeOr<LaunchGameResult | undefined>(
+      "game_launch",
+      { game },
+      {
+        success: false,
+        appId: game.appId,
+        error: "Não foi possível iniciar o jogo.",
+      }
+    );
   },
 
   getGameIconUrl(appId: string): Promise<string | null> {
-    void appId;
-    return Promise.resolve(null);
+    return invokeOr<string | null>(
+      "steam_get_game_icon_url",
+      { appId },
+      null
+    );
   },
 
   onSteamCmdReady(callback: () => void): () => void {
     void callback;
     return noopUnsubscribe;
+  },
+
+  onCatalogueCacheUpdated(
+    callback: (payload: CatalogueCacheUpdatedPayload) => void
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<CatalogueCacheUpdatedPayload>(
+      "catalogue-cache-updated",
+      (event) => {
+        callback(event.payload);
+      }
+    ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
+  onLocalAchievementsUnlocked(
+    callback: (payload: LocalAchievementsUnlockedPayload) => void
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<LocalAchievementsUnlockedPayload>(
+      "local-achievements-unlocked",
+      (event) => {
+        callback(event.payload);
+      }
+    ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
+  onWindowHiddenToTray(callback: () => void): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen("window-hidden-to-tray", () => {
+      callback();
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   },
 
   minimize(): Promise<void> {

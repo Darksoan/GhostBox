@@ -2,6 +2,7 @@ import type {
   AddGameResult,
   GameDatabaseRequest,
   GameDatabaseResult,
+  HomeResult,
   PirateGame,
   RemoveGameResult,
 } from "../data";
@@ -19,6 +20,7 @@ export type {
   AddGameResult,
   GameDatabaseRequest,
   GameDatabaseResult,
+  HomeResult,
   PirateGame,
   RemoveGameResult,
   BackupDetails,
@@ -45,6 +47,9 @@ export type GamePlaytimeEntry = {
   appId: string;
   playTimeInMilliseconds: number;
   lastTimePlayed: string | null;
+  lastSessionRecordedAt?: string | null;
+  lastSessionDurationInMilliseconds?: number;
+  sessionActive?: boolean;
 };
 
 export type GamePlaytimeSnapshot = Record<string, GamePlaytimeEntry>;
@@ -71,6 +76,16 @@ export type GameExecutableSelectionResult = {
   settings: BackupSettings;
   libraryGame?: PirateGame;
   message?: string;
+};
+
+export type LocalAchievementsUnlockedPayload = {
+  appId: string;
+  title: string;
+  achievements: string[];
+};
+
+export type CatalogueCacheUpdatedPayload = {
+  updatedAt?: string;
 };
 
 export type LaunchGameResult = {
@@ -109,6 +124,15 @@ export type LudusaviBackupPreviewGame = {
 export type MorrenusStatsResult = {
   success: boolean;
   stats?: unknown;
+  error?: string;
+};
+
+export type SteamRestartResult = {
+  success: boolean;
+  status: "opened" | "opened-url" | "failed" | "missing";
+  steamPath?: string;
+  checkedPaths?: string[];
+  message?: string;
   error?: string;
 };
 
