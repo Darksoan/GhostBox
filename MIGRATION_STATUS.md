@@ -218,7 +218,7 @@ Plugins usados:
 `src-tauri/src/lib.rs` ainda ficou grande. Refactor incremental iniciado:
 
 - `catalogue.rs` implementado;
-- `backup.rs` iniciado com comandos de backup root/settings (`get`, `validate`, `ensure`, `set output path`);
+- `backup.rs` iniciado com comandos de backup root/settings, backup automático settings, pin, custom executable, open/delete e metadata refresh;
 - `steam_appcache.rs` implementado;
 - `luatools.rs` implementado;
 - `ludusavi.rs` implementado;
@@ -226,7 +226,7 @@ Plugins usados:
 
 Ainda falta separar de `lib.rs`:
 
-- comandos e helpers de backup/restore restantes;
+- comandos e helpers de backup/restore manual restantes;
 - Steam profile/login e Steam scan;
 - window lifecycle/tray;
 - playtime/monitoramento de sessão.
