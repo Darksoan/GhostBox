@@ -219,7 +219,7 @@ Plugins usados:
 
 - `catalogue.rs` implementado;
 - `backup.rs` iniciado com comandos de backup root/settings, backup automático settings, pin, custom executable, open/delete, metadata refresh, backup manual, restore manual e details;
-- `steam.rs` iniciado com Steam profile/login, persistência de profile, OpenID, callback local e sign-out;
+- `steam.rs` iniciado com Steam profile/login, persistência de profile, OpenID, callback local, sign-out, seleção de path, scan de biblioteca e restart seguro;
 - `steam_appcache.rs` implementado;
 - `luatools.rs` implementado;
 - `ludusavi.rs` implementado;
@@ -227,7 +227,6 @@ Plugins usados:
 
 Ainda falta separar de `lib.rs`:
 
-- Steam scan/path/restart;
 - window lifecycle/tray;
 - playtime/monitoramento de sessão.
 
@@ -235,7 +234,7 @@ Ainda falta separar de `lib.rs`:
 
 Backend:
 
-- continuar refactor técnico de `src-tauri/src/lib.rs` para módulos de Steam profile/login, Steam scan, window lifecycle/tray e playtime/monitoramento;
+- continuar refactor técnico de `src-tauri/src/lib.rs` para módulos de window lifecycle/tray e playtime/monitoramento;
 - decidir se `shell_open_external` deve restringir URLs como o Electron fazia ou manter o comportamento atual do frontend/Tauri.
 
 Frontend:
