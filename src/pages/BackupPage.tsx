@@ -61,6 +61,34 @@ function getBackupEntries(
   return [];
 }
 
+function backupErrorMessage(error: string | undefined, language: "pt" | "en") {
+  const normalized = error?.trim();
+  if (!normalized) {
+    return language === "en"
+      ? "Backup did not finish successfully."
+      : "O backup não terminou com sucesso.";
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower.includes("sidecar") || lower.includes("ludusavi")) {
+    return language === "en"
+      ? `Ludusavi is not available: ${normalized}`
+      : `Ludusavi não está disponível: ${normalized}`;
+  }
+  if (lower.includes("no saves") || lower.includes("sem saves")) {
+    return language === "en"
+      ? "No compatible saves were found for this game."
+      : "Nenhum save compatível foi encontrado para este jogo.";
+  }
+  if (lower.includes("path") || lower.includes("caminho") || lower.includes("pasta")) {
+    return language === "en"
+      ? `Backup path problem: ${normalized}`
+      : `Problema no caminho do backup: ${normalized}`;
+  }
+
+  return normalized;
+}
+
 export function BackupPage({
   games,
   backupSettings,
@@ -80,7 +108,12 @@ export function BackupPage({
     const gamesByAppId = new Map(games.map((game) => [game.appId, game]));
 
     return Object.entries(records)
-      .filter(([, record]) => getBackupEntries(record).length > 0)
+      .filter(
+        ([, record]) =>
+          getBackupEntries(record).length > 0 ||
+          record?.lastBackupSuccess === false ||
+          Boolean(record?.lastBackupError)
+      )
       .map<BackupListItem>(([appId, record]) => {
         const game = gamesByAppId.get(appId);
 
@@ -203,6 +236,10 @@ export function BackupPage({
               language
             );
             const hasSuccessfulBackup = recordEntries.length > 0;
+            const backupError =
+              record?.lastBackupSuccess === false || record?.lastBackupError
+                ? backupErrorMessage(record?.lastBackupError, language)
+                : "";
             const isRootSynced = backupRootStatus?.status === "ok";
             const useSuccessIcon = hasSuccessfulBackup && isRootSynced;
 
@@ -232,6 +269,9 @@ export function BackupPage({
                     )}
                     <div className="backup-list__copy">
                       <strong>{title}</strong>
+                      {backupError && (
+                        <span className="backup-list__error">{backupError}</span>
+                      )}
                       {latestBackupDate && <small>{latestBackupDate}</small>}
                     </div>
                   </div>

@@ -4562,6 +4562,10 @@ input[type="search"]::-ms-reveal {
     line-height: 1.25;
   }
 
+  .backup-list__error {
+    color: var(--danger-hover);
+  }
+
   small {
     color: rgba(211, 211, 211, 0.34);
     font-size: 12px;

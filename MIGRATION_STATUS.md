@@ -272,9 +272,13 @@ Frontend:
 Backend básico existe. Ainda pode precisar refinamento para:
 
 - progresso de backup/restore;
-- mensagens específicas do Ludusavi;
 - estado claro de sidecar ausente;
 - detalhes de backup mais ricos.
+
+Implementado no frontend:
+
+- a página de backups lista registros com falha mesmo sem backup válido;
+- erros de Ludusavi, ausência de saves e problemas de path recebem mensagens específicas.
 
 ### Performance Frontend
 
