@@ -67,10 +67,11 @@ export function CatalogueListLoadingState({
   pulseLoading?: boolean;
 }) {
   const loadingClassName = pulseLoading ? "loading-pulse-skeleton" : "loading-wave";
+  const placeholderCount = Math.min(cataloguePageSize, 6);
 
   return (
     <div className="catalogue-list">
-      {Array.from({ length: cataloguePageSize }, (_, index) => (
+      {Array.from({ length: placeholderCount }, (_, index) => (
         <div className="catalogue-list__placeholder" key={`catalogue-loading-${index}`}>
           <div className={`catalogue-list__placeholder-cover ${loadingClassName}`} />
           <div className="catalogue-list__placeholder-content">

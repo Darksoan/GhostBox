@@ -395,7 +395,7 @@ export function CataloguePage({
   const currentPage = Math.min(page, totalPages);
 
   useEffect(() => {
-    const el = scrollElementRef?.current ?? resultsRef.current;
+    const el = resultsRef.current ?? scrollElementRef?.current;
     el?.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentPage, scrollElementRef]);
 
@@ -531,7 +531,7 @@ export function CataloguePage({
                 addingGameId={addingGameId}
                 removingGameId={removingGameId}
                 onRemoveGame={onRemoveGame}
-                scrollElementRef={scrollElementRef}
+                scrollElementRef={resultsRef}
                 onVirtualHeightChange={setVirtualListHeight}
                 onGameContextMenu={(game, x, y) =>
                   setContextMenu({ game, x, y, mode: "game" })

@@ -16,6 +16,7 @@ export const imageSourceCacheKey = "piratebox:image-source-cache:v1";
 export const recentPlayedGamesStorageKey = "piratebox:recent-played-games:v3";
 export const profileHistoryGamesStorageKey = "piratebox:profile-history-games:v1";
 export const showSteamGamesStorageKey = "piratebox:show-steam-games:v1";
+export const personalCalendarStorageKey = "piratebox:personal-calendar:v1";
 export const recentLibrarySessionLimit = 50;
 export const librarySortStorageKey = "piratebox:library-sort-by:v1";
 export const imageSourceCacheLimit = 800;

@@ -19,8 +19,14 @@ export function useAppShellState(page: Page) {
     { enabled: Boolean(debouncedQuery.trim()) && page !== "catalogue" }
   );
 
+  const isCatalogueSearchPending =
+    page === "catalogue" &&
+    Boolean(query.trim()) &&
+    query.trim() !== debouncedQuery.trim();
+
   const isSearchLoading =
-    headerSearchQuery.isFetching && Boolean(debouncedQuery.trim());
+    isCatalogueSearchPending ||
+    (headerSearchQuery.isFetching && Boolean(debouncedQuery.trim()));
 
   const headerSearchSuggestions = useMemo(
     () =>

@@ -5,9 +5,14 @@ use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
+use tauri::Manager;
 
 const STEAM_STORE_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 2;
+const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.hella.workers.dev";
+const STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
 
 fn text(value: Option<&Value>) -> String {
     value
@@ -247,12 +252,254 @@ fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
     }
 }
 
+fn steam_store_details_from_store_data(store_data: &Value) -> Value {
+    let screenshots: Vec<Value> = store_data
+        .get("screenshots")
+        .and_then(|value| value.as_array())
+        .map(|screenshots| {
+            screenshots
+                .iter()
+                .filter_map(|screenshot| {
+                    let full = text(screenshot.get("path_full"));
+                    (!full.is_empty()).then_some(Value::String(full))
+                })
+                .take(8)
+                .collect()
+        })
+        .unwrap_or_default();
+    let movies: Vec<Value> = store_data
+        .get("movies")
+        .and_then(|value| value.as_array())
+        .map(|movies| movies.iter().filter_map(steam_store_movie).collect())
+        .unwrap_or_default();
+    let genres: Vec<Value> = store_data
+        .get("genres")
+        .and_then(|value| value.as_array())
+        .map(|genres| {
+            genres
+                .iter()
+                .filter_map(|genre| {
+                    let description = text(genre.get("description"));
+                    (!description.is_empty()).then_some(Value::String(description))
+                })
+                .take(6)
+                .collect()
+        })
+        .unwrap_or_default();
+    let pc_requirements = store_data.get("pc_requirements").unwrap_or(&Value::Null);
+
+    serde_json::json!({
+        "name": text(store_data.get("name")),
+        "headerImage": text(store_data.get("header_image")),
+        "screenshots": screenshots,
+        "movies": movies,
+        "aboutTheGame": text(store_data.get("about_the_game")),
+        "shortDescription": text(store_data.get("short_description")),
+        "pcRequirements": {
+            "minimum": requirements(pc_requirements.get("minimum")),
+            "recommended": requirements(pc_requirements.get("recommended")),
+        },
+        "genres": genres,
+        "developers": text_array(store_data.get("developers"), usize::MAX),
+        "publishers": text_array(store_data.get("publishers"), usize::MAX),
+    })
+}
+
+fn text_array(value: Option<&Value>, limit: usize) -> Vec<Value> {
+    value
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| {
+                    let value = text(Some(value));
+                    (!value.is_empty()).then_some(Value::String(value))
+                })
+                .take(limit)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
+    let Some(object) = game.as_object_mut() else {
+        return;
+    };
+
+    let screenshots = text_array(details.get("screenshots"), 8);
+    if !screenshots.is_empty() {
+        object.insert("screenshots".to_string(), Value::Array(screenshots));
+    }
+
+    let movies: Vec<Value> = details
+        .get("movies")
+        .and_then(|value| value.as_array())
+        .map(|movies| movies.iter().filter_map(steam_store_movie).collect())
+        .unwrap_or_default();
+    if !movies.is_empty() {
+        object.insert("movies".to_string(), Value::Array(movies));
+    }
+
+    let about_the_game = text(details.get("aboutTheGame"));
+    if !about_the_game.is_empty() {
+        object.insert("aboutTheGame".to_string(), Value::String(about_the_game));
+    }
+
+    let short_description = text(details.get("shortDescription"));
+    if !short_description.is_empty() {
+        object.insert(
+            "shortDescription".to_string(),
+            Value::String(short_description),
+        );
+    }
+
+    if let Some(pc_requirements) = details
+        .get("pcRequirements")
+        .and_then(|value| value.as_object())
+    {
+        let minimum = text_array(pc_requirements.get("minimum"), usize::MAX);
+        let recommended = text_array(pc_requirements.get("recommended"), usize::MAX);
+        if !minimum.is_empty() || !recommended.is_empty() {
+            object.insert(
+                "pcRequirements".to_string(),
+                serde_json::json!({
+                    "minimum": minimum,
+                    "recommended": recommended,
+                }),
+            );
+        }
+    }
+
+    let genres = text_array(details.get("genres"), 6);
+    if !genres.is_empty() {
+        object.insert("genres".to_string(), Value::Array(genres));
+    }
+
+    for key in ["developers", "publishers"] {
+        let values = text_array(details.get(key), usize::MAX);
+        if !values.is_empty() {
+            object.insert(key.to_string(), Value::Array(values));
+        }
+    }
+}
+
+fn steam_store_details_cache_path(app: &tauri::AppHandle, app_id: &str) -> Option<PathBuf> {
+    if !app_id.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+
+    let directory = app
+        .path()
+        .app_data_dir()
+        .ok()?
+        .join("cache")
+        .join("steam-store-details");
+    Some(directory.join(format!("{app_id}.json")))
+}
+
+fn read_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str) -> Option<Value> {
+    let path = steam_store_details_cache_path(app, app_id)?;
+    let contents = fs::read_to_string(path).ok()?;
+    let cached = serde_json::from_str::<Value>(&contents).ok()?;
+    if cached.get("version").and_then(|value| value.as_u64())
+        != Some(STEAM_STORE_DETAILS_CACHE_VERSION)
+    {
+        return None;
+    }
+    cached.get("data").cloned()
+}
+
+fn write_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str, details: &Value) {
+    let Some(path) = steam_store_details_cache_path(app, app_id) else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+
+    let body = serde_json::json!({
+        "version": STEAM_STORE_DETAILS_CACHE_VERSION,
+        "cachedAt": chrono::Utc::now().to_rfc3339(),
+        "appId": app_id,
+        "data": details,
+    });
+    let Ok(contents) = serde_json::to_string(&body) else {
+        return;
+    };
+    let _ = fs::write(path, contents);
+}
+
+fn has_steam_store_movies(details: &Value) -> bool {
+    details
+        .get("movies")
+        .and_then(|value| value.as_array())
+        .map(|movies| movies.iter().any(|movie| steam_store_movie(movie).is_some()))
+        .unwrap_or(false)
+}
+
+fn should_write_steam_store_details_cache(next: &Value, previous: Option<&Value>) -> bool {
+    has_steam_store_movies(next) || !previous.map(has_steam_store_movies).unwrap_or(false)
+}
+
+fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
+    if !app_id.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+
+    let base = std::env::var(STEAM_DETAILS_PROXY_URL_ENV)
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_STEAM_DETAILS_PROXY_URL.to_string());
+    let mut url = reqwest::Url::parse(&base).ok()?;
+    let is_localhost = matches!(url.host_str(), Some("localhost" | "127.0.0.1"));
+    if url.scheme() != "https" && !is_localhost {
+        return None;
+    }
+
+    let base_path = url.path().trim_end_matches('/');
+    url.set_path(&format!("{base_path}/games/{app_id}/details"));
+    url.query_pairs_mut().clear().append_pair("lang", "portuguese");
+    Some(url)
+}
+
+async fn fetch_steam_details_proxy(app_id: &str) -> Option<Value> {
+    let url = steam_details_proxy_url(app_id)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+    let details = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()?;
+    let response_app_id = text(details.get("appId"));
+    if !response_app_id.is_empty() && response_app_id != app_id {
+        return None;
+    }
+    Some(details)
+}
+
 async fn fetch_steam_store_details(app_id: &str) -> Option<Value> {
     let url = format!(
         "https://store.steampowered.com/api/appdetails?appids={}&l=portuguese",
         app_id
     );
-    let response = reqwest::Client::new()
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+    let response = client
         .get(url)
         .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
@@ -673,8 +920,36 @@ pub async fn database_get_game_store_details(
         return Ok(None);
     };
 
+    let mut latest_cached_details = read_cached_steam_store_details(&app, &app_id);
+    if let Some(cached_details) = latest_cached_details.as_ref() {
+        merge_normalized_steam_details(&mut game, cached_details);
+        if has_steam_store_movies(cached_details) {
+            return Ok(Some(game));
+        }
+    }
+
+    if let Some(proxy_details) = fetch_steam_details_proxy(&app_id).await {
+        let has_proxy_movies = has_steam_store_movies(&proxy_details);
+        merge_normalized_steam_details(&mut game, &proxy_details);
+        if should_write_steam_store_details_cache(&proxy_details, latest_cached_details.as_ref()) {
+            write_cached_steam_store_details(&app, &app_id, &proxy_details);
+            latest_cached_details = Some(proxy_details);
+        }
+        if has_proxy_movies {
+            return Ok(Some(game));
+        }
+    }
+
     if let Some(store_data) = fetch_steam_store_details(&app_id).await {
+        let store_details = steam_store_details_from_store_data(&store_data);
         merge_steam_store_details(&mut game, &store_data);
+        if should_write_steam_store_details_cache(
+            &store_details,
+            latest_cached_details.as_ref(),
+        )
+        {
+            write_cached_steam_store_details(&app, &app_id, &store_details);
+        }
     }
 
     Ok(Some(game))

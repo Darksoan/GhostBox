@@ -1,21 +1,28 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Trophy } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PirateGame } from "../data";
 import type { CatalogueFilterKey, UserCollection } from "../types";
-import { loadGameStoreDetails } from "../data";
+import { loadGames, loadGameStoreDetails } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useSettings } from "../context/settings";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import {
   useCachedImageSources,
   useLoadableImageCover,
 } from "../hooks/useCachedImageSources";
-import { readStoredRecentPlayedGames } from "../utils/storage";
+import {
+  readStoredPersonalCalendar,
+  writeStoredPersonalCalendar,
+  type StoredPersonalCalendar,
+} from "../utils/storage";
 import {
   gameHeaderOnlySources,
   gameHeroCapsuleSources,
+  gamePortraitSources,
   layeredImageStyle,
 } from "../utils/image";
+import { formatCompactPlaytime } from "../utils/time";
 
 type HomeGameSeed = {
   appId: string;
@@ -38,25 +45,25 @@ const topReviewedSteamGames: HomeGameSeed[] = [
     appId: "2050650",
     title: "Resident Evil 4",
     shortDescription:
-      "Survival horror reimaginado com combate moderno, tensão constante e uma missão de resgate em um vilarejo dominado por uma ameaça brutal.",
+      "Survival horror reimagined with modern combat, constant tension, and a rescue mission in a village controlled by a brutal threat.",
   },
   {
     appId: "367520",
     title: "Hollow Knight",
     shortDescription:
-      "Explore Hallownest em uma aventura de ação atmosférica, cheia de chefes desafiadores, segredos e combates precisos.",
+      "Explore Hallownest in an atmospheric action adventure filled with challenging bosses, secrets, and precise combat.",
   },
   {
     appId: "1449690",
     title: "The Walking Dead: The Telltale Definitive Series",
     shortDescription:
-      "Uma jornada narrativa completa no universo de The Walking Dead, com escolhas difíceis, personagens marcantes e consequências emocionais.",
+      "A complete narrative journey through The Walking Dead universe, with hard choices, memorable characters, and emotional consequences.",
   },
   {
     appId: "1817070",
     title: "Marvel's Spider-Man Remastered",
     shortDescription:
-      "Viva a história de um Peter Parker experiente enquanto enfrenta grandes ameaças e cruza Nova York com acrobacias fluidas.",
+      "Experience the story of a seasoned Peter Parker as he faces major threats and swings through New York with fluid acrobatics.",
   },
 ];
 
@@ -96,6 +103,23 @@ const homeFeaturedSteamGames: HomeGameSeed[] = [
 ];
 
 const homeCarouselGroupSize = 4;
+const homePersonalCalendarGameCount = 21;
+const homePersonalCalendarPageSize = 500;
+const homePersonalCalendarHistoryLimit = homePersonalCalendarGameCount * 8;
+const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
+
+function getHomeCalendarDates(): string[] {
+  const today = new Date();
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    dates.push(`${day}/${month}`);
+  }
+  return dates;
+}
 
 function homeSteamCdnUrl(appId: string, asset: string) {
   return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/${asset}`;
@@ -103,6 +127,24 @@ function homeSteamCdnUrl(appId: string, asset: string) {
 
 function homeGameAppId(game: PirateGame) {
   return game.appId || game.id.replace(/^steam-/, "");
+}
+
+function formatLastSessionDate(
+  value: string | null | undefined,
+  language: "pt" | "en" = "pt"
+) {
+  if (!value)
+    return language === "en" ? "Recently played" : "Jogado recentemente";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return language === "en" ? "Recently played" : "Jogado recentemente";
+  }
+
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
 }
 
 function createHomeSeedFallbackGame(
@@ -159,6 +201,150 @@ function hasCompletedPlaySession(
       Number.isFinite(Date.parse(game.lastTimePlayed ?? "")) &&
       !/^Steam App \d+$/i.test(game.title.trim())
   );
+}
+
+function getLastPlayedTime(game: PirateGame) {
+  const lastPlayedTime = Date.parse(game.lastTimePlayed ?? "");
+  return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
+}
+
+function homeGameKey(game: PirateGame) {
+  return game.appId || game.id;
+}
+
+function isStoredHomePersonalCalendarFresh(
+  calendar: StoredPersonalCalendar | null
+): calendar is StoredPersonalCalendar {
+  return Boolean(
+    calendar &&
+      calendar.gameIds.length === homePersonalCalendarGameCount &&
+      Date.parse(calendar.expiresAt) > Date.now()
+  );
+}
+
+function getUniqueCalendarPool(games: PirateGame[]) {
+  const seen = new Set<string>();
+
+  return games.filter((game) => {
+    const key = homeGameKey(game);
+    if (!key || seen.has(key) || /^Steam App \d+$/i.test(game.title.trim())) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function shuffleHomeCalendarGames(games: PirateGame[]) {
+  const shuffled = [...games];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const nextIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[nextIndex]] = [shuffled[nextIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function getHomeCalendarTraits(game: PirateGame) {
+  return new Set(
+    [...game.genres, ...game.tags]
+      .map((value) => normalizeHomeCategory(value).toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function getHomeCalendarOverlapScore(
+  game: PirateGame,
+  selectedGames: PirateGame[]
+) {
+  const traits = getHomeCalendarTraits(game);
+  if (!traits.size) return 0;
+
+  return selectedGames.slice(-6).reduce((score, selectedGame) => {
+    const selectedTraits = getHomeCalendarTraits(selectedGame);
+    let overlap = 0;
+    traits.forEach((trait) => {
+      if (selectedTraits.has(trait)) overlap += 1;
+    });
+    return score + overlap;
+  }, 0);
+}
+
+function pickHomePersonalCalendarGames(
+  games: PirateGame[],
+  recentGameIds: string[]
+) {
+  const recentIds = new Set(recentGameIds);
+  const pool = getUniqueCalendarPool(games);
+  const freshPool = pool.filter((game) => !recentIds.has(homeGameKey(game)));
+  const availableGames = freshPool.length >= homePersonalCalendarGameCount
+    ? freshPool
+    : pool;
+  const candidates = shuffleHomeCalendarGames(availableGames);
+  const selectedGames: PirateGame[] = [];
+
+  while (
+    selectedGames.length < homePersonalCalendarGameCount &&
+    candidates.length > 0
+  ) {
+    const rankedCandidates = candidates
+      .map((game, index) => ({
+        game,
+        index,
+        score: getHomeCalendarOverlapScore(game, selectedGames),
+      }))
+      .sort((a, b) => a.score - b.score || a.index - b.index);
+    const nextCandidate = rankedCandidates[0];
+
+    selectedGames.push(nextCandidate.game);
+    candidates.splice(nextCandidate.index, 1);
+  }
+
+  return selectedGames;
+}
+
+function createHomePersonalCalendar(
+  selectedGames: PirateGame[],
+  storedCalendar: StoredPersonalCalendar | null
+): StoredPersonalCalendar {
+  const now = Date.now();
+  const selectedGameIds = selectedGames.map(homeGameKey);
+  const recentGameIds = [
+    ...selectedGameIds,
+    ...(storedCalendar?.recentGameIds ?? []).filter(
+      (gameId) => !selectedGameIds.includes(gameId)
+    ),
+  ].slice(0, homePersonalCalendarHistoryLimit);
+
+  return {
+    weekStart: new Date(now).toISOString(),
+    expiresAt: new Date(now + homePersonalCalendarRefreshMs).toISOString(),
+    gameIds: selectedGameIds,
+    recentGameIds,
+  };
+}
+
+async function loadHomePersonalCalendarPool() {
+  const games: PirateGame[] = [];
+  let offset = 0;
+  let expectedTotal: number | undefined;
+
+  while (expectedTotal === undefined || offset < expectedTotal) {
+    const result = await loadGames({
+      query: "",
+      limit: homePersonalCalendarPageSize,
+      offset,
+      sort: "popular",
+    });
+    games.push(...result.games);
+    expectedTotal = result.matched || result.total || games.length;
+
+    if (result.games.length < homePersonalCalendarPageSize) break;
+    offset += homePersonalCalendarPageSize;
+  }
+
+  return getUniqueCalendarPool(games);
 }
 
 function HomeCategoryCard({
@@ -595,6 +781,167 @@ function HomeExploreCategories({
   );
 }
 
+function HomeCalendarGameCard({
+  game,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  game: PirateGame;
+  onOpenGame: (game: PirateGame) => void;
+  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+}) {
+  const coverSources = useCachedImageSources(gamePortraitSources(game));
+  const { source: coverSource, loaded } = useLoadableImageCover(coverSources);
+  const layeredSources = coverSource
+    ? [coverSource, ...coverSources.filter((source) => source !== coverSource)]
+    : coverSources;
+
+  return (
+    <button
+      type="button"
+      className="home-calendar-card"
+      onClick={() => onOpenGame(game)}
+      onContextMenu={(event) => {
+        if (!onGameContextMenu) return;
+        event.preventDefault();
+        onGameContextMenu(game, event.clientX, event.clientY);
+      }}
+    >
+      <span
+        className={`home-calendar-card__cover${
+          loaded ? " home-calendar-card__cover--loaded" : ""
+        }`}
+        style={layeredImageStyle(layeredSources, "")}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+function HomePersonalCalendar({
+  title,
+  subtitle,
+  games,
+  language,
+  loading,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  title: string;
+  subtitle: string;
+  games: PirateGame[];
+  language: "pt" | "en";
+  loading: boolean;
+  onOpenGame: (game: PirateGame) => void;
+  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+}) {
+  const weekdays = getHomeCalendarDates();
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const [isAtStart, setIsAtStart] = useState(true);
+  const [isAtEnd, setIsAtEnd] = useState(false);
+  const gamesPerDay = 3;
+
+  const updateCalendarScrollState = () => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+    setIsAtStart(carousel.scrollLeft <= 1);
+    setIsAtEnd(
+      carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 2
+    );
+  };
+
+  useLayoutEffect(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    carousel.scrollLeft = 0;
+    updateCalendarScrollState();
+    const frame = requestAnimationFrame(updateCalendarScrollState);
+
+    return () => cancelAnimationFrame(frame);
+  }, [games.length]);
+
+  if (!games.length && !loading) return null;
+
+  const handleScroll = () => {
+    updateCalendarScrollState();
+  };
+
+  const scrollCalendar = (direction: -1 | 1) => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    carousel.scrollBy({
+      left: direction * carousel.clientWidth,
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <section className="home-calendar" aria-label={title}>
+      <div className="home-calendar__header">
+        <h3 className="home-calendar__title">{title}</h3>
+        {subtitle && <span className="home-calendar__subtitle">{subtitle}</span>}
+      </div>
+      <div className="home-calendar__rail">
+        <button
+          type="button"
+          className="home-calendar__arrow home-calendar__arrow--prev"
+          aria-label={language === "en" ? "Previous calendar days" : "Dias anteriores"}
+          onClick={() => scrollCalendar(-1)}
+          style={{ visibility: isAtStart ? "hidden" : "visible" }}
+        >
+          <ChevronLeft size={30} strokeWidth={2.1} aria-hidden="true" />
+        </button>
+        <div className="home-calendar__carousel" ref={carouselRef} onScroll={handleScroll}>
+          <div className="home-calendar__track">
+            {weekdays.map((date, dayIndex) => {
+              const dayGames = games.slice(
+                dayIndex * gamesPerDay,
+                dayIndex * gamesPerDay + gamesPerDay
+              );
+
+              return (
+                <section className="home-calendar-day" key={date} aria-label={date}>
+                  <h4 className="home-calendar-day__title">{date}</h4>
+                  <div className="home-calendar-day__games">
+                    {Array.from({ length: 3 }, (_, gameIndex) => {
+                      const game = dayGames[gameIndex];
+                      return game ? (
+                        <HomeCalendarGameCard
+                          key={homeGameKey(game)}
+                          game={game}
+                          onOpenGame={onOpenGame}
+                          onGameContextMenu={onGameContextMenu}
+                        />
+                      ) : (
+                        <span
+                          key={`placeholder-${gameIndex}`}
+                          className="home-calendar-card home-calendar-card--empty"
+                          aria-hidden="true"
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="home-calendar__arrow home-calendar__arrow--next"
+          aria-label={language === "en" ? "Next calendar days" : "Próximos dias"}
+          onClick={() => scrollCalendar(1)}
+          style={{ visibility: isAtEnd ? "hidden" : "visible" }}
+        >
+          <ChevronRight size={30} strokeWidth={2.1} aria-hidden="true" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function HomeRecommendedHero({
   title,
   games,
@@ -652,7 +999,7 @@ function HomeRecommendedHero({
       transitionFrameRef.current = requestAnimationFrame(() => {
         setIsTransitioning(false);
       });
-    }, 160);
+    }, 100);
   }
 
   function moveRecommendedHero(direction: -1 | 1) {
@@ -760,6 +1107,15 @@ function HomeRecentBanner({
   const heroSources = fallbackHeroSource ? [fallbackHeroSource] : [];
   const cachedSources = useCachedImageSources(heroSources);
   const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
+  const achievementTotal = game?.achievements.total ?? 0;
+  const achievementUnlocked = Math.min(
+    game?.achievements.unlocked ?? 0,
+    achievementTotal
+  );
+  const achievementProgress =
+    achievementTotal > 0
+      ? Math.round((achievementUnlocked / achievementTotal) * 100)
+      : 0;
 
   if (!game) {
     return (
@@ -769,8 +1125,33 @@ function HomeRecentBanner({
           <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
           <span className="home-recent-banner__gradient" aria-hidden="true" />
           <span className="home-recent-banner__content home-recent-banner__content--skeleton">
-            <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
-            <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--desc" />
+            <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
+            </strong>
+            <span className="home-recent-banner__description home-recent-banner__description--skeleton">
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--desc" />
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--desc home-recent-banner__skeleton-line--desc-short" />
+            </span>
+            <span className="home-recent-banner__meta" aria-hidden="true">
+              <small className="home-recent-banner__meta-item">
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
+              </small>
+              <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
+                <span className="home-recent-banner__meta-copy">
+                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
+                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
+                </span>
+              </small>
+              <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
+                <span className="home-recent-banner__meta-copy">
+                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
+                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
+                </span>
+              </small>
+            </span>
           </span>
         </div>
       </section>
@@ -809,6 +1190,64 @@ function HomeRecentBanner({
           <span className="home-recent-banner__description">
             {getHomeShortDescription(game, language)}
           </span>
+          <span className="home-recent-banner__meta">
+            <small className="home-recent-banner__meta-item">
+              <span className="home-recent-banner__meta-label">
+                {language === "en" ? "Last session" : "Última sessão"}
+              </span>
+              <span className="home-recent-banner__meta-value">
+                {formatLastSessionDate(game.lastTimePlayed, language)}
+              </span>
+            </small>
+            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
+              <Clock
+                className="home-recent-banner__meta-icon"
+                size={26}
+                strokeWidth={1.7}
+                aria-hidden="true"
+              />
+              <span className="home-recent-banner__meta-copy">
+                <span className="home-recent-banner__meta-label">
+                  {language === "en" ? "Playtime" : "Tempo de jogo"}
+                </span>
+                <span className="home-recent-banner__meta-value">
+                  {game.playTimeInMilliseconds
+                    ? formatCompactPlaytime(game.playTimeInMilliseconds)
+                    : language === "en"
+                      ? "Recently played"
+                      : "Jogado recentemente"}
+                </span>
+              </span>
+            </small>
+            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
+              <Trophy
+                className="home-recent-banner__meta-icon"
+                size={28}
+                strokeWidth={1.7}
+                aria-hidden="true"
+              />
+              <span className="home-recent-banner__meta-copy">
+                <span className="home-recent-banner__meta-label">
+                  {language === "en" ? "Achievements" : "Conquistas"}
+                </span>
+                <span className="home-recent-banner__meta-value home-recent-banner__meta-value--achievements">
+                  {achievementTotal > 0
+                    ? `${achievementUnlocked}/${achievementTotal} ${
+                        language === "en" ? "unlocked" : "alcançadas"
+                      } (${achievementProgress}%)`
+                    : language === "en"
+                      ? "No achievements"
+                      : "Sem conquistas"}
+                </span>
+                <span
+                  className="home-recent-banner__achievement-track"
+                  aria-hidden="true"
+                >
+                  <span style={{ width: `${achievementProgress}%` }} />
+                </span>
+              </span>
+            </small>
+          </span>
         </span>
       </div>
     </section>
@@ -831,6 +1270,7 @@ export function HomePage({
   onAddGameToCollection,
   onRemoveGameFromCollection,
   onOpenCatalogueCategory,
+  profileHistoryGames,
 }: {
   onOpenGame: (game: PirateGame) => void;
   favoriteGameIds: Set<string>;
@@ -850,6 +1290,7 @@ export function HomePage({
     key: Extract<CatalogueFilterKey, "genres" | "tags">,
     value: string
   ) => void;
+  profileHistoryGames: PirateGame[];
 }) {
   const { appearance, t } = useSettings();
   const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<PirateGame[]>(
@@ -863,9 +1304,11 @@ export function HomePage({
       createHomeSeedFallbackGame(game, index, "")
     )
   );
-  const [recentPlayedGames] = useState<PirateGame[]>(() =>
-    readStoredRecentPlayedGames()
+  const [storedPersonalCalendar] = useState<StoredPersonalCalendar | null>(() =>
+    readStoredPersonalCalendar()
   );
+  const [personalCalendarGames, setPersonalCalendarGames] = useState<PirateGame[]>([]);
+  const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
   const [homeContextMenu, setHomeContextMenu] = useState<{
     game: PirateGame;
     x: number;
@@ -940,14 +1383,78 @@ export function HomePage({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPersonalCalendar() {
+      setIsLoadingPersonalCalendar(true);
+
+      try {
+        const pool = await loadHomePersonalCalendarPool();
+        if (cancelled) return;
+
+        const gameById = new Map<string, PirateGame>();
+        pool.forEach((game) => {
+          gameById.set(homeGameKey(game), game);
+          gameById.set(game.id, game);
+        });
+
+        if (isStoredHomePersonalCalendarFresh(storedPersonalCalendar)) {
+          const storedGames = storedPersonalCalendar.gameIds.flatMap((gameId) => {
+            const game = gameById.get(gameId);
+            return game ? [game] : [];
+          });
+
+          if (storedGames.length === homePersonalCalendarGameCount) {
+            setPersonalCalendarGames(storedGames);
+            return;
+          }
+        }
+
+        const selectedGames = pickHomePersonalCalendarGames(
+          pool,
+          storedPersonalCalendar?.recentGameIds ?? []
+        );
+
+        if (!selectedGames.length) {
+          setPersonalCalendarGames([]);
+          return;
+        }
+
+        const nextCalendar = createHomePersonalCalendar(
+          selectedGames,
+          storedPersonalCalendar
+        );
+        writeStoredPersonalCalendar(nextCalendar);
+        setPersonalCalendarGames(selectedGames);
+      } finally {
+        if (!cancelled) setIsLoadingPersonalCalendar(false);
+      }
+    }
+
+    void loadPersonalCalendar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storedPersonalCalendar]);
+
   const homeVisibleGames = useMemo(() => {
     return homeTopReviewedGames.slice(0, homeCarouselGroupSize);
   }, [homeTopReviewedGames]);
   const featuredGames = homeFeaturedGames;
+  const enrichedPersonalCalendarGames = useEnrichedGameCards(
+    personalCalendarGames,
+    homePersonalCalendarGameCount
+  );
   const exploreCategories = useMemo(() => {
     return getHomeExploreCategories([...homeTopReviewedGames, ...homeFeaturedGames]);
   }, [homeTopReviewedGames, homeFeaturedGames]);
-  const homeRecentPlayedGame = recentPlayedGames.find(hasCompletedPlaySession);
+  const homeRecentPlayedGame = useMemo(() => {
+    return [...profileHistoryGames]
+      .filter(hasCompletedPlaySession)
+      .sort((left, right) => getLastPlayedTime(right) - getLastPlayedTime(left))[0];
+  }, [profileHistoryGames]);
 
   const homeContextMenuItems = useCollectionContextMenu({
     game: homeContextMenu?.game ?? null,
@@ -996,6 +1503,17 @@ export function HomePage({
         language={appearance.language}
         onOpenCategory={(category) =>
           onOpenCatalogueCategory(category.filterKey, category.filterValue)
+        }
+      />
+      <HomePersonalCalendar
+        title={appearance.language === "en" ? "Personal calendar" : "Calendário pessoal"}
+        subtitle=""
+        games={enrichedPersonalCalendarGames}
+        language={appearance.language}
+        loading={isLoadingPersonalCalendar}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={(gameItem, x, y) =>
+          setHomeContextMenu({ game: gameItem, x, y })
         }
       />
       <HomeRecentBanner

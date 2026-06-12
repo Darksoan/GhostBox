@@ -13,6 +13,28 @@ interface MediaItem {
   alt: string;
 }
 
+function getMovieSource(movie: SteamMovie) {
+  const sourceOptions = [
+    { src: movie.hls_h264, type: "application/x-mpegURL" },
+    { src: movie.mp4?.max, type: "video/mp4" },
+    { src: movie.mp4?.["480"], type: "video/mp4" },
+    { src: movie.webm?.max, type: "video/webm" },
+    { src: movie.webm?.["480"], type: "video/webm" },
+    { src: movie.dash_h264, type: "application/dash+xml" },
+    { src: movie.dash_av1, type: "application/dash+xml" },
+  ];
+
+  const source = sourceOptions.find((option) => option.src?.trim());
+  if (!source?.src) return null;
+
+  return {
+    videoSrc: source.src.startsWith("http://")
+      ? source.src.replace("http://", "https://")
+      : source.src,
+    videoType: source.type,
+  };
+}
+
 interface GallerySliderProps {
   screenshots: string[];
   movies?: SteamMovie[];
@@ -35,32 +57,14 @@ export function GallerySlider({
 
     if (movies) {
       movies.forEach((movie, index) => {
-        const videoSrc =
-          movie.hls_h264 ||
-          movie.mp4?.max ||
-          movie.mp4?.["480"] ||
-          movie.webm?.max ||
-          movie.webm?.["480"] ||
-          movie.dash_h264 ||
-          movie.dash_av1;
-        const videoType = movie.hls_h264
-          ? "application/x-mpegURL"
-          : movie.mp4?.max || movie.mp4?.["480"]
-              ? "video/mp4"
-              : movie.webm?.max || movie.webm?.["480"]
-                ? "video/webm"
-                : movie.dash_h264 || movie.dash_av1
-                  ? "application/dash+xml"
-                  : undefined;
-        if (videoSrc) {
+        const source = getMovieSource(movie);
+        if (source) {
           items.push({
             id: `movie-${movie.id}`,
             type: "video",
             poster: movie.thumbnail,
-            videoSrc: videoSrc.startsWith("http://")
-              ? videoSrc.replace("http://", "https://")
-              : videoSrc,
-            videoType,
+            videoSrc: source.videoSrc,
+            videoType: source.videoType,
             alt: movie.name || (language === "en" ? `Trailer ${index + 1}` : `Trailer ${index + 1}`),
           });
         }
@@ -149,12 +153,12 @@ export function GallerySlider({
               key={item.id}
               className={`gallery-slider__slide ${index === selectedIndex ? "gallery-slider__slide--active" : ""}`}
             >
-              {item.type === "video" && index === selectedIndex ? (
+              {item.type === "video" ? (
                 <VideoPlayer
                   videoSrc={item.videoSrc!}
                   videoType={item.videoType}
                   poster={item.poster}
-                  autoplay
+                  autoplay={index === selectedIndex}
                   loop
                   muted
                   controls
@@ -164,7 +168,7 @@ export function GallerySlider({
               ) : (
                 <img
                   className="gallery-slider__media"
-                  src={item.poster || item.src || ""}
+                  src={item.src}
                   alt={item.alt}
                   loading={index === selectedIndex ? "eager" : "lazy"}
                   decoding="async"

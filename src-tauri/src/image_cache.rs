@@ -145,6 +145,14 @@ fn steam_asset_fallback_request(url: &str) -> Option<(String, String)> {
     Some((app_id, file_name))
 }
 
+fn legacy_library_capsule_alias(file_name: &str) -> Option<&'static str> {
+    match file_name.to_ascii_lowercase().as_str() {
+        "library_600x900.jpg" => Some("library_capsule.jpg"),
+        "library_600x900_2x.jpg" => Some("library_capsule_2x.jpg"),
+        _ => None,
+    }
+}
+
 async fn fetch_and_cache_image(
     client: &reqwest::Client,
     directory: &Path,
@@ -294,6 +302,16 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
         if fallback_url != url {
             if let Some(path) = fetch_and_cache_image(&client, &directory, &fallback_url).await {
                 return path.to_string_lossy().into_owned();
+            }
+        }
+
+        if let Some(alias) = legacy_library_capsule_alias(&file_name) {
+            let fallback_url = crate::steam_asset_url(&app_id, alias);
+            if fallback_url != url {
+                if let Some(path) = fetch_and_cache_image(&client, &directory, &fallback_url).await
+                {
+                    return path.to_string_lossy().into_owned();
+                }
             }
         }
     }

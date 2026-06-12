@@ -13,11 +13,19 @@ import {
   recentPlayedGamesStorageKey,
   profileHistoryGamesStorageKey,
   showSteamGamesStorageKey,
+  personalCalendarStorageKey,
   recentLibrarySessionLimit,
   librarySortStorageKey,
 } from "../constants/catalogue";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
+
+export type StoredPersonalCalendar = {
+  weekStart: string;
+  expiresAt: string;
+  gameIds: string[];
+  recentGameIds: string[];
+};
 
 function storedString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
@@ -53,6 +61,30 @@ function storedStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function normalizeStoredPersonalCalendar(
+  value: unknown
+): StoredPersonalCalendar | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const calendar = value as Record<string, unknown>;
+  const weekStart = storedString(calendar.weekStart);
+  const expiresAt = storedString(calendar.expiresAt);
+  const gameIds = storedStringArray(calendar.gameIds);
+  const recentGameIds = storedStringArray(calendar.recentGameIds);
+
+  if (
+    !weekStart ||
+    !expiresAt ||
+    !Number.isFinite(Date.parse(weekStart)) ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    gameIds.length === 0
+  ) {
+    return null;
+  }
+
+  return { weekStart, expiresAt, gameIds, recentGameIds };
 }
 
 function storedGameStatus(value: unknown): GameStatus {
@@ -313,6 +345,35 @@ export function writeStoredShowSteamGames(value: boolean) {
     window.localStorage.setItem(showSteamGamesStorageKey, value ? "true" : "false");
   } catch {
     // Setting still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredPersonalCalendar(): StoredPersonalCalendar | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(personalCalendarStorageKey) ?? "null"
+    ) as unknown;
+
+    return normalizeStoredPersonalCalendar(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredPersonalCalendar(
+  calendar: StoredPersonalCalendar
+) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      personalCalendarStorageKey,
+      JSON.stringify(calendar)
+    );
+  } catch {
+    // Calendar can be regenerated if localStorage is unavailable.
   }
 }
 

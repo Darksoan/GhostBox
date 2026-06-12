@@ -104,6 +104,7 @@ export function PageRouter({
           addingGameId={appData.addingGameId}
           launchingGameId={appData.launchingGameId}
           userCollections={appData.userCollections}
+          profileHistoryGames={appData.profileHistoryGames}
           onToggleFavorite={appData.toggleFavoriteGame}
           onAddGame={appData.queueGame}
           onPlayGame={appData.handlePlayGame}
