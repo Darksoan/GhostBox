@@ -5,6 +5,8 @@ import {
   imageSourceCache,
   loadedImageSources,
   isPredictableSteamAssetSource,
+  resolveSteamLibraryCoverSource,
+  steamAppIdFromImageSource,
 } from "../utils/imageCache";
 
 export interface LoadableImageState {
@@ -243,27 +245,48 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
         };
 
         const tryResolvedFallback = () => {
+          const loadFallbackImage = (resolvedSource: string) => {
+            if (
+              cancelled ||
+              resolved ||
+              !resolvedSource ||
+              resolvedSource === source
+            ) {
+              markFailed();
+              return;
+            }
+
+            const fallbackImage = new Image();
+            fallbackImage.decoding = "async";
+            fallbackImage.referrerPolicy = "no-referrer";
+            fallbackImage.onload = () =>
+              commit(resolvedSource, { priorityIndex: getPriorityIndex(source) });
+            fallbackImage.onerror = markFailed;
+            fallbackImage.src = resolvedSource;
+          };
+
+          const tryHashedSteamLibraryCover = () => {
+            const appId = steamAppIdFromImageSource(source);
+            if (!appId) {
+              markFailed();
+              return;
+            }
+
+            void resolveSteamLibraryCoverSource(appId)
+              .then(loadFallbackImage)
+              .catch(markFailed);
+          };
+
           void resolveCachedImageSource(source, { steamAssetFallback: true })
             .then((resolvedSource) => {
-              if (
-                cancelled ||
-                resolved ||
-                !resolvedSource ||
-                resolvedSource === source
-              ) {
-                markFailed();
+              if (!resolvedSource || resolvedSource === source) {
+                tryHashedSteamLibraryCover();
                 return;
               }
 
-              const fallbackImage = new Image();
-              fallbackImage.decoding = "async";
-              fallbackImage.referrerPolicy = "no-referrer";
-              fallbackImage.onload = () =>
-                commit(resolvedSource, { priorityIndex: getPriorityIndex(source) });
-              fallbackImage.onerror = markFailed;
-              fallbackImage.src = resolvedSource;
+              loadFallbackImage(resolvedSource);
             })
-            .catch(markFailed);
+            .catch(tryHashedSteamLibraryCover);
         };
 
         const image = new Image();

@@ -1681,6 +1681,7 @@ pub fn run() {
             catalogue::app_is_steamtools_installed,
             catalogue::app_install_steamtools,
             catalogue::cache_get_image,
+            catalogue::cache_resolve_steam_library_asset,
             settings::app_get_startup_settings,
             settings::app_set_startup_settings,
             settings::app_set_notification_settings,

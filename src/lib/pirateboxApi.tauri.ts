@@ -125,6 +125,14 @@ export const pirateboxApi = {
     });
   },
 
+  resolveSteamLibraryAsset(appId: string, fileName: string): Promise<string> {
+    return invokeOr<string>(
+      "cache_resolve_steam_library_asset",
+      { appId, fileName },
+      ""
+    );
+  },
+
   addGameViaLuaTools(game: PirateGame): Promise<AddGameResult> {
     return invokeOr<AddGameResult>(
       "luatools_add_game",

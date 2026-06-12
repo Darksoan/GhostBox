@@ -1031,3 +1031,12 @@ pub fn app_install_steamtools() -> serde_json::Value {
 pub async fn cache_get_image(app: tauri::AppHandle, url: String) -> String {
     image_cache::cache_image_url(&app, &url).await
 }
+
+#[tauri::command]
+pub async fn cache_resolve_steam_library_asset(
+    app: tauri::AppHandle,
+    app_id: String,
+    file_name: String,
+) -> String {
+    image_cache::resolve_steam_library_asset_url(&app, &app_id, &file_name).await
+}

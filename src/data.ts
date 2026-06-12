@@ -179,6 +179,13 @@ export async function loadCachedImage(url: string): Promise<string> {
   return pirateboxApi.getCachedImage(url);
 }
 
+export async function resolveSteamLibraryAsset(
+  appId: string,
+  fileName: string
+): Promise<string> {
+  return pirateboxApi.resolveSteamLibraryAsset(appId, fileName);
+}
+
 export async function addGameViaLuaTools(
   game: PirateGame
 ): Promise<AddGameResult> {

@@ -1,4 +1,4 @@
-import { loadCachedImage } from "../data";
+import { loadCachedImage, resolveSteamLibraryAsset } from "../data";
 import {
   imageSourceCacheKey,
   imageSourceCacheLimit,
@@ -7,6 +7,8 @@ import {
 export const imageSourceCache = new Map<string, string>();
 export const imageResolvePromises = new Map<string, Promise<string>>();
 export const screenshotPreloadCache = new Set<string>();
+const steamLibraryCoverSourceCache = new Map<string, string>();
+const steamLibraryCoverResolvePromises = new Map<string, Promise<string>>();
 // Sources that have actually finished loading at least once. Unlike
 // screenshotPreloadCache (which is set optimistically when a load starts and
 // removed on failure), this only holds sources we know decoded successfully,
@@ -163,8 +165,9 @@ const steamLibraryAssetFallbackNames = new Set([
 ]);
 
 function normalizeSteamLibraryAssetName(fileName: string) {
+  if (fileName === "library_600x900_2x.jpg") return "library_600x900.jpg";
   if (fileName === "library_capsule.jpg") return "library_600x900.jpg";
-  if (fileName === "library_capsule_2x.jpg") return "library_600x900_2x.jpg";
+  if (fileName === "library_capsule_2x.jpg") return "library_600x900.jpg";
   return fileName;
 }
 
@@ -212,6 +215,48 @@ function parseSteamAssetSource(source: string) {
   }
 }
 
+export function steamAppIdFromImageSource(source: string) {
+  return parseSteamAssetSource(source)?.appId ?? "";
+}
+
+function resolvedSteamLibraryCoverSourceForSources(sources: string[]) {
+  for (const source of sources) {
+    const appId = steamAppIdFromImageSource(source);
+    if (!appId) continue;
+
+    const resolvedSource = steamLibraryCoverSourceCache.get(appId);
+    if (resolvedSource) return resolvedSource;
+  }
+
+  return "";
+}
+
+export function resolveSteamLibraryCoverSource(appId: string) {
+  if (!/^\d+$/.test(appId)) return Promise.resolve("");
+
+  const cachedSource = steamLibraryCoverSourceCache.get(appId);
+  if (cachedSource) return Promise.resolve(cachedSource);
+
+  const pending = steamLibraryCoverResolvePromises.get(appId);
+  if (pending) return pending;
+
+  const promise = resolveSteamLibraryAsset(appId, "library_capsule.jpg")
+    .then((source) => {
+      if (/^https?:\/\//i.test(source)) {
+        steamLibraryCoverSourceCache.set(appId, source);
+        return source;
+      }
+      return "";
+    })
+    .catch(() => "")
+    .finally(() => {
+      steamLibraryCoverResolvePromises.delete(appId);
+    });
+
+  steamLibraryCoverResolvePromises.set(appId, promise);
+  return promise;
+}
+
 function steamCdnFallbackForSource(source: string) {
   const parsed = parseSteamAssetSource(source);
   if (!parsed) return "";
@@ -232,16 +277,21 @@ function canResolveSteamLibraryAssetFallback(source: string) {
 }
 
 export function withCachedImageSources(sources: string[]) {
+  const resolvedCoverSource = resolvedSteamLibraryCoverSourceForSources(sources);
+
   return uniqueSources(
-    sources.flatMap((source) => {
-      const cachedSource = imageSourceCache.get(source);
-      const cdnFallback = steamCdnFallbackForSource(source);
-      return uniqueSources([
-        ...(cachedSource && cachedSource !== source ? [cachedSource] : []),
-        source,
-        ...(cdnFallback && cdnFallback !== source ? [cdnFallback] : []),
-      ]);
-    })
+    [
+      ...(resolvedCoverSource ? [resolvedCoverSource] : []),
+      ...sources.flatMap((source) => {
+        const cachedSource = imageSourceCache.get(source);
+        const cdnFallback = steamCdnFallbackForSource(source);
+        return uniqueSources([
+          ...(cachedSource && cachedSource !== source ? [cachedSource] : []),
+          source,
+          ...(cdnFallback && cdnFallback !== source ? [cdnFallback] : []),
+        ]);
+      }),
+    ]
   );
 }
 
