@@ -17,6 +17,10 @@ const APP_USER_MODEL_ID: &str = "com.piratebox.app";
 static IS_QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+fn piratebox_icon() -> Option<tauri::image::Image<'static>> {
+    tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).ok()
+}
+
 #[cfg(windows)]
 fn configure_windows_app_identity() {
     use std::os::windows::ffi::OsStrExt;
@@ -118,7 +122,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = app.default_window_icon().cloned() {
+    if let Some(icon) = piratebox_icon().or_else(|| app.default_window_icon().cloned()) {
         tray = tray.icon(icon);
     }
 
@@ -140,6 +144,10 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     start_game_playtime_snapshot_emitter(handle.clone());
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        if let Some(icon) = piratebox_icon() {
+            let _ = window.set_icon(icon);
+        }
+
         let close_app = handle.clone();
         let close_window = window.clone();
         window.on_window_event(move |event| {

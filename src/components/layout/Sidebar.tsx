@@ -15,7 +15,7 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
-import { memo, useMemo, useState, type MouseEvent, type PointerEvent } from "react";
+import { memo, useMemo, useState } from "react";
 import type { PirateGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { ContextMenu } from "../ui/ContextMenu";
@@ -76,8 +76,6 @@ interface SidebarProps {
 }
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
-const SIDEBAR_PULSE_MAX_PRESS_MS = 450;
-
 type SidebarCollection = {
   id: string;
   name: string;
@@ -202,25 +200,6 @@ export const Sidebar = memo(function Sidebar({
     }
   };
 
-  const handlePulsePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    event.currentTarget.dataset.pressStartedAt = String(performance.now());
-  };
-
-  const pulseClickedOption = (event: MouseEvent<HTMLButtonElement>) => {
-    const button = event.currentTarget;
-    const pressStartedAt = Number(button.dataset.pressStartedAt);
-    delete button.dataset.pressStartedAt;
-
-    if (pressStartedAt && performance.now() - pressStartedAt > SIDEBAR_PULSE_MAX_PRESS_MS) {
-      return;
-    }
-
-    const pulseTarget = button.closest(".sidebar__collection-item") ?? button;
-    pulseTarget.classList.remove("sidebar__option--pulse");
-    void (pulseTarget as HTMLElement).offsetWidth;
-    pulseTarget.classList.add("sidebar__option--pulse");
-  };
-
   return (
     <aside className="sidebar">
       <div className="sidebar__content">
@@ -244,11 +223,7 @@ export const Sidebar = memo(function Sidebar({
                   <button
                     type="button"
                     className="sidebar__menu-item-button"
-                    onPointerDown={handlePulsePointerDown}
-                    onClick={(event) => {
-                      pulseClickedOption(event);
-                      onNavigate(id);
-                    }}
+                    onClick={() => onNavigate(id)}
                   >
                     <Icon size={18} strokeWidth={1.5} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
@@ -260,11 +235,7 @@ export const Sidebar = memo(function Sidebar({
                   <button
                     type="button"
                     className="sidebar__menu-item-button"
-                    onPointerDown={handlePulsePointerDown}
-                    onClick={(event) => {
-                      pulseClickedOption(event);
-                      onRestartSteam();
-                    }}
+                    onClick={() => onRestartSteam()}
                   >
                     <Icon size={18} strokeWidth={1.5} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
@@ -279,11 +250,7 @@ export const Sidebar = memo(function Sidebar({
                   <button
                     type="button"
                     className="sidebar__menu-item-button"
-                    onPointerDown={handlePulsePointerDown}
-                    onClick={(event) => {
-                      pulseClickedOption(event);
-                      onNavigate(id);
-                    }}
+                    onClick={() => onNavigate(id)}
                   >
                     <Icon size={18} strokeWidth={1.5} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
@@ -305,11 +272,7 @@ export const Sidebar = memo(function Sidebar({
                   <button
                     type="button"
                     className="sidebar__menu-item-button"
-                    onPointerDown={handlePulsePointerDown}
-                    onClick={(event) => {
-                      pulseClickedOption(event);
-                      onSettingsTabChange(id);
-                    }}
+                    onClick={() => onSettingsTabChange(id)}
                   >
                     <Icon size={18} strokeWidth={1.5} />
                     <span className="sidebar__menu-item-label">{t(settingsTabLabelKeys[id])}</span>
@@ -401,13 +364,7 @@ export const Sidebar = memo(function Sidebar({
                         <button
                           type="button"
                           className="sidebar__menu-item-button"
-                          onPointerDown={handlePulsePointerDown}
-                          onClick={(event) => {
-                            if (!isFavoritesCollection) {
-                              pulseClickedOption(event);
-                            }
-                            handleCollectionClick(collection);
-                          }}
+                          onClick={() => handleCollectionClick(collection)}
                         >
                           {isFavoritesCollection ? (
                             <Heart size={16} className="sidebar__collection-icon" />
@@ -425,11 +382,7 @@ export const Sidebar = memo(function Sidebar({
                                 <button
                                   type="button"
                                   className="sidebar__collection-game-button"
-                                  onPointerDown={handlePulsePointerDown}
-                                  onClick={(event) => {
-                                    pulseClickedOption(event);
-                                    onOpenGame(game);
-                                  }}
+                                  onClick={() => onOpenGame(game)}
                                   onFocus={() => preloadGameModalAssets(game)}
                                   onMouseEnter={() => preloadGameModalAssets(game)}
                                   onContextMenu={(event) => {
@@ -509,11 +462,7 @@ export const Sidebar = memo(function Sidebar({
                 <button
                   type="button"
                   className="sidebar__menu-item-button sidebar__menu-item-button--back"
-                  onPointerDown={handlePulsePointerDown}
-                  onClick={(event) => {
-                    pulseClickedOption(event);
-                    onBack();
-                  }}
+                  onClick={() => onBack()}
                 >
                   <ChevronLeft size={18} strokeWidth={1.5} />
                   <span className="sidebar__menu-item-label">{t("header.back")}</span>

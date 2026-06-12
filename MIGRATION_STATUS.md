@@ -1,6 +1,6 @@
 # PirateBox Tauri Migration Status
 
-Atualizado em: 2026-06-09
+Atualizado em: 2026-06-10
 
 ## Resumo
 
@@ -235,8 +235,8 @@ Backend:
 
 Frontend:
 
-- melhorar UX de Ludusavi/backup com progresso, estado explícito de sidecar ausente e mensagens específicas;
-- adicionar indicador de sessão ativa em cards/listas além do `GameModal`, se desejado;
+- melhorar UX de Ludusavi/backup com progresso, estado explícito de sidecar ausente e detalhes de backup mais ricos;
+- indicador de sessão ativa já aparece no `GameModal` e em cards/listas de biblioteca/perfil;
 - otimizar chunk grande de `GameModal` com lazy imports internos.
 
 ## Frontend Pendente
@@ -291,7 +291,7 @@ Implementado no frontend:
 
 1. Executar a checklist manual de release/instalador.
 2. Corrigir qualquer falha encontrada na checklist.
-3. Refatorar `src-tauri/src/lib.rs` em módulos depois da estabilização.
+3. Fazer apenas limpezas opcionais não bloqueantes, como otimizar chunks grandes do frontend.
 
 ## Checklist Manual De Release
 

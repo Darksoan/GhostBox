@@ -224,6 +224,7 @@ function AppShell() {
               contentRef={contentRef}
               steamPathModalLoading={steamPathModalLoading}
               setSteamPathModalLoading={setSteamPathModalLoading}
+              onNavigateToCatalogue={() => handleNavigate("catalogue")}
             />
           </section>
         </article>

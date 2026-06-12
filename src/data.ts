@@ -71,6 +71,7 @@ export type PirateGame = {
   publishers?: string[];
   screenshots: string[];
   movies?: SteamMovie[];
+  shortDescription?: string;
   aboutTheGame?: string;
   achievements: AchievementStats;
   achievementList: SteamAchievement[];

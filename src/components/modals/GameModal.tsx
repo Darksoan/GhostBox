@@ -218,10 +218,11 @@ function getSanitizedSteamAboutHtml(value?: string) {
 
   document.body.querySelectorAll("video").forEach((video) => {
     video.removeAttribute("controls");
-    video.autoplay = true;
+    video.autoplay = false;
     video.loop = true;
     video.muted = true;
     video.playsInline = true;
+    video.preload = "none";
     video.removeAttribute("width");
     video.removeAttribute("height");
   });
@@ -1193,44 +1194,35 @@ export function GameModal({
                       className="modal__showcase-placeholder"
                       aria-hidden="true"
                     />
-                    {screenshotItems.map(
-                      (item) =>
-                        item.displaySource && (
-                          <img
-                            className={`modal__showcase-image ${item.displaySource === currentScreenshotSource && item.displaySource === visibleScreenshotSource ? "modal__showcase-image--visible" : ""}`}
-                            src={item.displaySource}
-                            key={`${item.index}-${item.source}-${item.displaySource}`}
-                            alt=""
-                            aria-hidden="true"
-                            decoding="async"
-                            loading="eager"
-                            onLoad={async (event) => {
-                              const image = event.currentTarget;
-                              if (typeof image.decode === "function") {
-                                await image.decode().catch(() => undefined);
-                              }
-                              setLoadedScreenshotSources((loadedSources) => {
-                                if (loadedSources.has(item.displaySource))
-                                  return loadedSources;
-                                const nextLoadedSources = new Set(
-                                  loadedSources
-                                );
-                                nextLoadedSources.add(item.displaySource);
-                                return nextLoadedSources;
-                              });
-                              if (
-                                item.displaySource === currentScreenshotSource
-                              ) {
-                                setVisibleScreenshotSource(item.displaySource);
-                              }
-                            }}
-                            onError={() => {
-                              setFailedScreenshotSources((failedSources) =>
-                                new Set(failedSources).add(item.displaySource)
-                              );
-                            }}
-                          />
-                        )
+                    {currentScreenshotItem.displaySource && (
+                      <img
+                        className={`modal__showcase-image ${currentScreenshotItem.displaySource === visibleScreenshotSource ? "modal__showcase-image--visible" : ""}`}
+                        src={currentScreenshotItem.displaySource}
+                        key={`${currentScreenshotItem.index}-${currentScreenshotItem.source}-${currentScreenshotItem.displaySource}`}
+                        alt=""
+                        aria-hidden="true"
+                        decoding="async"
+                        loading="eager"
+                        onLoad={async (event) => {
+                          const image = event.currentTarget;
+                          if (typeof image.decode === "function") {
+                            await image.decode().catch(() => undefined);
+                          }
+                          setLoadedScreenshotSources((loadedSources) => {
+                            if (loadedSources.has(currentScreenshotItem.displaySource))
+                              return loadedSources;
+                            const nextLoadedSources = new Set(loadedSources);
+                            nextLoadedSources.add(currentScreenshotItem.displaySource);
+                            return nextLoadedSources;
+                          });
+                          setVisibleScreenshotSource(currentScreenshotItem.displaySource);
+                        }}
+                        onError={() => {
+                          setFailedScreenshotSources((failedSources) =>
+                            new Set(failedSources).add(currentScreenshotItem.displaySource)
+                          );
+                        }}
+                      />
                     )}
                     {shouldShowLogoOverlay && (
                       <img

@@ -258,6 +258,7 @@ interface CataloguePageProps {
   };
   filtersLoading: boolean;
   loading: boolean;
+  initialLoading: boolean;
   query: string;
   page: number;
   chunkOffset: number;
@@ -292,6 +293,7 @@ export function CataloguePage({
   facets,
   filtersLoading,
   loading,
+  initialLoading,
   query,
   page,
   chunkOffset,
@@ -391,6 +393,12 @@ export function CataloguePage({
 
   const totalPages = Math.max(1, Math.ceil(matched / cataloguePageSize));
   const currentPage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    const el = scrollElementRef?.current ?? resultsRef.current;
+    el?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentPage, scrollElementRef]);
+
   const startIndex = Math.max(
     0,
     (currentPage - 1) * cataloguePageSize - chunkOffset
@@ -489,7 +497,7 @@ export function CataloguePage({
     onRemoveGameFromCollection,
   });
 
-  if (loading && !games.length) {
+  if (initialLoading) {
     return (
       <CatalogueLoadingState
         animateFilters={animateFilterPlaceholders}

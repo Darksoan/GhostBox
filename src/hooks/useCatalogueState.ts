@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { GameDatabaseResult } from "../data";
 import type { CatalogueFilters, CatalogueSort } from "../types";
 import {
   catalogueChunkPageCount,
   catalogueChunkSize,
-  cataloguePageSize,
   emptyCatalogueFilters,
 } from "../constants/catalogue";
 import { hasSelectedCatalogueFilters } from "../utils/filters";
@@ -21,6 +21,8 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     useState<CatalogueFilters>(emptyCatalogueFilters);
   const [catalogueSort, setCatalogueSort] = useState<CatalogueSort>("popular");
   const [hasLoadedCatalogueOnce, setHasLoadedCatalogueOnce] = useState(false);
+  const [lastCatalogueFacets, setLastCatalogueFacets] =
+    useState<GameDatabaseResult["facets"]>();
 
   const catalogueFiltersCacheKey = getCatalogueFiltersCacheKey(catalogueFilters);
 
@@ -28,16 +30,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     const requestedChunkOffset =
       Math.floor((cataloguePage - 1) / catalogueChunkPageCount) *
       catalogueChunkSize;
-    const hasActiveCatalogueFilters =
-      hasSelectedCatalogueFilters(catalogueFilters);
-    const isFirstPageSnapshot =
-      requestedChunkOffset === 0 &&
-      cataloguePage === 1 &&
-      !debouncedQuery.trim() &&
-      !hasActiveCatalogueFilters;
-    const requestedLimit = isFirstPageSnapshot
-      ? cataloguePageSize
-      : catalogueChunkSize;
+    const requestedLimit = catalogueChunkSize;
 
     return {
       requestedChunkOffset,
@@ -62,6 +55,9 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     enabled,
   });
 
+  const shouldLoadCatalogueFacetsFallback =
+    enabled && Boolean(catalogueQuery.data) && !catalogueQuery.data?.facets;
+
   const facetsQuery = useGamesQuery(
     {
       query: debouncedQuery,
@@ -72,7 +68,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
       includeFacets: true,
       facetsOnly: true,
     },
-    { enabled }
+    { enabled: shouldLoadCatalogueFacetsFallback }
   );
 
   useEffect(() => {
@@ -86,6 +82,13 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     catalogueRequestMeta.requestedChunkOffset,
     enabled,
   ]);
+
+  useEffect(() => {
+    const facets = facetsQuery.data?.facets ?? catalogueQuery.data?.facets;
+    if (facets && enabled) {
+      setLastCatalogueFacets(facets);
+    }
+  }, [catalogueQuery.data?.facets, enabled, facetsQuery.data?.facets]);
 
   const requestedCatalogueCacheKey = getGamesCacheKey(
     debouncedQuery,
@@ -129,8 +132,10 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
       limited: false,
       source: "stub",
     },
-    catalogueFacets: facetsQuery.data?.facets,
+    catalogueFacets:
+      facetsQuery.data?.facets ?? catalogueQuery.data?.facets ?? lastCatalogueFacets,
     isLoadingCatalogueFacets: facetsQuery.isFetching,
+    isInitialCatalogueLoading: shouldShowCatalogueLoading && !hasLoadedCatalogueOnce,
     shouldShowCatalogueLoading,
     shouldPulseCatalogueLoading:
       (isPageChunkLoading || !hasRequestedCatalogueData) &&

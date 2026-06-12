@@ -6,7 +6,8 @@ import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { useCatalogueState } from "../../hooks/useCatalogueState";
 import { pirateboxApi } from "../../lib/pirateboxApi";
-import type { Page } from "../../types";
+import type { CatalogueFilterKey, Page } from "../../types";
+import { emptyCatalogueFilters } from "../../constants/catalogue";
 import { ContentOverlay, useContentOverlayState } from "./ContentOverlay";
 import { ConfirmModal } from "../modals/ConfirmModal";
 import { CollectionModal } from "../modals/CollectionModal";
@@ -58,6 +59,7 @@ interface PageRouterProps {
   contentRef: RefObject<HTMLElement>;
   steamPathModalLoading: boolean;
   setSteamPathModalLoading: (loading: boolean) => void;
+  onNavigateToCatalogue: () => void;
 }
 
 export function PageRouter({
@@ -71,6 +73,7 @@ export function PageRouter({
   contentRef,
   steamPathModalLoading,
   setSteamPathModalLoading,
+  onNavigateToCatalogue,
 }: PageRouterProps) {
   const { appearance } = useSettings();
   const appData = useAppData();
@@ -91,7 +94,34 @@ export function PageRouter({
 
   function renderPage() {
     if (page === "home") {
-      return <HomePage onOpenGame={openGame} />;
+      return (
+        <HomePage
+          onOpenGame={openGame}
+          favoriteGameIds={appData.favoriteGameIds}
+          libraryGameAppIds={appData.availableLibraryGameAppIds}
+          removableGameAppIds={appData.addedLibraryGameAppIds}
+          playableGameAppIds={appData.playableGameAppIds}
+          addingGameId={appData.addingGameId}
+          launchingGameId={appData.launchingGameId}
+          userCollections={appData.userCollections}
+          onToggleFavorite={appData.toggleFavoriteGame}
+          onAddGame={appData.queueGame}
+          onPlayGame={appData.handlePlayGame}
+          onRemoveGame={appData.removeQueuedGame}
+          onAddGameToCollection={appData.addGameToUserCollection}
+          onRemoveGameFromCollection={appData.removeGameFromCollection}
+          onOpenCatalogueCategory={(
+            key: Extract<CatalogueFilterKey, "genres" | "tags">,
+            value: string
+          ) => {
+            catalogue.handleCatalogueFiltersChange({
+              ...emptyCatalogueFilters,
+              [key]: [value],
+            });
+            onNavigateToCatalogue();
+          }}
+        />
+      );
     }
 
     if (page === "catalogue") {
@@ -110,6 +140,7 @@ export function PageRouter({
             catalogue.isLoadingCatalogueFacets && !catalogue.catalogueFacets
           }
           loading={catalogue.shouldShowCatalogueLoading}
+          initialLoading={catalogue.isInitialCatalogueLoading}
           query={debouncedQuery}
           page={catalogue.cataloguePage}
           chunkOffset={catalogue.catalogueChunkOffset}

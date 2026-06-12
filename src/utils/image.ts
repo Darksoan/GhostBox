@@ -202,6 +202,16 @@ export function gamePortraitSources(game: PirateGame) {
     game.coverUrl,
     ...(game.coverFallbacks ?? []),
   ].filter((source) => !isHeaderImageSource(source));
+  const fallbackCoverSources = uniqueSources([
+    game.coverUrl,
+    game.cover,
+    ...(game.coverFallbacks ?? []),
+    ...gameHeaderOnlySources(game),
+  ]).filter(
+    (source) =>
+      !isHeaderImageSource(source) &&
+      !game.screenshots.includes(source)
+  );
 
   return uniqueSources([
     `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
@@ -221,6 +231,7 @@ export function gamePortraitSources(game: PirateGame) {
         // almost always horizontal and causes the initial "stretched" cover.
         !game.screenshots.includes(source)
     ),
+    ...fallbackCoverSources,
   ]);
 }
 

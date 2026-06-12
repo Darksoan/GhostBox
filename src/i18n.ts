@@ -107,7 +107,6 @@ const translations: Record<Language, TranslationTree> = {
       achievementUnlocked: "Conquista desbloqueada",
       achievementLocked: "Conquista bloqueada",
       achievementUnlockedOn: "Desbloqueada em {date}",
-      noTopGames: "Nenhum tempo de jogo registrado.",
       favorites: "Favoritos",
       library: "Biblioteca",
       editProfile: "Editar perfil",
@@ -129,7 +128,6 @@ const translations: Record<Language, TranslationTree> = {
       featuredGames: "Bem avaliados",
       recentSection: "Último jogado",
       recentSubtitle: "Jogado recentemente",
-      recentEmpty: "Nenhum jogo por aqui",
     },
     sidebar: {
       collections: "Coleções",
@@ -440,7 +438,6 @@ const translations: Record<Language, TranslationTree> = {
       achievementUnlocked: "Achievement unlocked",
       achievementLocked: "Achievement locked",
       achievementUnlockedOn: "Unlocked {date}",
-      noTopGames: "No playtime recorded.",
       favorites: "Favorites",
       library: "Library",
       editProfile: "Edit profile",
@@ -462,7 +459,6 @@ const translations: Record<Language, TranslationTree> = {
       featuredGames: "Top rated",
       recentSection: "Last played",
       recentSubtitle: "Recently played",
-      recentEmpty: "No games here",
     },
     sidebar: {
       collections: "Collections",

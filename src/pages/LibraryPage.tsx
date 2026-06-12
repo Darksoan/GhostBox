@@ -7,6 +7,7 @@ import { GameGrid, GameGridLoadingState } from "../components/ui/GameCard";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import { sortLibraryGames } from "../utils/librarySort";
@@ -121,12 +122,13 @@ export function LibraryPage({
     onActiveCollectionChange?.(collectionId);
   };
 
-  const libraryGames = useMemo(() => {
+  const baseLibraryGames = useMemo(() => {
     const gamesByKey = new Map<string, PirateGame>();
     const addGames = (games: PirateGame[]) => {
       games.forEach((game) => {
         const key = game.appId || game.id;
-        if (!gamesByKey.has(key)) gamesByKey.set(key, game);
+        const current = gamesByKey.get(key);
+        gamesByKey.set(key, current ? { ...game, ...current } : game);
       });
     };
     addGames(visibleGames);
@@ -170,6 +172,7 @@ export function LibraryPage({
     userCollections,
     visibleGames,
   ]);
+  const libraryGames = useEnrichedGameCards(baseLibraryGames);
   const sortLabel = useMemo(() => {
     const option = sortOptions.find((o) => o.value === sortBy);
     return option ? option[language] : option!.en;
@@ -307,6 +310,7 @@ export function LibraryPage({
           dense
           portrait
           showAchievements
+          showAchievementSummary
           showBackupStatus
           hasBackupByAppId={gamesWithBackup}
           activeSessionAppIds={activeSessionAppIds}

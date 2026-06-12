@@ -158,7 +158,12 @@ pub async fn fetch_json_with_cache(
     force_refresh: bool,
 ) -> Result<(serde_json::Value, Option<String>, bool), String> {
     let cache_key = cache_key_for_url(url.as_str());
-    let _ = force_refresh;
+
+    if !force_refresh {
+        if let Some(entry) = read_cache_entry(app, &cache_key) {
+            return Ok((entry.body, entry.updated_at, true));
+        }
+    }
 
     match fetch_json_from_network(url.clone()).await {
         Ok((body, updated_at)) => {
@@ -211,7 +216,7 @@ pub async fn refresh_warm_catalogue_endpoints(
     }
 
     let search_url = format!(
-        "{base}/catalogue/search?limit=48&offset=0&sort=popular&includeFacets=1&facetsVersion={}&rankingVersion={}",
+        "{base}/catalogue/search?limit=200&offset=0&sort=popular&includeFacets=1&facetsVersion={}&rankingVersion={}",
         crate::FACETS_VERSION,
         crate::RANKING_VERSION
     );

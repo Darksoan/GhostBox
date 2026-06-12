@@ -59,11 +59,15 @@ export const GameCard = memo(function GameCard({
     ? coverImage.source
     : previousCoverSourceRef.current;
   const coverSources = coverSource ? [coverSource] : [];
-  const achievementTotal =
-    game.achievementList?.length || game.achievements.total;
+  const achievementListTotal = game.achievementList?.length ?? 0;
+  const achievementTotal = Math.max(
+    achievementListTotal,
+    game.achievements.total,
+    game.achievements.unlocked
+  );
   const achievementUnlocked = Math.min(
-    game.achievementList?.length
-      ? game.achievementList.filter(
+    achievementListTotal > 0
+      ? (game.achievementList ?? []).filter(
           (achievement) => achievement.unlocked === true
         ).length
       : game.achievements.unlocked,

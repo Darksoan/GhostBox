@@ -149,12 +149,12 @@ export function GallerySlider({
               key={item.id}
               className={`gallery-slider__slide ${index === selectedIndex ? "gallery-slider__slide--active" : ""}`}
             >
-              {item.type === "video" ? (
+              {item.type === "video" && index === selectedIndex ? (
                 <VideoPlayer
                   videoSrc={item.videoSrc!}
                   videoType={item.videoType}
                   poster={item.poster}
-                  autoplay={index === selectedIndex}
+                  autoplay
                   loop
                   muted
                   controls
@@ -164,7 +164,7 @@ export function GallerySlider({
               ) : (
                 <img
                   className="gallery-slider__media"
-                  src={item.src}
+                  src={item.poster || item.src || ""}
                   alt={item.alt}
                   loading={index === selectedIndex ? "eager" : "lazy"}
                   decoding="async"

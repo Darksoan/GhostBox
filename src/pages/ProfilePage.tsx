@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +17,7 @@ import {
   Lock,
   ShieldUser,
   Settings2,
+  Trophy,
   User,
 } from "lucide-react";
 import type { PirateGame, SteamAchievement } from "../data";
@@ -25,6 +27,7 @@ import {
   ContextMenu,
 } from "../components/ui/ContextMenu";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { EditProfileModal } from "../components/modals/EditProfileModal";
 import "./ProfilePage.scss";
 import { useCachedImageSources } from "../hooks/useCachedImageSources";
@@ -37,6 +40,7 @@ import {
 } from "../utils/image";
 import { useSettings } from "../context/settings";
 import { formatCompactPlaytime } from "../utils/time";
+import { mergeGameCardData } from "../utils/gameCardData";
 import {
   ProfileLevelBadge,
   getProfileAchievementTotal as getAchievementTotal,
@@ -152,21 +156,7 @@ function getLastUnlockedAchievement(game: PirateGame) {
 }
 
 function mergeProfileGameCardData(game: PirateGame, details: PirateGame) {
-  const richerAchievementGame = getRicherAchievementGame(game, details);
-  const gamePlaytime = game.playTimeInMilliseconds ?? 0;
-  const detailsPlaytime = details.playTimeInMilliseconds ?? 0;
-
-  return {
-    ...game,
-    achievements: richerAchievementGame.achievements,
-    achievementList: richerAchievementGame.achievementList,
-    playTimeInMilliseconds:
-      detailsPlaytime > gamePlaytime
-        ? details.playTimeInMilliseconds
-        : game.playTimeInMilliseconds ?? details.playTimeInMilliseconds,
-    hours: Math.max(game.hours, details.hours),
-    lastTimePlayed: game.lastTimePlayed ?? details.lastTimePlayed,
-  };
+  return mergeGameCardData(game, details);
 }
 
 function achievementShowcaseKey(
@@ -348,6 +338,8 @@ export function ProfilePage({
   );
   const loadMoreGamesRef = useRef<HTMLDivElement | null>(null);
   const achievementShowcaseRef = useRef<HTMLDivElement | null>(null);
+  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
 
   const activeCollectionId =
     propActiveCollectionId ?? internalActiveCollectionId;
@@ -546,6 +538,26 @@ export function ProfilePage({
     },
     [setActiveCollectionId]
   );
+
+  useLayoutEffect(() => {
+    const container = tabsContainerRef.current;
+    if (!container) return;
+    const activeTab = container.querySelector<HTMLElement>(
+      `[data-tab-id="${activeCollectionId}"]`
+    );
+    if (!activeTab) return;
+
+    const update = () => {
+      setTabIndicatorStyle({
+        left: activeTab.offsetLeft - container.scrollLeft,
+        width: activeTab.offsetWidth,
+      });
+    };
+
+    update();
+    container.addEventListener("scroll", update, { passive: true });
+    return () => container.removeEventListener("scroll", update);
+  }, [activeCollectionId, profileCollections]);
 
   const visibleGames = useMemo(() => {
     const seen = new Set<string>();
@@ -794,10 +806,11 @@ export function ProfilePage({
     return () => observer.disconnect();
   }, [renderedGameCount, visibleGames.length]);
 
-  const renderedGames = useMemo(
+  const baseRenderedGames = useMemo(
     () => visibleGames.slice(0, renderedGameCount),
     [renderedGameCount, visibleGames]
   );
+  const renderedGames = useEnrichedGameCards(baseRenderedGames);
 
   const contextMenuItems = useCollectionContextMenu({
     game: gameContextMenu?.game ?? null,
@@ -910,7 +923,14 @@ export function ProfilePage({
               className="profile-page__tabs"
               aria-label={t("sidebar.collections")}
             >
-              <div className="profile-page__collection-tabs">
+              <div className="profile-page__collection-tabs" ref={tabsContainerRef}>
+                <div
+                  className="profile-page__tab-indicator"
+                  style={{
+                    left: tabIndicatorStyle.left,
+                    width: tabIndicatorStyle.width,
+                  }}
+                />
                 {profileCollections.map((collection) => {
                   const TabIcon =
                     collection.id === "overview"
@@ -924,6 +944,7 @@ export function ProfilePage({
                   return (
                     <button
                       key={collection.id}
+                      data-tab-id={collection.id}
                       type="button"
                       className={`profile-page__tab ${
                         activeCollectionId === collection.id
@@ -1129,6 +1150,7 @@ export function ProfilePage({
                                   <span className="profile-page__top-game-stat profile-page__top-game-stat--achievements">
                                     <span className="profile-page__top-game-stat-heading">
                                       <span className="profile-page__top-game-stat-label">
+                                        <Trophy size={14} strokeWidth={2.2} aria-hidden="true" />
                                         {appearance.language === "en"
                                           ? "Achievements"
                                           : "Conquistas"}
@@ -1174,9 +1196,43 @@ export function ProfilePage({
                         })}
                       </div>
                     ) : (
-                      <div className="profile-page__overview-empty">
-                        <LibraryBig size={22} />
-                        <span>{t("profile.noTopGames")}</span>
+                      <div
+                        className="profile-page__top-games-list profile-page__top-games-list--skeleton"
+                        aria-hidden="true"
+                      >
+                        {[0, 1, 2].map((index) => (
+                          <div
+                            key={index}
+                            className="profile-page__top-game-console-row profile-page__top-game-console-row--skeleton"
+                          >
+                            <span className="profile-page__top-game-rank profile-page__skeleton-block" />
+                            <span className="profile-page__top-game-cover profile-page__skeleton-block" />
+                            <span className="profile-page__top-game-content profile-page__top-game-content--skeleton">
+                              <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
+                              <span className="profile-page__top-game-stats profile-page__top-game-stats--skeleton">
+                                <span className="profile-page__top-game-stat">
+                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+                                </span>
+                                <span className="profile-page__top-game-stat">
+                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+                                </span>
+                                <span className="profile-page__top-game-stat profile-page__top-game-stat--achievements">
+                                  <span className="profile-page__top-game-stat-heading">
+                                    <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                                    <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+                                  </span>
+                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--progress" />
+                                  <span className="profile-page__top-game-last-achievement profile-page__top-game-last-achievement--skeleton">
+                                    <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                                    <span className="profile-page__skeleton-line profile-page__skeleton-line--achievement" />
+                                  </span>
+                                </span>
+                              </span>
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
