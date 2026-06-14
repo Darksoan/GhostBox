@@ -1,12 +1,12 @@
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { LibrarySortBy } from "../utils/storage";
 
-function getLibraryLastPlayedTime(game: PirateGame) {
+function getLibraryLastPlayedTime(game: GhostBoxGame) {
   const lastPlayedTime = Date.parse(game.lastTimePlayed ?? "");
   return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
 }
 
-function getLibraryPlaytimeInMilliseconds(game: PirateGame) {
+function getLibraryPlaytimeInMilliseconds(game: GhostBoxGame) {
   const trackedPlaytime = Number.isFinite(game.playTimeInMilliseconds)
     ? game.playTimeInMilliseconds ?? 0
     : 0;
@@ -18,7 +18,7 @@ function getLibraryPlaytimeInMilliseconds(game: PirateGame) {
 }
 
 export function sortLibraryGames(
-  games: PirateGame[],
+  games: GhostBoxGame[],
   sortBy: LibrarySortBy,
   language: "pt" | "en"
 ) {

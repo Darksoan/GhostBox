@@ -1,11 +1,11 @@
 import { useMemo } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
 import { Download, Folder, Heart, Play, TextSearch, Trash } from "lucide-react";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
 
 interface UseCollectionContextMenuOptions {
-  game: PirateGame | null;
+  game: GhostBoxGame | null;
   favoriteGameIds: Set<string>;
   libraryGameAppIds?: Set<string>;
   removableGameAppIds?: Set<string>;
@@ -13,13 +13,13 @@ interface UseCollectionContextMenuOptions {
   addingGameId?: string | null;
   launchingGameId?: string | null;
   userCollections: UserCollection[];
-  onOpenGame?: (game: PirateGame) => void;
-  onAddGame?: (game: PirateGame) => void;
-  onPlayGame?: (game: PirateGame) => void;
-  onRemoveGame?: (game: PirateGame) => void;
-  onToggleFavorite?: (game: PirateGame) => void;
-  onAddGameToCollection?: (game: PirateGame, collectionId: string) => void;
-  onRemoveGameFromCollection?: (game: PirateGame, collectionId: string) => void;
+  onOpenGame?: (game: GhostBoxGame) => void;
+  onAddGame?: (game: GhostBoxGame) => void;
+  onPlayGame?: (game: GhostBoxGame) => void;
+  onRemoveGame?: (game: GhostBoxGame) => void;
+  onToggleFavorite?: (game: GhostBoxGame) => void;
+  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
+  onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
   includeFavorites?: boolean;
   directFavoriteAction?: boolean;
   onlyCollectionActions?: boolean;

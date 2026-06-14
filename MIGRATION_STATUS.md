@@ -1,4 +1,4 @@
-# PirateBox Tauri Migration Status
+# GhostBox Tauri Migration Status
 
 Atualizado em: 2026-06-10
 
@@ -25,7 +25,7 @@ Status atual: **não completa; release candidate aguardando validação manual**
 - Catálogo remoto via Worker.
 - Home remoto via Worker `GET /home`:
   - command Tauri `catalogue_get_home` busca fora do WebView/CORS;
-  - frontend usa `pirateboxApi.getHome` + `useHomeQuery`;
+  - frontend usa `ghostboxApi.getHome` + `useHomeQuery`;
   - `HomePage` renderiza listas remotas `popular` e `recentlyAdded` com fallback visual local quando o remoto está indisponível.
 - Busca, filtros, paginação e detalhes remotos básicos.
 - Persistência local de startup settings.
@@ -54,7 +54,7 @@ Status atual: **não completa; release candidate aguardando validação manual**
   - leitura de `libraryfolders.vdf`;
   - leitura de `appmanifest_*.acf`;
   - leitura de `config/stplug-in/*.lua` (jogos LuaTools);
-  - persistência de biblioteca em `piratebox-library.json`;
+  - persistência de biblioteca em `ghostbox-library.json`;
   - merge biblioteca persistida + instalados + plugin no scan.
 - Launch game:
   - executável customizado quando configurado;
@@ -75,7 +75,7 @@ Status atual: **não completa; release candidate aguardando validação manual**
   - evento Tauri `backup-settings-changed` sincroniza settings na UI.
 - Backup entries com retenção (até 3) e pin de entradas protegidas.
 - Achievement server local loopback para executáveis customizados.
-- Persistência local de achievements desbloqueados (`piratebox-achievements.json`).
+- Persistência local de achievements desbloqueados (`ghostbox-achievements.json`).
 - Monitor Steam `RunningAppID` para backup/playtime em jogos via `steam://`.
 - Notificações de backup (toast in-app + desktop) no frontend.
 - LuaTools add/remove sem secrets:
@@ -165,15 +165,15 @@ Limite conhecido: monitor Steam depende do registro `RunningAppID` no Windows. F
 ### Achievements Locais
 
 - Catálogo e detalhes de achievements remotos com merge de desbloqueios locais.
-- Servidor local `POST /achievements/unlock` em loopback com token `x-piratebox-token`.
-- Token e URL expostos via `PIRATEBOX_ACHIEVEMENTS_URL` / `PIRATEBOX_ACHIEVEMENTS_TOKEN` ao lançar executável customizado.
-- Persistência em `piratebox-achievements.json` por jogo no backup root.
+- Servidor local `POST /achievements/unlock` em loopback com token `x-ghostbox-token`.
+- Token e URL expostos via `GHOSTBOX_ACHIEVEMENTS_URL` / `GHOSTBOX_ACHIEVEMENTS_TOKEN` ao lançar executável customizado.
+- Persistência em `ghostbox-achievements.json` por jogo no backup root.
 - Parser binary VDF do Steam (`appcache/stats`) em `src-tauri/src/steam_appcache.rs`.
 - `steam_scan_library` enriquece jogos com progresso offline (`unlocked`/`total`/`progress`).
 - `database_get_game_achievement_details` cruza lista remota com backup local e appcache.
 - `getBackupDetails` enriquece achievements com ícones da API remota (fallback appcache quando não há backup JSON).
-- Backup Ludusavi copia stats Steam para `piratebox-steam-achievements/` dentro da pasta do backup.
-- Restore Ludusavi repõe stats Steam de `piratebox-steam-achievements/` em `appcache/stats`.
+- Backup Ludusavi copia stats Steam para `ghostbox-steam-achievements/` dentro da pasta do backup.
+- Restore Ludusavi repõe stats Steam de `ghostbox-steam-achievements/` em `appcache/stats`.
 
 Ainda falta:
 
@@ -193,14 +193,14 @@ O comportamento Electron com `ensureSteamCmd()` foi substituído pelo fallback r
 Implementado e refinado para build release:
 
 - single instance com foco na janela existente;
-- tray nativo com **Abrir PirateBox**, ocultar e sair;
+- tray nativo com **Abrir GhostBox**, ocultar e sair;
 - close-to-tray via `minimizeToTray` (botão X e `window_close`);
 - notificação desktop ao ocultar para a bandeja (`window-hidden-to-tray`);
 - autostart via `openAtLogin`;
 - start minimized via `startMinimized`;
 - shutdown limpo ao sair (sessões de playtime + achievement server);
-- `AppUserModelID` Windows (`com.piratebox.app`) para notificações desktop em release;
-- product/window title alinhados a **PirateBox** no bundle.
+- `AppUserModelID` Windows (`com.ghostbox.app`) para notificações desktop em release;
+- product/window title alinhados a **GhostBox** no bundle.
 
 Ainda pode precisar:
 
@@ -295,10 +295,10 @@ Implementado no frontend:
 
 ## Checklist Manual De Release
 
-Marcar cada item durante validação do instalador `PirateBox_0.1.0_x64-setup.exe` ou MSI gerado pelo Tauri.
+Marcar cada item durante validação do instalador `GhostBox_0.1.0_x64-setup.exe` ou MSI gerado pelo Tauri.
 
 - [ ] Instalar em uma máquina Windows limpa ou perfil de usuário limpo.
-- [ ] Abrir pelo atalho/menu iniciar e confirmar título/produto **PirateBox**.
+- [ ] Abrir pelo atalho/menu iniciar e confirmar título/produto **GhostBox**.
 - [ ] Confirmar que a Home carrega dados remotos (`popular`/`recentlyAdded`) sem SQLite local.
 - [ ] Confirmar busca, filtros, paginação e detalhes do catálogo remoto.
 - [ ] Confirmar que botão X respeita `minimizeToTray`.
@@ -327,7 +327,7 @@ Marcar cada item durante validação do instalador `PirateBox_0.1.0_x64-setup.ex
 - [ ] Confirmar Morrenus: salvar chave, reiniciar app, carregar chave via DPAPI e consultar stats.
 - [ ] Confirmar LuaTools add/remove baixa/extrai apenas `.manifest` e `.lua`, sem secrets.
 - [ ] Confirmar restart Steam abre instalação local ou fallback `steam://open/main` sem matar processo.
-- [ ] Confirmar que `rg "window\.piratebox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri` não retorna ocorrências.
+- [ ] Confirmar que `rg "window\.ghostbox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri` não retorna ocorrências.
 
 ## Fora Do Escopo Do Runtime Tauri
 
@@ -337,8 +337,8 @@ Estes itens do repo Electron continuam fora do runtime Tauri por decisão de esc
 - Banco local `games.sqlite` e fallbacks locais de catálogo no runtime.
 - Worker thread Node usado para cache/índice local de jogos do Electron.
 - SteamCMD local e evento `steamcmd:ready`; substituído por fallback remoto de assets públicos Steam no Tauri.
-- Python RPC e binário `piratebox-native`; fluxos necessários foram reimplementados em comandos Rust/Tauri ou removidos do runtime.
-- Dependências Electron/preload/IPC (`window.piratebox`, `ipcRenderer`, `contextBridge`, `BrowserWindow`).
+- Python RPC e binário `ghostbox-native`; fluxos necessários foram reimplementados em comandos Rust/Tauri ou removidos do runtime.
+- Dependências Electron/preload/IPC (`window.ghostbox`, `ipcRenderer`, `contextBridge`, `BrowserWindow`).
 
 ## Observações De Segurança
 
@@ -356,18 +356,18 @@ Estes itens do repo Electron continuam fora do runtime Tauri por decisão de esc
 cargo check --manifest-path "src-tauri\Cargo.toml"
 npm run build
 npm run tauri -- build
-rg "window\.piratebox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri
+rg "window\.ghostbox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri
 ```
 
 Artefactos release (2026-06-09):
 
-- `src-tauri\target\release\piratebox-tauri.exe` (~14 MB)
-- `src-tauri\target\release\bundle\nsis\PirateBox_0.1.0_x64-setup.exe` (~11 MB)
-- `src-tauri\target\release\bundle\msi\PirateBox_0.1.0_x64_en-US.msi` (~16 MB)
+- `src-tauri\target\release\ghostbox-tauri.exe` (~14 MB)
+- `src-tauri\target\release\bundle\nsis\GhostBox_0.1.0_x64-setup.exe` (~11 MB)
+- `src-tauri\target\release\bundle\msi\GhostBox_0.1.0_x64_en-US.msi` (~16 MB)
 
 Validação manual pendente no instalador: tray/close-to-tray, autostart, login Steam OpenID e notificações desktop.
 
 Avisos conhecidos:
 
 - Chunk grande em `GameModal`, não bloqueante.
-- Bundle identifier `com.piratebox.app` termina com `.app`; Tauri recomenda evitar isso para macOS.
+- Bundle identifier `com.ghostbox.app` termina com `.app`; Tauri recomenda evitar isso para macOS.

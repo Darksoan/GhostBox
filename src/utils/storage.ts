@@ -1,5 +1,5 @@
 import type {
-  PirateGame,
+  GhostBoxGame,
   GameRequirements,
   GameStatus,
   SteamAchievement,
@@ -14,6 +14,7 @@ import {
   profileHistoryGamesStorageKey,
   showSteamGamesStorageKey,
   personalCalendarStorageKey,
+  steamWishlistRecommendationsStorageKey,
   recentLibrarySessionLimit,
   librarySortStorageKey,
 } from "../constants/catalogue";
@@ -27,6 +28,12 @@ export type StoredPersonalCalendar = {
   recentGameIds: string[];
 };
 
+export type StoredSteamWishlistRecommendations = {
+  steamId: string;
+  expiresAt: string;
+  gameIds: string[];
+};
+
 function storedString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
 }
@@ -35,7 +42,7 @@ function storedNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function hasCompletedPlaySession(game: PirateGame) {
+function hasCompletedPlaySession(game: GhostBoxGame) {
   return (
     Number.isFinite(Date.parse(game.lastTimePlayed ?? "")) &&
     !/^Steam App \d+$/i.test(game.title.trim())
@@ -85,6 +92,28 @@ function normalizeStoredPersonalCalendar(
   }
 
   return { weekStart, expiresAt, gameIds, recentGameIds };
+}
+
+function normalizeStoredSteamWishlistRecommendations(
+  value: unknown
+): StoredSteamWishlistRecommendations | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const wishlist = value as Record<string, unknown>;
+  const steamId = storedString(wishlist.steamId);
+  const expiresAt = storedString(wishlist.expiresAt);
+  const gameIds = storedStringArray(wishlist.gameIds);
+
+  if (
+    !steamId ||
+    !expiresAt ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    gameIds.length === 0
+  ) {
+    return null;
+  }
+
+  return { steamId, expiresAt, gameIds };
 }
 
 function storedGameStatus(value: unknown): GameStatus {
@@ -142,7 +171,7 @@ function storedRequirements(value: unknown): GameRequirements | undefined {
   };
 }
 
-function normalizeStoredFavoriteGame(value: unknown): PirateGame | null {
+function normalizeStoredFavoriteGame(value: unknown): GhostBoxGame | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
   const game = value as Record<string, unknown>;
@@ -211,7 +240,7 @@ function normalizeStoredCollection(value: unknown): UserCollection | null {
   };
 }
 
-export function readStoredFavoriteGames(): PirateGame[] {
+export function readStoredFavoriteGames(): GhostBoxGame[] {
   if (typeof window === "undefined") return [];
 
   try {
@@ -220,7 +249,7 @@ export function readStoredFavoriteGames(): PirateGame[] {
     ) as unknown;
     if (!Array.isArray(parsed)) return [];
 
-    const uniqueGames = new Map<string, PirateGame>();
+    const uniqueGames = new Map<string, GhostBoxGame>();
     parsed.forEach((game) => {
       const favoriteGame = normalizeStoredFavoriteGame(game);
       if (favoriteGame) {
@@ -234,7 +263,7 @@ export function readStoredFavoriteGames(): PirateGame[] {
   }
 }
 
-export function writeStoredFavoriteGames(favoriteGames: PirateGame[]) {
+export function writeStoredFavoriteGames(favoriteGames: GhostBoxGame[]) {
   if (typeof window === "undefined") return;
 
   try {
@@ -247,7 +276,7 @@ export function writeStoredFavoriteGames(favoriteGames: PirateGame[]) {
   }
 }
 
-export function readStoredRecentPlayedGames(): PirateGame[] {
+export function readStoredRecentPlayedGames(): GhostBoxGame[] {
   if (typeof window === "undefined") return [];
 
   try {
@@ -256,7 +285,7 @@ export function readStoredRecentPlayedGames(): PirateGame[] {
     ) as unknown;
     if (!Array.isArray(parsed)) return [];
 
-    const games: PirateGame[] = [];
+    const games: GhostBoxGame[] = [];
     const seenAppIds = new Set<string>();
 
     parsed.forEach((game) => {
@@ -277,7 +306,7 @@ export function readStoredRecentPlayedGames(): PirateGame[] {
   }
 }
 
-export function writeStoredRecentPlayedGames(games: PirateGame[]) {
+export function writeStoredRecentPlayedGames(games: GhostBoxGame[]) {
   if (typeof window === "undefined") return;
 
   try {
@@ -292,7 +321,7 @@ export function writeStoredRecentPlayedGames(games: PirateGame[]) {
   }
 }
 
-export function readStoredProfileHistoryGames(): PirateGame[] {
+export function readStoredProfileHistoryGames(): GhostBoxGame[] {
   if (typeof window === "undefined") return [];
 
   try {
@@ -301,7 +330,7 @@ export function readStoredProfileHistoryGames(): PirateGame[] {
     ) as unknown;
     if (!Array.isArray(parsed)) return [];
 
-    const uniqueGames = new Map<string, PirateGame>();
+    const uniqueGames = new Map<string, GhostBoxGame>();
     parsed.forEach((game) => {
       const historyGame = normalizeStoredFavoriteGame(game);
       if (historyGame) uniqueGames.set(historyGame.appId, historyGame);
@@ -313,7 +342,7 @@ export function readStoredProfileHistoryGames(): PirateGame[] {
   }
 }
 
-export function writeStoredProfileHistoryGames(games: PirateGame[]) {
+export function writeStoredProfileHistoryGames(games: GhostBoxGame[]) {
   if (typeof window === "undefined") return;
 
   try {
@@ -374,6 +403,35 @@ export function writeStoredPersonalCalendar(
     );
   } catch {
     // Calendar can be regenerated if localStorage is unavailable.
+  }
+}
+
+export function readStoredSteamWishlistRecommendations(): StoredSteamWishlistRecommendations | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(steamWishlistRecommendationsStorageKey) ?? "null"
+    ) as unknown;
+
+    return normalizeStoredSteamWishlistRecommendations(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredSteamWishlistRecommendations(
+  wishlist: StoredSteamWishlistRecommendations
+) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      steamWishlistRecommendationsStorageKey,
+      JSON.stringify(wishlist)
+    );
+  } catch {
+    // Wishlist recommendations can be regenerated if localStorage is unavailable.
   }
 }
 

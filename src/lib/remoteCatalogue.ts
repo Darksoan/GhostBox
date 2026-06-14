@@ -1,6 +1,6 @@
 import type { HomeResult } from "../data";
-import { pirateboxApi } from "./pirateboxApi";
+import { ghostboxApi } from "./ghostboxApi";
 
 export function getRemoteHome(): Promise<HomeResult> {
-  return pirateboxApi.getHome();
+  return ghostboxApi.getHome();
 }

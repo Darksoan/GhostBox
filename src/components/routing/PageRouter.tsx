@@ -1,12 +1,12 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import type { RefObject } from "react";
 import { HomePage } from "../../pages/HomePage";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { useCatalogueState } from "../../hooks/useCatalogueState";
-import { pirateboxApi } from "../../lib/pirateboxApi";
-import type { CatalogueFilterKey, Page } from "../../types";
+import { ghostboxApi } from "../../lib/ghostboxApi";
+import type { CatalogueFilterKey, Page, SteamProfile } from "../../types";
 import { emptyCatalogueFilters } from "../../constants/catalogue";
 import { ContentOverlay, useContentOverlayState } from "./ContentOverlay";
 import { ConfirmModal } from "../modals/ConfirmModal";
@@ -28,8 +28,9 @@ const LazySettingsPage = lazy(() =>
 const LazyBackupPage = lazy(() =>
   import("../../pages/BackupPage").then((m) => ({ default: m.BackupPage }))
 );
+const loadProfilePage = () => import("../../pages/ProfilePage");
 const LazyProfilePage = lazy(() =>
-  import("../../pages/ProfilePage").then((m) => ({ default: m.ProfilePage }))
+  loadProfilePage().then((m) => ({ default: m.ProfilePage }))
 );
 const LazyNotificationsPage = lazy(() =>
   import("../../pages/NotificationsPage").then((m) => ({
@@ -60,6 +61,7 @@ interface PageRouterProps {
   steamPathModalLoading: boolean;
   setSteamPathModalLoading: (loading: boolean) => void;
   onNavigateToCatalogue: () => void;
+  steamProfile: SteamProfile | null;
 }
 
 export function PageRouter({
@@ -74,6 +76,7 @@ export function PageRouter({
   steamPathModalLoading,
   setSteamPathModalLoading,
   onNavigateToCatalogue,
+  steamProfile,
 }: PageRouterProps) {
   const { appearance } = useSettings();
   const appData = useAppData();
@@ -92,6 +95,20 @@ export function PageRouter({
 
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
 
+  useEffect(() => {
+    let timeout: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      timeout = window.setTimeout(() => {
+        void loadProfilePage();
+      }, 300);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, []);
+
   function renderPage() {
     if (page === "home") {
       return (
@@ -105,6 +122,7 @@ export function PageRouter({
           launchingGameId={appData.launchingGameId}
           userCollections={appData.userCollections}
           profileHistoryGames={appData.profileHistoryGames}
+          steamProfile={steamProfile}
           onToggleFavorite={appData.toggleFavoriteGame}
           onAddGame={appData.queueGame}
           onPlayGame={appData.handlePlayGame}
@@ -367,7 +385,7 @@ export function PageRouter({
         onClose={() => setPendingBackupDeletion(null)}
         onConfirm={() => {
           if (pendingBackupDeletion) {
-            void pirateboxApi
+            void ghostboxApi
               .deleteBackupFolder(
                 pendingBackupDeletion.appId,
                 pendingBackupDeletion.backupPath

@@ -1,6 +1,6 @@
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 
-function getUnlockedAchievementCount(game: PirateGame) {
+function getUnlockedAchievementCount(game: GhostBoxGame) {
   const explicitUnlocked = (game.achievementList ?? []).filter(
     (achievement) => achievement.unlocked === true
   ).length;
@@ -8,7 +8,7 @@ function getUnlockedAchievementCount(game: PirateGame) {
   return Math.max(explicitUnlocked, game.achievements?.unlocked ?? 0);
 }
 
-function getAchievementTotal(game: PirateGame) {
+function getAchievementTotal(game: GhostBoxGame) {
   return Math.max(
     game.achievementList?.length ?? 0,
     game.achievements?.total ?? 0,
@@ -16,7 +16,7 @@ function getAchievementTotal(game: PirateGame) {
   );
 }
 
-function getRicherAchievementGame(current: PirateGame, incoming: PirateGame) {
+function getRicherAchievementGame(current: GhostBoxGame, incoming: GhostBoxGame) {
   const currentTotal = getAchievementTotal(current);
   const incomingTotal = getAchievementTotal(incoming);
   const currentUnlocked = getUnlockedAchievementCount(current);
@@ -41,7 +41,7 @@ function preferArray(primary: string[] | undefined, fallback: string[]) {
   return primary?.length ? primary : fallback;
 }
 
-export function mergeGameCardData(game: PirateGame, details: PirateGame) {
+export function mergeGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
   const richerAchievementGame = getRicherAchievementGame(game, details);
   const gamePlaytime = game.playTimeInMilliseconds ?? 0;
   const detailsPlaytime = details.playTimeInMilliseconds ?? 0;

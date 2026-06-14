@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { translate } from "../i18n";
-import { pirateboxApi } from "../lib/pirateboxApi";
+import { ghostboxApi } from "../lib/ghostboxApi";
 
 interface AppearanceSettings {
   theme: "dark" | "light";
@@ -102,11 +102,20 @@ function normalizeNotifications(value: unknown): NotificationSettings {
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const appearanceStorageKey = "ghostbox-appearance";
+const legacyEdenAppearanceStorageKey = "eden-appearance";
+const legacyAppearanceStorageKey = "piratebox-appearance";
+const notificationsStorageKey = "ghostbox-notifications";
+const legacyEdenNotificationsStorageKey = "eden-notifications";
+const legacyNotificationsStorageKey = "piratebox-notifications";
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
     try {
-      const saved = localStorage.getItem("piratebox-appearance");
+      const saved =
+        localStorage.getItem(appearanceStorageKey) ??
+        localStorage.getItem(legacyEdenAppearanceStorageKey) ??
+        localStorage.getItem(legacyAppearanceStorageKey);
       return saved ? normalizeAppearance(JSON.parse(saved)) : defaultAppearance;
     } catch {
       return defaultAppearance;
@@ -115,7 +124,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const [notifications, setNotifications] = useState<NotificationSettings>(() => {
     try {
-      const saved = localStorage.getItem("piratebox-notifications");
+      const saved =
+        localStorage.getItem(notificationsStorageKey) ??
+        localStorage.getItem(legacyEdenNotificationsStorageKey) ??
+        localStorage.getItem(legacyNotificationsStorageKey);
       return saved ? normalizeNotifications(JSON.parse(saved)) : defaultNotifications;
     } catch {
       return defaultNotifications;
@@ -126,7 +138,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     (settings: Partial<AppearanceSettings>) => {
       setAppearance((current) => {
         const updated = normalizeAppearance({ ...current, ...settings });
-        localStorage.setItem("piratebox-appearance", JSON.stringify(updated));
+        localStorage.setItem(appearanceStorageKey, JSON.stringify(updated));
         return updated;
       });
     },
@@ -137,8 +149,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     (settings: Partial<NotificationSettings>) => {
       setNotifications((current) => {
         const updated = normalizeNotifications({ ...current, ...settings });
-        localStorage.setItem("piratebox-notifications", JSON.stringify(updated));
-        void pirateboxApi.setNotificationSettings(updated).catch(() => undefined);
+        localStorage.setItem(notificationsStorageKey, JSON.stringify(updated));
+        void ghostboxApi.setNotificationSettings(updated).catch(() => undefined);
         return updated;
       });
     },
@@ -161,7 +173,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [appearance.disableCoverZoom, appearance.disableTabAnimations]);
 
   useEffect(() => {
-    void pirateboxApi.setNotificationSettings(notifications).catch(() => undefined);
+    void ghostboxApi.setNotificationSettings(notifications).catch(() => undefined);
   }, [notifications]);
 
   const value = useMemo<SettingsContextType>(

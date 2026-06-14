@@ -1,4 +1,4 @@
-import type { GameDatabaseResult, PirateGame } from "../data";
+import type { GameDatabaseResult, GhostBoxGame } from "../data";
 import {
   loadGameAchievementDetails,
   loadGameDetails,
@@ -18,20 +18,20 @@ export const gamesCache = new Map<
   { cachedAt: number; result: GameDatabaseResult }
 >();
 export const gameRequestCache = new Map<string, Promise<GameDatabaseResult>>();
-export const gameDetailsCache = new Map<string, PirateGame | null>();
+export const gameDetailsCache = new Map<string, GhostBoxGame | null>();
 export const gameDetailsRequestCache = new Map<
   string,
-  Promise<PirateGame | null>
+  Promise<GhostBoxGame | null>
 >();
-export const gameStoreDetailsCache = new Map<string, PirateGame | null>();
+export const gameStoreDetailsCache = new Map<string, GhostBoxGame | null>();
 export const gameStoreDetailsRequestCache = new Map<
   string,
-  Promise<PirateGame | null>
+  Promise<GhostBoxGame | null>
 >();
-export const gameAchievementDetailsCache = new Map<string, PirateGame | null>();
+export const gameAchievementDetailsCache = new Map<string, GhostBoxGame | null>();
 export const gameAchievementDetailsRequestCache = new Map<
   string,
-  Promise<PirateGame | null>
+  Promise<GhostBoxGame | null>
 >();
 const queuedGameDetailsPreloadIds = new Set<string>();
 export let hasLoadedCatalogueGlobally = false;
@@ -107,9 +107,9 @@ export function loadGamesCached(
 
 function loadCachedGameRequest(
   gameId: string,
-  cache: Map<string, PirateGame | null>,
-  requestCache: Map<string, Promise<PirateGame | null>>,
-  loader: (gameId: string) => Promise<PirateGame | null>
+  cache: Map<string, GhostBoxGame | null>,
+  requestCache: Map<string, Promise<GhostBoxGame | null>>,
+  loader: (gameId: string) => Promise<GhostBoxGame | null>
 ) {
   if (cache.has(gameId)) {
     return Promise.resolve(cache.get(gameId) ?? null);
@@ -166,7 +166,7 @@ export function preloadGameDetailsCached(gameId: string) {
 }
 
 export function preloadGameDetailsListCached(
-  games: Array<Pick<PirateGame, "id">>,
+  games: Array<Pick<GhostBoxGame, "id">>,
   limit = 4,
   staggerMs = 250
 ) {

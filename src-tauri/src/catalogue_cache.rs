@@ -142,7 +142,9 @@ async fn fetch_json_from_network(
         .map_err(|error| error.to_string())?;
     let updated_at = response
         .headers()
-        .get("x-piratebox-updated-at")
+        .get("x-ghostbox-updated-at")
+        .or_else(|| response.headers().get("x-eden-updated-at"))
+        .or_else(|| response.headers().get("x-piratebox-updated-at"))
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
     let body = response

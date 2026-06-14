@@ -5,20 +5,24 @@ use crate::playtime::{
 use crate::settings::{
     apply_autostart_settings, is_startup_setting_enabled, startup_setting_enabled,
 };
-use crate::{load_startup_settings, stop_piratebox_achievement_server};
+use crate::{load_startup_settings, stop_ghostbox_achievement_server};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const WINDOW_HIDDEN_TO_TRAY_EVENT: &str = "window-hidden-to-tray";
 const TRAY_SHOW_ID: &str = "show";
 const TRAY_HIDE_ID: &str = "hide";
 const TRAY_QUIT_ID: &str = "quit";
-const APP_USER_MODEL_ID: &str = "com.piratebox.app";
+const APP_USER_MODEL_ID: &str = "com.ghostbox.app";
 
 static IS_QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-fn piratebox_icon() -> Option<tauri::image::Image<'static>> {
+fn ghostbox_icon() -> Option<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).ok()
+}
+
+fn ghostbox_tray_icon() -> Option<tauri::image::Image<'static>> {
+    tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png")).ok()
 }
 
 #[cfg(windows)]
@@ -45,7 +49,7 @@ pub(crate) fn shutdown_app_services(app: &tauri::AppHandle) {
 
     close_all_game_playtime_sessions(app);
     crate::achievement_monitor::stop_all_local_achievement_monitors();
-    stop_piratebox_achievement_server();
+    stop_ghostbox_achievement_server();
 }
 
 fn hide_main_window_to_tray(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
@@ -101,14 +105,14 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
-    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Abrir PirateBox", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Abrir GhostBox", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, TRAY_HIDE_ID, "Ocultar", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Sair", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &hide, &quit])?;
 
     let mut tray = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
-        .tooltip("PirateBox")
+        .tooltip("GhostBox")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_SHOW_ID => show_main_window(app),
@@ -122,7 +126,10 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = piratebox_icon().or_else(|| app.default_window_icon().cloned()) {
+    if let Some(icon) = ghostbox_tray_icon()
+        .or_else(ghostbox_icon)
+        .or_else(|| app.default_window_icon().cloned())
+    {
         tray = tray.icon(icon);
     }
 
@@ -144,7 +151,7 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     start_game_playtime_snapshot_emitter(handle.clone());
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        if let Some(icon) = piratebox_icon() {
+        if let Some(icon) = ghostbox_icon() {
             let _ = window.set_icon(icon);
         }
 

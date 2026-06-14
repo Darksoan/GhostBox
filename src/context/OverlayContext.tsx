@@ -9,14 +9,14 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { ToastVariant } from "../components/ui/Toast";
 import { getToastVariant } from "../lib/toastUtils";
 import { useSettings } from "./settings";
 import { preloadGameModalAssets } from "../utils/image";
 
 export type AchievementsViewState = {
-  game: PirateGame;
+  game: GhostBoxGame;
   reopenModalOnBack: boolean;
   highlightAchievementId?: string;
 } | null;
@@ -29,18 +29,18 @@ type ToastState = {
 } | null;
 
 interface OverlayContextValue {
-  selectedGame: PirateGame | null;
+  selectedGame: GhostBoxGame | null;
   achievementsView: AchievementsViewState;
   isGameModalExitPending: boolean;
   toast: ToastState;
   collectionModalOpen: boolean;
   steamPathModalOpen: boolean;
   pendingBackupDeletion: { appId: string; title: string; backupPath?: string } | null;
-  openGame: (game: PirateGame) => void;
+  openGame: (game: GhostBoxGame) => void;
   closeGame: () => void;
   closeContentOverlay: () => void;
   openAchievements: (
-    game: PirateGame,
+    game: GhostBoxGame,
     options?: { reopenModalOnBack?: boolean; highlightAchievementId?: string }
   ) => void;
   closeAchievements: () => void;
@@ -60,7 +60,7 @@ const OverlayContext = createContext<OverlayContextValue | undefined>(undefined)
 
 export function OverlayProvider({ children }: { children: ReactNode }) {
   const { notifications } = useSettings();
-  const [selectedGame, setSelectedGame] = useState<PirateGame | null>(null);
+  const [selectedGame, setSelectedGame] = useState<GhostBoxGame | null>(null);
   const [achievementsView, setAchievementsView] =
     useState<AchievementsViewState>(null);
   const [isGameModalExitPending, setIsGameModalExitPending] = useState(false);
@@ -109,7 +109,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const openGame = useCallback((game: PirateGame) => {
+  const openGame = useCallback((game: GhostBoxGame) => {
     if (gameModalExitTimeoutRef.current) {
       window.clearTimeout(gameModalExitTimeoutRef.current);
       gameModalExitTimeoutRef.current = undefined;
@@ -153,7 +153,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
 
   const openAchievements = useCallback(
     (
-      game: PirateGame,
+      game: GhostBoxGame,
       options?: { reopenModalOnBack?: boolean; highlightAchievementId?: string }
     ) => {
       setSelectedGame(null);

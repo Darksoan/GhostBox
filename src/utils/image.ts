@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import {
   preloadGameDetailsCached,
   preloadGameDetailsListCached,
@@ -14,7 +14,7 @@ import {
 } from "./imageCache";
 
 export const profileBannerPlaceholderSource = new URL(
-  "../assets/images/defaultbanner.png",
+  "../../Icons/ghost-solid.png",
   import.meta.url
 ).href;
 
@@ -77,7 +77,7 @@ export function getPriorityScreenshotSources(
   );
 }
 
-export function gameHeaderSources(game: PirateGame) {
+export function gameHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
@@ -92,7 +92,7 @@ export function gameHeaderSources(game: PirateGame) {
   ]);
 }
 
-export function gameCatalogueHeaderSources(game: PirateGame) {
+export function gameCatalogueHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
@@ -104,7 +104,7 @@ export function gameCatalogueHeaderSources(game: PirateGame) {
   ]);
 }
 
-export function gameHeaderOnlySources(game: PirateGame) {
+export function gameHeaderOnlySources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
@@ -145,6 +145,21 @@ export function isHeroImageSource(source: string) {
   return /(^|\/)library_hero(_2x)?\.jpg$/.test(pathname.replace(/\\/g, "/"));
 }
 
+export function isSteamScreenshotSource(source: string) {
+  const normalizedSource = source.trim().toLowerCase();
+  if (!normalizedSource) return false;
+
+  let pathname = normalizedSource.split(/[?#]/)[0];
+
+  try {
+    pathname = new URL(normalizedSource).pathname;
+  } catch {
+    // Non-URL sources still get checked by filename below.
+  }
+
+  return /(^|\/)ss_[^/]+\.jpg$/.test(pathname.replace(/\\/g, "/"));
+}
+
 export function isLandscapeImageSource(source: string) {
   const normalizedSource = source.trim().toLowerCase();
   if (!normalizedSource) return false;
@@ -181,22 +196,33 @@ export function withoutHeroImageSources(sources: string[]) {
   return uniqueSources(sources).filter((source) => !isHeroImageSource(source));
 }
 
-export function gameHeroSources(game: PirateGame) {
+export function gameHeroSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
-
-  return withoutHeaderImageSources([
-    game.heroUrl,
-    ...(game.heroFallbacks ?? []),
+  const screenshotSources = new Set(game.screenshots ?? []);
+  const steamHeroSources = [
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
-  ]);
+  ];
+  const customHeroSources = [
+    game.heroUrl,
+    game.hero,
+    ...(game.heroFallbacks ?? []),
+  ].filter(
+    (source) =>
+      source &&
+      !isHeaderImageSource(source) &&
+      !isSteamScreenshotSource(source) &&
+      !screenshotSources.has(source)
+  );
+
+  return uniqueSources([...steamHeroSources, ...customHeroSources]);
 }
 
-export function gamePortraitSources(game: PirateGame) {
+export function gamePortraitSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const customPortraitSources = [
     game.coverUrl,
@@ -224,21 +250,56 @@ export function gamePortraitSources(game: PirateGame) {
   ]);
 }
 
-export function gameHeroCapsuleSources(game: PirateGame) {
+export function gameHeroCapsuleSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
-    `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.akamai.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
   ]);
 }
 
-export function gameLogoSources(game: PirateGame) {
+export function gameMainCapsuleSources(game: GhostBoxGame) {
+  const appId = getGameAppId(game);
+
+  return uniqueSources([
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+  ]);
+}
+
+export function gameLogoSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
@@ -250,7 +311,7 @@ export function gameLogoSources(game: PirateGame) {
   ]);
 }
 
-export function gameModalAssetSources(game: PirateGame, activeScreenshot = 0) {
+export function gameModalAssetSources(game: GhostBoxGame, activeScreenshot = 0) {
   const screenshots = withoutHeaderImageSources(game.screenshots);
   const showcaseSources = uniqueSources([
     ...gameHeroSources(game),
@@ -263,34 +324,34 @@ export function gameModalAssetSources(game: PirateGame, activeScreenshot = 0) {
   ]);
 }
 
-export function preloadGamePortraitSources(game: PirateGame) {
+export function preloadGamePortraitSources(game: GhostBoxGame) {
   preloadImageSources(gamePortraitSources(game), { limit: 6, idle: true });
 }
 
-export function preloadGameHeroCapsuleSources(game: PirateGame) {
+export function preloadGameHeroCapsuleSources(game: GhostBoxGame) {
   preloadImageSources(gameHeroCapsuleSources(game), { limit: 3, idle: true });
 }
 
-export function preloadGameHeaderSources(game: PirateGame) {
+export function preloadGameHeaderSources(game: GhostBoxGame) {
   preloadImageSources(gameHeaderSources(game), { limit: 3, idle: true });
 }
 
-export function preloadGameHeaderOnlySources(game: PirateGame) {
+export function preloadGameHeaderOnlySources(game: GhostBoxGame) {
   preloadImageSources(gameHeaderOnlySources(game), { limit: 3, idle: true });
 }
 
-export function preloadGameHeroSources(game: PirateGame) {
+export function preloadGameHeroSources(game: GhostBoxGame) {
   preloadImageSources(
     uniqueSources([...gameHeroSources(game), ...gameLogoSources(game)]),
     { limit: 6, idle: true }
   );
 }
 
-export function preloadGameLogoSources(game: PirateGame) {
+export function preloadGameLogoSources(game: GhostBoxGame) {
   preloadImageSources(gameLogoSources(game), { limit: 3, decode: true });
 }
 
-export function preloadGameModalAssets(game: PirateGame, activeScreenshot = 0) {
+export function preloadGameModalAssets(game: GhostBoxGame, activeScreenshot = 0) {
   preloadGameDetailsCached(game.id);
   preloadImageSources(gameModalAssetSources(game, activeScreenshot), {
     limit: 8,
@@ -299,7 +360,7 @@ export function preloadGameModalAssets(game: PirateGame, activeScreenshot = 0) {
 }
 
 export function preloadGameListAssets(
-  games: PirateGame[],
+  games: GhostBoxGame[],
   options: GameListPreloadOptions = {}
 ) {
   const variant = options.variant ?? "header";
@@ -330,7 +391,7 @@ export function preloadGameListAssets(
 }
 
 export async function preloadGameListAssetsReady(
-  games: PirateGame[],
+  games: GhostBoxGame[],
   options: GameListPreloadOptions = {}
 ) {
   const variant = options.variant ?? "header";
@@ -360,24 +421,27 @@ export function preloadProfileImages(
 ) {
   if (!profile) return;
 
+  preloadImageSources([profile.avatarUrl ?? ""], {
+    limit: 1,
+    idle: false,
+    decode: true,
+  });
+
   preloadImageSources(
-    [
-      profile.avatarUrl ?? "",
-      profile.bannerUrl ?? profileBannerPlaceholderSource,
-    ],
+    [profile.bannerUrl ?? profileBannerPlaceholderSource],
     {
-      limit: 2,
-      idle: false,
-      decode: true,
+      limit: 1,
+      idle: true,
+      decode: false,
     }
   );
 }
 
-export function getGameAppId(game: PirateGame) {
+export function getGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
 }
 
-export function gameStyle(game: PirateGame): import("react").CSSProperties {
+export function gameStyle(game: GhostBoxGame): import("react").CSSProperties {
   return {
     "--accent": game.accent,
   } as import("react").CSSProperties;

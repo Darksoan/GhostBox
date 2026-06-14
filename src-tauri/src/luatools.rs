@@ -1,6 +1,6 @@
 use crate::catalogue::fetch_remote_game;
+use crate::ghostbox_library;
 use crate::ludusavi::game_title;
-use crate::pirate_library;
 use crate::util::{text_value, EmptyVecExt};
 use crate::{extract_app_id, resolve_steam_path, save_steam_path, steam_asset_url};
 
@@ -260,7 +260,7 @@ async fn library_game_from_luatools_add(
         "appId": app_id,
         "id": format!("steam-{app_id}"),
         "title": title,
-        "subtitle": "Adicionado pelo PirateBox",
+        "subtitle": "Adicionado pelo GhostBox",
         "status": "discover",
         "hours": 0,
         "rating": 0,
@@ -298,7 +298,7 @@ pub async fn luatools_add_game(
         }));
     }
     let title = game_title(&game, &app_id);
-    if pirate_library::is_library_app_blocked(&app_id, &title) {
+    if ghostbox_library::is_library_app_blocked(&app_id, &title) {
         return Ok(serde_json::json!({
             "success": false,
             "error": "Este item não é um jogo e foi bloqueado da Biblioteca."
@@ -335,7 +335,7 @@ pub async fn luatools_add_game(
             }
             library_game["luaToolsManifests"] = serde_json::json!(manifest_files);
             let _ = save_steam_path(&app, &steam_path);
-            let _ = pirate_library::upsert_pirate_library_game(&app, library_game.clone());
+            let _ = ghostbox_library::upsert_ghostbox_library_game(&app, library_game.clone());
 
             Ok(serde_json::json!({
                 "success": true,
@@ -392,7 +392,7 @@ pub fn luatools_remove_game(app: tauri::AppHandle, game: serde_json::Value) -> s
         }
     }
 
-    let _ = pirate_library::remove_pirate_library_game(&app, &app_id);
+    let _ = ghostbox_library::remove_ghostbox_library_game(&app, &app_id);
 
     serde_json::json!({
         "success": true,

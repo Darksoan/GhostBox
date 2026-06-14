@@ -26,7 +26,7 @@ Este plano é para outra IA continuar de forma segura e incremental.
 ```powershell
 cargo check --manifest-path "src-tauri\Cargo.toml"
 npm run build
-rg "window\.piratebox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri
+rg "window\.ghostbox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri
 git diff --check
 ```
 
@@ -191,8 +191,8 @@ Mover:
 ### Contornos De Erro
 
 - `steam_select_path` deve retornar `invalid`, não erro fatal, quando pasta não tem `steamapps/libraryfolders.vdf`.
-- `steam_scan_library` deve retornar `missing` se não há Steam e nem biblioteca PirateBox persistida.
-- Se há biblioteca PirateBox persistida, deve retornar `ok` com jogos persistidos mesmo sem Steam.
+- `steam_scan_library` deve retornar `missing` se não há Steam e nem biblioteca GhostBox persistida.
+- Se há biblioteca GhostBox persistida, deve retornar `ok` com jogos persistidos mesmo sem Steam.
 
 ## Backend 3: Extrair Playtime E Session Monitor
 
@@ -376,7 +376,7 @@ function backupErrorMessage(error: unknown, fallback: string) {
 async function runBackup(game: LudusaviBackupPreviewGame) {
   setRunningBackupAppIds((current) => new Set(current).add(game.appId));
   try {
-    const result = await pirateboxApi.runGameLocalBackup(game);
+    const result = await ghostboxApi.runGameLocalBackup(game);
     if (!result?.success) {
       showToast({
         type: "error",
@@ -422,7 +422,7 @@ Adicionar indicador em:
 Exemplo mínimo:
 
 ```tsx
-export function GameCard({ game, active }: { game: PirateGame; active?: boolean }) {
+export function GameCard({ game, active }: { game: GhostBoxGame; active?: boolean }) {
   return (
     <article className={`game-card${active ? " game-card--active" : ""}`}>
       {active && <span className="game-card__active-badge">Playing</span>}
@@ -518,7 +518,7 @@ git status --short
 git diff --check
 cargo check --manifest-path "src-tauri\Cargo.toml"
 npm run build
-rg "window\.piratebox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri
+rg "window\.ghostbox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite" src src-tauri
 git diff --stat
 ```
 

@@ -1,20 +1,27 @@
 import { Minus, X } from "lucide-react";
 import { useCallback } from "react";
+import ghostSolidIcon from "../../../Icons/ghost-solid.png";
 import { useSettings } from "../../context/settings";
-import { pirateboxApi } from "../../lib/pirateboxApi";
+import { ghostboxApi } from "../../lib/ghostboxApi";
 
 export function TitleBar() {
   const { appearance } = useSettings();
-  const handleMinimize = useCallback(() => void pirateboxApi.minimize(), []);
-  const handleClose = useCallback(() => void pirateboxApi.close(), []);
+  const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
+  const handleClose = useCallback(() => void ghostboxApi.close(), []);
 
   return (
     <div className="title-bar">
       <div className="title-bar__drag-zone" aria-hidden="true" />
 
       <div className="title-bar__brand">
-        <span className="title-bar__logo" aria-hidden="true" />
-        <span className="title-bar__title">PIRATEBOX</span>
+        <img
+          className="title-bar__logo"
+          src={ghostSolidIcon}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
+        <span className="title-bar__title">GHOSTBOX</span>
       </div>
 
       <div className="title-bar__controls">

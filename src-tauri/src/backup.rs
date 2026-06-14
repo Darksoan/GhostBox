@@ -3,7 +3,7 @@ use crate::ludusavi::{game_title, ludusavi_args, run_ludusavi};
 use crate::steam_appcache;
 use crate::util::text_value;
 use crate::{
-    backup_details_for_path, backup_marker_path, backup_root_status, backup_timestamp,
+    backup_details_for_path, backup_root_marker_exists, backup_root_status, backup_timestamp,
     default_backup_output_path, directory_has_content, directory_size, extract_app_id,
     get_backup_record_entries, is_path_inside_or_equal, load_backup_settings, make_backup_entry,
     persist_backup_settings, resolve_steam_path, sanitize_folder_name, save_backup_record,
@@ -67,12 +67,12 @@ pub fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
         );
     }
 
-    if !backup_marker_path(&output_path).exists() {
+    if !backup_root_marker_exists(&output_path) {
         return backup_root_status(
             "invalid",
             &output_path,
             settings,
-            "A pasta selecionada nÃ£o parece ser uma raiz de backups do PirateBox.",
+            "A pasta selecionada nÃ£o parece ser uma raiz de backups do GhostBox.",
         );
     }
 

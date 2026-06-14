@@ -141,7 +141,7 @@ const translations: Record<Language, TranslationTree> = {
           eyebrow: "Base do app",
           title: "Comportamento principal",
           description:
-            "Preferências globais para iniciar, navegar e organizar a experiência do PirateBox.",
+            "Preferências globais para iniciar, navegar e organizar a experiência do GhostBox.",
         },
         performance: {
           label: "Desempenho",
@@ -162,7 +162,7 @@ const translations: Record<Language, TranslationTree> = {
           eyebrow: "Saves locais",
           title: "Destino dos backups",
           description:
-            "Configure onde o PirateBox salva backups locais criados pelo Ludusavi.",
+            "Configure onde o GhostBox salva backups locais criados pelo Ludusavi.",
         },
         notifications: {
           label: "Notificações",
@@ -182,7 +182,7 @@ const translations: Record<Language, TranslationTree> = {
       general: {
         language: {
           label: "Idioma",
-          description: "Escolha o idioma da interface do PirateBox.",
+          description: "Escolha o idioma da interface do GhostBox.",
           portuguese: "Português",
           english: "English",
         },
@@ -193,7 +193,7 @@ const translations: Record<Language, TranslationTree> = {
         },
         initialPage: {
           label: "Página inicial",
-          description: "Escolha a tela aberta ao iniciar o PirateBox.",
+          description: "Escolha a tela aberta ao iniciar o GhostBox.",
           home: "Início",
           profile: "Perfil",
           catalogue: "Catálogo",
@@ -201,7 +201,7 @@ const translations: Record<Language, TranslationTree> = {
         openAtLogin: {
           label: "Iniciar com Windows",
           description:
-            "Abre o PirateBox automaticamente quando o Windows iniciar.",
+            "Abre o GhostBox automaticamente quando o Windows iniciar.",
         },
         startMinimized: {
           label: "Iniciar minimizado",
@@ -257,7 +257,7 @@ const translations: Record<Language, TranslationTree> = {
         inAppToasts: {
           label: "Toasts dentro do app",
           description:
-            "Mostra avisos pequenos enquanto a janela do PirateBox está aberta.",
+            "Mostra avisos pequenos enquanto a janela do GhostBox está aberta.",
         },
         inAppSuccessToasts: {
           label: "Toasts de sucesso",
@@ -472,7 +472,7 @@ const translations: Record<Language, TranslationTree> = {
           eyebrow: "App base",
           title: "Main behavior",
           description:
-            "Global preferences for launch, navigation, and the PirateBox experience.",
+            "Global preferences for launch, navigation, and the GhostBox experience.",
         },
         performance: {
           label: "Performance",
@@ -492,7 +492,7 @@ const translations: Record<Language, TranslationTree> = {
           eyebrow: "Local saves",
           title: "Backup destination",
           description:
-            "Configure where PirateBox saves local backups created by Ludusavi.",
+            "Configure where GhostBox saves local backups created by Ludusavi.",
         },
         notifications: {
           label: "Notifications",
@@ -512,7 +512,7 @@ const translations: Record<Language, TranslationTree> = {
       general: {
         language: {
           label: "Language",
-          description: "Choose the PirateBox interface language.",
+          description: "Choose the GhostBox interface language.",
           portuguese: "Portuguese",
           english: "English",
         },
@@ -523,14 +523,14 @@ const translations: Record<Language, TranslationTree> = {
         },
         initialPage: {
           label: "Home page",
-          description: "Choose the screen opened when PirateBox starts.",
+          description: "Choose the screen opened when GhostBox starts.",
           home: "Home",
           profile: "Profile",
           catalogue: "Catalogue",
         },
         openAtLogin: {
           label: "Start with Windows",
-          description: "Opens PirateBox automatically when Windows starts.",
+          description: "Opens GhostBox automatically when Windows starts.",
         },
         startMinimized: {
           label: "Start minimized",
@@ -582,7 +582,7 @@ const translations: Record<Language, TranslationTree> = {
         },
         inAppToasts: {
           label: "In-app toasts",
-          description: "Shows small alerts while the PirateBox window is open.",
+          description: "Shows small alerts while the GhostBox window is open.",
         },
         inAppSuccessToasts: {
           label: "Success toasts",

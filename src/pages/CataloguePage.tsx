@@ -10,7 +10,7 @@ import {
   type CSSProperties,
   type RefObject,
 } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import { Clock, ThumbsUp } from "lucide-react";
 import type {
   CatalogueFilters,
@@ -44,7 +44,30 @@ import { preloadGameListAssets } from "../utils/image";
 
 const maxVisibleFilterOptions = 160;
 
-function getFilterDisplayValue(_key: CatalogueFilterKey, value: string) {
+function getFilterDisplayValue(
+  _key: CatalogueFilterKey,
+  value: string,
+  language: "pt" | "en" = "pt"
+) {
+  if (language === "pt") {
+    const labels: Record<string, string> = {
+      Action: "Ação",
+      Adventure: "Aventura",
+      Atmospheric: "Atmosférico",
+      Exploration: "Exploração",
+      Fantasy: "Fantasia",
+      Horror: "Terror",
+      Racing: "Corrida",
+      Simulation: "Simulação",
+      Sports: "Esportes",
+      Strategy: "Estratégia",
+      "Story Rich": "Boa trama",
+      Survival: "Sobrevivência",
+    };
+
+    return labels[value] ?? value;
+  }
+
   return value;
 }
 
@@ -90,13 +113,13 @@ const CatalogueActiveFilters = memo(function CatalogueActiveFilters({
               onClick={() => onRemove(key, value)}
               aria-label={
                 isEnglish
-                  ? `Remove filter ${getFilterDisplayValue(key, value)}`
-                  : `Remover filtro ${getFilterDisplayValue(key, value)}`
+                  ? `Remove filter ${getFilterDisplayValue(key, value, appearance.language)}`
+                  : `Remover filtro ${getFilterDisplayValue(key, value, appearance.language)}`
               }
             >
               <span className="catalogue-filter-chip__orb" />
               <span>
-                {getFilterCategoryLabel(key, t)}: {getFilterDisplayValue(key, value)}
+                {getFilterCategoryLabel(key, t)}: {getFilterDisplayValue(key, value, appearance.language)}
               </span>
               <X size={13} />
             </button>
@@ -124,7 +147,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
   onToggle,
   onClear,
 }: CatalogueFilterSectionProps) {
-  const { t } = useSettings();
+  const { appearance, t } = useSettings();
   const [isOpen, setIsOpen] = useState(() => selectedValues.length > 0);
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearchTerm = useDeferredValue(searchTerm);
@@ -223,7 +246,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
                       <span className="catalogue-filter-option__box">
                         {checked && <Check size={12} strokeWidth={3} />}
                       </span>
-                      <span>{getFilterDisplayValue(filterKey, value)}</span>
+                      <span>{getFilterDisplayValue(filterKey, value, appearance.language)}</span>
                     </label>
                   );
                 })}
@@ -248,7 +271,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
   );
 });
 interface CataloguePageProps {
-  games: PirateGame[];
+  games: GhostBoxGame[];
   facets?: {
     genres?: string[];
     tags?: string[];
@@ -269,7 +292,7 @@ interface CataloguePageProps {
   onFiltersChange: (filters: CatalogueFilters) => void;
   onSortChange: (sort: CatalogueSort) => void;
   onPageChange: (page: number) => void;
-  onOpenGame: (game: PirateGame) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
   favoriteGameIds: Set<string>;
   addedGameAppIds: Set<string>;
   libraryGameAppIds: Set<string>;
@@ -277,13 +300,13 @@ interface CataloguePageProps {
   addingGameId: string | null;
   launchingGameId: string | null;
   removingGameId: string | null;
-  onToggleFavorite: (game: PirateGame) => void;
-  onAddGame: (game: PirateGame) => void;
-  onPlayGame: (game: PirateGame) => void;
-  onRemoveGame: (game: PirateGame) => void;
+  onToggleFavorite: (game: GhostBoxGame) => void;
+  onAddGame: (game: GhostBoxGame) => void;
+  onPlayGame: (game: GhostBoxGame) => void;
+  onRemoveGame: (game: GhostBoxGame) => void;
   userCollections: UserCollection[];
-  onAddGameToCollection: (game: PirateGame, collectionId: string) => void;
-  onRemoveGameFromCollection: (game: PirateGame, collectionId: string) => void;
+  onAddGameToCollection: (game: GhostBoxGame, collectionId: string) => void;
+  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   pulseLoading: boolean;
   scrollElementRef?: RefObject<HTMLElement | null>;
 }
@@ -327,7 +350,7 @@ export function CataloguePage({
   const resultsRef = useRef<HTMLDivElement>(null);
   const [virtualListHeight, setVirtualListHeight] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{
-    game: PirateGame;
+    game: GhostBoxGame;
     x: number;
     y: number;
     mode: "game" | "collection";
@@ -558,13 +581,15 @@ export function CataloguePage({
             />
           )}
 
-          <div className="catalogue-page__footer">
-            <PaginationControls
-              page={currentPage}
-              totalPages={totalPages}
-              onPageChange={onPageChange}
-            />
-          </div>
+          {!loading && totalPages > 1 && (
+            <div className="catalogue-page__footer">
+              <PaginationControls
+                page={currentPage}
+                totalPages={totalPages}
+                onPageChange={onPageChange}
+              />
+            </div>
+          )}
         </div>
 
         <aside className="catalogue-filters" aria-label={t("catalogue.filters.label")}>

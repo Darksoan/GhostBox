@@ -9,7 +9,7 @@ import {
   useState,
   type RefObject,
 } from "react";
-import type { PirateGame } from "../../data";
+import type { GhostBoxGame } from "../../data";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
 import {
   layeredImageStyle,
@@ -24,16 +24,16 @@ const CATALOGUE_ITEM_ESTIMATED_HEIGHT = 108;
 const CATALOGUE_VIRTUALIZATION_THRESHOLD = 30;
 
 interface CatalogueListItemProps {
-  game: PirateGame;
+  game: GhostBoxGame;
   isAdded: boolean;
   canAddToCollection: boolean;
   isAdding?: boolean;
   isRemoving?: boolean;
-  onOpenGame: (game: PirateGame) => void;
-  onRemoveGame?: (game: PirateGame) => void;
-  onPreloadGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
-  onCollectionContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onRemoveGame?: (game: GhostBoxGame) => void;
+  onPreloadGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+  onCollectionContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }
 
 export const CatalogueListItem = memo(function CatalogueListItem({
@@ -189,15 +189,15 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 });
 
 interface CatalogueListProps {
-  games: PirateGame[];
-  onOpenGame: (game: PirateGame) => void;
+  games: GhostBoxGame[];
+  onOpenGame: (game: GhostBoxGame) => void;
   userCollections?: UserCollection[];
   addedGameAppIds?: Set<string>;
   addingGameId?: string | null;
   removingGameId?: string | null;
-  onRemoveGame?: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
-  onCollectionContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onRemoveGame?: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+  onCollectionContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   scrollElementRef?: RefObject<HTMLElement | null>;
   onVirtualHeightChange?: (height: number) => void;
 }
@@ -218,7 +218,7 @@ export function CatalogueList({
   const preloadTimeoutRef = useRef<number | null>(null);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
 
-  const scheduleGamePreload = useCallback((game: PirateGame) => {
+  const scheduleGamePreload = useCallback((game: GhostBoxGame) => {
     if (preloadTimeoutRef.current !== null) {
       window.clearTimeout(preloadTimeoutRef.current);
     }
@@ -256,7 +256,7 @@ export function CatalogueList({
     onVirtualHeightChange(virtualizer.getTotalSize());
   }, [onVirtualHeightChange, shouldVirtualize, virtualizer, games.length]);
 
-  const renderItem = (game: PirateGame) => (
+  const renderItem = (game: GhostBoxGame) => (
     <CatalogueListItem
       game={game}
       key={game.id}

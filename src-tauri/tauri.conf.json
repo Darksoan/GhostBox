@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PirateBox",
+  "productName": "GhostBox",
   "version": "0.1.1",
-  "identifier": "com.piratebox.app",
+  "identifier": "com.ghostbox.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "PirateBox",
+        "title": "GhostBox",
         "width": 1280,
         "height": 720,
         "minWidth": 1280,
@@ -36,10 +36,11 @@
       "binaries/ludusavi"
     ],
     "icon": [
-      "../Icons/app-icon-32.png",
-      "../Icons/app-icon-128.png",
-      "../Icons/app-icon-256.png",
-      "../Icons/app-icon.ico"
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
     ]
   }
 }

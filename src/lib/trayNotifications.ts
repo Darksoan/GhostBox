@@ -10,13 +10,13 @@ export function getTrayHiddenNotificationCopy(
 ): TrayHiddenNotificationPayload {
   if (language === "en") {
     return {
-      title: "PirateBox is still running",
+      title: "GhostBox is still running",
       message: "Double-click the tray icon to open the app again.",
     };
   }
 
   return {
-    title: "PirateBox continua em execução",
+    title: "GhostBox continua em execução",
     message: "Clique duas vezes no ícone da bandeja para reabrir o app.",
   };
 }

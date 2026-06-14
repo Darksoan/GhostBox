@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import {
   loadGameAchievementDetailsCached,
   loadGameStoreDetailsCached,
 } from "../utils/gameCache";
 import { mergeGameCardData } from "../utils/gameCardData";
 
-export function useEnrichedGameCards(games: PirateGame[], limit = 80) {
+export function useEnrichedGameCards(games: GhostBoxGame[], limit = 80) {
   const requestedKeysRef = useRef(new Set<string>());
   const [detailsByAppId, setDetailsByAppId] = useState(
-    () => new Map<string, PirateGame>()
+    () => new Map<string, GhostBoxGame>()
   );
   const gamesKey = games.map((game) => game.id).join("|");
 
   useEffect(() => {
     let cancelled = false;
 
-    const mergeDetails = (baseGame: PirateGame, details: PirateGame | null) => {
+    const mergeDetails = (baseGame: GhostBoxGame, details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
 
       setDetailsByAppId((current) => {

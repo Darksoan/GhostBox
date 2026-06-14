@@ -11,7 +11,7 @@ import { useAppShellState } from "./hooks/useAppShellState";
 import { useAppData } from "./context/AppDataContext";
 import { useOverlay } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
-import { pirateboxApi } from "./lib/pirateboxApi";
+import { ghostboxApi } from "./lib/ghostboxApi";
 import {
   getTrayHiddenNotificationCopy,
   showTrayHiddenDesktopNotification,
@@ -52,7 +52,7 @@ function AppShell() {
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
 
   useEffect(() => {
-    return pirateboxApi.onCatalogueCacheUpdated(() => {
+    return ghostboxApi.onCatalogueCacheUpdated(() => {
       clearCatalogueGamesCache();
       void queryClient.invalidateQueries({ queryKey: ["games"] });
       void queryClient.invalidateQueries({ queryKey: ["home"] });
@@ -60,7 +60,7 @@ function AppShell() {
   }, [queryClient]);
 
   useEffect(() => {
-    return pirateboxApi.onWindowHiddenToTray(() => {
+    return ghostboxApi.onWindowHiddenToTray(() => {
       const copy = getTrayHiddenNotificationCopy(appearance.language);
       showTrayHiddenDesktopNotification(
         copy,
@@ -151,7 +151,7 @@ function AppShell() {
   ]);
 
   return (
-    <div className="piratebox-shell">
+    <div className="ghostbox-shell">
       <TitleBar />
 
       <main className="app-main">
@@ -225,6 +225,7 @@ function AppShell() {
               steamPathModalLoading={steamPathModalLoading}
               setSteamPathModalLoading={setSteamPathModalLoading}
               onNavigateToCatalogue={() => handleNavigate("catalogue")}
+              steamProfile={appData.steamProfile}
             />
           </section>
         </article>

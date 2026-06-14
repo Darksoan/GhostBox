@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { CloudAlert, CloudCheck, FolderInput, Trash } from "lucide-react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { BackupEntry, BackupRootStatus, BackupSettings } from "../types";
 import { useSettings } from "../context/settings";
-import { pirateboxApi } from "../lib/pirateboxApi";
+import { ghostboxApi } from "../lib/ghostboxApi";
 
 type BackupPageProps = {
-  games: PirateGame[];
+  games: GhostBoxGame[];
   installedGameAppIds?: Set<string>;
   isRefreshingInstallationStatus?: boolean;
   backupSettings: BackupSettings | null;
@@ -149,7 +149,7 @@ export function BackupPage({
       for (const { appId, record } of backupGames.slice(0, 25)) {
         if (cancelled) continue;
 
-        const settings = await pirateboxApi
+        const settings = await ghostboxApi
           .refreshGameBackupMetadata(appId)
           .catch(() => null);
         const nextRecord = settings?.backupRecords[appId];

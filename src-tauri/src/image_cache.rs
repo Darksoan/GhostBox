@@ -268,12 +268,17 @@ fn library_asset_cache_paths(app: &AppHandle) -> Vec<PathBuf> {
         let app_data = PathBuf::from(app_data);
         paths.push(
             app_data
-                .join("piratebox")
+                .join("GhostBox")
                 .join("steamcmd-library-asset-cache.json"),
         );
         paths.push(
             app_data
-                .join("PirateBox")
+                .join("Eden")
+                .join("steamcmd-library-asset-cache.json"),
+        );
+        paths.push(
+            app_data
+                .join("piratebox")
                 .join("steamcmd-library-asset-cache.json"),
         );
     }
@@ -471,13 +476,14 @@ fn steamcmd_candidates(app: &AppHandle) -> Vec<PathBuf> {
         let app_data = PathBuf::from(app_data);
         candidates.push(
             app_data
-                .join("piratebox")
+                .join("GhostBox")
                 .join("steamcmd")
                 .join("steamcmd.exe"),
         );
+        candidates.push(app_data.join("Eden").join("steamcmd").join("steamcmd.exe"));
         candidates.push(
             app_data
-                .join("PirateBox")
+                .join("piratebox")
                 .join("steamcmd")
                 .join("steamcmd.exe"),
         );
@@ -760,11 +766,9 @@ pub fn start_image_cache_cleanup(app: AppHandle) {
     }
 
     cleanup_image_cache(&app);
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(Duration::from_millis(IMAGE_CACHE_CLEANUP_INTERVAL_MS));
-            cleanup_image_cache(&app);
-        }
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(IMAGE_CACHE_CLEANUP_INTERVAL_MS));
+        cleanup_image_cache(&app);
     });
 }
 

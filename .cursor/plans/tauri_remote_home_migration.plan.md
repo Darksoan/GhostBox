@@ -26,7 +26,7 @@ Render the Tauri app's Home page from the remote catalogue API without using a l
 }
 ```
 
-The frontend passes `VITE_PIRATEBOX_GAMES_API_URL` when defined. Rust falls back to the current Worker deployment and performs the HTTP request outside WebView CORS restrictions.
+The frontend passes `VITE_GHOSTBOX_GAMES_API_URL` when defined. Rust falls back to the current Worker deployment and performs the HTTP request outside WebView CORS restrictions.
 
 ## Implementation Steps
 
@@ -41,4 +41,4 @@ The frontend passes `VITE_PIRATEBOX_GAMES_API_URL` when defined. Rust falls back
 
 - `npm run build`
 - `cargo check --manifest-path src-tauri\Cargo.toml`
-- `rg 'window\.piratebox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite' src src-tauri`
+- `rg 'window\.ghostbox|ipcRenderer|contextBridge|BrowserWindow|sqlite|games\.sqlite' src src-tauri`

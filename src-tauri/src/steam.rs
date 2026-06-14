@@ -1,4 +1,4 @@
-use crate::pirate_library;
+use crate::ghostbox_library;
 use crate::playtime;
 use crate::settings::{read_json_file, remove_data_file, write_json_file};
 use crate::util::{escape_html, text_value, xml_text, EmptyStringExt};
@@ -11,6 +11,7 @@ use crate::{
 const STEAM_PROFILE_FILE: &str = "steam-profile.json";
 const MAX_PROFILE_AVATAR_BYTES: usize = 512 * 1024;
 const STEAM_OPENID_ENDPOINT: &str = "https://steamcommunity.com/openid/login";
+const STEAM_WISHLIST_USER_AGENT: &str = "Mozilla/5.0 GhostBox/0.1";
 
 static STEAM_SIGN_IN_ACTIVE: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 
@@ -241,7 +242,7 @@ fn steam_login_page_html(success: bool, message: &str) -> String {
     };
 
     format!(
-        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>PirateBox</title><style>:root {{ color-scheme: dark; }} body {{ min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b0b0b; color: #d3d3d3; font: 500 24px \"Segoe UI\", system-ui, sans-serif; user-select: none; }} p {{ margin: 0; }}</style></head><body><p>{}</p></body></html>",
+        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>GhostBox</title><style>:root {{ color-scheme: dark; }} body {{ min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b0b0b; color: #d3d3d3; font: 500 24px \"Segoe UI\", system-ui, sans-serif; user-select: none; }} p {{ margin: 0; }}</style></head><body><p>{}</p></body></html>",
         escape_html(text)
     )
 }
@@ -422,6 +423,93 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
 #[tauri::command]
 pub fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
+}
+
+#[tauri::command]
+pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Value>, String> {
+    let steam_id = steam_id.trim();
+    if steam_id.is_empty() || !steam_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Ok(Vec::new());
+    }
+
+    let url =
+        format!("https://api.steampowered.com/IWishlistService/GetWishlist/v1/?steamid={steam_id}");
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
+        .send()
+        .await;
+
+    let Ok(response) = response else {
+        return Ok(Vec::new());
+    };
+    if !response.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let Ok(payload) = response.json::<serde_json::Value>().await else {
+        return Ok(Vec::new());
+    };
+    let Some(items) = payload
+        .get("response")
+        .and_then(|response| response.get("items"))
+        .and_then(|items| items.as_array())
+    else {
+        return Ok(Vec::new());
+    };
+
+    let mut wishlist = items
+        .iter()
+        .filter_map(|item| {
+            let app_id = item.get("appid")?.as_u64()?.to_string();
+            let priority = item
+                .get("priority")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0);
+            let date_added = item
+                .get("date_added")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0);
+
+            Some(serde_json::json!({
+                "appId": app_id,
+                "priority": priority,
+                "dateAdded": date_added
+            }))
+        })
+        .collect::<Vec<_>>();
+
+    wishlist.sort_by(|left, right| {
+        let left_priority = left
+            .get("priority")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let right_priority = right
+            .get("priority")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let left_date = left
+            .get("dateAdded")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+        let right_date = right
+            .get("dateAdded")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(0);
+
+        match (left_priority > 0, right_priority > 0) {
+            (true, true) => left_priority.cmp(&right_priority),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => right_date.cmp(&left_date),
+        }
+    });
+
+    Ok(wishlist)
 }
 
 #[tauri::command]
@@ -618,11 +706,11 @@ pub fn steam_scan_library(
     _force_refresh_owned_games: Option<bool>,
     _include_owned_games: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let pirate_library_games = pirate_library::read_pirate_library_games(&app);
+    let ghostbox_library_games = ghostbox_library::read_ghostbox_library_games(&app);
     let (resolved_path, checked_paths) = resolve_steam_path(&app, steam_path);
 
     let Some(steam_path) = resolved_path else {
-        if pirate_library_games.is_empty() {
+        if ghostbox_library_games.is_empty() {
             return Ok(serde_json::json!({
                 "status": "missing",
                 "checkedPaths": checked_paths,
@@ -632,13 +720,13 @@ pub fn steam_scan_library(
 
         let stored_path = load_saved_steam_path(&app);
         let playtimes = playtime::load_game_playtimes(&app);
-        let added_app_ids = pirate_library_games
+        let added_app_ids = ghostbox_library_games
             .iter()
             .map(extract_app_id)
             .filter(|app_id| !app_id.is_empty())
             .collect::<Vec<_>>();
         let steam_path_ref = stored_path.as_str();
-        let games = pirate_library_games
+        let games = ghostbox_library_games
             .into_iter()
             .map(|game| merge_playtime_into_game(game, &playtimes))
             .map(|game| enrich_game_with_local_achievement_stats(&app, game, steam_path_ref))
@@ -657,11 +745,11 @@ pub fn steam_scan_library(
     save_steam_path(&app, &steam_path)?;
     let library_paths = read_steam_library_paths(&steam_path);
     let installed_games = scan_installed_steam_games(&library_paths);
-    let plugin_app_ids = pirate_library::read_plugin_added_steam_app_ids(&steam_path);
-    let (added_app_ids, merged_games) = pirate_library::build_scan_games_with_plugins(
+    let plugin_app_ids = ghostbox_library::read_plugin_added_steam_app_ids(&steam_path);
+    let (added_app_ids, merged_games) = ghostbox_library::build_scan_games_with_plugins(
         installed_games,
         &plugin_app_ids,
-        pirate_library_games,
+        ghostbox_library_games,
     );
     let added_app_id_set = added_app_ids
         .iter()

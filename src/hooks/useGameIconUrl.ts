@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { getGameAppId } from "../utils/image";
-import type { PirateGame } from "../data";
-import { pirateboxApi } from "../lib/pirateboxApi";
+import type { GhostBoxGame } from "../data";
+import { ghostboxApi } from "../lib/ghostboxApi";
 
-const gameIconUrlCacheKey = "piratebox:game-icon-url-cache:v1";
+const gameIconUrlCacheKey = "ghostbox:game-icon-url-cache:v1";
+const legacyEdenGameIconUrlCacheKey = "eden:game-icon-url-cache:v1";
+const legacyGameIconUrlCacheKey = "piratebox:game-icon-url-cache:v1";
 const gameIconUrlCacheLimit = 300;
 const cache = new Map<string, string>();
 const requestCache = new Map<string, Promise<string | null>>();
@@ -13,7 +15,10 @@ function readStoredCache() {
 
   try {
     const parsed = JSON.parse(
-      window.localStorage.getItem(gameIconUrlCacheKey) ?? "{}"
+      window.localStorage.getItem(gameIconUrlCacheKey) ??
+        window.localStorage.getItem(legacyEdenGameIconUrlCacheKey) ??
+        window.localStorage.getItem(legacyGameIconUrlCacheKey) ??
+        "{}"
     ) as Record<string, string>;
 
     Object.entries(parsed).forEach(([appId, url]) => {
@@ -44,7 +49,7 @@ function loadIconUrl(appId: string) {
   const pending = requestCache.get(appId);
   if (pending) return pending;
 
-  const request = pirateboxApi
+  const request = ghostboxApi
     .getGameIconUrl(appId)
     .then((result) => {
       if (result) {
@@ -65,7 +70,7 @@ function loadIconUrl(appId: string) {
 
 readStoredCache();
 
-export function useGameIconUrl(game: PirateGame) {
+export function useGameIconUrl(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const [url, setUrl] = useState<string | null>(() => cache.get(appId) ?? null);
 

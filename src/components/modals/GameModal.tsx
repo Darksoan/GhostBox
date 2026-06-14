@@ -18,7 +18,7 @@ import {
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
-  PirateGame,
+  GhostBoxGame,
   GameRequirements,
   SteamAchievement,
 } from "../../data";
@@ -765,7 +765,7 @@ function GameDetailsLoadingSections() {
 }
 
 interface GameModalProps {
-  game: PirateGame | null;
+  game: GhostBoxGame | null;
   isAdding: boolean;
   isAdded: boolean;
   isInstalled: boolean;
@@ -778,27 +778,27 @@ interface GameModalProps {
   customExecutablePath: string;
   userCollections: UserCollection[];
   onClose: () => void;
-  onQueueGame: (game: PirateGame) => void | Promise<void>;
-  onRemoveGame: (game: PirateGame) => void | Promise<void>;
-  onToggleFavorite: (game: PirateGame) => void;
+  onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
+  onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
+  onToggleFavorite: (game: GhostBoxGame) => void;
   onAddGameToCollection: (
-    game: PirateGame,
+    game: GhostBoxGame,
     collectionId: string
   ) => void | Promise<void>;
   onRemoveGameFromCollection: (
-    game: PirateGame,
+    game: GhostBoxGame,
     collectionId: string
   ) => void | Promise<void>;
   onToggleAutomaticBackup: (
-    game: PirateGame,
+    game: GhostBoxGame,
     enabled: boolean
   ) => void | Promise<void>;
-  onSelectGameExecutable: (game: PirateGame) => void | Promise<void>;
-  onRemoveGameExecutable: (game: PirateGame) => void | Promise<void>;
-  onPlayGame: (game: PirateGame) => void | Promise<void>;
+  onSelectGameExecutable: (game: GhostBoxGame) => void | Promise<void>;
+  onRemoveGameExecutable: (game: GhostBoxGame) => void | Promise<void>;
+  onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
   onSelectBackupOutputPath: () => void;
-  onDetailsLoaded?: (game: PirateGame) => void;
-  onViewAchievements?: (game: PirateGame) => void;
+  onDetailsLoaded?: (game: GhostBoxGame) => void;
+  onViewAchievements?: (game: GhostBoxGame) => void;
 }
 
 export function GameModal({
@@ -831,7 +831,7 @@ export function GameModal({
   const { appearance, t } = useSettings();
   const hasCustomExecutable = Boolean(customExecutablePath);
   const [activeScreenshot, setActiveScreenshot] = useState(0);
-  const [detailGame, setDetailGame] = useState<PirateGame | null>(null);
+  const [detailGame, setDetailGame] = useState<GhostBoxGame | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [loadedScreenshotSources, setLoadedScreenshotSources] = useState<
     Set<string>
@@ -871,7 +871,7 @@ export function GameModal({
       pendingRequests -= 1;
       if (!cancelled && pendingRequests === 0) setIsLoadingDetails(false);
     };
-    const mergeStoreDetails = (details: PirateGame | null) => {
+    const mergeStoreDetails = (details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
 
       setDetailGame((current) => {
@@ -888,7 +888,7 @@ export function GameModal({
       });
       onDetailsLoaded?.(details);
     };
-    const mergeAchievementDetails = (details: PirateGame | null) => {
+    const mergeAchievementDetails = (details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
 
       setDetailGame((current) => ({

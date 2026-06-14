@@ -1,6 +1,6 @@
 import { ChevronLeft, Bell, Heart, Search } from "lucide-react";
 import { memo, useState, useCallback } from "react";
-import type { PirateGame } from "../../data";
+import type { GhostBoxGame } from "../../data";
 import type { Page } from "../../types";
 import { useSettings } from "../../context/settings";
 import { preloadGameModalAssets } from "../../utils/image";
@@ -19,12 +19,12 @@ interface HeaderProps {
   canGoBack?: boolean;
   query: string;
   isSearching: boolean;
-  suggestions: PirateGame[];
+  suggestions: GhostBoxGame[];
   allowSearchDropdown?: boolean;
   favoriteGameIds?: Set<string>;
   addedGameAppIds?: Set<string>;
   onQueryChange: (query: string) => void;
-  onSelectSuggestion: (game: PirateGame) => void;
+  onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
   onNavigateToNotifications?: () => void;
 }

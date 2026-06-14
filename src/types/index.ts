@@ -1,4 +1,4 @@
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 
 export type Page = "home" | "catalogue" | "library" | "favorites" | "backup" | "settings" | "profile" | "notifications";
 
@@ -78,7 +78,7 @@ export type UserCollection = {
   id: string;
   name: string;
   gameIds: string[];
-  games?: PirateGame[];
+  games?: GhostBoxGame[];
 };
 
 export type GameCollection = {
@@ -100,6 +100,12 @@ export type SteamProfile = {
   profileUrl: string;
 };
 
+export type SteamWishlistItem = {
+  appId: string;
+  priority: number;
+  dateAdded: number;
+};
+
 export type SteamLibraryScanResult =
   | {
       status: "ok";
@@ -107,7 +113,7 @@ export type SteamLibraryScanResult =
       libraryPaths: string[];
       appIds: string[];
       addedAppIds: string[];
-      games: PirateGame[];
+      games: GhostBoxGame[];
     }
   | {
       status: "missing";

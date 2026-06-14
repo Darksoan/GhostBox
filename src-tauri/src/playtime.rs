@@ -346,7 +346,7 @@ fn poll_steam_running_app_id(app: &tauri::AppHandle) {
     };
 
     if running_app_id != "0" {
-        if crate::pirate_library::is_library_app_blocked(&running_app_id, "") {
+        if crate::ghostbox_library::is_library_app_blocked(&running_app_id, "") {
             return;
         }
 

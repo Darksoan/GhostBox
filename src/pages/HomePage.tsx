@@ -1,8 +1,8 @@
 import { ChevronLeft, ChevronRight, Clock, Trophy } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { PirateGame } from "../data";
-import type { CatalogueFilterKey, UserCollection } from "../types";
-import { loadGames, loadGameStoreDetails } from "../data";
+import type { GhostBoxGame } from "../data";
+import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem, UserCollection } from "../types";
+import { loadGames, loadGameStoreDetails, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useSettings } from "../context/settings";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
@@ -14,11 +14,15 @@ import {
 import {
   readStoredPersonalCalendar,
   writeStoredPersonalCalendar,
+  readStoredSteamWishlistRecommendations,
+  writeStoredSteamWishlistRecommendations,
   type StoredPersonalCalendar,
 } from "../utils/storage";
 import {
   gameHeaderOnlySources,
+  gameHeroSources,
   gameHeroCapsuleSources,
+  gameMainCapsuleSources,
   gamePortraitSources,
   layeredImageStyle,
 } from "../utils/image";
@@ -36,7 +40,7 @@ type HomeExploreCategory = {
   label: string;
   filterKey: Extract<CatalogueFilterKey, "genres" | "tags">;
   filterValue: string;
-  games: PirateGame[];
+  games: GhostBoxGame[];
   score: number;
 };
 
@@ -107,6 +111,7 @@ const homePersonalCalendarGameCount = 21;
 const homePersonalCalendarPageSize = 500;
 const homePersonalCalendarHistoryLimit = homePersonalCalendarGameCount * 8;
 const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
+const homeWishlistDetailsBatchSize = 8;
 
 function getHomeCalendarDates(): string[] {
   const today = new Date();
@@ -125,7 +130,7 @@ function homeSteamCdnUrl(appId: string, asset: string) {
   return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/${asset}`;
 }
 
-function homeGameAppId(game: PirateGame) {
+function homeGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
 }
 
@@ -151,7 +156,7 @@ function createHomeSeedFallbackGame(
   game: HomeGameSeed,
   index: number,
   subtitle = "Mais avaliados na Steam"
-): PirateGame {
+): GhostBoxGame {
   const accent = ["#ff2d35", "#f59e0b", "#35d07f", "#60a5fa", "#c084fc"][
     index % 5
   ];
@@ -194,8 +199,8 @@ function createHomeSeedFallbackGame(
 }
 
 function hasCompletedPlaySession(
-  game: PirateGame | undefined
-): game is PirateGame {
+  game: GhostBoxGame | undefined
+): game is GhostBoxGame {
   return Boolean(
     game &&
       Number.isFinite(Date.parse(game.lastTimePlayed ?? "")) &&
@@ -203,13 +208,33 @@ function hasCompletedPlaySession(
   );
 }
 
-function getLastPlayedTime(game: PirateGame) {
+function getLastPlayedTime(game: GhostBoxGame) {
   const lastPlayedTime = Date.parse(game.lastTimePlayed ?? "");
   return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
 }
 
-function homeGameKey(game: PirateGame) {
+function homeGameKey(game: GhostBoxGame) {
   return game.appId || game.id;
+}
+
+function getUniqueWishlistAppIds(
+  wishlistItems: SteamWishlistItem[],
+  libraryGameAppIds: Set<string>
+) {
+  const seen = new Set<string>();
+
+  return wishlistItems.flatMap((item) => {
+    const appId = item.appId.trim();
+    if (!appId || seen.has(appId) || libraryGameAppIds.has(appId)) return [];
+    seen.add(appId);
+    return [appId];
+  });
+}
+
+function createWishlistFallbackGames(appIds: string[]) {
+  return appIds.map((appId, index) =>
+    createHomeSeedFallbackGame({ appId, title: `Steam App ${appId}` }, index)
+  );
 }
 
 function isStoredHomePersonalCalendarFresh(
@@ -222,7 +247,7 @@ function isStoredHomePersonalCalendarFresh(
   );
 }
 
-function getUniqueCalendarPool(games: PirateGame[]) {
+function getUniqueCalendarPool(games: GhostBoxGame[]) {
   const seen = new Set<string>();
 
   return games.filter((game) => {
@@ -236,7 +261,7 @@ function getUniqueCalendarPool(games: PirateGame[]) {
   });
 }
 
-function shuffleHomeCalendarGames(games: PirateGame[]) {
+function shuffleHomeCalendarGames(games: GhostBoxGame[]) {
   const shuffled = [...games];
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
     const nextIndex = Math.floor(Math.random() * (index + 1));
@@ -246,7 +271,7 @@ function shuffleHomeCalendarGames(games: PirateGame[]) {
   return shuffled;
 }
 
-function getHomeCalendarTraits(game: PirateGame) {
+function getHomeCalendarTraits(game: GhostBoxGame) {
   return new Set(
     [...game.genres, ...game.tags]
       .map((value) => normalizeHomeCategory(value).toLowerCase())
@@ -255,8 +280,8 @@ function getHomeCalendarTraits(game: PirateGame) {
 }
 
 function getHomeCalendarOverlapScore(
-  game: PirateGame,
-  selectedGames: PirateGame[]
+  game: GhostBoxGame,
+  selectedGames: GhostBoxGame[]
 ) {
   const traits = getHomeCalendarTraits(game);
   if (!traits.size) return 0;
@@ -272,7 +297,7 @@ function getHomeCalendarOverlapScore(
 }
 
 function pickHomePersonalCalendarGames(
-  games: PirateGame[],
+  games: GhostBoxGame[],
   recentGameIds: string[]
 ) {
   const recentIds = new Set(recentGameIds);
@@ -282,7 +307,7 @@ function pickHomePersonalCalendarGames(
     ? freshPool
     : pool;
   const candidates = shuffleHomeCalendarGames(availableGames);
-  const selectedGames: PirateGame[] = [];
+  const selectedGames: GhostBoxGame[] = [];
 
   while (
     selectedGames.length < homePersonalCalendarGameCount &&
@@ -305,7 +330,7 @@ function pickHomePersonalCalendarGames(
 }
 
 function createHomePersonalCalendar(
-  selectedGames: PirateGame[],
+  selectedGames: GhostBoxGame[],
   storedCalendar: StoredPersonalCalendar | null
 ): StoredPersonalCalendar {
   const now = Date.now();
@@ -326,7 +351,7 @@ function createHomePersonalCalendar(
 }
 
 async function loadHomePersonalCalendarPool() {
-  const games: PirateGame[] = [];
+  const games: GhostBoxGame[] = [];
   let offset = 0;
   let expectedTotal: number | undefined;
 
@@ -353,10 +378,10 @@ function HomeCategoryCard({
   onOpenGame,
   onGameContextMenu,
 }: {
-  game: PirateGame;
+  game: GhostBoxGame;
   imageVariant?: HomeCategoryImageVariant;
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const fallbackCoverSources = useMemo(
     () =>
@@ -402,6 +427,7 @@ function HomeCategoryCard({
 function HomeCategorySection({
   title,
   games,
+  className = "",
   imageVariant = "header",
   maxGames = 3,
   showCardContentAlways = false,
@@ -409,19 +435,22 @@ function HomeCategorySection({
   onGameContextMenu,
 }: {
   title: string;
-  games: PirateGame[];
+  games: GhostBoxGame[];
+  className?: string;
   imageVariant?: HomeCategoryImageVariant;
   maxGames?: number;
   showCardContentAlways?: boolean;
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const visibleGames = games.slice(0, maxGames);
   const isHeroCapsule = imageVariant === "heroCapsule";
 
   return (
     <section
-      className={`home-category${showCardContentAlways ? " home-category--show-card-content" : ""}`}
+      className={`home-category${className ? ` ${className}` : ""}${
+        showCardContentAlways ? " home-category--show-card-content" : ""
+      }`}
       aria-label={title}
     >
       <h3 className="home-category__title">{title}</h3>
@@ -472,7 +501,7 @@ function getPlainSteamText(value?: string) {
     .trim();
 }
 
-function getHomeShortDescription(game: PirateGame, language: "pt" | "en") {
+function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
   const source =
     getPlainSteamText(game.shortDescription) ||
     game.subtitle ||
@@ -480,15 +509,11 @@ function getHomeShortDescription(game: PirateGame, language: "pt" | "en") {
 
   if (!source) {
     return language === "en"
-      ? "Featured pick from the PirateBox catalogue."
-      : "Destaque selecionado do catálogo PirateBox.";
+      ? "Featured pick from the GhostBox catalogue."
+      : "Destaque selecionado do catálogo GhostBox.";
   }
 
   return source.length > 150 ? `${source.slice(0, 147).trim()}...` : source;
-}
-
-function uniqueImageSources(sources: string[]) {
-  return sources.filter((source, index) => source && sources.indexOf(source) === index);
 }
 
 function normalizeHomeCategory(value: string) {
@@ -553,19 +578,19 @@ function getHomeCategoryLabel(value: string, language: "pt" | "en") {
   return labels[value] ?? value;
 }
 
-function gameCategoryScore(game: PirateGame) {
+function gameCategoryScore(game: GhostBoxGame) {
   const reviewScore = game.steamPositiveRatio ?? game.rating ?? 0;
   const popularityScore = game.recommendations ?? game.steamReviewCount ?? 0;
   return reviewScore * 100 + Math.log10(popularityScore + 1);
 }
 
-function getHomeExploreCategories(games: PirateGame[]) {
+function getHomeExploreCategories(games: GhostBoxGame[]) {
   const categoryMap = new Map<
     string,
     {
       filterKey: Extract<CatalogueFilterKey, "genres" | "tags">;
       filterValue: string;
-      games: PirateGame[];
+      games: GhostBoxGame[];
       score: number;
     }
   >();
@@ -589,13 +614,13 @@ function getHomeExploreCategories(games: PirateGame[]) {
     ).forEach((category) => {
       const entry = categoryMap.get(category.normalized) ?? {
         filterKey: category.key,
-        filterValue: category.value,
+        filterValue: category.normalized,
         games: [],
         score: 0,
       };
       if (entry.filterKey === "tags" && category.key === "genres") {
         entry.filterKey = category.key;
-        entry.filterValue = category.value;
+        entry.filterValue = category.normalized;
       }
       entry.games.push(game);
       entry.score += gameCategoryScore(game);
@@ -617,7 +642,7 @@ function getHomeExploreCategories(games: PirateGame[]) {
     .slice(0, 15);
 }
 
-function getUniqueHomeGames(games: PirateGame[]) {
+function getUniqueHomeGames(games: GhostBoxGame[]) {
   const seen = new Set<string>();
 
   return games.filter((game) => {
@@ -629,8 +654,8 @@ function getUniqueHomeGames(games: PirateGame[]) {
 }
 
 function getHomeExplorePreviewRows(
-  categoryGames: PirateGame[],
-  _allGames: PirateGame[]
+  categoryGames: GhostBoxGame[],
+  _allGames: GhostBoxGame[]
 ) {
   const uniqueCategoryGames = getUniqueHomeGames(categoryGames);
   const previewGames = uniqueCategoryGames.slice(0, 18);
@@ -641,7 +666,7 @@ function getHomeExplorePreviewRows(
   return rows.filter((row) => row.length > 0);
 }
 
-function HomeExploreCategoryImage({ game }: { game: PirateGame }) {
+function HomeExploreCategoryImage({ game }: { game: GhostBoxGame }) {
   const sources = gameHeaderOnlySources(game);
   const cachedSources = useCachedImageSources(sources);
   const { source: imageSource } = useLoadableImageCover(cachedSources);
@@ -664,7 +689,7 @@ function HomeExploreCategories({
 }: {
   title: string;
   categories: HomeExploreCategory[];
-  allGames: PirateGame[];
+  allGames: GhostBoxGame[];
   language: "pt" | "en";
   onOpenCategory: (category: HomeExploreCategory) => void;
 }) {
@@ -786,9 +811,9 @@ function HomeCalendarGameCard({
   onOpenGame,
   onGameContextMenu,
 }: {
-  game: PirateGame;
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  game: GhostBoxGame;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const coverSources = useCachedImageSources(gamePortraitSources(game));
   const { source: coverSource, loaded } = useLoadableImageCover(coverSources);
@@ -829,11 +854,11 @@ function HomePersonalCalendar({
 }: {
   title: string;
   subtitle: string;
-  games: PirateGame[];
+  games: GhostBoxGame[];
   language: "pt" | "en";
   loading: boolean;
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const weekdays = getHomeCalendarDates();
   const carouselRef = useRef<HTMLDivElement | null>(null);
@@ -950,30 +975,22 @@ function HomeRecommendedHero({
   onGameContextMenu,
 }: {
   title: string;
-  games: PirateGame[];
+  games: GhostBoxGame[];
   language: "pt" | "en";
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionFrameRef = useRef<number | null>(null);
   const game = games[activeIndex] ?? games[0];
-  const fallbackHeroSource = game
-    ? homeSteamCdnUrl(homeGameAppId(game), "library_hero.jpg")
-    : "";
-  const heroSources = game
-    ? uniqueImageSources([
-        fallbackHeroSource,
-        game.heroUrl,
-        game.hero,
-        ...(game.heroFallbacks ?? []),
-      ])
-    : [];
+  const heroSources = game ? gameHeroSources(game) : [];
   const cachedSources = useCachedImageSources(heroSources);
   const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
   const canNavigate = games.length > 1;
+  const publisher = game?.publishers?.filter(Boolean).slice(0, 2).join(", ") ?? "";
+  const release = game?.release?.trim() ?? "";
 
   useEffect(() => {
     if (activeIndex <= games.length - 1) return;
@@ -1011,9 +1028,6 @@ function HomeRecommendedHero({
 
   return (
     <section className="home-recommended" aria-label={title}>
-      <div className="home-carousel__header">
-        <h2 className="home-carousel__header-title">{title}</h2>
-      </div>
       <div
         className={`home-recommended-hero${
           isTransitioning ? " home-recommended-hero--transitioning" : ""
@@ -1046,15 +1060,22 @@ function HomeRecommendedHero({
           className={`home-recommended-hero__cover${
             loaded ? " home-recommended-hero__cover--loaded" : ""
           }`}
-          style={layeredImageStyle([heroSource, ...heroSources], "")}
+          style={layeredImageStyle(heroSource ? [heroSource] : [], "")}
           aria-hidden="true"
         />
         <span className="home-recommended-hero__shade" aria-hidden="true" />
         <span className="home-recommended-hero__content">
           <strong className="home-recommended-hero__title">{game.title}</strong>
-          <span className="home-recommended-hero__description">
-            {getHomeShortDescription(game, language)}
-          </span>
+          {(publisher || release) && (
+            <span className="home-recommended-hero__meta">
+              {publisher && <span>{publisher}</span>}
+              {release && (
+                <span className="home-recommended-hero__meta-release">
+                  {publisher ? `(${release})` : release}
+                </span>
+              )}
+            </span>
+          )}
         </span>
         {canNavigate && (
           <>
@@ -1088,6 +1109,149 @@ function HomeRecommendedHero({
   );
 }
 
+function HomeWishlistCard({
+  game,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  game: GhostBoxGame;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  const sources = useCachedImageSources(gameMainCapsuleSources(game));
+  const { source: imageSource, loaded } = useLoadableImageCover(sources);
+
+  return (
+    <button
+      type="button"
+      className="home-wishlist-card"
+      onClick={() => onOpenGame(game)}
+      onContextMenu={(event) => {
+        if (!onGameContextMenu) return;
+        event.preventDefault();
+        onGameContextMenu(game, event.clientX, event.clientY);
+      }}
+    >
+      <span
+        className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : ""}`}
+        style={layeredImageStyle(imageSource ? [imageSource, ...sources] : sources, "")}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+function HomeWishlistRecommendations({
+  title,
+  games,
+  loading,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  title: string;
+  games: GhostBoxGame[];
+  loading: boolean;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const [isAtStart, setIsAtStart] = useState(true);
+  const [isAtEnd, setIsAtEnd] = useState(false);
+  const visibleCards = loading && games.length === 0 ? 4 : games.length;
+
+  const updateWishlistScrollState = () => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+    setIsAtStart(carousel.scrollLeft <= 1);
+    setIsAtEnd(
+      carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 2
+    );
+  };
+
+  useLayoutEffect(() => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    carousel.scrollLeft = 0;
+    updateWishlistScrollState();
+    const frame = requestAnimationFrame(updateWishlistScrollState);
+
+    return () => cancelAnimationFrame(frame);
+  }, [visibleCards]);
+
+  if (!games.length && !loading) return null;
+
+  const hasControls = visibleCards > 4;
+
+  const scrollWishlist = (direction: -1 | 1) => {
+    const carousel = carouselRef.current;
+    if (!carousel) return;
+
+    carousel.scrollBy({
+      left: direction * carousel.clientWidth,
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <section className="home-wishlist" aria-label={title}>
+      <div className="home-wishlist__header">
+        <h3 className="home-wishlist__title">{title}</h3>
+      </div>
+      <div className="home-wishlist__rail">
+        {hasControls && (
+          <button
+            type="button"
+            className="home-wishlist__arrow home-wishlist__arrow--prev"
+            aria-label="Jogos anteriores da wishlist"
+            onClick={() => scrollWishlist(-1)}
+            style={{ visibility: isAtStart ? "hidden" : "visible" }}
+          >
+            <ChevronLeft size={30} strokeWidth={2.1} aria-hidden="true" />
+          </button>
+        )}
+        <div
+          className="home-wishlist__carousel"
+          ref={carouselRef}
+          onScroll={updateWishlistScrollState}
+        >
+          <div className="home-wishlist__track">
+            {loading && games.length === 0
+              ? Array.from({ length: 4 }, (_, index) => (
+                  <span
+                    key={`wishlist-skeleton-${index}`}
+                    className="home-wishlist-card home-wishlist-card--skeleton"
+                    aria-hidden="true"
+                  >
+                    <span className="home-wishlist-card__cover home-wishlist-card__cover--skeleton" />
+                  </span>
+                ))
+              : games.map((game) => (
+                  <HomeWishlistCard
+                    key={game.appId || game.id}
+                    game={game}
+                    onOpenGame={onOpenGame}
+                    onGameContextMenu={onGameContextMenu}
+                  />
+                ))}
+          </div>
+        </div>
+        {hasControls && (
+          <button
+            type="button"
+            className="home-wishlist__arrow home-wishlist__arrow--next"
+            aria-label="Próximos jogos da wishlist"
+            onClick={() => scrollWishlist(1)}
+            style={{ visibility: isAtEnd ? "hidden" : "visible" }}
+          >
+            <ChevronRight size={30} strokeWidth={2.1} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function HomeRecentBanner({
   title,
   game,
@@ -1096,10 +1260,10 @@ function HomeRecentBanner({
   onGameContextMenu,
 }: {
   title: string;
-  game: PirateGame | undefined;
+  game: GhostBoxGame | undefined;
   language: "pt" | "en";
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const fallbackHeroSource = game
     ? homeSteamCdnUrl(homeGameAppId(game), "library_hero.jpg")
@@ -1123,7 +1287,6 @@ function HomeRecentBanner({
         <h3 className="home-recent-banner__heading">{title}</h3>
         <div className="home-recent-banner__card home-recent-banner__card--skeleton" aria-hidden="true">
           <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
-          <span className="home-recent-banner__gradient" aria-hidden="true" />
           <span className="home-recent-banner__content home-recent-banner__content--skeleton">
             <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
               <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
@@ -1271,8 +1434,9 @@ export function HomePage({
   onRemoveGameFromCollection,
   onOpenCatalogueCategory,
   profileHistoryGames,
+  steamProfile,
 }: {
-  onOpenGame: (game: PirateGame) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
   favoriteGameIds: Set<string>;
   libraryGameAppIds: Set<string>;
   removableGameAppIds: Set<string>;
@@ -1280,26 +1444,27 @@ export function HomePage({
   addingGameId: string | null;
   launchingGameId: string | null;
   userCollections: UserCollection[];
-  onToggleFavorite: (game: PirateGame) => void;
-  onAddGame: (game: PirateGame) => void;
-  onPlayGame: (game: PirateGame) => void;
-  onRemoveGame: (game: PirateGame) => void;
-  onAddGameToCollection: (game: PirateGame, collectionId: string) => void;
-  onRemoveGameFromCollection: (game: PirateGame, collectionId: string) => void;
+  onToggleFavorite: (game: GhostBoxGame) => void;
+  onAddGame: (game: GhostBoxGame) => void;
+  onPlayGame: (game: GhostBoxGame) => void;
+  onRemoveGame: (game: GhostBoxGame) => void;
+  onAddGameToCollection: (game: GhostBoxGame, collectionId: string) => void;
+  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   onOpenCatalogueCategory: (
     key: Extract<CatalogueFilterKey, "genres" | "tags">,
     value: string
   ) => void;
-  profileHistoryGames: PirateGame[];
+  profileHistoryGames: GhostBoxGame[];
+  steamProfile: SteamProfile | null;
 }) {
   const { appearance, t } = useSettings();
-  const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<PirateGame[]>(
+  const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
     () =>
       topReviewedSteamGames.map((game, index) =>
         createHomeSeedFallbackGame(game, index)
       )
   );
-  const [homeFeaturedGames, setHomeFeaturedGames] = useState<PirateGame[]>(() =>
+  const [homeFeaturedGames, setHomeFeaturedGames] = useState<GhostBoxGame[]>(() =>
     homeFeaturedSteamGames.map((game, index) =>
       createHomeSeedFallbackGame(game, index, "")
     )
@@ -1307,10 +1472,12 @@ export function HomePage({
   const [storedPersonalCalendar] = useState<StoredPersonalCalendar | null>(() =>
     readStoredPersonalCalendar()
   );
-  const [personalCalendarGames, setPersonalCalendarGames] = useState<PirateGame[]>([]);
+  const [personalCalendarGames, setPersonalCalendarGames] = useState<GhostBoxGame[]>([]);
   const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
+  const [wishlistRecommendationGames, setWishlistRecommendationGames] = useState<GhostBoxGame[]>([]);
+  const [isLoadingWishlistRecommendations, setIsLoadingWishlistRecommendations] = useState(false);
   const [homeContextMenu, setHomeContextMenu] = useState<{
-    game: PirateGame;
+    game: GhostBoxGame;
     x: number;
     y: number;
   } | null>(null);
@@ -1322,7 +1489,7 @@ export function HomePage({
       games: HomeGameSeed[],
       start: number,
       end: number,
-      updateFn: (results: PirateGame[], offset: number) => void
+      updateFn: (results: GhostBoxGame[], offset: number) => void
     ) {
       if (cancelled || start >= end) return;
 
@@ -1393,7 +1560,7 @@ export function HomePage({
         const pool = await loadHomePersonalCalendarPool();
         if (cancelled) return;
 
-        const gameById = new Map<string, PirateGame>();
+        const gameById = new Map<string, GhostBoxGame>();
         pool.forEach((game) => {
           gameById.set(homeGameKey(game), game);
           gameById.set(game.id, game);
@@ -1438,6 +1605,81 @@ export function HomePage({
       cancelled = true;
     };
   }, [storedPersonalCalendar]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWishlistRecommendations() {
+      if (!steamProfile?.steamId) {
+        setWishlistRecommendationGames([]);
+        return;
+      }
+      setIsLoadingWishlistRecommendations(true);
+
+      try {
+        const storedWishlistRecommendations = readStoredSteamWishlistRecommendations();
+        if (storedWishlistRecommendations?.steamId === steamProfile.steamId) {
+          const cachedAppIds = storedWishlistRecommendations.gameIds.filter(
+            (appId) => appId && !libraryGameAppIds.has(appId)
+          );
+          if (cachedAppIds.length > 0) {
+            setWishlistRecommendationGames(createWishlistFallbackGames(cachedAppIds));
+          }
+        }
+
+        const wishlistItems = await loadSteamWishlist(steamProfile.steamId);
+        if (cancelled) return;
+
+        const newAppIds = getUniqueWishlistAppIds(wishlistItems, libraryGameAppIds);
+
+        if (newAppIds.length === 0) {
+          setWishlistRecommendationGames([]);
+          return;
+        }
+
+        let nextGames = createWishlistFallbackGames(newAppIds);
+        setWishlistRecommendationGames(nextGames);
+
+        writeStoredSteamWishlistRecommendations({
+          steamId: steamProfile.steamId,
+          expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+          gameIds: newAppIds,
+        });
+
+        for (
+          let offset = 0;
+          offset < newAppIds.length;
+          offset += homeWishlistDetailsBatchSize
+        ) {
+          const batchAppIds = newAppIds.slice(
+            offset,
+            offset + homeWishlistDetailsBatchSize
+          );
+          const detailedGames = await Promise.all(
+            batchAppIds.map(async (appId, index) => {
+              const game = await loadGameStoreDetails(appId).catch(() => null);
+              return game ?? nextGames[offset + index];
+            })
+          );
+
+          if (cancelled) return;
+          nextGames = [...nextGames];
+          detailedGames.forEach((game, index) => {
+            nextGames[offset + index] = game;
+          });
+          setWishlistRecommendationGames(nextGames);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingWishlistRecommendations(false);
+      }
+    }
+
+    void loadWishlistRecommendations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [steamProfile?.steamId, libraryGameAppIds]);
 
   const homeVisibleGames = useMemo(() => {
     return homeTopReviewedGames.slice(0, homeCarouselGroupSize);
@@ -1489,6 +1731,7 @@ export function HomePage({
         <HomeCategorySection
           title={t("home.featuredGames")}
           games={featuredGames}
+          className="home-category--featured"
           maxGames={6}
           onOpenGame={onOpenGame}
           onGameContextMenu={(gameItem, x, y) =>
@@ -1511,6 +1754,15 @@ export function HomePage({
         games={enrichedPersonalCalendarGames}
         language={appearance.language}
         loading={isLoadingPersonalCalendar}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={(gameItem, x, y) =>
+          setHomeContextMenu({ game: gameItem, x, y })
+        }
+      />
+      <HomeWishlistRecommendations
+        title={appearance.language === "en" ? "From your Steam wishlist" : "Da sua wishlist da Steam"}
+        games={wishlistRecommendationGames}
+        loading={isLoadingWishlistRecommendations}
         onOpenGame={onOpenGame}
         onGameContextMenu={(gameItem, x, y) =>
           setHomeContextMenu({ game: gameItem, x, y })

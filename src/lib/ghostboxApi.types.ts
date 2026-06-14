@@ -3,7 +3,7 @@ import type {
   GameDatabaseRequest,
   GameDatabaseResult,
   HomeResult,
-  PirateGame,
+  GhostBoxGame,
   RemoveGameResult,
 } from "../data";
 
@@ -14,6 +14,7 @@ import type {
   StartupSettings,
   SteamLibraryScanResult,
   SteamProfile,
+  SteamWishlistItem,
 } from "../types";
 
 export type {
@@ -21,7 +22,7 @@ export type {
   GameDatabaseRequest,
   GameDatabaseResult,
   HomeResult,
-  PirateGame,
+  GhostBoxGame,
   RemoveGameResult,
   BackupDetails,
   BackupRootStatus,
@@ -29,6 +30,7 @@ export type {
   StartupSettings,
   SteamLibraryScanResult,
   SteamProfile,
+  SteamWishlistItem,
 };
 
 export type NotificationSettings = {
@@ -81,7 +83,7 @@ export type GameExecutableSelectionResult = {
   appId: string;
   executablePath?: string;
   settings: BackupSettings;
-  libraryGame?: PirateGame;
+  libraryGame?: GhostBoxGame;
   message?: string;
 };
 

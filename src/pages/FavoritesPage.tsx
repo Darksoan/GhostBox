@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import { Clock, Trophy } from "lucide-react";
 import type { UserCollection } from "../types";
 import {
@@ -17,9 +17,9 @@ import { ContextMenu } from "../components/ui/ContextMenu";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 
 interface FavoriteCardProps {
-  game: PirateGame;
-  onOpenGame: (game: PirateGame) => void;
-  onContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  game: GhostBoxGame;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }
 
 export const FavoriteCard = memo(function FavoriteCard({
@@ -93,9 +93,9 @@ export const FavoriteCard = memo(function FavoriteCard({
 });
 
 interface FavoritesPageProps {
-  games: PirateGame[];
-  onOpenGame: (game: PirateGame) => void;
-  onToggleFavorite: (game: PirateGame) => void;
+  games: GhostBoxGame[];
+  onOpenGame: (game: GhostBoxGame) => void;
+  onToggleFavorite: (game: GhostBoxGame) => void;
   emptyTitle?: string;
   emptyMessage?: string;
   favoriteGameIds?: Set<string>;
@@ -105,11 +105,11 @@ interface FavoritesPageProps {
   addingGameId?: string | null;
   launchingGameId?: string | null;
   userCollections?: UserCollection[];
-  onAddGame?: (game: PirateGame) => void;
-  onPlayGame?: (game: PirateGame) => void;
-  onRemoveGame?: (game: PirateGame) => void;
-  onAddGameToCollection?: (game: PirateGame, collectionId: string) => void;
-  onRemoveGameFromCollection?: (game: PirateGame, collectionId: string) => void;
+  onAddGame?: (game: GhostBoxGame) => void;
+  onPlayGame?: (game: GhostBoxGame) => void;
+  onRemoveGame?: (game: GhostBoxGame) => void;
+  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
+  onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
 }
 
 export function FavoritesPage({
@@ -132,7 +132,7 @@ export function FavoritesPage({
   onRemoveGameFromCollection,
 }: FavoritesPageProps) {
   const [contextMenu, setContextMenu] = useState<{
-    game: PirateGame;
+    game: GhostBoxGame;
     x: number;
     y: number;
   } | null>(null);

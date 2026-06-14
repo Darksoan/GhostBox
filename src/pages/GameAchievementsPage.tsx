@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PirateGame, SteamAchievement } from "../data";
+import type { GhostBoxGame, SteamAchievement } from "../data";
 import { useSettings } from "../context/settings";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import { formatCompactPlaytime } from "../utils/time";
@@ -102,9 +102,9 @@ function AchievementListItem({
 }
 
 interface GameAchievementsPageProps {
-  game: PirateGame;
+  game: GhostBoxGame;
   highlightAchievementId?: string;
-  onDetailsLoaded?: (game: PirateGame) => void;
+  onDetailsLoaded?: (game: GhostBoxGame) => void;
 }
 
 export function GameAchievementsPage({
@@ -113,7 +113,7 @@ export function GameAchievementsPage({
   onDetailsLoaded,
 }: GameAchievementsPageProps) {
   const { appearance, t } = useSettings();
-  const [detailGame, setDetailGame] = useState<PirateGame>(game);
+  const [detailGame, setDetailGame] = useState<GhostBoxGame>(game);
   const [isLoading, setIsLoading] = useState(true);
   const highlightScrolledRef = useRef(false);
 

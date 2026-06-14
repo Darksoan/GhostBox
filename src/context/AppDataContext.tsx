@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import {
   addGameViaLuaTools,
   removeGameViaLuaTools,
@@ -24,8 +24,8 @@ import type {
   SteamProfile,
   UserCollection,
 } from "../types";
-import { pirateboxApi } from "../lib/pirateboxApi";
-import type { GamePlaytimeSnapshot } from "../lib/pirateboxApi.types";
+import { ghostboxApi } from "../lib/ghostboxApi";
+import type { GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
 import {
   formatSteamLoginError,
   mergeSteamProfile,
@@ -75,18 +75,18 @@ const defaultBackupSettings: BackupSettings = {
   customExecutables: {},
 };
 
-function upsertLibraryGameByAppId(games: PirateGame[], nextGame: PirateGame) {
+function upsertLibraryGameByAppId(games: GhostBoxGame[], nextGame: GhostBoxGame) {
   return [nextGame, ...games.filter((game) => game.appId !== nextGame.appId)];
 }
 
-function removeLibraryGameByAppId(games: PirateGame[], appId: string) {
+function removeLibraryGameByAppId(games: GhostBoxGame[], appId: string) {
   return games.filter((game) => game.appId !== appId);
 }
 
 function applyPlaytimeToGame(
-  game: PirateGame,
+  game: GhostBoxGame,
   snapshot: GamePlaytimeSnapshot
-): PirateGame {
+): GhostBoxGame {
   const playtime = snapshot[game.appId];
   return playtime
     ? {
@@ -102,7 +102,7 @@ function applyPlaytimeToGame(
 }
 
 function applyPlaytimeSnapshotToGames(
-  games: PirateGame[],
+  games: GhostBoxGame[],
   snapshot: GamePlaytimeSnapshot
 ) {
   return games.map((game) => {
@@ -130,8 +130,8 @@ function collectActiveSessionAppIds(snapshot: GamePlaytimeSnapshot) {
 }
 
 interface AppDataContextValue {
-  favoriteGames: PirateGame[];
-  addedLibraryGames: PirateGame[];
+  favoriteGames: GhostBoxGame[];
+  addedLibraryGames: GhostBoxGame[];
   userCollections: UserCollection[];
   steamProfile: SteamProfile | null;
   isSteamSigningIn: boolean;
@@ -151,16 +151,16 @@ interface AppDataContextValue {
   initialPage: StartupPage;
   steamPathInput: string;
   showSteamGames: boolean;
-  profileHistoryGames: PirateGame[];
-  profileFavoriteGames: PirateGame[];
-  profileAddedLibraryGames: PirateGame[];
-  handleGameDetailsLoaded: (details: PirateGame) => void;
-  toggleFavoriteGame: (game: PirateGame) => void;
-  queueGame: (game: PirateGame) => Promise<void>;
-  removeQueuedGame: (game: PirateGame) => Promise<void>;
-  handlePlayGame: (game: PirateGame) => Promise<void>;
-  addGameToUserCollection: (game: PirateGame, collectionId: string) => void;
-  removeGameFromCollection: (game: PirateGame, collectionId: string) => void;
+  profileHistoryGames: GhostBoxGame[];
+  profileFavoriteGames: GhostBoxGame[];
+  profileAddedLibraryGames: GhostBoxGame[];
+  handleGameDetailsLoaded: (details: GhostBoxGame) => void;
+  toggleFavoriteGame: (game: GhostBoxGame) => void;
+  queueGame: (game: GhostBoxGame) => Promise<void>;
+  removeQueuedGame: (game: GhostBoxGame) => Promise<void>;
+  handlePlayGame: (game: GhostBoxGame) => Promise<void>;
+  addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
+  removeGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   deleteCollection: (collectionId: string) => void;
   createUserCollection: (name: string) => void;
   openCreateUserCollectionModal: () => void;
@@ -183,9 +183,9 @@ interface AppDataContextValue {
   handleSelectSteamPath: () => Promise<void>;
   handleSelectBackupOutputPath: () => Promise<void>;
   handleToggleLibraryAutomaticBackups: (enabled: boolean) => Promise<void>;
-  handleToggleAutomaticBackup: (game: PirateGame, enabled: boolean) => Promise<void>;
-  handleSelectGameExecutable: (game: PirateGame) => Promise<void>;
-  handleRemoveGameExecutable: (game: PirateGame) => Promise<void>;
+  handleToggleAutomaticBackup: (game: GhostBoxGame, enabled: boolean) => Promise<void>;
+  handleSelectGameExecutable: (game: GhostBoxGame) => Promise<void>;
+  handleRemoveGameExecutable: (game: GhostBoxGame) => Promise<void>;
   handleOpenBackupFolder: (appId: string, backupPath?: string) => Promise<void>;
   handleDeleteBackupFolder: (
     appId: string,
@@ -202,10 +202,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const { showToast, setCollectionModalOpen } = useOverlay();
   const { appearance, notifications } = useSettings();
 
-  const [favoriteGames, setFavoriteGames] = useState<PirateGame[]>(() =>
+  const [favoriteGames, setFavoriteGames] = useState<GhostBoxGame[]>(() =>
     readStoredFavoriteGames()
   );
-  const [addedLibraryGames, setAddedLibraryGames] = useState<PirateGame[]>([]);
+  const [addedLibraryGames, setAddedLibraryGames] = useState<GhostBoxGame[]>([]);
   const [userCollections, setUserCollections] = useState<UserCollection[]>(() =>
     readStoredUserCollections()
   );
@@ -245,16 +245,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const steamProfileRequestSequenceRef = useRef(0);
   const profileBackupSyncKeysRef = useRef(new Map<string, string>());
   const gamePlaytimesRef = useRef<GamePlaytimeSnapshot>({});
-  const [profileHistoryGames, setProfileHistoryGames] = useState<PirateGame[]>(
+  const [profileHistoryGames, setProfileHistoryGames] = useState<GhostBoxGame[]>(
     () => readStoredProfileHistoryGames()
   );
 
-  const mergeGamePlaytime = useCallback((game: PirateGame): PirateGame => {
+  const mergeGamePlaytime = useCallback((game: GhostBoxGame): GhostBoxGame => {
     return applyPlaytimeToGame(game, gamePlaytimesRef.current);
   }, []);
 
   const refreshGamePlaytimes = useCallback(async () => {
-    const snapshot = await pirateboxApi.getGamePlaytimes();
+    const snapshot = await ghostboxApi.getGamePlaytimes();
     gamePlaytimesRef.current = snapshot;
     setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
     setFavoriteGames((current) =>
@@ -266,7 +266,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    return pirateboxApi.onGamePlaytimesChanged((snapshot) => {
+    return ghostboxApi.onGamePlaytimesChanged((snapshot) => {
       gamePlaytimesRef.current = snapshot;
       setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
       setFavoriteGames((current) =>
@@ -336,7 +336,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    void pirateboxApi.validateBackupRoot().then((status) => {
+    void ghostboxApi.validateBackupRoot().then((status) => {
       if (cancelled || !status) return;
 
       setBackupRootStatus(status);
@@ -347,7 +347,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    const unsubscribe = pirateboxApi.onBackupSettingsChanged((settings) => {
+    const unsubscribe = ghostboxApi.onBackupSettingsChanged((settings) => {
       if (cancelled) return;
 
       const changedRecord = getLatestChangedBackupRecord(
@@ -399,7 +399,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         const backupPath = record.entries?.[0]?.path ?? record.lastBackupPath;
-        const backupDetails = await pirateboxApi
+        const backupDetails = await ghostboxApi
           .getBackupDetails(appId, backupPath)
           .catch(() => null);
         if (cancelled || !backupDetails?.achievements.length) continue;
@@ -468,7 +468,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const achievementUnlockedTitle =
       appearance.language === "en" ? "Achievement unlocked" : "Conquista desbloqueada";
 
-    return pirateboxApi.onLocalAchievementsUnlocked((payload) => {
+    return ghostboxApi.onLocalAchievementsUnlocked((payload) => {
       if (!notifications.achievementsEnabled) return;
 
       for (const achievementName of payload.achievements) {
@@ -494,7 +494,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    void pirateboxApi.getStartupSettings().then((settings) => {
+    void ghostboxApi.getStartupSettings().then((settings) => {
       if (settings) setStartupSettings(settings);
     });
   }, []);
@@ -502,7 +502,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const requestId = ++steamProfileRequestSequenceRef.current;
 
-    void pirateboxApi.getSteamProfile().then((profile) => {
+    void ghostboxApi.getSteamProfile().then((profile) => {
       if (steamProfileRequestSequenceRef.current !== requestId) return;
 
       setSteamProfile((currentProfile) => {
@@ -514,7 +514,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void pirateboxApi.getMorrenusApiKey().then((key) => {
+    void ghostboxApi.getMorrenusApiKey().then((key) => {
       if (typeof key === "string") setMorrenusApiKey(key);
     });
   }, []);
@@ -554,7 +554,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const toggleFavoriteGame = useCallback(
-    (game: PirateGame) => {
+    (game: GhostBoxGame) => {
       const isFavorite = favoriteGameIds.has(game.id);
       if (!isFavorite) preloadGamePortraitSources(game);
 
@@ -574,7 +574,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const queueGame = useCallback(
-    async (game: PirateGame) => {
+    async (game: GhostBoxGame) => {
       if (
         addingGameId ||
         removingGameId ||
@@ -617,7 +617,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeQueuedGame = useCallback(
-    async (game: PirateGame) => {
+    async (game: GhostBoxGame) => {
       if (addingGameId || removingGameId) return;
       setRemovingGameId(game.id);
 
@@ -669,7 +669,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [addingGameId, mergeGamePlaytime, removingGameId, showToast]
   );
 
-  const handleGameDetailsLoaded = useCallback((details: PirateGame) => {
+  const handleGameDetailsLoaded = useCallback((details: GhostBoxGame) => {
     setProfileHistoryGames((current) => {
       const existingGame = current.find((game) => game.appId === details.appId);
       if (!existingGame) return current;
@@ -682,10 +682,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const handlePlayGame = useCallback(
-    async (game: PirateGame) => {
+    async (game: GhostBoxGame) => {
       setLaunchingGameId(game.id);
       try {
-        const result = await pirateboxApi.launchGame(game);
+        const result = await ghostboxApi.launchGame(game);
         if (result && !result.success) {
           showToast(
             "Falha ao iniciar",
@@ -703,7 +703,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const addGameToUserCollection = useCallback(
-    (game: PirateGame, collectionId: string) => {
+    (game: GhostBoxGame, collectionId: string) => {
       setUserCollections((current) =>
         current.map((collection) =>
           collection.id === collectionId &&
@@ -721,7 +721,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeGameFromCollection = useCallback(
-    (game: PirateGame, collectionId: string) => {
+    (game: GhostBoxGame, collectionId: string) => {
       setUserCollections((current) =>
         current.map((collection) =>
           collection.id === collectionId
@@ -792,7 +792,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     );
 
     try {
-      const profile = await pirateboxApi.signInWithSteam();
+      const profile = await ghostboxApi.signInWithSteam();
       if (steamProfileRequestSequenceRef.current !== requestId) return;
 
       setSteamProfile(profile);
@@ -822,13 +822,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const handleSteamSignOut = useCallback(async () => {
     ++steamProfileRequestSequenceRef.current;
-    await pirateboxApi.signOutSteam();
+    await ghostboxApi.signOutSteam();
     setSteamProfile(null);
     writeStoredSteamProfile(null);
   }, []);
 
   const handleRestartSteam = useCallback(async () => {
-    const result = await pirateboxApi.restartSteam();
+    const result = await ghostboxApi.restartSteam();
     if (result?.success) {
       showToast(
         "Steam aberta",
@@ -862,14 +862,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       setSteamProfile(nextProfile);
       writeStoredSteamProfile(nextProfile);
-      await pirateboxApi.saveSteamProfile(nextProfile);
+      await ghostboxApi.saveSteamProfile(nextProfile);
     },
     [steamProfile]
   );
 
   const handleStartupSettingsChange = useCallback(
     async (settings: Partial<StartupSettings>) => {
-      const next = await pirateboxApi.setStartupSettings(settings);
+      const next = await ghostboxApi.setStartupSettings(settings);
       if (next) setStartupSettings(next);
     },
     []
@@ -878,7 +878,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const handleMorrenusApiKeySave = useCallback(
     async (key: string) => {
       try {
-        const saved = await pirateboxApi.setMorrenusApiKey(key);
+        const saved = await ghostboxApi.setMorrenusApiKey(key);
         setMorrenusApiKey(saved);
         showToast(
           appearance.language === "en"
@@ -908,10 +908,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const handleSelectSteamPath = useCallback(async () => {
     setIsScanningSteamLibrary(true);
     try {
-      const result = await pirateboxApi.selectSteamPath();
+      const result = await ghostboxApi.selectSteamPath();
       if (result?.status === "ok") {
         setSteamPathInput(result.steamPath);
-        const scanResult = await pirateboxApi.scanSteamLibrary(result.steamPath);
+        const scanResult = await ghostboxApi.scanSteamLibrary(result.steamPath);
         if (scanResult?.status === "ok") {
           applySteamLibraryScanResult(scanResult);
           showToast(
@@ -936,7 +936,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     setIsScanningSteamLibrary(true);
-    void pirateboxApi
+    void ghostboxApi
       .scanSteamLibrary()
       .then((result) => {
         if (!cancelled && result?.status === "ok") {
@@ -957,13 +957,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [refreshGamePlaytimes]);
 
   const handleSelectBackupOutputPath = useCallback(async () => {
-    const result = await pirateboxApi.selectBackupOutputPath();
+    const result = await ghostboxApi.selectBackupOutputPath();
     if (result?.settings) setBackupSettings(result.settings);
   }, []);
 
   const handleToggleLibraryAutomaticBackups = useCallback(
     async (enabled: boolean) => {
-      const settings = await pirateboxApi.setLibraryAutomaticBackups(
+      const settings = await ghostboxApi.setLibraryAutomaticBackups(
         enabled,
         addedLibraryGames.map((game) => game.appId)
       );
@@ -973,8 +973,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const handleToggleAutomaticBackup = useCallback(
-    async (game: PirateGame, enabled: boolean) => {
-      const settings = await pirateboxApi.setGameAutomaticBackup(
+    async (game: GhostBoxGame, enabled: boolean) => {
+      const settings = await ghostboxApi.setGameAutomaticBackup(
         game.appId,
         enabled
       );
@@ -984,8 +984,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const handleSelectGameExecutable = useCallback(
-    async (game: PirateGame) => {
-      const result = await pirateboxApi.selectGameExecutable(game);
+    async (game: GhostBoxGame) => {
+      const result = await ghostboxApi.selectGameExecutable(game);
       if (result?.settings) setBackupSettings(result.settings);
       if (result?.status === "ok" && result.libraryGame && !isHiddenLibraryGame(result.libraryGame)) {
         setProfileHistoryGames((current) =>
@@ -996,14 +996,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const handleRemoveGameExecutable = useCallback(async (game: PirateGame) => {
-    const settings = await pirateboxApi.setGameCustomExecutable(game.appId, null);
+  const handleRemoveGameExecutable = useCallback(async (game: GhostBoxGame) => {
+    const settings = await ghostboxApi.setGameCustomExecutable(game.appId, null);
     if (settings) setBackupSettings(settings);
   }, []);
 
   const handleOpenBackupFolder = useCallback(
     async (appId: string, backupPath?: string) => {
-      const result = await pirateboxApi.openBackupFolder(appId, backupPath);
+      const result = await ghostboxApi.openBackupFolder(appId, backupPath);
       if (result.error) showToast("Falha ao abrir pasta", result.error);
     },
     [showToast]
@@ -1023,7 +1023,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [handleSelectBackupOutputPath]);
 
   const refreshBackupRootStatus = useCallback(async () => {
-    const status = await pirateboxApi.validateBackupRoot();
+    const status = await ghostboxApi.validateBackupRoot();
     if (status) {
       setBackupRootStatus(status);
       setBackupSettings(status.settings);

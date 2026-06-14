@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { PirateGame, SteamAchievement } from "../../data";
+import type { GhostBoxGame, SteamAchievement } from "../../data";
 
 type ProfileLevelBadgeProps = {
   level: number;
@@ -40,7 +40,7 @@ export function getProfileAchievementXp(achievement: SteamAchievement) {
   return 10;
 }
 
-export function getProfileUnlockedAchievementCount(game: PirateGame) {
+export function getProfileUnlockedAchievementCount(game: GhostBoxGame) {
   const explicitUnlocked = (game.achievementList ?? []).filter(
     isProfileAchievementUnlocked
   ).length;
@@ -48,7 +48,7 @@ export function getProfileUnlockedAchievementCount(game: PirateGame) {
   return Math.max(explicitUnlocked, game.achievements?.unlocked ?? 0);
 }
 
-export function getProfileAchievementTotal(game: PirateGame) {
+export function getProfileAchievementTotal(game: GhostBoxGame) {
   return Math.max(
     game.achievementList?.length ?? 0,
     game.achievements?.total ?? 0,
@@ -57,8 +57,8 @@ export function getProfileAchievementTotal(game: PirateGame) {
 }
 
 export function getRicherProfileAchievementGame(
-  current: PirateGame | undefined,
-  incoming: PirateGame
+  current: GhostBoxGame | undefined,
+  incoming: GhostBoxGame
 ) {
   if (!current) return incoming;
 
@@ -78,7 +78,7 @@ export function getRicherProfileAchievementGame(
     : current;
 }
 
-export function getProfileXpStats(games: PirateGame[]): ProfileXpStats {
+export function getProfileXpStats(games: GhostBoxGame[]): ProfileXpStats {
   const xp = games.reduce((total, game) => {
     return total + (game.achievementList ?? []).reduce((gameTotal, achievement) => {
       if (!isProfileAchievementUnlocked(achievement)) return gameTotal;

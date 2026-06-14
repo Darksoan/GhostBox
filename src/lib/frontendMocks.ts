@@ -1,4 +1,4 @@
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { BackupSettings } from "../types";
 
 /** Optional UI dev seeds until backend commands are implemented. */
@@ -10,4 +10,4 @@ export const frontendMockBackupSettings: BackupSettings = {
   customExecutables: {},
 };
 
-export const frontendMockCatalogueGames: PirateGame[] = [];
+export const frontendMockCatalogueGames: GhostBoxGame[] = [];

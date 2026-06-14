@@ -2,21 +2,27 @@ pub(crate) const FACETS_VERSION: &str = "facets-v11-primary-tags";
 pub(crate) const RANKING_VERSION: &str = "ranking-v7";
 const BACKUP_SETTINGS_FILE: &str = "backup-settings.json";
 const STEAM_LIBRARY_PATH_FILE: &str = "steam-library-path.json";
-const BACKUP_ROOT_FOLDER_NAME: &str = "PirateBoxBackups";
-const BACKUP_ROOT_MARKER_FILE: &str = "piratebox-backup-root.json";
+const BACKUP_ROOT_FOLDER_NAME: &str = "GhostBoxBackups";
+const LEGACY_EDEN_BACKUP_ROOT_FOLDER_NAME: &str = "EdenBackups";
+const LEGACY_BACKUP_ROOT_FOLDER_NAME: &str = "PirateBoxBackups";
+const BACKUP_ROOT_MARKER_FILE: &str = "ghostbox-backup-root.json";
+const LEGACY_EDEN_BACKUP_ROOT_MARKER_FILE: &str = "eden-backup-root.json";
+const LEGACY_BACKUP_ROOT_MARKER_FILE: &str = "piratebox-backup-root.json";
 const BACKUP_SETTINGS_CHANGED_EVENT: &str = "backup-settings-changed";
 
-const PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
+const GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE: &str = "ghostbox-achievements.json";
+const LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE: &str = "eden-achievements.json";
+const LEGACY_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
 const BACKUP_ENTRY_RETENTION_LIMIT: usize = 3;
 
 mod achievement_monitor;
 mod backup;
 mod catalogue;
 mod catalogue_cache;
+mod ghostbox_library;
 mod image_cache;
 mod luatools;
 mod ludusavi;
-mod pirate_library;
 mod playtime;
 mod settings;
 mod steam;
@@ -70,7 +76,11 @@ pub(crate) fn to_backup_root_path(output_path: &str) -> String {
     if path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case(BACKUP_ROOT_FOLDER_NAME))
+        .is_some_and(|name| {
+            name.eq_ignore_ascii_case(BACKUP_ROOT_FOLDER_NAME)
+                || name.eq_ignore_ascii_case(LEGACY_EDEN_BACKUP_ROOT_FOLDER_NAME)
+                || name.eq_ignore_ascii_case(LEGACY_BACKUP_ROOT_FOLDER_NAME)
+        })
     {
         path.to_string_lossy().to_string()
     } else {
@@ -149,21 +159,26 @@ fn emit_backup_settings_changed(app: &tauri::AppHandle, settings: &serde_json::V
     let _ = app.emit(BACKUP_SETTINGS_CHANGED_EVENT, settings.clone());
 }
 
-pub(crate) fn backup_marker_path(output_path: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(output_path).join(BACKUP_ROOT_MARKER_FILE)
-}
-
 pub(crate) fn write_backup_root_marker(output_path: &str) -> Result<(), String> {
     let output_path = std::path::PathBuf::from(output_path);
     std::fs::create_dir_all(&output_path).map_err(|error| error.to_string())?;
     let marker = serde_json::json!({
         "version": 1,
-        "createdBy": "PirateBox",
+        "createdBy": "GhostBox",
         "createdAt": current_timestamp_string()
     });
     let contents = serde_json::to_string_pretty(&marker).map_err(|error| error.to_string())?;
     std::fs::write(output_path.join(BACKUP_ROOT_MARKER_FILE), contents)
         .map_err(|error| error.to_string())
+}
+
+pub(crate) fn backup_root_marker_exists(output_path: &str) -> bool {
+    let output_path = std::path::PathBuf::from(output_path);
+    output_path.join(BACKUP_ROOT_MARKER_FILE).exists()
+        || output_path
+            .join(LEGACY_EDEN_BACKUP_ROOT_MARKER_FILE)
+            .exists()
+        || output_path.join(LEGACY_BACKUP_ROOT_MARKER_FILE).exists()
 }
 
 fn current_timestamp_string() -> String {
@@ -430,7 +445,7 @@ fn read_persisted_achievement_stats(
     app_id: &str,
     title: &str,
 ) -> serde_json::Value {
-    let backup_file = read_piratebox_achievements_backup_file(app, app_id, title, None);
+    let backup_file = read_ghostbox_achievements_backup_file(app, app_id, title, None);
     let total = backup_file
         .as_ref()
         .and_then(|file| file.get("total"))
@@ -495,7 +510,7 @@ fn mark_local_unlocked_achievements(
         return achievements;
     }
 
-    let backup_file = read_piratebox_achievements_backup_file(app, app_id, title, None);
+    let backup_file = read_ghostbox_achievements_backup_file(app, app_id, title, None);
     let backup_unlocked = backup_file
         .as_ref()
         .and_then(|file| file.get("unlocked"))
@@ -716,16 +731,34 @@ fn enrich_backup_achievements_with_icons(
         .collect()
 }
 
-fn piratebox_achievements_backup_path(
+fn ghostbox_achievements_backup_path(
     settings: &serde_json::Value,
     title: &str,
 ) -> std::path::PathBuf {
     std::path::PathBuf::from(text_value(settings.get("outputPath")))
         .join(sanitize_folder_name(title))
-        .join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE)
+        .join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE)
 }
 
-fn normalize_piratebox_achievements_backup_file(
+fn legacy_achievements_backup_path(
+    settings: &serde_json::Value,
+    title: &str,
+) -> std::path::PathBuf {
+    std::path::PathBuf::from(text_value(settings.get("outputPath")))
+        .join(sanitize_folder_name(title))
+        .join(LEGACY_ACHIEVEMENTS_BACKUP_FILE)
+}
+
+fn legacy_eden_achievements_backup_path(
+    settings: &serde_json::Value,
+    title: &str,
+) -> std::path::PathBuf {
+    std::path::PathBuf::from(text_value(settings.get("outputPath")))
+        .join(sanitize_folder_name(title))
+        .join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE)
+}
+
+fn normalize_ghostbox_achievements_backup_file(
     value: &serde_json::Value,
     app_id: &str,
 ) -> Option<serde_json::Value> {
@@ -765,25 +798,33 @@ fn normalize_piratebox_achievements_backup_file(
         "appId": app_id,
         "title": text_value(record.get("title")).if_empty(app_id.to_string()),
         "updatedAt": text_value(record.get("updatedAt")),
-        "source": text_value(record.get("source")).if_empty("piratebox".to_string()),
+        "source": text_value(record.get("source")).if_empty("ghostbox".to_string()),
         "total": total,
         "unlocked": unlocked
     }))
 }
 
-fn read_piratebox_achievements_backup_file(
+fn read_ghostbox_achievements_backup_file(
     app: &tauri::AppHandle,
     app_id: &str,
     title: &str,
     backup_path: Option<&str>,
 ) -> Option<serde_json::Value> {
     let settings = load_backup_settings(app);
-    let mut candidates = vec![piratebox_achievements_backup_path(&settings, title)];
+    let mut candidates = vec![
+        ghostbox_achievements_backup_path(&settings, title),
+        legacy_eden_achievements_backup_path(&settings, title),
+        legacy_achievements_backup_path(&settings, title),
+    ];
     if let Some(path) = backup_path.filter(|value| !value.is_empty()) {
         let backup = std::path::PathBuf::from(path);
-        candidates.push(backup.join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE));
+        candidates.push(backup.join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE));
+        candidates.push(backup.join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE));
+        candidates.push(backup.join(LEGACY_ACHIEVEMENTS_BACKUP_FILE));
         if let Some(parent) = backup.parent() {
-            candidates.push(parent.join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE));
+            candidates.push(parent.join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE));
+            candidates.push(parent.join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE));
+            candidates.push(parent.join(LEGACY_ACHIEVEMENTS_BACKUP_FILE));
         }
         if let Some(record) = settings
             .get("backupRecords")
@@ -794,7 +835,13 @@ fn read_piratebox_achievements_backup_file(
                 .and_then(|value| value.as_str())
             {
                 candidates.push(
-                    std::path::PathBuf::from(last_path).join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE),
+                    std::path::PathBuf::from(last_path).join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE),
+                );
+                candidates.push(
+                    std::path::PathBuf::from(last_path).join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE),
+                );
+                candidates.push(
+                    std::path::PathBuf::from(last_path).join(LEGACY_ACHIEVEMENTS_BACKUP_FILE),
                 );
             }
         }
@@ -807,7 +854,7 @@ fn read_piratebox_achievements_backup_file(
         let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) else {
             continue;
         };
-        if let Some(normalized) = normalize_piratebox_achievements_backup_file(&parsed, app_id) {
+        if let Some(normalized) = normalize_ghostbox_achievements_backup_file(&parsed, app_id) {
             if normalized
                 .get("unlocked")
                 .and_then(|value| value.as_array())
@@ -821,7 +868,7 @@ fn read_piratebox_achievements_backup_file(
     None
 }
 
-fn write_piratebox_achievements_backup_file(
+fn write_ghostbox_achievements_backup_file(
     app: &tauri::AppHandle,
     file: &serde_json::Value,
     target_directory: Option<&str>,
@@ -829,9 +876,9 @@ fn write_piratebox_achievements_backup_file(
     let app_id = text_value(file.get("appId"));
     let title = text_value(file.get("title")).if_empty(app_id.clone());
     let file_path = if let Some(directory) = target_directory.filter(|value| !value.is_empty()) {
-        std::path::PathBuf::from(directory).join(PIRATEBOX_ACHIEVEMENTS_BACKUP_FILE)
+        std::path::PathBuf::from(directory).join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE)
     } else {
-        piratebox_achievements_backup_path(&load_backup_settings(app), &title)
+        ghostbox_achievements_backup_path(&load_backup_settings(app), &title)
     };
     if let Some(parent) = file_path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -841,7 +888,7 @@ fn write_piratebox_achievements_backup_file(
     Ok(file_path.to_string_lossy().to_string())
 }
 
-fn resolve_piratebox_achievement_total(
+fn resolve_ghostbox_achievement_total(
     existing_total: usize,
     provided_total: Option<&serde_json::Value>,
 ) -> usize {
@@ -853,7 +900,7 @@ fn resolve_piratebox_achievement_total(
     existing_total
 }
 
-fn record_piratebox_steam_api_achievement_unlock(
+fn record_ghostbox_steam_api_achievement_unlock(
     app: &tauri::AppHandle,
     payload: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -895,7 +942,7 @@ fn record_piratebox_steam_api_achievement_unlock(
         .map(|value| value.to_rfc3339())
         .unwrap_or_else(|_| current_timestamp_string());
 
-    let existing_file = read_piratebox_achievements_backup_file(app, &app_id, &title, None);
+    let existing_file = read_ghostbox_achievements_backup_file(app, &app_id, &title, None);
     let existing_unlocked = existing_file
         .as_ref()
         .and_then(|file| file.get("unlocked"))
@@ -941,7 +988,7 @@ fn record_piratebox_steam_api_achievement_unlock(
     };
     next_unlocked
         .sort_by(|left, right| text_value(left.get("name")).cmp(&text_value(right.get("name"))));
-    let total = resolve_piratebox_achievement_total(
+    let total = resolve_ghostbox_achievement_total(
         existing_file
             .as_ref()
             .and_then(|file| file.get("total"))
@@ -956,11 +1003,11 @@ fn record_piratebox_steam_api_achievement_unlock(
         "appId": app_id,
         "title": title,
         "updatedAt": current_timestamp_string(),
-        "source": "piratebox-steam-api-shim",
+        "source": "ghostbox-steam-api-shim",
         "total": total,
         "unlocked": next_unlocked
     });
-    write_piratebox_achievements_backup_file(app, &next_file, None)?;
+    write_ghostbox_achievements_backup_file(app, &next_file, None)?;
     let _ = persist_backup_settings(app, load_backup_settings(app));
 
     Ok(serde_json::json!({
@@ -1058,7 +1105,9 @@ fn handle_achievement_connection(
         return Ok(());
     }
     let header_token = headers
-        .get("x-piratebox-token")
+        .get("x-ghostbox-token")
+        .or_else(|| headers.get("x-eden-token"))
+        .or_else(|| headers.get("x-piratebox-token"))
         .map(String::as_str)
         .unwrap_or_default();
     if header_token != expected_token {
@@ -1068,7 +1117,7 @@ fn handle_achievement_connection(
 
     let payload =
         serde_json::from_str::<serde_json::Value>(&body).unwrap_or_else(|_| serde_json::json!({}));
-    match record_piratebox_steam_api_achievement_unlock(app, &payload) {
+    match record_ghostbox_steam_api_achievement_unlock(app, &payload) {
         Ok(result) => {
             let body = serde_json::json!({ "ok": true, "result": result });
             write_json_http_response(stream, "200 OK", &body.to_string());
@@ -1082,7 +1131,7 @@ fn handle_achievement_connection(
     Ok(())
 }
 
-fn start_piratebox_achievement_server(app: tauri::AppHandle) -> Result<(String, String), String> {
+fn start_ghostbox_achievement_server(app: tauri::AppHandle) -> Result<(String, String), String> {
     let mut guard = achievement_server_state()
         .lock()
         .map_err(|_| "achievement server lock poisoned".to_string())?;
@@ -1310,16 +1359,24 @@ fn launch_custom_executable(
         });
     }
 
-    let achievement_env = start_piratebox_achievement_server(app.clone()).ok();
+    let achievement_env = start_ghostbox_achievement_server(app.clone()).ok();
     let launched_title = game_title(&game, app_id);
 
     let mut command = std::process::Command::new(&executable);
     if let Some(parent) = executable.parent() {
         command.current_dir(parent);
     }
+    command.env("GHOSTBOX_APP_ID", app_id);
+    command.env("GHOSTBOX_GAME_TITLE", &launched_title);
+    command.env("EDEN_APP_ID", app_id);
+    command.env("EDEN_GAME_TITLE", &launched_title);
     command.env("PIRATEBOX_APP_ID", app_id);
     command.env("PIRATEBOX_GAME_TITLE", &launched_title);
     if let Some((url, token)) = achievement_env {
+        command.env("GHOSTBOX_ACHIEVEMENTS_URL", &url);
+        command.env("GHOSTBOX_ACHIEVEMENTS_TOKEN", &token);
+        command.env("EDEN_ACHIEVEMENTS_URL", &url);
+        command.env("EDEN_ACHIEVEMENTS_TOKEN", &token);
         command.env("PIRATEBOX_ACHIEVEMENTS_URL", url);
         command.env("PIRATEBOX_ACHIEVEMENTS_TOKEN", token);
     }
@@ -1397,10 +1454,11 @@ pub(crate) fn directory_has_content(path: &std::path::Path) -> bool {
     };
 
     entries.flatten().any(|entry| {
-        entry
-            .file_name()
-            .to_str()
-            .is_some_and(|name| name != BACKUP_ROOT_MARKER_FILE)
+        entry.file_name().to_str().is_some_and(|name| {
+            name != BACKUP_ROOT_MARKER_FILE
+                && name != LEGACY_EDEN_BACKUP_ROOT_MARKER_FILE
+                && name != LEGACY_BACKUP_ROOT_MARKER_FILE
+        })
     })
 }
 
@@ -1448,7 +1506,7 @@ pub(crate) fn backup_details_for_path(
         .and_then(|value| value.as_str())
         .unwrap_or(app_id);
     let mut achievements =
-        read_piratebox_achievements_backup_file(app, app_id, title, Some(backup_path))
+        read_ghostbox_achievements_backup_file(app, app_id, title, Some(backup_path))
             .and_then(|file| file.get("unlocked").cloned())
             .and_then(|value| value.as_array().cloned())
             .unwrap_or_default();
@@ -1536,7 +1594,7 @@ pub(crate) fn backup_details_for_path(
     }))
 }
 
-pub(crate) fn stop_piratebox_achievement_server() {
+pub(crate) fn stop_ghostbox_achievement_server() {
     if let Ok(mut guard) = achievement_server_state().lock() {
         if let Some(state) = guard.take() {
             let _ = state._stop.send(());
@@ -1689,6 +1747,7 @@ pub fn run() {
             settings::app_set_morrenus_api_key,
             settings::app_get_morrenus_stats,
             steam::steam_get_profile,
+            steam::steam_get_wishlist,
             steam::steam_save_profile,
             steam::steam_sign_in,
             steam::steam_sign_out,

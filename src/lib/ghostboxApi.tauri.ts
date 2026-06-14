@@ -23,14 +23,15 @@ import type {
   LudusaviBackupPreviewGame,
   MorrenusStatsResult,
   NotificationSettings,
-  PirateGame,
+  GhostBoxGame,
   RemoveGameResult,
   StartupSettings,
   SteamRestartResult,
   SteamLibraryScanResult,
   SteamPathSelectionResult,
   SteamProfile,
-} from "./pirateboxApi.types";
+  SteamWishlistItem,
+} from "./ghostboxApi.types";
 
 function noopUnsubscribe() {
   return undefined;
@@ -40,7 +41,10 @@ const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
 
 function getGamesApiUrl() {
   return (
-    import.meta.env.VITE_PIRATEBOX_GAMES_API_URL?.trim() || defaultGamesApiUrl
+    import.meta.env.VITE_GHOSTBOX_GAMES_API_URL?.trim() ||
+    import.meta.env.VITE_EDEN_GAMES_API_URL?.trim() ||
+    import.meta.env.VITE_PIRATEBOX_GAMES_API_URL?.trim() ||
+    defaultGamesApiUrl
   ).replace(/\/+$/, "");
 }
 
@@ -71,7 +75,7 @@ async function invokeOr<T>(
   }
 }
 
-export const pirateboxApi = {
+export const ghostboxApi = {
   getAppStatus(): Promise<AppStatus | undefined> {
     return invokeOr<AppStatus | undefined>("app_get_status", {}, undefined);
   },
@@ -92,24 +96,24 @@ export const pirateboxApi = {
     );
   },
 
-  getGameDetails(gameId: string): Promise<PirateGame | null> {
-    return invokeOr<PirateGame | null>(
+  getGameDetails(gameId: string): Promise<GhostBoxGame | null> {
+    return invokeOr<GhostBoxGame | null>(
       "database_get_game_details",
       { gameId, apiUrl: getGamesApiUrl() },
       null
     );
   },
 
-  getGameStoreDetails(gameId: string): Promise<PirateGame | null> {
-    return invokeOr<PirateGame | null>(
+  getGameStoreDetails(gameId: string): Promise<GhostBoxGame | null> {
+    return invokeOr<GhostBoxGame | null>(
       "database_get_game_store_details",
       { gameId, apiUrl: getGamesApiUrl() },
       null
     );
   },
 
-  getGameAchievementDetails(gameId: string): Promise<PirateGame | null> {
-    return invokeOr<PirateGame | null>(
+  getGameAchievementDetails(gameId: string): Promise<GhostBoxGame | null> {
+    return invokeOr<GhostBoxGame | null>(
       "database_get_game_achievement_details",
       { gameId, apiUrl: getGamesApiUrl() },
       null
@@ -133,7 +137,7 @@ export const pirateboxApi = {
     );
   },
 
-  addGameViaLuaTools(game: PirateGame): Promise<AddGameResult> {
+  addGameViaLuaTools(game: GhostBoxGame): Promise<AddGameResult> {
     return invokeOr<AddGameResult>(
       "luatools_add_game",
       { game },
@@ -141,7 +145,7 @@ export const pirateboxApi = {
     );
   },
 
-  removeGameViaLuaTools(game: PirateGame): Promise<RemoveGameResult> {
+  removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",
       { game },
@@ -204,6 +208,14 @@ export const pirateboxApi = {
 
   signOutSteam(): Promise<void> {
     return invokeOr<void>("steam_sign_out", {}, undefined);
+  },
+
+  getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {
+    return invokeOr<SteamWishlistItem[]>(
+      "steam_get_wishlist",
+      { steamId },
+      []
+    );
   },
 
   restartSteam(): Promise<SteamRestartResult | undefined> {
@@ -459,7 +471,7 @@ export const pirateboxApi = {
   },
 
   async selectGameExecutable(
-    game: PirateGame
+    game: GhostBoxGame
   ): Promise<GameExecutableSelectionResult | undefined> {
     const executablePath = await open({
       directory: false,

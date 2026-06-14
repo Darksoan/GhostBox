@@ -16,7 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { memo, useMemo, useState } from "react";
-import type { PirateGame } from "../../data";
+import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { ContextMenu } from "../ui/ContextMenu";
 import { useCollectionContextMenu } from "../../hooks/useCollectionContextMenu";
@@ -46,20 +46,20 @@ interface SidebarProps {
   activeCollectionId?: string;
   steamProfile: SteamProfile | null;
   isSteamSigningIn: boolean;
-  favoriteGames: PirateGame[];
-  addedLibraryGames: PirateGame[];
+  favoriteGames: GhostBoxGame[];
+  addedLibraryGames: GhostBoxGame[];
   userCollections: UserCollection[];
   onNavigate: (page: Page, collectionId?: string) => void;
   onBack: () => void;
   onOpenProfile: () => void;
-  onOpenGame: (game: PirateGame) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
   onSteamSignIn: () => void;
   onSteamSignOut: () => void;
   onRestartSteam: () => void;
   onCreateCollection: () => void;
-  onRemoveFavorite: (game: PirateGame) => void;
-  onRemoveGame: (game: PirateGame) => void;
-  onRemoveGameFromCollection: (game: PirateGame, collectionId: string) => void;
+  onRemoveFavorite: (game: GhostBoxGame) => void;
+  onRemoveGame: (game: GhostBoxGame) => void;
+  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   onDeleteCollection?: (collectionId: string) => void;
   favoriteGameIds?: Set<string>;
   libraryGameAppIds?: Set<string>;
@@ -67,19 +67,36 @@ interface SidebarProps {
   playableGameAppIds?: Set<string>;
   addingGameId?: string | null;
   launchingGameId?: string | null;
-  onAddGame?: (game: PirateGame) => void;
-  onPlayGame?: (game: PirateGame) => void;
-  onAddGameToCollection?: (game: PirateGame, collectionId: string) => void;
-  onToggleFavorite?: (game: PirateGame) => void;
+  onAddGame?: (game: GhostBoxGame) => void;
+  onPlayGame?: (game: GhostBoxGame) => void;
+  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
+  onToggleFavorite?: (game: GhostBoxGame) => void;
   activeSettingsTabId: SettingsTabId;
   onSettingsTabChange: (tabId: SettingsTabId) => void;
 }
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
+const SIDEBAR_CURSOR_LOCK_MS = 700;
+
+let sidebarCursorLockTimeout: number | undefined;
+
+function lockSidebarPointerCursor() {
+  document.documentElement.classList.add("sidebar-cursor-lock");
+
+  if (sidebarCursorLockTimeout) {
+    window.clearTimeout(sidebarCursorLockTimeout);
+  }
+
+  sidebarCursorLockTimeout = window.setTimeout(() => {
+    document.documentElement.classList.remove("sidebar-cursor-lock");
+    sidebarCursorLockTimeout = undefined;
+  }, SIDEBAR_CURSOR_LOCK_MS);
+}
+
 type SidebarCollection = {
   id: string;
   name: string;
-  games: PirateGame[];
+  games: GhostBoxGame[];
 };
 
 export const Sidebar = memo(function Sidebar({
@@ -127,7 +144,7 @@ export const Sidebar = memo(function Sidebar({
   }>({ collection: null, visible: false, position: { x: 0, y: 0 } });
   const [collectionGameContextMenu, setCollectionGameContextMenu] = useState<{
     collection: SidebarCollection | null;
-    game: PirateGame | null;
+    game: GhostBoxGame | null;
     visible: boolean;
     position: { x: number; y: number };
   }>({ collection: null, game: null, visible: false, position: { x: 0, y: 0 } });
@@ -201,7 +218,7 @@ export const Sidebar = memo(function Sidebar({
   };
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" onPointerDown={lockSidebarPointerCursor}>
       <div className="sidebar__content">
         <SidebarProfile
           profile={steamProfile}
@@ -477,7 +494,7 @@ export const Sidebar = memo(function Sidebar({
 });
 
 interface SidebarGameItemProps {
-  game: PirateGame;
+  game: GhostBoxGame;
 }
 
 function SidebarGameItem({ game }: SidebarGameItemProps) {

@@ -12,15 +12,17 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings } from "../context/settings";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
-import { pirateboxApi } from "../lib/pirateboxApi";
+import { ghostboxApi } from "../lib/ghostboxApi";
 
 export type { SettingsTabId } from "../features/settings/settingsTabsShared";
 export { settingsTabLabelKeys } from "../features/settings/settingsTabsShared";
 
-const SETTINGS_DRAFTS_STORAGE_KEY = "piratebox:settings-drafts:v1";
+const SETTINGS_DRAFTS_STORAGE_KEY = "ghostbox:settings-drafts:v1";
+const LEGACY_EDEN_SETTINGS_DRAFTS_STORAGE_KEY = "eden:settings-drafts:v1";
+const LEGACY_SETTINGS_DRAFTS_STORAGE_KEY = "piratebox:settings-drafts:v1";
 const MORRENUS_DISCORD_URL = "https://discord.gg/hubcapsmanifest";
 
 type SettingOption = {
@@ -103,7 +105,12 @@ function readDrafts(): DraftsState {
   if (typeof window === "undefined") return {};
 
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(SETTINGS_DRAFTS_STORAGE_KEY) ?? "{}") as unknown;
+    const parsed = JSON.parse(
+      window.localStorage.getItem(SETTINGS_DRAFTS_STORAGE_KEY) ??
+        window.localStorage.getItem(LEGACY_EDEN_SETTINGS_DRAFTS_STORAGE_KEY) ??
+        window.localStorage.getItem(LEGACY_SETTINGS_DRAFTS_STORAGE_KEY) ??
+        "{}"
+    ) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
 
     const drafts = parsed as Record<string, unknown>;
@@ -225,7 +232,7 @@ export const settingsTabs: SettingsTab[] = [
 
 interface SettingsPageProps {
   activeTabId: SettingsTabId;
-  games: PirateGame[];
+  games: GhostBoxGame[];
   initialPage: StartupPage;
   onInitialPageChange: Dispatch<SetStateAction<StartupPage>>;
   steamPath: string;
@@ -319,7 +326,7 @@ export function SettingsPage({
 
     setMorrenusStats({ status: "loading" });
     try {
-      const result = await pirateboxApi.getMorrenusStats(normalizedApiKey);
+      const result = await ghostboxApi.getMorrenusStats(normalizedApiKey);
       if (!result?.success) {
         setMorrenusStats({ status: "error", message: result?.error || t("settings.download.accountStatus.defaultError") });
         return;
@@ -592,7 +599,7 @@ function buildTabOptions(
             className="settings-option__label-link"
             aria-label={t("settings.download.morrenusApiKey.openLink")}
             onClick={() => {
-              void pirateboxApi.openExternal(MORRENUS_DISCORD_URL);
+              void ghostboxApi.openExternal(MORRENUS_DISCORD_URL);
             }}
           >
             <ExternalLink size={13} aria-hidden="true" />
@@ -728,7 +735,7 @@ function DownloadApiSourcesInfo({
                 className="settings-option__label-link"
                 aria-label={t("settings.download.sources.openDiscord", { source: source.name })}
                 onClick={() => {
-                  void pirateboxApi.openExternal(source.url);
+                  void ghostboxApi.openExternal(source.url);
                 }}
               >
                 <ExternalLink size={13} aria-hidden="true" />

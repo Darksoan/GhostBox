@@ -4,7 +4,9 @@ use std::path::Path;
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-pub const PIRATE_LIBRARY_FILE: &str = "piratebox-library.json";
+pub const GHOSTBOX_LIBRARY_FILE: &str = "ghostbox-library.json";
+const LEGACY_EDEN_LIBRARY_FILE: &str = "eden-library.json";
+const LEGACY_LIBRARY_FILE: &str = "piratebox-library.json";
 
 fn library_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     use tauri::Manager;
@@ -14,7 +16,20 @@ fn library_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
         .app_data_dir()
         .map_err(|error| error.to_string())?;
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory.join(PIRATE_LIBRARY_FILE))
+    Ok(directory.join(GHOSTBOX_LIBRARY_FILE))
+}
+
+fn legacy_library_file_path(
+    app: &AppHandle,
+    file_name: &str,
+) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    Ok(directory.join(file_name))
 }
 
 fn text_value(value: Option<&Value>) -> String {
@@ -40,7 +55,7 @@ pub fn is_library_app_blocked(app_id: &str, title: &str) -> bool {
             .contains("steamworks common redistributables")
 }
 
-fn sanitize_pirate_library_game(value: &Value) -> Option<Value> {
+fn sanitize_ghostbox_library_game(value: &Value) -> Option<Value> {
     let app_id = extract_app_id(value);
     let id = text_value(value.get("id"));
     let title = text_value(value.get("title"));
@@ -53,10 +68,20 @@ fn sanitize_pirate_library_game(value: &Value) -> Option<Value> {
     Some(value.clone())
 }
 
-pub fn read_pirate_library_games(app: &AppHandle) -> Vec<Value> {
-    let Ok(path) = library_file_path(app) else {
+pub fn read_ghostbox_library_games(app: &AppHandle) -> Vec<Value> {
+    let Ok(mut path) = library_file_path(app) else {
         return Vec::new();
     };
+    if !path.exists() {
+        for file_name in [LEGACY_EDEN_LIBRARY_FILE, LEGACY_LIBRARY_FILE] {
+            if let Ok(legacy_path) = legacy_library_file_path(app, file_name) {
+                if legacy_path.exists() {
+                    path = legacy_path;
+                    break;
+                }
+            }
+        }
+    }
     let Ok(contents) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
@@ -68,20 +93,20 @@ pub fn read_pirate_library_games(app: &AppHandle) -> Vec<Value> {
         .map(|items| {
             items
                 .iter()
-                .filter_map(sanitize_pirate_library_game)
+                .filter_map(sanitize_ghostbox_library_game)
                 .collect()
         })
         .unwrap_or_default()
 }
 
-fn write_pirate_library_games(app: &AppHandle, games: &[Value]) -> Result<(), String> {
+fn write_ghostbox_library_games(app: &AppHandle, games: &[Value]) -> Result<(), String> {
     let path = library_file_path(app)?;
     let contents = serde_json::to_string_pretty(games).map_err(|error| error.to_string())?;
     std::fs::write(path, contents).map_err(|error| error.to_string())
 }
 
-pub fn upsert_pirate_library_game(app: &AppHandle, game: Value) -> Result<(), String> {
-    let Some(mut next_game) = sanitize_pirate_library_game(&game) else {
+pub fn upsert_ghostbox_library_game(app: &AppHandle, game: Value) -> Result<(), String> {
+    let Some(mut next_game) = sanitize_ghostbox_library_game(&game) else {
         return Ok(());
     };
     if let Some(object) = next_game.as_object_mut() {
@@ -89,15 +114,15 @@ pub fn upsert_pirate_library_game(app: &AppHandle, game: Value) -> Result<(), St
     }
 
     let app_id = extract_app_id(&next_game);
-    let mut games = read_pirate_library_games(app)
+    let mut games = read_ghostbox_library_games(app)
         .into_iter()
         .filter(|game| extract_app_id(game) != app_id)
         .collect::<Vec<_>>();
     games.insert(0, next_game);
-    write_pirate_library_games(app, &games)
+    write_ghostbox_library_games(app, &games)
 }
 
-pub fn remove_pirate_library_game(app: &AppHandle, app_id: &str) -> Result<(), String> {
+pub fn remove_ghostbox_library_game(app: &AppHandle, app_id: &str) -> Result<(), String> {
     let app_id = app_id
         .chars()
         .filter(char::is_ascii_digit)
@@ -106,11 +131,11 @@ pub fn remove_pirate_library_game(app: &AppHandle, app_id: &str) -> Result<(), S
         return Ok(());
     }
 
-    let games = read_pirate_library_games(app)
+    let games = read_ghostbox_library_games(app)
         .into_iter()
         .filter(|game| extract_app_id(game) != app_id)
         .collect::<Vec<_>>();
-    write_pirate_library_games(app, &games)
+    write_ghostbox_library_games(app, &games)
 }
 
 pub fn read_plugin_added_steam_app_ids(steam_path: &str) -> Vec<String> {
@@ -255,7 +280,7 @@ pub fn merge_library_games(steam_games: Vec<Value>, added_games: Vec<Value>) -> 
 pub fn build_scan_games_with_plugins(
     installed_games: Vec<Value>,
     plugin_app_ids: &[String],
-    pirate_library_games: Vec<Value>,
+    ghostbox_library_games: Vec<Value>,
 ) -> (Vec<String>, Vec<Value>) {
     let installed_app_ids = installed_games
         .iter()
@@ -276,7 +301,7 @@ pub fn build_scan_games_with_plugins(
             .iter()
             .cloned()
             .chain(
-                pirate_library_games
+                ghostbox_library_games
                     .iter()
                     .map(extract_app_id)
                     .filter(|app_id| !app_id.is_empty()),
@@ -284,6 +309,6 @@ pub fn build_scan_games_with_plugins(
             .collect(),
     );
 
-    let games = merge_library_games(steam_games, pirate_library_games);
+    let games = merge_library_games(steam_games, ghostbox_library_games);
     (added_app_ids, games)
 }

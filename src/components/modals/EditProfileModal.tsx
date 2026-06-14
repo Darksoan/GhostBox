@@ -14,6 +14,9 @@ const defaultBannerPosition: BannerPosition = { x: 50, y: 50, scale: 1 };
 const defaultAvatarCropPosition: AvatarCropPosition = { x: 50, y: 50, scale: 1 };
 
 const avatarCropSize = 512;
+const bannerMaxWidth = 2800;
+const bannerMaxHeight = 1225;
+const bannerMaxPixels = 3_430_000;
 
 function clampBannerPosition(value: number) {
   return Math.min(100, Math.max(0, Math.round(value)));
@@ -80,6 +83,33 @@ async function cropAvatarDataUrl(
   return canvas.toDataURL(type === "image/png" ? "image/png" : "image/jpeg", 0.92);
 }
 
+async function resizeBannerDataUrl(source: string) {
+  const image = await loadImage(source);
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+
+  if (!width || !height) return source;
+
+  const dimensionScale = Math.min(1, bannerMaxWidth / width, bannerMaxHeight / height);
+  const pixelScale = Math.min(1, Math.sqrt(bannerMaxPixels / (width * height)));
+  const scale = Math.min(dimensionScale, pixelScale);
+
+  if (scale >= 1) return source;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+
+  const context = canvas.getContext("2d");
+  if (!context) return source;
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  return canvas.toDataURL("image/jpeg", 0.94);
+}
+
 interface EditProfileModalProps {
   open: boolean;
   mode?: "profile" | "cover";
@@ -118,9 +148,10 @@ export function EditProfileModal({
   } | null>(null);
   const avatarSources = useCachedImageSources(avatarUrl ? [avatarUrl] : []);
   const bannerSources = useCachedImageSources(bannerUrl ? [bannerUrl] : [profileBannerPlaceholderSource]);
-  const avatarPreviewSource = avatarSources[0] ?? avatarUrl;
-  const bannerPreviewSource = bannerSources[0] ?? profileBannerPlaceholderSource;
+  const avatarPreviewSource = avatarUrl.startsWith("data:") ? avatarUrl : avatarSources[0] ?? avatarUrl;
+  const bannerPreviewSource = bannerUrl.startsWith("data:") ? bannerUrl : bannerSources[0] ?? profileBannerPlaceholderSource;
   const isCoverMode = mode === "cover";
+  const isBannerPlaceholder = !bannerUrl;
 
   useEffect(() => {
     if (open && profile) {
@@ -187,8 +218,13 @@ export function EditProfileModal({
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (event) => {
-          setBannerUrl(event.target?.result as string);
+        reader.onload = async (event) => {
+          const source = event.target?.result as string;
+          try {
+            setBannerUrl(await resizeBannerDataUrl(source));
+          } catch {
+            setBannerUrl(source);
+          }
           setBannerPosition(defaultBannerPosition);
         };
         reader.readAsDataURL(file);
@@ -237,7 +273,7 @@ export function EditProfileModal({
   );
 
   const handleBannerPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!bannerPreviewSource) return;
+    if (isBannerPlaceholder || !bannerPreviewSource) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
     bannerDragRef.current = {
@@ -247,7 +283,7 @@ export function EditProfileModal({
       originX: bannerPosition.x,
       originY: bannerPosition.y,
     };
-  }, [bannerPosition.x, bannerPosition.y, bannerPreviewSource]);
+  }, [bannerPosition.x, bannerPosition.y, bannerPreviewSource, isBannerPlaceholder]);
 
   const handleAvatarCropPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!pendingAvatar) return;
@@ -314,7 +350,7 @@ export function EditProfileModal({
   }, []);
 
   const handleBannerWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (!bannerPreviewSource) return;
+    if (isBannerPlaceholder || !bannerPreviewSource) return;
 
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
@@ -322,9 +358,9 @@ export function EditProfileModal({
       ...current,
       scale: clampBannerScale((current.scale ?? 1) + direction * 0.08),
     }));
-  }, [bannerPreviewSource]);
+  }, [bannerPreviewSource, isBannerPlaceholder]);
 
-  const bannerPreviewStyle = bannerPreviewSource
+  const bannerPreviewStyle = bannerPreviewSource && !isBannerPlaceholder
     ? {
         objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
         transform: `scale(${bannerPosition.scale ?? 1})`,
@@ -367,7 +403,7 @@ export function EditProfileModal({
                     ? appearance.language === "en" ? "Choose the image framing for your profile avatar." : "Escolha o enquadramento da sua foto de perfil."
                     : isCoverMode
                       ? appearance.language === "en" ? "Choose the banner shown on your profile." : "Escolha a capa exibida no seu perfil."
-                      : appearance.language === "en" ? "Customize your PirateBox identity" : "Personalize sua identidade no PirateBox"}
+                      : appearance.language === "en" ? "Customize your GhostBox identity" : "Personalize sua identidade no GhostBox"}
                 </p>
               </div>
 
@@ -413,7 +449,7 @@ export function EditProfileModal({
                   >
                     {bannerPreviewSource ? (
                       <img
-                        className="edit-profile-cover-modal__preview-image"
+                        className={`edit-profile-cover-modal__preview-image${isBannerPlaceholder ? " edit-profile-cover-modal__preview-image--placeholder" : ""}`}
                         src={bannerPreviewSource}
                         alt=""
                         decoding="async"
@@ -439,7 +475,7 @@ export function EditProfileModal({
                         type="button"
                         className="edit-profile-cover-modal__preview-action edit-profile-cover-modal__preview-action--danger"
                         onClick={handleBannerRemove}
-                        disabled={!bannerPreviewSource}
+                        disabled={isBannerPlaceholder}
                       >
                         <Trash2 size={16} aria-hidden="true" />
                         {appearance.language === "en" ? "Remove" : "Remover"}

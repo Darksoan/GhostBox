@@ -476,7 +476,9 @@ pub fn read_local_achievement_stats(steam_path: &str, app_id: &str, persisted: &
     })
 }
 
-pub const STEAM_ACHIEVEMENTS_BACKUP_FOLDER: &str = "piratebox-steam-achievements";
+pub const STEAM_ACHIEVEMENTS_BACKUP_FOLDER: &str = "ghostbox-steam-achievements";
+const LEGACY_EDEN_STEAM_ACHIEVEMENTS_BACKUP_FOLDER: &str = "eden-steam-achievements";
+const LEGACY_STEAM_ACHIEVEMENTS_BACKUP_FOLDER: &str = "piratebox-steam-achievements";
 
 fn is_steam_achievement_stats_file(file_name: &str, app_id: &str) -> bool {
     file_name == format!("UserGameStatsSchema_{app_id}.bin")
@@ -528,7 +530,15 @@ pub fn restore_steam_achievement_files(steam_path: &str, app_id: &str, backup_pa
         return;
     }
 
-    let source_path = backup_path.join(STEAM_ACHIEVEMENTS_BACKUP_FOLDER);
+    let source_path = [
+        STEAM_ACHIEVEMENTS_BACKUP_FOLDER,
+        LEGACY_EDEN_STEAM_ACHIEVEMENTS_BACKUP_FOLDER,
+        LEGACY_STEAM_ACHIEVEMENTS_BACKUP_FOLDER,
+    ]
+    .into_iter()
+    .map(|folder| backup_path.join(folder))
+    .find(|path| path.is_dir())
+    .unwrap_or_else(|| backup_path.join(STEAM_ACHIEVEMENTS_BACKUP_FOLDER));
     if !source_path.is_dir() {
         return;
     }

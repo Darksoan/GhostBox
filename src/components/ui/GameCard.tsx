@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { Clock, CloudCheck, Trophy } from "lucide-react";
-import type { PirateGame } from "../../data";
+import type { GhostBoxGame } from "../../data";
 import {
   useCachedImageSources,
   useLoadableImageState,
@@ -17,9 +17,9 @@ import { formatCompactPlaytime } from "../../utils/time";
 import { GameGridLoadingState } from "./LoadingStates";
 
 interface GameCardProps {
-  game: PirateGame;
-  onOpenGame: (game: PirateGame) => void;
-  onContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  game: GhostBoxGame;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   portrait?: boolean;
   showAchievements?: boolean;
   showAchievementSummary?: boolean;
@@ -181,11 +181,11 @@ export const GameCard = memo(function GameCard({
 });
 
 interface GameGridProps {
-  games: PirateGame[];
+  games: GhostBoxGame[];
   className?: string;
   dense?: boolean;
-  onOpenGame: (game: PirateGame) => void;
-  onGameContextMenu?: (game: PirateGame, x: number, y: number) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   portrait?: boolean;
   showAchievements?: boolean;
   showAchievementSummary?: boolean;

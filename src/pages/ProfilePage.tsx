@@ -1,9 +1,9 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
+  startTransition,
   useState,
   type CSSProperties,
 } from "react";
@@ -20,7 +20,7 @@ import {
   Trophy,
   User,
 } from "lucide-react";
-import type { PirateGame, SteamAchievement } from "../data";
+import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamProfile, UserCollection } from "../types";
 import { GameGrid } from "../components/ui/GameCard";
 import {
@@ -65,9 +65,9 @@ function normalizeBannerPosition(
 
 interface ProfilePageProps {
   steamProfile: SteamProfile | null;
-  favoriteGames: PirateGame[];
-  addedLibraryGames: PirateGame[];
-  achievementHistoryGames?: PirateGame[];
+  favoriteGames: GhostBoxGame[];
+  addedLibraryGames: GhostBoxGame[];
+  achievementHistoryGames?: GhostBoxGame[];
   userCollections: UserCollection[];
   activeCollectionId?: string;
   onSelectCollection?: (id: string) => void;
@@ -78,22 +78,22 @@ interface ProfilePageProps {
     bannerUrl: string,
     bannerPosition: BannerPosition
   ) => Promise<void> | void;
-  onOpenGame: (game: PirateGame) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
   removableGameAppIds: Set<string>;
   libraryGameAppIds?: Set<string>;
   playableGameAppIds?: Set<string>;
   activeSessionAppIds?: Set<string>;
   addingGameId?: string | null;
   launchingGameId?: string | null;
-  onAddGame?: (game: PirateGame) => void;
-  onRemoveGame: (game: PirateGame) => void;
-  onPlayGame?: (game: PirateGame) => void;
-  onRemoveGameFromCollection: (game: PirateGame, collectionId: string) => void;
+  onAddGame?: (game: GhostBoxGame) => void;
+  onRemoveGame: (game: GhostBoxGame) => void;
+  onPlayGame?: (game: GhostBoxGame) => void;
+  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   favoriteGameIds?: Set<string>;
-  onToggleFavorite?: (game: PirateGame) => void;
-  onAddGameToCollection?: (game: PirateGame, collectionId: string) => void;
+  onToggleFavorite?: (game: GhostBoxGame) => void;
+  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   onOpenGameAchievements?: (
-    game: PirateGame,
+    game: GhostBoxGame,
     achievementId?: string
   ) => void;
 }
@@ -106,7 +106,7 @@ type ProfileCollection = {
 
 type ProfileAchievementHighlight = {
   key: string;
-  game: PirateGame;
+  game: GhostBoxGame;
   achievementId: string;
   title: string;
   description: string;
@@ -122,8 +122,9 @@ const showcaseAchievementMinLimit = 15;
 const showcaseAchievementMaxLimit = 32;
 const showcaseLockedAchievementsPerGame = 4;
 const showcaseAchievementEstimatedSlotWidth = 66;
+let hasPreparedProfileOverviewData = false;
 
-function getGamePlaytime(game: PirateGame) {
+function getGamePlaytime(game: GhostBoxGame) {
   return game.playTimeInMilliseconds ?? game.hours * 3_600_000;
 }
 
@@ -139,7 +140,7 @@ function formatProfileLastSession(value: string | null | undefined, language: st
   }).format(time);
 }
 
-function getLastUnlockedAchievement(game: PirateGame) {
+function getLastUnlockedAchievement(game: GhostBoxGame) {
   const unlockedAchievements = (game.achievementList ?? []).filter(
     isAchievementUnlocked
   );
@@ -155,12 +156,12 @@ function getLastUnlockedAchievement(game: PirateGame) {
   })[0];
 }
 
-function mergeProfileGameCardData(game: PirateGame, details: PirateGame) {
+function mergeProfileGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
   return mergeGameCardData(game, details);
 }
 
 function achievementShowcaseKey(
-  game: PirateGame,
+  game: GhostBoxGame,
   achievement: SteamAchievement
 ) {
   return `${game.id}-${achievement.name || achievement.title}`;
@@ -336,6 +337,9 @@ export function ProfilePage({
   const [showcaseAchievementLimit, setShowcaseAchievementLimit] = useState(
     showcaseAchievementMinLimit
   );
+  const [isOverviewDataReady, setIsOverviewDataReady] = useState(
+    () => hasPreparedProfileOverviewData
+  );
   const loadMoreGamesRef = useRef<HTMLDivElement | null>(null);
   const achievementShowcaseRef = useRef<HTMLDivElement | null>(null);
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -347,7 +351,7 @@ export function ProfilePage({
     onSelectCollection ?? setInternalActiveCollectionId;
 
   const [gameContextMenu, setGameContextMenu] = useState<{
-    game: PirateGame;
+    game: GhostBoxGame;
     x: number;
     y: number;
   } | null>(null);
@@ -383,9 +387,38 @@ export function ProfilePage({
     [userCollections]
   );
 
+  const activeCollection =
+    profileCollections.find(
+      (collection) => collection.id === activeCollectionId
+    ) ?? profileCollections[0];
+  const isOverviewActive = activeCollection.id === "overview";
+  const shouldBuildCollectionGameData = !isOverviewActive;
+  const shouldComputeOverviewData = !isOverviewActive || isOverviewDataReady;
+
+  useEffect(() => {
+    if (!isOverviewActive || isOverviewDataReady) return;
+
+    let timeout: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      timeout = window.setTimeout(() => {
+        startTransition(() => {
+          hasPreparedProfileOverviewData = true;
+          setIsOverviewDataReady(true);
+        });
+      }, 0);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [isOverviewActive, isOverviewDataReady]);
+
   const enrichedGameByAppId = useMemo(() => {
-    const map = new Map<string, PirateGame>();
-    const addGame = (game: PirateGame) => {
+    const map = new Map<string, GhostBoxGame>();
+    if (!shouldBuildCollectionGameData) return map;
+
+    const addGame = (game: GhostBoxGame) => {
       const current = map.get(game.appId);
       map.set(game.appId, current ? mergeProfileGameCardData(current, game) : game);
     };
@@ -398,29 +431,37 @@ export function ProfilePage({
     }
 
     return map;
-  }, [achievementHistoryGames, addedLibraryGames, favoriteGames, userCollections]);
+  }, [achievementHistoryGames, addedLibraryGames, favoriteGames, shouldBuildCollectionGameData, userCollections]);
 
   const enrichedFavoriteGames = useMemo(
-    () =>
-      favoriteGames.map((game) => {
+    () => {
+      if (!shouldBuildCollectionGameData) return favoriteGames;
+
+      return favoriteGames.map((game) => {
         const details = enrichedGameByAppId.get(game.appId);
         return details ? mergeProfileGameCardData(game, details) : game;
-      }),
-    [enrichedGameByAppId, favoriteGames]
+      });
+    },
+    [enrichedGameByAppId, favoriteGames, shouldBuildCollectionGameData]
   );
 
   const enrichedAddedLibraryGames = useMemo(
-    () =>
-      addedLibraryGames.map((game) => {
+    () => {
+      if (!shouldBuildCollectionGameData) return addedLibraryGames;
+
+      return addedLibraryGames.map((game) => {
         const details = enrichedGameByAppId.get(game.appId);
         return details ? mergeProfileGameCardData(game, details) : game;
-      }),
-    [addedLibraryGames, enrichedGameByAppId]
+      });
+    },
+    [addedLibraryGames, enrichedGameByAppId, shouldBuildCollectionGameData]
   );
 
   const gamesById = useMemo(() => {
-    const map = new Map<string, PirateGame>();
-    const addGame = (game: PirateGame) => {
+    const map = new Map<string, GhostBoxGame>();
+    if (!shouldBuildCollectionGameData) return map;
+
+    const addGame = (game: GhostBoxGame) => {
       const details = enrichedGameByAppId.get(game.appId);
       map.set(game.id, details ? mergeProfileGameCardData(game, details) : game);
     };
@@ -431,10 +472,12 @@ export function ProfilePage({
       for (const game of collection.games ?? []) addGame(game);
     }
     return map;
-  }, [enrichedAddedLibraryGames, enrichedFavoriteGames, enrichedGameByAppId, userCollections]);
+  }, [enrichedAddedLibraryGames, enrichedFavoriteGames, enrichedGameByAppId, shouldBuildCollectionGameData, userCollections]);
 
   const profileAchievementGames = useMemo(() => {
-    const games = new Map<string, PirateGame>();
+    if (!shouldComputeOverviewData) return [];
+
+    const games = new Map<string, GhostBoxGame>();
     for (const game of achievementHistoryGames) {
       games.set(
         game.appId,
@@ -448,7 +491,7 @@ export function ProfilePage({
       );
     }
     return [...games.values()];
-  }, [achievementHistoryGames, addedLibraryGames]);
+  }, [achievementHistoryGames, addedLibraryGames, shouldComputeOverviewData]);
 
   useEffect(() => {
     if (
@@ -459,12 +502,6 @@ export function ProfilePage({
       return;
     setActiveCollectionId("overview");
   }, [activeCollectionId, profileCollections]);
-
-  const activeCollection =
-    profileCollections.find(
-      (collection) => collection.id === activeCollectionId
-    ) ?? profileCollections[0];
-  const isOverviewActive = activeCollectionId === "overview";
 
   useEffect(() => {
     if (!isOverviewActive) return;
@@ -499,13 +536,13 @@ export function ProfilePage({
   }, [isOverviewActive]);
 
   const getGamesForCollection = useCallback(
-    (collectionId: string): PirateGame[] => {
+    (collectionId: string): GhostBoxGame[] => {
       if (collectionId === "overview") return enrichedAddedLibraryGames.slice(0, 12);
       if (collectionId === "library") return enrichedAddedLibraryGames.slice(0, 12);
       if (collectionId === "favorites") return enrichedFavoriteGames.slice(0, 12);
       const collection = userCollectionById.get(collectionId);
       if (!collection) return [];
-      const games: PirateGame[] = [];
+      const games: GhostBoxGame[] = [];
       for (const gameId of collection.gameIds) {
         const game = gamesById.get(gameId);
         if (game) games.push(game);
@@ -539,7 +576,7 @@ export function ProfilePage({
     [setActiveCollectionId]
   );
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const container = tabsContainerRef.current;
     if (!container) return;
     const activeTab = container.querySelector<HTMLElement>(
@@ -565,7 +602,7 @@ export function ProfilePage({
     if (activeCollection.id === "overview") return [];
 
     if (activeCollection.id === "library") {
-      const result: PirateGame[] = [];
+      const result: GhostBoxGame[] = [];
       for (const game of enrichedAddedLibraryGames) {
         if (seen.has(game.id)) continue;
         seen.add(game.id);
@@ -574,7 +611,7 @@ export function ProfilePage({
       return result;
     }
     if (activeCollection.id === "favorites") {
-      const result: PirateGame[] = [];
+      const result: GhostBoxGame[] = [];
       for (const game of enrichedFavoriteGames) {
         if (seen.has(game.id)) continue;
         seen.add(game.id);
@@ -586,7 +623,7 @@ export function ProfilePage({
     const collection = userCollectionById.get(activeCollection.id);
     if (!collection) return [];
 
-    const result: PirateGame[] = [];
+    const result: GhostBoxGame[] = [];
 
     for (const gameId of collection.gameIds) {
       const game = gamesById.get(gameId);
@@ -660,7 +697,7 @@ export function ProfilePage({
       );
 
     const addHighlight = (
-      game: PirateGame,
+      game: GhostBoxGame,
       achievement: SteamAchievement,
       unlocked: boolean
     ) => {
@@ -747,23 +784,44 @@ export function ProfilePage({
   const avatarSources = useCachedImageSources(
     steamProfile?.avatarUrl ? [steamProfile.avatarUrl] : []
   );
+  const shouldUseBannerCache = !steamProfile?.bannerUrl?.startsWith("data:");
   const bannerSources = useCachedImageSources(
-    steamProfile?.bannerUrl
+    shouldUseBannerCache && steamProfile?.bannerUrl
       ? [steamProfile.bannerUrl]
-      : [profileBannerPlaceholderSource]
+      : shouldUseBannerCache
+        ? [profileBannerPlaceholderSource]
+        : []
   );
-  const avatarSource = avatarSources[0] ?? steamProfile?.avatarUrl ?? "";
-  const requestedBannerSource =
-    bannerSources[0] ?? profileBannerPlaceholderSource;
-  const [visibleBannerSource, setVisibleBannerSource] = useState(
-    requestedBannerSource
+  const avatarSource = steamProfile?.avatarUrl?.startsWith("data:")
+    ? steamProfile.avatarUrl
+    : avatarSources[0] ?? steamProfile?.avatarUrl ?? "";
+  const requestedBannerImageSource = !shouldUseBannerCache && steamProfile?.bannerUrl
+    ? steamProfile.bannerUrl
+    : bannerSources[0] ?? profileBannerPlaceholderSource;
+  const isBannerPlaceholder = !steamProfile?.bannerUrl;
+  const [bannerImageSource, setBannerImageSource] = useState(() =>
+    steamProfile?.bannerUrl ? "" : requestedBannerImageSource
   );
-  const bannerImageSource = visibleBannerSource || requestedBannerSource;
 
   useEffect(() => {
-    if (visibleBannerSource === requestedBannerSource) return;
-    setVisibleBannerSource(requestedBannerSource);
-  }, [requestedBannerSource, visibleBannerSource]);
+    if (!steamProfile?.bannerUrl) {
+      setBannerImageSource(requestedBannerImageSource);
+      return;
+    }
+
+    setBannerImageSource("");
+    let timeout: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      timeout = window.setTimeout(() => {
+        startTransition(() => setBannerImageSource(requestedBannerImageSource));
+      }, 80);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [requestedBannerImageSource, steamProfile?.bannerUrl]);
 
   useEffect(() => {
     preloadProfileImages(steamProfile);
@@ -832,29 +890,31 @@ export function ProfilePage({
   });
 
   const handleGameContextMenu = useCallback(
-    (game: PirateGame, x: number, y: number) =>
+    (game: GhostBoxGame, x: number, y: number) =>
       setGameContextMenu({ game, x, y }),
     []
   );
   const bannerPosition = normalizeBannerPosition(steamProfile?.bannerPosition);
-  const bannerImageStyle: CSSProperties = {
-    objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
-    transform: `scale(${bannerPosition.scale ?? 1})`,
-  };
+  const bannerImageStyle: CSSProperties | undefined = isBannerPlaceholder
+    ? undefined
+    : {
+        objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
+        transform: `scale(${bannerPosition.scale ?? 1})`,
+      };
 
   if (!steamProfile) return null;
 
   return (
     <section className="profile-page">
       <header
-        className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}`}
+        className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}${isBannerPlaceholder ? " profile-page__content-box--placeholder" : " profile-page__content-box--cover"}`}
       >
         {bannerImageSource && (
           <div
             className="profile-page__banner-viewport"
           >
             <img
-              className="profile-page__banner-image"
+              className={`profile-page__banner-image${isBannerPlaceholder ? " profile-page__banner-image--placeholder" : ""}`}
               src={bannerImageSource}
               alt=""
               decoding="sync"

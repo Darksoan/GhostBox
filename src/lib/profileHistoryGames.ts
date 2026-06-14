@@ -1,4 +1,4 @@
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { BackupDetails, BackupSettings } from "../types";
 import type { SteamAchievement } from "../data";
 
@@ -7,8 +7,8 @@ function normalizeAchievementKey(value: string) {
 }
 
 export function upsertProfileHistoryGame(
-  games: PirateGame[],
-  nextGame: PirateGame
+  games: GhostBoxGame[],
+  nextGame: GhostBoxGame
 ) {
   return [
     nextGame,
@@ -17,7 +17,7 @@ export function upsertProfileHistoryGame(
 }
 
 export function removeProfileHistoryGameByAppId(
-  games: PirateGame[],
+  games: GhostBoxGame[],
   appId: string
 ) {
   return games.filter((game) => game.appId !== appId);
@@ -34,7 +34,7 @@ export function getBackupRecordLatestKey(
   ].join("|");
 }
 
-export function countUnlockedAchievements(game: PirateGame | undefined) {
+export function countUnlockedAchievements(game: GhostBoxGame | undefined) {
   if (!game) return 0;
 
   const explicitUnlocked = (game.achievementList ?? []).filter(
@@ -46,9 +46,9 @@ export function countUnlockedAchievements(game: PirateGame | undefined) {
 }
 
 export function mergeGameDetailsPreservingAchievements(
-  game: PirateGame,
-  details: PirateGame
-): PirateGame {
+  game: GhostBoxGame,
+  details: GhostBoxGame
+): GhostBoxGame {
   const isPlaceholderTitle = /^Steam \d+$/.test(details.title);
   const hasAchievementDetails =
     details.achievements.total > 0 || (details.achievementList ?? []).length > 0;
@@ -74,9 +74,9 @@ export function mergeGameDetailsPreservingAchievements(
 }
 
 export function mergeBackupAchievementsIntoGame(
-  game: PirateGame,
+  game: GhostBoxGame,
   backupDetails: BackupDetails | null
-): PirateGame {
+): GhostBoxGame {
   const backupAchievements = backupDetails?.achievements ?? [];
   if (!backupAchievements.length) return game;
 
@@ -145,7 +145,7 @@ export function mergeBackupAchievementsIntoGame(
 export function createProfileHistoryFallbackGame(
   appId: string,
   title: string
-): PirateGame {
+): GhostBoxGame {
   const headerImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
   const heroImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`;
 

@@ -101,20 +101,6 @@ export function CatalogueLoadingState({
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
           <CatalogueListLoadingState animateListText={animateListText} pulseLoading={pulseLoading} />
-          <div className="catalogue-page__footer">
-            <div className="pagination-controls pagination-controls--placeholder">
-              <div className={`pagination-controls__arrow ${loadingClassName}`} />
-              <div className="pagination-controls__numbers">
-                {Array.from({ length: 3 }, (_, index) => (
-                  <div
-                    className={`pagination-controls__page ${loadingClassName}`}
-                    key={`catalogue-page-loading-${index}`}
-                  />
-                ))}
-              </div>
-              <div className={`pagination-controls__arrow ${loadingClassName}`} />
-            </div>
-          </div>
         </div>
 
         <aside

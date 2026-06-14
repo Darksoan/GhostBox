@@ -12,7 +12,9 @@ const STEAM_STORE_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
 const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 2;
 const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.hella.workers.dev";
-const STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
+const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
+const LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV: &str = "EDEN_STEAM_DETAILS_PROXY_URL";
+const LEGACY_STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
 
 fn text(value: Option<&Value>) -> String {
     value
@@ -39,6 +41,8 @@ fn default_games_api_url() -> String {
 
 pub(crate) fn normalize_api_url(api_url: Option<String>) -> String {
     api_url
+        .or_else(|| std::env::var("GHOSTBOX_GAMES_API_URL").ok())
+        .or_else(|| std::env::var("EDEN_GAMES_API_URL").ok())
         .or_else(|| std::env::var("PIRATEBOX_GAMES_API_URL").ok())
         .map(|value| value.trim().trim_end_matches('/').to_string())
         .filter(|value| !value.is_empty())
@@ -164,6 +168,17 @@ fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
     let Some(object) = game.as_object_mut() else {
         return;
     };
+
+    let name = text(store_data.get("name"));
+    if !name.is_empty() {
+        let current_title = text(object.get("title"));
+        if current_title.is_empty()
+            || current_title
+                .eq_ignore_ascii_case(&format!("Steam App {}", text(object.get("appId"))))
+        {
+            object.insert("title".to_string(), Value::String(name));
+        }
+    }
 
     let screenshots: Vec<Value> = store_data
         .get("screenshots")
@@ -326,6 +341,17 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
         return;
     };
 
+    let name = text(details.get("name"));
+    if !name.is_empty() {
+        let current_title = text(object.get("title"));
+        if current_title.is_empty()
+            || current_title
+                .eq_ignore_ascii_case(&format!("Steam App {}", text(object.get("appId"))))
+        {
+            object.insert("title".to_string(), Value::String(name));
+        }
+    }
+
     let screenshots = text_array(details.get("screenshots"), 8);
     if !screenshots.is_empty() {
         object.insert("screenshots".to_string(), Value::Array(screenshots));
@@ -435,7 +461,11 @@ fn has_steam_store_movies(details: &Value) -> bool {
     details
         .get("movies")
         .and_then(|value| value.as_array())
-        .map(|movies| movies.iter().any(|movie| steam_store_movie(movie).is_some()))
+        .map(|movies| {
+            movies
+                .iter()
+                .any(|movie| steam_store_movie(movie).is_some())
+        })
         .unwrap_or(false)
 }
 
@@ -449,6 +479,8 @@ fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
     }
 
     let base = std::env::var(STEAM_DETAILS_PROXY_URL_ENV)
+        .or_else(|_| std::env::var(LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV))
+        .or_else(|_| std::env::var(LEGACY_STEAM_DETAILS_PROXY_URL_ENV))
         .ok()
         .map(|value| value.trim().trim_end_matches('/').to_string())
         .filter(|value| !value.is_empty())
@@ -461,7 +493,9 @@ fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
 
     let base_path = url.path().trim_end_matches('/');
     url.set_path(&format!("{base_path}/games/{app_id}/details"));
-    url.query_pairs_mut().clear().append_pair("lang", "portuguese");
+    url.query_pairs_mut()
+        .clear()
+        .append_pair("lang", "portuguese");
     Some(url)
 }
 
@@ -785,11 +819,27 @@ fn steamcmd_candidates(app: &tauri::AppHandle) -> Vec<PathBuf> {
     }
     if let Some(app_data) = std::env::var_os("APPDATA") {
         let app_data = PathBuf::from(app_data);
-        candidates.push(app_data.join("piratebox").join("steamcmd").join("steamcmd.exe"));
-        candidates.push(app_data.join("PirateBox").join("steamcmd").join("steamcmd.exe"));
+        candidates.push(
+            app_data
+                .join("GhostBox")
+                .join("steamcmd")
+                .join("steamcmd.exe"),
+        );
+        candidates.push(app_data.join("Eden").join("steamcmd").join("steamcmd.exe"));
+        candidates.push(
+            app_data
+                .join("piratebox")
+                .join("steamcmd")
+                .join("steamcmd.exe"),
+        );
     }
     if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("tools").join("steamcmd").join("steamcmd.exe"));
+        candidates.push(
+            resource_dir
+                .join("tools")
+                .join("steamcmd")
+                .join("steamcmd.exe"),
+        );
     }
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(exe_dir) = current_exe.parent() {
@@ -843,7 +893,7 @@ pub(crate) async fn fetch_remote_game(
 #[tauri::command]
 pub fn app_get_status() -> serde_json::Value {
     serde_json::json!({
-        "name": "PirateBox Tauri",
+        "name": "GhostBox Tauri",
         "version": env!("CARGO_PKG_VERSION"),
         "runtime": "tauri-2",
         "dev": cfg!(debug_assertions)
@@ -943,11 +993,7 @@ pub async fn database_get_game_store_details(
     if let Some(store_data) = fetch_steam_store_details(&app_id).await {
         let store_details = steam_store_details_from_store_data(&store_data);
         merge_steam_store_details(&mut game, &store_data);
-        if should_write_steam_store_details_cache(
-            &store_details,
-            latest_cached_details.as_ref(),
-        )
-        {
+        if should_write_steam_store_details_cache(&store_details, latest_cached_details.as_ref()) {
             write_cached_steam_store_details(&app, &app_id, &store_details);
         }
     }

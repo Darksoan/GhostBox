@@ -1,6 +1,6 @@
 import { ChevronLeft, Folder, Heart } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PirateGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
 import type { BackupRootStatus, BackupSettings } from "../types";
 import { GameGrid, GameGridLoadingState } from "../components/ui/GameCard";
@@ -36,14 +36,14 @@ function addLibraryGameKey(keys: Set<string>, value: string | null | undefined) 
   }
 }
 
-function getLibraryGameKeys(game: PirateGame) {
+function getLibraryGameKeys(game: GhostBoxGame) {
   const keys = new Set<string>();
   addLibraryGameKey(keys, game.id);
   addLibraryGameKey(keys, game.appId);
   return keys;
 }
 
-function gameMatchesLibraryKeys(game: PirateGame, keys: Set<string>) {
+function gameMatchesLibraryKeys(game: GhostBoxGame, keys: Set<string>) {
   for (const key of getLibraryGameKeys(game)) {
     if (keys.has(key)) return true;
   }
@@ -52,22 +52,22 @@ function gameMatchesLibraryKeys(game: PirateGame, keys: Set<string>) {
 }
 
 interface LibraryPageProps {
-  games: PirateGame[];
-  favoriteGames?: PirateGame[];
+  games: GhostBoxGame[];
+  favoriteGames?: GhostBoxGame[];
   loading: boolean;
   query: string;
-  onOpenGame: (game: PirateGame) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
   removableGameAppIds: Set<string>;
   playableGameAppIds?: Set<string>;
   launchingGameId?: string | null;
-  onRemoveGame: (game: PirateGame) => void;
-  onPlayGame?: (game: PirateGame) => void;
+  onRemoveGame: (game: GhostBoxGame) => void;
+  onPlayGame?: (game: GhostBoxGame) => void;
   favoriteGameIds?: Set<string>;
   userCollections?: UserCollection[];
   activeCollectionId?: string | null;
   onActiveCollectionChange?: (collectionId: string | null) => void;
-  onToggleFavorite?: (game: PirateGame) => void;
-  onAddGameToCollection?: (game: PirateGame, collectionId: string) => void;
+  onToggleFavorite?: (game: GhostBoxGame) => void;
+  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   backupSettings?: BackupSettings | null;
   backupRootStatus?: BackupRootStatus | null;
   activeSessionAppIds?: Set<string>;
@@ -97,7 +97,7 @@ export function LibraryPage({
   const { appearance } = useSettings();
   const [sortBy, setSortBy] = useState<LibrarySortBy>(() => readStoredLibrarySortBy());
   const [internalActiveCollectionId, setInternalActiveCollectionId] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ game: PirateGame; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ game: GhostBoxGame; x: number; y: number } | null>(null);
   const language = appearance.language;
   const selectedCollectionId =
     propActiveCollectionId === undefined
@@ -123,8 +123,8 @@ export function LibraryPage({
   };
 
   const baseLibraryGames = useMemo(() => {
-    const gamesByKey = new Map<string, PirateGame>();
-    const addGames = (games: PirateGame[]) => {
+    const gamesByKey = new Map<string, GhostBoxGame>();
+    const addGames = (games: GhostBoxGame[]) => {
       games.forEach((game) => {
         const key = game.appId || game.id;
         const current = gamesByKey.get(key);
@@ -199,7 +199,7 @@ export function LibraryPage({
     };
   }, [sortDropdownOpen]);
 
-  const handleGameContextMenu = (game: PirateGame, x: number, y: number) => {
+  const handleGameContextMenu = (game: GhostBoxGame, x: number, y: number) => {
     setContextMenu({ game, x, y });
   };
 

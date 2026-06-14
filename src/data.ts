@@ -1,4 +1,5 @@
-import { pirateboxApi } from "./lib/pirateboxApi";
+import { ghostboxApi } from "./lib/ghostboxApi";
+import type { SteamWishlistItem } from "./types";
 
 export type GameStatus = "installed" | "queued" | "discover" | "syncing";
 
@@ -41,7 +42,7 @@ export type SteamMovie = {
   webm?: SteamVideoSource;
 };
 
-export type PirateGame = {
+export type GhostBoxGame = {
   appId: string;
   id: string;
   title: string;
@@ -103,7 +104,7 @@ export type GameDatabaseRequest = {
 };
 
 export type GameDatabaseResult = {
-  games: PirateGame[];
+  games: GhostBoxGame[];
   total: number;
   matched: number;
   limited: boolean;
@@ -119,8 +120,8 @@ export type GameDatabaseResult = {
 };
 
 export type HomeResult = {
-  popular: PirateGame[];
-  recentlyAdded: PirateGame[];
+  popular: GhostBoxGame[];
+  recentlyAdded: GhostBoxGame[];
   total: number;
   updatedAt?: string;
   source: string;
@@ -133,7 +134,7 @@ export type AddGameResult =
       api: string;
       installedPath: string;
       manifestCount: number;
-      libraryGame: PirateGame;
+      libraryGame: GhostBoxGame;
     }
   | {
       success: false;
@@ -154,46 +155,52 @@ export type RemoveGameResult =
 export async function loadGames(
   request: GameDatabaseRequest = {}
 ): Promise<GameDatabaseResult> {
-  return pirateboxApi.getGames(request);
+  return ghostboxApi.getGames(request);
 }
 
 export async function loadGameDetails(
   gameId: string
-): Promise<PirateGame | null> {
-  return pirateboxApi.getGameDetails(gameId);
+): Promise<GhostBoxGame | null> {
+  return ghostboxApi.getGameDetails(gameId);
 }
 
 export async function loadGameStoreDetails(
   gameId: string
-): Promise<PirateGame | null> {
-  return pirateboxApi.getGameStoreDetails(gameId);
+): Promise<GhostBoxGame | null> {
+  return ghostboxApi.getGameStoreDetails(gameId);
+}
+
+export async function loadSteamWishlist(
+  steamId: string
+): Promise<SteamWishlistItem[]> {
+  return ghostboxApi.getSteamWishlist(steamId);
 }
 
 export async function loadGameAchievementDetails(
   gameId: string
-): Promise<PirateGame | null> {
-  return pirateboxApi.getGameAchievementDetails(gameId);
+): Promise<GhostBoxGame | null> {
+  return ghostboxApi.getGameAchievementDetails(gameId);
 }
 
 export async function loadCachedImage(url: string): Promise<string> {
-  return pirateboxApi.getCachedImage(url);
+  return ghostboxApi.getCachedImage(url);
 }
 
 export async function resolveSteamLibraryAsset(
   appId: string,
   fileName: string
 ): Promise<string> {
-  return pirateboxApi.resolveSteamLibraryAsset(appId, fileName);
+  return ghostboxApi.resolveSteamLibraryAsset(appId, fileName);
 }
 
 export async function addGameViaLuaTools(
-  game: PirateGame
+  game: GhostBoxGame
 ): Promise<AddGameResult> {
-  return pirateboxApi.addGameViaLuaTools(game);
+  return ghostboxApi.addGameViaLuaTools(game);
 }
 
 export async function removeGameViaLuaTools(
-  game: PirateGame
+  game: GhostBoxGame
 ): Promise<RemoveGameResult> {
-  return pirateboxApi.removeGameViaLuaTools(game);
+  return ghostboxApi.removeGameViaLuaTools(game);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { loadGames, type PirateGame } from "../data";
+import { loadGames, type GhostBoxGame } from "../data";
 import { useSettings } from "../context/settings";
 
 const recentlyAddedLimit = 200;
@@ -35,18 +35,18 @@ function formatDateGroup(timestamp: number | undefined, locale: string, language
 }
 
 type NotificationsPageProps = {
-  onOpenGame: (game: PirateGame) => void;
+  onOpenGame: (game: GhostBoxGame) => void;
 };
 
 export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
   const { appearance, t } = useSettings();
   const locale = appearance.language === "en" ? "en-US" : "pt-BR";
-  const [recentGames, setRecentGames] = useState<PirateGame[]>([]);
+  const [recentGames, setRecentGames] = useState<GhostBoxGame[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
 
   const groupedGames = useMemo(() => {
-    const groups = new Map<string, { label: string; dateText: string; games: PirateGame[] }>();
+    const groups = new Map<string, { label: string; dateText: string; games: GhostBoxGame[] }>();
 
     for (const game of recentGames) {
       const date = formatDateGroup(game.databaseAddedAt, locale, appearance.language);
@@ -61,7 +61,7 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
     return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
   }, [appearance.language, locale, recentGames]);
 
-  function getGameDeveloperLabel(game: PirateGame) {
+  function getGameDeveloperLabel(game: GhostBoxGame) {
     return game.developers?.[0] || "";
   }
 
