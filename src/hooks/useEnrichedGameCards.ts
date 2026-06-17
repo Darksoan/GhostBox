@@ -15,17 +15,33 @@ export function useEnrichedGameCards(games: GhostBoxGame[], limit = 80) {
 
   useEffect(() => {
     let cancelled = false;
+    // Buffer incoming detail resolutions and flush them into state once per
+    // animation frame, so a burst of resolved promises produces a single
+    // re-render instead of one per resolution.
+    const pending: Array<{ baseGame: GhostBoxGame; details: GhostBoxGame }> = [];
+    let frame: number | null = null;
+
+    const flush = () => {
+      frame = null;
+      if (cancelled || pending.length === 0) return;
+
+      const batch = pending.splice(0, pending.length);
+      setDetailsByAppId((current) => {
+        const next = new Map(current);
+        for (const { baseGame, details } of batch) {
+          const existing = next.get(baseGame.appId) ?? baseGame;
+          next.set(baseGame.appId, mergeGameCardData(existing, details));
+        }
+        return next;
+      });
+    };
 
     const mergeDetails = (baseGame: GhostBoxGame, details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
-
-      setDetailsByAppId((current) => {
-        const existing = current.get(baseGame.appId) ?? baseGame;
-        const merged = mergeGameCardData(existing, details);
-        const next = new Map(current);
-        next.set(baseGame.appId, merged);
-        return next;
-      });
+      pending.push({ baseGame, details });
+      if (frame === null) {
+        frame = requestAnimationFrame(flush);
+      }
     };
 
     games.slice(0, limit).forEach((game) => {
@@ -48,6 +64,9 @@ export function useEnrichedGameCards(games: GhostBoxGame[], limit = 80) {
 
     return () => {
       cancelled = true;
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
     };
   }, [gamesKey, games, limit]);
 

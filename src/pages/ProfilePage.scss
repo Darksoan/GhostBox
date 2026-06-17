@@ -142,7 +142,7 @@
     min-height: 34px;
     padding: 0 14px;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
     color: var(--text-strong);
     backdrop-filter: blur(var(--profile-glass-blur));
@@ -156,10 +156,10 @@
     pointer-events: none;
     transform: translateY(-4px);
     transition:
-      opacity 0.15s ease,
+      opacity var(--motion-fast) ease,
       background-color ease 0.2s,
       color ease 0.2s,
-      transform 0.1s ease;
+      transform var(--motion-fast) ease;
 
     svg {
       flex: 0 0 auto;
@@ -204,7 +204,7 @@
     place-items: center;
     overflow: hidden;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background-color: var(--background);
     color: var(--text-muted);
     cursor: pointer;
@@ -270,7 +270,7 @@
     align-self: center;
     transform: translateY(2px);
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.18);
     color: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(var(--profile-glass-blur));
@@ -279,10 +279,10 @@
     opacity: 0;
     pointer-events: none;
     transition:
-      opacity 0.15s ease,
+      opacity var(--motion-fast) ease,
       background-color ease 0.2s,
       color ease 0.2s,
-      transform 0.1s ease;
+      transform var(--motion-fast) ease;
 
     svg {
       display: block;
@@ -311,7 +311,7 @@
     width: 32px;
     height: 32px;
     place-items: center;
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     background: transparent;
     color: var(--text-strong);
     font-size: 13px;
@@ -354,7 +354,7 @@
     min-height: 30px;
     padding: 6px 8px;
     overflow: hidden;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background-color: rgba(0, 0, 0, 0.3);
     color: var(--text);
     cursor: pointer;
@@ -515,7 +515,7 @@
     width: 100%;
     height: 6px;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--surface-strong);
 
     span {
@@ -523,8 +523,7 @@
       height: 100%;
       border-radius: inherit;
       background: var(--text-strong);
-      box-shadow: 0 0 14px color-mix(in srgb, var(--text-strong) 28%, transparent);
-      transition: width 0.35s ease;
+      transition: width var(--motion-slow) ease;
     }
 
     &--compact {
@@ -533,7 +532,6 @@
 
     &--xp span {
       background: var(--text-strong);
-      box-shadow: 0 0 8px color-mix(in srgb, var(--text-strong) 10%, transparent);
     }
   }
 
@@ -581,7 +579,7 @@
     strong {
       color: var(--text-strong);
       font-size: clamp(26px, 4vw, 40px);
-      font-weight: 300;
+      font-weight: 400;
       line-height: 1;
       letter-spacing: -0.04em;
     }
@@ -611,9 +609,8 @@
     position: relative;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     background: var(--background-dark);
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
   }
 
   &__overview-panel--showcase {
@@ -673,21 +670,20 @@
     box-sizing: border-box;
     padding: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: transparent;
     color: color-mix(in srgb, var(--text-dim) 78%, #000 22%);
     box-shadow: none;
     transition:
-      filter 0.16s ease,
-      opacity 0.16s ease,
-      transform 0.16s ease,
-      box-shadow 0.16s ease;
+      filter var(--motion-base) ease,
+      opacity var(--motion-base) ease,
+      transform var(--motion-base) ease,
+      box-shadow var(--motion-base) ease;
 
     &:hover,
     &:focus-visible {
       filter: brightness(1.14);
       transform: translateY(-3px);
-      box-shadow: 0 8px 20px color-mix(in srgb, var(--text-strong) 12%, transparent);
       outline: 0;
     }
 
@@ -699,9 +695,8 @@
   }
 
   &__showcase-achievement--empty {
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
-    box-shadow: inset 0 0 0 1px var(--border-subtle);
   }
 
   &__showcase-achievement--locked {
@@ -728,7 +723,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
     overflow: hidden;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--surface-deep);
   }
 
@@ -760,7 +755,7 @@
     strong {
       color: var(--text-strong);
       font-size: clamp(30px, 5vw, 48px);
-      font-weight: 300;
+      font-weight: 400;
       line-height: 1;
       letter-spacing: -0.04em;
     }
@@ -809,15 +804,15 @@
     min-height: 104px;
     padding: 10px 12px;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text);
     cursor: pointer;
     text-align: left;
     transition:
-      background-color 0.18s ease,
-      box-shadow 0.18s ease,
-      transform 0.18s ease;
+      background-color var(--motion-base) ease,
+      box-shadow var(--motion-base) ease,
+      transform var(--motion-base) ease;
     will-change: transform;
 
     &:focus-visible {
@@ -844,9 +839,8 @@
   &__skeleton-block,
   &__skeleton-line {
     display: block;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-subtle) 70%, transparent);
   }
 
   &__skeleton-line {
@@ -873,7 +867,7 @@
     height: 5px;
     align-self: center;
     margin-top: -1px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
   }
 
   &__skeleton-line--achievement {
@@ -890,14 +884,14 @@
     min-width: 0;
     padding: 10px;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
     color: var(--text);
     cursor: pointer;
     text-align: left;
     transition:
-      background-color 0.18s ease,
-      transform 0.18s ease;
+      background-color var(--motion-base) ease,
+      transform var(--motion-base) ease;
 
     & + .profile-page__top-game {
       border-top: 0;
@@ -913,7 +907,7 @@
     width: 30px;
     height: 30px;
     place-items: center;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--surface-hover);
     color: var(--text-strong);
     font-size: 13px;
@@ -922,7 +916,6 @@
 
   &__top-game-rank.profile-page__skeleton-block {
     background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-subtle) 70%, transparent);
   }
 
   &__top-game-cover {
@@ -930,10 +923,9 @@
     height: 82px;
     aspect-ratio: 2 / 3;
     min-height: 0;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background-color: var(--surface-solid);
     background-size: var(--pb-background-size);
-    box-shadow: inset 0 0 0 1px var(--border-subtle);
   }
 
   &__top-game-content {
@@ -1062,10 +1054,9 @@
       width: 22px;
       height: 22px;
       flex: 0 0 auto;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       object-fit: cover;
       background: var(--surface-solid);
-      box-shadow: inset 0 0 0 1px var(--border-subtle);
     }
 
     span {
@@ -1110,10 +1101,9 @@
       width: 24px;
       height: 24px;
       flex: 0 0 auto;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       object-fit: cover;
       background: var(--surface-deep);
-      box-shadow: inset 0 0 0 1px var(--border-subtle);
     }
   }
 
@@ -1201,13 +1191,10 @@
     z-index: 1;
     width: 10px;
     height: 10px;
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     background: var(--surface-active);
     flex: 0 0 auto;
     margin-top: 37px;
-    box-shadow:
-      0 0 0 3px var(--surface-deep),
-      inset 0 0 0 1px var(--border-subtle);
   }
 
   &__achievement-timeline-card {
@@ -1217,10 +1204,9 @@
     width: 100%;
     min-width: 0;
     padding: 10px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
-    box-shadow: inset 0 0 0 1px var(--surface-subtle);
-    transition: background-color 0.18s ease;
+    transition: background-color var(--motion-base) ease;
     margin-top: 8px;
     margin-bottom: 8px;
   }
@@ -1229,12 +1215,9 @@
     flex: 0 0 auto;
     width: 48px;
     height: 48px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     object-fit: cover;
     background: var(--surface-deep);
-    box-shadow:
-      0 0 0 4px var(--surface-deep),
-      inset 0 0 0 1px var(--border-subtle);
   }
 
   &__achievement-timeline-content {
@@ -1273,7 +1256,7 @@
     font-weight: 600;
     white-space: nowrap;
     padding: 3px 8px;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     background: var(--surface-subtle);
 
     svg {
@@ -1288,10 +1271,6 @@
 
     .profile-page__achievement-timeline-dot {
       background: var(--surface-strong);
-      box-shadow:
-        0 0 0 3px var(--surface-deep),
-        0 0 10px var(--surface-active),
-        inset 0 0 0 1px var(--border-subtle);
     }
 
     .profile-page__achievement-timeline-percent {
@@ -1307,14 +1286,14 @@
     width: 100%;
     padding: 10px;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.34);
     color: var(--text);
     cursor: pointer;
     text-align: left;
     transition:
-      background-color 0.18s ease,
-      transform 0.18s ease;
+      background-color var(--motion-base) ease,
+      transform var(--motion-base) ease;
 
     &:hover,
     &:focus-visible {
@@ -1326,10 +1305,9 @@
 
   &__recent-cover {
     min-height: 70px;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background-color: var(--surface-solid);
     background-size: var(--pb-background-size);
-    box-shadow: inset 0 0 0 1px var(--border-subtle);
   }
 
   &__recent-body {
@@ -1388,7 +1366,7 @@
     width: 100%;
     height: 5px;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(255, 255, 255, 0.08);
 
     span {
@@ -1409,10 +1387,9 @@
       width: 28px;
       height: 28px;
       flex: 0 0 auto;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       object-fit: cover;
       background: var(--surface-solid);
-      box-shadow: inset 0 0 0 1px var(--border-subtle);
     }
   }
 
@@ -1429,7 +1406,7 @@
   &__game-grid .game-card,
   &__game-grid .game-card__cover {
     border: 0 !important;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     outline: 0;
   }
 
@@ -1443,7 +1420,7 @@
 
   &__game-grid .game-card__cover::after {
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--motion-base) ease;
   }
 
   &__game-grid .game-card__achievement-badge {
@@ -1484,7 +1461,7 @@
     left: 0;
     transform: translateY(-50%);
     height: 34px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
     pointer-events: none;
     transition: left 0.25s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -1503,7 +1480,7 @@
     padding: 0 14px;
     overflow: hidden;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--text-dim);
     cursor: pointer;
@@ -1512,7 +1489,7 @@
     line-height: 1;
     position: relative;
     z-index: 2;
-    transition: color 0.24s ease;
+    transition: color var(--motion-base) ease;
 
     svg {
       flex: 0 0 auto;
@@ -1573,7 +1550,7 @@
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
-    transition: color 0.24s ease;
+    transition: color var(--motion-base) ease;
 
     &:hover {
       color: var(--text-strong);
@@ -1583,7 +1560,7 @@
 
   &__collection-button--create {
     color: var(--text-muted);
-    transition: color 0.24s ease;
+    transition: color var(--motion-base) ease;
 
     &:hover,
     &:focus-visible {
@@ -1603,7 +1580,7 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         background: currentColor;
         transform: translate(-50%, -50%);
       }
@@ -1648,7 +1625,7 @@
   &__section-badge {
     min-width: 24px;
     padding: 4px 8px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background-color: rgba(211, 211, 211, 0.1);
     color: rgba(211, 211, 211, 0.7);
     font-size: 12px;
@@ -1729,7 +1706,7 @@
     align-items: center;
     justify-content: center;
     margin-bottom: 16px;
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     background-color: rgba(211, 211, 211, 0.06);
   }
 
@@ -1748,7 +1725,7 @@
   }
 
   &__game-grid.game-grid--cover-format-in .game-card {
-    animation: library-cover-format-in 0.24s ease both;
+    animation: library-cover-format-in var(--motion-base) ease both;
 
     @for $i from 1 through 24 {
       &:nth-child(#{$i}) {
@@ -1888,7 +1865,6 @@
   &__top-game-console-row:hover,
   &__top-game-console-row:focus-visible {
     background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
-    box-shadow: 0 10px 24px color-mix(in srgb, #000 18%, transparent);
     transform: translateY(-3px);
   }
 
@@ -1906,7 +1882,6 @@
   &__recent-icons img,
   &__achievement-timeline-icon {
     background-color: var(--surface-solid);
-    box-shadow: inset 0 0 0 1px var(--border-subtle);
   }
 
   &__top-game-content > span:not(.profile-page__top-game-stats):not(.profile-page__top-game-last-achievement),
@@ -1937,7 +1912,6 @@
 
   &__progress-track--xp span {
     background: var(--text-strong);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--text-strong) 10%, transparent);
   }
 
   &__side-section {
@@ -2104,7 +2078,7 @@
   }
 
   .profile-page__top-game-console-row {
-    transition: background-color 0.18s ease;
+    transition: background-color var(--motion-base) ease;
   }
 
   .profile-page__tab {

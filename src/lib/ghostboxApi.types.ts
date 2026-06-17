@@ -56,6 +56,71 @@ export type GamePlaytimeEntry = {
 
 export type GamePlaytimeSnapshot = Record<string, GamePlaytimeEntry>;
 
+export type SteamGameReviewAuthor = {
+  steamid: string;
+  personaname: string;
+  profileurl: string;
+  avatar: string;
+  playtime_forever?: number;
+  playtime_last_two_weeks?: number;
+  playtime_at_review?: number;
+  last_played?: number;
+};
+
+export type SteamGameReview = {
+  recommendationid: string;
+  author: SteamGameReviewAuthor;
+  language: string;
+  review: string;
+  timestamp_created: number;
+  timestamp_updated?: number;
+  voted_up: boolean;
+  votes_up: number;
+  votes_funny?: number;
+  weighted_vote_score?: string;
+  steam_purchase?: boolean;
+  received_for_free?: boolean;
+};
+
+export type SteamReviewHistogramBucket = {
+  date: number;
+  recommendations_up: number;
+  recommendations_down: number;
+};
+
+export type SteamReviewHistogram = {
+  start_date?: number;
+  end_date?: number;
+  weeks?: SteamReviewHistogramBucket[];
+  rollups?: SteamReviewHistogramBucket[];
+  rollup_type?: string;
+  recent?: SteamReviewHistogramBucket[];
+};
+
+export type SteamGameReviewsResult = {
+  success: number;
+  query_summary?: {
+    num_reviews?: number;
+    review_score?: number;
+    review_score_desc?: string;
+    total_positive?: number;
+    total_negative?: number;
+    total_reviews?: number;
+  };
+  reviews: SteamGameReview[];
+  reviewHistogram?: SteamReviewHistogram;
+};
+
+export type SteamRecommendedTag = {
+  tagid?: number;
+  tagId?: number;
+  name?: string;
+  tag_name?: string;
+  tagName?: string;
+  weight?: number;
+  score?: number;
+};
+
 export type AppStatus = {
   name: string;
   version: string;

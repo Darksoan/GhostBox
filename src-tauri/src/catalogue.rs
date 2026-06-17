@@ -320,6 +320,77 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
     })
 }
 
+fn is_steam_app_title_placeholder(title: &str, app_id: &str) -> bool {
+    let title = title.trim();
+    title.is_empty()
+        || title.eq_ignore_ascii_case(&format!("Steam App {app_id}"))
+        || title.eq_ignore_ascii_case(&format!("Steam {app_id}"))
+}
+
+fn set_game_title(game: &mut Value, title: String) {
+    if let Some(object) = game.as_object_mut() {
+        object.insert("title".to_string(), Value::String(title));
+    }
+}
+
+fn extract_between(value: &str, start: &str, end: &str) -> Option<String> {
+    let start_index = value.find(start)? + start.len();
+    let after_start = &value[start_index..];
+    let end_index = after_start.find(end)?;
+    Some(after_start[..end_index].to_string())
+}
+
+fn extract_steam_store_page_title(html: &str) -> Option<String> {
+    let apphub_title = extract_between(html, "<div class=\"apphub_AppName\">", "</div>")
+        .or_else(|| extract_between(html, "<div class='apphub_AppName'>", "</div>"));
+    let raw_title = apphub_title.or_else(|| extract_between(html, "<title>", "</title>"))?;
+    let title = strip_html(&raw_title)
+        .replace(" on Steam", "")
+        .replace(" no Steam", "")
+        .trim()
+        .to_string();
+
+    (!title.is_empty()).then_some(title)
+}
+
+fn steam_app_fallback_game(app_id: &str) -> Value {
+    let header = format!(
+        "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg"
+    );
+    let hero = format!(
+        "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_hero.jpg"
+    );
+    serde_json::json!({
+        "appId": app_id,
+        "id": format!("steam-{app_id}"),
+        "title": format!("Steam App {app_id}"),
+        "subtitle": "Steam",
+        "status": "discover",
+        "hours": 0,
+        "rating": 0,
+        "size": "Steam",
+        "release": "Steam",
+        "progress": 0,
+        "accent": "#f0f1f7",
+        "cover": header,
+        "hero": hero,
+        "coverUrl": header,
+        "heroUrl": hero,
+        "coverFallbacks": [header],
+        "heroFallbacks": [hero],
+        "logo": format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/logo.png"),
+        "tags": [],
+        "genres": [],
+        "screenshots": [],
+        "achievements": {
+            "unlocked": 0,
+            "total": 0,
+            "progress": 0
+        },
+        "achievementList": []
+    })
+}
+
 fn text_array(value: Option<&Value>, limit: usize) -> Vec<Value> {
     value
         .and_then(|value| value.as_array())
@@ -469,8 +540,24 @@ fn has_steam_store_movies(details: &Value) -> bool {
         .unwrap_or(false)
 }
 
+fn has_steam_store_about(details: &Value) -> bool {
+    !text(details.get("aboutTheGame")).is_empty()
+}
+
+fn has_complete_steam_store_details(details: &Value) -> bool {
+    has_steam_store_movies(details) && has_steam_store_about(details)
+}
+
 fn should_write_steam_store_details_cache(next: &Value, previous: Option<&Value>) -> bool {
-    has_steam_store_movies(next) || !previous.map(has_steam_store_movies).unwrap_or(false)
+    let next_has_movies = has_steam_store_movies(next);
+    let next_has_about = has_steam_store_about(next);
+
+    previous
+        .map(|previous| {
+            (next_has_movies && !has_steam_store_movies(previous))
+                || (next_has_about && !has_steam_store_about(previous))
+        })
+        .unwrap_or(next_has_movies || next_has_about)
 }
 
 fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
@@ -552,6 +639,187 @@ async fn fetch_steam_store_details(app_id: &str) -> Option<Value> {
         return None;
     }
     app.get("data").cloned()
+}
+
+async fn fetch_steam_store_page_title(app_id: &str) -> Option<String> {
+    let url = format!("https://store.steampowered.com/app/{app_id}/?l=portuguese&cc=br");
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+    let html = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "text/html,*/*")
+        .header(
+            reqwest::header::COOKIE,
+            "birthtime=568022401; lastagecheckage=1-January-1988",
+        )
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .text()
+        .await
+        .ok()?;
+
+    extract_steam_store_page_title(&html)
+}
+
+fn steam_reviews_language(language: Option<String>) -> &'static str {
+    match language.as_deref().map(str::trim) {
+        Some("english") => "english",
+        Some("brazilian") => "brazilian",
+        _ => "brazilian",
+    }
+}
+
+fn steam_reviews_type(review_type: Option<String>) -> &'static str {
+    match review_type.as_deref().map(str::trim) {
+        Some("positive") => "positive",
+        Some("negative") => "negative",
+        _ => "all",
+    }
+}
+
+async fn fetch_steam_game_reviews(
+    app_id: &str,
+    language: &str,
+    review_type: &str,
+    filter: &str,
+    purchase_type: &str,
+) -> Option<Value> {
+    let mut url = reqwest::Url::parse(&format!(
+        "https://store.steampowered.com/appreviews/{app_id}"
+    ))
+    .ok()?;
+    url.query_pairs_mut()
+        .append_pair("json", "1")
+        .append_pair("language", language)
+        .append_pair("filter", filter)
+        .append_pair("num_per_page", "60")
+        .append_pair("review_type", review_type)
+        .append_pair("purchase_type", purchase_type);
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+
+    client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()
+}
+
+fn steam_reviews_empty(value: &Value) -> bool {
+    value
+        .get("reviews")
+        .and_then(|reviews| reviews.as_array())
+        .map(|reviews| reviews.is_empty())
+        .unwrap_or(true)
+}
+
+async fn fetch_steam_game_reviews_with_fallbacks(
+    app_id: &str,
+    language: &str,
+    review_type: &str,
+) -> Option<Value> {
+    let primary_filter = if review_type == "all" {
+        "recent"
+    } else {
+        "all"
+    };
+    let mut best =
+        fetch_steam_game_reviews(app_id, language, review_type, primary_filter, "steam").await;
+    if best
+        .as_ref()
+        .is_some_and(|value| !steam_reviews_empty(value))
+    {
+        return best;
+    }
+
+    let fallback_attempts = if review_type == "all" {
+        vec![
+            (language, "recent", "all"),
+            (language, "updated", "steam"),
+            ("all", "recent", "steam"),
+            ("all", "recent", "all"),
+        ]
+    } else {
+        vec![
+            (language, "all", "all"),
+            ("all", "all", "steam"),
+            ("all", "all", "all"),
+        ]
+    };
+
+    for (fallback_language, fallback_filter, fallback_purchase_type) in fallback_attempts {
+        let result = fetch_steam_game_reviews(
+            app_id,
+            fallback_language,
+            review_type,
+            fallback_filter,
+            fallback_purchase_type,
+        )
+        .await;
+
+        if result
+            .as_ref()
+            .is_some_and(|value| !steam_reviews_empty(value))
+        {
+            return result;
+        }
+
+        if best.is_none() {
+            best = result;
+        }
+    }
+
+    best
+}
+
+async fn fetch_steam_review_histogram(app_id: &str) -> Option<Value> {
+    let mut url = reqwest::Url::parse(&format!(
+        "https://store.steampowered.com/appreviewhistogram/{app_id}"
+    ))
+    .ok()?;
+    url.query_pairs_mut()
+        .append_pair("json", "1")
+        .append_pair("l", "portuguese");
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+
+    let histogram = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()?;
+
+    if histogram.get("success").and_then(|value| value.as_u64()) != Some(1) {
+        return None;
+    }
+
+    histogram.get("results").cloned()
 }
 
 fn normalize_achievement(achievement: &Value) -> Option<Value> {
@@ -965,27 +1233,36 @@ pub async fn database_get_game_store_details(
         return Ok(None);
     }
 
-    let remote_game = fetch_remote_game(&app, game_id, api_url).await?;
-    let Some(mut game) = remote_game else {
-        return Ok(None);
-    };
+    let mut game = fetch_remote_game(&app, game_id, api_url)
+        .await?
+        .unwrap_or_else(|| steam_app_fallback_game(&app_id));
 
     let mut latest_cached_details = read_cached_steam_store_details(&app, &app_id);
     if let Some(cached_details) = latest_cached_details.as_ref() {
         merge_normalized_steam_details(&mut game, cached_details);
-        if has_steam_store_movies(cached_details) {
+        if has_complete_steam_store_details(cached_details) {
+            if is_steam_app_title_placeholder(&text(game.get("title")), &app_id) {
+                if let Some(title) = fetch_steam_store_page_title(&app_id).await {
+                    set_game_title(&mut game, title);
+                }
+            }
             return Ok(Some(game));
         }
     }
 
     if let Some(proxy_details) = fetch_steam_details_proxy(&app_id).await {
-        let has_proxy_movies = has_steam_store_movies(&proxy_details);
+        let has_complete_proxy_details = has_complete_steam_store_details(&proxy_details);
         merge_normalized_steam_details(&mut game, &proxy_details);
         if should_write_steam_store_details_cache(&proxy_details, latest_cached_details.as_ref()) {
             write_cached_steam_store_details(&app, &app_id, &proxy_details);
             latest_cached_details = Some(proxy_details);
         }
-        if has_proxy_movies {
+        if has_complete_proxy_details {
+            if is_steam_app_title_placeholder(&text(game.get("title")), &app_id) {
+                if let Some(title) = fetch_steam_store_page_title(&app_id).await {
+                    set_game_title(&mut game, title);
+                }
+            }
             return Ok(Some(game));
         }
     }
@@ -995,6 +1272,12 @@ pub async fn database_get_game_store_details(
         merge_steam_store_details(&mut game, &store_data);
         if should_write_steam_store_details_cache(&store_details, latest_cached_details.as_ref()) {
             write_cached_steam_store_details(&app, &app_id, &store_details);
+        }
+    }
+
+    if is_steam_app_title_placeholder(&text(game.get("title")), &app_id) {
+        if let Some(title) = fetch_steam_store_page_title(&app_id).await {
+            set_game_title(&mut game, title);
         }
     }
 
@@ -1033,6 +1316,35 @@ pub async fn database_get_game_achievement_details(
         game,
         steam_path.as_deref().unwrap_or_default(),
     )))
+}
+
+#[tauri::command]
+pub async fn database_get_game_reviews(
+    game_id: String,
+    language: Option<String>,
+    review_type: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let app_id: String = game_id.chars().filter(char::is_ascii_digit).collect();
+    if app_id.is_empty() {
+        return Ok(serde_json::json!({ "success": 0, "reviews": [] }));
+    }
+
+    let language = steam_reviews_language(language);
+    let review_type = steam_reviews_type(review_type);
+    let mut reviews = fetch_steam_game_reviews_with_fallbacks(&app_id, language, review_type)
+        .await
+        .unwrap_or_else(|| serde_json::json!({ "success": 0, "reviews": [] }));
+    let histogram = if review_type == "all" {
+        fetch_steam_review_histogram(&app_id).await
+    } else {
+        None
+    };
+
+    if let (Some(object), Some(histogram)) = (reviews.as_object_mut(), histogram) {
+        object.insert("reviewHistogram".to_string(), histogram);
+    }
+
+    Ok(reviews)
 }
 
 #[tauri::command]

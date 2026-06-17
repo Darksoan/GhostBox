@@ -102,6 +102,7 @@ export type SteamProfile = {
 
 export type SteamWishlistItem = {
   appId: string;
+  title?: string;
   priority: number;
   dateAdded: number;
 };

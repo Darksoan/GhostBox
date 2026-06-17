@@ -14,6 +14,8 @@ import type {
   GameDatabaseResult,
   GameExecutableSelectionResult,
   GamePlaytimeSnapshot,
+  SteamGameReviewsResult,
+  SteamRecommendedTag,
   HomeResult,
   CatalogueCacheUpdatedPayload,
   LaunchGameResult,
@@ -120,6 +122,18 @@ export const ghostboxApi = {
     );
   },
 
+  getGameReviews(
+    gameId: string,
+    language: "brazilian" | "english",
+    reviewType: "all" | "positive" | "negative" = "all"
+  ): Promise<SteamGameReviewsResult> {
+    return invokeOr<SteamGameReviewsResult>(
+      "database_get_game_reviews",
+      { gameId, language, reviewType },
+      { success: 0, reviews: [] }
+    );
+  },
+
   getCachedImage(url: string): Promise<string> {
     return invokeOr<string>("cache_get_image", { url }, url).then((result) => {
       if (!result || result === url || /^https?:\/\//i.test(result)) {
@@ -214,6 +228,22 @@ export const ghostboxApi = {
     return invokeOr<SteamWishlistItem[]>(
       "steam_get_wishlist",
       { steamId },
+      []
+    );
+  },
+
+  getSteamRecommendedTagsForUser(steamId: string): Promise<SteamRecommendedTag[]> {
+    return invokeOr<SteamRecommendedTag[]>(
+      "steam_get_recommended_tags_for_user",
+      { steamId },
+      []
+    );
+  },
+
+  getSteamSimilarAppIds(appId: string): Promise<string[]> {
+    return invokeOr<string[]>(
+      "steam_get_similar_app_ids",
+      { appId },
       []
     );
   },

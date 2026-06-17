@@ -1,4 +1,5 @@
 import { ghostboxApi } from "./lib/ghostboxApi";
+import type { SteamGameReviewsResult, SteamRecommendedTag } from "./lib/ghostboxApi.types";
 import type { SteamWishlistItem } from "./types";
 
 export type GameStatus = "installed" | "queued" | "discover" | "syncing";
@@ -176,10 +177,28 @@ export async function loadSteamWishlist(
   return ghostboxApi.getSteamWishlist(steamId);
 }
 
+export async function loadSteamRecommendedTagsForUser(
+  steamId: string
+): Promise<SteamRecommendedTag[]> {
+  return ghostboxApi.getSteamRecommendedTagsForUser(steamId);
+}
+
+export async function loadSteamSimilarAppIds(appId: string): Promise<string[]> {
+  return ghostboxApi.getSteamSimilarAppIds(appId);
+}
+
 export async function loadGameAchievementDetails(
   gameId: string
 ): Promise<GhostBoxGame | null> {
   return ghostboxApi.getGameAchievementDetails(gameId);
+}
+
+export async function loadGameReviews(
+  gameId: string,
+  language: "brazilian" | "english",
+  reviewType: "all" | "positive" | "negative" = "all"
+): Promise<SteamGameReviewsResult> {
+  return ghostboxApi.getGameReviews(gameId, language, reviewType);
 }
 
 export async function loadCachedImage(url: string): Promise<string> {

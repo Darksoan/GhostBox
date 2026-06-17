@@ -7,6 +7,7 @@ use crate::{
     merge_playtime_into_game, normalize_steam_root_path, resolve_steam_path, save_steam_path,
     steam_asset_url, steamapps_path,
 };
+use std::collections::{HashMap, HashSet};
 
 const STEAM_PROFILE_FILE: &str = "steam-profile.json";
 const MAX_PROFILE_AVATAR_BYTES: usize = 512 * 1024;
@@ -425,6 +426,61 @@ pub fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
 }
 
+async fn fetch_steam_wishlist_titles(steam_id: &str) -> HashMap<String, String> {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    else {
+        return HashMap::new();
+    };
+
+    let mut titles = HashMap::new();
+    for page in 0..10 {
+        let url = format!(
+            "https://store.steampowered.com/wishlist/profiles/{steam_id}/wishlistdata/?p={page}"
+        );
+        let Ok(response) = client
+            .get(url)
+            .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
+            .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
+            .send()
+            .await
+        else {
+            break;
+        };
+        if !response.status().is_success() {
+            break;
+        }
+        let Ok(payload) = response.json::<serde_json::Value>().await else {
+            break;
+        };
+        let Some(items) = payload.as_object() else {
+            break;
+        };
+        if items.is_empty() {
+            break;
+        }
+
+        for (key, item) in items {
+            let app_id = item
+                .get("appid")
+                .and_then(|value| value.as_u64())
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| key.to_string());
+            let title = text_value(item.get("name"));
+            if !app_id.is_empty() && !title.is_empty() {
+                titles.insert(app_id, title);
+            }
+        }
+
+        if items.len() < 100 {
+            break;
+        }
+    }
+
+    titles
+}
+
 #[tauri::command]
 pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Value>, String> {
     let steam_id = steam_id.trim();
@@ -462,6 +518,8 @@ pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Valu
         return Ok(Vec::new());
     };
 
+    let wishlist_titles = fetch_steam_wishlist_titles(steam_id).await;
+
     let mut wishlist = items
         .iter()
         .filter_map(|item| {
@@ -475,11 +533,21 @@ pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Valu
                 .and_then(|value| value.as_i64())
                 .unwrap_or(0);
 
-            Some(serde_json::json!({
+            let mut wishlist_item = serde_json::json!({
                 "appId": app_id,
                 "priority": priority,
                 "dateAdded": date_added
-            }))
+            });
+            if let Some(title) = wishlist_titles.get(
+                wishlist_item
+                    .get("appId")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default(),
+            ) {
+                wishlist_item["title"] = serde_json::Value::String(title.clone());
+            }
+
+            Some(wishlist_item)
         })
         .collect::<Vec<_>>();
 
@@ -510,6 +578,111 @@ pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Valu
     });
 
     Ok(wishlist)
+}
+
+#[tauri::command]
+pub async fn steam_get_recommended_tags_for_user(
+    steam_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let steam_id = steam_id.trim();
+    if steam_id.is_empty() || !steam_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Ok(Vec::new());
+    }
+
+    let url = format!(
+        "https://api.steampowered.com/IStoreService/GetRecommendedTagsForUser/v1/?steamid={steam_id}"
+    );
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
+        .send()
+        .await;
+
+    let Ok(response) = response else {
+        return Ok(Vec::new());
+    };
+    if !response.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let Ok(payload) = response.json::<serde_json::Value>().await else {
+        return Ok(Vec::new());
+    };
+    let tags = payload
+        .get("response")
+        .and_then(|response| response.get("tags"))
+        .or_else(|| payload.get("tags"))
+        .and_then(|tags| tags.as_array())
+        .map(|tags| tags.to_vec())
+        .unwrap_or_default();
+
+    Ok(tags)
+}
+
+fn parse_steam_similar_app_ids(html: &str, source_app_id: &str) -> Vec<String> {
+    let marker = "data-ds-appid=\"";
+    let mut rest = html;
+    let mut seen = HashSet::new();
+    let mut app_ids = Vec::new();
+
+    while let Some(marker_index) = rest.find(marker) {
+        let value_start = marker_index + marker.len();
+        let value = &rest[value_start..];
+        let Some(value_end) = value.find('"') else {
+            break;
+        };
+
+        let app_id = &value[..value_end];
+        if app_id != source_app_id
+            && app_id.chars().all(|ch| ch.is_ascii_digit())
+            && seen.insert(app_id.to_string())
+        {
+            app_ids.push(app_id.to_string());
+            if app_ids.len() >= 30 {
+                break;
+            }
+        }
+
+        rest = &value[value_end + 1..];
+    }
+
+    app_ids
+}
+
+#[tauri::command]
+pub async fn steam_get_similar_app_ids(app_id: String) -> Result<Vec<String>, String> {
+    let app_id = app_id.trim();
+    if app_id.is_empty() || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Ok(Vec::new());
+    }
+
+    let url = format!("https://store.steampowered.com/recommended/morelike/app/{app_id}/?l=english&cc=br");
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "text/html,*/*")
+        .send()
+        .await;
+
+    let Ok(response) = response else {
+        return Ok(Vec::new());
+    };
+    if !response.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let Ok(html) = response.text().await else {
+        return Ok(Vec::new());
+    };
+
+    Ok(parse_steam_similar_app_ids(&html, app_id))
 }
 
 #[tauri::command]

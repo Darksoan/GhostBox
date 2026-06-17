@@ -1,13 +1,13 @@
 import {
+  BarChart3,
   ChevronDown,
   Check,
-  CircleCheck,
-  Clock,
   Cpu,
   Download,
   Heart,
   Image as ImageIcon,
   Loader2,
+  MessageCircle,
   Play,
   Settings,
   Tags as TagsIcon,
@@ -15,7 +15,13 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   GhostBoxGame,
@@ -26,8 +32,13 @@ import type { UserCollection } from "../../types";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import {
   loadGameAchievementDetailsCached,
+  loadGameReviewsCached,
   loadGameStoreDetailsCached,
 } from "../../utils/gameCache";
+import type {
+  SteamGameReview,
+  SteamGameReviewsResult,
+} from "../../lib/ghostboxApi.types";
 import {
   imageSourceCache,
   preloadImageSources,
@@ -143,6 +154,260 @@ function RequirementItem({ item }: { item: string }) {
       <strong>{item.slice(0, separatorIndex + 1)}</strong>{" "}
       {item.slice(separatorIndex + 1).trim()}
     </li>
+  );
+}
+
+function steamReviewAvatarUrl(hash: string) {
+  if (!hash) return "";
+  if (/^https?:\/\//i.test(hash)) return hash;
+  return `https://avatars.akamai.steamstatic.com/${hash}_medium.jpg`;
+}
+
+function steamReviewLanguage(language: "pt" | "en") {
+  return language === "en" ? "english" : "brazilian";
+}
+
+type SteamReviewFilter = "all" | "positive" | "negative";
+
+const steamReviewFilters: SteamReviewFilter[] = ["all", "positive", "negative"];
+const reviewsPerPage = 6;
+
+function steamReviewFilterLabel(filter: SteamReviewFilter, language: "pt" | "en") {
+  if (filter === "positive") return language === "en" ? "Positive" : "Positivas";
+  if (filter === "negative") return language === "en" ? "Negative" : "Negativas";
+  return language === "en" ? "Recent" : "Recentes";
+}
+
+function getRecommendedPercent(summary?: SteamGameReviewsResult["query_summary"]) {
+  const positive = summary?.total_positive ?? 0;
+  const negative = summary?.total_negative ?? 0;
+  const total = positive + negative;
+  if (total <= 0) return null;
+  return Math.round((positive / total) * 100);
+}
+
+function getReviewSummaryTotal(summary?: SteamGameReviewsResult["query_summary"]) {
+  const positive = summary?.total_positive ?? 0;
+  const negative = summary?.total_negative ?? 0;
+  return summary?.total_reviews ?? positive + negative;
+}
+
+function formatReviewNumber(value: number, language: "pt" | "en") {
+  return new Intl.NumberFormat(language === "en" ? "en-US" : "pt-BR").format(
+    value
+  );
+}
+
+function formatReviewCountLabel(value: number, language: "pt" | "en") {
+  if (value <= 0) return language === "en" ? "No reviews" : "Sem análises";
+  return `${formatReviewNumber(value, language)} ${
+    language === "en" ? "reviews" : "análises"
+  }`;
+}
+
+function getReviewSentimentLabel(
+  percent: number,
+  reviewCount: number,
+  language: "pt" | "en"
+) {
+  if (reviewCount < 10) return language === "en" ? "Few reviews" : "Poucas análises";
+  if (percent >= 95) {
+    return language === "en" ? "Overwhelmingly positive" : "Extremamente positivas";
+  }
+  if (percent >= 85) return language === "en" ? "Very positive" : "Muito positivas";
+  if (percent >= 70) return language === "en" ? "Positive" : "Positivas";
+  if (percent >= 40) return language === "en" ? "Mixed" : "Mistas";
+  if (percent >= 20) return language === "en" ? "Negative" : "Negativas";
+  return language === "en" ? "Very negative" : "Muito negativas";
+}
+
+function getReviewScoreFillColor(percent: number) {
+  if (percent >= 95) return "var(--success)";
+  if (percent >= 80) return "rgba(53, 208, 127, 0.72)";
+  if (percent >= 60) return "rgba(211, 211, 211, 0.62)";
+  return "rgba(255, 255, 255, 0.24)";
+}
+
+function ReviewRecommendationSidebar({
+  summary,
+  isLoading,
+  fallbackPositiveRatio,
+  fallbackReviewCount,
+  language,
+}: {
+  summary?: SteamGameReviewsResult["query_summary"];
+  isLoading: boolean;
+  fallbackPositiveRatio?: number;
+  fallbackReviewCount?: number;
+  language: "pt" | "en";
+}) {
+  const fallbackPercent =
+    typeof fallbackPositiveRatio === "number" && Number.isFinite(fallbackPositiveRatio)
+      ? Math.round(fallbackPositiveRatio * 100)
+      : null;
+  const overallPercent = getRecommendedPercent(summary) ?? fallbackPercent;
+  const totalReviews =
+    getReviewSummaryTotal(summary) ||
+    (typeof fallbackReviewCount === "number" && Number.isFinite(fallbackReviewCount)
+      ? fallbackReviewCount
+      : 0);
+  const meterFill = getReviewScoreFillColor(overallPercent ?? 0);
+
+  if (!isLoading && overallPercent === null) return null;
+
+  return (
+    <section
+      className="modal__review-summary-section"
+      aria-label={
+        language === "en" ? "Review recommendation" : "Recomendação das análises"
+      }
+    >
+      <div className="modal__review-summary-heading">
+        <BarChart3 size={16} aria-hidden="true" />
+        <strong>{language === "en" ? "Recommendation" : "Recomendação"}</strong>
+      </div>
+
+      {isLoading && overallPercent === null ? (
+        <div className="modal__review-summary-loading">
+          {language === "en" ? "Loading reviews" : "Carregando análises"}
+        </div>
+      ) : (
+        <>
+          <div className="modal__review-summary-card">
+            <div className="modal__review-summary-score">
+              <strong>{overallPercent}%</strong>
+              <span>{language === "en" ? "recommend" : "recomendam"}</span>
+            </div>
+            <span className="modal__review-summary-sentiment">
+              {getReviewSentimentLabel(overallPercent ?? 0, totalReviews, language)}
+            </span>
+            <span className="modal__review-summary-count">
+              {formatReviewCountLabel(totalReviews, language)}
+            </span>
+            <div className="modal__review-summary-meter" aria-hidden="true">
+              <span
+                style={{
+                  width: `${overallPercent ?? 0}%`,
+                  backgroundColor: meterFill,
+                }}
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function getReviewPaginationItems(totalPages: number, activePage: number) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (activePage <= 4) return [1, 2, 3, 4, "ellipsis", totalPages] as const;
+  if (activePage >= totalPages - 3) {
+    return [
+      1,
+      "ellipsis",
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ] as const;
+  }
+
+  return [
+    1,
+    "ellipsis",
+    activePage - 1,
+    activePage,
+    activePage + 1,
+    "ellipsis",
+    totalPages,
+  ] as const;
+}
+
+function formatReviewDate(timestamp: number, language: "pt" | "en") {
+  if (!timestamp) return "";
+
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(timestamp * 1000));
+}
+
+function normalizeSteamReviewText(text: string) {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[\t ]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function SteamReviewCard({
+  review,
+  language,
+}: {
+  review: SteamGameReview;
+  language: "pt" | "en";
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const avatarUrl = steamReviewAvatarUrl(review.author.avatar);
+  const authorName = review.author.personaname || "Steam user";
+  const playtimeAtReview = review.author.playtime_at_review ?? 0;
+  const reviewDate = formatReviewDate(review.timestamp_created, language);
+  const reviewText = normalizeSteamReviewText(review.review);
+  const isLongReview = reviewText.length > 280;
+
+  return (
+    <article className="modal__review-card">
+      <div className="modal__review-author">
+        {avatarUrl ? (
+          <img
+            className="modal__review-avatar"
+            src={avatarUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="modal__review-avatar modal__review-avatar--empty" />
+        )}
+        <div className="modal__review-author-copy">
+          <strong>{authorName}</strong>
+          <span>
+            {formatCompactPlaytime(playtimeAtReview * 60_000)}{" "}
+            {language === "en" ? "at review" : "no review"}
+            {reviewDate ? ` · ${reviewDate}` : ""}
+          </span>
+        </div>
+      </div>
+
+      <p
+        className={`modal__review-text ${isExpanded ? "modal__review-text--expanded" : ""}`}
+      >
+        {reviewText}
+      </p>
+
+      {isLongReview && (
+        <button
+          type="button"
+          className="modal__review-toggle"
+          onClick={() => setIsExpanded((value) => !value)}
+        >
+          {isExpanded
+            ? language === "en"
+              ? "Show less"
+              : "Ver menos"
+            : language === "en"
+              ? "Show more"
+              : "Ver mais"}
+        </button>
+      )}
+    </article>
   );
 }
 
@@ -845,6 +1110,24 @@ export function GameModal({
   const [loadedLogoSource, setLoadedLogoSource] = useState("");
   const [visibleScreenshotSource, setVisibleScreenshotSource] = useState("");
   const [isBackupOptionsOpen, setIsBackupOptionsOpen] = useState(false);
+  const [gameReviews, setGameReviews] = useState<SteamGameReview[]>([]);
+  const [gameReviewsSummary, setGameReviewsSummary] = useState<
+    SteamGameReviewsResult["query_summary"]
+  >();
+  const [overallGameReviewsSummary, setOverallGameReviewsSummary] = useState<
+    SteamGameReviewsResult["query_summary"]
+  >();
+  const [activeReviewFilter, setActiveReviewFilter] =
+    useState<SteamReviewFilter>("all");
+  const [activeReviewPage, setActiveReviewPage] = useState(1);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+  const reviewsSectionRef = useRef<HTMLElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const aboutContentShellRef = useRef<HTMLDivElement | null>(null);
+  const aboutActionsRef = useRef<HTMLDivElement | null>(null);
+  const [aboutCollapsedMaxHeight, setAboutCollapsedMaxHeight] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     setActiveScreenshot(0);
@@ -854,6 +1137,11 @@ export function GameModal({
     setLoadedLogoSource("");
     setVisibleScreenshotSource("");
     setIsBackupOptionsOpen(false);
+    setGameReviews([]);
+    setGameReviewsSummary(undefined);
+    setOverallGameReviewsSummary(undefined);
+    setActiveReviewFilter("all");
+    setActiveReviewPage(1);
   }, [game?.id]);
 
   useEffect(() => {
@@ -898,13 +1186,14 @@ export function GameModal({
       }));
       onDetailsLoaded?.(details);
     };
+    const detailsGameId = game.appId || game.id;
 
-    loadGameStoreDetailsCached(game.id)
+    loadGameStoreDetailsCached(detailsGameId)
       .then(mergeStoreDetails)
       .catch(() => undefined)
       .finally(finishRequest);
 
-    loadGameAchievementDetailsCached(game.id)
+    loadGameAchievementDetailsCached(detailsGameId)
       .then(mergeAchievementDetails)
       .catch(() => undefined)
       .finally(finishRequest);
@@ -912,7 +1201,44 @@ export function GameModal({
     return () => {
       cancelled = true;
     };
-  }, [game?.id, onDetailsLoaded]);
+  }, [game?.appId, game?.id, onDetailsLoaded]);
+
+  useEffect(() => {
+    if (!game) return;
+
+    let cancelled = false;
+    const language = steamReviewLanguage(appearance.language);
+    setIsLoadingReviews(true);
+    setGameReviews([]);
+    setGameReviewsSummary(undefined);
+    setActiveReviewPage(1);
+
+    loadGameReviewsCached(game.appId || game.id, language, activeReviewFilter)
+      .then((result) => {
+        if (cancelled) return;
+        setGameReviews(result.reviews ?? []);
+        setGameReviewsSummary(result.query_summary);
+        if (activeReviewFilter === "all") {
+          setOverallGameReviewsSummary(result.query_summary);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGameReviews([]);
+          setGameReviewsSummary(undefined);
+          if (activeReviewFilter === "all") {
+            setOverallGameReviewsSummary(undefined);
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingReviews(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeReviewFilter, appearance.language, game?.appId, game?.id]);
 
   useEffect(() => {
     if (!game) return;
@@ -1159,9 +1485,90 @@ export function GameModal({
     !achievements.length &&
     !hasRequirements;
 
+  useEffect(() => {
+    if (!aboutTheGameHtml || isAboutExpanded) {
+      setAboutCollapsedMaxHeight(null);
+      return;
+    }
+
+    let frameId = 0;
+    const updateCollapsedHeight = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        const sidebar = sidebarRef.current;
+        const shell = aboutContentShellRef.current;
+        const actions = aboutActionsRef.current;
+        if (!sidebar || !shell || !actions) return;
+
+        const sidebarBottom = sidebar.getBoundingClientRect().bottom;
+        const shellTop = shell.getBoundingClientRect().top;
+        const actionsHeight = actions.getBoundingClientRect().height;
+        const nextHeight = Math.max(
+          160,
+          Math.floor(sidebarBottom - shellTop - actionsHeight - 10)
+        );
+
+        setAboutCollapsedMaxHeight((current) =>
+          current !== null && Math.abs(current - nextHeight) <= 1
+            ? current
+            : nextHeight
+        );
+      });
+    };
+
+    updateCollapsedHeight();
+    window.addEventListener("resize", updateCollapsedHeight);
+
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(updateCollapsedHeight)
+        : null;
+    if (observer) {
+      if (sidebarRef.current) observer.observe(sidebarRef.current);
+      if (aboutContentShellRef.current) observer.observe(aboutContentShellRef.current);
+      if (aboutActionsRef.current) observer.observe(aboutActionsRef.current);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", updateCollapsedHeight);
+      observer?.disconnect();
+    };
+  }, [aboutTheGameHtml, isAboutExpanded, displayGame?.id, shouldShowDetailLoading]);
+
+  const sortedGameReviews =
+    activeReviewFilter === "all"
+      ? gameReviews
+      : [...gameReviews].sort((a, b) => {
+          const voteDifference = (b.votes_up ?? 0) - (a.votes_up ?? 0);
+          if (voteDifference !== 0) return voteDifference;
+          return (b.timestamp_created ?? 0) - (a.timestamp_created ?? 0);
+        });
+  const reviewPageCount = Math.ceil(sortedGameReviews.length / reviewsPerPage);
+  const visibleGameReviews = sortedGameReviews.slice(
+    (activeReviewPage - 1) * reviewsPerPage,
+    activeReviewPage * reviewsPerPage
+  );
+  const reviewPaginationItems = getReviewPaginationItems(
+    reviewPageCount,
+    activeReviewPage
+  );
+
   function handleViewAchievements() {
     if (!displayGame || !onViewAchievements) return;
     onViewAchievements(displayGame);
+  }
+
+  function handleReviewPageChange(page: number) {
+    if (page === activeReviewPage) return;
+
+    setActiveReviewPage(page);
+    window.requestAnimationFrame(() => {
+      reviewsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
   }
 
   return (
@@ -1420,46 +1827,13 @@ export function GameModal({
 
             <section className="modal__details">
               <div className="modal__details-main">
-                <div className="modal__title-block">
-                  <div className="modal__title-copy">
-                    <h3>
-                      {displayGame.title}
-                      {isAdded && (
-                        <CircleCheck
-                          size={24}
-                          className="modal__title-check"
-                          aria-hidden="true"
-                        />
-                      )}
-                      {isFavorite && (
-                        <Heart size={24} fill="currentColor" aria-hidden="true" />
-                      )}
-                    </h3>
-                    <span className="modal__release-date">
-                      {displayGame.release}
-                    </span>
-                  </div>
-                  <div
-                    className={`modal__playtime-panel${isSessionActive ? " modal__playtime-panel--active" : ""}`}
-                  >
-                    <Clock size={18} strokeWidth={1.9} aria-hidden="true" />
-                    <div className="modal__playtime-copy">
-                      <span className="modal__playtime-label">
-                        {isSessionActive
-                          ? appearance.language === "en"
-                            ? "ACTIVE SESSION"
-                            : "SESSÃO ATIVA"
-                          : appearance.language === "en"
-                            ? "PLAY TIME"
-                            : "TEMPO DE JOGO"}
-                      </span>
-                      <strong className="modal__playtime-value">
-                        {formatCompactPlaytime(
-                          displayGame.playTimeInMilliseconds ??
-                            displayGame.hours * 3_600_000
-                        )}
-                      </strong>
-                    </div>
+                <div className="modal__main-title-block">
+                  <h3>{displayGame.title}</h3>
+                  <div className="modal__main-title-meta">
+                    {displayGame.publishers?.filter(Boolean).join(", ") && (
+                      <span>{displayGame.publishers.filter(Boolean).join(", ")}</span>
+                    )}
+                    {displayGame.release && <span>{displayGame.release}</span>}
                   </div>
                 </div>
 
@@ -1487,7 +1861,16 @@ export function GameModal({
                       </strong>
                     </div>
                     <div
+                      ref={aboutContentShellRef}
                       className={`modal__about-content-shell ${isAboutExpanded ? "modal__about-content-shell--expanded" : ""}`}
+                      style={
+                        !isAboutExpanded && aboutCollapsedMaxHeight !== null
+                          ? {
+                              height: aboutCollapsedMaxHeight,
+                              maxHeight: aboutCollapsedMaxHeight,
+                            }
+                          : undefined
+                      }
                     >
                       <div
                         className="modal__about-content"
@@ -1497,7 +1880,7 @@ export function GameModal({
                         <div className="modal__about-fade" aria-hidden="true" />
                       )}
                     </div>
-                    <div className="modal__about-actions">
+                    <div className="modal__about-actions" ref={aboutActionsRef}>
                       <button
                         type="button"
                         className="button button--outline modal__about-toggle"
@@ -1516,7 +1899,7 @@ export function GameModal({
                 )}
               </div>
 
-              <aside className="modal__sidebar">
+              <aside className="modal__sidebar" ref={sidebarRef}>
                 {shouldShowDetailLoading ? (
                   <GameDetailsLoadingSections />
                 ) : (
@@ -1597,9 +1980,130 @@ export function GameModal({
                         </div>
                       </section>
                     )}
+
+                    <ReviewRecommendationSidebar
+                      summary={overallGameReviewsSummary ?? gameReviewsSummary}
+                      isLoading={isLoadingReviews}
+                      fallbackPositiveRatio={displayGame.steamPositiveRatio}
+                      fallbackReviewCount={displayGame.steamReviewCount}
+                      language={appearance.language}
+                    />
                   </>
                 )}
               </aside>
+
+              <section
+                className="modal__reviews-section"
+                ref={reviewsSectionRef}
+                aria-label={
+                  appearance.language === "en"
+                    ? "Steam reviews"
+                    : "Reviews da Steam"
+                }
+              >
+                <div className="modal__reviews-heading">
+                  <div className="modal__reviews-heading-title">
+                    <MessageCircle size={16} aria-hidden="true" />
+                    <strong>
+                      {appearance.language === "en"
+                        ? "Player reviews"
+                        : "Reviews dos jogadores"}
+                    </strong>
+                  </div>
+                </div>
+
+                <div
+                  className="modal__reviews-filters"
+                  role="tablist"
+                  aria-label={
+                    appearance.language === "en"
+                      ? "Review filters"
+                      : "Filtros de reviews"
+                  }
+                >
+                  {steamReviewFilters.map((filter) => (
+                    <button
+                      type="button"
+                      className={`modal__reviews-filter ${activeReviewFilter === filter ? "modal__reviews-filter--active" : ""}`}
+                      onClick={() => {
+                        setActiveReviewFilter(filter);
+                        setActiveReviewPage(1);
+                      }}
+                      aria-selected={activeReviewFilter === filter}
+                      role="tab"
+                      key={filter}
+                    >
+                      {steamReviewFilterLabel(filter, appearance.language)}
+                    </button>
+                  ))}
+                </div>
+
+                {isLoadingReviews ? (
+                  <div className="modal__reviews-loading">
+                    <span className="modal__add-spinner modal__add-spinner--light" aria-hidden="true" />
+                    <span>
+                      {appearance.language === "en"
+                        ? "Loading reviews"
+                        : "Carregando reviews"}
+                    </span>
+                  </div>
+                ) : gameReviews.length > 0 ? (
+                  <>
+                    <div
+                      className="modal__reviews-list"
+                      key={`${activeReviewFilter}-${activeReviewPage}`}
+                    >
+                      {visibleGameReviews.map((review) => (
+                        <SteamReviewCard
+                          review={review}
+                          language={appearance.language}
+                          key={review.recommendationid}
+                        />
+                      ))}
+                    </div>
+                    {reviewPageCount > 1 && (
+                      <nav
+                        className="modal__reviews-pagination"
+                        aria-label={
+                          appearance.language === "en"
+                            ? "Review pages"
+                            : "Páginas de reviews"
+                        }
+                      >
+                        {reviewPaginationItems.map((item, index) =>
+                          item === "ellipsis" ? (
+                            <span
+                              className="modal__reviews-pagination-ellipsis"
+                              aria-hidden="true"
+                              key={`ellipsis-${index}`}
+                            >
+                              ...
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`modal__reviews-page ${activeReviewPage === item ? "modal__reviews-page--active" : ""}`}
+                              onClick={() => handleReviewPageChange(item)}
+                              aria-current={
+                                activeReviewPage === item ? "page" : undefined
+                              }
+                              key={item}
+                            >
+                              {item}
+                            </button>
+                          )
+                        )}
+                      </nav>
+                    )}
+                  </>
+                ) : (
+                  <p className="modal__reviews-empty">
+                    {appearance.language === "en"
+                      ? "No reviews found for this filter and language."
+                      : "Nenhum review encontrado neste filtro e idioma."}
+                  </p>
+                )}
+              </section>
             </section>
           </article>
         </div>

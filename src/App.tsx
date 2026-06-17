@@ -70,6 +70,7 @@ function AppShell() {
   }, [appearance.language, notifications.desktopNotificationsEnabled]);
 
   const headerTitle = useMemo(() => {
+    if (selectedGame) return selectedGame.title;
     if (achievementsView) return achievementsView.game.title;
     if (page !== "favorites") return undefined;
     if (shell.activeProfileCollectionId === "favorites") return undefined;
@@ -80,6 +81,7 @@ function AppShell() {
     achievementsView,
     appData.userCollections,
     page,
+    selectedGame,
     shell.activeProfileCollectionId,
   ]);
 

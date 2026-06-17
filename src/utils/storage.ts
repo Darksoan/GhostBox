@@ -31,7 +31,14 @@ export type StoredPersonalCalendar = {
 export type StoredSteamWishlistRecommendations = {
   steamId: string;
   expiresAt: string;
+  algorithmVersion?: string;
   gameIds: string[];
+  recommendationPairs?: Array<{
+    sourceAppId: string;
+    sourceTitle?: string;
+    recommendedAppId: string;
+    recommendedTitle?: string;
+  }>;
 };
 
 function storedString(value: unknown, fallback = "") {
@@ -102,18 +109,32 @@ function normalizeStoredSteamWishlistRecommendations(
   const wishlist = value as Record<string, unknown>;
   const steamId = storedString(wishlist.steamId);
   const expiresAt = storedString(wishlist.expiresAt);
+  const algorithmVersion = storedString(wishlist.algorithmVersion) || undefined;
   const gameIds = storedStringArray(wishlist.gameIds);
+  const recommendationPairs = Array.isArray(wishlist.recommendationPairs)
+    ? wishlist.recommendationPairs.flatMap((pair) => {
+        if (!pair || typeof pair !== "object" || Array.isArray(pair)) return [];
+        const record = pair as Record<string, unknown>;
+        const sourceAppId = storedString(record.sourceAppId);
+        const sourceTitle = storedString(record.sourceTitle) || undefined;
+        const recommendedAppId = storedString(record.recommendedAppId);
+        const recommendedTitle = storedString(record.recommendedTitle) || undefined;
+        return sourceAppId && recommendedAppId
+          ? [{ sourceAppId, sourceTitle, recommendedAppId, recommendedTitle }]
+          : [];
+      })
+    : [];
 
   if (
     !steamId ||
     !expiresAt ||
     !Number.isFinite(Date.parse(expiresAt)) ||
-    gameIds.length === 0
+    (gameIds.length === 0 && recommendationPairs.length === 0)
   ) {
     return null;
   }
 
-  return { steamId, expiresAt, gameIds };
+  return { steamId, expiresAt, algorithmVersion, gameIds, recommendationPairs };
 }
 
 function storedGameStatus(value: unknown): GameStatus {
