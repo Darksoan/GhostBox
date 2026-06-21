@@ -59,20 +59,28 @@ export const GameCard = memo(function GameCard({
     ? coverImage.source
     : previousCoverSourceRef.current;
   const coverSources = coverSource ? [coverSource] : [];
-  const achievementListTotal = game.achievementList?.length ?? 0;
-  const achievementTotal = Math.max(
-    achievementListTotal,
-    game.achievements.total,
-    game.achievements.unlocked
-  );
-  const achievementUnlocked = Math.min(
-    achievementListTotal > 0
-      ? (game.achievementList ?? []).filter(
-          (achievement) => achievement.unlocked === true
-        ).length
-      : game.achievements.unlocked,
-    achievementTotal
-  );
+
+  const shouldComputeAchievementData = showAchievements || showAchievementSummary;
+  const achievementListTotal = shouldComputeAchievementData
+    ? game.achievementList?.length ?? 0
+    : 0;
+  const achievementTotal = shouldComputeAchievementData
+    ? Math.max(
+        achievementListTotal,
+        game.achievements.total,
+        game.achievements.unlocked
+      )
+    : 0;
+  const achievementUnlocked = shouldComputeAchievementData
+    ? Math.min(
+        achievementListTotal > 0
+          ? (game.achievementList ?? []).filter(
+              (achievement) => achievement.unlocked === true
+            ).length
+          : game.achievements.unlocked,
+        achievementTotal
+      )
+    : 0;
   const achievementProgress =
     achievementTotal > 0 ? (achievementUnlocked / achievementTotal) * 100 : 0;
   const playtimeInMilliseconds = game.playTimeInMilliseconds ?? game.hours * 3_600_000;

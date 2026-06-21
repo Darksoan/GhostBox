@@ -18,12 +18,19 @@ export const profileBannerPlaceholderSource = new URL(
   import.meta.url
 ).href;
 
+const heroCapsuleSourceOverrides: Record<string, string[]> = {
+  "1449690": [
+    "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1449690/29c54f959792708565b8c5e200e636b93cd61cb4/hero_capsule.jpg?t=1760651835",
+  ],
+};
+
 type GameListPreloadOptions = {
   decode?: boolean;
   details?: boolean;
   detailsLimit?: number;
   idle?: boolean;
   limit?: number;
+  sourceLimit?: number;
   variant?: "header" | "portrait" | "hero";
 };
 
@@ -254,6 +261,7 @@ export function gameHeroCapsuleSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
+    ...(heroCapsuleSourceOverrides[appId] ?? []),
     `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
@@ -365,6 +373,7 @@ export function preloadGameListAssets(
 ) {
   const variant = options.variant ?? "header";
   const limit = options.limit ?? games.length;
+  const sourceLimit = options.sourceLimit ?? 1;
   if (options.details) {
     preloadGameDetailsListCached(
       games,
@@ -373,15 +382,15 @@ export function preloadGameListAssets(
   }
 
   const sources = games.slice(0, limit).flatMap((game) => {
-    if (variant === "portrait") return gamePortraitSources(game).slice(0, 6);
+    if (variant === "portrait") return gamePortraitSources(game).slice(0, sourceLimit);
     if (variant === "hero") {
       return uniqueSources([
         ...gameHeroSources(game),
         ...gameLogoSources(game),
-      ]).slice(0, 6);
+      ]).slice(0, sourceLimit);
     }
 
-    return gameHeaderOnlySources(game).slice(0, 6);
+    return gameHeaderOnlySources(game).slice(0, sourceLimit);
   });
 
   preloadImageSources(sources, {

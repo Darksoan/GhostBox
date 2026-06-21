@@ -105,20 +105,41 @@ function applyPlaytimeSnapshotToGames(
   games: GhostBoxGame[],
   snapshot: GamePlaytimeSnapshot
 ) {
-  return games.map((game) => {
+  let changed = false;
+
+  const nextGames = games.map((game) => {
     const playtime = snapshot[game.appId];
-    return playtime
-      ? {
-          ...game,
-          playTimeInMilliseconds: playtime.playTimeInMilliseconds,
-          lastTimePlayed: playtime.lastTimePlayed,
-          lastSessionRecordedAt: playtime.lastSessionRecordedAt,
-          lastSessionDurationInMilliseconds:
-            playtime.lastSessionDurationInMilliseconds,
-          sessionActive: playtime.sessionActive === true,
-        }
-      : { ...game, sessionActive: false };
+
+    if (!playtime) {
+      if (game.sessionActive === false) return game;
+      changed = true;
+      return { ...game, sessionActive: false };
+    }
+
+    const nextSessionActive = playtime.sessionActive === true;
+    const isSame =
+      game.playTimeInMilliseconds === playtime.playTimeInMilliseconds &&
+      game.lastTimePlayed === playtime.lastTimePlayed &&
+      game.lastSessionRecordedAt === playtime.lastSessionRecordedAt &&
+      game.lastSessionDurationInMilliseconds ===
+        playtime.lastSessionDurationInMilliseconds &&
+      game.sessionActive === nextSessionActive;
+
+    if (isSame) return game;
+
+    changed = true;
+    return {
+      ...game,
+      playTimeInMilliseconds: playtime.playTimeInMilliseconds,
+      lastTimePlayed: playtime.lastTimePlayed,
+      lastSessionRecordedAt: playtime.lastSessionRecordedAt,
+      lastSessionDurationInMilliseconds:
+        playtime.lastSessionDurationInMilliseconds,
+      sessionActive: nextSessionActive,
+    };
   });
+
+  return changed ? nextGames : games;
 }
 
 function collectActiveSessionAppIds(snapshot: GamePlaytimeSnapshot) {

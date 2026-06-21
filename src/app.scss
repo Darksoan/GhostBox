@@ -1,6 +1,5 @@
-@import "@fontsource/montserrat/400.css";
-@import "@fontsource/montserrat/500.css";
-@import "@fontsource/montserrat/600.css";
+@import "@fontsource/open-sans/400.css";
+@import "@fontsource/open-sans/500.css";
 
 :root {
   --background: #0b0b0b;
@@ -45,10 +44,10 @@
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 500;
-  --weight-bold: 600;
-  --font-sans: "Montserrat", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Montserrat", "Segoe UI", system-ui, sans-serif;
-  --font-sidebar: "Montserrat", "Segoe UI", system-ui, sans-serif;
+  --weight-bold: 500;
+  --font-sans: "Open Sans", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Open Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sidebar: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --hydra-button-dark: #080808;
   --hydra-button-dark-hover: #060606;
   --hydra-button-text: #fafafa;
@@ -428,6 +427,12 @@ input,
   transform: none;
 }
 
+.sidebar__collection-more {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 h1,
 h2,
 h3,
@@ -590,7 +595,6 @@ p {
       transition:
         transform var(--motion-base) ease,
         opacity var(--motion-base) ease !important;
-      will-change: transform;
     }
 
     &--settings {
@@ -1761,9 +1765,9 @@ p {
   width: calc(100% + (var(--home-page-inline-padding) * 2));
   min-width: 0;
   flex-direction: column;
-  gap: 0;
-  margin: calc(var(--home-page-block-start-padding) * -1) calc(var(--home-page-inline-padding) * -1) 0;
-  padding-inline: 0;
+  gap: calc(var(--spacing) * 1.25);
+  margin: 0 calc(var(--home-page-inline-padding) * -1);
+  padding-inline: var(--home-content-inline-inset);
 }
 
 .home-recommended__header {
@@ -1783,6 +1787,29 @@ p {
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.home-recommended__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: calc(var(--spacing) * 2);
+  min-width: 0;
+}
+
+.home-recommended__grid .home-category-card--hero-capsule {
+  max-width: none;
+}
+
+@media (max-width: 1100px) {
+  .home-recommended__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .home-recommended__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .home-recommended-hero {
@@ -2043,6 +2070,29 @@ p {
   text-transform: uppercase;
 }
 
+.home-explore,
+.home-calendar,
+.home-wishlist,
+.home-recent-banner {
+  content-visibility: auto;
+}
+
+.home-explore {
+  contain-intrinsic-size: 200px;
+}
+
+.home-calendar {
+  contain-intrinsic-size: 280px;
+}
+
+.home-wishlist {
+  contain-intrinsic-size: 480px;
+}
+
+.home-recent-banner {
+  contain-intrinsic-size: 320px;
+}
+
 .home-explore {
   display: flex;
   box-sizing: border-box;
@@ -2177,7 +2227,12 @@ p {
   display: flex;
   width: max-content;
   animation: home-explore-card-pan 52s linear infinite;
-  will-change: transform;
+  animation-play-state: paused;
+}
+
+.home-explore-card:hover .home-explore-card__image-row,
+.home-explore-card:focus-visible .home-explore-card__image-row {
+  animation-play-state: running;
 }
 
 .home-explore-card__image-row--2 {
@@ -2650,6 +2705,11 @@ p {
 .home-calendar-card--empty {
   background: var(--surface-subtle);
   cursor: default;
+}
+
+.home-calendar-card--skeleton {
+  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  animation: pulse-skeleton 1.6s ease-in-out infinite;
 }
 
 @media (max-width: 720px) {
@@ -9514,6 +9574,10 @@ html.no-tab-animations {
     gap: 12px;
   }
 
+  &__review-summary-slot {
+    display: contents;
+  }
+
   &__review-summary-heading {
     display: flex;
     align-items: center;
@@ -9535,17 +9599,6 @@ html.no-tab-animations {
     padding: 12px;
     border-radius: var(--radius-md);
     background: var(--surface-subtle);
-
-    &::after {
-      content: "";
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      height: 42%;
-      background: linear-gradient(180deg, rgba(11, 11, 11, 0), var(--background-dark));
-      pointer-events: none;
-    }
 
     > * {
       position: relative;
@@ -11077,7 +11130,7 @@ html.no-tab-animations {
   }
 }
 
-// Montserrat typography scale
+// Open Sans typography scale
 .content-section__header h3,
 .settings-page .content-section__header h3,
 .home-recommended__title,

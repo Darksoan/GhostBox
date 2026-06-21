@@ -425,6 +425,7 @@
     align-items: start;
     gap: 18px;
     width: 100%;
+    margin-top: calc(var(--spacing) * 3);
     padding: 0;
   }
 
@@ -1324,10 +1325,7 @@
     height: 44px;
     padding: 0 24px;
     margin: -44px 0 18px;
-    background: rgba(6, 6, 6, 0.46);
-    box-shadow: none;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--profile-glass-background);
   }
 
   &__collection-tabs {
@@ -1349,15 +1347,18 @@
 
   &__tab-indicator {
     position: absolute;
-    bottom: 0;
+    top: 50%;
     left: 0;
-    height: 3px;
-    border-radius: var(--radius-pill) var(--radius-pill) 0 0;
-    background: var(--text-strong);
+    height: 32px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--surface-active);
     pointer-events: none;
-    transition: left 0.25s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+    transform: translateY(-50%);
+    transition:
+      left var(--motion-slow) var(--ease),
+      width var(--motion-slow) var(--ease);
     z-index: 1;
-    box-shadow: 0 0 12px rgba(255, 255, 255, 0.18);
   }
 
   &__tab {

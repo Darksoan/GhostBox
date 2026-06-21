@@ -17,17 +17,18 @@ import {
   writeStoredPersonalCalendar,
   readStoredSteamWishlistRecommendations,
   writeStoredSteamWishlistRecommendations,
+  readStoredSteamWishlistReview,
+  writeStoredSteamWishlistReview,
   type StoredPersonalCalendar,
 } from "../utils/storage";
 import {
   gameHeaderOnlySources,
-  gameHeroSources,
   gameHeroCapsuleSources,
   gamePortraitSources,
   layeredImageStyle,
   withoutHeaderImageSources,
 } from "../utils/image";
-import { loadedImageSources, withCachedImageSources } from "../utils/imageCache";
+import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
 import { formatCompactPlaytime } from "../utils/time";
 
 type HomeGameSeed = {
@@ -59,10 +60,10 @@ const topReviewedSteamGames: HomeGameSeed[] = [
       "Survival horror reimagined with modern combat, constant tension, and a rescue mission in a village controlled by a brutal threat.",
   },
   {
-    appId: "367520",
-    title: "Hollow Knight",
+    appId: "1030300",
+    title: "Hollow Knight: Silksong",
     shortDescription:
-      "Explore Hallownest in an atmospheric action adventure filled with challenging bosses, secrets, and precise combat.",
+      "Explore a haunted kingdom in a handcrafted action adventure with precise combat, secrets, and acrobatic movement.",
   },
   {
     appId: "1449690",
@@ -76,6 +77,10 @@ const topReviewedSteamGames: HomeGameSeed[] = [
     shortDescription:
       "Experience the story of a seasoned Peter Parker as he faces major threats and swings through New York with fluid acrobatics.",
   },
+  { appId: "1693980", title: "Dead Space" },
+  { appId: "208650", title: "Batman: Arkham Knight" },
+  { appId: "413150", title: "Stardew Valley" },
+  { appId: "1714320", title: "Find Love or Die Trying" },
 ];
 
 const homeFeaturedSteamGames: HomeGameSeed[] = [
@@ -114,6 +119,11 @@ const homeFeaturedSteamGames: HomeGameSeed[] = [
 ];
 
 const homeCarouselGroupSize = 4;
+const homeRecommendedHeroCapsulePreloadLimit = 8;
+const homeRecommendedGroupPreloadTimeoutMs = 1800;
+const homeRecommendedAppIdGroups = [
+  ["1693980", "208650", "413150", "1714320"],
+];
 const homePersonalCalendarGameCount = 21;
 const homePersonalCalendarPageSize = 120;
 const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 5;
@@ -123,92 +133,7 @@ const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
 const homeWishlistDetailsBatchSize = 8;
 const homeWishlistRecommendationSourceLimit = 10;
 const homeWishlistRecommendationAlgorithmVersion = "steam-morelike-v1";
-const homeRecommendedHeroPositions = ["18% center", "48% center", "18% center", "72% center"];
-const homeRecommendedHeroPreloadLimit = 1;
-const homeRecommendedHeroPreloadTimeoutMs = 900;
-const homeRecommendedHeroFadeMs = 180;
-const homeRecommendedHeroPreloads = new Map<string, Promise<void>>();
-
-type HomeRecommendedHeroLayer = {
-  source: string;
-  position: string;
-};
-
-function homeRecommendedHeroSources(game: GhostBoxGame | undefined) {
-  if (!game) return [];
-
-  const appId = homeGameAppId(game);
-  return [
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    ...gameHeroSources(game),
-  ].filter((source, index, sources) => source && sources.indexOf(source) === index);
-}
-
-function preloadHomeRecommendedHero(sources: string[]) {
-  const candidates = withCachedImageSources(sources).slice(
-    0,
-    homeRecommendedHeroPreloadLimit
-  );
-  const cacheKey = candidates.join("\n");
-
-  if (!candidates.length || typeof Image === "undefined") {
-    return Promise.resolve();
-  }
-
-  const existingPreload = homeRecommendedHeroPreloads.get(cacheKey);
-  if (existingPreload) return existingPreload;
-
-  const preload = new Promise<void>((resolve) => {
-    if (candidates.some((source) => loadedImageSources.has(source))) {
-      resolve();
-      return;
-    }
-
-    let settled = false;
-    let pending = candidates.length;
-    const timeout = window.setTimeout(
-      finish,
-      homeRecommendedHeroPreloadTimeoutMs
-    );
-
-    function finish() {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      resolve();
-    }
-
-    candidates.forEach((source) => {
-      const image = new Image();
-      image.decoding = "async";
-      image.referrerPolicy = "no-referrer";
-      image.onload = async () => {
-        if (typeof image.decode === "function") {
-          await image.decode().catch(() => undefined);
-        }
-
-        loadedImageSources.add(source);
-        finish();
-      };
-      image.onerror = () => {
-        pending -= 1;
-        if (pending === 0) finish();
-      };
-      image.src = source;
-    });
-  }).finally(() => {
-    homeRecommendedHeroPreloads.delete(cacheKey);
-  });
-
-  homeRecommendedHeroPreloads.set(cacheKey, preload);
-  return preload;
-}
-
+const homeWishlistCacheRefreshMs = 7 * 24 * 60 * 60 * 1000;
 function getHomeCalendarDates(): string[] {
   const today = new Date();
   const dates: string[] = [];
@@ -366,6 +291,59 @@ function createWishlistFallbackGames(
 
 function createWishlistFallbackGame(appId: string, index = 0, title?: string) {
   return createHomeSeedFallbackGame({ appId, title: title || `Steam App ${appId}` }, index);
+}
+
+function preloadHomeRecommendedCover(game: GhostBoxGame) {
+  const sources = gameHeroCapsuleSources(game).slice(
+    0,
+    homeRecommendedHeroCapsulePreloadLimit
+  );
+
+  if (!sources.length || sources.some((source) => loadedImageSources.has(source))) {
+    return Promise.resolve();
+  }
+
+  if (typeof Image === "undefined") return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let pending = sources.length;
+    const timeout = window.setTimeout(
+      finish,
+      homeRecommendedGroupPreloadTimeoutMs
+    );
+
+    function finish(source?: string) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      if (source) loadedImageSources.add(source);
+      resolve();
+    }
+
+    sources.forEach((source) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.referrerPolicy = "no-referrer";
+      image.onload = async () => {
+        if (typeof image.decode === "function") {
+          await image.decode().catch(() => undefined);
+        }
+        finish(source);
+      };
+      image.onerror = () => {
+        pending -= 1;
+        if (pending === 0) finish();
+      };
+      image.src = source;
+    });
+  });
+}
+
+function preloadHomeRecommendedGroup(games: GhostBoxGame[]) {
+  return Promise.all(
+    games.slice(0, homeCarouselGroupSize).map(preloadHomeRecommendedCover)
+  ).then(() => undefined);
 }
 
 async function loadWishlistDisplayGame(appId: string, index = 0, title?: string) {
@@ -681,16 +659,23 @@ function HomeCategoryCard({
   const fallbackCoverSources = useMemo(
     () =>
       imageVariant === "heroCapsule"
-        ? gameHeroCapsuleSources(game)
+        ? gameHeroCapsuleSources(game).slice(
+            0,
+            homeRecommendedHeroCapsulePreloadLimit
+          )
         : gameHeaderOnlySources(game),
     [game, imageVariant]
   );
   const isHeroCapsule = imageVariant === "heroCapsule";
   const cachedSources = useCachedImageSources(fallbackCoverSources);
   const { source: coverSource, loaded } = useLoadableImageCover(cachedSources);
-  const layeredSources = coverSource
-    ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
-    : fallbackCoverSources;
+  const layeredSources = isHeroCapsule
+    ? loaded && coverSource
+      ? [coverSource]
+      : []
+    : coverSource
+      ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
+      : fallbackCoverSources;
 
   return (
     <button
@@ -953,9 +938,9 @@ function getHomeExplorePreviewRows(
   _allGames: GhostBoxGame[]
 ) {
   const uniqueCategoryGames = getUniqueHomeGames(categoryGames);
-  const previewGames = uniqueCategoryGames.slice(0, 18);
+  const previewGames = uniqueCategoryGames.slice(0, 9);
   const rows = [0, 1, 2].map((rowIndex) =>
-    previewGames.filter((_, index) => index % 3 === rowIndex).slice(0, 6)
+    previewGames.filter((_, index) => index % 3 === rowIndex).slice(0, 3)
   );
 
   return rows.filter((row) => row.length > 0);
@@ -1200,16 +1185,24 @@ function HomeCalendarGameCardComponent({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const coverSources = useCachedImageSources(gamePortraitSources(game));
+  const portraitSources = useMemo(
+    () =>
+      gamePortraitSources(game).filter((source) =>
+        /(?:^|\/)library_600x900(?:_2x)?\.jpg(?:[?#].*)?$/i.test(source)
+      ),
+    [game]
+  );
+  const coverSources = useCachedImageSources(portraitSources);
   const { source: coverSource, loaded } = useLoadableImageCover(coverSources);
-  const layeredSources = coverSource
-    ? [coverSource, ...coverSources.filter((source) => source !== coverSource)]
-    : coverSources;
+  const hasLoadedPortraitCover = loaded && coverSources.includes(coverSource);
+  const layeredSources = hasLoadedPortraitCover ? [coverSource] : [];
 
   return (
     <button
       type="button"
-      className="home-calendar-card"
+      className={`home-calendar-card${
+        hasLoadedPortraitCover ? "" : " home-calendar-card--skeleton"
+      }`}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
         if (!onGameContextMenu) return;
@@ -1219,7 +1212,7 @@ function HomeCalendarGameCardComponent({
     >
       <span
         className={`home-calendar-card__cover${
-          loaded ? " home-calendar-card__cover--loaded" : ""
+          hasLoadedPortraitCover ? " home-calendar-card__cover--loaded" : ""
         }`}
         style={layeredImageStyle(layeredSources, "")}
         aria-hidden="true"
@@ -1354,226 +1347,52 @@ function HomePersonalCalendar({
 
 function HomeRecommendedHero({
   title,
-  games,
-  language,
+  gameGroups,
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
-  games: GhostBoxGame[];
-  language: "pt" | "en";
+  gameGroups: GhostBoxGame[][];
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [exitingHeroLayer, setExitingHeroLayer] =
-    useState<HomeRecommendedHeroLayer | null>(null);
-  const [isExitingHeroLayerVisible, setIsExitingHeroLayerVisible] =
-    useState(false);
-  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const transitionFrameRef = useRef<number | null>(null);
-  const prefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectionTokenRef = useRef(0);
-  const game = games[activeIndex] ?? games[0];
-  const heroSources = useMemo(() => homeRecommendedHeroSources(game), [game]);
-  const cachedSources = useCachedImageSources(heroSources);
-  const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
-  const canNavigate = games.length > 1;
-  const readyHeroSource = cachedSources.find((source) =>
-    loadedImageSources.has(source)
+  const availableGroups = useMemo(
+    () => gameGroups.filter((group) => group.length > 0),
+    [gameGroups]
   );
-  const heroBackgroundSources = readyHeroSource
-    ? [readyHeroSource]
-    : heroSource
-      ? [heroSource]
-      : heroSources.slice(0, 1);
-  const heroBackgroundSource = heroBackgroundSources[0] ?? "";
-  const heroBackgroundPosition =
-    homeRecommendedHeroPositions[activeIndex] ?? "center top";
+  const visibleGames = (availableGroups[0] ?? []).slice(
+    0,
+    homeCarouselGroupSize
+  );
 
   useEffect(() => {
-    if (activeIndex <= games.length - 1) return;
-    setActiveIndex(Math.max(games.length - 1, 0));
-  }, [activeIndex, games.length]);
-
-  useEffect(() => {
-    return () => {
-      selectionTokenRef.current += 1;
-      if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
-      if (transitionFrameRef.current) cancelAnimationFrame(transitionFrameRef.current);
-      if (prefetchTimeoutRef.current) clearTimeout(prefetchTimeoutRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!canNavigate) return;
-
-    if (prefetchTimeoutRef.current) clearTimeout(prefetchTimeoutRef.current);
-    prefetchTimeoutRef.current = setTimeout(() => {
-      const nextIndex = (activeIndex + 1) % games.length;
-      const previousIndex = (activeIndex - 1 + games.length) % games.length;
-      void preloadHomeRecommendedHero(homeRecommendedHeroSources(games[nextIndex]));
-      void preloadHomeRecommendedHero(homeRecommendedHeroSources(games[previousIndex]));
-    }, 250);
-
-    return () => {
-      if (prefetchTimeoutRef.current) clearTimeout(prefetchTimeoutRef.current);
-    };
-  }, [activeIndex, canNavigate, games]);
-
-  function selectRecommendedHero(nextIndex: number) {
-    if (nextIndex === activeIndex || isTransitioning) return;
-
-    if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
-    if (transitionFrameRef.current) cancelAnimationFrame(transitionFrameRef.current);
-
-    const selectionToken = selectionTokenRef.current + 1;
-    selectionTokenRef.current = selectionToken;
-    setIsTransitioning(true);
-    void preloadHomeRecommendedHero(homeRecommendedHeroSources(games[nextIndex]));
-
-    if (heroBackgroundSource) {
-      setExitingHeroLayer({
-        source: heroBackgroundSource,
-        position: heroBackgroundPosition,
+    const cancelPreload = runWhenIdle(() => {
+      availableGroups.forEach((group) => {
+        void preloadHomeRecommendedGroup(group);
       });
-      setIsExitingHeroLayerVisible(true);
-    }
+    }, 450);
 
-    setActiveIndex(nextIndex);
-    transitionFrameRef.current = requestAnimationFrame(() => {
-      if (selectionTokenRef.current !== selectionToken) return;
-      setIsExitingHeroLayerVisible(false);
+    return cancelPreload;
+  }, [availableGroups]);
 
-      transitionTimeoutRef.current = setTimeout(() => {
-        if (selectionTokenRef.current !== selectionToken) return;
-        setExitingHeroLayer(null);
-        setIsTransitioning(false);
-      }, homeRecommendedHeroFadeMs);
-    });
-  }
-
-  function moveRecommendedHero(direction: -1 | 1) {
-    if (!canNavigate) return;
-    selectRecommendedHero((activeIndex + direction + games.length) % games.length);
-  }
-
-  if (!game) return null;
+  if (!visibleGames.length) return null;
 
   return (
     <section className="home-recommended" aria-label={title}>
-      <div
-        className={`home-recommended-hero${
-          isTransitioning ? " home-recommended-hero--transitioning" : ""
-        }`}
-        onContextMenu={(event) => {
-          if (!onGameContextMenu) return;
-          event.preventDefault();
-          onGameContextMenu(game, event.clientX, event.clientY);
-        }}
-        onClick={() => onOpenGame(game)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          onOpenGame(game);
-        }}
-        role="button"
-        tabIndex={0}
-        aria-label={game.title}
-      >
-        <span
-          className={`home-recommended-hero__cover${
-            loaded ? " home-recommended-hero__cover--loaded" : ""
-          }`}
-          aria-hidden="true"
-        >
-          {heroBackgroundSource && (
-            <img
-              src={heroBackgroundSource}
-              alt=""
-              decoding="async"
-              draggable={false}
-              style={{ objectPosition: heroBackgroundPosition }}
-            />
-          )}
-        </span>
-        {exitingHeroLayer && (
-          <span
-            className={`home-recommended-hero__cover home-recommended-hero__cover--exiting${
-              isExitingHeroLayerVisible
-                ? " home-recommended-hero__cover--exiting-visible"
-                : ""
-            }`}
-            aria-hidden="true"
-          >
-            <img
-              src={exitingHeroLayer.source}
-              alt=""
-              decoding="async"
-              draggable={false}
-              style={{ objectPosition: exitingHeroLayer.position }}
-            />
-          </span>
-        )}
-        <span className="home-recommended-hero__shade" aria-hidden="true" />
-        <span className="home-recommended-hero__info">
-          {game.logo && (
-            <img
-              className="home-recommended-hero__logo"
-              src={game.logo}
-              alt=""
-              decoding="async"
-              draggable={false}
-            />
-          )}
-        </span>
-        {canNavigate && (
-          <>
-            <button
-              type="button"
-              className="home-recommended-hero__arrow home-recommended-hero__arrow--prev"
-              aria-label={language === "en" ? "Previous game" : "Jogo anterior"}
-              onClick={(event) => {
-                event.stopPropagation();
-                moveRecommendedHero(-1);
-              }}
-            >
-              <ChevronLeft size={30} strokeWidth={2.1} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="home-recommended-hero__arrow home-recommended-hero__arrow--next"
-              aria-label={language === "en" ? "Next game" : "Próximo jogo"}
-              onClick={(event) => {
-                event.stopPropagation();
-                moveRecommendedHero(1);
-              }}
-            >
-              <ChevronRight size={30} strokeWidth={2.1} aria-hidden="true" />
-            </button>
-          </>
-        )}
+      <div className="home-recommended__header">
+        <h3 className="home-recommended__title">{title}</h3>
       </div>
-      {canNavigate && (
-        <span className="home-recommended-hero__pills" aria-label={language === "en" ? "Select featured game" : "Selecionar jogo em destaque"}>
-          {games.map((item, index) => (
-            <button
-              key={item.appId || item.id}
-              type="button"
-              className={`home-recommended-hero__pill${
-                index === activeIndex ? " home-recommended-hero__pill--active" : ""
-              }`}
-              aria-label={item.title}
-              aria-current={index === activeIndex ? "true" : undefined}
-              onClick={(event) => {
-                event.stopPropagation();
-                selectRecommendedHero(index);
-              }}
-            />
-          ))}
-        </span>
-      )}
+      <div className="home-recommended__grid">
+        {visibleGames.map((game) => (
+          <HomeCategoryCard
+            key={game.appId || game.id}
+            game={game}
+            imageVariant="heroCapsule"
+            onOpenGame={onOpenGame}
+            onGameContextMenu={onGameContextMenu}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -1585,13 +1404,66 @@ function HomeWishlistPlayerReview({
   game: GhostBoxGame;
   language: "pt" | "en";
 }) {
-  const [review, setReview] = useState<SteamGameReview | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const appId = homeGameAppId(game);
+  const reviewLanguage = language === "en" ? "english" : "brazilian";
+  const cachedReview = appId
+    ? readStoredSteamWishlistReview(appId, reviewLanguage)
+    : null;
+  const reviewRef = useRef<HTMLSpanElement | null>(null);
+  const [hasBeenVisible, setHasBeenVisible] = useState(false);
+  const [review, setReview] = useState<SteamGameReview | null>(
+    () => cachedReview?.review ?? null
+  );
+  const [isLoading, setIsLoading] = useState(() => !cachedReview);
 
   useEffect(() => {
-    let cancelled = false;
-    const appId = homeGameAppId(game);
     if (!appId) {
+      setReview(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const nextCachedReview = readStoredSteamWishlistReview(appId, reviewLanguage);
+    setReview(nextCachedReview?.review ?? null);
+    setIsLoading(!nextCachedReview);
+    setHasBeenVisible(Boolean(nextCachedReview));
+  }, [appId, reviewLanguage]);
+
+  useEffect(() => {
+    if (hasBeenVisible) return;
+    const node = reviewRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setHasBeenVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setHasBeenVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px 200px 0px", threshold: 0.01 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasBeenVisible]);
+
+  useEffect(() => {
+    if (!hasBeenVisible) return;
+    let cancelled = false;
+    if (!appId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const cachedReview = readStoredSteamWishlistReview(appId, reviewLanguage);
+    if (cachedReview) {
+      setReview(cachedReview.review);
       setIsLoading(false);
       return;
     }
@@ -1599,33 +1471,36 @@ function HomeWishlistPlayerReview({
     setIsLoading(true);
     setReview(null);
 
-    const timeout = window.setTimeout(() => {
-      void loadGameReviews(
-        appId,
-        language === "en" ? "english" : "brazilian",
-        "positive"
-      )
-        .then((result) => {
-          if (cancelled) return;
-          setReview(result.reviews?.find((item) => item.review.trim()) ?? null);
-        })
-        .catch(() => {
-          if (!cancelled) setReview(null);
-        })
-        .finally(() => {
-          if (!cancelled) setIsLoading(false);
-        });
-    }, 1200);
+    void loadGameReviews(appId, reviewLanguage, "positive")
+      .then((result) => {
+        if (cancelled) return;
+        const nextReview = result.reviews?.find((item) => item.review.trim()) ?? null;
+        setReview(nextReview);
+        if (nextReview) {
+          writeStoredSteamWishlistReview({
+            appId,
+            language: reviewLanguage,
+            expiresAt: new Date(Date.now() + homeWishlistCacheRefreshMs).toISOString(),
+            review: nextReview,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setReview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
     };
-  }, [game, language]);
+  }, [appId, reviewLanguage, hasBeenVisible]);
 
   if (isLoading) {
     return (
       <span
+        ref={reviewRef}
         className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton"
         aria-hidden="true"
       >
@@ -1810,11 +1685,11 @@ function HomeWishlistCardComponent({
           }}
         >
           {imageSource && <img src={imageSource} alt="" draggable={false} />}
-          {screenshots.map((source, index) => (
+          {isHovered && screenshots.map((source, index) => (
             <img
               key={source}
               className={`home-wishlist-card__screenshot${
-                isHovered && index === screenshotIndex
+                index === screenshotIndex
                   ? " home-wishlist-card__screenshot--active"
                   : ""
               }`}
@@ -2216,7 +2091,7 @@ export function HomePage({
     void loadGameRange(
       topReviewedSteamGames,
       0,
-      homeCarouselGroupSize,
+      topReviewedSteamGames.length,
       (results, offset) => {
         setHomeTopReviewedGames((current) => {
           const next = [...current];
@@ -2231,7 +2106,7 @@ export function HomePage({
     void loadGameRange(
       homeFeaturedSteamGames,
       0,
-      homeFeaturedSteamGames.length,
+      6,
       (results, offset) => {
         setHomeFeaturedGames((current) => {
           const next = [...current];
@@ -2243,8 +2118,26 @@ export function HomePage({
       }
     );
 
+    const cancelIdleFeaturedLoad = runWhenIdle(() => {
+      void loadGameRange(
+        homeFeaturedSteamGames,
+        6,
+        homeFeaturedSteamGames.length,
+        (results, offset) => {
+          setHomeFeaturedGames((current) => {
+            const next = [...current];
+            results.forEach((game, index) => {
+              next[offset + index] = game;
+            });
+            return next;
+          });
+        }
+      );
+    }, 1800);
+
     return () => {
       cancelled = true;
+      cancelIdleFeaturedLoad();
     };
   }, []);
 
@@ -2439,7 +2332,7 @@ export function HomePage({
 
         writeStoredSteamWishlistRecommendations({
           steamId: steamProfile.steamId,
-          expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + homeWishlistCacheRefreshMs).toISOString(),
           algorithmVersion: homeWishlistRecommendationAlgorithmVersion,
           gameIds: nextRecommendations.map(({ recommendedGame }) =>
             homeGameAppId(recommendedGame)
@@ -2458,15 +2351,24 @@ export function HomePage({
       }
     }
 
-    void loadWishlistRecommendations();
+    const cancelIdleWishlistLoad = runWhenIdle(() => {
+      void loadWishlistRecommendations();
+    }, 2200);
 
     return () => {
       cancelled = true;
+      cancelIdleWishlistLoad();
     };
   }, [steamProfile?.steamId, libraryGameAppIds]);
 
-  const homeVisibleGames = useMemo(() => {
-    return homeTopReviewedGames.filter((game) => game.appId === "2050650").slice(0, 1);
+  const homeVisibleGameGroups = useMemo(() => {
+    return homeRecommendedAppIdGroups.map((appIds) =>
+      appIds
+        .map((appId) =>
+          homeTopReviewedGames.find((game) => homeGameAppId(game) === appId)
+        )
+        .filter((game): game is GhostBoxGame => Boolean(game))
+    );
   }, [homeTopReviewedGames]);
   const featuredGames = homeFeaturedGames;
   const enrichedPersonalCalendarGames = useEnrichedGameCards(
@@ -2504,8 +2406,7 @@ export function HomePage({
     <section className="home-page" aria-label={t("home.pageAria")}>
       <HomeRecommendedHero
         title={t("home.recommended")}
-        games={homeVisibleGames}
-        language={appearance.language}
+        gameGroups={homeVisibleGameGroups}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

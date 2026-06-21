@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
 import type { RefObject } from "react";
-import { HomePage } from "../../pages/HomePage";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
@@ -14,6 +13,9 @@ import { CollectionModal } from "../modals/CollectionModal";
 import { SteamPathModal } from "../modals/SteamPathModal";
 import { SubscriptionModal } from "../modals/SubscriptionModal";
 
+const LazyHomePage = lazy(() =>
+  import("../../pages/HomePage").then((m) => ({ default: m.HomePage }))
+);
 const LazyCataloguePage = lazy(() =>
   import("../../pages/CataloguePage").then((m) => ({ default: m.CataloguePage }))
 );
@@ -115,7 +117,7 @@ export function PageRouter({
   function renderPage() {
     if (page === "home") {
       return (
-        <HomePage
+        <LazyHomePage
           onOpenGame={openGame}
           favoriteGameIds={appData.favoriteGameIds}
           libraryGameAppIds={appData.availableLibraryGameAppIds}

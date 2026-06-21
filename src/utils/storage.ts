@@ -4,6 +4,7 @@ import type {
   GameStatus,
   SteamAchievement,
 } from "../data";
+import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { StartupPage, UserCollection, SteamProfile } from "../types";
 import {
   favoriteGamesStorageKey,
@@ -15,6 +16,7 @@ import {
   showSteamGamesStorageKey,
   personalCalendarStorageKey,
   steamWishlistRecommendationsStorageKey,
+  steamWishlistReviewCacheStorageKey,
   recentLibrarySessionLimit,
   librarySortStorageKey,
 } from "../constants/catalogue";
@@ -40,6 +42,15 @@ export type StoredSteamWishlistRecommendations = {
     recommendedTitle?: string;
   }>;
 };
+
+export type StoredSteamWishlistReview = {
+  appId: string;
+  language: string;
+  expiresAt: string;
+  review: SteamGameReview;
+};
+
+type StoredSteamWishlistReviewCache = Record<string, StoredSteamWishlistReview>;
 
 function storedString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
@@ -135,6 +146,72 @@ function normalizeStoredSteamWishlistRecommendations(
   }
 
   return { steamId, expiresAt, algorithmVersion, gameIds, recommendationPairs };
+}
+
+function normalizeStoredSteamReviewAuthor(value: unknown): SteamGameReview["author"] | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const author = value as Record<string, unknown>;
+
+  return {
+    steamid: storedString(author.steamid),
+    personaname: storedString(author.personaname),
+    profileurl: storedString(author.profileurl),
+    avatar: storedString(author.avatar),
+    playtime_forever: storedNumber(author.playtime_forever) || undefined,
+    playtime_last_two_weeks: storedNumber(author.playtime_last_two_weeks) || undefined,
+    playtime_at_review: storedNumber(author.playtime_at_review) || undefined,
+    last_played: storedNumber(author.last_played) || undefined,
+  };
+}
+
+function normalizeStoredSteamWishlistReview(
+  value: unknown
+): StoredSteamWishlistReview | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const cachedReview = value as Record<string, unknown>;
+  const appId = storedString(cachedReview.appId);
+  const language = storedString(cachedReview.language);
+  const expiresAt = storedString(cachedReview.expiresAt);
+  const reviewRecord = cachedReview.review;
+  if (!reviewRecord || typeof reviewRecord !== "object" || Array.isArray(reviewRecord)) {
+    return null;
+  }
+
+  const review = reviewRecord as Record<string, unknown>;
+  const author = normalizeStoredSteamReviewAuthor(review.author);
+  const reviewText = storedString(review.review).trim();
+
+  if (
+    !appId ||
+    !language ||
+    !expiresAt ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    !author ||
+    !reviewText
+  ) {
+    return null;
+  }
+
+  return {
+    appId,
+    language,
+    expiresAt,
+    review: {
+      recommendationid: storedString(review.recommendationid),
+      author,
+      language: storedString(review.language, language),
+      review: reviewText,
+      timestamp_created: storedNumber(review.timestamp_created),
+      timestamp_updated: storedNumber(review.timestamp_updated) || undefined,
+      voted_up: review.voted_up !== false,
+      votes_up: storedNumber(review.votes_up),
+      votes_funny: storedNumber(review.votes_funny) || undefined,
+      weighted_vote_score: storedString(review.weighted_vote_score) || undefined,
+      steam_purchase: typeof review.steam_purchase === "boolean" ? review.steam_purchase : undefined,
+      received_for_free: typeof review.received_for_free === "boolean" ? review.received_for_free : undefined,
+    },
+  };
 }
 
 function storedGameStatus(value: unknown): GameStatus {
@@ -454,6 +531,61 @@ export function writeStoredSteamWishlistRecommendations(
   } catch {
     // Wishlist recommendations can be regenerated if localStorage is unavailable.
   }
+}
+
+function steamWishlistReviewCacheKey(appId: string, language: string) {
+  return `${appId.trim()}:${language.trim().toLowerCase()}`;
+}
+
+function readStoredSteamWishlistReviewCache(): StoredSteamWishlistReviewCache {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(steamWishlistReviewCacheStorageKey) ?? "{}"
+    ) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+    const now = Date.now();
+    const cache: StoredSteamWishlistReviewCache = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      const cachedReview = normalizeStoredSteamWishlistReview(value);
+      if (!cachedReview || Date.parse(cachedReview.expiresAt) <= now) return;
+      cache[key] = cachedReview;
+    });
+
+    return cache;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredSteamWishlistReviewCache(cache: StoredSteamWishlistReviewCache) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      steamWishlistReviewCacheStorageKey,
+      JSON.stringify(cache)
+    );
+  } catch {
+    // Reviews still load from the network if localStorage is unavailable.
+  }
+}
+
+export function readStoredSteamWishlistReview(
+  appId: string,
+  language: string
+): StoredSteamWishlistReview | null {
+  const key = steamWishlistReviewCacheKey(appId, language);
+  return readStoredSteamWishlistReviewCache()[key] ?? null;
+}
+
+export function writeStoredSteamWishlistReview(review: StoredSteamWishlistReview) {
+  const key = steamWishlistReviewCacheKey(review.appId, review.language);
+  const cache = readStoredSteamWishlistReviewCache();
+  cache[key] = review;
+  writeStoredSteamWishlistReviewCache(cache);
 }
 
 export function readStoredUserCollections(): UserCollection[] {

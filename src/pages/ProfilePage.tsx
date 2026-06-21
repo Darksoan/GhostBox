@@ -117,8 +117,8 @@ type ProfileAchievementHighlight = {
 const showcaseAchievementMinLimit = 15;
 const showcaseAchievementMaxLimit = 32;
 const showcaseAchievementEstimatedSlotWidth = 66;
-const localAchievementHydrationLimit = 160;
-const localAchievementHydrationBatchSize = 10;
+const localAchievementHydrationLimit = 80;
+const localAchievementHydrationBatchSize = 5;
 let hasPreparedProfileOverviewData = false;
 
 function getGamePlaytime(game: GhostBoxGame) {
@@ -524,6 +524,15 @@ export function ProfilePage({
       for (let index = 0; index < candidates.length; index += localAchievementHydrationBatchSize) {
         if (cancelled) return;
 
+        // Yield to main thread between batches so the profile render isn't blocked
+        await new Promise<void>((resolve) => {
+          if (typeof window.requestIdleCallback === "function") {
+            window.requestIdleCallback(() => resolve(), { timeout: 800 });
+            return;
+          }
+          window.setTimeout(resolve, 50);
+        });
+
         const hydratedGames = await Promise.all(
           candidates
             .slice(index, index + localAchievementHydrationBatchSize)
@@ -867,7 +876,7 @@ export function ProfilePage({
   }, [visibleGamesKey]);
 
   useEffect(() => {
-    setRenderedGameCount(Math.min(40, visibleGames.length));
+    setRenderedGameCount(Math.min(24, visibleGames.length));
   }, [visibleGamesKey, visibleGames.length]);
 
   useEffect(() => {
@@ -875,7 +884,7 @@ export function ProfilePage({
     if (!sentinel || renderedGameCount >= visibleGames.length) return;
     if (typeof IntersectionObserver === "undefined") {
       setRenderedGameCount((current) =>
-        Math.min(current + 24, visibleGames.length)
+        Math.min(current + 16, visibleGames.length)
       );
       return;
     }
@@ -885,7 +894,7 @@ export function ProfilePage({
         if (!entries.some((entry) => entry.isIntersecting)) return;
         setRenderedGameCount((current) => {
           if (current >= visibleGames.length) return current;
-          return Math.min(current + 24, visibleGames.length);
+          return Math.min(current + 16, visibleGames.length);
         });
       },
       { rootMargin: "600px 0px" }

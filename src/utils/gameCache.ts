@@ -168,7 +168,7 @@ export function loadGameAchievementDetailsCached(gameId: string) {
 
 export function loadGameReviewsCached(
   gameId: string,
-  language: "brazilian" | "english",
+  language: "all" | "brazilian" | "english",
   reviewType: "all" | "positive" | "negative" = "all"
 ) {
   const cacheKey = `${gameId}:${language}:${reviewType}`;

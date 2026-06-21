@@ -669,6 +669,7 @@ async fn fetch_steam_store_page_title(app_id: &str) -> Option<String> {
 
 fn steam_reviews_language(language: Option<String>) -> &'static str {
     match language.as_deref().map(str::trim) {
+        Some("all") => "all",
         Some("english") => "english",
         Some("brazilian") => "brazilian",
         _ => "brazilian",
@@ -729,6 +730,19 @@ fn steam_reviews_empty(value: &Value) -> bool {
         .unwrap_or(true)
 }
 
+fn steam_reviews_has_summary(value: &Value) -> bool {
+    value
+        .get("query_summary")
+        .and_then(|summary| summary.as_object())
+        .is_some_and(|summary| {
+            summary
+                .get("total_reviews")
+                .or_else(|| summary.get("num_reviews"))
+                .and_then(|value| value.as_u64())
+                .is_some_and(|count| count > 0)
+        })
+}
+
 async fn fetch_steam_game_reviews_with_fallbacks(
     app_id: &str,
     language: &str,
@@ -743,7 +757,7 @@ async fn fetch_steam_game_reviews_with_fallbacks(
         fetch_steam_game_reviews(app_id, language, review_type, primary_filter, "steam").await;
     if best
         .as_ref()
-        .is_some_and(|value| !steam_reviews_empty(value))
+        .is_some_and(|value| !steam_reviews_empty(value) || steam_reviews_has_summary(value))
     {
         return best;
     }
@@ -775,7 +789,7 @@ async fn fetch_steam_game_reviews_with_fallbacks(
 
         if result
             .as_ref()
-            .is_some_and(|value| !steam_reviews_empty(value))
+            .is_some_and(|value| !steam_reviews_empty(value) || steam_reviews_has_summary(value))
         {
             return result;
         }

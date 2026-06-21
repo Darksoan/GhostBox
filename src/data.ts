@@ -195,7 +195,7 @@ export async function loadGameAchievementDetails(
 
 export async function loadGameReviews(
   gameId: string,
-  language: "brazilian" | "english",
+  language: "all" | "brazilian" | "english",
   reviewType: "all" | "positive" | "negative" = "all"
 ): Promise<SteamGameReviewsResult> {
   return ghostboxApi.getGameReviews(gameId, language, reviewType);

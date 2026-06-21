@@ -77,6 +77,7 @@ interface SidebarProps {
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
 const SIDEBAR_CURSOR_LOCK_MS = 700;
+const SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT = 30;
 
 let sidebarCursorLockTimeout: number | undefined;
 
@@ -394,29 +395,36 @@ export const Sidebar = memo(function Sidebar({
                       {isExpanded && (
                         <ul className="sidebar__collection-games" aria-label={`Jogos em ${collection.name}`}>
                           {collection.games.length > 0 ? (
-                            collection.games.map((game) => (
-                              <li key={game.id} className="sidebar__collection-game">
-                                <button
-                                  type="button"
-                                  className="sidebar__collection-game-button"
-                                  onClick={() => onOpenGame(game)}
-                                  onFocus={() => preloadGameModalAssets(game)}
-                                  onMouseEnter={() => preloadGameModalAssets(game)}
-                                  onContextMenu={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    setCollectionGameContextMenu({
-                                      collection,
-                                      game,
-                                      visible: true,
-                                      position: { x: event.clientX, y: event.clientY },
-                                    });
-                                  }}
-                                >
-                                  <SidebarGameItem game={game} />
-                                </button>
-                              </li>
-                            ))
+                            <>
+                              {collection.games.slice(0, SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT).map((game) => (
+                                <li key={game.id} className="sidebar__collection-game">
+                                  <button
+                                    type="button"
+                                    className="sidebar__collection-game-button"
+                                    onClick={() => onOpenGame(game)}
+                                    onFocus={() => preloadGameModalAssets(game)}
+                                    onMouseEnter={() => preloadGameModalAssets(game)}
+                                    onContextMenu={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setCollectionGameContextMenu({
+                                        collection,
+                                        game,
+                                        visible: true,
+                                        position: { x: event.clientX, y: event.clientY },
+                                      });
+                                    }}
+                                  >
+                                    <SidebarGameItem game={game} />
+                                  </button>
+                                </li>
+                              ))}
+                              {collection.games.length > SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT && (
+                                <li className="sidebar__collection-more">
+                                  +{collection.games.length - SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT}
+                                </li>
+                              )}
+                            </>
                           ) : (
                             <li className="sidebar__collection-empty">
                               {t("sidebar.noGames")}

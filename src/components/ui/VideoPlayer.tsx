@@ -1,5 +1,4 @@
 import { useRef, useEffect } from "react";
-import Hls from "hls.js";
 
 interface VideoPlayerProps {
   videoSrc: string;
@@ -35,56 +34,62 @@ export function VideoPlayer({
       return undefined;
     }
 
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-      });
+    let destroyed = false;
+    let hlsInstance: import("hls.js").default | null = null;
 
-      hls.loadSource(videoSrc);
-      hls.attachMedia(video);
+    void import("hls.js").then(({ default: Hls }) => {
+      if (destroyed || !videoRef.current) return;
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (autoplay) {
-          video.play().catch(() => {});
-        }
-      });
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+        });
 
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal) return;
+        hlsInstance.loadSource(videoSrc);
+        hlsInstance.attachMedia(videoRef.current);
 
-        switch (data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
-            hls.startLoad();
-            break;
-          case Hls.ErrorTypes.MEDIA_ERROR:
-            hls.recoverMediaError();
-            break;
-          default:
-            hls.destroy();
-            break;
-        }
-      });
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (autoplay) {
+            videoRef.current?.play().catch(() => {});
+          }
+        });
 
-      return () => {
-        hls.destroy();
-      };
-    }
+        hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
+          if (!hlsInstance) return;
+          if (!data.fatal) return;
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = videoSrc;
-      video.load();
-
-      if (autoplay) {
-        video.play().catch(() => {});
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hlsInstance.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hlsInstance.recoverMediaError();
+              break;
+            default:
+              hlsInstance.destroy();
+              break;
+          }
+        });
+        return;
       }
 
-      return () => {
-        video.src = "";
-      };
-    }
+      if (videoRef.current?.canPlayType("application/vnd.apple.mpegurl")) {
+        videoRef.current.src = videoSrc;
+        videoRef.current.load();
+        if (autoplay) {
+          videoRef.current.play().catch(() => {});
+        }
+      }
+    });
 
-    return undefined;
+    return () => {
+      destroyed = true;
+      hlsInstance?.destroy();
+      if (videoRef.current?.src === videoSrc) {
+        videoRef.current.src = "";
+      }
+    };
   }, [autoplay, isHls, videoSrc]);
 
   useEffect(() => {

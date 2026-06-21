@@ -125,7 +125,7 @@ export const ghostboxApi = {
 
   getGameReviews(
     gameId: string,
-    language: "brazilian" | "english",
+    language: "all" | "brazilian" | "english",
     reviewType: "all" | "positive" | "negative" = "all"
   ): Promise<SteamGameReviewsResult> {
     return invokeOr<SteamGameReviewsResult>(
