@@ -35,6 +35,7 @@ interface OverlayContextValue {
   toast: ToastState;
   collectionModalOpen: boolean;
   steamPathModalOpen: boolean;
+  subscriptionModalOpen: boolean;
   pendingBackupDeletion: { appId: string; title: string; backupPath?: string } | null;
   openGame: (game: GhostBoxGame) => void;
   closeGame: () => void;
@@ -48,6 +49,7 @@ interface OverlayContextValue {
   dismissToast: () => void;
   setCollectionModalOpen: (open: boolean) => void;
   setSteamPathModalOpen: (open: boolean) => void;
+  setSubscriptionModalOpen: (open: boolean) => void;
   setPendingBackupDeletion: (
     value: { appId: string; title: string; backupPath?: string } | null
   ) => void;
@@ -67,6 +69,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastState>(null);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
   const [steamPathModalOpen, setSteamPathModalOpen] = useState(false);
+  const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
   const [pendingBackupDeletion, setPendingBackupDeletion] = useState<{
     appId: string;
     title: string;
@@ -181,6 +184,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       toast,
       collectionModalOpen,
       steamPathModalOpen,
+      subscriptionModalOpen,
       pendingBackupDeletion,
       openGame,
       closeGame,
@@ -191,6 +195,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       dismissToast,
       setCollectionModalOpen,
       setSteamPathModalOpen,
+      setSubscriptionModalOpen,
       setPendingBackupDeletion,
       setIsGameModalExitPending,
       modalReturnScrollTopRef,
@@ -203,6 +208,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       toast,
       collectionModalOpen,
       steamPathModalOpen,
+      subscriptionModalOpen,
       pendingBackupDeletion,
       openGame,
       closeGame,

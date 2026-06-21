@@ -54,9 +54,43 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     useLoadableImageCover(headerSources);
   const previousCoverSourceRef = useRef(coverLoaded ? coverSource : "");
   const isEnglish = appearance.language === "en";
-  const genresRef = useRef<HTMLDivElement>(null);
-  const [showGenreFade, setShowGenreFade] = useState(false);
-  const genreLabels = game.tags.length ? game.tags : game.genres;
+  const maxGenreLabels = (game.tags.length ? game.tags : game.genres).slice(0, 3);
+  const genreLabelsKey = maxGenreLabels.join("\u0000");
+  const genresRef = useRef<HTMLDivElement | null>(null);
+  const [visibleGenreCount, setVisibleGenreCount] = useState(maxGenreLabels.length);
+
+  useLayoutEffect(() => {
+    setVisibleGenreCount(maxGenreLabels.length);
+  }, [game.id, genreLabelsKey, maxGenreLabels.length]);
+
+  useLayoutEffect(() => {
+    const container = genresRef.current;
+    if (!container || maxGenreLabels.length < 3) return;
+
+    const measureGenres = () => {
+      const firstChip = container.children.item(0) as HTMLElement | null;
+      const thirdChip = container.children.item(2) as HTMLElement | null;
+      if (!firstChip || !thirdChip) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const thirdRect = thirdChip.getBoundingClientRect();
+      const overflowsLine =
+        thirdChip.offsetTop > firstChip.offsetTop ||
+        thirdRect.right > containerRect.right + 0.5;
+
+      setVisibleGenreCount(overflowsLine ? 2 : maxGenreLabels.length);
+    };
+
+    measureGenres();
+
+    const resizeObserver = new ResizeObserver(() => {
+      setVisibleGenreCount(maxGenreLabels.length);
+      window.requestAnimationFrame(measureGenres);
+    });
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, [genreLabelsKey, maxGenreLabels.length]);
 
   useEffect(() => {
     if (coverLoaded && coverSource) {
@@ -68,34 +102,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     ? coverSource
     : previousCoverSourceRef.current;
   const displayedCoverSources = displayedCoverSource ? [displayedCoverSource] : [];
-
-  const updateGenreFade = useCallback(() => {
-    const node = genresRef.current;
-    if (!node) {
-      setShowGenreFade(false);
-      return;
-    }
-
-    setShowGenreFade(node.scrollWidth > node.clientWidth + 1);
-  }, []);
-
-  useEffect(() => {
-    updateGenreFade();
-  }, [genreLabels, updateGenreFade]);
-
-  useEffect(() => {
-    const node = genresRef.current;
-    if (!node) return;
-
-    const resizeObserver = new ResizeObserver(updateGenreFade);
-    resizeObserver.observe(node);
-    window.addEventListener("resize", updateGenreFade);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updateGenreFade);
-    };
-  }, [updateGenreFade]);
 
   return (
     <article
@@ -118,11 +124,8 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       />
       <div className="catalogue-list__content">
         <strong>{game.title}</strong>
-        <div
-          ref={genresRef}
-          className={`catalogue-list__genres${showGenreFade ? " catalogue-list__genres--fade" : ""}`}
-        >
-          {genreLabels.slice(0, 4).map((tag) => (
+        <div className="catalogue-list__genres" ref={genresRef}>
+          {maxGenreLabels.slice(0, visibleGenreCount).map((tag) => (
             <span className="catalogue-list__genre-chip" key={tag}>{tag}</span>
           ))}
         </div>

@@ -1,5 +1,6 @@
 import {
   Code2,
+  Crown,
   DatabaseBackup,
   Bell,
   FolderCog,
@@ -13,6 +14,7 @@ export type SettingsTabId =
   | "performance"
   | "library"
   | "backups"
+  | "subscription"
   | "notifications"
   | "download";
 
@@ -21,6 +23,7 @@ export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   performance: "settings.tabs.performance.label",
   library: "settings.tabs.library.label",
   backups: "settings.tabs.backups.label",
+  subscription: "settings.tabs.subscription.label",
   notifications: "settings.tabs.notifications.label",
   download: "settings.tabs.download.label",
 };
@@ -35,6 +38,7 @@ export const settingsNavigationTabs: SettingsNavigationTab[] = [
   { id: "performance", icon: Gauge },
   { id: "library", icon: FolderCog },
   { id: "backups", icon: DatabaseBackup },
+  { id: "subscription", icon: Crown },
   { id: "notifications", icon: Bell },
   { id: "download", icon: Code2 },
 ];

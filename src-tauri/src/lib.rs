@@ -1748,6 +1748,7 @@ pub fn run() {
             settings::app_set_morrenus_api_key,
             settings::app_get_morrenus_stats,
             steam::steam_get_profile,
+            steam::steam_get_account_stats,
             steam::steam_get_wishlist,
             steam::steam_get_recommended_tags_for_user,
             steam::steam_get_similar_app_ids,

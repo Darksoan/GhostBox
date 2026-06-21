@@ -1,6 +1,9 @@
 use crate::ghostbox_library;
 use crate::playtime;
-use crate::settings::{read_json_file, remove_data_file, write_json_file};
+use crate::settings::{
+    load_steam_stats_proxy_url, load_steam_web_api_key, read_json_file, remove_data_file,
+    write_json_file,
+};
 use crate::util::{escape_html, text_value, xml_text, EmptyStringExt};
 use crate::{
     enrich_game_with_local_achievement_stats, extract_app_id, load_saved_steam_path,
@@ -8,13 +11,78 @@ use crate::{
     steam_asset_url, steamapps_path,
 };
 use std::collections::{HashMap, HashSet};
+use tauri::Emitter;
 
 const STEAM_PROFILE_FILE: &str = "steam-profile.json";
+const STEAM_ACCOUNT_STATS_CACHE_FILE: &str = "steam-account-stats-cache.json";
+const STEAM_ACCOUNT_STATS_UPDATED_EVENT: &str = "steam-account-stats-updated";
+const STEAM_ACHIEVEMENT_SCAN_CONCURRENCY: usize = 8;
+const STEAM_ACHIEVEMENT_CACHE_MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
+const STEAM_NO_STATS_CACHE_MAX_AGE_SECONDS: u64 = 30 * 24 * 60 * 60;
 const MAX_PROFILE_AVATAR_BYTES: usize = 512 * 1024;
 const STEAM_OPENID_ENDPOINT: &str = "https://steamcommunity.com/openid/login";
 const STEAM_WISHLIST_USER_AGENT: &str = "Mozilla/5.0 GhostBox/0.1";
 
 static STEAM_SIGN_IN_ACTIVE: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+static STEAM_STATS_SCAN_ACTIVE: std::sync::OnceLock<std::sync::Mutex<HashSet<String>>> =
+    std::sync::OnceLock::new();
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct SteamOwnedGameStats {
+    appid: u64,
+    playtime_forever: u64,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamAchievementCacheEntry {
+    playtime_forever: u64,
+    unlocked_achievements: u64,
+    total_achievements: u64,
+    has_achievements: bool,
+    last_fetched_at: u64,
+    last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamAccountStatsCache {
+    steam_id: String,
+    games: HashMap<String, SteamAchievementCacheEntry>,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub(crate) struct SteamShowcaseAchievement {
+    id: String,
+    title: String,
+    game_title: String,
+    icon: String,
+    app_id: String,
+    unlocked_at: u64,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub(crate) struct SteamAccountStats {
+    steam_id: String,
+    games_count: u64,
+    total_playtime_minutes: u64,
+    unlocked_achievements: u64,
+    total_achievements: u64,
+    perfect_games: u64,
+    average_progress: u64,
+    scanned_games: u64,
+    pending_games: u64,
+    failed_games: u64,
+    fetched_at: u64,
+    private: bool,
+    has_api_key: bool,
+    scan_in_progress: bool,
+    recent_achievements: Vec<SteamShowcaseAchievement>,
+}
 
 fn is_image_data_url(value: &str) -> bool {
     let value = value.trim().to_lowercase();
@@ -182,6 +250,388 @@ async fn fetch_steam_profile(steam_id: &str) -> Result<serde_json::Value, String
         "avatarUrl": avatar_url,
         "profileUrl": profile_url
     }))
+}
+
+fn steam_unix_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
+}
+
+fn load_steam_account_stats_cache(
+    app: &tauri::AppHandle,
+    steam_id: &str,
+) -> SteamAccountStatsCache {
+    let mut cache: SteamAccountStatsCache = read_json_file(app, STEAM_ACCOUNT_STATS_CACHE_FILE)
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
+    if cache.steam_id != steam_id {
+        cache = SteamAccountStatsCache {
+            steam_id: steam_id.to_string(),
+            games: HashMap::new(),
+        };
+    }
+    cache
+}
+
+fn save_steam_account_stats_cache(
+    app: &tauri::AppHandle,
+    cache: &SteamAccountStatsCache,
+) -> Result<(), String> {
+    let value = serde_json::to_value(cache).map_err(|error| error.to_string())?;
+    write_json_file(app, STEAM_ACCOUNT_STATS_CACHE_FILE, &value)
+}
+
+fn should_refresh_achievement_entry(
+    entry: Option<&SteamAchievementCacheEntry>,
+    playtime_forever: u64,
+    now: u64,
+) -> bool {
+    let Some(entry) = entry else {
+        return true;
+    };
+    if entry.playtime_forever != playtime_forever {
+        return true;
+    }
+
+    let max_age = if entry.last_error.as_deref() == Some("no_stats") {
+        STEAM_NO_STATS_CACHE_MAX_AGE_SECONDS
+    } else {
+        STEAM_ACHIEVEMENT_CACHE_MAX_AGE_SECONDS
+    };
+    now.saturating_sub(entry.last_fetched_at) > max_age
+}
+
+fn build_steam_account_stats(
+    steam_id: &str,
+    owned_games: &[SteamOwnedGameStats],
+    cache: &SteamAccountStatsCache,
+    has_api_key: bool,
+    private: bool,
+    scan_in_progress: bool,
+) -> SteamAccountStats {
+    let now = steam_unix_timestamp();
+    let owned_app_ids = owned_games
+        .iter()
+        .map(|game| game.appid.to_string())
+        .collect::<HashSet<_>>();
+    let unlocked_achievements = owned_app_ids
+        .iter()
+        .filter_map(|app_id| cache.games.get(app_id))
+        .map(|entry| entry.unlocked_achievements)
+        .sum();
+    let total_achievements = owned_app_ids
+        .iter()
+        .filter_map(|app_id| cache.games.get(app_id))
+        .map(|entry| entry.total_achievements)
+        .sum();
+    let achievement_entries = owned_app_ids
+        .iter()
+        .filter_map(|app_id| cache.games.get(app_id))
+        .filter(|entry| entry.total_achievements > 0)
+        .collect::<Vec<_>>();
+    let perfect_games = achievement_entries
+        .iter()
+        .filter(|entry| entry.unlocked_achievements >= entry.total_achievements)
+        .count() as u64;
+    let average_progress = if achievement_entries.is_empty() {
+        0
+    } else {
+        ((achievement_entries
+            .iter()
+            .map(|entry| entry.unlocked_achievements as f64 / entry.total_achievements as f64)
+            .sum::<f64>()
+            / achievement_entries.len() as f64)
+            * 100.0)
+            .round() as u64
+    };
+    let scanned_games = owned_app_ids
+        .iter()
+        .filter(|app_id| {
+            cache
+                .games
+                .get(*app_id)
+                .is_some_and(|entry| entry.last_fetched_at > 0)
+        })
+        .count() as u64;
+    let failed_games = owned_app_ids
+        .iter()
+        .filter(|app_id| {
+            cache
+                .games
+                .get(*app_id)
+                .and_then(|entry| entry.last_error.as_deref())
+                .is_some_and(|error| error != "no_stats")
+        })
+        .count() as u64;
+    let total_playtime_minutes = owned_games
+        .iter()
+        .map(|game| game.playtime_forever)
+        .sum::<u64>();
+
+    SteamAccountStats {
+        steam_id: steam_id.to_string(),
+        games_count: owned_games.len() as u64,
+        total_playtime_minutes,
+        unlocked_achievements,
+        total_achievements,
+        perfect_games,
+        average_progress,
+        scanned_games,
+        pending_games: owned_games.len().saturating_sub(scanned_games as usize) as u64,
+        failed_games,
+        fetched_at: now,
+        private,
+        has_api_key,
+        scan_in_progress,
+        recent_achievements: Vec::new(),
+    }
+}
+
+async fn fetch_steam_owned_games(
+    client: &reqwest::Client,
+    steam_id: &str,
+    api_key: &str,
+) -> Result<Vec<SteamOwnedGameStats>, String> {
+    let value = client
+        .get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/")
+        .query(&[
+            ("key", api_key),
+            ("steamid", steam_id),
+            ("include_appinfo", "0"),
+            ("include_played_free_games", "1"),
+        ])
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(value
+        .get("response")
+        .and_then(|response| response.get("games"))
+        .and_then(|games| games.as_array())
+        .map(|games| {
+            games
+                .iter()
+                .filter_map(|game| {
+                    Some(SteamOwnedGameStats {
+                        appid: game.get("appid")?.as_u64()?,
+                        playtime_forever: game
+                            .get("playtime_forever")
+                            .and_then(|value| value.as_u64())
+                            .unwrap_or_default(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+async fn fetch_steam_account_stats_from_proxy(
+    proxy_url: &str,
+    steam_id: &str,
+) -> Result<SteamAccountStats, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/account-stats"))
+        .query(&[("steamId", steam_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<SteamAccountStats>()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn fetch_steam_game_achievement_counts(
+    client: reqwest::Client,
+    steam_id: String,
+    api_key: String,
+    game: SteamOwnedGameStats,
+) -> (String, SteamAchievementCacheEntry) {
+    let app_id = game.appid.to_string();
+    let now = steam_unix_timestamp();
+    let response = client
+        .get("https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/")
+        .query(&[
+            ("key", api_key.as_str()),
+            ("steamid", steam_id.as_str()),
+            ("appid", app_id.as_str()),
+        ])
+        .send()
+        .await;
+
+    let Ok(response) = response else {
+        return (
+            app_id,
+            SteamAchievementCacheEntry {
+                playtime_forever: game.playtime_forever,
+                last_fetched_at: now,
+                last_error: Some("request_failed".to_string()),
+                ..Default::default()
+            },
+        );
+    };
+
+    if !response.status().is_success() {
+        let last_error = if response.status().as_u16() == 400 {
+            "no_stats"
+        } else {
+            "http_error"
+        };
+        return (
+            app_id,
+            SteamAchievementCacheEntry {
+                playtime_forever: game.playtime_forever,
+                has_achievements: false,
+                last_fetched_at: now,
+                last_error: Some(last_error.to_string()),
+                ..Default::default()
+            },
+        );
+    }
+
+    let value = match response.json::<serde_json::Value>().await {
+        Ok(value) => value,
+        Err(_) => {
+            return (
+                app_id,
+                SteamAchievementCacheEntry {
+                    playtime_forever: game.playtime_forever,
+                    last_fetched_at: now,
+                    last_error: Some("invalid_json".to_string()),
+                    ..Default::default()
+                },
+            )
+        }
+    };
+
+    let achievements = value
+        .get("playerstats")
+        .and_then(|stats| stats.get("achievements"))
+        .and_then(|achievements| achievements.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let total_achievements = achievements.len() as u64;
+    let unlocked_achievements = achievements
+        .iter()
+        .filter(|achievement| {
+            achievement
+                .get("achieved")
+                .and_then(|value| value.as_u64())
+                .unwrap_or_default()
+                == 1
+        })
+        .count() as u64;
+
+    (
+        app_id,
+        SteamAchievementCacheEntry {
+            playtime_forever: game.playtime_forever,
+            unlocked_achievements,
+            total_achievements,
+            has_achievements: total_achievements > 0,
+            last_fetched_at: now,
+            last_error: None,
+        },
+    )
+}
+
+fn begin_steam_stats_scan(steam_id: &str) -> bool {
+    let lock = STEAM_STATS_SCAN_ACTIVE.get_or_init(|| std::sync::Mutex::new(HashSet::new()));
+    let Ok(mut active) = lock.lock() else {
+        return false;
+    };
+    active.insert(steam_id.to_string())
+}
+
+fn end_steam_stats_scan(steam_id: &str) {
+    let lock = STEAM_STATS_SCAN_ACTIVE.get_or_init(|| std::sync::Mutex::new(HashSet::new()));
+    if let Ok(mut active) = lock.lock() {
+        active.remove(steam_id);
+    }
+}
+
+fn emit_steam_account_stats(app: &tauri::AppHandle, stats: &SteamAccountStats) {
+    let _ = app.emit(STEAM_ACCOUNT_STATS_UPDATED_EVENT, stats.clone());
+}
+
+fn start_steam_achievement_stats_scan(
+    app: tauri::AppHandle,
+    steam_id: String,
+    api_key: String,
+    owned_games: Vec<SteamOwnedGameStats>,
+) {
+    if !begin_steam_stats_scan(&steam_id) {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(12))
+            .build()
+        {
+            Ok(client) => client,
+            Err(_) => {
+                end_steam_stats_scan(&steam_id);
+                return;
+            }
+        };
+
+        let now = steam_unix_timestamp();
+        let mut cache = load_steam_account_stats_cache(&app, &steam_id);
+        let mut pending = owned_games
+            .iter()
+            .filter(|game| {
+                should_refresh_achievement_entry(
+                    cache.games.get(&game.appid.to_string()),
+                    game.playtime_forever,
+                    now,
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        pending.sort_by(|left, right| right.playtime_forever.cmp(&left.playtime_forever));
+
+        for chunk in pending.chunks(STEAM_ACHIEVEMENT_SCAN_CONCURRENCY) {
+            let mut handles = Vec::new();
+            for game in chunk.iter().cloned() {
+                handles.push(tauri::async_runtime::spawn(
+                    fetch_steam_game_achievement_counts(
+                        client.clone(),
+                        steam_id.clone(),
+                        api_key.clone(),
+                        game,
+                    ),
+                ));
+            }
+            for handle in handles {
+                if let Ok((app_id, entry)) = handle.await {
+                    cache.games.insert(app_id, entry);
+                }
+            }
+
+            let _ = save_steam_account_stats_cache(&app, &cache);
+            let stats =
+                build_steam_account_stats(&steam_id, &owned_games, &cache, true, false, true);
+            emit_steam_account_stats(&app, &stats);
+        }
+
+        let _ = save_steam_account_stats_cache(&app, &cache);
+        let stats = build_steam_account_stats(&steam_id, &owned_games, &cache, true, false, false);
+        emit_steam_account_stats(&app, &stats);
+        end_steam_stats_scan(&steam_id);
+    });
 }
 
 async fn validate_steam_openid(callback_url: &reqwest::Url) -> Result<bool, String> {
@@ -426,6 +876,79 @@ pub fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
 }
 
+#[tauri::command]
+pub async fn steam_get_account_stats(
+    app: tauri::AppHandle,
+    steam_id: String,
+) -> Result<SteamAccountStats, String> {
+    let steam_id = steam_id.trim().to_string();
+    if steam_id.is_empty() {
+        return Err("Steam ID is required".to_string());
+    }
+
+    let proxy_url = load_steam_stats_proxy_url();
+    if !proxy_url.is_empty() {
+        return fetch_steam_account_stats_from_proxy(&proxy_url, &steam_id).await;
+    }
+
+    let api_key = load_steam_web_api_key(&app);
+    let cache = load_steam_account_stats_cache(&app, &steam_id);
+    if api_key.is_empty() {
+        return Ok(build_steam_account_stats(
+            &steam_id,
+            &[],
+            &cache,
+            false,
+            false,
+            false,
+        ));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let owned_games = match fetch_steam_owned_games(&client, &steam_id, &api_key).await {
+        Ok(games) => games,
+        Err(_) => {
+            return Ok(build_steam_account_stats(
+                &steam_id,
+                &[],
+                &cache,
+                true,
+                true,
+                false,
+            ));
+        }
+    };
+
+    let now = steam_unix_timestamp();
+    let scan_needed = owned_games.iter().any(|game| {
+        should_refresh_achievement_entry(
+            cache.games.get(&game.appid.to_string()),
+            game.playtime_forever,
+            now,
+        )
+    });
+    if scan_needed {
+        start_steam_achievement_stats_scan(
+            app.clone(),
+            steam_id.clone(),
+            api_key,
+            owned_games.clone(),
+        );
+    }
+
+    Ok(build_steam_account_stats(
+        &steam_id,
+        &owned_games,
+        &cache,
+        true,
+        false,
+        scan_needed,
+    ))
+}
+
 async fn fetch_steam_wishlist_titles(steam_id: &str) -> HashMap<String, String> {
     let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -660,7 +1183,9 @@ pub async fn steam_get_similar_app_ids(app_id: String) -> Result<Vec<String>, St
         return Ok(Vec::new());
     }
 
-    let url = format!("https://store.steampowered.com/recommended/morelike/app/{app_id}/?l=english&cc=br");
+    let url = format!(
+        "https://store.steampowered.com/recommended/morelike/app/{app_id}/?l=english&cc=br"
+    );
     let response = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()

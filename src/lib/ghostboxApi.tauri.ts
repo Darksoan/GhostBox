@@ -30,6 +30,7 @@ import type {
   StartupSettings,
   SteamRestartResult,
   SteamLibraryScanResult,
+  SteamAccountStats,
   SteamPathSelectionResult,
   SteamProfile,
   SteamWishlistItem,
@@ -206,6 +207,35 @@ export const ghostboxApi = {
 
   getSteamProfile(): Promise<SteamProfile | null> {
     return invokeOr<SteamProfile | null>("steam_get_profile", {}, null);
+  },
+
+  getSteamAccountStats(steamId: string): Promise<SteamAccountStats | null> {
+    return invokeOr<SteamAccountStats | null>(
+      "steam_get_account_stats",
+      { steamId },
+      null
+    );
+  },
+
+  onSteamAccountStatsUpdated(
+    callback: (stats: SteamAccountStats) => void
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<SteamAccountStats>("steam-account-stats-updated", (event) => {
+      callback(event.payload);
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   },
 
   saveSteamProfile(profile: SteamProfile): Promise<SteamProfile> {

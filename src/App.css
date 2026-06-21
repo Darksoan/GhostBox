@@ -33,7 +33,7 @@ body {
   margin: 0 0 14px;
   color: #a8a8a8;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
@@ -54,7 +54,7 @@ h1 {
 }
 
 code {
-  color: #ffffff;
+  color: var(--text-strong);
 }
 
 .status-grid {
@@ -76,7 +76,7 @@ code {
   display: block;
   color: rgba(245, 245, 245, 0.48);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }

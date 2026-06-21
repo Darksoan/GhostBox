@@ -318,8 +318,8 @@ export function BackupPage({
       ) : (
         <div className="backup-page__empty">
           {language === "en"
-            ? "No backups found in the backup folder. Add games to your library to restore existing backups automatically."
-            : "Nenhum backup encontrado na pasta de backups. Adicione jogos à biblioteca para restaurar backups existentes automaticamente."}
+            ? "No backups found."
+            : "Nenhum backup encontrado."}
         </div>
       )}
     </section>

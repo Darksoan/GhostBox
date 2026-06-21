@@ -100,6 +100,33 @@ export type SteamProfile = {
   profileUrl: string;
 };
 
+export type SteamAccountStats = {
+  steamId: string;
+  gamesCount: number;
+  totalPlaytimeMinutes: number;
+  unlockedAchievements: number;
+  totalAchievements: number;
+  perfectGames: number;
+  averageProgress: number;
+  scannedGames: number;
+  pendingGames: number;
+  failedGames: number;
+  fetchedAt: number;
+  private: boolean;
+  hasApiKey: boolean;
+  scanInProgress: boolean;
+  recentAchievements: SteamRecentAchievement[];
+};
+
+export type SteamRecentAchievement = {
+  id: string;
+  title: string;
+  gameTitle: string;
+  icon: string;
+  appId: string;
+  unlockedAt: number;
+};
+
 export type SteamWishlistItem = {
   appId: string;
   title?: string;

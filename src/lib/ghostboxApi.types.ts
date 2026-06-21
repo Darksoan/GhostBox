@@ -13,6 +13,7 @@ import type {
   BackupSettings,
   StartupSettings,
   SteamLibraryScanResult,
+  SteamAccountStats,
   SteamProfile,
   SteamWishlistItem,
 } from "../types";
@@ -29,6 +30,7 @@ export type {
   BackupSettings,
   StartupSettings,
   SteamLibraryScanResult,
+  SteamAccountStats,
   SteamProfile,
   SteamWishlistItem,
 };

@@ -1472,6 +1472,15 @@ function HomeRecommendedHero({
           event.preventDefault();
           onGameContextMenu(game, event.clientX, event.clientY);
         }}
+        onClick={() => onOpenGame(game)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onOpenGame(game);
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={game.title}
       >
         <span
           className={`home-recommended-hero__cover${
@@ -1509,57 +1518,18 @@ function HomeRecommendedHero({
         )}
         <span className="home-recommended-hero__shade" aria-hidden="true" />
         <span className="home-recommended-hero__info">
-          <span className="home-recommended-hero__info-text">
-            <h2 className="home-recommended-hero__title">{game.title}</h2>
-            {(game.publishers?.[0] || game.developers?.[0]) && (
-              <span className="home-recommended-hero__publisher">
-                {game.publishers?.[0] || game.developers?.[0]}
-              </span>
-            )}
-            <span className="home-recommended-hero__tags">
-              {[...game.genres, ...game.tags]
-                .filter(Boolean)
-                .filter((tag, i, arr) => arr.indexOf(tag) === i)
-                .slice(0, 4)
-                .map((tag) => (
-                  <span key={tag} className="home-recommended-hero__tag">
-                    {tag}
-                  </span>
-                ))}
-            </span>
-          </span>
-          <span className="home-recommended-hero__actions">
-            <button
-              type="button"
-              className="home-recommended-hero__btn home-recommended-hero__btn--details"
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenGame(game);
-              }}
-            >
-              {language === "en" ? "See details" : "Ver detalhes"}
-            </button>
-          </span>
+          {game.logo && (
+            <img
+              className="home-recommended-hero__logo"
+              src={game.logo}
+              alt=""
+              decoding="async"
+              draggable={false}
+            />
+          )}
         </span>
         {canNavigate && (
           <>
-            <span className="home-recommended-hero__pills" aria-label={language === "en" ? "Select featured game" : "Selecionar jogo em destaque"}>
-              {games.map((item, index) => (
-                <button
-                  key={item.appId || item.id}
-                  type="button"
-                  className={`home-recommended-hero__pill${
-                    index === activeIndex ? " home-recommended-hero__pill--active" : ""
-                  }`}
-                  aria-label={item.title}
-                  aria-current={index === activeIndex ? "true" : undefined}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    selectRecommendedHero(index);
-                  }}
-                />
-              ))}
-            </span>
             <button
               type="button"
               className="home-recommended-hero__arrow home-recommended-hero__arrow--prev"
@@ -1585,6 +1555,25 @@ function HomeRecommendedHero({
           </>
         )}
       </div>
+      {canNavigate && (
+        <span className="home-recommended-hero__pills" aria-label={language === "en" ? "Select featured game" : "Selecionar jogo em destaque"}>
+          {games.map((item, index) => (
+            <button
+              key={item.appId || item.id}
+              type="button"
+              className={`home-recommended-hero__pill${
+                index === activeIndex ? " home-recommended-hero__pill--active" : ""
+              }`}
+              aria-label={item.title}
+              aria-current={index === activeIndex ? "true" : undefined}
+              onClick={(event) => {
+                event.stopPropagation();
+                selectRecommendedHero(index);
+              }}
+            />
+          ))}
+        </span>
+      )}
     </section>
   );
 }
@@ -1898,13 +1887,25 @@ function HomeWishlistRecommendations({
               >
                 <span className="home-wishlist-card__content">
                   <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--title" />
-                  <span className="home-wishlist-card__text-skeleton" />
+                  <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--reason" />
                 </span>
                 <span className="home-wishlist-card__media home-wishlist-card__media--single">
                   <span className="home-wishlist-card__cover home-wishlist-card__cover--skeleton" />
                   <span className="home-wishlist-card__details">
-                    <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-                    <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review-short" />
+                    <span className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton">
+                      <span className="home-wishlist-card__player-review-quote-skeleton">
+                        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
+                        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
+                        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review-short" />
+                      </span>
+                      <span className="home-wishlist-card__player-review-author">
+                        <span className="home-wishlist-card__player-review-avatar home-wishlist-card__player-review-avatar--skeleton" />
+                        <span className="home-wishlist-card__player-review-author-skeleton">
+                          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-name" />
+                          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-meta" />
+                        </span>
+                      </span>
+                    </span>
                     <span className="home-wishlist-card__tag-skeleton-row">
                       {Array.from({ length: 4 }, (_, tagIndex) => (
                         <span
@@ -2465,7 +2466,7 @@ export function HomePage({
   }, [steamProfile?.steamId, libraryGameAppIds]);
 
   const homeVisibleGames = useMemo(() => {
-    return homeTopReviewedGames.slice(0, homeCarouselGroupSize);
+    return homeTopReviewedGames.filter((game) => game.appId === "2050650").slice(0, 1);
   }, [homeTopReviewedGames]);
   const featuredGames = homeFeaturedGames;
   const enrichedPersonalCalendarGames = useEnrichedGameCards(

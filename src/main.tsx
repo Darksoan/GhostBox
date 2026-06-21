@@ -12,9 +12,9 @@ async function waitForInterfaceFonts() {
 
   await Promise.race([
     Promise.all([
-      document.fonts.load('400 14px "Open Sans"'),
-      document.fonts.load('500 14px "Open Sans"'),
-      document.fonts.load('600 14px "Open Sans"'),
+      document.fonts.load('400 14px "Montserrat"'),
+      document.fonts.load('500 14px "Montserrat"'),
+      document.fonts.load('600 14px "Montserrat"'),
     ]),
     new Promise((resolve) => window.setTimeout(resolve, 900)),
   ]);

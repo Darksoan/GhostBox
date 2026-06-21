@@ -12,6 +12,7 @@ import { ContentOverlay, useContentOverlayState } from "./ContentOverlay";
 import { ConfirmModal } from "../modals/ConfirmModal";
 import { CollectionModal } from "../modals/CollectionModal";
 import { SteamPathModal } from "../modals/SteamPathModal";
+import { SubscriptionModal } from "../modals/SubscriptionModal";
 
 const LazyCataloguePage = lazy(() =>
   import("../../pages/CataloguePage").then((m) => ({ default: m.CataloguePage }))
@@ -85,9 +86,11 @@ export function PageRouter({
     openAchievements,
     collectionModalOpen,
     steamPathModalOpen,
+    subscriptionModalOpen,
     pendingBackupDeletion,
     setCollectionModalOpen,
     setSteamPathModalOpen,
+    setSubscriptionModalOpen,
     setPendingBackupDeletion,
     showToast,
   } = useOverlay();
@@ -298,7 +301,6 @@ export function PageRouter({
           userCollections={appData.userCollections}
           activeCollectionId={activeProfileCollectionId}
           onSelectCollection={setActiveProfileCollectionId}
-          onCreateCollection={appData.openCreateUserCollectionModal}
           onUpdateProfile={appData.handleUpdateProfile}
           onOpenGame={openGame}
           removableGameAppIds={appData.addedLibraryGameAppIds}
@@ -364,6 +366,11 @@ export function PageRouter({
             setSteamPathModalLoading(false);
           }
         }}
+      />
+
+      <SubscriptionModal
+        open={subscriptionModalOpen}
+        onClose={() => setSubscriptionModalOpen(false)}
       />
 
       <ConfirmModal

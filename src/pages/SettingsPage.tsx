@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   Check,
   Bell,
+  Crown,
   DatabaseBackup,
   ExternalLink,
   FolderCog,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings } from "../context/settings";
+import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
@@ -217,6 +219,11 @@ export const settingsTabs: SettingsTab[] = [
         control: "input",
       },
     ],
+  },
+  {
+    id: "subscription",
+    icon: Crown,
+    options: [],
   },
   {
     id: "notifications",
@@ -443,6 +450,12 @@ export function SettingsPage({
                 </div>
               )}
             </section>
+          )}
+          {activeTab.id === "subscription" && (
+            <SubscriptionPlans
+              surface="settings"
+              enterDelay={`${0.04 + options.length * 0.035}s`}
+            />
           )}
           {activeTab.id === "download" && (
             <>

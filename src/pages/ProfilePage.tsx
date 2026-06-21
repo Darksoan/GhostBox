@@ -41,15 +41,13 @@ import {
 import { useSettings } from "../context/settings";
 import { formatCompactPlaytime } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
+import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import {
-  ProfileLevelBadge,
   getProfileAchievementTotal as getAchievementTotal,
-  getProfileAchievementXp as getAchievementXp,
   getProfileUnlockedAchievementCount as getUnlockedAchievementCount,
-  getProfileXpStats,
   getRicherProfileAchievementGame as getRicherAchievementGame,
   isProfileAchievementUnlocked as isAchievementUnlocked,
-} from "../components/ui/ProfileLevelBadge";
+} from "../utils/profileAchievements";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
@@ -71,7 +69,6 @@ interface ProfilePageProps {
   userCollections: UserCollection[];
   activeCollectionId?: string;
   onSelectCollection?: (id: string) => void;
-  onCreateCollection: () => void;
   onUpdateProfile: (
     displayName: string,
     avatarUrl: string,
@@ -106,22 +103,22 @@ type ProfileCollection = {
 
 type ProfileAchievementHighlight = {
   key: string;
-  game: GhostBoxGame;
+  game?: GhostBoxGame;
   achievementId: string;
   title: string;
   description: string;
   icon: string;
   unlocked: boolean;
   gameTitle: string;
-  xp: number;
   globalPercent?: number;
   unlockedAt?: string;
 };
 
 const showcaseAchievementMinLimit = 15;
 const showcaseAchievementMaxLimit = 32;
-const showcaseLockedAchievementsPerGame = 4;
 const showcaseAchievementEstimatedSlotWidth = 66;
+const localAchievementHydrationLimit = 160;
+const localAchievementHydrationBatchSize = 10;
 let hasPreparedProfileOverviewData = false;
 
 function getGamePlaytime(game: GhostBoxGame) {
@@ -185,6 +182,11 @@ function achievementShowcaseIcon(
     : achievement.iconGray || achievement.icon;
 }
 
+function achievementUnlockedTime(unlockedAt?: string) {
+  const time = Date.parse(unlockedAt ?? "");
+  return Number.isFinite(time) ? time : 0;
+}
+
 function ProfileAchievementShowcaseItem({
   achievement,
   onSelect,
@@ -231,10 +233,11 @@ function ProfileAchievementShowcaseItem({
     appearance.language === "en"
       ? "Global percentage unavailable"
       : "Percentual global indisponível";
+  const secondaryLabel = achievement.gameTitle || fallbackPercentLabel;
   const ariaLabel =
     typeof achievement.globalPercent === "number"
       ? `${achievement.title}, ${globalPercent} ${globalPercentLabel}`
-      : `${achievement.title}, ${fallbackPercentLabel}`;
+      : `${achievement.title}, ${secondaryLabel}`;
   const tooltip = (
     <span
       className="modal__achievement-tooltip modal__achievement-tooltip--portal"
@@ -252,7 +255,7 @@ function ProfileAchievementShowcaseItem({
       <span>
         {typeof achievement.globalPercent === "number"
           ? `${globalPercent} ${globalPercentLabel}`
-          : fallbackPercentLabel}
+          : secondaryLabel}
       </span>
     </span>
   );
@@ -309,7 +312,6 @@ export function ProfilePage({
   userCollections,
   activeCollectionId: propActiveCollectionId,
   onSelectCollection,
-  onCreateCollection,
   onUpdateProfile,
   onOpenGame,
   removableGameAppIds,
@@ -334,6 +336,8 @@ export function ProfilePage({
   const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
   const [renderedGameCount, setRenderedGameCount] = useState(40);
   const [pulsedTabId, setPulsedTabId] = useState<string | null>(null);
+  const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
+    useState<Map<string, GhostBoxGame>>(() => new Map());
   const [showcaseAchievementLimit, setShowcaseAchievementLimit] = useState(
     showcaseAchievementMinLimit
   );
@@ -490,8 +494,70 @@ export function ProfilePage({
         getRicherAchievementGame(games.get(game.appId), game)
       );
     }
+    for (const game of localAchievementGamesByAppId.values()) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
     return [...games.values()];
-  }, [achievementHistoryGames, addedLibraryGames, shouldComputeOverviewData]);
+  }, [achievementHistoryGames, addedLibraryGames, localAchievementGamesByAppId, shouldComputeOverviewData]);
+
+  useEffect(() => {
+    if (!shouldComputeOverviewData) return;
+
+    let cancelled = false;
+    const candidates = [...achievementHistoryGames, ...addedLibraryGames]
+      .filter((game) => game.appId && !localAchievementGamesByAppId.has(game.appId))
+      .sort((left, right) => {
+        const unlockedDelta =
+          (right.achievements?.unlocked ?? 0) - (left.achievements?.unlocked ?? 0);
+        if (unlockedDelta !== 0) return unlockedDelta;
+
+        return getGamePlaytime(right) - getGamePlaytime(left);
+      })
+      .slice(0, localAchievementHydrationLimit);
+
+    if (candidates.length === 0) return;
+
+    void (async () => {
+      for (let index = 0; index < candidates.length; index += localAchievementHydrationBatchSize) {
+        if (cancelled) return;
+
+        const hydratedGames = await Promise.all(
+          candidates
+            .slice(index, index + localAchievementHydrationBatchSize)
+            .map(async (game) => {
+            const details = await loadGameAchievementDetailsCached(
+              game.id || `steam-${game.appId}`
+            ).catch(() => null);
+            if (!details?.achievementList?.length) return null;
+            return {
+              ...game,
+              achievements: details.achievements,
+              achievementList: details.achievementList,
+            };
+          })
+        );
+        if (cancelled) return;
+
+        setLocalAchievementGamesByAppId((current) => {
+          let changed = false;
+          const next = new Map(current);
+          for (const game of hydratedGames) {
+            if (!game || next.has(game.appId)) continue;
+            next.set(game.appId, game);
+            changed = true;
+          }
+          return changed ? next : current;
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [achievementHistoryGames, addedLibraryGames, localAchievementGamesByAppId, shouldComputeOverviewData]);
 
   useEffect(() => {
     if (
@@ -682,93 +748,58 @@ export function ProfilePage({
     };
   }, [enrichedAddedLibraryGames.length, profileAchievementGames]);
 
-  const profileXpStats = useMemo(
-    () => getProfileXpStats(profileAchievementGames),
-    [profileAchievementGames]
-  );
-
   const achievementHighlights = useMemo<ProfileAchievementHighlight[]>(() => {
-    const highlights: ProfileAchievementHighlight[] = [];
     const highlightKeys = new Set<string>();
+    const selectedGameAppIds = new Set<string>();
+    const unlockedHighlights: ProfileAchievementHighlight[] = [];
 
-    const sortHighlights = () =>
-      highlights.slice().sort(
-        (left, right) => Number(right.unlocked) - Number(left.unlocked)
-      );
+    for (const game of profileAchievementGames) {
+      const unlockedAchievements = (game.achievementList ?? [])
+        .filter(isAchievementUnlocked)
+        .sort(
+          (left, right) =>
+            achievementUnlockedTime(right.unlockedAt) -
+            achievementUnlockedTime(left.unlockedAt)
+        );
 
-    const addHighlight = (
-      game: GhostBoxGame,
-      achievement: SteamAchievement,
-      unlocked: boolean
-    ) => {
+      for (const achievement of unlockedAchievements) {
+        if (!isAchievementUnlocked(achievement)) continue;
+        if (selectedGameAppIds.has(game.appId)) break;
+
       const key = achievementShowcaseKey(game, achievement);
-      if (highlightKeys.has(key)) return false;
+        if (highlightKeys.has(key)) continue;
 
-      const icon = achievementShowcaseIcon(achievement, unlocked);
-      if (!icon) return false;
+        const icon = achievementShowcaseIcon(achievement, true);
+        if (!icon) continue;
 
       highlightKeys.add(key);
-      highlights.push({
+        selectedGameAppIds.add(game.appId);
+        unlockedHighlights.push({
         key,
         game,
         achievementId: achievement.name || achievement.title,
         title: achievement.title,
         description: achievement.description,
         icon,
-        unlocked,
+          unlocked: true,
         gameTitle: game.title,
-        xp: getAchievementXp(achievement),
         globalPercent: achievement.globalPercent,
         unlockedAt: achievement.unlockedAt,
       });
-
-      return highlights.length >= showcaseAchievementLimit;
-    };
-
-    for (const game of profileAchievementGames) {
-      const achievementList = game.achievementList ?? [];
-      const explicitUnlocked = achievementList.filter(isAchievementUnlocked);
-
-      for (const achievement of explicitUnlocked) {
-        if (addHighlight(game, achievement, true)) return sortHighlights();
       }
     }
 
-    const gamesWithLockedAchievements = profileAchievementGames
-      .map((game) => ({
-        game,
-        achievements: (game.achievementList ?? []).filter(
-          (achievement) => !isAchievementUnlocked(achievement)
-        ),
-        offset: 0,
-      }))
-      .filter((item) => item.achievements.length > 0);
+    const sortedHighlights = unlockedHighlights
+      .sort((left, right) => {
+        const byDate =
+          achievementUnlockedTime(right.unlockedAt) -
+          achievementUnlockedTime(left.unlockedAt);
+        if (byDate !== 0) return byDate;
+        return (right.globalPercent ?? 100) - (left.globalPercent ?? 100);
+      })
+      .slice(0, showcaseAchievementLimit);
 
-    while (highlights.length < showcaseAchievementLimit) {
-      let addedInRound = false;
-
-      for (const item of gamesWithLockedAchievements) {
-        let addedForGame = 0;
-
-        while (
-          addedForGame < showcaseLockedAchievementsPerGame &&
-          item.offset < item.achievements.length
-        ) {
-          const achievement = item.achievements[item.offset];
-          item.offset += 1;
-
-          if (addHighlight(item.game, achievement, false)) return sortHighlights();
-          addedForGame += 1;
-          addedInRound = true;
-        }
-
-        if (highlights.length >= showcaseAchievementLimit) return sortHighlights();
-      }
-
-      if (!addedInRound) break;
-    }
-
-    return sortHighlights();
+    return sortedHighlights;
   }, [profileAchievementGames, showcaseAchievementLimit]);
 
   const topGames = useMemo(() => {
@@ -955,13 +986,6 @@ export function ProfilePage({
                 <h2 className="profile-page__display-name">
                   {steamProfile.displayName}
                 </h2>
-                <ProfileLevelBadge
-                  level={profileXpStats.level}
-                  progressPercent={profileXpStats.progressPercent}
-                  label={t("profile.levelLabel", {
-                    level: profileXpStats.level,
-                  })}
-                />
                 <button
                   type="button"
                   className="profile-page__edit-button"
@@ -1039,29 +1063,6 @@ export function ProfilePage({
                 aria-label={t("profile.overview")}
               >
                 <section className="profile-page__overview-console">
-                  <div className="profile-page__progress-console">
-                    <div className="profile-page__overview-title-row profile-page__progress-console-header">
-                      <h3>{t("profile.xpProgress")}</h3>
-                      <span>
-                        {profileXpStats.currentLevelXp} /{" "}
-                        {profileXpStats.nextLevelXp}{" "}
-                        <span className="profile-page__xp-suffix">XP</span>
-                      </span>
-                    </div>
-                    <div
-                      className="profile-page__progress-track profile-page__progress-track--xp"
-                      role="progressbar"
-                      aria-valuenow={profileXpStats.currentLevelXp}
-                      aria-valuemin={0}
-                      aria-valuemax={profileXpStats.nextLevelXp}
-                      aria-label={t("profile.xpProgress")}
-                    >
-                      <span
-                        style={{ width: `${profileXpStats.progressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-
                   <div className="profile-page__metric-strip">
                     <div className="profile-page__metric-strip-item profile-page__metric-strip-item--lead">
                       <strong>{overviewStats.libraryGames}</strong>
@@ -1102,11 +1103,11 @@ export function ProfilePage({
                             <ProfileAchievementShowcaseItem
                               key={achievement.key}
                               achievement={achievement}
-                              onSelect={
-                                onOpenGameAchievements
-                                  ? () => {
+                                onSelect={
+                                  onOpenGameAchievements && achievement.game
+                                    ? () => {
                                       onOpenGameAchievements(
-                                        achievement.game,
+                                        achievement.game!,
                                         achievement.achievementId
                                       );
                                     }
@@ -1348,18 +1349,6 @@ export function ProfilePage({
           )}
         </main>
 
-        <div className="profile-page__collection-actions">
-          <button
-            type="button"
-            className="profile-page__collection-button profile-page__collection-button--create"
-            onClick={onCreateCollection}
-          >
-            <span className="profile-page__create-icon" aria-hidden="true" />
-            {appearance.language === "en"
-              ? "Create collection"
-              : "Criar coleção"}
-          </button>
-        </div>
       </div>
 
       <EditProfileModal

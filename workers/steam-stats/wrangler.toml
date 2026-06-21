@@ -1,0 +1,8 @@
+name = "ghostbox-steam-stats"
+main = "src/index.ts"
+compatibility_date = "2026-06-17"
+
+[[kv_namespaces]]
+binding = "STATS_CACHE"
+id = "b5996f474a2a4196b375960235599e70"
+preview_id = "183f9da6fca2465a934a59a4c3a502bb"

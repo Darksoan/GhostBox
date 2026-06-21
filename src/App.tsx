@@ -33,6 +33,7 @@ function AppShell() {
     closeContentOverlay,
     closeAchievements,
     modalReturnScrollTopRef,
+    setSubscriptionModalOpen,
   } = useOverlay();
   const { isGameModalVisible, isAchievementsViewVisible } =
     useContentOverlayState();
@@ -50,6 +51,7 @@ function AppShell() {
   const { appearance, notifications } = useSettings();
   const queryClient = useQueryClient();
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
+  const isPremium = false;
 
   useEffect(() => {
     return ghostboxApi.onCatalogueCacheUpdated(() => {
@@ -87,6 +89,12 @@ function AppShell() {
 
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
+      if (newPage === "backup" && !isPremium) {
+        closeContentOverlay();
+        setSubscriptionModalOpen(true);
+        return;
+      }
+
       saveScrollPosition();
       closeContentOverlay();
       if (newPage !== page) {
@@ -97,7 +105,7 @@ function AppShell() {
         shell.setActiveProfileCollectionId(collectionId);
       }
     },
-    [closeContentOverlay, navigate, page, saveScrollPosition, shell]
+    [closeContentOverlay, isPremium, navigate, page, saveScrollPosition, setSubscriptionModalOpen, shell]
   );
 
   const handleBack = useCallback(() => {

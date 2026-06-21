@@ -1,0 +1,11 @@
+name = "ghostbox-subscriptions"
+main = "src/index.ts"
+compatibility_date = "2026-06-19"
+
+[vars]
+CHECKOUT_RETURN_URL = "https://ghostbox-subscriptions.hella.workers.dev/subscription/return"
+
+[[d1_databases]]
+binding = "SUBSCRIPTION_DB"
+database_name = "ghostbox-subscriptions"
+database_id = "fd16afc9-ed7c-4de0-924f-9fd4d9d6f15e"

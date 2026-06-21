@@ -91,8 +91,6 @@ const translations: Record<Language, TranslationTree> = {
       perfectGames: "Jogos perfeitos",
       averageAchievements: "Média de conquistas por jogo",
       overallProgress: "Progresso geral",
-      xpProgress: "Progresso",
-      levelLabel: "Nível {level}",
       totalPlaytimeLabel: "Tempo total",
       topGames: "Jogos mais jogados",
       mostPlayed: "Mais jogados",
@@ -134,6 +132,53 @@ const translations: Record<Language, TranslationTree> = {
       restartSteam: "Reiniciar Steam",
       noGames: "Nenhum jogo",
     },
+    subscription: {
+      eyebrow: "Ghost Premium",
+      title: "Desbloqueie sincronização em nuvem",
+      description: "Backup automático, restauração rápida e progresso sincronizado entre PCs.",
+      actions: {
+        subscribe: "Assinar",
+      },
+      checkoutPending: {
+        title: "Checkout em breve",
+        message: "A UI está pronta. O checkout Tauri seguro entra na fase backend.",
+      },
+      checkout: {
+        title: "Checkout seguro via SumUp",
+        label: "Checkout seguro via",
+        provider: "SumUp",
+      },
+      paymentMethods: {
+        visa: "Visa",
+        mastercard: "Mastercard",
+        pix: "Pix",
+      },
+      benefits: {
+        backupSync: "Backups e sincronização",
+        localAndCloudBackups: "Backup local e em nuvem",
+        sync: "Sincronização entre PCs",
+        automaticRestore: "Restauração automática",
+      },
+      plans: {
+        free: {
+          title: "Free",
+          price: "R$ 0",
+          cadence: "para sempre",
+          action: "Atual",
+        },
+        monthly: {
+          title: "Mensal",
+          cadence: "por mês",
+        },
+        quarterly: {
+          title: "Trimestral",
+          cadence: "a cada 3 meses",
+          badge: "Recomendado",
+          savingsLabel: "Economize",
+          savingsValue: "28%",
+        },
+      },
+    },
     settings: {
       tabs: {
         general: {
@@ -163,6 +208,13 @@ const translations: Record<Language, TranslationTree> = {
           title: "Destino dos backups",
           description:
             "Configure onde o GhostBox salva backups locais criados pelo Ludusavi.",
+        },
+        subscription: {
+          label: "Assinatura",
+          eyebrow: "Ghost Premium",
+          title: "Planos Premium",
+          description:
+            "Compare Free, Mensal e Trimestral antes de ativar o checkout.",
         },
         notifications: {
           label: "Notificações",
@@ -422,8 +474,6 @@ const translations: Record<Language, TranslationTree> = {
       perfectGames: "Perfect games",
       averageAchievements: "Average achievements per game",
       overallProgress: "Overall progress",
-      xpProgress: "Progress",
-      levelLabel: "Level {level}",
       totalPlaytimeLabel: "Total playtime",
       topGames: "Top games",
       mostPlayed: "Most played",
@@ -465,6 +515,53 @@ const translations: Record<Language, TranslationTree> = {
       restartSteam: "Restart Steam",
       noGames: "No games",
     },
+    subscription: {
+      eyebrow: "Ghost Premium",
+      title: "Unlock cloud sync",
+      description: "Automatic backup, fast restore, and progress synced across PCs.",
+      actions: {
+        subscribe: "Subscribe",
+      },
+      checkoutPending: {
+        title: "Checkout soon",
+        message: "The UI is ready. Secure Tauri checkout comes in the backend phase.",
+      },
+      checkout: {
+        title: "Secure checkout via SumUp",
+        label: "Secure checkout via",
+        provider: "SumUp",
+      },
+      paymentMethods: {
+        visa: "Visa",
+        mastercard: "Mastercard",
+        pix: "Pix",
+      },
+      benefits: {
+        backupSync: "Backups and sync",
+        localAndCloudBackups: "Local and cloud backup",
+        sync: "Sync across PCs",
+        automaticRestore: "Automatic restore",
+      },
+      plans: {
+        free: {
+          title: "Free",
+          price: "R$ 0",
+          cadence: "forever",
+          action: "Current",
+        },
+        monthly: {
+          title: "Monthly",
+          cadence: "per month",
+        },
+        quarterly: {
+          title: "Quarterly",
+          cadence: "every 3 months",
+          badge: "Recommended",
+          savingsLabel: "Save",
+          savingsValue: "28%",
+        },
+      },
+    },
     settings: {
       tabs: {
         general: {
@@ -493,6 +590,13 @@ const translations: Record<Language, TranslationTree> = {
           title: "Backup destination",
           description:
             "Configure where GhostBox saves local backups created by Ludusavi.",
+        },
+        subscription: {
+          label: "Subscription",
+          eyebrow: "Ghost Premium",
+          title: "Premium plans",
+          description:
+            "Compare Free, Monthly, and Quarterly before enabling checkout.",
         },
         notifications: {
           label: "Notifications",

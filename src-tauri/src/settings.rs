@@ -3,6 +3,8 @@ use crate::util::{merge_object_defaults, text_value, EmptyStringExt};
 pub(crate) const STARTUP_SETTINGS_FILE: &str = "startup-settings.json";
 pub(crate) const NOTIFICATION_SETTINGS_FILE: &str = "notification-settings.json";
 const HUBCAP_MANIFEST_API_KEY_FILE: &str = "morrenus-api-key.bin";
+const STEAM_WEB_API_KEY_FILE: &str = "steam-web-api-key.bin";
+const DEFAULT_STEAM_STATS_PROXY_URL: &str = "https://ghostbox-steam-stats.hella.workers.dev";
 
 pub(crate) fn default_startup_settings() -> serde_json::Value {
     serde_json::json!({
@@ -197,6 +199,50 @@ pub(crate) fn save_morrenus_api_key(
     let payload = encrypt_secret_for_current_user(&normalized)?;
     write_binary_file(app, HUBCAP_MANIFEST_API_KEY_FILE, &payload)?;
     Ok(normalized)
+}
+
+pub(crate) fn load_steam_web_api_key(app: &tauri::AppHandle) -> String {
+    if let Ok(api_key) = std::env::var("GHOSTBOX_STEAM_WEB_API_KEY") {
+        let api_key = api_key.trim().to_string();
+        if !api_key.is_empty() {
+            return api_key;
+        }
+    }
+    if let Ok(api_key) = std::env::var("STEAM_WEB_API_KEY") {
+        let api_key = api_key.trim().to_string();
+        if !api_key.is_empty() {
+            return api_key;
+        }
+    }
+    match read_binary_file(app, STEAM_WEB_API_KEY_FILE) {
+        Ok(bytes) if bytes.is_empty() => String::new(),
+        Ok(bytes) => decrypt_secret_for_current_user(&bytes).unwrap_or_default(),
+        Err(_) => String::new(),
+    }
+}
+
+pub(crate) fn load_steam_stats_proxy_url() -> String {
+    for key in ["GHOSTBOX_STEAM_STATS_API_URL", "STEAM_STATS_API_URL"] {
+        if let Ok(value) = std::env::var(key) {
+            let value = value.trim().trim_end_matches('/').to_string();
+            if value.starts_with("https://") {
+                return value;
+            }
+        }
+    }
+    for value in [
+        option_env!("GHOSTBOX_STEAM_STATS_API_URL"),
+        option_env!("STEAM_STATS_API_URL"),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let value = value.trim().trim_end_matches('/').to_string();
+        if value.starts_with("https://") {
+            return value;
+        }
+    }
+    DEFAULT_STEAM_STATS_PROXY_URL.to_string()
 }
 
 pub(crate) fn load_startup_settings(app: &tauri::AppHandle) -> serde_json::Value {

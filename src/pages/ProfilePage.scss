@@ -38,60 +38,16 @@
 
     &--empty {
       background: var(--background-dark);
-
-      &::after {
-        display: none;
-      }
-    }
-
-    &--placeholder {
-      &::after {
-        display: none;
-      }
-    }
-
-    &::after {
-      content: "";
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      z-index: 2;
-      height: 140px;
-      background: linear-gradient(
-        to bottom,
-        transparent 0%,
-        color-mix(in srgb, var(--background-dark) 35%, transparent) 50%,
-        var(--background-dark) 100%
-      );
-      pointer-events: none;
     }
   }
 
   &__banner-viewport {
     position: absolute;
-    inset: 0;
+    inset: 0 0 -1px;
     overflow: hidden;
     contain: paint;
     pointer-events: none;
     user-select: none;
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      display: none;
-      background: linear-gradient(
-        to bottom,
-        color-mix(in srgb, var(--overlay-subtle) 28%, transparent) 0%,
-        color-mix(in srgb, var(--background-dark) 45%, transparent) 55%,
-        var(--background-dark) 100%
-      );
-    }
-  }
-
-  &__content-box--cover &__banner-viewport::after {
-    display: block;
   }
 
   &__banner-image {
@@ -252,7 +208,7 @@
     overflow: hidden;
     color: var(--text-strong);
     font-size: 28px;
-    font-weight: 500;
+    font-weight: var(--weight-medium);
     line-height: 34px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -272,7 +228,7 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.18);
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text);
     backdrop-filter: blur(var(--profile-glass-blur));
     -webkit-backdrop-filter: blur(var(--profile-glass-blur));
     cursor: pointer;
@@ -291,59 +247,16 @@
 
     &:hover {
       background: var(--profile-glass-background);
-      color: #fff;
+      color: var(--text-strong);
     }
 
     &:focus-visible {
       background: var(--profile-glass-background);
-      color: #fff;
+      color: var(--text-strong);
       outline: 0;
     }
 
 }
-
-  .profile-level-badge {
-    --profile-level-progress: 0%;
-
-    position: relative;
-    display: inline-grid;
-    flex: 0 0 auto;
-    width: 32px;
-    height: 32px;
-    place-items: center;
-    border-radius: var(--radius-circle);
-    background: transparent;
-    color: var(--text-strong);
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1;
-    box-shadow: none;
-  }
-
-  .profile-level-badge__ring {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: conic-gradient(
-      var(--text-strong) var(--profile-level-progress),
-      color-mix(in srgb, var(--text-strong) 16%, transparent) 0
-    );
-    -webkit-mask: radial-gradient(
-      farthest-side,
-      transparent calc(100% - 2px),
-      #000 calc(100% - 2px)
-    );
-    mask: radial-gradient(
-      farthest-side,
-      transparent calc(100% - 2px),
-      #000 calc(100% - 2px)
-    );
-  }
-
-  .profile-level-badge__value {
-    position: relative;
-    z-index: 1;
-  }
 
   &__copy-button {
     display: flex;
@@ -475,39 +388,12 @@
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-template-areas:
-      "progress progress progress progress progress progress progress progress achievements achievements achievements achievements"
       "metrics metrics metrics metrics metrics metrics metrics metrics achievements achievements achievements achievements"
       "top top top top top top top top top top top top";
     align-items: start;
     gap: 18px 44px;
     width: min(100%, 1180px);
     margin: 0 auto;
-  }
-
-  &__progress-console {
-    grid-area: progress;
-    width: 100%;
-    padding: 0;
-  }
-
-  &__progress-console-header#{&}__overview-title-row {
-    margin-bottom: 14px;
-    min-height: 16px;
-
-    > span {
-      color: var(--text-dim);
-      font-size: 15px;
-      font-weight: 500;
-      letter-spacing: -0.02em;
-    }
-
-    .profile-page__xp-suffix {
-      color: var(--text-strong);
-      font-size: inherit;
-      font-weight: inherit;
-      line-height: inherit;
-      letter-spacing: inherit;
-    }
   }
 
   &__progress-track {
@@ -530,9 +416,6 @@
       height: 5px;
     }
 
-    &--xp span {
-      background: var(--text-strong);
-    }
   }
 
   &__metric-strip {
@@ -637,7 +520,7 @@
       margin: 0;
       color: var(--text-soft);
       font-size: 12px;
-      font-weight: 600;
+      font-weight: var(--weight-medium);
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
@@ -1150,7 +1033,7 @@
   &__achievement-timeline-date {
     padding: 18px 10px 0 0;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: var(--weight-medium);
     color: var(--text-faint);
     text-align: right;
     white-space: nowrap;
@@ -1236,7 +1119,7 @@
     strong {
       color: var(--text-strong);
       font-size: 14px;
-      font-weight: 600;
+      font-weight: var(--weight-medium);
     }
 
     span {
@@ -1253,7 +1136,7 @@
     gap: 6px;
     color: var(--text-dim);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: var(--weight-medium);
     white-space: nowrap;
     padding: 3px 8px;
     border-radius: var(--radius-sm);
@@ -1335,7 +1218,7 @@
     strong {
       color: var(--text-strong);
       font-size: 14px;
-      font-weight: 600;
+      font-weight: var(--weight-medium);
     }
 
     span,
@@ -1358,7 +1241,7 @@
     gap: 6px;
     color: rgba(211, 211, 211, 0.78);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: var(--weight-medium);
   }
 
   &__recent-progress {
@@ -1440,10 +1323,11 @@
     isolation: isolate;
     height: 44px;
     padding: 0 24px;
-    margin: -44px 0 10px;
-    background: transparent;
-    border: 0;
+    margin: -44px 0 18px;
+    background: rgba(6, 6, 6, 0.46);
     box-shadow: none;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
   &__collection-tabs {
@@ -1451,21 +1335,29 @@
     align-items: center;
     height: 100%;
     gap: 8px;
+    width: 100%;
     min-width: 0;
     position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   &__tab-indicator {
     position: absolute;
-    top: 50%;
+    bottom: 0;
     left: 0;
-    transform: translateY(-50%);
-    height: 34px;
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
+    height: 3px;
+    border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+    background: var(--text-strong);
     pointer-events: none;
     transition: left 0.25s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
     z-index: 1;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.18);
   }
 
   &__tab {
@@ -1474,15 +1366,15 @@
     justify-content: center;
     gap: 8px;
     flex: 0 0 auto;
-    height: 34px;
-    min-height: 34px;
+    height: 100%;
+    min-height: 100%;
     min-width: 0;
     padding: 0 14px;
     overflow: hidden;
     border: 0;
-    border-radius: var(--radius-pill);
+    border-radius: 0;
     background: transparent;
-    color: var(--text-dim);
+    color: color-mix(in srgb, var(--text-strong) 58%, transparent);
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
@@ -1522,79 +1414,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     transform: none;
-  }
-
-  &__collection-actions {
-    position: absolute;
-    top: -44px;
-    right: 24px;
-    height: 44px;
-    z-index: 4;
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  &__collection-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    flex: 0 0 auto;
-    min-height: 34px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: rgba(211, 211, 211, 0.74);
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: color var(--motion-base) ease;
-
-    &:hover {
-      color: var(--text-strong);
-      transform: none;
-    }
-  }
-
-  &__collection-button--create {
-    color: var(--text-muted);
-    transition: color var(--motion-base) ease;
-
-    &:hover,
-    &:focus-visible {
-      color: var(--text-strong);
-    }
-
-    .profile-page__create-icon {
-      position: relative;
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      flex: 0 0 auto;
-
-      &::before,
-      &::after {
-        content: "";
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        border-radius: var(--radius-pill);
-        background: currentColor;
-        transform: translate(-50%, -50%);
-      }
-
-      &::before {
-        width: 14px;
-        height: 2px;
-      }
-
-      &::after {
-        width: 2px;
-        height: 14px;
-      }
-    }
   }
 
   &__side-section {
@@ -1820,13 +1639,11 @@
     &__overview-console {
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
-        "progress"
         "metrics"
         "achievements"
         "top";
     }
 
-    &__progress-console,
     &__metric-strip {
       width: 100%;
     }
@@ -1888,7 +1705,6 @@
   &__recent-main span,
   &__recent-main small,
   &__overview-empty,
-  &__collection-button,
   &__achievement-timeline-percent {
     color: var(--text-dim);
   }
@@ -1907,10 +1723,6 @@
 
   &__recent-progress span,
   &__progress-track span {
-    background: var(--text-strong);
-  }
-
-  &__progress-track--xp span {
     background: var(--text-strong);
   }
 
