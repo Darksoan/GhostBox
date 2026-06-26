@@ -144,9 +144,9 @@ const translations: Record<Language, TranslationTree> = {
         message: "A UI está pronta. O checkout Tauri seguro entra na fase backend.",
       },
       checkout: {
-        title: "Checkout seguro via SumUp",
+        title: "Checkout seguro via Stripe",
         label: "Checkout seguro via",
-        provider: "SumUp",
+        provider: "Stripe",
       },
       paymentMethods: {
         visa: "Visa",
@@ -158,6 +158,42 @@ const translations: Record<Language, TranslationTree> = {
         localAndCloudBackups: "Backup local e em nuvem",
         sync: "Sincronização entre PCs",
         automaticRestore: "Restauração automática",
+      },
+      steps: {
+        title: "Como ativar a assinatura",
+        choose: "Escolha o plano que combina com seu uso.",
+        checkout: "Finalize o pagamento no checkout seguro.",
+        sync: "Entre na conta Steam e mantenha seus saves sincronizados.",
+      },
+      details: {
+        payments: {
+          title: "Pagamentos",
+          card: "Pagamentos e reembolsos aprovados são processados pela Stripe.",
+          methods: "Métodos, impostos e detalhes de cobrança são exibidos no Stripe Checkout antes da confirmação.",
+          security: "O GhostBox não armazena número completo de cartão nem credenciais de pagamento.",
+        },
+        billing: {
+          title: "Cobrança e acesso",
+          renewal: "A assinatura é recorrente e os termos finais aparecem no Stripe Checkout antes do pagamento.",
+          activation: "O Premium é liberado para a conta Steam usada no app após a confirmação do pagamento.",
+          receipt: "Comprovantes, status da assinatura e revisões de reembolso ficam vinculados ao pagamento na Stripe.",
+        },
+        refunds: {
+          title: "Reembolso",
+          window: "Solicitações devem ser enviadas em até 7 dias do pagamento original sempre que possível.",
+          prorated: "Reembolsos não são automáticos; cada pedido é revisado por status da conta, pagamento e motivo.",
+          abuse: "Reembolsos parciais do período não são garantidos, exceto quando exigidos por lei ou por falha técnica confirmada.",
+        },
+        cancel: {
+          title: "Cancelamento",
+          anytime: "Você pode cancelar a assinatura para impedir renovações futuras.",
+          access: "Ao cancelar, o acesso Premium continua ativo até o fim do período já pago.",
+          data: "Cancelar não reembolsa automaticamente cobranças anteriores nem o período atual.",
+        },
+      },
+      policy: {
+        title: "Resumo importante",
+        description: "A assinatura cobre recursos Premium opcionais do GhostBox, como backups automáticos, pontos de restauração e sincronização em nuvem. Para suporte ou revisão de reembolso, envie a conta, data da cobrança e descrição do problema para ghostbox@mail.com.",
       },
       plans: {
         free: {
@@ -527,9 +563,9 @@ const translations: Record<Language, TranslationTree> = {
         message: "The UI is ready. Secure Tauri checkout comes in the backend phase.",
       },
       checkout: {
-        title: "Secure checkout via SumUp",
+        title: "Secure checkout via Stripe",
         label: "Secure checkout via",
-        provider: "SumUp",
+        provider: "Stripe",
       },
       paymentMethods: {
         visa: "Visa",
@@ -541,6 +577,42 @@ const translations: Record<Language, TranslationTree> = {
         localAndCloudBackups: "Local and cloud backup",
         sync: "Sync across PCs",
         automaticRestore: "Automatic restore",
+      },
+      steps: {
+        title: "How to activate the subscription",
+        choose: "Choose the plan that fits your usage.",
+        checkout: "Complete payment in the secure checkout.",
+        sync: "Sign in with Steam and keep your saves synced.",
+      },
+      details: {
+        payments: {
+          title: "Payments",
+          card: "Payments and approved refunds are processed by Stripe.",
+          methods: "Payment methods, taxes, and billing details are shown in Stripe Checkout before confirmation.",
+          security: "GhostBox does not store full card numbers or payment credentials.",
+        },
+        billing: {
+          title: "Billing and access",
+          renewal: "The subscription is recurring and final terms appear in Stripe Checkout before payment.",
+          activation: "Premium is unlocked for the Steam account used in the app after payment confirmation.",
+          receipt: "Receipts, subscription status, and refund reviews are linked to the Stripe payment.",
+        },
+        refunds: {
+          title: "Refunds",
+          window: "Requests should be sent within 7 days of the original payment whenever possible.",
+          prorated: "Refunds are not automatic; each request is reviewed by account status, payment record, and reason.",
+          abuse: "Partial-period refunds are not guaranteed unless required by law or caused by a confirmed technical issue.",
+        },
+        cancel: {
+          title: "Cancellation",
+          anytime: "You can cancel the subscription to stop future renewals.",
+          access: "After cancellation, Premium access remains active until the end of the paid period.",
+          data: "Cancellation does not automatically refund previous charges or the current billing period.",
+        },
+      },
+      policy: {
+        title: "Important summary",
+        description: "The subscription covers optional GhostBox Premium features such as automatic backups, restore points, and cloud sync. For support or refund review, send the account, billing date, and issue description to ghostbox@mail.com.",
       },
       plans: {
         free: {

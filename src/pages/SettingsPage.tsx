@@ -1,5 +1,5 @@
 import {
-  ChevronLeft,
+  ChevronRight,
   Check,
   Bell,
   Crown,
@@ -999,7 +999,7 @@ function SettingsDropdown({
         onClick={() => setOpen((current) => !current)}
       >
         <span>{activeChoice.label}</span>
-        <ChevronLeft size={14} />
+        <ChevronRight size={14} />
       </button>
 
       {open && (

@@ -2,9 +2,6 @@ import { Check, X } from "lucide-react";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import ghostIcon from "../../../Icons/ghost-solid.png";
-import mastercardIcon from "../../../Icons/mastercard.svg";
-import pixIcon from "../../../Icons/pix.svg";
-import visaIcon from "../../../Icons/visa.svg";
 
 type SubscriptionPlanId = "free" | "monthly" | "quarterly";
 
@@ -19,10 +16,45 @@ const benefits: Record<SubscriptionPlanId, string[]> = {
   quarterly: ["subscription.benefits.localAndCloudBackups", "subscription.benefits.sync", "subscription.benefits.automaticRestore"],
 };
 
-const paymentMethods = [
-  { key: "subscription.paymentMethods.visa", image: visaIcon, variant: "card" },
-  { key: "subscription.paymentMethods.mastercard", image: mastercardIcon, variant: "card" },
-  { key: "subscription.paymentMethods.pix", image: pixIcon },
+const details = [
+  {
+    title: "subscription.details.payments.title",
+    items: [
+      "subscription.details.payments.card",
+      "subscription.details.payments.methods",
+      "subscription.details.payments.security",
+    ],
+  },
+  {
+    title: "subscription.details.billing.title",
+    items: [
+      "subscription.details.billing.renewal",
+      "subscription.details.billing.activation",
+      "subscription.details.billing.receipt",
+    ],
+  },
+  {
+    title: "subscription.details.refunds.title",
+    items: [
+      "subscription.details.refunds.window",
+      "subscription.details.refunds.prorated",
+      "subscription.details.refunds.abuse",
+    ],
+  },
+  {
+    title: "subscription.details.cancel.title",
+    items: [
+      "subscription.details.cancel.anytime",
+      "subscription.details.cancel.access",
+      "subscription.details.cancel.data",
+    ],
+  },
+];
+
+const steps = [
+  "subscription.steps.choose",
+  "subscription.steps.checkout",
+  "subscription.steps.sync",
 ];
 
 export function SubscriptionPlans({
@@ -152,25 +184,32 @@ export function SubscriptionPlans({
         ))}
       </div>
 
-      <div className="subscription-plans__checkout" aria-label={t("subscription.checkout.title")}>
-        <span>
-          {t("subscription.checkout.label")} <strong>{t("subscription.checkout.provider")}</strong>
-        </span>
-        <div className="subscription-plans__payment-methods">
-          {paymentMethods.map((method) => {
-            return (
-              <span
-                key={method.key}
-                className={`subscription-plans__payment-method ${method.variant === "card" ? "subscription-plans__payment-method--card" : ""}`}
-                aria-label={t(method.key)}
-                title={t(method.key)}
-              >
-                <img src={method.image} alt="" aria-hidden="true" />
-              </span>
-            );
-          })}
-        </div>
+      <div className="subscription-plans__steps" aria-label={t("subscription.steps.title")}>
+        {steps.map((stepKey, index) => (
+          <div key={stepKey} className="subscription-plans__step">
+            <span>{index + 1}</span>
+            <strong>{t(stepKey)}</strong>
+          </div>
+        ))}
       </div>
+
+      <div className="subscription-plans__details">
+        {details.map((section) => (
+          <article key={section.title} className="subscription-plans__detail-card">
+            <h4>{t(section.title)}</h4>
+            <ul>
+              {section.items.map((item) => (
+                <li key={item}>{t(item)}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+
+      <footer className="subscription-plans__policy-note">
+        <strong>{t("subscription.policy.title")}</strong>
+        <p>{t("subscription.policy.description")}</p>
+      </footer>
     </section>
   );
 }

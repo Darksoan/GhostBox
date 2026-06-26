@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { CircleCheck, FolderPlus, Loader2, Trash2 } from "lucide-react";
+import { CircleCheck, Loader2, Trash2 } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -18,7 +18,6 @@ import {
 } from "../../utils/image";
 import { CatalogueListLoadingState } from "./LoadingStates";
 import { useSettings } from "../../context/settings";
-import type { UserCollection } from "../../types";
 
 const CATALOGUE_ITEM_ESTIMATED_HEIGHT = 108;
 const CATALOGUE_VIRTUALIZATION_THRESHOLD = 30;
@@ -26,27 +25,23 @@ const CATALOGUE_VIRTUALIZATION_THRESHOLD = 30;
 interface CatalogueListItemProps {
   game: GhostBoxGame;
   isAdded: boolean;
-  canAddToCollection: boolean;
   isAdding?: boolean;
   isRemoving?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onPreloadGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-  onCollectionContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }
 
 export const CatalogueListItem = memo(function CatalogueListItem({
   game,
   isAdded,
-  canAddToCollection,
   isAdding = false,
   isRemoving = false,
   onOpenGame,
   onRemoveGame,
   onPreloadGame,
   onGameContextMenu,
-  onCollectionContextMenu,
 }: CatalogueListItemProps) {
   const { appearance } = useSettings();
   const headerSources = useCachedImageSources(gameCatalogueHeaderSources(game));
@@ -130,61 +125,41 @@ export const CatalogueListItem = memo(function CatalogueListItem({
           ))}
         </div>
       </div>
-      {(canAddToCollection || isAdded) && (
+      {isAdded && (
         <div className="catalogue-list__actions">
-          {canAddToCollection && onCollectionContextMenu && (
-            <button
-              type="button"
-              className="catalogue-list__collection-button"
-              onClick={(event) => {
-                event.stopPropagation();
-                const rect = event.currentTarget.getBoundingClientRect();
-                onCollectionContextMenu(game, rect.right, rect.bottom);
-              }}
-              aria-label={
-                isEnglish
-                  ? `Add ${game.title} to collection`
-                  : `Adicionar ${game.title} à coleção`
-              }
-            >
-              <FolderPlus size={20} stroke="currentColor" />
-            </button>
-          )}
-          {isAdded && (
-            <button
-              type="button"
-              className="catalogue-list__added-status"
-              onClick={(event) => {
-                event.stopPropagation();
-                onRemoveGame?.(game);
-              }}
-              disabled={!onRemoveGame || isRemoving}
-              aria-label={
-                isEnglish ? `Remove ${game.title}` : `Remover ${game.title}`
-              }
-            >
-              {isRemoving ? (
-                <Loader2
+          <button
+            type="button"
+            className="catalogue-list__added-status"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemoveGame?.(game);
+            }}
+            disabled={!onRemoveGame || isRemoving}
+            aria-label={
+              isEnglish ? `Remove ${game.title}` : `Remover ${game.title}`
+            }
+          >
+            {isRemoving ? (
+              <Loader2
+                size={20}
+                className="catalogue-list__remove-spinner"
+                aria-hidden="true"
+              />
+            ) : (
+              <>
+                <CircleCheck
+                  className="catalogue-list__added-check"
                   size={20}
-                  className="catalogue-list__remove-spinner"
                   aria-hidden="true"
                 />
-              ) : (
-                <>
-                  <CircleCheck
-                    className="catalogue-list__added-check"
-                    size={20}
-                    aria-hidden="true"
-                  />
-                  <Trash2
-                    className="catalogue-list__added-trash"
-                    size={20}
-                    aria-hidden="true"
-                  />
-                </>
-              )}
-            </button>
-          )}
+                <Trash2
+                  className="catalogue-list__added-trash"
+                  size={20}
+                  aria-hidden="true"
+                />
+              </>
+            )}
+          </button>
         </div>
       )}
     </article>
@@ -194,13 +169,11 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 interface CatalogueListProps {
   games: GhostBoxGame[];
   onOpenGame: (game: GhostBoxGame) => void;
-  userCollections?: UserCollection[];
   addedGameAppIds?: Set<string>;
   addingGameId?: string | null;
   removingGameId?: string | null;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-  onCollectionContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   scrollElementRef?: RefObject<HTMLElement | null>;
   onVirtualHeightChange?: (height: number) => void;
 }
@@ -208,13 +181,11 @@ interface CatalogueListProps {
 export function CatalogueList({
   games,
   onOpenGame,
-  userCollections = [],
   addedGameAppIds = new Set(),
   addingGameId = null,
   removingGameId = null,
   onRemoveGame,
   onGameContextMenu,
-  onCollectionContextMenu,
   scrollElementRef,
   onVirtualHeightChange,
 }: CatalogueListProps) {
@@ -264,16 +235,12 @@ export function CatalogueList({
       game={game}
       key={game.id}
       isAdded={addedGameAppIds.has(game.appId)}
-      canAddToCollection={userCollections.some(
-        (collection) => !collection.gameIds.includes(game.id)
-      )}
       isAdding={addingGameId === game.id}
       isRemoving={removingGameId === game.id}
       onOpenGame={onOpenGame}
       onRemoveGame={onRemoveGame}
       onPreloadGame={scheduleGamePreload}
       onGameContextMenu={onGameContextMenu}
-      onCollectionContextMenu={onCollectionContextMenu}
     />
   );
 

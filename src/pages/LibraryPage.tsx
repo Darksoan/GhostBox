@@ -1,4 +1,4 @@
-import { ChevronLeft, Folder, Heart } from "lucide-react";
+import { ChevronRight, Folder, Heart } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
@@ -234,7 +234,7 @@ export function LibraryPage({
 
   return (
     <section className="content-section content-section--full content-section--library">
-<div className="library-toolbar" aria-label={language === "en" ? "Library filters" : "Filtros da biblioteca"}>
+      <div className="library-toolbar" aria-label={language === "en" ? "Library filters" : "Filtros da biblioteca"}>
         <div className="library-toolbar__row">
           <div className={`settings-dropdown ${sortDropdownOpen ? "settings-dropdown--open" : ""}`} ref={sortDropdownRef}>
             <button
@@ -245,7 +245,7 @@ export function LibraryPage({
                 onClick={() => setSortDropdownOpen((current) => !current)}
               >
                 <span>{sortLabel}</span>
-                <ChevronLeft size={14} />
+                <ChevronRight size={14} />
               </button>
               {sortDropdownOpen && (
                 <div className="settings-dropdown__menu" role="listbox" aria-label={language === "en" ? "Sort by" : "Ordenar por"}>
@@ -268,35 +268,34 @@ export function LibraryPage({
               )}
             </div>
 
-        </div>
-
-        <div className="library-toolbar__chips">
-          <button
-            type="button"
-            className={favoritesOnly ? "library-chip library-chip--active" : "library-chip"}
-            aria-pressed={favoritesOnly}
-            onClick={() => {
-              changeActiveCollection(favoritesOnly ? null : "favorites");
-            }}
-          >
-            <Heart size={15} strokeWidth={2.2} fill={favoritesOnly ? "currentColor" : "none"} />
-            <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
-          </button>
-
-          {userCollections.map((collection) => (
+          <div className="library-toolbar__chips">
             <button
-              key={collection.id}
               type="button"
-              className={activeCollectionId === collection.id ? "library-chip library-chip--active" : "library-chip"}
-              aria-pressed={activeCollectionId === collection.id}
+              className={favoritesOnly ? "library-chip library-chip--active" : "library-chip"}
+              aria-pressed={favoritesOnly}
               onClick={() => {
-                changeActiveCollection(activeCollectionId === collection.id ? null : collection.id);
+                changeActiveCollection(favoritesOnly ? null : "favorites");
               }}
             >
-              <Folder size={15} strokeWidth={2.2} />
-              <span>{collection.name}</span>
+              <Heart size={15} strokeWidth={2.2} fill={favoritesOnly ? "currentColor" : "none"} />
+              <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
             </button>
-          ))}
+
+            {userCollections.map((collection) => (
+              <button
+                key={collection.id}
+                type="button"
+                className={activeCollectionId === collection.id ? "library-chip library-chip--active" : "library-chip"}
+                aria-pressed={activeCollectionId === collection.id}
+                onClick={() => {
+                  changeActiveCollection(activeCollectionId === collection.id ? null : collection.id);
+                }}
+              >
+                <Folder size={15} strokeWidth={2.2} />
+                <span>{collection.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

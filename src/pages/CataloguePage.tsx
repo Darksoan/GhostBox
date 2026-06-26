@@ -549,7 +549,6 @@ export function CataloguePage({
               <CatalogueList
                 games={visibleGames}
                 onOpenGame={onOpenGame}
-                userCollections={userCollections}
                 addedGameAppIds={addedGameAppIds}
                 addingGameId={addingGameId}
                 removingGameId={removingGameId}
@@ -558,9 +557,6 @@ export function CataloguePage({
                 onVirtualHeightChange={setVirtualListHeight}
                 onGameContextMenu={(game, x, y) =>
                   setContextMenu({ game, x, y, mode: "game" })
-                }
-                onCollectionContextMenu={(game, x, y) =>
-                  setContextMenu({ game, x, y, mode: "collection" })
                 }
               />
             </div>

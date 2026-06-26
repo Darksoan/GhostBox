@@ -1,6 +1,7 @@
 .profile-page {
   --profile-glass-blur: 4px;
   --profile-glass-background: var(--overlay-medium);
+  --profile-cover-height: 280px;
 
   display: flex;
   flex-direction: column;
@@ -94,13 +95,14 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
+    width: 34px;
     height: 34px;
     min-height: 34px;
-    padding: 0 14px;
+    padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
-    color: var(--text-strong);
+    color: var(--text-muted);
     backdrop-filter: blur(var(--profile-glass-blur));
     -webkit-backdrop-filter: blur(var(--profile-glass-blur));
     font-size: 14px;
@@ -113,8 +115,7 @@
     transform: translateY(-4px);
     transition:
       opacity var(--motion-fast) ease,
-      background-color ease 0.2s,
-      color ease 0.2s,
+      color var(--motion-base) ease,
       transform var(--motion-fast) ease;
 
     svg {
@@ -122,12 +123,10 @@
     }
 
     &:hover {
-      background: var(--profile-glass-background);
       color: var(--text-strong);
     }
 
     &:focus-visible {
-      background: var(--profile-glass-background);
       color: var(--text-strong);
       outline: 0;
     }
@@ -227,8 +226,8 @@
     transform: translateY(2px);
     border: 0;
     border-radius: var(--radius-sm);
-    background: rgba(0, 0, 0, 0.18);
-    color: var(--text);
+    background: var(--overlay-subtle);
+    color: var(--text-muted);
     backdrop-filter: blur(var(--profile-glass-blur));
     -webkit-backdrop-filter: blur(var(--profile-glass-blur));
     cursor: pointer;
@@ -236,8 +235,7 @@
     pointer-events: none;
     transition:
       opacity var(--motion-fast) ease,
-      background-color ease 0.2s,
-      color ease 0.2s,
+      color var(--motion-base) ease,
       transform var(--motion-fast) ease;
 
     svg {
@@ -246,12 +244,10 @@
     }
 
     &:hover {
-      background: var(--profile-glass-background);
       color: var(--text-strong);
     }
 
     &:focus-visible {
-      background: var(--profile-glass-background);
       color: var(--text-strong);
       outline: 0;
     }
@@ -1325,7 +1321,34 @@
     height: 44px;
     padding: 0 24px;
     margin: -44px 0 18px;
+    overflow: hidden;
     background: var(--profile-glass-background);
+  }
+
+  &__tabs-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+
+    img {
+      position: absolute;
+      right: -16px;
+      bottom: -16px;
+      left: -16px;
+      width: calc(100% + 32px);
+      height: calc(var(--profile-cover-height) + 32px);
+      object-fit: cover;
+      filter: blur(var(--profile-glass-blur));
+    }
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--profile-glass-background);
+    }
   }
 
   &__collection-tabs {
@@ -1336,6 +1359,7 @@
     width: 100%;
     min-width: 0;
     position: relative;
+    z-index: 1;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -1355,10 +1379,13 @@
     background: var(--surface-active);
     pointer-events: none;
     transform: translateY(-50%);
-    transition:
-      left var(--motion-slow) var(--ease),
-      width var(--motion-slow) var(--ease);
+    opacity: 0;
+    transition: none;
     z-index: 1;
+
+    &--ready {
+      transition: opacity var(--motion-fast) ease;
+    }
   }
 
   &__tab {

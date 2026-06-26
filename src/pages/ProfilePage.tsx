@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   startTransition,
@@ -187,6 +188,14 @@ function achievementUnlockedTime(unlockedAt?: string) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function achievementShowcaseRandomWeight(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
 function ProfileAchievementShowcaseItem({
   achievement,
   onSelect,
@@ -348,6 +357,7 @@ export function ProfilePage({
   const achievementShowcaseRef = useRef<HTMLDivElement | null>(null);
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
+  const [isTabIndicatorReady, setIsTabIndicatorReady] = useState(false);
 
   const activeCollectionId =
     propActiveCollectionId ?? internalActiveCollectionId;
@@ -395,6 +405,7 @@ export function ProfilePage({
     profileCollections.find(
       (collection) => collection.id === activeCollectionId
     ) ?? profileCollections[0];
+  const activeTabId = activeCollection.id;
   const isOverviewActive = activeCollection.id === "overview";
   const shouldBuildCollectionGameData = !isOverviewActive;
   const shouldComputeOverviewData = !isOverviewActive || isOverviewDataReady;
@@ -507,9 +518,19 @@ export function ProfilePage({
     if (!shouldComputeOverviewData) return;
 
     let cancelled = false;
+    const recentGameIndexes = new Map(
+      achievementHistoryGames.map((game, index) => [game.appId, index])
+    );
     const candidates = [...achievementHistoryGames, ...addedLibraryGames]
       .filter((game) => game.appId && !localAchievementGamesByAppId.has(game.appId))
       .sort((left, right) => {
+        const leftRecentIndex = recentGameIndexes.get(left.appId);
+        const rightRecentIndex = recentGameIndexes.get(right.appId);
+        if (leftRecentIndex !== undefined || rightRecentIndex !== undefined) {
+          return (leftRecentIndex ?? Number.MAX_SAFE_INTEGER) -
+            (rightRecentIndex ?? Number.MAX_SAFE_INTEGER);
+        }
+
         const unlockedDelta =
           (right.achievements?.unlocked ?? 0) - (left.achievements?.unlocked ?? 0);
         if (unlockedDelta !== 0) return unlockedDelta;
@@ -651,11 +672,11 @@ export function ProfilePage({
     [setActiveCollectionId]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = tabsContainerRef.current;
     if (!container) return;
     const activeTab = container.querySelector<HTMLElement>(
-      `[data-tab-id="${activeCollectionId}"]`
+      `[data-tab-id="${activeTabId}"]`
     );
     if (!activeTab) return;
 
@@ -664,12 +685,13 @@ export function ProfilePage({
         left: activeTab.offsetLeft - container.scrollLeft,
         width: activeTab.offsetWidth,
       });
+      setIsTabIndicatorReady(true);
     };
 
     update();
     container.addEventListener("scroll", update, { passive: true });
     return () => container.removeEventListener("scroll", update);
-  }, [activeCollectionId, profileCollections]);
+  }, [activeTabId, profileCollections]);
 
   const visibleGames = useMemo(() => {
     const seen = new Set<string>();
@@ -759,7 +781,6 @@ export function ProfilePage({
 
   const achievementHighlights = useMemo<ProfileAchievementHighlight[]>(() => {
     const highlightKeys = new Set<string>();
-    const selectedGameAppIds = new Set<string>();
     const unlockedHighlights: ProfileAchievementHighlight[] = [];
 
     for (const game of profileAchievementGames) {
@@ -773,28 +794,26 @@ export function ProfilePage({
 
       for (const achievement of unlockedAchievements) {
         if (!isAchievementUnlocked(achievement)) continue;
-        if (selectedGameAppIds.has(game.appId)) break;
 
-      const key = achievementShowcaseKey(game, achievement);
+        const key = achievementShowcaseKey(game, achievement);
         if (highlightKeys.has(key)) continue;
 
         const icon = achievementShowcaseIcon(achievement, true);
         if (!icon) continue;
 
-      highlightKeys.add(key);
-        selectedGameAppIds.add(game.appId);
+        highlightKeys.add(key);
         unlockedHighlights.push({
-        key,
-        game,
-        achievementId: achievement.name || achievement.title,
-        title: achievement.title,
-        description: achievement.description,
-        icon,
+          key,
+          game,
+          achievementId: achievement.name || achievement.title,
+          title: achievement.title,
+          description: achievement.description,
+          icon,
           unlocked: true,
-        gameTitle: game.title,
-        globalPercent: achievement.globalPercent,
-        unlockedAt: achievement.unlockedAt,
-      });
+          gameTitle: game.title,
+          globalPercent: achievement.globalPercent,
+          unlockedAt: achievement.unlockedAt,
+        });
       }
     }
 
@@ -808,8 +827,72 @@ export function ProfilePage({
       })
       .slice(0, showcaseAchievementLimit);
 
-    return sortedHighlights;
-  }, [profileAchievementGames, showcaseAchievementLimit]);
+    if (sortedHighlights.length > 0 || overviewStats.unlocked > 0) {
+      return sortedHighlights;
+    }
+
+    const recentGameIndexes = new Map(
+      achievementHistoryGames.map((game, index) => [game.appId, index])
+    );
+    const recentProfileGamesByAppId = new Map<string, GhostBoxGame>();
+    const lockedHighlightsByAppId = new Map<string, ProfileAchievementHighlight[]>();
+
+    for (const game of profileAchievementGames) {
+      if (!recentGameIndexes.has(game.appId)) continue;
+      recentProfileGamesByAppId.set(game.appId, game);
+
+      for (const achievement of game.achievementList ?? []) {
+        if (isAchievementUnlocked(achievement)) continue;
+
+        const key = achievementShowcaseKey(game, achievement);
+        if (highlightKeys.has(key)) continue;
+
+        const icon = achievementShowcaseIcon(achievement, false);
+        if (!icon) continue;
+
+        highlightKeys.add(key);
+        const gameHighlights = lockedHighlightsByAppId.get(game.appId) ?? [];
+        gameHighlights.push({
+          key,
+          game,
+          achievementId: achievement.name || achievement.title,
+          title: achievement.title,
+          description: achievement.description,
+          icon,
+          unlocked: false,
+          gameTitle: game.title,
+          globalPercent: achievement.globalPercent,
+        });
+        lockedHighlightsByAppId.set(game.appId, gameHighlights);
+      }
+    }
+
+    const lockedHighlights: ProfileAchievementHighlight[] = [];
+    for (const recentGame of achievementHistoryGames) {
+      const game = recentProfileGamesByAppId.get(recentGame.appId);
+      if (!game) continue;
+
+      const gameHighlights = lockedHighlightsByAppId.get(game.appId) ?? [];
+      lockedHighlights.push(
+        ...gameHighlights
+          .sort(
+            (left, right) =>
+              achievementShowcaseRandomWeight(left.key) -
+              achievementShowcaseRandomWeight(right.key)
+          )
+          .slice(0, 3)
+      );
+
+      if (lockedHighlights.length >= showcaseAchievementLimit) break;
+    }
+
+    return lockedHighlights.slice(0, showcaseAchievementLimit);
+  }, [
+    achievementHistoryGames,
+    overviewStats.unlocked,
+    profileAchievementGames,
+    showcaseAchievementLimit,
+  ]);
 
   const topGames = useMemo(() => {
     return profileAchievementGames
@@ -972,7 +1055,6 @@ export function ProfilePage({
             aria-label={t("profile.changeBanner")}
           >
             <Camera size={16} />
-            {t("profile.changeBannerShort")}
           </button>
           <div className="profile-page__identity">
             <div className="profile-page__avatar-button">
@@ -1016,15 +1098,28 @@ export function ProfilePage({
               className="profile-page__tabs"
               aria-label={t("sidebar.collections")}
             >
+              {bannerImageSource && !isBannerPlaceholder && (
+                <div className="profile-page__tabs-backdrop" aria-hidden="true">
+                  <img
+                    src={bannerImageSource}
+                    alt=""
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    style={bannerImageStyle}
+                  />
+                </div>
+              )}
               <div className="profile-page__collection-tabs" ref={tabsContainerRef}>
                 <div
-                  className="profile-page__tab-indicator"
-                  style={{
-                    left: tabIndicatorStyle.left,
-                    width: tabIndicatorStyle.width,
-                  }}
+                  className={`profile-page__tab-indicator${isTabIndicatorReady ? " profile-page__tab-indicator--ready" : ""}`}
+                    style={{
+                      left: tabIndicatorStyle.left,
+                      width: tabIndicatorStyle.width,
+                      opacity: tabIndicatorStyle.width > 0 ? 1 : 0,
+                    }}
                 />
                 {profileCollections.map((collection) => {
+                  const isIconOnlyTab = ["overview", "library", "favorites"].includes(collection.id);
                   const TabIcon =
                     collection.id === "overview"
                       ? User
@@ -1039,8 +1134,9 @@ export function ProfilePage({
                       key={collection.id}
                       data-tab-id={collection.id}
                       type="button"
+                      aria-label={collection.name}
                       className={`profile-page__tab ${
-                        activeCollectionId === collection.id
+                        activeTabId === collection.id
                           ? "profile-page__tab--active"
                           : ""
                       }${
@@ -1055,9 +1151,11 @@ export function ProfilePage({
                       onFocus={() => handleCollectionTabHover(collection.id)}
                     >
                       <TabIcon size={15} strokeWidth={2} aria-hidden="true" />
-                      <span className="profile-page__tab-label">
-                        {collection.name}
-                      </span>
+                      {!isIconOnlyTab && (
+                        <span className="profile-page__tab-label">
+                          {collection.name}
+                        </span>
+                      )}
 
                     </button>
                   );
