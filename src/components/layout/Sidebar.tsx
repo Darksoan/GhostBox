@@ -243,7 +243,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onNavigate(id)}
                   >
-                    <Icon size={18} strokeWidth={1.5} />
+                    <Icon size={18} strokeWidth={2.0} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -255,7 +255,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onRestartSteam()}
                   >
-                    <Icon size={18} strokeWidth={1.5} />
+                    <Icon size={18} strokeWidth={2.0} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -270,7 +270,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onNavigate(id)}
                   >
-                    <Icon size={18} strokeWidth={1.5} />
+                    <Icon size={18} strokeWidth={2.0} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -292,7 +292,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onSettingsTabChange(id)}
                   >
-                    <Icon size={18} strokeWidth={1.5} />
+                    <Icon size={18} strokeWidth={2.0} />
                     <span className="sidebar__menu-item-label">{t(settingsTabLabelKeys[id])}</span>
                   </button>
                 </li>
@@ -489,7 +489,7 @@ export const Sidebar = memo(function Sidebar({
                   className="sidebar__menu-item-button sidebar__menu-item-button--back"
                   onClick={() => onBack()}
                 >
-                  <ChevronLeft size={18} strokeWidth={1.5} />
+                  <ChevronLeft size={18} strokeWidth={2.0} />
                   <span className="sidebar__menu-item-label">{t("header.back")}</span>
                 </button>
               </li>

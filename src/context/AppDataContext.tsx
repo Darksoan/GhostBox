@@ -67,6 +67,23 @@ import { useOverlay } from "./OverlayContext";
 import { useSettings } from "./settings";
 import type { BackupToastPayload } from "../lib/backupNotifications";
 
+type InitialLoadStep =
+  | "backupRoot"
+  | "morrenusApiKey"
+  | "playtimes"
+  | "startupSettings"
+  | "steamLibrary"
+  | "steamProfile";
+
+const initialLoadSteps: InitialLoadStep[] = [
+  "startupSettings",
+  "steamProfile",
+  "morrenusApiKey",
+  "steamLibrary",
+  "playtimes",
+  "backupRoot",
+];
+
 const defaultBackupSettings: BackupSettings = {
   outputPath: "",
   automaticBackupsForLibrary: false,
@@ -151,6 +168,8 @@ function collectActiveSessionAppIds(snapshot: GamePlaytimeSnapshot) {
 }
 
 interface AppDataContextValue {
+  isInitialLoading: boolean;
+  initialLoadingProgress: number;
   favoriteGames: GhostBoxGame[];
   addedLibraryGames: GhostBoxGame[];
   userCollections: UserCollection[];
@@ -269,6 +288,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [profileHistoryGames, setProfileHistoryGames] = useState<GhostBoxGame[]>(
     () => readStoredProfileHistoryGames()
   );
+  const [completedInitialLoadSteps, setCompletedInitialLoadSteps] = useState<
+    Set<InitialLoadStep>
+  >(() => new Set());
+
+  const markInitialLoadStepComplete = useCallback((step: InitialLoadStep) => {
+    setCompletedInitialLoadSteps((current) => {
+      if (current.has(step)) return current;
+      return new Set(current).add(step);
+    });
+  }, []);
+
+  const initialLoadingProgress = Math.round(
+    (completedInitialLoadSteps.size / initialLoadSteps.length) * 100
+  );
+  const isInitialLoading = completedInitialLoadSteps.size < initialLoadSteps.length;
 
   const mergeGamePlaytime = useCallback((game: GhostBoxGame): GhostBoxGame => {
     return applyPlaytimeToGame(game, gamePlaytimesRef.current);
@@ -357,16 +391,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    void ghostboxApi.validateBackupRoot().then((status) => {
-      if (cancelled || !status) return;
+    void ghostboxApi
+      .validateBackupRoot()
+      .then((status) => {
+        if (cancelled || !status) return;
 
-      setBackupRootStatus(status);
-      backupSettingsRef.current = status.settings;
-      setBackupSettings(status.settings);
-      if (status.status !== "ok") {
-        showToast("Atenção aos backups", status.message);
-      }
-    });
+        setBackupRootStatus(status);
+        backupSettingsRef.current = status.settings;
+        setBackupSettings(status.settings);
+        if (status.status !== "ok") {
+          showToast("Atenção aos backups", status.message);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) markInitialLoadStepComplete("backupRoot");
+      });
 
     const unsubscribe = ghostboxApi.onBackupSettingsChanged((settings) => {
       if (cancelled) return;
@@ -384,7 +424,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe();
     };
-  }, [queueBackupToast, showToast]);
+  }, [markInitialLoadStepComplete, queueBackupToast, showToast]);
 
   useEffect(() => {
     writeStoredFavoriteGames(favoriteGames);
@@ -515,30 +555,67 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    void ghostboxApi.getStartupSettings().then((settings) => {
-      if (settings) setStartupSettings(settings);
-    });
-  }, []);
+    let cancelled = false;
+
+    void ghostboxApi
+      .getStartupSettings()
+      .then((settings) => {
+        if (!cancelled && settings) setStartupSettings(settings);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) markInitialLoadStepComplete("startupSettings");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [markInitialLoadStepComplete]);
 
   useEffect(() => {
+    let cancelled = false;
     const requestId = ++steamProfileRequestSequenceRef.current;
 
-    void ghostboxApi.getSteamProfile().then((profile) => {
-      if (steamProfileRequestSequenceRef.current !== requestId) return;
+    void ghostboxApi
+      .getSteamProfile()
+      .then((profile) => {
+        if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
 
-      setSteamProfile((currentProfile) => {
-        const merged = mergeSteamProfile(profile, currentProfile);
-        if (merged) writeStoredSteamProfile(merged);
-        return merged;
+        setSteamProfile((currentProfile) => {
+          const merged = mergeSteamProfile(profile, currentProfile);
+          if (merged) writeStoredSteamProfile(merged);
+          return merged;
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled && steamProfileRequestSequenceRef.current === requestId) {
+          markInitialLoadStepComplete("steamProfile");
+        }
       });
-    });
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [markInitialLoadStepComplete]);
 
   useEffect(() => {
-    void ghostboxApi.getMorrenusApiKey().then((key) => {
-      if (typeof key === "string") setMorrenusApiKey(key);
-    });
-  }, []);
+    let cancelled = false;
+
+    void ghostboxApi
+      .getMorrenusApiKey()
+      .then((key) => {
+        if (!cancelled && typeof key === "string") setMorrenusApiKey(key);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) markInitialLoadStepComplete("morrenusApiKey");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [markInitialLoadStepComplete]);
 
   const favoriteGameIds = useMemo(
     () => new Set(favoriteGames.map((game) => game.id)),
@@ -852,8 +929,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const result = await ghostboxApi.restartSteam();
     if (result?.success) {
       showToast(
-        "Steam aberta",
-        result.message ?? "A Steam foi aberta sem encerrar processos existentes."
+        "Steam reiniciada",
+        "Steam foi reiniciada com sucesso."
       );
       return;
     }
@@ -965,17 +1042,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => {
-        if (!cancelled) setIsScanningSteamLibrary(false);
+        if (!cancelled) {
+          setIsScanningSteamLibrary(false);
+          markInitialLoadStepComplete("steamLibrary");
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [applySteamLibraryScanResult]);
+  }, [applySteamLibraryScanResult, markInitialLoadStepComplete]);
 
   useEffect(() => {
-    void refreshGamePlaytimes();
-  }, [refreshGamePlaytimes]);
+    let cancelled = false;
+
+    void refreshGamePlaytimes()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) markInitialLoadStepComplete("playtimes");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [markInitialLoadStepComplete, refreshGamePlaytimes]);
 
   const handleSelectBackupOutputPath = useCallback(async () => {
     const result = await ghostboxApi.selectBackupOutputPath();
@@ -1053,6 +1143,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppDataContextValue>(
     () => ({
+      isInitialLoading,
+      initialLoadingProgress,
       favoriteGames,
       addedLibraryGames,
       userCollections,
@@ -1111,6 +1203,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }),
     [
       favoriteGames,
+      isInitialLoading,
+      initialLoadingProgress,
       addedLibraryGames,
       userCollections,
       steamProfile,

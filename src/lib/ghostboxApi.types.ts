@@ -226,3 +226,32 @@ export type SteamPathSelectionResult =
       missingEntries: string[];
       message: string;
     };
+
+export type DiscordLinkStatus = {
+  steamId: string;
+  linked: boolean;
+  discordUserId: string | null;
+  discordUsername: string | null;
+  discordGlobalName: string | null;
+  linkedAt: string | null;
+  premiumRole: {
+    synced: boolean;
+    skipped: boolean;
+    reason: string | null;
+  } | null;
+};
+
+export type SubscriptionStatusResult = {
+  steamId: string;
+  subscription: {
+    status: "free" | "active" | "expired";
+    isPremium: boolean;
+    planId: "monthly" | "quarterly" | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    lastPaymentId: string | null;
+    updatedAt: string | null;
+  };
+  latestPayment: unknown | null;
+  discordLink?: DiscordLinkStatus;
+};

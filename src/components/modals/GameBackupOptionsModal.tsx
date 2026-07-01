@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import type { UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
+import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 interface BackupOptionsModalProps {
   open: boolean;
@@ -121,7 +122,7 @@ export function GameBackupOptionsModal({
               onClick={onClose}
               aria-label={appearance.language === "en" ? "Close" : "Fechar"}
             >
-              <X size={20} strokeWidth={1.7} />
+              <ModalCloseIcon />
             </button>
           </header>
 
@@ -338,7 +339,7 @@ export function GameBackupOptionsModal({
                           }}
                         />
                         <span className="catalogue-filter-option__box">
-                          {checked && <Check size={12} strokeWidth={3} />}
+                          {checked && <Check size={12} strokeWidth={2.0} />}
                         </span>
                         <span>{collection.name}</span>
                       </label>

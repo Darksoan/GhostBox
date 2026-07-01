@@ -123,7 +123,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
                 onClose();
               }}
             >
-              {item.icon && <item.icon size={18} strokeWidth={1.75} />}
+              {item.icon && <item.icon size={18} strokeWidth={2.0} />}
               <span className="context-menu__label">{item.label}</span>
             </button>
             {item.children?.length ? (
@@ -139,7 +139,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
                         onClose();
                       }}
                     >
-                      {child.icon && <child.icon size={18} strokeWidth={1.75} />}
+                      {child.icon && <child.icon size={18} strokeWidth={2.0} />}
                       <span className="context-menu__label">{child.label}</span>
                     </button>
                   </li>

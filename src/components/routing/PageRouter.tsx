@@ -249,6 +249,7 @@ export function PageRouter({
         <LazySettingsPage
           activeTabId={activeSettingsTabId as never}
           games={appData.addedLibraryGames}
+          steamProfile={appData.steamProfile}
           initialPage={appData.initialPage}
           onInitialPageChange={appData.setInitialPage}
           steamPath={appData.steamPathInput}

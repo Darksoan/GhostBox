@@ -4,6 +4,14 @@ type Env = {
   SUMUP_MERCHANT_CODE: string;
   SUMUP_BASE_URL?: string;
   CHECKOUT_RETURN_URL?: string;
+  DISCORD_CLIENT_ID?: string;
+  DISCORD_CLIENT_SECRET?: string;
+  DISCORD_REDIRECT_URI?: string;
+  DISCORD_OAUTH_STATE_SECRET?: string;
+  DISCORD_BOT_TOKEN?: string;
+  DISCORD_GUILD_ID?: string;
+  DISCORD_PREMIUM_ROLE_ID?: string;
+  DISCORD_SYNC_TOKEN?: string;
   ALLOWED_ORIGIN?: string;
 };
 
@@ -58,6 +66,28 @@ type SubscriptionRow = {
   updated_at: string;
 };
 
+type DiscordLinkRow = {
+  steam_id: string;
+  discord_user_id: string;
+  discord_username: string | null;
+  discord_global_name: string | null;
+  linked_at: string;
+  updated_at: string;
+};
+
+type DiscordTokenResponse = {
+  access_token?: string;
+  token_type?: string;
+  error?: string;
+  error_description?: string;
+};
+
+type DiscordUserResponse = {
+  id?: string;
+  username?: string;
+  global_name?: string | null;
+};
+
 const plans: Record<PlanId, Plan> = {
   monthly: {
     id: "monthly",
@@ -91,6 +121,69 @@ function addMonths(date: Date, months: number) {
 
 function validSteamId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9]{15,20}$/.test(value);
+}
+
+function base64Url(bytes: Uint8Array) {
+  let value = "";
+  for (const byte of bytes) value += String.fromCharCode(byte);
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function timingSafeEqual(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
+
+async function hmacSha256(secret: string, value: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return base64Url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value))));
+}
+
+function getDiscordRedirectUri(env: Env, request: Request) {
+  return env.DISCORD_REDIRECT_URI || `${new URL(request.url).origin}/discord/callback`;
+}
+
+function getDiscordStateSecret(env: Env) {
+  return env.DISCORD_OAUTH_STATE_SECRET || env.DISCORD_CLIENT_SECRET;
+}
+
+async function createDiscordState(env: Env, steamId: string) {
+  const secret = getDiscordStateSecret(env);
+  if (!secret) throw new Error("DISCORD_OAUTH_STATE_SECRET is not configured");
+
+  const expiresAt = Math.floor(Date.now() / 1000) + 10 * 60;
+  const nonce = base64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const payload = `${steamId}.${expiresAt}.${nonce}`;
+  return `${payload}.${await hmacSha256(secret, payload)}`;
+}
+
+async function verifyDiscordState(env: Env, state: string | null) {
+  const secret = getDiscordStateSecret(env);
+  if (!secret || !state) return null;
+
+  const parts = state.split(".");
+  if (parts.length !== 4) return null;
+
+  const [steamId, expiresAtValue, nonce, signature] = parts;
+  if (!validSteamId(steamId) || !nonce) return null;
+
+  const expiresAt = Number(expiresAtValue);
+  if (!Number.isFinite(expiresAt) || expiresAt < Math.floor(Date.now() / 1000)) return null;
+
+  const payload = `${steamId}.${expiresAtValue}.${nonce}`;
+  const expected = await hmacSha256(secret, payload);
+  return timingSafeEqual(signature, expected) ? steamId : null;
 }
 
 function jsonResponse(value: unknown, env: Env, status = 200) {
@@ -183,6 +276,83 @@ function publicSubscription(row: SubscriptionRow | null) {
     lastPaymentId: row.last_payment_id,
     updatedAt: row.updated_at,
   };
+}
+
+type DiscordRoleSyncResult = {
+  ok: boolean;
+  skipped: boolean;
+  reason?: string;
+};
+
+function publicDiscordLink(steamId: string, row: DiscordLinkRow | null, roleSync?: DiscordRoleSyncResult | null) {
+  return {
+    steamId,
+    linked: Boolean(row),
+    discordUserId: row?.discord_user_id ?? null,
+    discordUsername: row?.discord_username ?? null,
+    discordGlobalName: row?.discord_global_name ?? null,
+    linkedAt: row?.linked_at ?? null,
+    premiumRole: roleSync
+      ? {
+          synced: roleSync.ok,
+          skipped: roleSync.skipped,
+          reason: roleSync.reason ?? null,
+        }
+      : null,
+  };
+}
+
+function isActiveSubscription(row: SubscriptionRow | null) {
+  return row?.status === "active" && !!row.current_period_end && new Date(row.current_period_end).getTime() > Date.now();
+}
+
+function discordRoleConfigured(env: Env) {
+  return Boolean(env.DISCORD_BOT_TOKEN && env.DISCORD_GUILD_ID && env.DISCORD_PREMIUM_ROLE_ID);
+}
+
+async function discordRoleRequest(env: Env, discordUserId: string, grant: boolean): Promise<DiscordRoleSyncResult> {
+  if (!discordRoleConfigured(env)) return { ok: false, skipped: true, reason: "Discord role sync is not configured" };
+
+  const endpoint = `https://discord.com/api/v10/guilds/${encodeURIComponent(env.DISCORD_GUILD_ID!)}/members/${encodeURIComponent(discordUserId)}/roles/${encodeURIComponent(env.DISCORD_PREMIUM_ROLE_ID!)}`;
+  const response = await fetch(endpoint, {
+    method: grant ? "PUT" : "DELETE",
+    headers: {
+      authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+      "x-audit-log-reason": encodeURIComponent(grant ? "GhostBox Premium activated" : "GhostBox Premium expired"),
+    },
+  });
+
+  if (response.ok || response.status === 204) return { ok: true, skipped: false };
+  const message = await response.text().catch(() => "");
+  return {
+    ok: false,
+    skipped: false,
+    reason: message || `Discord HTTP ${response.status}`,
+  };
+}
+
+async function syncPremiumRoleForSteam(env: Env, steamId: string, grant: boolean): Promise<DiscordRoleSyncResult> {
+  const link = await getDiscordLink(env, steamId);
+  if (!link) return { ok: false, skipped: true, reason: "Steam account has no Discord link" };
+
+  const result = await discordRoleRequest(env, link.discord_user_id, grant);
+  if (!result.ok && !result.skipped) {
+    console.warn("Discord Premium role sync failed", { steamId, discordUserId: link.discord_user_id, grant, reason: result.reason });
+  }
+  return result;
+}
+
+function htmlResponse(title: string, message: string, status = 200) {
+  return new Response(
+    `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b0b;color:#fff;font:16px system-ui,sans-serif}main{max-width:520px;padding:28px;text-align:center}p{color:#b9b9b9;line-height:1.5}</style></head><body><main><h1>${title}</h1><p>${message}</p><script>setTimeout(() => window.close(), 2400)</script></main></body></html>`,
+    {
+      status,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
 }
 
 async function readJson(request: Request) {
@@ -322,8 +492,12 @@ async function activateSubscription(env: Env, payment: PaymentRow) {
        current_period_start = excluded.current_period_start,
        current_period_end = excluded.current_period_end,
        last_payment_id = excluded.last_payment_id,
-       updated_at = excluded.updated_at`
+        updated_at = excluded.updated_at`
   ).bind(payment.steam_id, payment.plan_id, periodStart, periodEnd, payment.id, updatedAt, updatedAt).run();
+
+  await syncPremiumRoleForSteam(env, payment.steam_id, true).catch((error) => {
+    console.warn("Discord Premium role grant failed", { steamId: payment.steam_id, error: error instanceof Error ? error.message : String(error) });
+  });
 }
 
 async function updatePaymentFromSumUp(env: Env, payment: PaymentRow, checkout: Record<string, unknown>) {
@@ -363,10 +537,175 @@ async function getSubscription(env: Env, steamId: string) {
     await env.SUBSCRIPTION_DB.prepare(
       `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE steam_id = ?`
     ).bind(updatedAt, steamId).run();
+    await syncPremiumRoleForSteam(env, steamId, false).catch((error) => {
+      console.warn("Discord Premium role revoke failed", { steamId, error: error instanceof Error ? error.message : String(error) });
+    });
     return { ...row, status: "expired" as SubscriptionStatus, updated_at: updatedAt };
   }
 
   return row;
+}
+
+async function getDiscordLink(env: Env, steamId: string) {
+  return env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM discord_links WHERE steam_id = ? LIMIT 1`
+  ).bind(steamId).first<DiscordLinkRow>();
+}
+
+async function syncDiscordPremiumRoles(env: Env) {
+  const now = nowIso();
+  const expired = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM subscriptions
+     WHERE status = 'active' AND current_period_end IS NOT NULL AND current_period_end <= ?
+     LIMIT 100`
+  ).bind(now).all<SubscriptionRow>();
+
+  let granted = 0;
+  let revoked = 0;
+  let skipped = 0;
+  const failures: Array<{ steamId: string; action: "grant" | "revoke"; reason: string }> = [];
+
+  for (const subscription of expired.results || []) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE steam_id = ?`
+    ).bind(now, subscription.steam_id).run();
+
+    const result = await syncPremiumRoleForSteam(env, subscription.steam_id, false);
+    if (result.ok) revoked += 1;
+    else if (result.skipped) skipped += 1;
+    else failures.push({ steamId: subscription.steam_id, action: "revoke", reason: result.reason || "Unknown Discord error" });
+  }
+
+  const active = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM subscriptions
+     WHERE status = 'active' AND current_period_end IS NOT NULL AND current_period_end > ?
+     LIMIT 100`
+  ).bind(now).all<SubscriptionRow>();
+
+  for (const subscription of active.results || []) {
+    const result = await syncPremiumRoleForSteam(env, subscription.steam_id, true);
+    if (result.ok) granted += 1;
+    else if (result.skipped) skipped += 1;
+    else failures.push({ steamId: subscription.steam_id, action: "grant", reason: result.reason || "Unknown Discord error" });
+  }
+
+  return {
+    granted,
+    revoked,
+    skipped,
+    failures,
+  };
+}
+
+async function handleDiscordSync(request: Request, env: Env) {
+  if (!env.DISCORD_SYNC_TOKEN) return jsonResponse({ error: "Discord sync token is not configured" }, env, 404);
+  const authorization = request.headers.get("authorization") || "";
+  if (authorization !== `Bearer ${env.DISCORD_SYNC_TOKEN}`) return jsonResponse({ error: "Unauthorized" }, env, 401);
+
+  return jsonResponse(await syncDiscordPremiumRoles(env), env);
+}
+
+async function handleDiscordLinkStatus(request: Request, env: Env) {
+  const steamId = new URL(request.url).searchParams.get("steamId");
+  if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+
+  const [subscription, link] = await Promise.all([
+    getSubscription(env, steamId),
+    getDiscordLink(env, steamId),
+  ]);
+  const roleSync = link
+    ? await syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription))
+    : null;
+
+  return jsonResponse(publicDiscordLink(steamId, link, roleSync), env);
+}
+
+async function handleDiscordLinkStart(request: Request, env: Env) {
+  const url = new URL(request.url);
+  const steamId = url.searchParams.get("steamId");
+  if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
+    return jsonResponse({ error: "Discord OAuth is not configured" }, env, 500);
+  }
+
+  await ensureUser(env, steamId);
+
+  const authorizeUrl = new URL("https://discord.com/oauth2/authorize");
+  authorizeUrl.searchParams.set("client_id", env.DISCORD_CLIENT_ID);
+  authorizeUrl.searchParams.set("redirect_uri", getDiscordRedirectUri(env, request));
+  authorizeUrl.searchParams.set("response_type", "code");
+  authorizeUrl.searchParams.set("scope", "identify");
+  authorizeUrl.searchParams.set("prompt", "consent");
+  authorizeUrl.searchParams.set("state", await createDiscordState(env, steamId));
+
+  return Response.redirect(authorizeUrl.toString(), 302);
+}
+
+async function handleDiscordCallback(request: Request, env: Env) {
+  const url = new URL(request.url);
+  const steamId = await verifyDiscordState(env, url.searchParams.get("state"));
+  const code = url.searchParams.get("code");
+
+  if (!steamId || !code) {
+    return htmlResponse("Vínculo não concluído", "A autorização do Discord expirou ou foi recusada. Volte ao GhostBox e tente novamente.", 400);
+  }
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
+    return htmlResponse("Discord não configurado", "O OAuth do Discord ainda não foi configurado no servidor.", 500);
+  }
+
+  const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.DISCORD_CLIENT_ID,
+      client_secret: env.DISCORD_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: getDiscordRedirectUri(env, request),
+    }),
+  });
+  const token = await tokenResponse.json<DiscordTokenResponse>();
+  if (!tokenResponse.ok || !token.access_token) {
+    return htmlResponse("Falha no Discord", token.error_description || token.error || "Não foi possível validar a autorização do Discord.", 502);
+  }
+
+  const userResponse = await fetch("https://discord.com/api/users/@me", {
+    headers: { authorization: `Bearer ${token.access_token}` },
+  });
+  const user = await userResponse.json<DiscordUserResponse>();
+  if (!userResponse.ok || !user.id) {
+    return htmlResponse("Falha no Discord", "Não foi possível ler o usuário autorizado no Discord.", 502);
+  }
+
+  const now = nowIso();
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO discord_links (
+       steam_id, discord_user_id, discord_username, discord_global_name, linked_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(steam_id) DO UPDATE SET
+       discord_user_id = excluded.discord_user_id,
+       discord_username = excluded.discord_username,
+       discord_global_name = excluded.discord_global_name,
+       linked_at = excluded.linked_at,
+       updated_at = excluded.updated_at`
+  ).bind(steamId, user.id, user.username ?? null, user.global_name ?? null, now, now).run();
+
+  const subscription = await getSubscription(env, steamId);
+  let roleSynced = false;
+  if (isActiveSubscription(subscription)) {
+    const result = await syncPremiumRoleForSteam(env, steamId, true).catch((error) => {
+      console.warn("Discord Premium role grant after link failed", { steamId, discordUserId: user.id, error: error instanceof Error ? error.message : String(error) });
+      return null;
+    });
+    roleSynced = result?.ok === true;
+  }
+
+  return htmlResponse(
+    "Discord vinculado",
+    roleSynced
+      ? "Sua conta Discord foi vinculada à Steam usada no GhostBox e o cargo Premium foi sincronizado. Você já pode voltar ao app."
+      : "Sua conta Discord foi vinculada à Steam usada no GhostBox. Entre no servidor pelo convite e volte ao app para sincronizar o cargo Premium."
+  );
 }
 
 async function handleCreateCheckout(request: Request, env: Env) {
@@ -429,11 +768,16 @@ async function handleStatus(request: Request, env: Env) {
       `SELECT * FROM payments WHERE steam_id = ? ORDER BY created_at DESC LIMIT 1`
     ).bind(steamId).first<PaymentRow>(),
   ]);
+  const discordLink = await getDiscordLink(env, steamId);
+  const premiumRole = discordLink
+    ? await syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription))
+    : null;
 
   return jsonResponse({
     steamId,
     subscription: publicSubscription(subscription),
     latestPayment: latestPayment ? publicPayment(latestPayment, origin) : null,
+    discordLink: publicDiscordLink(steamId, discordLink, premiumRole),
   }, env);
 }
 
@@ -549,6 +893,18 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "GET" && url.pathname === "/subscription/status") {
     return handleStatus(request, env);
   }
+  if (request.method === "GET" && url.pathname === "/discord/link-status") {
+    return handleDiscordLinkStatus(request, env);
+  }
+  if (request.method === "GET" && url.pathname === "/discord/link") {
+    return handleDiscordLinkStart(request, env);
+  }
+  if (request.method === "GET" && url.pathname === "/discord/callback") {
+    return handleDiscordCallback(request, env);
+  }
+  if (request.method === "POST" && url.pathname === "/discord/sync-premium") {
+    return handleDiscordSync(request, env);
+  }
   if ((request.method === "GET" || request.method === "POST") && url.pathname === "/subscription/refresh") {
     return handleRefreshPayment(request, env);
   }
@@ -573,5 +929,8 @@ export default {
       const message = error instanceof Error ? error.message : "Internal error";
       return jsonResponse({ error: message }, env, 500);
     }
+  },
+  async scheduled(_controller: ScheduledController, env: Env, _context: ExecutionContext) {
+    await syncDiscordPremiumRoles(env);
   },
 };

@@ -228,6 +228,17 @@ pub async fn refresh_warm_catalogue_endpoints(
         }
     }
 
+    let recently_added_url = format!(
+        "{base}/catalogue/search?limit=200&offset=0&sort=recentlyAdded&facetsVersion={}&rankingVersion={}",
+        crate::FACETS_VERSION,
+        crate::RANKING_VERSION
+    );
+    if let Ok(url) = reqwest::Url::parse(&recently_added_url) {
+        if let Ok((_, updated_at, _)) = fetch_json_with_cache(app, url, true).await {
+            latest_updated_at = updated_at.or(latest_updated_at);
+        }
+    }
+
     let now = current_millis();
     let meta = CatalogueCacheMeta {
         last_refresh_at: now,

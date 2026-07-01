@@ -3,7 +3,11 @@ import { memo, useState, useCallback } from "react";
 import type { GhostBoxGame } from "../../data";
 import type { Page } from "../../types";
 import { useSettings } from "../../context/settings";
+import { ghostboxApi } from "../../lib/ghostboxApi";
 import { preloadGameModalAssets } from "../../utils/image";
+import discordIcon from "../../../Icons/discord.svg";
+
+const discordInviteUrl = "https://discord.gg/Y7XTy5rKBc";
 
 const HighlightedSearchText = memo(function HighlightedSearchText({
   text,
@@ -64,6 +68,10 @@ export const Header = memo(function Header({
 
   const handleFocus = useCallback(() => setFocused(true), []);
 
+  const handleDiscordClick = useCallback(() => {
+    void ghostboxApi.openExternalUrl(discordInviteUrl);
+  }, []);
+
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
       onQueryChange(event.target.value),
@@ -91,7 +99,15 @@ export const Header = memo(function Header({
       <div className="header__section">
         <button
           type="button"
-          className="header__notification-button"
+          className="header__icon-button header__discord-button"
+          aria-label={t("header.discord")}
+          onClick={handleDiscordClick}
+        >
+          <img src={discordIcon} alt="" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="header__icon-button header__notification-button"
           aria-label={t("header.notifications")}
           onClick={onNavigateToNotifications}
         >

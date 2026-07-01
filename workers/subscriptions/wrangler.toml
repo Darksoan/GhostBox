@@ -4,6 +4,12 @@ compatibility_date = "2026-06-19"
 
 [vars]
 CHECKOUT_RETURN_URL = "https://ghostbox-subscriptions.hella.workers.dev/subscription/return"
+DISCORD_REDIRECT_URI = "https://ghostbox-subscriptions.hella.workers.dev/discord/callback"
+DISCORD_GUILD_ID = "1519331076831580291"
+DISCORD_PREMIUM_ROLE_ID = "1520811722770743388"
+
+[triggers]
+crons = ["*/30 * * * *"]
 
 [[d1_databases]]
 binding = "SUBSCRIPTION_DB"

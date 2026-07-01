@@ -20,8 +20,29 @@ import { clearCatalogueGamesCache } from "./utils/gameCache";
 import type { SettingsTabId } from "./features/settings/settingsTabsShared";
 import "./app.scss";
 
-function AppShell() {
-  const appData = useAppData();
+function AppSplash({ progress }: { progress: number }) {
+  return (
+    <main
+      className="app-splash app-splash--react"
+      aria-label="Carregando interface"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={progress}
+      role="progressbar"
+    >
+      <div className="app-splash__content">
+        <img className="app-splash__icon" src="/ghost-solid.png" alt="GhostBox" />
+        <div
+          className="app-splash__spinner"
+          style={{ "--app-splash-progress": `${progress}%` } as React.CSSProperties}
+          aria-hidden="true"
+        />
+      </div>
+    </main>
+  );
+}
+
+function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const {
     openGame,
     toast,
@@ -51,7 +72,35 @@ function AppShell() {
   const { appearance, notifications } = useSettings();
   const queryClient = useQueryClient();
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
-  const isPremium = false;
+  const [isPremium, setIsPremium] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const steamId = appData.steamProfile?.steamId;
+
+    if (!steamId) {
+      setIsPremium(false);
+      return;
+    }
+
+    const refreshSubscriptionStatus = () => void ghostboxApi.getSubscriptionStatus(steamId).then((status) => {
+      if (!cancelled) setIsPremium(status?.subscription.isPremium === true);
+    });
+
+    refreshSubscriptionStatus();
+    window.addEventListener("focus", refreshSubscriptionStatus);
+    const refreshInterval = window.setInterval(refreshSubscriptionStatus, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshSubscriptionStatus);
+      window.clearInterval(refreshInterval);
+    };
+  }, [appData.steamProfile?.steamId]);
+
+  useEffect(() => {
+    if (isPremium) setSubscriptionModalOpen(false);
+  }, [isPremium, setSubscriptionModalOpen]);
 
   useEffect(() => {
     return ghostboxApi.onCatalogueCacheUpdated(() => {
@@ -244,6 +293,16 @@ function AppShell() {
       <Toast toast={toast} onClose={dismissToast} />
     </div>
   );
+}
+
+function AppShell() {
+  const appData = useAppData();
+
+  if (appData.isInitialLoading) {
+    return <AppSplash progress={appData.initialLoadingProgress} />;
+  }
+
+  return <AppContent appData={appData} />;
 }
 
 function App() {

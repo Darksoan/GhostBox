@@ -1,8 +1,8 @@
-import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { useSettings } from "../../context/settings";
 import { SubscriptionPlans } from "../subscription/SubscriptionPlans";
+import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 type SubscriptionModalProps = {
   open: boolean;
@@ -31,18 +31,6 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
 
   return createPortal(
     <div className={`backdrop backdrop--subscription${closingClass}`} onClick={open ? onClose : undefined}>
-      <button
-        type="button"
-        className="subscription-modal__close"
-        onClick={(event) => {
-          event.stopPropagation();
-          onClose();
-        }}
-        aria-label={appearance.language === "en" ? "Close" : "Fechar"}
-      >
-        <X size={18} strokeWidth={1.7} />
-      </button>
-
       <section
         className={`subscription-modal${modalClosingClass}`}
         role="dialog"
@@ -52,6 +40,18 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
       >
         <SubscriptionPlans surface="modal" />
       </section>
+
+      <button
+        type="button"
+        className="subscription-modal__close"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+        aria-label={appearance.language === "en" ? "Close" : "Fechar"}
+      >
+        <ModalCloseIcon />
+      </button>
     </div>,
     document.body
   );

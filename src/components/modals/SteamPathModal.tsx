@@ -1,7 +1,7 @@
-import { X } from "lucide-react";
 import { useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSettings } from "../../context/settings";
+import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 interface SteamPathModalProps {
   open: boolean;
@@ -54,8 +54,8 @@ export function SteamPathModal({
                 <span className="eyebrow">Steam</span>
                 <h3>{appearance.language === "en" ? "Locate library" : "Localizar biblioteca"}</h3>
               </div>
-              <button type="button" onClick={onClose} aria-label={appearance.language === "en" ? "Close" : "Fechar"}>
-                <X size={18} />
+              <button type="button" className="steam-path-modal__close" onClick={onClose} aria-label={appearance.language === "en" ? "Close" : "Fechar"}>
+                <ModalCloseIcon />
               </button>
             </div>
 

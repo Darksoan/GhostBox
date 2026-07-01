@@ -1208,7 +1208,8 @@ pub async fn database_get_games(
     if get_bool(&request, "facetsOnly") {
         url.query_pairs_mut().append_pair("facetsOnly", "1");
     }
-    if let Some(sort) = get_string(&request, "sort") {
+    let sort = get_string(&request, "sort");
+    if let Some(sort) = sort.as_ref() {
         url.query_pairs_mut().append_pair("sort", &sort);
     }
 
@@ -1218,7 +1219,8 @@ pub async fn database_get_games(
     append_filter_params(&mut url, &request, "publishers");
     append_filter_params(&mut url, &request, "years");
 
-    match catalogue_cache::fetch_json_with_cache(&app, url, false).await {
+    let force_refresh = sort.as_deref() == Some("recentlyAdded");
+    match catalogue_cache::fetch_json_with_cache(&app, url, force_refresh).await {
         Ok((mut value, updated_at, from_cache)) => {
             catalogue_cache::prepare_cached_response(&mut value, updated_at, from_cache);
             Ok(value)

@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type RefObject,
@@ -44,7 +45,10 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   onGameContextMenu,
 }: CatalogueListItemProps) {
   const { appearance } = useSettings();
-  const headerSources = useCachedImageSources(gameCatalogueHeaderSources(game));
+  const itemRef = useRef<HTMLElement | null>(null);
+  const [shouldLoadCover, setShouldLoadCover] = useState(false);
+  const rawHeaderSources = useMemo(() => gameCatalogueHeaderSources(game), [game]);
+  const headerSources = useCachedImageSources(shouldLoadCover ? rawHeaderSources : []);
   const { source: coverSource, loaded: coverLoaded } =
     useLoadableImageCover(headerSources);
   const previousCoverSourceRef = useRef(coverLoaded ? coverSource : "");
@@ -53,6 +57,30 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   const genreLabelsKey = maxGenreLabels.join("\u0000");
   const genresRef = useRef<HTMLDivElement | null>(null);
   const [visibleGenreCount, setVisibleGenreCount] = useState(maxGenreLabels.length);
+
+  useEffect(() => {
+    if (shouldLoadCover) return;
+    const node = itemRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadCover(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadCover(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "420px 0px", threshold: 0.01 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldLoadCover]);
 
   useLayoutEffect(() => {
     setVisibleGenreCount(maxGenreLabels.length);
@@ -100,6 +128,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
   return (
     <article
+      ref={itemRef}
       className={`catalogue-list__item ${isAdding ? "catalogue-list__item--adding" : ""}`}
       data-catalogue-game-id={game.id}
       role="button"

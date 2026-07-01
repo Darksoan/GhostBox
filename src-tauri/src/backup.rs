@@ -27,7 +27,7 @@ pub fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
             "missing",
             "",
             settings,
-            "A pasta de backups ainda nÃ£o foi configurada.",
+            "A pasta de backups ainda não foi configurada.",
         );
     }
 
@@ -53,7 +53,7 @@ pub fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
                         "missing",
                         &output_path,
                         settings,
-                        &format!("NÃ£o foi possÃ­vel criar a pasta de backups padrÃ£o: {error}"),
+                        &format!("Não foi possível criar a pasta de backups padrão: {error}"),
                     );
                 }
             }
@@ -63,7 +63,7 @@ pub fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
             "missing",
             &output_path,
             settings,
-            "A pasta de backups configurada nÃ£o foi encontrada. Ela pode ter sido movida ou removida.",
+            "A pasta de backups configurada não foi encontrada. Ela pode ter sido movida ou removida.",
         );
     }
 
@@ -72,7 +72,7 @@ pub fn backup_validate_root(app: tauri::AppHandle) -> serde_json::Value {
             "invalid",
             &output_path,
             settings,
-            "A pasta selecionada nÃ£o parece ser uma raiz de backups do GhostBox.",
+            "A pasta selecionada não parece ser uma raiz de backups do GhostBox.",
         );
     }
 
@@ -241,7 +241,7 @@ pub fn backup_open_folder(
 
     if selected_path.is_empty() {
         return Ok(
-            serde_json::json!({ "success": false, "error": "Caminho de backup invÃ¡lido." }),
+            serde_json::json!({ "success": false, "error": "Caminho de backup inválido." }),
         );
     }
 
@@ -251,7 +251,7 @@ pub fn backup_open_folder(
         return Ok(serde_json::json!({
             "success": false,
             "path": selected_path,
-            "error": "A pasta de backup estÃ¡ fora da raiz configurada."
+            "error": "A pasta de backup está fora da raiz configurada."
         }));
     }
 
@@ -275,7 +275,7 @@ pub fn backup_delete_folder(
     if app_id.is_empty() || selected_path.is_empty() {
         return Ok(serde_json::json!({
             "success": false,
-            "error": "Nenhuma pasta de backup vÃ¡lida foi encontrada."
+            "error": "Nenhuma pasta de backup válida foi encontrada."
         }));
     }
 
@@ -285,7 +285,7 @@ pub fn backup_delete_folder(
         return Ok(serde_json::json!({
             "success": false,
             "path": selected_path,
-            "error": "A pasta de backup estÃ¡ fora da raiz configurada."
+            "error": "A pasta de backup está fora da raiz configurada."
         }));
     }
 
@@ -368,7 +368,7 @@ pub fn backup_run_game_local(
             "success": false,
             "appId": "",
             "title": title,
-            "error": "Jogo invÃ¡lido para backup."
+            "error": "Jogo inválido para backup."
         }));
     }
 
@@ -453,7 +453,7 @@ pub fn backup_restore_game_local(
             "success": false,
             "appId": app_id,
             "title": title,
-            "error": "Nenhum backup vÃ¡lido encontrado para este jogo.",
+            "error": "Nenhum backup válido encontrado para este jogo.",
             "settings": settings
         }));
     }
@@ -466,7 +466,7 @@ pub fn backup_restore_game_local(
             "appId": app_id,
             "title": title,
             "backupPath": selected_path,
-            "error": "A pasta de backup estÃ¡ fora da raiz configurada ou nÃ£o existe.",
+            "error": "A pasta de backup está fora da raiz configurada ou não existe.",
             "settings": settings
         }));
     }

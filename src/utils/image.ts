@@ -257,6 +257,28 @@ export function gamePortraitSources(game: GhostBoxGame) {
   ]);
 }
 
+export function gamePortraitPreviewSources(game: GhostBoxGame) {
+  const appId = getGameAppId(game);
+  const screenshots = game.screenshots ?? [];
+  const customPortraitSources = [
+    game.coverUrl,
+    ...(game.coverFallbacks ?? []),
+  ].filter(
+    (source) =>
+      source &&
+      /(^|\/)library_600x900\.jpg(?:[?#].*)?$/i.test(source) &&
+      !screenshots.includes(source)
+  );
+
+  return uniqueSources([
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+    ...customPortraitSources,
+  ]);
+}
+
 export function gameHeroCapsuleSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
@@ -333,7 +355,7 @@ export function gameModalAssetSources(game: GhostBoxGame, activeScreenshot = 0) 
 }
 
 export function preloadGamePortraitSources(game: GhostBoxGame) {
-  preloadImageSources(gamePortraitSources(game), { limit: 6, idle: true });
+  preloadImageSources(gamePortraitPreviewSources(game), { limit: 4, idle: true });
 }
 
 export function preloadGameHeroCapsuleSources(game: GhostBoxGame) {
@@ -382,7 +404,7 @@ export function preloadGameListAssets(
   }
 
   const sources = games.slice(0, limit).flatMap((game) => {
-    if (variant === "portrait") return gamePortraitSources(game).slice(0, sourceLimit);
+    if (variant === "portrait") return gamePortraitPreviewSources(game).slice(0, sourceLimit);
     if (variant === "hero") {
       return uniqueSources([
         ...gameHeroSources(game),
@@ -407,7 +429,7 @@ export async function preloadGameListAssetsReady(
   const limit = options.limit ?? games.length;
 
   const sources = games.slice(0, limit).flatMap((game) => {
-    if (variant === "portrait") return gamePortraitSources(game).slice(0, 1);
+    if (variant === "portrait") return gamePortraitPreviewSources(game).slice(0, 1);
     if (variant === "hero") {
       return uniqueSources([...gameHeroSources(game), ...gameLogoSources(game)]).slice(0, 1);
     }

@@ -1,6 +1,6 @@
-import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useSettings } from "../../context/settings";
+import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 type ConfirmModalProps = {
   open: boolean;
@@ -43,7 +43,7 @@ export function ConfirmModal({
             onClick={onClose}
             aria-label={appearance.language === "en" ? "Close" : "Fechar"}
           >
-            <X size={18} strokeWidth={1.7} />
+            <ModalCloseIcon />
           </button>
         </header>
 

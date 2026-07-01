@@ -24,11 +24,10 @@ import {
 import {
   gameHeaderOnlySources,
   gameHeroCapsuleSources,
-  gamePortraitSources,
   layeredImageStyle,
   withoutHeaderImageSources,
 } from "../utils/image";
-import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
+import { loadedImageSources, runWhenIdle, uniqueSources } from "../utils/imageCache";
 import { formatCompactPlaytime } from "../utils/time";
 
 type HomeGameSeed = {
@@ -130,6 +129,7 @@ const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 5;
 const homePersonalCalendarEnrichmentLimit = 6;
 const homePersonalCalendarHistoryLimit = homePersonalCalendarGameCount * 8;
 const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
+const homeCalendarCoverLoadMargin = "360px 720px";
 const homeWishlistDetailsBatchSize = 8;
 const homeWishlistRecommendationSourceLimit = 10;
 const homeWishlistRecommendationAlgorithmVersion = "steam-morelike-v1";
@@ -153,6 +153,27 @@ function homeSteamCdnUrl(appId: string, asset: string) {
 
 function homeGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
+}
+
+function homeCalendarPortraitSources(game: GhostBoxGame) {
+  const appId = homeGameAppId(game);
+  const customPortraitSources = [
+    game.coverUrl,
+    ...(game.coverFallbacks ?? []),
+  ].filter(
+    (source) =>
+      source &&
+      /(?:^|\/)library_600x900\.jpg(?:[?#].*)?$/i.test(source) &&
+      !game.screenshots.includes(source)
+  );
+
+  return uniqueSources([
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+    ...customPortraitSources,
+  ]);
 }
 
 function formatLastSessionDate(
@@ -982,7 +1003,7 @@ function HomeExploreCategoryImage({ game }: { game: GhostBoxGame }) {
   return (
     <span
       className="home-explore-card__image"
-      style={layeredImageStyle([imageSource, ...sources], "")}
+      style={layeredImageStyle(imageSource ? [imageSource] : [], "")}
       aria-hidden="true"
     />
   );
@@ -1143,7 +1164,7 @@ function HomeExploreCategories({
             onClick={() => scrollCategories(-1)}
             style={{ visibility: isAtStart ? "hidden" : "visible" }}
           >
-            <ChevronLeft size={30} strokeWidth={2.1} aria-hidden="true" />
+            <ChevronLeft size={30} strokeWidth={2.0} aria-hidden="true" />
           </button>
         )}
         <div className="home-explore__carousel" ref={carouselRef} onScroll={handleScroll}>
@@ -1168,7 +1189,7 @@ function HomeExploreCategories({
             onClick={() => scrollCategories(1)}
             style={{ visibility: isAtEnd ? "hidden" : "visible" }}
           >
-            <ChevronRight size={30} strokeWidth={2.1} aria-hidden="true" />
+            <ChevronRight size={30} strokeWidth={2.0} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -1178,27 +1199,62 @@ function HomeExploreCategories({
 
 function HomeCalendarGameCardComponent({
   game,
+  rootRef,
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
+  rootRef: RefObject<HTMLDivElement | null>;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
+  const cardRef = useRef<HTMLButtonElement | null>(null);
+  const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const portraitSources = useMemo(
-    () =>
-      gamePortraitSources(game).filter((source) =>
-        /(?:^|\/)library_600x900(?:_2x)?\.jpg(?:[?#].*)?$/i.test(source)
-      ),
-    [game]
+    () => (shouldLoadCover ? homeCalendarPortraitSources(game) : []),
+    [game, shouldLoadCover]
   );
+
+  useEffect(
+    () => {
+      if (shouldLoadCover) return;
+      const node = cardRef.current;
+      if (!node) return;
+
+      if (typeof IntersectionObserver === "undefined") {
+        setShouldLoadCover(true);
+        return;
+      }
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            setShouldLoadCover(true);
+            observer.disconnect();
+          }
+        },
+        {
+          root: rootRef.current ?? null,
+          rootMargin: homeCalendarCoverLoadMargin,
+          threshold: 0.01,
+        }
+      );
+
+      observer.observe(node);
+      return () => observer.disconnect();
+    },
+    [rootRef, shouldLoadCover]
+  );
+
   const coverSources = useCachedImageSources(portraitSources);
   const { source: coverSource, loaded } = useLoadableImageCover(coverSources);
-  const hasLoadedPortraitCover = loaded && coverSources.includes(coverSource);
+  const hasLoadedPortraitCover =
+    shouldLoadCover && loaded && coverSources.includes(coverSource);
   const layeredSources = hasLoadedPortraitCover ? [coverSource] : [];
 
   return (
     <button
+      ref={cardRef}
       type="button"
       className={`home-calendar-card${
         hasLoadedPortraitCover ? "" : " home-calendar-card--skeleton"
@@ -1294,7 +1350,7 @@ function HomePersonalCalendar({
           onClick={() => scrollCalendar(-1)}
           style={{ visibility: isAtStart ? "hidden" : "visible" }}
         >
-          <ChevronLeft size={30} strokeWidth={2.1} aria-hidden="true" />
+          <ChevronLeft size={30} strokeWidth={2.0} aria-hidden="true" />
         </button>
         <div className="home-calendar__carousel" ref={carouselRef} onScroll={handleScroll}>
           <div className="home-calendar__track">
@@ -1314,6 +1370,7 @@ function HomePersonalCalendar({
                         <HomeCalendarGameCard
                           key={homeGameKey(game)}
                           game={game}
+                          rootRef={carouselRef}
                           onOpenGame={onOpenGame}
                           onGameContextMenu={onGameContextMenu}
                         />
@@ -1338,7 +1395,7 @@ function HomePersonalCalendar({
           onClick={() => scrollCalendar(1)}
           style={{ visibility: isAtEnd ? "hidden" : "visible" }}
         >
-          <ChevronRight size={30} strokeWidth={2.1} aria-hidden="true" />
+          <ChevronRight size={30} strokeWidth={2.0} aria-hidden="true" />
         </button>
       </div>
     </section>
@@ -1570,19 +1627,29 @@ function HomeWishlistCardComponent({
     [recommendedGame.screenshots]
   );
   const [isHovered, setIsHovered] = useState(false);
-  const [screenshotIndex, setScreenshotIndex] = useState(0);
+  const [screenshotIndex, setScreenshotIndex] = useState<number | null>(null);
   const screenshotTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const firstScreenshotFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isHovered || screenshots.length === 0) {
+      if (firstScreenshotFrameRef.current !== null) {
+        window.cancelAnimationFrame(firstScreenshotFrameRef.current);
+        firstScreenshotFrameRef.current = null;
+      }
       if (screenshotTimerRef.current) {
         clearInterval(screenshotTimerRef.current);
         screenshotTimerRef.current = null;
       }
+      setScreenshotIndex(null);
       return;
     }
 
-    setScreenshotIndex(0);
+    setScreenshotIndex(null);
+    firstScreenshotFrameRef.current = window.requestAnimationFrame(() => {
+      firstScreenshotFrameRef.current = null;
+      setScreenshotIndex(0);
+    });
 
     // Preload the rotating screenshots off the critical path so creating the
     // Image() probes never competes with the hover interaction itself.
@@ -1601,10 +1668,16 @@ function HomeWishlistCardComponent({
         : window.setTimeout(preload, 0);
 
     screenshotTimerRef.current = setInterval(() => {
-      setScreenshotIndex((current) => (current + 1) % screenshots.length);
+      setScreenshotIndex((current) =>
+        current === null ? 0 : (current + 1) % screenshots.length
+      );
     }, 1400);
 
     return () => {
+      if (firstScreenshotFrameRef.current !== null) {
+        window.cancelAnimationFrame(firstScreenshotFrameRef.current);
+        firstScreenshotFrameRef.current = null;
+      }
       if (typeof window.cancelIdleCallback === "function") {
         window.cancelIdleCallback(idleHandle as number);
       } else {
@@ -1675,7 +1748,10 @@ function HomeWishlistCardComponent({
           tabIndex={0}
           onClick={handleClick}
           onContextMenu={handleContextMenu}
-          onMouseEnter={() => setIsHovered(true)}
+          onMouseEnter={() => {
+            setScreenshotIndex(null);
+            setIsHovered(true);
+          }}
           onMouseLeave={() => setIsHovered(false)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -1931,7 +2007,7 @@ function HomeRecentBanner({
               <Clock
                 className="home-recent-banner__meta-icon"
                 size={26}
-                strokeWidth={1.7}
+                strokeWidth={2.0}
                 aria-hidden="true"
               />
               <span className="home-recent-banner__meta-copy">
@@ -1951,7 +2027,7 @@ function HomeRecentBanner({
               <Trophy
                 className="home-recent-banner__meta-icon"
                 size={28}
-                strokeWidth={1.7}
+                strokeWidth={2.0}
                 aria-hidden="true"
               />
               <span className="home-recent-banner__meta-copy">

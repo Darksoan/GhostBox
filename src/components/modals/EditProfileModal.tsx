@@ -1,4 +1,4 @@
-import { ImageUp, Trash2, X, Camera, Crop } from "lucide-react";
+import { ImageUp, Trash2, Camera, Crop } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SteamProfile } from "../../types";
@@ -6,6 +6,7 @@ import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { preloadImageSources } from "../../utils/imageCache";
 import { profileBannerPlaceholderSource } from "../../utils/image";
+import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 type AvatarCropPosition = { x: number; y: number; scale: number };
@@ -67,6 +68,9 @@ async function cropAvatarDataUrl(
 
   const context = canvas.getContext("2d");
   if (!context) return source;
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
 
   context.drawImage(
     image,
@@ -400,15 +404,15 @@ export function EditProfileModal({
                 </h3>
                 <p>
                   {isAvatarCropMode
-                    ? appearance.language === "en" ? "Choose the image framing for your profile avatar." : "Escolha o enquadramento da sua foto de perfil."
+                    ? appearance.language === "en" ? "choose the image framing for your profile avatar." : "escolha o enquadramento da sua foto de perfil."
                     : isCoverMode
-                      ? appearance.language === "en" ? "Choose the banner shown on your profile." : "Escolha a capa exibida no seu perfil."
+                      ? appearance.language === "en" ? "choose the banner shown on your profile." : "escolha a capa exibida no seu perfil."
                       : appearance.language === "en" ? "Customize your GhostBox identity" : "Personalize sua identidade no GhostBox"}
                 </p>
               </div>
 
               <button type="button" className="collection-modal__close" onClick={onClose} aria-label={appearance.language === "en" ? "Close" : "Fechar"}>
-                <X size={20} strokeWidth={1.7} />
+                <ModalCloseIcon />
               </button>
             </header>
 

@@ -15,6 +15,7 @@ const translations: Record<Language, TranslationTree> = {
       settings: "Ajustes",
       profile: "Perfil",
       notifications: "Notificações",
+      discord: "Abrir Discord do GhostBox",
     },
     header: {
       back: "Voltar",
@@ -141,7 +142,18 @@ const translations: Record<Language, TranslationTree> = {
       },
       checkoutPending: {
         title: "Checkout em breve",
-        message: "A UI está pronta. O checkout Tauri seguro entra na fase backend.",
+        message: "A conta Steam e o Discord já estão vinculados. O checkout Premium entra na próxima fase.",
+      },
+      discordLink: {
+        title: "Vincular Steam ao Discord",
+        description: "Conecte o Discord à conta Steam usada no GhostBox para receber Premium no servidor futuramente.",
+        signInSteam: "Entrar com Steam",
+        link: "Vincular Discord",
+        relink: "Atualizar vínculo",
+        linked: "Vinculado",
+        linkedAs: "Discord vinculado como {name}.",
+        openedTitle: "Discord aberto",
+        openedMessage: "Conclua a autorização no navegador para ligar sua Steam ao Discord.",
       },
       checkout: {
         title: "Checkout seguro via Stripe",
@@ -434,6 +446,7 @@ const translations: Record<Language, TranslationTree> = {
       settings: "Settings",
       profile: "Profile",
       notifications: "Notifications",
+      discord: "Open GhostBox Discord",
     },
     header: {
       back: "Back",
@@ -560,7 +573,18 @@ const translations: Record<Language, TranslationTree> = {
       },
       checkoutPending: {
         title: "Checkout soon",
-        message: "The UI is ready. Secure Tauri checkout comes in the backend phase.",
+        message: "Steam and Discord are linked. Premium checkout comes in the next phase.",
+      },
+      discordLink: {
+        title: "Link Steam to Discord",
+        description: "Connect Discord to the Steam account used in GhostBox so Premium can be granted in the server later.",
+        signInSteam: "Sign in with Steam",
+        link: "Link Discord",
+        relink: "Update link",
+        linked: "Linked",
+        linkedAs: "Discord linked as {name}.",
+        openedTitle: "Discord opened",
+        openedMessage: "Finish the browser authorization to link Steam with Discord.",
       },
       checkout: {
         title: "Secure checkout via Stripe",

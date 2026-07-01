@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, CloudCheck, Trophy } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import {
@@ -9,7 +9,7 @@ import type { BackupRootStatus } from "../../types";
 import {
   layeredImageStyle,
   gameHeaderOnlySources,
-  gamePortraitSources,
+  gamePortraitPreviewSources,
   gameStyle,
   preloadGameModalAssets,
 } from "../../utils/image";
@@ -43,11 +43,39 @@ export const GameCard = memo(function GameCard({
   backupRootStatus = null,
   libraryCoverFade = false,
 }: GameCardProps) {
-  const headerSources = useCachedImageSources(
-    portrait ? gamePortraitSources(game) : gameHeaderOnlySources(game)
+  const cardRef = useRef<HTMLElement | null>(null);
+  const [shouldLoadCover, setShouldLoadCover] = useState(false);
+  const rawHeaderSources = useMemo(
+    () => (portrait ? gamePortraitPreviewSources(game) : gameHeaderOnlySources(game)),
+    [game, portrait]
   );
+  const headerSources = useCachedImageSources(shouldLoadCover ? rawHeaderSources : []);
   const coverImage = useLoadableImageState(headerSources);
   const previousCoverSourceRef = useRef(coverImage.loaded ? coverImage.source : "");
+
+  useEffect(() => {
+    if (shouldLoadCover) return;
+    const node = cardRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadCover(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadCover(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "420px 0px", threshold: 0.01 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldLoadCover]);
 
   useEffect(() => {
     if (coverImage.loaded && coverImage.source) {
@@ -84,10 +112,10 @@ export const GameCard = memo(function GameCard({
   const achievementProgress =
     achievementTotal > 0 ? (achievementUnlocked / achievementTotal) * 100 : 0;
   const playtimeInMilliseconds = game.playTimeInMilliseconds ?? game.hours * 3_600_000;
-  const hasPlaytime = playtimeInMilliseconds > 0;
+  const compactPlaytime =
+    playtimeInMilliseconds > 0 ? formatCompactPlaytime(playtimeInMilliseconds) : "0h";
   const showAchievementProgress = showAchievements && achievementTotal > 0;
-  const showAchievementSummaryBadge =
-    showAchievementSummary && (achievementTotal > 0 || hasPlaytime);
+  const showAchievementSummaryBadge = showAchievementSummary;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     if (onContextMenu) {
@@ -98,6 +126,7 @@ export const GameCard = memo(function GameCard({
 
   return (
     <article
+      ref={cardRef}
       className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}`}
       style={gameStyle(game)}
       onClick={() => onOpenGame(game)}
@@ -123,9 +152,9 @@ export const GameCard = memo(function GameCard({
             }
           >
             {backupRootStatus?.status === "ok" && hasBackup ? (
-              <CloudCheck size={15} strokeWidth={2.4} />
+              <CloudCheck size={15} strokeWidth={2.0} />
             ) : (
-              <CloudCheck size={15} strokeWidth={2.4} />
+              <CloudCheck size={15} strokeWidth={2.0} />
             )}
           </div>
         )}
@@ -137,16 +166,16 @@ export const GameCard = memo(function GameCard({
         {showAchievementProgress && (
           <div
             className="game-card__achievement-progress"
-            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${formatCompactPlaytime(playtimeInMilliseconds)} jogadas`}
+            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
           >
             <div className="game-card__achievement-progress-count">
-              <Trophy size={16} strokeWidth={2.35} />
+              <Trophy size={16} strokeWidth={2.0} />
               <span>
                 {achievementUnlocked} / {achievementTotal}
               </span>
               <span className="game-card__summary-metric">
-                <Clock size={16} strokeWidth={2.35} />
-                <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
+                <Clock size={16} strokeWidth={2.0} />
+                <span>{compactPlaytime}</span>
               </span>
             </div>
             <div
@@ -160,19 +189,17 @@ export const GameCard = memo(function GameCard({
         {showAchievementSummaryBadge && !showAchievementProgress && (
           <div
             className="game-card__achievement-badge"
-            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${formatCompactPlaytime(playtimeInMilliseconds)} jogadas`}
+            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
           >
-            {achievementTotal > 0 && (
-              <span className="game-card__summary-metric">
-                <Trophy size={14} strokeWidth={2.35} />
-                <span>
-                  {achievementUnlocked} / {achievementTotal}
-                </span>
-              </span>
-            )}
             <span className="game-card__summary-metric">
-              <Clock size={14} strokeWidth={2.35} />
-              <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
+              <Trophy size={16} strokeWidth={2.0} />
+              <span>
+                {achievementUnlocked} / {achievementTotal}
+              </span>
+            </span>
+            <span className="game-card__summary-metric">
+              <Clock size={16} strokeWidth={2.0} />
+              <span>{compactPlaytime}</span>
             </span>
           </div>
         )}

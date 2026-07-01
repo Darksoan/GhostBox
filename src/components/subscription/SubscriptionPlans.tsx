@@ -1,13 +1,37 @@
-import { Check, X } from "lucide-react";
+import { CalendarClock, Check, CloudUpload, CreditCard, ExternalLink, Link, RefreshCw, ShieldCheck, UserRound, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
+import { ghostboxApi } from "../../lib/ghostboxApi";
+import type { DiscordLinkStatus, SubscriptionStatusResult } from "../../lib/ghostboxApi.types";
+import type { SteamProfile } from "../../types";
 import ghostIcon from "../../../Icons/ghost-solid.png";
+import discordIcon from "../../../Icons/discord.svg";
 
 type SubscriptionPlanId = "free" | "monthly" | "quarterly";
 
 type SubscriptionPlansProps = {
   surface?: "modal" | "settings";
   enterDelay?: string;
+  cloudBackupGames?: Array<{
+    appId: string;
+    title: string;
+    lastBackupAt: string | null;
+    lastBackupSuccess: boolean | null;
+  }>;
+  steamProfile?: SteamProfile | null;
+};
+
+type LatestPayment = {
+  id?: string;
+  planId?: string;
+  status?: string;
+  amountCents?: number;
+  currency?: string;
+  createdAt?: string;
+  confirmedAt?: string | null;
+  updatedAt?: string;
 };
 
 const benefits: Record<SubscriptionPlanId, string[]> = {
@@ -57,12 +81,212 @@ const steps = [
   "subscription.steps.sync",
 ];
 
+function formatDate(value: string | null | undefined, language: "pt" | "en") {
+  if (!value) return language === "en" ? "Not available" : "Indisponível";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(timestamp);
+}
+
+function formatCurrency(amountCents: number | undefined, currency: string | undefined, language: "pt" | "en") {
+  if (typeof amountCents !== "number") return language === "en" ? "Not available" : "Indisponível";
+  return new Intl.NumberFormat(language === "en" ? "en-US" : "pt-BR", {
+    style: "currency",
+    currency: currency || "BRL",
+  }).format(amountCents / 100);
+}
+
+function latestPayment(value: unknown): LatestPayment | null {
+  return value && typeof value === "object" ? value as LatestPayment : null;
+}
+
 export function SubscriptionPlans({
   surface = "settings",
   enterDelay,
+  cloudBackupGames = [],
+  steamProfile: steamProfileProp,
 }: SubscriptionPlansProps) {
-  const { t } = useSettings();
+  const { appearance, t } = useSettings();
   const { showToast } = useOverlay();
+  const appData = useAppData();
+  const { isSteamSigningIn, handleSteamSignIn } = appData;
+  const steamProfile = steamProfileProp ?? appData.steamProfile;
+  const [discordLinkStatus, setDiscordLinkStatus] = useState<DiscordLinkStatus | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings" && Boolean(steamProfile?.steamId));
+  const linkedDiscordName = discordLinkStatus?.discordGlobalName || discordLinkStatus?.discordUsername;
+  const language = appearance.language;
+  const copy = (pt: string, en: string) => language === "en" ? en : pt;
+
+  function refreshDiscordLinkStatus(steamId: string) {
+    void ghostboxApi.getDiscordLinkStatus(steamId).then((status) => {
+      setDiscordLinkStatus(status);
+    });
+  }
+
+  function refreshSubscriptionStatus(steamId: string) {
+    setSubscriptionLoading(true);
+    void ghostboxApi.getSubscriptionStatus(steamId)
+      .then((status) => {
+        setSubscriptionStatus(status);
+        if (status?.discordLink) setDiscordLinkStatus(status.discordLink);
+      })
+      .finally(() => setSubscriptionLoading(false));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!steamProfile?.steamId) {
+      setDiscordLinkStatus(null);
+      return;
+    }
+
+    void ghostboxApi.getDiscordLinkStatus(steamProfile.steamId).then((status) => {
+      if (!cancelled) setDiscordLinkStatus(status);
+    });
+    refreshSubscriptionStatus(steamProfile.steamId);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [steamProfile?.steamId]);
+
+  useEffect(() => {
+    const steamId = steamProfile?.steamId;
+    if (!steamId) return;
+
+    const handleFocus = () => refreshDiscordLinkStatus(steamId);
+    const handleFocusSubscription = () => refreshSubscriptionStatus(steamId);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("focus", handleFocusSubscription);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("focus", handleFocusSubscription);
+    };
+  }, [steamProfile?.steamId]);
+
+  const isPremium = subscriptionStatus?.subscription.isPremium === true;
+  const payment = latestPayment(subscriptionStatus?.latestPayment);
+
+  if (surface === "settings" && steamProfile?.steamId && subscriptionLoading && !subscriptionStatus) {
+    return (
+      <section
+        className="subscription-account subscription-account--loading settings-panel__animated-block"
+        style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
+        aria-label={copy("Carregando assinatura", "Loading subscription")}
+      >
+        <div className="subscription-account__loading-indicator" role="status" aria-live="polite">
+          <span className="subscription-account__spinner" aria-hidden="true" />
+          <span className="sr-only">{copy("Carregando dados da assinatura", "Loading subscription data")}</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (surface === "settings" && isPremium) {
+    return (
+      <section
+        className="subscription-account settings-panel__animated-block"
+        style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
+        aria-label={copy("Resumo da assinatura Premium", "Premium subscription summary")}
+      >
+        <header className="subscription-account__header">
+          <span className="subscription-account__eyebrow">GhostBox Premium</span>
+          <div>
+            <h3>{copy("Assinatura ativa", "Active subscription")}</h3>
+            <p>{copy("Seu benefício Premium está liberado para a conta Steam conectada.", "Your Premium benefit is enabled for the connected Steam account.")}</p>
+          </div>
+          <button
+            type="button"
+            className="subscription-account__refresh"
+            onClick={() => steamProfile?.steamId && refreshSubscriptionStatus(steamProfile.steamId)}
+            disabled={subscriptionLoading || !steamProfile?.steamId}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            {copy("Atualizar", "Refresh")}
+          </button>
+        </header>
+
+        <div className="subscription-account__summary-grid">
+          <article className="subscription-account__summary-card">
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span>{copy("Status", "Status")}</span>
+            <strong>{copy("Premium ativo", "Premium active")}</strong>
+          </article>
+          <article className="subscription-account__summary-card">
+            <CalendarClock size={18} aria-hidden="true" />
+            <span>{copy("Expira em", "Expires on")}</span>
+            <strong>{formatDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
+          </article>
+          <article className="subscription-account__summary-card">
+            <CloudUpload size={18} aria-hidden="true" />
+            <span>{copy("Backups em nuvem", "Cloud backups")}</span>
+            <strong>{cloudBackupGames.length}</strong>
+          </article>
+        </div>
+
+        <div className="subscription-account__details-grid">
+          <article className="subscription-account__panel">
+            <h4><CreditCard size={16} aria-hidden="true" />{copy("Pagamento e benefício", "Payment and benefit")}</h4>
+            <dl>
+              <div><dt>{copy("Plano", "Plan")}</dt><dd>{subscriptionStatus.subscription.planId === "quarterly" ? copy("Trimestral", "Quarterly") : copy("Mensal", "Monthly")}</dd></div>
+              <div><dt>{copy("Início", "Start")}</dt><dd>{formatDate(subscriptionStatus.subscription.currentPeriodStart, language)}</dd></div>
+              <div><dt>{copy("Expiração", "Expiration")}</dt><dd>{formatDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</dd></div>
+              <div><dt>{copy("Último pagamento", "Latest payment")}</dt><dd>{payment ? `${formatCurrency(payment.amountCents, payment.currency, language)} · ${payment.status ?? "-"}` : copy("Benefício administrativo", "Administrative benefit")}</dd></div>
+              <div><dt>{copy("Data do pagamento", "Payment date")}</dt><dd>{formatDate(payment?.confirmedAt || payment?.createdAt, language)}</dd></div>
+            </dl>
+          </article>
+
+          <article className="subscription-account__panel">
+            <h4><UserRound size={16} aria-hidden="true" />Discord</h4>
+            <dl>
+              <div><dt>{copy("Conta Steam", "Steam account")}</dt><dd>{steamProfile?.displayName || steamProfile?.steamId || copy("Não conectada", "Not connected")}</dd></div>
+              <div><dt>{copy("Discord", "Discord")}</dt><dd>{linkedDiscordName || copy("Não vinculado", "Not linked")}</dd></div>
+              <div><dt>{copy("Cargo Premium", "Premium role")}</dt><dd>{discordLinkStatus?.premiumRole?.synced ? copy("Sincronizado", "Synced") : discordLinkStatus?.linked ? copy("Aguardando servidor", "Waiting for server") : copy("Vincule sua conta", "Link your account")}</dd></div>
+              <div><dt>{copy("Vinculado em", "Linked at")}</dt><dd>{formatDate(discordLinkStatus?.linkedAt, language)}</dd></div>
+            </dl>
+            <button
+              type="button"
+              className="subscription-account__link-button"
+              onClick={() => {
+                if (!steamProfile?.steamId) {
+                  void handleSteamSignIn();
+                  return;
+                }
+                void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
+              }}
+            >
+              <Link size={15} aria-hidden="true" />
+              {discordLinkStatus?.linked ? copy("Atualizar vínculo", "Update link") : copy("Vincular Discord", "Link Discord")}
+            </button>
+          </article>
+        </div>
+
+        <article className="subscription-account__panel subscription-account__panel--wide">
+          <h4><CloudUpload size={16} aria-hidden="true" />{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
+          {cloudBackupGames.length > 0 ? (
+            <ul className="subscription-account__backup-list">
+              {cloudBackupGames.map((game) => (
+                <li key={game.appId}>
+                  <strong>{game.title}</strong>
+                  <span>{game.lastBackupAt ? formatDate(game.lastBackupAt, language) : copy("Sem backup registrado", "No backup recorded")}</span>
+                  <em className={game.lastBackupSuccess === false ? "subscription-account__backup-status subscription-account__backup-status--error" : "subscription-account__backup-status"}>
+                    {game.lastBackupSuccess === false ? copy("Falhou", "Failed") : copy("Ativo", "Active")}
+                  </em>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="subscription-account__empty">{copy("Nenhum jogo está com backup automático em nuvem ativado agora.", "No game currently has automatic cloud backup enabled.")}</p>
+          )}
+        </article>
+      </section>
+    );
+  }
 
   const plans: Array<{
     id: SubscriptionPlanId;
@@ -108,6 +332,19 @@ export function SubscriptionPlans({
 
   function handleSubscribe(planId: SubscriptionPlanId) {
     if (planId === "free") return;
+    if (!steamProfile?.steamId) {
+      void handleSteamSignIn();
+      return;
+    }
+    if (!discordLinkStatus?.linked) {
+      void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
+      showToast(
+        t("subscription.discordLink.openedTitle"),
+        t("subscription.discordLink.openedMessage")
+      );
+      return;
+    }
+
     showToast(
       t("subscription.checkoutPending.title"),
       t("subscription.checkoutPending.message"),
@@ -156,9 +393,9 @@ export function SubscriptionPlans({
                   className={plan.id === "free" ? "subscription-plan-card__benefit--disabled" : undefined}
                 >
                   {plan.id === "free" ? (
-                    <X size={15} strokeWidth={2} aria-hidden="true" />
+                    <X size={15} strokeWidth={2.0} aria-hidden="true" />
                   ) : (
-                    <Check size={15} strokeWidth={2} aria-hidden="true" />
+                    <Check size={15} strokeWidth={2.0} aria-hidden="true" />
                   )}
                   <span>{t(benefitKey)}</span>
                 </li>
@@ -192,6 +429,53 @@ export function SubscriptionPlans({
           </div>
         ))}
       </div>
+
+      <section className="subscription-plans__discord-link" aria-label={t("subscription.discordLink.title")}>
+        <div className="subscription-plans__discord-copy">
+          <img
+            className="subscription-plans__discord-icon"
+            src={discordIcon}
+            alt=""
+            aria-hidden="true"
+          />
+          <div>
+            <h4>{t("subscription.discordLink.title")}</h4>
+            <p>
+              {discordLinkStatus?.linked && linkedDiscordName
+                ? t("subscription.discordLink.linkedAs").replace("{name}", linkedDiscordName)
+                : t("subscription.discordLink.description")}
+            </p>
+          </div>
+        </div>
+        <div className="subscription-plans__discord-actions">
+          <button
+            type="button"
+            className="subscription-plans__discord-action"
+            onClick={() => {
+              if (!steamProfile?.steamId) {
+                void handleSteamSignIn();
+                return;
+              }
+              void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
+              window.setTimeout(() => refreshDiscordLinkStatus(steamProfile.steamId), 3000);
+            }}
+            disabled={isSteamSigningIn}
+          >
+            {steamProfile?.steamId ? <Link size={15} aria-hidden="true" /> : <ExternalLink size={15} aria-hidden="true" />}
+            {steamProfile?.steamId
+              ? discordLinkStatus?.linked
+                ? t("subscription.discordLink.relink")
+                : t("subscription.discordLink.link")
+              : t("subscription.discordLink.signInSteam")}
+          </button>
+          {discordLinkStatus?.linked && (
+            <span className="subscription-plans__discord-status">
+              <Check size={14} aria-hidden="true" />
+              {t("subscription.discordLink.linked")}
+            </span>
+          )}
+        </div>
+      </section>
 
       <div className="subscription-plans__details">
         {details.map((section) => (

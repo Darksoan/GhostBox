@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AddGameResult,
   AppStatus,
@@ -34,6 +35,8 @@ import type {
   SteamPathSelectionResult,
   SteamProfile,
   SteamWishlistItem,
+  DiscordLinkStatus,
+  SubscriptionStatusResult,
 } from "./ghostboxApi.types";
 
 function noopUnsubscribe() {
@@ -41,6 +44,7 @@ function noopUnsubscribe() {
 }
 
 const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
+const defaultSubscriptionsApiUrl = "https://ghostbox-subscriptions.hella.workers.dev";
 
 function getGamesApiUrl() {
   return (
@@ -48,6 +52,13 @@ function getGamesApiUrl() {
     import.meta.env.VITE_EDEN_GAMES_API_URL?.trim() ||
     import.meta.env.VITE_PIRATEBOX_GAMES_API_URL?.trim() ||
     defaultGamesApiUrl
+  ).replace(/\/+$/, "");
+}
+
+function getSubscriptionsApiUrl() {
+  return (
+    import.meta.env.VITE_GHOSTBOX_SUBSCRIPTIONS_API_URL?.trim() ||
+    defaultSubscriptionsApiUrl
   ).replace(/\/+$/, "");
 }
 
@@ -79,6 +90,46 @@ async function invokeOr<T>(
 }
 
 export const ghostboxApi = {
+  async openExternalUrl(url: string): Promise<void> {
+    try {
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  },
+
+  getDiscordLinkUrl(steamId: string): string {
+    const url = new URL(`${getSubscriptionsApiUrl()}/discord/link`);
+    url.searchParams.set("steamId", steamId);
+    return url.toString();
+  },
+
+  async getDiscordLinkStatus(steamId: string): Promise<DiscordLinkStatus | null> {
+    const url = new URL(`${getSubscriptionsApiUrl()}/discord/link-status`);
+    url.searchParams.set("steamId", steamId);
+
+    try {
+      const response = await fetch(url, { headers: { accept: "application/json" } });
+      if (!response.ok) return null;
+      return await response.json() as DiscordLinkStatus;
+    } catch {
+      return null;
+    }
+  },
+
+  async getSubscriptionStatus(steamId: string): Promise<SubscriptionStatusResult | null> {
+    const url = new URL(`${getSubscriptionsApiUrl()}/subscription/status`);
+    url.searchParams.set("steamId", steamId);
+
+    try {
+      const response = await fetch(url, { headers: { accept: "application/json" } });
+      if (!response.ok) return null;
+      return await response.json() as SubscriptionStatusResult;
+    } catch {
+      return null;
+    }
+  },
+
   getAppStatus(): Promise<AppStatus | undefined> {
     return invokeOr<AppStatus | undefined>("app_get_status", {}, undefined);
   },

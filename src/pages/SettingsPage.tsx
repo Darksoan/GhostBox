@@ -1,5 +1,5 @@
 import {
-  ChevronRight,
+  ChevronLeft,
   Check,
   Bell,
   Crown,
@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { useSettings } from "../context/settings";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import type { GhostBoxGame } from "../data";
-import type { BackupSettings, StartupPage, StartupSettings } from "../types";
+import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
 
@@ -78,6 +78,8 @@ type MorrenusStatsState =
 type BackupEnabledGame = {
   appId: string;
   title: string;
+  lastBackupAt: string | null;
+  lastBackupSuccess: boolean | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -240,6 +242,7 @@ export const settingsTabs: SettingsTab[] = [
 interface SettingsPageProps {
   activeTabId: SettingsTabId;
   games: GhostBoxGame[];
+  steamProfile: SteamProfile | null;
   initialPage: StartupPage;
   onInitialPageChange: Dispatch<SetStateAction<StartupPage>>;
   steamPath: string;
@@ -257,6 +260,7 @@ interface SettingsPageProps {
 export function SettingsPage({
   activeTabId,
   games,
+  steamProfile,
   initialPage,
   onInitialPageChange,
   steamPath,
@@ -408,13 +412,15 @@ export function SettingsPage({
       .map(([appId]) => ({
         appId,
         title: gameTitles.get(appId) || backupRecords[appId]?.title || appId,
+        lastBackupAt: backupRecords[appId]?.lastBackupAt ?? null,
+        lastBackupSuccess: typeof backupRecords[appId]?.lastBackupSuccess === "boolean" ? backupRecords[appId].lastBackupSuccess : null,
       }))
       .sort((left, right) => left.title.localeCompare(right.title));
   }, [backupSettings, games]);
 
   return (
     <section className="settings-page settings-page--tabs" aria-label={t("nav.settings")}>
-      <article className="settings-panel">
+      <article className={`settings-panel${activeTab.id === "subscription" ? " settings-panel--bare" : ""}`}>
         <div key={activeTab.id} className="settings-panel__body">
           <div className="settings-options">
             {options.map((option, index) => (
@@ -455,6 +461,8 @@ export function SettingsPage({
             <SubscriptionPlans
               surface="settings"
               enterDelay={`${0.04 + options.length * 0.035}s`}
+              cloudBackupGames={backupEnabledGames}
+              steamProfile={steamProfile}
             />
           )}
           {activeTab.id === "download" && (
@@ -840,7 +848,7 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
               aria-label={option.confirmAriaLabel ?? "Salvar chave"}
               onClick={option.onClick}
             >
-              <Check size={14} strokeWidth={3} />
+              <Check size={14} strokeWidth={2.0} />
             </button>
           </div>
         )}
@@ -999,7 +1007,7 @@ function SettingsDropdown({
         onClick={() => setOpen((current) => !current)}
       >
         <span>{activeChoice.label}</span>
-        <ChevronRight size={14} />
+        <ChevronLeft size={14} />
       </button>
 
       {open && (

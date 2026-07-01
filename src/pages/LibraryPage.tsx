@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, Heart } from "lucide-react";
+import { ChevronLeft, Folder, Heart } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
@@ -226,7 +226,7 @@ export function LibraryPage({
     if (!loading)
       preloadGameListAssets(libraryGames, {
         variant: "portrait",
-        limit: 24,
+        limit: 12,
         details: true,
         detailsLimit: 8,
       });
@@ -245,7 +245,7 @@ export function LibraryPage({
                 onClick={() => setSortDropdownOpen((current) => !current)}
               >
                 <span>{sortLabel}</span>
-                <ChevronRight size={14} />
+                <ChevronLeft size={14} />
               </button>
               {sortDropdownOpen && (
                 <div className="settings-dropdown__menu" role="listbox" aria-label={language === "en" ? "Sort by" : "Ordenar por"}>
@@ -277,7 +277,7 @@ export function LibraryPage({
                 changeActiveCollection(favoritesOnly ? null : "favorites");
               }}
             >
-              <Heart size={15} strokeWidth={2.2} fill={favoritesOnly ? "currentColor" : "none"} />
+              <Heart size={15} strokeWidth={2.0} fill="none" />
               <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
             </button>
 
@@ -291,7 +291,7 @@ export function LibraryPage({
                   changeActiveCollection(activeCollectionId === collection.id ? null : collection.id);
                 }}
               >
-                <Folder size={15} strokeWidth={2.2} />
+                <Folder size={15} strokeWidth={2.0} />
                 <span>{collection.name}</span>
               </button>
             ))}

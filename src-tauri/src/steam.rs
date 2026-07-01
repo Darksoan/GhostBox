@@ -1386,7 +1386,7 @@ pub fn steam_select_path(
             "status": "invalid",
             "selectedPath": selected_path,
             "missingEntries": missing_entries,
-            "message": "A pasta selecionada nÃ£o parece conter uma instalaÃ§Ã£o vÃ¡lida da Steam."
+            "message": "A pasta selecionada não parece conter uma instalação válida da Steam."
         }));
     };
 
@@ -1412,7 +1412,7 @@ pub fn steam_scan_library(
             return Ok(serde_json::json!({
                 "status": "missing",
                 "checkedPaths": checked_paths,
-                "message": "NÃ£o foi possÃ­vel localizar a instalaÃ§Ã£o da Steam."
+                "message": "Não foi possível localizar a instalação da Steam."
             }));
         }
 
@@ -1484,14 +1484,17 @@ pub fn steam_restart(app: tauri::AppHandle) -> serde_json::Value {
     if let Some(steam_path) = resolved_path {
         let steam_exe = std::path::PathBuf::from(&steam_path).join("steam.exe");
         if steam_exe.is_file() {
+            terminate_steam_processes();
+            std::thread::sleep(std::time::Duration::from_millis(1200));
+
             let mut command = std::process::Command::new(&steam_exe);
             command.current_dir(&steam_path);
             return match command.spawn() {
                 Ok(_) => serde_json::json!({
                     "success": true,
-                    "status": "opened",
+                    "status": "restarted",
                     "steamPath": steam_path,
-                    "message": "Steam foi aberta com seguranÃ§a. Processos existentes nÃ£o foram encerrados."
+                    "message": "Steam foi encerrada completamente e aberta novamente."
                 }),
                 Err(error) => serde_json::json!({
                     "success": false,
@@ -1508,7 +1511,7 @@ pub fn steam_restart(app: tauri::AppHandle) -> serde_json::Value {
             "success": true,
             "status": "opened-url",
             "checkedPaths": checked_paths,
-            "message": "Steam foi solicitada via protocolo steam://. Processos existentes nÃ£o foram encerrados."
+            "message": "Steam foi solicitada via protocolo steam://. Não foi possível encerrar processos sem localizar a instalação."
         }),
         Err(error) => serde_json::json!({
             "success": false,
@@ -1516,5 +1519,29 @@ pub fn steam_restart(app: tauri::AppHandle) -> serde_json::Value {
             "checkedPaths": checked_paths,
             "error": error.to_string()
         }),
+    }
+}
+
+#[cfg(windows)]
+fn terminate_steam_processes() {
+    for process_name in [
+        "steam.exe",
+        "steamwebhelper.exe",
+        "GameOverlayUI.exe",
+        "steamerrorreporter.exe",
+        "steamerrorreporter64.exe",
+    ] {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/IM", process_name])
+            .status();
+    }
+}
+
+#[cfg(not(windows))]
+fn terminate_steam_processes() {
+    for process_name in ["steam", "steamwebhelper"] {
+        let _ = std::process::Command::new("pkill")
+            .args(["-TERM", process_name])
+            .status();
     }
 }

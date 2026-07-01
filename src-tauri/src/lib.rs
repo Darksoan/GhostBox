@@ -35,6 +35,7 @@ pub(crate) use settings::load_startup_settings;
 
 use ludusavi::game_title;
 use settings::{read_json_file, write_json_file};
+use tauri::Manager;
 use util::{merge_object_defaults, object_or_empty, text_value, EmptyStringExt};
 
 struct AchievementServerState {
@@ -905,7 +906,7 @@ fn record_ghostbox_steam_api_achievement_unlock(
     payload: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let Some(payload) = payload.as_object() else {
-        return Err("Payload de conquista invÃ¡lido.".to_string());
+        return Err("Payload de conquista inválido.".to_string());
     };
     let app_id: String = text_value(payload.get("appId"))
         .chars()
@@ -924,7 +925,7 @@ fn record_ghostbox_steam_api_achievement_unlock(
     .map(str::to_string)
     .unwrap_or_default();
     if app_id.is_empty() || name.is_empty() {
-        return Err("appId e name sÃ£o obrigatÃ³rios.".to_string());
+        return Err("appId e name são obrigatórios.".to_string());
     }
 
     let settings = load_backup_settings(app);
@@ -1355,7 +1356,7 @@ fn launch_custom_executable(
             "success": false,
             "appId": app_id,
             "customExecutable": true,
-            "error": "O executÃ¡vel configurado nÃ£o foi encontrado."
+            "error": "O executável configurado não foi encontrado."
         });
     }
 
@@ -1614,7 +1615,7 @@ fn game_launch(
         return Ok(serde_json::json!({
             "success": false,
             "appId": "",
-            "error": "AppId invÃ¡lido."
+            "error": "AppId inválido."
         }));
     }
 
@@ -1684,7 +1685,7 @@ fn backup_select_game_executable(
             "status": "invalid",
             "appId": "",
             "settings": settings,
-            "message": "Jogo invÃ¡lido."
+            "message": "Jogo inválido."
         }));
     }
 
@@ -1695,7 +1696,7 @@ fn backup_select_game_executable(
             "status": "invalid",
             "appId": app_id,
             "settings": settings,
-            "message": "Selecione um arquivo .exe vÃ¡lido."
+            "message": "Selecione um arquivo .exe válido."
         }));
     }
 
@@ -1713,6 +1714,11 @@ fn backup_select_game_executable(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                window_lifecycle::show_main_window_when_ready(webview.app_handle());
+            }
+        })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             window_lifecycle::show_main_window(app);
         }))

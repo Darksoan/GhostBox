@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import { Clock, Trophy } from "lucide-react";
 import type { UserCollection } from "../types";
@@ -9,7 +9,7 @@ import {
 import { formatCompactPlaytime } from "../utils/time";
 import {
   layeredImageStyle,
-  gamePortraitSources,
+  gamePortraitPreviewSources,
   preloadGameListAssets,
   preloadGameModalAssets,
 } from "../utils/image";
@@ -27,7 +27,10 @@ export const FavoriteCard = memo(function FavoriteCard({
   onOpenGame,
   onContextMenu,
 }: FavoriteCardProps) {
-  const coverSources = useCachedImageSources(gamePortraitSources(game));
+  const cardRef = useRef<HTMLElement | null>(null);
+  const [shouldLoadCover, setShouldLoadCover] = useState(false);
+  const rawCoverSources = useMemo(() => gamePortraitPreviewSources(game), [game]);
+  const coverSources = useCachedImageSources(shouldLoadCover ? rawCoverSources : []);
   const coverSource = useLoadableImageSource(coverSources);
   const achievementTotal = game.achievements.total;
   const achievementUnlocked = Math.min(
@@ -38,8 +41,33 @@ export const FavoriteCard = memo(function FavoriteCard({
     achievementTotal > 0 ? (achievementUnlocked / achievementTotal) * 100 : 0;
   const playtimeInMilliseconds = game.playTimeInMilliseconds ?? game.hours * 3_600_000;
 
+  useEffect(() => {
+    if (shouldLoadCover) return;
+    const node = cardRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadCover(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadCover(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "420px 0px", threshold: 0.01 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldLoadCover]);
+
   return (
     <article
+      ref={cardRef}
       className="favorites-grid__item"
       role="button"
       onClick={() => onOpenGame(game)}
@@ -64,13 +92,13 @@ export const FavoriteCard = memo(function FavoriteCard({
           >
             <div className="game-card__achievement-progress-count">
               <>
-                <Trophy size={16} strokeWidth={2.35} />
+                <Trophy size={16} strokeWidth={2.0} />
                 <span>
                   {achievementUnlocked} / {achievementTotal}
                 </span>
               </>
               <span className="game-card__summary-metric">
-                <Clock size={16} strokeWidth={2.35} />
+                <Clock size={16} strokeWidth={2.0} />
                 <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
               </span>
             </div>
@@ -159,7 +187,7 @@ export function FavoritesPage({
   useEffect(() => {
     preloadGameListAssets(games, {
       variant: "portrait",
-      limit: 24,
+      limit: 12,
       idle: true,
       details: true,
       detailsLimit: 8,

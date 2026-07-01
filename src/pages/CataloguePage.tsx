@@ -244,7 +244,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
                         onChange={() => onToggle(filterKey, value)}
                       />
                       <span className="catalogue-filter-option__box">
-                        {checked && <Check size={12} strokeWidth={3} />}
+                        {checked && <Check size={12} strokeWidth={2.0} />}
                       </span>
                       <span>{getFilterDisplayValue(filterKey, value, appearance.language)}</span>
                     </label>
@@ -454,11 +454,11 @@ export function CataloguePage({
 
     preloadGameListAssets(visibleGames, {
       variant: "header",
-      limit: 10,
+      limit: 6,
     });
     preloadGameListAssets(nextPageGames, {
       variant: "header",
-      limit: 10,
+      limit: 6,
       idle: true,
     });
   }, [loading, nextPageGames, visibleGames, visibleGamesCacheKey]);
@@ -615,7 +615,7 @@ export function CataloguePage({
                   className={sort === "popular" ? "is-active" : undefined}
                   onClick={() => onSortChange("popular")}
                 >
-                  <ThumbsUp size={15} strokeWidth={2.25} />
+                  <ThumbsUp size={15} strokeWidth={2.0} />
                   <span>{t("catalogue.sort.featured")}</span>
                 </button>
                 <button
@@ -623,7 +623,7 @@ export function CataloguePage({
                   className={sort === "recentlyAdded" ? "is-active" : undefined}
                   onClick={() => onSortChange("recentlyAdded")}
                 >
-                  <Clock size={15} strokeWidth={2.25} />
+                  <Clock size={15} strokeWidth={2.0} />
                   <span>{t("catalogue.sort.recentlyAdded")}</span>
                 </button>
               </div>

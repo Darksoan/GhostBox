@@ -977,7 +977,7 @@ export function GameModal({
                       {isPlaying ? (
                         <span className="modal__add-spinner modal__add-spinner--light" aria-hidden="true" />
                       ) : (
-                        <Play size={20} strokeWidth={2} />
+                        <Play size={20} strokeWidth={2.0} />
                       )}
                       <span className="button__label modal__action-label">
                         {isSessionActive
@@ -1216,7 +1216,7 @@ export function GameModal({
                         }
                       >
                         <div className="modal__achievements-heading">
-                          <Trophy size={16} />
+                          <Trophy size={16} strokeWidth={2.0} />
                           <strong>
                             {appearance.language === "en"
                               ? "Achievements"

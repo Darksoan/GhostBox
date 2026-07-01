@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadGames, type GhostBoxGame } from "../data";
 import { useSettings } from "../context/settings";
+import { ghostboxApi } from "../lib/ghostboxApi";
 
 const recentlyAddedLimit = 200;
 
@@ -45,6 +46,27 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
 
+  const loadRecentGames = useCallback((showLoading = true) => {
+    let cancelled = false;
+
+    if (showLoading) setIsLoading(true);
+    const request = loadGames({ limit: recentlyAddedLimit, sort: "recentlyAdded" })
+      .then((database) => {
+        if (!cancelled) setRecentGames(database.games);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentGames([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      void request;
+    };
+  }, []);
+
   const groupedGames = useMemo(() => {
     const groups = new Map<string, { label: string; dateText: string; games: GhostBoxGame[] }>();
 
@@ -66,24 +88,14 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
   }
 
   useEffect(() => {
-    let cancelled = false;
+    return loadRecentGames();
+  }, [loadRecentGames]);
 
-    setIsLoading(true);
-    loadGames({ limit: recentlyAddedLimit, sort: "recentlyAdded" })
-      .then((database) => {
-        if (!cancelled) setRecentGames(database.games);
-      })
-      .catch(() => {
-        if (!cancelled) setRecentGames([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(() => {
+    return ghostboxApi.onCatalogueCacheUpdated(() => {
+      loadRecentGames(false);
+    });
+  }, [loadRecentGames]);
 
   return (
     <section className="notifications-page content-section content-section--full">

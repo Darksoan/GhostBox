@@ -13,6 +13,7 @@ const TRAY_SHOW_ID: &str = "show";
 const TRAY_HIDE_ID: &str = "hide";
 const TRAY_QUIT_ID: &str = "quit";
 const APP_USER_MODEL_ID: &str = "com.ghostbox.app";
+const WINDOW_BACKGROUND: tauri::window::Color = tauri::window::Color(11, 11, 11, 255);
 
 static IS_QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -93,6 +94,12 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+pub(crate) fn show_main_window_when_ready(app: &tauri::AppHandle) {
+    if !is_startup_setting_enabled(app, "startMinimized") {
+        show_main_window(app);
+    }
+}
+
 fn hide_main_window(app: &tauri::AppHandle) {
     use tauri::Manager;
 
@@ -151,6 +158,8 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     start_game_playtime_snapshot_emitter(handle.clone());
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        let _ = window.set_background_color(Some(WINDOW_BACKGROUND));
+
         if let Some(icon) = ghostbox_icon() {
             let _ = window.set_icon(icon);
         }

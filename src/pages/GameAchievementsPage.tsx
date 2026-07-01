@@ -44,13 +44,11 @@ function AchievementListItem({
   highlighted,
   language,
   unlockedLabel,
-  globalPercentLabel,
 }: {
   achievement: SteamAchievement;
   highlighted: boolean;
   language: string;
   unlockedLabel: (date: string) => string;
-  globalPercentLabel: (percent: string) => string;
 }) {
   const unlocked = isAchievementUnlocked(achievement);
   const preferredSource = achievementIconSource(achievement, unlocked);
@@ -94,7 +92,17 @@ function AchievementListItem({
         {unlocked && unlockedDate
           ? unlockedLabel(unlockedDate)
           : globalPercent
-            ? globalPercentLabel(globalPercent)
+            ? language === "en"
+              ? (
+                <>
+                  Unlocked by <strong>{globalPercent}</strong> of players.
+                </>
+              )
+              : (
+                <>
+                  Desbloqueado por <strong>{globalPercent}</strong> dos jogadores.
+                </>
+              )
             : null}
       </div>
     </li>
@@ -186,8 +194,6 @@ export function GameAchievementsPage({
 
   const unlockedLabel = (date: string) =>
     t("profile.achievementUnlockedOn", { date });
-  const globalPercentLabel = (percent: string) =>
-    t("achievements.globalPercent", { percent });
 
   return (
     <section
@@ -250,7 +256,6 @@ export function GameAchievementsPage({
                 highlighted={achievement.name === highlightAchievementId}
                 language={appearance.language}
                 unlockedLabel={unlockedLabel}
-                globalPercentLabel={globalPercentLabel}
               />
             ))}
           </ul>
