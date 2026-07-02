@@ -59,12 +59,6 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
       appData.favoriteGames.find((game) => game.id === selectedGame.id) ??
       selectedGame;
     const isSessionActive = appData.activeSessionAppIds.has(selectedGame.appId);
-    const automaticBackupEnabled = Boolean(
-      appData.backupSettings?.automaticBackups[selectedGame.appId] ||
-        (appData.backupSettings?.automaticBackupsForLibrary === true &&
-          appData.addedLibraryGameAppIds.has(selectedGame.appId))
-    );
-
     return (
       <div className="page page--game-modal">
         <Suspense fallback={<DeferredPagePlaceholder page={page} />}>
@@ -77,23 +71,20 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             isPlaying={appData.launchingGameId === selectedGame.id}
             isSessionActive={isSessionActive}
             isFavorite={appData.favoriteGameIds.has(selectedGame.id)}
-            automaticBackupEnabled={automaticBackupEnabled}
-            backupOutputPath={appData.backupSettings?.outputPath ?? ""}
             customExecutablePath={
               appData.backupSettings?.customExecutables[selectedGame.appId] ?? ""
             }
             userCollections={appData.userCollections}
+            steamProfile={appData.steamProfile}
             onClose={closeGame}
             onQueueGame={appData.queueGame}
             onRemoveGame={appData.removeQueuedGame}
             onToggleFavorite={appData.toggleFavoriteGame}
             onAddGameToCollection={appData.addGameToUserCollection}
             onRemoveGameFromCollection={appData.removeGameFromCollection}
-            onToggleAutomaticBackup={appData.handleToggleAutomaticBackup}
             onSelectGameExecutable={appData.handleSelectGameExecutable}
             onRemoveGameExecutable={appData.handleRemoveGameExecutable}
             onPlayGame={appData.handlePlayGame}
-            onSelectBackupOutputPath={appData.handleSelectBackupOutputPath}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })
             }

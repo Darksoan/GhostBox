@@ -1,8 +1,11 @@
 import { Minus, X } from "lucide-react";
 import { useCallback } from "react";
 import ghostSolidIcon from "../../../Icons/ghost-solid.png";
+import packageJson from "../../../package.json";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+
+const displayVersion = packageJson.version.replace(/\.0$/, "");
 
 export function TitleBar() {
   const { appearance } = useSettings();
@@ -25,6 +28,7 @@ export function TitleBar() {
       </div>
 
       <div className="title-bar__controls">
+        <span className="title-bar__version">v{displayVersion}</span>
         <button type="button" aria-label={appearance.language === "en" ? "Minimize" : "Minimizar"} onClick={handleMinimize}>
           <Minus size={14} />
         </button>

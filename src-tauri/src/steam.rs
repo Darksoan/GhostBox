@@ -868,7 +868,17 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
         &steam_login_page_html(true, &success_message),
     );
 
-    save_steam_profile(app, profile)
+    let mut saved_profile = save_steam_profile(app, profile)?;
+    if let Ok(session) = crate::cloud_save::cloud_authenticate_steam_callback(
+        app,
+        callback.as_str(),
+        &saved_profile,
+    )
+    .await
+    {
+        saved_profile["cloudSession"] = session;
+    }
+    Ok(saved_profile)
 }
 
 #[tauri::command]
@@ -1225,6 +1235,7 @@ pub async fn steam_sign_in(app: tauri::AppHandle) -> Result<serde_json::Value, S
 
 #[tauri::command]
 pub fn steam_sign_out(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = crate::cloud_save::cloud_sign_out(app.clone());
     remove_data_file(&app, STEAM_PROFILE_FILE)
 }
 

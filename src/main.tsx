@@ -6,6 +6,7 @@ import { SettingsProvider } from "./context/settings";
 import { OverlayProvider } from "./context/OverlayContext";
 import { AppDataProvider } from "./context/AppDataContext";
 import { queryClient } from "./lib/queryClient";
+import { TrayMenu } from "./components/tray/TrayMenu";
 
 async function waitForInterfaceFonts() {
   if (!("fonts" in document)) return;
@@ -19,18 +20,32 @@ async function waitForInterfaceFonts() {
   ]);
 }
 
-void waitForInterfaceFonts().finally(() => {
+const isTrayMenu = new URLSearchParams(window.location.search).get("tray") === "1";
+
+function renderApp() {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <QueryClientProvider client={queryClient}>
+      {isTrayMenu ? (
         <SettingsProvider>
-          <OverlayProvider>
-            <AppDataProvider>
-              <App />
-            </AppDataProvider>
-          </OverlayProvider>
+          <TrayMenu />
         </SettingsProvider>
-      </QueryClientProvider>
+      ) : (
+        <QueryClientProvider client={queryClient}>
+          <SettingsProvider>
+            <OverlayProvider>
+              <AppDataProvider>
+                <App />
+              </AppDataProvider>
+            </OverlayProvider>
+          </SettingsProvider>
+        </QueryClientProvider>
+      )}
     </React.StrictMode>
   );
-});
+}
+
+if (isTrayMenu) {
+  renderApp();
+} else {
+  void waitForInterfaceFonts().finally(renderApp);
+}

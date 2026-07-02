@@ -392,16 +392,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     void ghostboxApi
-      .validateBackupRoot()
-      .then((status) => {
-        if (cancelled || !status) return;
+      .getBackupSettings()
+      .then((settings) => {
+        if (cancelled || !settings) return;
 
-        setBackupRootStatus(status);
-        backupSettingsRef.current = status.settings;
-        setBackupSettings(status.settings);
-        if (status.status !== "ok") {
-          showToast("Atenção aos backups", status.message);
-        }
+        backupSettingsRef.current = settings;
+        setBackupSettings(settings);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -424,7 +420,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe();
     };
-  }, [markInitialLoadStepComplete, queueBackupToast, showToast]);
+  }, [markInitialLoadStepComplete, queueBackupToast]);
 
   useEffect(() => {
     writeStoredFavoriteGames(favoriteGames);
@@ -445,6 +441,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeStoredProfileHistoryGames(profileHistoryGames);
   }, [profileHistoryGames]);
+
+  useEffect(() => {
+    void ghostboxApi.setTrayLibraryGames(addedLibraryGames);
+  }, [addedLibraryGames]);
 
   useEffect(() => {
     const records = backupSettings?.backupRecords;

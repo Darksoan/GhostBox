@@ -1,10 +1,11 @@
-import { ChevronLeft, Bell, Heart, Search } from "lucide-react";
+import { ChevronLeft, Bell, Heart, MessageSquareText, Search } from "lucide-react";
 import { memo, useState, useCallback } from "react";
 import type { GhostBoxGame } from "../../data";
-import type { Page } from "../../types";
+import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { preloadGameModalAssets } from "../../utils/image";
+import { FeedbackModal } from "../modals/FeedbackModal";
 import discordIcon from "../../../Icons/discord.svg";
 
 const discordInviteUrl = "https://discord.gg/Y7XTy5rKBc";
@@ -27,6 +28,7 @@ interface HeaderProps {
   allowSearchDropdown?: boolean;
   favoriteGameIds?: Set<string>;
   addedGameAppIds?: Set<string>;
+  steamProfile?: SteamProfile | null;
   onQueryChange: (query: string) => void;
   onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
@@ -43,6 +45,7 @@ export const Header = memo(function Header({
   allowSearchDropdown = false,
   favoriteGameIds = new Set(),
   addedGameAppIds = new Set(),
+  steamProfile = null,
   onQueryChange,
   onSelectSuggestion,
   onBack,
@@ -50,6 +53,7 @@ export const Header = memo(function Header({
 }: HeaderProps) {
   const { t } = useSettings();
   const [focused, setFocused] = useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const hasBackButton = canGoBack ?? page !== "home";
   const showDropdown =
     (page !== "catalogue" || allowSearchDropdown) &&
@@ -67,6 +71,10 @@ export const Header = memo(function Header({
   );
 
   const handleFocus = useCallback(() => setFocused(true), []);
+
+  const handleFeedbackClick = useCallback(() => {
+    setFeedbackModalOpen(true);
+  }, []);
 
   const handleDiscordClick = useCallback(() => {
     void ghostboxApi.openExternalUrl(discordInviteUrl);
@@ -97,6 +105,14 @@ export const Header = memo(function Header({
       </div>
 
       <div className="header__section">
+        <button
+          type="button"
+          className="header__icon-button header__feedback-button"
+          aria-label={t("header.feedback")}
+          onClick={handleFeedbackClick}
+        >
+          <MessageSquareText size={18} />
+        </button>
         <button
           type="button"
           className="header__icon-button header__discord-button"
@@ -180,6 +196,11 @@ export const Header = memo(function Header({
           )}
         </div>
       </div>
+      <FeedbackModal
+        open={feedbackModalOpen}
+        steamProfile={steamProfile}
+        onClose={() => setFeedbackModalOpen(false)}
+      />
     </header>
   );
 });

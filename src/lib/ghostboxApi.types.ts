@@ -130,6 +130,18 @@ export type AppStatus = {
   dev: boolean;
 };
 
+export type FeedbackRequest = {
+  message: string;
+  language: "pt" | "en";
+  steamId?: string;
+  userName?: string;
+};
+
+export type FeedbackResult = {
+  success: boolean;
+  error?: string;
+};
+
 export type BackupOutputPathSelectionResult = {
   status: "ok" | "cancelled";
   settings: BackupSettings;
@@ -254,4 +266,44 @@ export type SubscriptionStatusResult = {
   };
   latestPayment: unknown | null;
   discordLink?: DiscordLinkStatus;
+};
+
+export type CloudSessionResult = {
+  token: string;
+  user: {
+    steamId: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+    isPremium: boolean;
+  };
+  subscription: SubscriptionStatusResult["subscription"];
+};
+
+export type CloudSave = {
+  id: string;
+  steamId: string;
+  appId: string;
+  gameTitle: string;
+  sizeBytes: number;
+  sha256: string;
+  manifest: unknown | null;
+  deviceName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CloudSavesResult = {
+  saves: CloudSave[];
+};
+
+export type CloudBackupResult = {
+  save: CloudSave;
+};
+
+export type CloudRestoreResult = {
+  success: boolean;
+  appId: string;
+  title: string;
+  saveId: string;
+  backupSizeBytes: number;
 };

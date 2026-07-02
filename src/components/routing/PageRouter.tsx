@@ -28,9 +28,6 @@ const LazyFavoritesPage = lazy(() =>
 const LazySettingsPage = lazy(() =>
   import("../../pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))
 );
-const LazyBackupPage = lazy(() =>
-  import("../../pages/BackupPage").then((m) => ({ default: m.BackupPage }))
-);
 const loadProfilePage = () => import("../../pages/ProfilePage");
 const LazyProfilePage = lazy(() =>
   loadProfilePage().then((m) => ({ default: m.ProfilePage }))
@@ -269,27 +266,6 @@ export function PageRouter({
             void appData.handleMorrenusApiKeySave(appData.morrenusApiKey)
           }
           backupSettings={appData.backupSettings}
-          onSelectBackupOutputPath={appData.handleSelectBackupOutputPath}
-          onToggleLibraryAutomaticBackups={
-            appData.handleToggleLibraryAutomaticBackups
-          }
-        />
-      );
-    }
-
-    if (page === "backup") {
-      return (
-        <LazyBackupPage
-          games={appData.addedLibraryGames}
-          installedGameAppIds={appData.addedLibraryGameAppIds}
-          isRefreshingInstallationStatus={appData.isScanningSteamLibrary}
-          backupSettings={appData.backupSettings}
-          backupRootStatus={appData.backupRootStatus}
-          onLocateBackupRoot={appData.handleSelectBackupOutputPath}
-          onCreateBackupRoot={appData.handleCreateBackupRoot}
-          onBackupSettingsChange={appData.setBackupSettings}
-          onOpenBackupFolder={appData.handleOpenBackupFolder}
-          onDeleteBackupFolder={appData.handleDeleteBackupFolder}
         />
       );
     }

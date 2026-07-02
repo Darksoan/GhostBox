@@ -83,7 +83,7 @@ pub(crate) fn remove_data_file(app: &tauri::AppHandle, file_name: &str) -> Resul
 }
 
 #[cfg(target_os = "windows")]
-fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, String> {
     use windows_sys::Win32::Foundation::LocalFree;
     use windows_sys::Win32::Security::Cryptography::{
         CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
@@ -125,7 +125,7 @@ fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
+pub(crate) fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
     use windows_sys::Win32::Foundation::LocalFree;
     use windows_sys::Win32::Security::Cryptography::{
         CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
@@ -168,12 +168,12 @@ fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, String> {
     Ok(value.as_bytes().to_vec())
 }
 
 #[cfg(not(target_os = "windows"))]
-fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
+pub(crate) fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
     String::from_utf8(value.to_vec())
         .map_err(|_| "API key do Hubcap's Manifest inválida.".to_string())
 }

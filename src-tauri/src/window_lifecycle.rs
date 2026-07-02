@@ -8,15 +8,19 @@ use crate::settings::{
 use crate::{load_startup_settings, stop_ghostbox_achievement_server};
 
 const MAIN_WINDOW_LABEL: &str = "main";
+const TRAY_WINDOW_LABEL: &str = "tray-menu";
 const WINDOW_HIDDEN_TO_TRAY_EVENT: &str = "window-hidden-to-tray";
-const TRAY_SHOW_ID: &str = "show";
-const TRAY_HIDE_ID: &str = "hide";
-const TRAY_QUIT_ID: &str = "quit";
+const TRAY_NAVIGATE_EVENT: &str = "tray-navigate";
+const TRAY_LIBRARY_LIMIT: usize = 20;
+const TRAY_MENU_WIDTH: f64 = 248.0;
+const TRAY_MENU_HEIGHT: f64 = 360.0;
 const APP_USER_MODEL_ID: &str = "com.ghostbox.app";
 const WINDOW_BACKGROUND: tauri::window::Color = tauri::window::Color(11, 11, 11, 255);
 
 static IS_QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static TRAY_LIBRARY_GAMES: std::sync::Mutex<Vec<serde_json::Value>> =
+    std::sync::Mutex::new(Vec::new());
 
 fn ghostbox_icon() -> Option<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).ok()
@@ -100,36 +104,135 @@ pub(crate) fn show_main_window_when_ready(app: &tauri::AppHandle) {
     }
 }
 
-fn hide_main_window(app: &tauri::AppHandle) {
+fn hide_tray_menu(app: &tauri::AppHandle) {
     use tauri::Manager;
 
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+    if let Some(window) = app.get_webview_window(TRAY_WINDOW_LABEL) {
         let _ = window.hide();
     }
 }
 
+fn tray_game_app_id(game: &serde_json::Value) -> String {
+    game.get("appId")
+        .or_else(|| game.get("app_id"))
+        .or_else(|| game.get("id"))
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn normalize_tray_library_games(games: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    let mut deduped = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for game in games {
+        let app_id = tray_game_app_id(&game);
+        if app_id.is_empty() || !seen.insert(app_id) {
+            continue;
+        }
+        deduped.push(game);
+        if deduped.len() >= TRAY_LIBRARY_LIMIT {
+            break;
+        }
+    }
+
+    deduped
+}
+
+fn cached_tray_library_games(app: &tauri::AppHandle) -> Vec<serde_json::Value> {
+    let cached_games = TRAY_LIBRARY_GAMES
+        .lock()
+        .map(|games| games.clone())
+        .unwrap_or_default();
+
+    if !cached_games.is_empty() {
+        return cached_games;
+    }
+
+    let persisted_games = normalize_tray_library_games(crate::ghostbox_library::read_ghostbox_library_games(app));
+    if let Ok(mut tray_games) = TRAY_LIBRARY_GAMES.lock() {
+        *tray_games = persisted_games.clone();
+    }
+
+    persisted_games
+}
+
+fn tray_menu_position(position: tauri::PhysicalPosition<f64>) -> (f64, f64) {
+    let x = (position.x - TRAY_MENU_WIDTH + 18.0).max(8.0);
+    let y = (position.y - TRAY_MENU_HEIGHT - 8.0).max(8.0);
+    (x, y)
+}
+
+fn build_tray_menu_window(app: &tauri::AppHandle, x: f64, y: f64, visible: bool) {
+    use tauri::Manager;
+
+    if let Some(window) = app.get_webview_window(TRAY_WINDOW_LABEL) {
+        let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
+        if visible {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        return;
+    }
+
+    let Ok(window) = tauri::WebviewWindowBuilder::new(
+        app,
+        TRAY_WINDOW_LABEL,
+        tauri::WebviewUrl::App("index.html?tray=1".into()),
+    )
+    .title("GhostBox")
+    .decorations(false)
+    .resizable(false)
+    .skip_taskbar(true)
+    .always_on_top(true)
+    .focused(visible)
+    .visible(visible)
+    .shadow(false)
+    .background_color(WINDOW_BACKGROUND)
+    .inner_size(TRAY_MENU_WIDTH, TRAY_MENU_HEIGHT)
+    .position(x, y)
+    .build()
+    else {
+        return;
+    };
+
+    let app_handle = app.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Focused(false)) {
+            hide_tray_menu(&app_handle);
+        }
+    });
+}
+
+fn show_tray_menu(app: &tauri::AppHandle, position: tauri::PhysicalPosition<f64>) {
+    let (x, y) = tray_menu_position(position);
+    build_tray_menu_window(app, x, y, true);
+}
+
+fn preload_tray_menu(app: &tauri::AppHandle) {
+    build_tray_menu_window(app, 0.0, 0.0, false);
+}
+
 fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
-    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Abrir GhostBox", true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, TRAY_HIDE_ID, "Ocultar", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &hide, &quit])?;
-
     let mut tray = TrayIconBuilder::with_id("main-tray")
-        .menu(&menu)
         .tooltip("GhostBox")
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            TRAY_SHOW_ID => show_main_window(app),
-            TRAY_HIDE_ID => hide_main_window(app),
-            TRAY_QUIT_ID => quit_application(app),
-            _ => {}
-        })
         .on_tray_icon_event(|tray, event| {
-            if matches!(event, TrayIconEvent::DoubleClick { .. }) {
-                show_main_window(tray.app_handle());
+            match event {
+                TrayIconEvent::Click {
+                    position,
+                    button_state,
+                    ..
+                } if matches!(button_state, tauri::tray::MouseButtonState::Down) => {
+                    show_tray_menu(tray.app_handle(), position);
+                }
+                TrayIconEvent::DoubleClick { position, .. } => {
+                    show_tray_menu(tray.app_handle(), position);
+                }
+                _ => {}
             }
         });
 
@@ -144,6 +247,75 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn tray_set_library_games(
+    games: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let deduped = normalize_tray_library_games(games);
+
+    if let Ok(mut tray_games) = TRAY_LIBRARY_GAMES.lock() {
+        *tray_games = deduped;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn tray_get_library_games(app: tauri::AppHandle) -> Vec<serde_json::Value> {
+    cached_tray_library_games(&app)
+}
+
+#[tauri::command]
+pub fn tray_launch_game(app: tauri::AppHandle, app_id: String) -> Result<serde_json::Value, String> {
+    let game = cached_tray_library_games(&app)
+        .into_iter()
+        .find(|game| tray_game_app_id(game) == app_id.trim());
+
+    hide_tray_menu(&app);
+    match game {
+        Some(game) => crate::launch_game_from_value(app, game),
+        None => Ok(serde_json::json!({
+            "success": false,
+            "appId": app_id,
+            "error": "Jogo não encontrado na biblioteca."
+        })),
+    }
+}
+
+#[tauri::command]
+pub fn tray_show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    hide_tray_menu(&app);
+    show_main_window(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn tray_navigate(app: tauri::AppHandle, page: String) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let page = page.trim();
+    if !matches!(page, "home" | "catalogue" | "library" | "profile") {
+        return Err("Página inválida.".to_string());
+    }
+
+    hide_tray_menu(&app);
+    show_main_window(&app);
+    app.emit(TRAY_NAVIGATE_EVENT, serde_json::json!({ "page": page }))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn tray_hide_menu(app: tauri::AppHandle) -> Result<(), String> {
+    hide_tray_menu(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn tray_quit_application(app: tauri::AppHandle) -> Result<(), String> {
+    quit_application(&app);
+    Ok(())
+}
+
 pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> {
     use tauri::Manager;
 
@@ -154,6 +326,7 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     let _ = apply_autostart_settings(&handle, &settings);
 
     setup_tray(&handle)?;
+    preload_tray_menu(&handle);
     start_steam_running_app_monitor(handle.clone());
     start_game_playtime_snapshot_emitter(handle.clone());
 

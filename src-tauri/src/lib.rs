@@ -19,6 +19,7 @@ mod achievement_monitor;
 mod backup;
 mod catalogue;
 mod catalogue_cache;
+mod cloud_save;
 mod ghostbox_library;
 mod image_cache;
 mod luatools;
@@ -1603,8 +1604,7 @@ pub(crate) fn stop_ghostbox_achievement_server() {
     }
 }
 
-#[tauri::command]
-fn game_launch(
+pub(crate) fn launch_game_from_value(
     app: tauri::AppHandle,
     game: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -1673,6 +1673,14 @@ fn game_launch(
 }
 
 #[tauri::command]
+fn game_launch(
+    app: tauri::AppHandle,
+    game: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    launch_game_from_value(app, game)
+}
+
+#[tauri::command]
 fn backup_select_game_executable(
     app: tauri::AppHandle,
     game: serde_json::Value,
@@ -1715,7 +1723,9 @@ fn backup_select_game_executable(
 pub fn run() {
     tauri::Builder::default()
         .on_page_load(|webview, payload| {
-            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
+            {
                 window_lifecycle::show_main_window_when_ready(webview.app_handle());
             }
         })
@@ -1761,6 +1771,11 @@ pub fn run() {
             steam::steam_save_profile,
             steam::steam_sign_in,
             steam::steam_sign_out,
+            cloud_save::cloud_get_session,
+            cloud_save::cloud_sign_out,
+            cloud_save::cloud_list_saves,
+            cloud_save::cloud_backup_game,
+            cloud_save::cloud_restore_save,
             backup::backup_get_settings,
             backup::backup_validate_root,
             backup::backup_ensure_root,
@@ -1786,6 +1801,13 @@ pub fn run() {
             luatools::luatools_remove_game,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
+            window_lifecycle::tray_set_library_games,
+            window_lifecycle::tray_get_library_games,
+            window_lifecycle::tray_launch_game,
+            window_lifecycle::tray_show_main_window,
+            window_lifecycle::tray_navigate,
+            window_lifecycle::tray_hide_menu,
+            window_lifecycle::tray_quit_application,
             window_lifecycle::shell_open_external,
         ])
         .build(tauri::generate_context!())

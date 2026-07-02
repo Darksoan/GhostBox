@@ -3,7 +3,6 @@ import {
   Check,
   Bell,
   Crown,
-  DatabaseBackup,
   ExternalLink,
   FolderCog,
   Code2,
@@ -75,7 +74,7 @@ type MorrenusStatsState =
   | { status: "error"; message: string }
   | { status: "success"; stats: Record<string, unknown> };
 
-type BackupEnabledGame = {
+type CloudBackupGame = {
   appId: string;
   title: string;
   lastBackupAt: string | null;
@@ -163,9 +162,6 @@ function getDefaultDrafts(
     library: {
       ["settings.library.steamPath.label"]: "C:\\Program Files (x86)\\Steam",
     },
-    backups: {
-      ["settings.backups.outputPath.label"]: "",
-    },
   };
 }
 
@@ -212,17 +208,6 @@ export const settingsTabs: SettingsTab[] = [
     ],
   },
   {
-    id: "backups",
-    icon: DatabaseBackup,
-    options: [
-      {
-        labelKey: "settings.backups.outputPath.label",
-        descriptionKey: "settings.backups.outputPath.description",
-        control: "input",
-      },
-    ],
-  },
-  {
     id: "subscription",
     icon: Crown,
     options: [],
@@ -253,8 +238,6 @@ interface SettingsPageProps {
   onMorrenusApiKeyChange: (value: string) => void;
   onMorrenusApiKeySave: () => void;
   backupSettings: BackupSettings | null;
-  onSelectBackupOutputPath: () => void;
-  onToggleLibraryAutomaticBackups: (enabled: boolean) => void;
 }
 
 export function SettingsPage({
@@ -271,8 +254,6 @@ export function SettingsPage({
   onMorrenusApiKeyChange,
   onMorrenusApiKeySave,
   backupSettings,
-  onSelectBackupOutputPath,
-  onToggleLibraryAutomaticBackups,
 }: SettingsPageProps) {
   const { appearance, notifications, updateAppearance, updateNotifications, t } = useSettings();
   const activeTab = settingsTabs.find((tab) => tab.id === activeTabId) ?? settingsTabs[0];
@@ -376,7 +357,7 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance.language, appearance.disableCoverZoom, appearance.disableTabAnimations, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, backupSettings, onSelectBackupOutputPath, onToggleLibraryAutomaticBackups, morrenusApiKey, onMorrenusApiKeyChange, () => {
+      }, appearance.language, appearance.disableCoverZoom, appearance.disableTabAnimations, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, () => {
         onMorrenusApiKeySave();
         void refreshMorrenusStats();
       }),
@@ -391,8 +372,6 @@ export function SettingsPage({
       notifications,
       onMorrenusApiKeyChange,
       onMorrenusApiKeySave,
-      onSelectBackupOutputPath,
-      onToggleLibraryAutomaticBackups,
       onSelectSteamPath,
       refreshMorrenusStats,
       steamPath,
@@ -402,18 +381,14 @@ export function SettingsPage({
     ]
   );
 
-  const backupEnabledGames = useMemo<BackupEnabledGame[]>(() => {
-    const automaticBackups = backupSettings?.automaticBackups ?? {};
+  const cloudBackupGames = useMemo<CloudBackupGame[]>(() => {
     const backupRecords = backupSettings?.backupRecords ?? {};
-    const gameTitles = new Map(games.map((game) => [game.appId, game.title]));
-
-    return Object.entries(automaticBackups)
-      .filter(([appId, enabled]) => enabled === true && gameTitles.has(appId))
-      .map(([appId]) => ({
-        appId,
-        title: gameTitles.get(appId) || backupRecords[appId]?.title || appId,
-        lastBackupAt: backupRecords[appId]?.lastBackupAt ?? null,
-        lastBackupSuccess: typeof backupRecords[appId]?.lastBackupSuccess === "boolean" ? backupRecords[appId].lastBackupSuccess : null,
+    return games
+      .map((game) => ({
+        appId: game.appId,
+        title: game.title,
+        lastBackupAt: backupRecords[game.appId]?.lastBackupAt ?? null,
+        lastBackupSuccess: typeof backupRecords[game.appId]?.lastBackupSuccess === "boolean" ? backupRecords[game.appId].lastBackupSuccess : null,
       }))
       .sort((left, right) => left.title.localeCompare(right.title));
   }, [backupSettings, games]);
@@ -431,37 +406,11 @@ export function SettingsPage({
               />
             ))}
           </div>
-          {activeTab.id === "backups" && (
-            <section
-              className="settings-backups-list"
-              aria-label="Jogos com backup automático"
-              style={{ ["--settings-enter-delay" as string]: `${0.04 + options.length * 0.035}s` }}
-            >
-              <div className="settings-backups-list__header">
-                <strong>Jogos com backup ativo</strong>
-                <span>{backupEnabledGames.length} jogo(s)</span>
-              </div>
-
-              {backupEnabledGames.length > 0 ? (
-                <ul>
-                  {backupEnabledGames.map((game) => (
-                    <li key={game.appId} className="settings-backups-list__item">
-                      <strong>{game.title}</strong>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="settings-backups-list__empty">
-                  Nenhum jogo com backup automático ativado.
-                </div>
-              )}
-            </section>
-          )}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans
               surface="settings"
               enterDelay={`${0.04 + options.length * 0.035}s`}
-              cloudBackupGames={backupEnabledGames}
+              cloudBackupGames={cloudBackupGames}
               steamProfile={steamProfile}
             />
           )}
@@ -503,9 +452,6 @@ function buildTabOptions(
   t: (key: string, params?: Record<string, string | number>) => string,
   steamPath: string,
   onSelectSteamPath: () => void,
-  backupSettings: BackupSettings | null,
-  onSelectBackupOutputPath: () => void,
-  onToggleLibraryAutomaticBackups: (enabled: boolean) => void,
   morrenusApiKey: string,
   onMorrenusApiKeyChange: (value: string) => void,
   onMorrenusApiKeyCheck: () => void
@@ -637,25 +583,6 @@ function buildTabOptions(
     ];
   }
 
-  if (activeTab.id === "backups") {
-    return [
-      {
-        label: t("settings.backups.outputPath.label"),
-        description: t("settings.backups.outputPath.description"),
-        control: "input" as const,
-        value: backupSettings?.outputPath ?? "",
-        onClick: onSelectBackupOutputPath,
-      },
-      {
-        label: t("settings.backups.automaticLibrary.label"),
-        description: t("settings.backups.automaticLibrary.description"),
-        control: "toggle" as const,
-        checked: backupSettings?.automaticBackupsForLibrary === true,
-        onToggle: onToggleLibraryAutomaticBackups,
-      },
-    ];
-  }
-
   if (activeTab.id === "library") {
     return activeTab.options.map((option) => {
       const label = t(option.labelKey);
@@ -706,18 +633,13 @@ function buildTabOptions(
 
     if (option.control === "input") {
       const isSteamPath = activeTab.id === "library" && option.labelKey === "settings.library.steamPath.label";
-      const isBackupOutputPath = activeTab.id === "backups" && option.labelKey === "settings.backups.outputPath.label";
 
       return {
         label,
         description,
         control: option.control,
-        value: isSteamPath
-          ? steamPath
-          : isBackupOutputPath
-            ? backupSettings?.outputPath ?? ""
-            : typeof currentValue === "string" ? currentValue : option.value,
-        onClick: isSteamPath ? onSelectSteamPath : isBackupOutputPath ? onSelectBackupOutputPath : undefined,
+        value: isSteamPath ? steamPath : typeof currentValue === "string" ? currentValue : option.value,
+        onClick: isSteamPath ? onSelectSteamPath : undefined,
       };
     }
 

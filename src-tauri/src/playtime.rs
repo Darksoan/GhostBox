@@ -1,8 +1,7 @@
-use crate::backup;
 use crate::ludusavi::game_title;
 use crate::settings::read_json_file;
 use crate::util::{text_value, EmptyStringExt};
-use crate::{extract_app_id, load_backup_settings, save_failed_backup_record};
+use crate::extract_app_id;
 
 const GAME_PLAYTIME_FILE: &str = "game-playtime.json";
 const GAME_PLAYTIMES_CHANGED_EVENT: &str = "game-playtimes-changed";
@@ -272,14 +271,6 @@ pub(crate) fn close_all_game_playtime_sessions(app: &tauri::AppHandle) {
     }
 }
 
-fn automatic_backup_enabled_for_close(settings: &serde_json::Value, app_id: &str) -> bool {
-    settings
-        .get("automaticBackups")
-        .and_then(|value| value.get(app_id))
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-}
-
 pub(crate) fn run_automatic_backup_after_close(
     app: tauri::AppHandle,
     app_id: String,
@@ -287,11 +278,6 @@ pub(crate) fn run_automatic_backup_after_close(
     game: serde_json::Value,
 ) {
     std::thread::spawn(move || {
-        let settings = load_backup_settings(&app);
-        if !automatic_backup_enabled_for_close(&settings, &app_id) {
-            return;
-        }
-
         {
             let Ok(mut guard) = steam_monitor_state().lock() else {
                 return;
@@ -317,19 +303,11 @@ pub(crate) fn run_automatic_backup_after_close(
         } else {
             game
         };
-        match backup::backup_run_game_local(app.clone(), backup_game) {
-            Ok(result) if result.get("success").and_then(|value| value.as_bool()) != Some(true) => {
-                let error = text_value(result.get("error"))
-                    .if_empty("Backup automático falhou.".to_string());
-                let output_path = text_value(result.get("outputPath"));
-                let _ =
-                    save_failed_backup_record(&app, &app_id, &title_fallback, &output_path, &error);
-            }
-            Err(error) => {
-                let _ = save_failed_backup_record(&app, &app_id, &title_fallback, "", &error);
-            }
-            _ => {}
-        }
+
+        let _ = tauri::async_runtime::block_on(crate::cloud_save::cloud_backup_game(
+            app.clone(),
+            backup_game,
+        ));
 
         if let Ok(mut guard) = steam_monitor_state().lock() {
             guard

@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
-import type { UserCollection } from "../../types";
+import { Check, Cloud, Loader2 } from "lucide-react";
+import type { GhostBoxGame } from "../../data";
+import type { SteamProfile, UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
+import { useOverlay } from "../../context/OverlayContext";
+import { ghostboxApi } from "../../lib/ghostboxApi";
+import type { CloudSave } from "../../lib/ghostboxApi.types";
 import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 interface BackupOptionsModalProps {
   open: boolean;
   gameId: string;
+  game: GhostBoxGame | null;
   gameTitle: string;
-  automaticBackupEnabled: boolean;
-  backupAvailable: boolean;
-  backupOutputPath: string;
+  steamProfile: SteamProfile | null;
   customExecutablePath: string;
   userCollections: UserCollection[];
   onClose: () => void;
-  onToggleAutomaticBackup: (enabled: boolean) => void | Promise<void>;
-  onSelectBackupOutputPath: () => void;
   onSelectGameExecutable: () => void | Promise<void>;
   onRemoveGameExecutable: () => void | Promise<void>;
   onAddGameToCollection: (collectionId: string) => void | Promise<void>;
@@ -26,28 +27,32 @@ interface BackupOptionsModalProps {
 export function GameBackupOptionsModal({
   open,
   gameId,
+  game,
   gameTitle,
-  automaticBackupEnabled,
-  backupAvailable,
-  backupOutputPath,
+  steamProfile,
   customExecutablePath,
   userCollections,
   onClose,
-  onToggleAutomaticBackup,
-  onSelectBackupOutputPath,
   onSelectGameExecutable,
   onRemoveGameExecutable,
   onAddGameToCollection,
   onRemoveGameFromCollection,
 }: BackupOptionsModalProps) {
   const { appearance } = useSettings();
+  const { setSubscriptionModalOpen } = useOverlay();
   const modalRef = useRef<HTMLFormElement>(null);
-  const [draftAutomaticBackupEnabled, setDraftAutomaticBackupEnabled] =
-    useState(automaticBackupEnabled);
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [draftCollectionIds, setDraftCollectionIds] = useState<Set<string>>(
     () => new Set()
   );
+  const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
+  const [selectedCloudSaveId, setSelectedCloudSaveId] = useState("");
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudBusyAction, setCloudBusyAction] = useState<"backup" | "restore" | null>(null);
+  const [cloudError, setCloudError] = useState("");
+  const [cloudMessage, setCloudMessage] = useState("");
+  const [hasCloudSession, setHasCloudSession] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
 
   const currentCollectionIds = useMemo(
     () =>
@@ -61,10 +66,181 @@ export function GameBackupOptionsModal({
 
   useEffect(() => {
     if (!open) return;
-    setDraftAutomaticBackupEnabled(automaticBackupEnabled);
     setIsCollectionPickerOpen(false);
     setDraftCollectionIds(currentCollectionIds);
-  }, [automaticBackupEnabled, currentCollectionIds, open]);
+  }, [currentCollectionIds, open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    setCloudError("");
+    setCloudMessage("");
+    setIsPremium(false);
+    setHasCloudSession(false);
+    setCloudSaves([]);
+    setSelectedCloudSaveId("");
+
+    if (!steamProfile?.steamId || !game?.appId) return;
+
+    setCloudLoading(true);
+    void Promise.all([
+      ghostboxApi.getSubscriptionStatus(steamProfile.steamId),
+      ghostboxApi.getCloudSession(),
+      ghostboxApi.listCloudSaves(game.appId),
+    ])
+      .then(([status, session, saves]) => {
+        if (cancelled) return;
+        setIsPremium(status?.subscription.isPremium === true);
+        setHasCloudSession(session?.user.steamId === steamProfile.steamId && Boolean(session.token));
+        setCloudSaves(saves);
+        setSelectedCloudSaveId(saves[0]?.id ?? "");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCloudError(
+            error instanceof Error
+              ? error.message
+              : appearance.language === "en"
+                ? "Could not load cloud saves."
+                : "Não foi possível carregar os backups em nuvem."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCloudLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appearance.language, game?.appId, open, steamProfile?.steamId]);
+
+  const refreshCloudSaves = async () => {
+    if (!game?.appId) return;
+    const saves = await ghostboxApi.listCloudSaves(game.appId);
+    setCloudSaves(saves);
+    setSelectedCloudSaveId((current) => current || saves[0]?.id || "");
+  };
+
+  const handleCloudBackup = async () => {
+    if (!game || cloudBusyAction) return;
+    if (!steamProfile?.steamId) {
+      setCloudError(
+        appearance.language === "en"
+          ? "Sign in with Steam before using cloud backup."
+          : "Entre com a Steam antes de usar backup em nuvem."
+      );
+      return;
+    }
+    if (!hasCloudSession) {
+      setCloudError(
+        appearance.language === "en"
+          ? "Reconnect Steam to enable cloud backup on this device."
+          : "Reconecte a Steam para ativar o backup em nuvem neste dispositivo."
+      );
+      return;
+    }
+    if (!isPremium) {
+      setSubscriptionModalOpen(true);
+      return;
+    }
+
+    setCloudError("");
+    setCloudBusyAction("backup");
+    try {
+      const result = await ghostboxApi.backupGameToCloud(game);
+      if (!result?.save) {
+        throw new Error(
+          appearance.language === "en"
+            ? "Cloud backup failed."
+            : "Falha ao fazer backup em nuvem."
+        );
+      }
+      await refreshCloudSaves();
+      setSelectedCloudSaveId(result.save.id);
+      setCloudMessage(
+        appearance.language === "en"
+          ? "Cloud backup completed."
+          : "Backup em nuvem concluído."
+      );
+    } catch (error) {
+      setCloudError(
+        error instanceof Error
+          ? error.message
+          : appearance.language === "en"
+            ? "Cloud backup failed."
+            : "Falha ao fazer backup em nuvem."
+      );
+    } finally {
+      setCloudBusyAction(null);
+    }
+  };
+
+  const handleCloudRestore = async () => {
+    if (!game || !selectedCloudSaveId || cloudBusyAction) return;
+    if (!hasCloudSession) {
+      setCloudError(
+        appearance.language === "en"
+          ? "Reconnect Steam to restore cloud backups on this device."
+          : "Reconecte a Steam para restaurar backups em nuvem neste dispositivo."
+      );
+      return;
+    }
+    if (!isPremium) {
+      setSubscriptionModalOpen(true);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      appearance.language === "en"
+        ? "Restoring this cloud backup will replace the current save on this PC. Continue?"
+        : "Restaurar este backup em nuvem substituirá o save atual neste PC. Continuar?"
+    );
+    if (!confirmed) return;
+
+    setCloudError("");
+    setCloudBusyAction("restore");
+    try {
+      const result = await ghostboxApi.restoreCloudSave(game, selectedCloudSaveId);
+      if (!result?.success) {
+        throw new Error(
+          appearance.language === "en"
+            ? "Cloud restore failed."
+            : "Falha ao restaurar backup em nuvem."
+        );
+      }
+      setCloudMessage(
+        appearance.language === "en"
+          ? "Cloud backup restored."
+          : "Backup em nuvem restaurado."
+      );
+    } catch (error) {
+      setCloudError(
+        error instanceof Error
+          ? error.message
+          : appearance.language === "en"
+            ? "Cloud restore failed."
+            : "Falha ao restaurar backup em nuvem."
+      );
+    } finally {
+      setCloudBusyAction(null);
+    }
+  };
+
+  const cloudUnavailableReason = !steamProfile?.steamId
+    ? appearance.language === "en"
+      ? "Sign in with Steam to link cloud saves to your account."
+      : "Entre com a Steam para vincular backups em nuvem à sua conta."
+    : !isPremium
+      ? appearance.language === "en"
+        ? "Cloud backup is available for Premium accounts."
+        : "Backup em nuvem está disponível para contas Premium."
+      : !hasCloudSession
+        ? appearance.language === "en"
+          ? "Reconnect Steam to activate cloud backup on this device."
+          : "Reconecte a Steam para ativar o backup em nuvem neste dispositivo."
+      : "";
 
   useEffect(() => {
     if (!open) return;
@@ -213,85 +389,81 @@ export function GameBackupOptionsModal({
                   ? "Save protection"
                   : "Proteção de saves"}
               </h4>
-              <button
-                type="button"
-                className={`modal__backup-option ${!backupAvailable ? "modal__backup-option--disabled" : ""}`}
-                onClick={() => {
-                  if (!backupAvailable) return;
-                  setDraftAutomaticBackupEnabled((current) => !current);
-                }}
-                aria-pressed={
-                  backupAvailable ? draftAutomaticBackupEnabled : undefined
-                }
-                disabled={!backupAvailable}
-              >
+              <div className="modal__backup-option modal__backup-option--static modal__cloud-backup-card">
                 <div className="modal__backup-option-copy">
                   <strong>
+                    <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
                     {appearance.language === "en"
-                      ? "Automatic local backup"
-                      : "Backup local automático"}
+                      ? "Cloud backup"
+                      : "Backup em nuvem"}
                   </strong>
                   <span>
-                    {!backupAvailable
-                      ? appearance.language === "en"
-                        ? "Available after adding this game to your library or selecting a custom executable."
-                        : "Disponível após adicionar este jogo à sua biblioteca ou selecionar um executável personalizado."
-                      : appearance.language === "en"
-                        ? "Create a local backup automatically when this game closes."
-                        : "Cria um backup local automaticamente quando este jogo for fechado."}
+                    {cloudUnavailableReason ||
+                      (cloudSaves[0]
+                        ? appearance.language === "en"
+                          ? `Latest backup: ${new Date(cloudSaves[0].updatedAt).toLocaleString()}`
+                          : `Último backup: ${new Date(cloudSaves[0].updatedAt).toLocaleString()}`
+                        : appearance.language === "en"
+                          ? "No cloud backup yet."
+                          : "Nenhum backup em nuvem ainda.")}
                   </span>
                 </div>
 
-                <span
-                  className={`settings-switch ${draftAutomaticBackupEnabled ? "settings-switch--on" : ""}`}
-                  aria-hidden="true"
-                >
-                  <span />
-                </span>
-              </button>
-
-              <div className="modal__backup-option modal__backup-option--static">
-                <div className="modal__backup-option-copy">
-                  <strong>
-                    {appearance.language === "en"
-                      ? "Backup location"
-                      : "Local dos backups"}
-                  </strong>
-                  <span>
-                    {backupOutputPath ||
-                      (appearance.language === "en"
-                        ? "Choose where local backups will be saved."
-                        : "Escolha onde os backups locais serão salvos.")}
-                  </span>
+                <div className="modal__cloud-backup-actions">
+                  <button
+                    type="button"
+                    className="button button--outline modal__backup-action-button"
+                    onClick={handleCloudBackup}
+                    disabled={cloudLoading || cloudBusyAction !== null || !steamProfile?.steamId || !hasCloudSession}
+                  >
+                    {cloudBusyAction === "backup" && (
+                      <Loader2 size={14} strokeWidth={2.15} aria-hidden="true" />
+                    )}
+                    {appearance.language === "en" ? "Back up now" : "Fazer backup"}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--outline modal__backup-action-button"
+                    onClick={handleCloudRestore}
+                    disabled={cloudLoading || cloudBusyAction !== null || !selectedCloudSaveId || !steamProfile?.steamId || !hasCloudSession}
+                  >
+                    {cloudBusyAction === "restore" && (
+                      <Loader2 size={14} strokeWidth={2.15} aria-hidden="true" />
+                    )}
+                    {appearance.language === "en" ? "Restore" : "Restaurar"}
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  className="button button--outline modal__backup-action-button"
-                  onClick={onSelectBackupOutputPath}
-                >
-                  {appearance.language === "en" ? "Choose" : "Escolher"}
-                </button>
               </div>
-            </section>
 
-            <div className="collection-modal__actions modal__backup-modal-actions">
-              <button
-                type="button"
-                className="button button--save"
-                onClick={() => {
-                  if (
-                    backupAvailable &&
-                    draftAutomaticBackupEnabled !== automaticBackupEnabled
-                  ) {
-                    onToggleAutomaticBackup(draftAutomaticBackupEnabled);
-                  }
-                  onClose();
-                }}
-              >
-                {appearance.language === "en" ? "Save" : "Salvar"}
-              </button>
-            </div>
+              {(cloudLoading || cloudSaves.length > 0 || cloudError) && (
+                <div className="modal__cloud-save-list">
+                  {cloudLoading ? (
+                    <span>
+                      {appearance.language === "en"
+                        ? "Loading cloud backups..."
+                        : "Carregando backups em nuvem..."}
+                    </span>
+                  ) : (
+                    cloudSaves.map((save) => (
+                      <button
+                        key={save.id}
+                        type="button"
+                        className={`modal__cloud-save-version ${selectedCloudSaveId === save.id ? "modal__cloud-save-version--active" : ""}`}
+                        onClick={() => setSelectedCloudSaveId(save.id)}
+                      >
+                        <strong>{new Date(save.updatedAt).toLocaleString()}</strong>
+                        <span>
+                          {`${Math.max(1, Math.round(save.sizeBytes / 1024 / 1024))} MB${save.deviceName ? ` · ${save.deviceName}` : ""}`}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                  {cloudMessage && <p className="modal__cloud-backup-message">{cloudMessage}</p>}
+                  {cloudError && <p className="modal__cloud-backup-error">{cloudError}</p>}
+                </div>
+              )}
+
+            </section>
           </div>
 
           {isCollectionPickerOpen && (

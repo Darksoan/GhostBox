@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   Camera,
+  ChevronDown,
   Folder,
   Heart,
   Layers,
@@ -556,6 +557,9 @@ export function ProfilePage({
   const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
   const [renderedGameCount, setRenderedGameCount] = useState(40);
   const [pulsedTabId, setPulsedTabId] = useState<string | null>(null);
+  const [expandedAchievementGameIds, setExpandedAchievementGameIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
     useState<Map<string, GhostBoxGame>>(() => new Map());
   const [isAchievementShowcaseModalOpen, setIsAchievementShowcaseModalOpen] =
@@ -586,6 +590,18 @@ export function ProfilePage({
     x: number;
     y: number;
   } | null>(null);
+
+  const toggleAchievementGameExpanded = useCallback((gameId: string) => {
+    setExpandedAchievementGameIds((current) => {
+      const next = new Set(current);
+      if (next.has(gameId)) {
+        next.delete(gameId);
+      } else {
+        next.add(gameId);
+      }
+      return next;
+    });
+  }, []);
 
   const profileCollections = useMemo<ProfileCollection[]>(() => {
     return [
@@ -1600,7 +1616,7 @@ export function ProfilePage({
                     const achievementProgress = achievementTotal > 0
                       ? Math.round((achievementUnlocked / achievementTotal) * 100)
                       : 0;
-                    const visibleAchievements = (game.achievementList ?? [])
+                    const sortedAchievements = (game.achievementList ?? [])
                       .filter((achievement) => achievement.icon || achievement.iconGray)
                       .slice()
                       .sort((left, right) => {
@@ -1614,8 +1630,12 @@ export function ProfilePage({
                         return (left.title || left.name).localeCompare(
                           right.title || right.name
                         );
-                      })
-                      .slice(0, 28);
+                      });
+                    const isExpanded = expandedAchievementGameIds.has(game.id);
+                    const visibleAchievements = isExpanded
+                      ? sortedAchievements
+                      : sortedAchievements.slice(0, 4);
+                    const hasMoreAchievements = sortedAchievements.length > 4;
 
                     return (
                       <section
@@ -1627,33 +1647,27 @@ export function ProfilePage({
                             <ProfileAchievementGameIcon game={game} />
                             <span>{game.title}</span>
                           </h3>
+                          <div className="profile-page__achievement-game-actions">
+                            <button
+                              type="button"
+                              className="profile-page__achievement-game-progress"
+                              onClick={() => onOpenGameAchievements ? onOpenGameAchievements(game) : onOpenGame(game)}
+                              aria-label={
+                                appearance.language === "en"
+                                  ? `${game.title} achievement progress: ${achievementUnlocked} of ${achievementTotal}`
+                                  : `Progresso de conquistas de ${game.title}: ${achievementUnlocked} de ${achievementTotal}`
+                              }
+                            >
+                              <Trophy size={14} strokeWidth={2.0} aria-hidden="true" />
+                              <span className="profile-page__achievement-game-progress-bar" aria-hidden="true">
+                                <span style={{ width: `${achievementProgress}%` }} />
+                              </span>
+                              <strong>{achievementUnlocked}/{achievementTotal}</strong>
+                            </button>
+                          </div>
                         </div>
 
                         <ProfileAchievementCardRow>
-                          <button
-                            type="button"
-                            className="profile-page__achievement-progress-card"
-                            onClick={() => onOpenGameAchievements ? onOpenGameAchievements(game) : onOpenGame(game)}
-                            aria-label={
-                              appearance.language === "en"
-                                ? `${game.title} achievement progress: ${achievementUnlocked} of ${achievementTotal}`
-                                : `Progresso de conquistas de ${game.title}: ${achievementUnlocked} de ${achievementTotal}`
-                            }
-                          >
-                            <span
-                              className="profile-page__achievement-progress-ring"
-                              style={{
-                                "--achievement-progress": `${achievementProgress}%`,
-                              } as CSSProperties}
-                              aria-hidden="true"
-                            >
-                              <strong>{achievementProgress}%</strong>
-                            </span>
-                            <span className="profile-page__achievement-progress-meta">
-                              {achievementUnlocked}/{achievementTotal}
-                            </span>
-                          </button>
-
                           {visibleAchievements.map((achievement) => {
                             const unlocked = isAchievementUnlocked(achievement);
                             const icon = achievementShowcaseIcon(achievement, unlocked);
@@ -1709,6 +1723,27 @@ export function ProfilePage({
                             );
                           })}
                         </ProfileAchievementCardRow>
+                        {hasMoreAchievements ? (
+                          <button
+                            type="button"
+                            className={`profile-page__achievement-game-toggle${
+                              isExpanded ? " profile-page__achievement-game-toggle--expanded" : ""
+                            }`}
+                            onClick={() => toggleAchievementGameExpanded(game.id)}
+                            aria-expanded={isExpanded}
+                            aria-label={
+                              isExpanded
+                                ? appearance.language === "en"
+                                  ? `Show fewer achievements for ${game.title}`
+                                  : `Ver menos conquistas de ${game.title}`
+                                : appearance.language === "en"
+                                  ? `See more achievements for ${game.title}`
+                                  : `Ver mais conquistas de ${game.title}`
+                            }
+                          >
+                            <ChevronDown size={18} strokeWidth={2.15} aria-hidden="true" />
+                          </button>
+                        ) : null}
                       </section>
                     );
                   })}

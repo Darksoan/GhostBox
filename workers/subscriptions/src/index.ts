@@ -13,6 +13,10 @@ type Env = {
   DISCORD_PREMIUM_ROLE_ID?: string;
   DISCORD_SYNC_TOKEN?: string;
   ALLOWED_ORIGIN?: string;
+  CLOUD_SESSION_SECRET?: string;
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  CLOUD_SAVE_BUCKET?: string;
 };
 
 type PlanId = "monthly" | "quarterly";
@@ -82,6 +86,25 @@ type DiscordTokenResponse = {
   error_description?: string;
 };
 
+type CloudSession = {
+  steamId: string;
+  exp: number;
+};
+
+type CloudSaveRow = {
+  id: string;
+  steam_id: string;
+  app_id: string;
+  game_title: string;
+  storage_path: string;
+  size_bytes: number;
+  sha256: string;
+  manifest_json: string | null;
+  device_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type DiscordUserResponse = {
   id?: string;
   username?: string;
@@ -129,6 +152,14 @@ function base64Url(bytes: Uint8Array) {
   return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+function base64UrlDecode(value: string) {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
 function timingSafeEqual(left: string, right: string) {
   if (left.length !== right.length) return false;
   let mismatch = 0;
@@ -148,6 +179,37 @@ async function hmacSha256(secret: string, value: string) {
     ["sign"]
   );
   return base64Url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value))));
+}
+
+function getCloudSessionSecret(env: Env) {
+  return env.CLOUD_SESSION_SECRET || env.DISCORD_OAUTH_STATE_SECRET || env.DISCORD_CLIENT_SECRET;
+}
+
+async function signCloudToken(env: Env, session: CloudSession) {
+  const secret = getCloudSessionSecret(env);
+  if (!secret) throw new Error("CLOUD_SESSION_SECRET is not configured");
+  const payload = base64Url(new TextEncoder().encode(JSON.stringify(session)));
+  const signature = await hmacSha256(secret, payload);
+  return `${payload}.${signature}`;
+}
+
+async function verifyCloudToken(env: Env, request: Request): Promise<CloudSession | null> {
+  const secret = getCloudSessionSecret(env);
+  if (!secret) return null;
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token) return null;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return null;
+  const expected = await hmacSha256(secret, payload);
+  if (!timingSafeEqual(signature, expected)) return null;
+  try {
+    const decoded = JSON.parse(new TextDecoder().decode(base64UrlDecode(payload))) as CloudSession;
+    if (!validSteamId(decoded.steamId) || decoded.exp < Math.floor(Date.now() / 1000)) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
 }
 
 function getDiscordRedirectUri(env: Env, request: Request) {
@@ -197,6 +259,42 @@ function jsonResponse(value: unknown, env: Env, status = 200) {
       "cache-control": "no-store",
     },
   });
+}
+
+function cloudSaveBucket(env: Env) {
+  return env.CLOUD_SAVE_BUCKET || "cloud-saves";
+}
+
+function requireSupabase(env: Env) {
+  const url = env.SUPABASE_URL?.replace(/\/+$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Supabase cloud save storage is not configured");
+  return { url, key, bucket: cloudSaveBucket(env) };
+}
+
+function publicCloudSave(row: CloudSaveRow) {
+  return {
+    id: row.id,
+    steamId: row.steam_id,
+    appId: row.app_id,
+    gameTitle: row.game_title,
+    sizeBytes: row.size_bytes,
+    sha256: row.sha256,
+    manifest: row.manifest_json ? JSON.parse(row.manifest_json) : null,
+    deviceName: row.device_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function requirePremiumSession(request: Request, env: Env) {
+  const session = await verifyCloudToken(env, request);
+  if (!session) return { response: jsonResponse({ error: "unauthorized" }, env, 401) };
+  const subscription = await getSubscription(env, session.steamId);
+  if (!isActiveSubscription(subscription)) {
+    return { response: jsonResponse({ error: "premium_required" }, env, 402) };
+  }
+  return { session };
 }
 
 function normalizeSumUpStatus(status: unknown): PaymentStatus {
@@ -361,6 +459,64 @@ async function readJson(request: Request) {
   } catch {
     return null;
   }
+}
+
+async function validateSteamOpenId(callbackUrl: string) {
+  let url: URL;
+  try {
+    url = new URL(callbackUrl);
+  } catch {
+    return null;
+  }
+
+  const params = Array.from(url.searchParams.entries()).filter(([key]) => key.startsWith("openid."));
+  const mode = url.searchParams.get("openid.mode");
+  if (mode !== "id_res") return null;
+  const claimedId = url.searchParams.get("openid.claimed_id") || "";
+  const steamId = claimedId.split("/openid/id/").pop() || "";
+  if (!validSteamId(steamId)) return null;
+
+  const body = new URLSearchParams();
+  for (const [key, value] of params) {
+    if (key !== "openid.mode") body.append(key, value);
+  }
+  body.append("openid.mode", "check_authentication");
+
+  const response = await fetch("https://steamcommunity.com/openid/login", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!response.ok) return null;
+  const text = await response.text();
+  return text.includes("is_valid:true") ? steamId : null;
+}
+
+async function handleSteamAuth(request: Request, env: Env) {
+  const body = await readJson(request);
+  const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : "";
+  const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
+  const avatarUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl.trim() : "";
+  const steamId = await validateSteamOpenId(callbackUrl);
+  if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
+
+  await ensureUser(env, steamId);
+  const subscription = await getSubscription(env, steamId);
+  const token = await signCloudToken(env, {
+    steamId,
+    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  });
+
+  return jsonResponse({
+    token,
+    user: {
+      steamId,
+      displayName: displayName || null,
+      avatarUrl: avatarUrl || null,
+      isPremium: isActiveSubscription(subscription),
+    },
+    subscription: publicSubscription(subscription),
+  }, env);
 }
 
 function getSumUpBaseUrl(env: Env) {
@@ -781,6 +937,134 @@ async function handleStatus(request: Request, env: Env) {
   }, env);
 }
 
+async function handleCloudSavesList(request: Request, env: Env) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  const url = new URL(request.url);
+  const appId = url.searchParams.get("appId")?.trim();
+  const query = appId
+    ? env.SUBSCRIPTION_DB.prepare(
+        `SELECT * FROM cloud_saves WHERE steam_id = ? AND app_id = ? ORDER BY updated_at DESC LIMIT 20`
+      ).bind(auth.session!.steamId, appId)
+    : env.SUBSCRIPTION_DB.prepare(
+        `SELECT * FROM cloud_saves WHERE steam_id = ? ORDER BY updated_at DESC LIMIT 100`
+      ).bind(auth.session!.steamId);
+  const rows = await query.all<CloudSaveRow>();
+  return jsonResponse({ saves: (rows.results || []).map(publicCloudSave) }, env);
+}
+
+async function handleCloudSaveUpload(request: Request, env: Env) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  const appId = request.headers.get("x-ghostbox-app-id")?.trim() || "";
+  const gameTitle = request.headers.get("x-ghostbox-game-title")?.trim() || appId;
+  const sha256 = request.headers.get("x-ghostbox-sha256")?.trim().toLowerCase() || "";
+  const deviceName = request.headers.get("x-ghostbox-device-name")?.trim() || null;
+  const manifestHeader = request.headers.get("x-ghostbox-manifest") || "";
+  if (!/^\d{1,12}$/.test(appId)) return jsonResponse({ error: "invalid_app_id" }, env, 400);
+  if (!/^[a-f0-9]{64}$/.test(sha256)) return jsonResponse({ error: "invalid_sha256" }, env, 400);
+
+  let manifest: unknown = null;
+  if (manifestHeader) {
+    try {
+      manifest = JSON.parse(manifestHeader);
+    } catch {
+      return jsonResponse({ error: "invalid_manifest" }, env, 400);
+    }
+  }
+
+  const bytes = await request.arrayBuffer();
+  if (bytes.byteLength === 0) return jsonResponse({ error: "empty_backup" }, env, 400);
+  if (bytes.byteLength > 50 * 1024 * 1024) return jsonResponse({ error: "backup_too_large" }, env, 413);
+
+  const id = crypto.randomUUID();
+  const now = nowIso();
+  const storage = requireSupabase(env);
+  const storagePath = `${auth.session!.steamId}/${appId}/${id}.zip`;
+  const upload = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}/${storagePath}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${storage.key}`,
+      apikey: storage.key,
+      "content-type": "application/zip",
+      "x-upsert": "false",
+    },
+    body: bytes,
+  });
+  if (!upload.ok) {
+    return jsonResponse({ error: "storage_upload_failed", detail: await upload.text().catch(() => "") }, env, 502);
+  }
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO cloud_saves (
+       id, steam_id, app_id, game_title, storage_path, size_bytes, sha256, manifest_json, device_name, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, auth.session!.steamId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
+
+  const stale = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM cloud_saves WHERE steam_id = ? AND app_id = ? ORDER BY updated_at DESC LIMIT 100 OFFSET 3`
+  ).bind(auth.session!.steamId, appId).all<CloudSaveRow>();
+  for (const row of stale.results || []) {
+    await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
+    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
+  }
+
+  return jsonResponse({ save: publicCloudSave({
+    id,
+    steam_id: auth.session!.steamId,
+    app_id: appId,
+    game_title: gameTitle,
+    storage_path: storagePath,
+    size_bytes: bytes.byteLength,
+    sha256,
+    manifest_json: manifest ? JSON.stringify(manifest) : null,
+    device_name: deviceName,
+    created_at: now,
+    updated_at: now,
+  }) }, env, 201);
+}
+
+async function deleteCloudSaveObject(env: Env, storagePath: string) {
+  const storage = requireSupabase(env);
+  await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}`, {
+    method: "DELETE",
+    headers: {
+      authorization: `Bearer ${storage.key}`,
+      apikey: storage.key,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ prefixes: [storagePath] }),
+  });
+}
+
+async function handleCloudSaveDownload(request: Request, env: Env, saveId: string) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  const row = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
+  ).bind(saveId, auth.session!.steamId).first<CloudSaveRow>();
+  if (!row) return jsonResponse({ error: "not_found" }, env, 404);
+
+  const storage = requireSupabase(env);
+  const response = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}/${row.storage_path}`, {
+    headers: {
+      authorization: `Bearer ${storage.key}`,
+      apikey: storage.key,
+    },
+  });
+  if (!response.ok || !response.body) {
+    return jsonResponse({ error: "storage_download_failed" }, env, 502);
+  }
+  return new Response(response.body, {
+    headers: {
+      "content-type": "application/zip",
+      "content-length": String(row.size_bytes),
+      "x-ghostbox-sha256": row.sha256,
+      "cache-control": "no-store",
+    },
+  });
+}
+
 async function handleRefreshPayment(request: Request, env: Env) {
   const url = new URL(request.url);
   const origin = url.origin;
@@ -886,6 +1170,19 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/health") {
     return jsonResponse({ ok: true, service: "ghostbox-subscriptions" }, env);
+  }
+  if (request.method === "POST" && url.pathname === "/auth/steam") {
+    return handleSteamAuth(request, env);
+  }
+  if (request.method === "GET" && url.pathname === "/cloud-saves") {
+    return handleCloudSavesList(request, env);
+  }
+  if (request.method === "POST" && url.pathname === "/cloud-saves") {
+    return handleCloudSaveUpload(request, env);
+  }
+  const downloadMatch = url.pathname.match(/^\/cloud-saves\/([^/]+)\/download$/);
+  if (request.method === "GET" && downloadMatch) {
+    return handleCloudSaveDownload(request, env, downloadMatch[1]);
   }
   if (request.method === "POST" && url.pathname === "/subscription/checkouts") {
     return handleCreateCheckout(request, env);

@@ -35,7 +35,13 @@ import type {
   SteamPathSelectionResult,
   SteamProfile,
   SteamWishlistItem,
+  FeedbackRequest,
+  FeedbackResult,
   DiscordLinkStatus,
+  CloudBackupResult,
+  CloudRestoreResult,
+  CloudSave,
+  CloudSessionResult,
   SubscriptionStatusResult,
 } from "./ghostboxApi.types";
 
@@ -45,6 +51,8 @@ function noopUnsubscribe() {
 
 const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
 const defaultSubscriptionsApiUrl = "https://ghostbox-subscriptions.hella.workers.dev";
+const defaultFeedbackApiUrl = "https://ghostbox-feedback.hella.workers.dev/feedback";
+const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.0";
 
 function getGamesApiUrl() {
   return (
@@ -60,6 +68,10 @@ function getSubscriptionsApiUrl() {
     import.meta.env.VITE_GHOSTBOX_SUBSCRIPTIONS_API_URL?.trim() ||
     defaultSubscriptionsApiUrl
   ).replace(/\/+$/, "");
+}
+
+function getFeedbackApiUrl() {
+  return import.meta.env.VITE_GHOSTBOX_FEEDBACK_API_URL?.trim() || defaultFeedbackApiUrl;
 }
 
 const emptyGameDatabase: GameDatabaseResult = {
@@ -127,6 +139,44 @@ export const ghostboxApi = {
       return await response.json() as SubscriptionStatusResult;
     } catch {
       return null;
+    }
+  },
+
+  async sendFeedback(request: FeedbackRequest): Promise<FeedbackResult> {
+    const apiUrl = getFeedbackApiUrl();
+
+    if (!apiUrl) {
+      return { success: false, error: "Feedback endpoint is not configured." };
+    }
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          message: request.message,
+          language: request.language,
+          steamId: request.steamId,
+          userName: request.userName,
+          appVersion,
+          source: "ghostbox-tauri",
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        return {
+          success: false,
+          error: payload?.error || "Could not send feedback.",
+        };
+      }
+
+      return { success: true };
+    } catch {
+      return { success: false, error: "Could not send feedback." };
     }
   },
 
@@ -303,6 +353,34 @@ export const ghostboxApi = {
 
   signOutSteam(): Promise<void> {
     return invokeOr<void>("steam_sign_out", {}, undefined);
+  },
+
+  getCloudSession(): Promise<CloudSessionResult | null> {
+    return invokeOr<CloudSessionResult | null>("cloud_get_session", {}, null);
+  },
+
+  signOutCloud(): Promise<void> {
+    return invokeOr<void>("cloud_sign_out", {}, undefined);
+  },
+
+  listCloudSaves(appId?: string): Promise<CloudSave[]> {
+    return invokeOr<{ saves: CloudSave[] }>(
+      "cloud_list_saves",
+      { appId: appId ?? null },
+      { saves: [] }
+    ).then((result) => result.saves ?? []);
+  },
+
+  backupGameToCloud(game: GhostBoxGame): Promise<CloudBackupResult | null> {
+    return invokeOr<CloudBackupResult | null>("cloud_backup_game", { game }, null);
+  },
+
+  restoreCloudSave(game: GhostBoxGame, saveId: string): Promise<CloudRestoreResult | null> {
+    return invokeOr<CloudRestoreResult | null>(
+      "cloud_restore_save",
+      { game, saveId },
+      null
+    );
   },
 
   getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {
@@ -633,6 +711,65 @@ export const ghostboxApi = {
         error: "Não foi possível iniciar o jogo.",
       }
     );
+  },
+
+  setTrayLibraryGames(games: GhostBoxGame[]): Promise<void> {
+    return invokeOr<void>("tray_set_library_games", { games }, undefined);
+  },
+
+  getTrayLibraryGames(): Promise<GhostBoxGame[]> {
+    return invokeOr<GhostBoxGame[]>("tray_get_library_games", {}, []);
+  },
+
+  launchTrayGame(appId: string): Promise<LaunchGameResult | undefined> {
+    return invokeOr<LaunchGameResult | undefined>(
+      "tray_launch_game",
+      { appId },
+      {
+        success: false,
+        appId,
+        error: "Não foi possível iniciar o jogo.",
+      }
+    );
+  },
+
+  showMainWindowFromTray(): Promise<void> {
+    return invokeOr<void>("tray_show_main_window", {}, undefined);
+  },
+
+  navigateFromTray(page: "home" | "catalogue" | "library" | "profile"): Promise<void> {
+    return invokeOr<void>("tray_navigate", { page }, undefined);
+  },
+
+  onTrayNavigate(
+    callback: (payload: { page: "home" | "catalogue" | "library" | "profile" }) => void
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void listen<{ page: "home" | "catalogue" | "library" | "profile" }>(
+      "tray-navigate",
+      (event) => callback(event.payload)
+    ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
+  hideTrayMenu(): Promise<void> {
+    return invokeOr<void>("tray_hide_menu", {}, undefined);
+  },
+
+  quitFromTray(): Promise<void> {
+    return invokeOr<void>("tray_quit_application", {}, undefined);
   },
 
   getGameIconUrl(appId: string): Promise<string | null> {

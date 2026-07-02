@@ -24,7 +24,7 @@ import type {
   GameRequirements,
   SteamAchievement,
 } from "../../data";
-import type { UserCollection } from "../../types";
+import type { SteamProfile, UserCollection } from "../../types";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import {
   loadGameAchievementDetailsCached,
@@ -401,10 +401,9 @@ interface GameModalProps {
   isPlaying: boolean;
   isSessionActive?: boolean;
   isFavorite: boolean;
-  automaticBackupEnabled: boolean;
-  backupOutputPath: string;
   customExecutablePath: string;
   userCollections: UserCollection[];
+  steamProfile: SteamProfile | null;
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
@@ -417,14 +416,9 @@ interface GameModalProps {
     game: GhostBoxGame,
     collectionId: string
   ) => void | Promise<void>;
-  onToggleAutomaticBackup: (
-    game: GhostBoxGame,
-    enabled: boolean
-  ) => void | Promise<void>;
   onSelectGameExecutable: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGameExecutable: (game: GhostBoxGame) => void | Promise<void>;
   onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
-  onSelectBackupOutputPath: () => void;
   onDetailsLoaded?: (game: GhostBoxGame) => void;
   onViewAchievements?: (game: GhostBoxGame) => void;
 }
@@ -438,21 +432,18 @@ export function GameModal({
   isPlaying,
   isSessionActive = false,
   isFavorite,
-  automaticBackupEnabled,
-  backupOutputPath,
   customExecutablePath,
   userCollections,
+  steamProfile,
   onClose,
   onQueueGame,
   onRemoveGame,
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
-  onToggleAutomaticBackup,
   onSelectGameExecutable,
   onRemoveGameExecutable,
   onPlayGame,
-  onSelectBackupOutputPath,
   onDetailsLoaded,
   onViewAchievements,
 }: GameModalProps) {
@@ -1309,19 +1300,12 @@ export function GameModal({
           <LazyGameBackupOptionsModal
             open={Boolean(displayGame)}
             gameId={displayGame?.id ?? ""}
+            game={displayGame}
             gameTitle={displayGame?.title ?? ""}
-            automaticBackupEnabled={automaticBackupEnabled}
-            backupAvailable={isAdded || hasCustomExecutable}
-            backupOutputPath={backupOutputPath}
+            steamProfile={steamProfile}
             customExecutablePath={customExecutablePath}
             userCollections={userCollections}
             onClose={() => setIsBackupOptionsOpen(false)}
-            onToggleAutomaticBackup={(enabled) => {
-              if (!displayGame) return;
-              onToggleAutomaticBackup(displayGame, enabled);
-              setIsBackupOptionsOpen(false);
-            }}
-            onSelectBackupOutputPath={onSelectBackupOutputPath}
             onSelectGameExecutable={() => {
               if (!displayGame) return;
               onSelectGameExecutable(displayGame);

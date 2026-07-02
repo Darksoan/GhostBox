@@ -1,7 +1,6 @@
 import {
   ChevronLeft,
   ChevronRight,
-  CloudUpload,
   Folder,
   Heart,
   Home,
@@ -30,7 +29,6 @@ const navigation: { id: Page; icon: LucideIcon; labelKey: string }[] = [
   { id: "home", labelKey: "nav.home", icon: Home },
   { id: "catalogue", labelKey: "nav.catalogue", icon: LayoutGrid },
   { id: "library", labelKey: "nav.library", icon: Layers },
-  { id: "backup", labelKey: "nav.backup", icon: CloudUpload },
 ];
 
 const sidebarFooterNavigation: { id: Page; icon: LucideIcon; labelKey: string }[] = [

@@ -29,6 +29,21 @@ const translations: Record<Language, TranslationTree> = {
       settings: "Ajustes",
       profile: "Perfil",
       notifications: "Notificações",
+      feedback: "Enviar feedback",
+    },
+    feedback: {
+      title: "Enviar feedback",
+      subtitle: "conte o que podemos melhorar no GhostBox.",
+      messageLabel: "Mensagem",
+      placeholder: "Descreva sua sugestão, problema ou ideia...",
+      characterCount: "{count} caracteres restantes",
+      cancel: "Cancelar",
+      send: "Enviar",
+      sending: "Enviando...",
+      successTitle: "Feedback enviado",
+      successMessage: "Obrigado. Sua mensagem foi recebida no Discord.",
+      errorTitle: "Erro ao enviar",
+      errorMessage: "Não foi possível enviar o feedback agora.",
     },
     notifications: {
       groupTitle: "Jogos adicionados",
@@ -167,7 +182,7 @@ const translations: Record<Language, TranslationTree> = {
       },
       benefits: {
         backupSync: "Backups e sincronização",
-        localAndCloudBackups: "Backup local e em nuvem",
+        localAndCloudBackups: "Backup em nuvem automático",
         sync: "Sincronização entre PCs",
         automaticRestore: "Restauração automática",
       },
@@ -385,7 +400,7 @@ const translations: Record<Language, TranslationTree> = {
         },
         backupSuccess: {
           label: "Backups concluídos",
-          description: "Avisa quando um backup local terminar com sucesso.",
+          description: "Avisa quando um backup terminar com sucesso.",
         },
         backupError: {
           label: "Falhas em backup",
@@ -460,6 +475,21 @@ const translations: Record<Language, TranslationTree> = {
       settings: "Settings",
       profile: "Profile",
       notifications: "Notifications",
+      feedback: "Send feedback",
+    },
+    feedback: {
+      title: "Send feedback",
+      subtitle: "tell us what we can improve in GhostBox.",
+      messageLabel: "Message",
+      placeholder: "Describe your suggestion, issue, or idea...",
+      characterCount: "{count} characters remaining",
+      cancel: "Cancel",
+      send: "Send",
+      sending: "Sending...",
+      successTitle: "Feedback sent",
+      successMessage: "Thanks. Your message was received in Discord.",
+      errorTitle: "Could not send",
+      errorMessage: "Feedback could not be sent right now.",
     },
     notifications: {
       groupTitle: "Games added",
@@ -598,7 +628,7 @@ const translations: Record<Language, TranslationTree> = {
       },
       benefits: {
         backupSync: "Backups and sync",
-        localAndCloudBackups: "Local and cloud backup",
+        localAndCloudBackups: "Automatic cloud backup",
         sync: "Sync across PCs",
         automaticRestore: "Automatic restore",
       },
@@ -808,7 +838,7 @@ const translations: Record<Language, TranslationTree> = {
         },
         backupSuccess: {
           label: "Completed backups",
-          description: "Notifies when a local backup finishes successfully.",
+          description: "Notifies when a backup finishes successfully.",
         },
         backupError: {
           label: "Backup failures",

@@ -13,6 +13,10 @@
         --font-sans: "Open Sans", "Segoe UI", system-ui, sans-serif;
       }
 
+      :root[data-window="tray"] #root > .app-splash {
+        display: none;
+      }
+
       html,
       body,
       #root {
@@ -31,9 +35,7 @@
         display: grid;
         min-height: 100%;
         place-items: center;
-        background:
-          radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.045), transparent 28%),
-          var(--background-dark);
+        background: var(--background-dark);
       }
 
       .app-splash__content {
@@ -69,6 +71,11 @@
         }
       }
     </style>
+    <script>
+      if (new URLSearchParams(window.location.search).get("tray") === "1") {
+        document.documentElement.dataset.window = "tray";
+      }
+    </script>
   </head>
 
   <body>

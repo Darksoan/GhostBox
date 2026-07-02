@@ -138,12 +138,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
-      if (newPage === "backup" && !isPremium) {
-        closeContentOverlay();
-        setSubscriptionModalOpen(true);
-        return;
-      }
-
       saveScrollPosition();
       closeContentOverlay();
       if (newPage !== page) {
@@ -154,8 +148,14 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         shell.setActiveProfileCollectionId(collectionId);
       }
     },
-    [closeContentOverlay, isPremium, navigate, page, saveScrollPosition, setSubscriptionModalOpen, shell]
+    [closeContentOverlay, navigate, page, saveScrollPosition, shell]
   );
+
+  useEffect(() => {
+    return ghostboxApi.onTrayNavigate(({ page }) => {
+      handleNavigate(page);
+    });
+  }, [handleNavigate]);
 
   const handleBack = useCallback(() => {
     saveScrollPosition();
@@ -262,6 +262,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             query={shell.query}
             isSearching={shell.isSearchLoading}
             suggestions={shell.headerSearchSuggestions}
+            steamProfile={appData.steamProfile}
             onQueryChange={shell.handleQueryChange}
             onSelectSuggestion={openGame}
             onBack={handleBack}
