@@ -1,9 +1,27 @@
 type Env = {
   DISCORD_WEBHOOK_URL: string;
   ALLOWED_ORIGIN?: string;
+  GITHUB_TOKEN?: string;
+  GITHUB_OWNER?: string;
+  GITHUB_REPO?: string;
+  RELEASE_ASSET_NAME?: string;
   LATEST_VERSION?: string;
   INSTALLER_URL?: string;
   RELEASE_NOTES_URL?: string;
+};
+
+type GitHubReleaseAsset = {
+  id: number;
+  name: string;
+  size?: number;
+};
+
+type GitHubRelease = {
+  tag_name?: string;
+  name?: string;
+  body?: string;
+  html_url?: string;
+  assets?: GitHubReleaseAsset[];
 };
 
 type FeedbackPayload = {
@@ -25,7 +43,7 @@ function jsonResponse(
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("access-control-allow-origin", env?.ALLOWED_ORIGIN || "*");
-  headers.set("access-control-allow-methods", "POST, OPTIONS");
+  headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
   headers.set("access-control-allow-headers", "content-type");
 
   return new Response(JSON.stringify(body), { ...init, headers });
@@ -42,9 +60,60 @@ function truncate(value: string, maxLength: number) {
 function corsHeaders(env: Env) {
   return {
     "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
-    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "content-type",
   };
+}
+
+function getGitHubConfig(env: Env) {
+  const owner = normalizeString(env.GITHUB_OWNER);
+  const repo = normalizeString(env.GITHUB_REPO);
+  const token = normalizeString(env.GITHUB_TOKEN);
+
+  if (!owner || !repo || !token) return null;
+
+  return { owner, repo, token };
+}
+
+function githubHeaders(token: string, accept = "application/vnd.github+json") {
+  return {
+    accept,
+    authorization: `Bearer ${token}`,
+    "user-agent": "ghostbox-update-worker",
+    "x-github-api-version": "2022-11-28",
+  };
+}
+
+function normalizeReleaseVersion(release: GitHubRelease) {
+  const tagName = normalizeString(release.tag_name);
+  return tagName.replace(/^v/i, "") || normalizeString(envLatestVersionFallback);
+}
+
+const envLatestVersionFallback = "0.1.0";
+
+async function fetchLatestRelease(env: Env) {
+  const config = getGitHubConfig(env);
+  if (!config) return null;
+
+  const response = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/latest`, {
+    headers: githubHeaders(config.token),
+  });
+
+  if (!response.ok) return null;
+
+  return response.json() as Promise<GitHubRelease>;
+}
+
+function findInstallerAsset(release: GitHubRelease, env: Env) {
+  const configuredName = normalizeString(env.RELEASE_ASSET_NAME);
+  const assets = release.assets || [];
+
+  if (configuredName) {
+    const configuredAsset = assets.find((asset) => asset.name === configuredName);
+    if (configuredAsset) return configuredAsset;
+  }
+
+  return assets.find((asset) => asset.name.toLowerCase().endsWith(".exe"));
 }
 
 async function handleFeedback(request: Request, env: Env) {
@@ -106,16 +175,63 @@ async function handleFeedback(request: Request, env: Env) {
   return jsonResponse({ success: true }, { status: 200 }, env);
 }
 
-function handleLatestUpdate(env: Env) {
+async function handleLatestUpdate(request: Request, env: Env) {
+  const release = await fetchLatestRelease(env);
+
+  if (release) {
+    const asset = findInstallerAsset(release, env);
+    const origin = new URL(request.url).origin;
+
+    return jsonResponse(
+      {
+        latestVersion: normalizeReleaseVersion(release),
+        installerUrl: asset ? `${origin}/updates/download/${asset.id}` : "",
+        releaseNotesUrl: normalizeString(release.html_url),
+      },
+      { status: 200 },
+      env
+    );
+  }
+
   return jsonResponse(
     {
-      latestVersion: normalizeString(env.LATEST_VERSION) || "0.1.0",
+      latestVersion: normalizeString(env.LATEST_VERSION) || envLatestVersionFallback,
       installerUrl: normalizeString(env.INSTALLER_URL),
       releaseNotesUrl: normalizeString(env.RELEASE_NOTES_URL),
     },
     { status: 200 },
     env
   );
+}
+
+async function handleUpdateDownload(assetId: string, env: Env) {
+  const config = getGitHubConfig(env);
+  if (!config || !assetId.match(/^\d+$/)) {
+    return jsonResponse({ success: false, error: "Update asset is not configured." }, { status: 404 }, env);
+  }
+
+  const response = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/assets/${assetId}`, {
+    headers: githubHeaders(config.token, "application/octet-stream"),
+    redirect: "manual",
+  });
+
+  const location = response.headers.get("location");
+  if (response.status >= 300 && response.status < 400 && location) {
+    return Response.redirect(location, 302);
+  }
+
+  if (!response.ok || !response.body) {
+    return jsonResponse({ success: false, error: "Update asset download failed." }, { status: 502 }, env);
+  }
+
+  return new Response(response.body, {
+    status: 200,
+    headers: {
+      "content-type": response.headers.get("content-type") || "application/octet-stream",
+      "content-disposition": response.headers.get("content-disposition") || "attachment",
+      "cache-control": "private, max-age=60",
+    },
+  });
 }
 
 export default {
@@ -131,7 +247,11 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/updates/latest") {
-      return handleLatestUpdate(env);
+      return handleLatestUpdate(request, env);
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/updates/download/")) {
+      return handleUpdateDownload(url.pathname.slice("/updates/download/".length), env);
     }
 
     return jsonResponse({ success: false, error: "Not found." }, { status: 404 }, env);
