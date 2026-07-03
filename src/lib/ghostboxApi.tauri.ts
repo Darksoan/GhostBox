@@ -37,6 +37,9 @@ import type {
   SteamWishlistItem,
   FeedbackRequest,
   FeedbackResult,
+  UpdateCheckResult,
+  UpdateInstallResult,
+  UpdateManifest,
   DiscordLinkStatus,
   CloudBackupResult,
   CloudRestoreResult,
@@ -52,7 +55,23 @@ function noopUnsubscribe() {
 const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
 const defaultSubscriptionsApiUrl = "https://ghostbox-subscriptions.hella.workers.dev";
 const defaultFeedbackApiUrl = "https://ghostbox-feedback.hella.workers.dev/feedback";
+const defaultUpdatesApiUrl = "https://ghostbox-feedback.hella.workers.dev/updates/latest";
 const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.0";
+
+function compareVersions(left: string, right: string) {
+  const leftParts = left.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = right.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(leftParts.length, rightParts.length, 3);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart > rightPart) return 1;
+    if (leftPart < rightPart) return -1;
+  }
+
+  return 0;
+}
 
 function getGamesApiUrl() {
   return (
@@ -72,6 +91,10 @@ function getSubscriptionsApiUrl() {
 
 function getFeedbackApiUrl() {
   return import.meta.env.VITE_GHOSTBOX_FEEDBACK_API_URL?.trim() || defaultFeedbackApiUrl;
+}
+
+function getUpdatesApiUrl() {
+  return import.meta.env.VITE_GHOSTBOX_UPDATES_API_URL?.trim() || defaultUpdatesApiUrl;
 }
 
 const emptyGameDatabase: GameDatabaseResult = {
@@ -178,6 +201,40 @@ export const ghostboxApi = {
     } catch {
       return { success: false, error: "Could not send feedback." };
     }
+  },
+
+  async checkForUpdates(): Promise<UpdateCheckResult | null> {
+    const apiUrl = getUpdatesApiUrl();
+
+    try {
+      const url = new URL(apiUrl);
+      url.searchParams.set("currentVersion", appVersion);
+      const response = await fetch(url, { headers: { accept: "application/json" } });
+      if (!response.ok) return null;
+
+      const manifest = await response.json() as Partial<UpdateManifest>;
+      const latestVersion = manifest.latestVersion?.trim() || appVersion;
+      const installerUrl = manifest.installerUrl?.trim() || "";
+      const updateAvailable = compareVersions(latestVersion, appVersion) > 0 && installerUrl.startsWith("https://");
+
+      return {
+        updateAvailable,
+        currentVersion: appVersion,
+        latestVersion,
+        installerUrl: updateAvailable ? installerUrl : "",
+        releaseNotesUrl: manifest.releaseNotesUrl?.trim() || undefined,
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  installUpdate(installerUrl: string): Promise<UpdateInstallResult> {
+    return invokeOr<UpdateInstallResult>(
+      "app_download_and_run_update",
+      { request: { installerUrl } },
+      { success: false }
+    );
   },
 
   getAppStatus(): Promise<AppStatus | undefined> {

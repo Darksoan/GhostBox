@@ -28,6 +28,7 @@ mod playtime;
 mod settings;
 mod steam;
 mod steam_appcache;
+mod updater;
 mod util;
 mod window_lifecycle;
 
@@ -1809,6 +1810,7 @@ pub fn run() {
             window_lifecycle::tray_hide_menu,
             window_lifecycle::tray_quit_application,
             window_lifecycle::shell_open_external,
+            updater::app_download_and_run_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

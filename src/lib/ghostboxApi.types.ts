@@ -142,6 +142,25 @@ export type FeedbackResult = {
   error?: string;
 };
 
+export type UpdateManifest = {
+  latestVersion: string;
+  installerUrl: string;
+  releaseNotesUrl?: string;
+};
+
+export type UpdateCheckResult = {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  installerUrl: string;
+  releaseNotesUrl?: string;
+};
+
+export type UpdateInstallResult = {
+  success: boolean;
+  installerPath?: string;
+};
+
 export type BackupOutputPathSelectionResult = {
   status: "ok" | "cancelled";
   settings: BackupSettings;

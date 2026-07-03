@@ -4,3 +4,6 @@ compatibility_date = "2026-06-19"
 
 [vars]
 ALLOWED_ORIGIN = "*"
+LATEST_VERSION = "0.1.0"
+INSTALLER_URL = ""
+RELEASE_NOTES_URL = ""

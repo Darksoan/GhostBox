@@ -1,6 +1,9 @@
 type Env = {
   DISCORD_WEBHOOK_URL: string;
   ALLOWED_ORIGIN?: string;
+  LATEST_VERSION?: string;
+  INSTALLER_URL?: string;
+  RELEASE_NOTES_URL?: string;
 };
 
 type FeedbackPayload = {
@@ -103,6 +106,18 @@ async function handleFeedback(request: Request, env: Env) {
   return jsonResponse({ success: true }, { status: 200 }, env);
 }
 
+function handleLatestUpdate(env: Env) {
+  return jsonResponse(
+    {
+      latestVersion: normalizeString(env.LATEST_VERSION) || "0.1.0",
+      installerUrl: normalizeString(env.INSTALLER_URL),
+      releaseNotesUrl: normalizeString(env.RELEASE_NOTES_URL),
+    },
+    { status: 200 },
+    env
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env) {
     if (request.method === "OPTIONS") {
@@ -113,6 +128,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/feedback") {
       return handleFeedback(request, env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/updates/latest") {
+      return handleLatestUpdate(env);
     }
 
     return jsonResponse({ success: false, error: "Not found." }, { status: 404 }, env);

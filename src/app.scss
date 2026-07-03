@@ -719,6 +719,31 @@ p {
     opacity: 0.62;
     pointer-events: none;
   }
+
+  &__update-button {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: var(--radius-sm);
+    color: var(--text-dim) !important;
+
+    &:hover {
+      background-color: var(--surface-hover) !important;
+      color: var(--text-strong) !important;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.65;
+    }
+
+    svg {
+      flex-shrink: 0;
+    }
+  }
+
+  &__update-spinner {
+    animation: spin var(--motion-slow) linear infinite;
+  }
 }
 
 .app-main {

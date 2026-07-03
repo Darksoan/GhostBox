@@ -34,6 +34,13 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "sidebarImage": "installer/sidebar.bmp",
+        "headerImage": "installer/header.bmp"
+      }
+    },
     "externalBin": [
       "binaries/ludusavi"
     ],
