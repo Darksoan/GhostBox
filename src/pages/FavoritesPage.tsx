@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
-import { Clock, Trophy } from "lucide-react";
+import { Clock } from "lucide-react";
+import { Cup } from "reicon-react";
 import type { UserCollection } from "../types";
 import {
   useCachedImageSources,
@@ -92,7 +93,7 @@ export const FavoriteCard = memo(function FavoriteCard({
           >
             <div className="game-card__achievement-progress-count">
               <>
-                <Trophy size={16} strokeWidth={2.0} />
+                <Cup size={16} weight="Filled" strokeWidth={2.0} />
                 <span>
                   {achievementUnlocked} / {achievementTotal}
                 </span>

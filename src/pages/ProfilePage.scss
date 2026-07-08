@@ -53,6 +53,27 @@
     contain: paint;
     pointer-events: none;
     user-select: none;
+
+    // Legibility fade on the left (behind avatar/name) + soft edge vignette.
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(
+          to right,
+          rgba(0, 0, 0, 0.5) 0%,
+          rgba(0, 0, 0, 0.18) 32%,
+          transparent 62%
+        ),
+        radial-gradient(
+          128% 96% at 50% 4%,
+          transparent 56%,
+          rgba(0, 0, 0, 0.42) 100%
+        );
+      pointer-events: none;
+      z-index: 1;
+    }
   }
 
   &__banner-image {
@@ -64,7 +85,8 @@
     transform-origin: center;
     pointer-events: none;
     user-select: none;
-    opacity: 1;
+    opacity: 0.94;
+    animation: profile-banner-reveal var(--motion-slow) var(--ease) both;
 
     &--placeholder {
       inset: 50% auto auto 50%;
@@ -72,6 +94,7 @@
       height: 88px;
       object-fit: contain;
       transform: translate(-50%, -50%);
+      animation: none;
 
       &[src] {
         opacity: 0.72;
@@ -86,9 +109,18 @@
     z-index: 1;
     width: 100%;
     min-height: 280px;
-    padding: 24px 24px 56px;
+    padding: 24px 24px 12px;
     box-sizing: border-box;
-    background: transparent;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 38%,
+      color-mix(in srgb, var(--profile-glass-background) 55%, transparent) 68%,
+      var(--profile-glass-background) 100%
+    );
+    backdrop-filter: blur(var(--profile-glass-blur));
+    -webkit-backdrop-filter: blur(var(--profile-glass-blur));
+    justify-content: flex-end;
   }
 
   &__banner-edit-button {
@@ -162,17 +194,32 @@
     height: 96px;
     place-items: center;
     overflow: hidden;
-    border: 0;
-    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
     background-color: var(--background);
     color: var(--color-subtext);
     cursor: pointer;
+    transition:
+      border-color var(--motion-base) var(--ease),
+      transform var(--motion-base) var(--ease);
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+      outline: 0;
+    }
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       opacity: 1;
+      transition: transform var(--motion-slow) var(--ease);
+    }
+
+    &:hover img {
+      transform: scale(1.04);
     }
   }
 
@@ -216,6 +263,148 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     margin: 0;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+
+  &__steam-id-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+
+  &__steam-id-icon {
+    display: block;
+    width: 14px;
+    height: 14px;
+    fill: var(--color-subtext);
+    flex-shrink: 0;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+  }
+
+  &__steam-id-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 10px;
+    min-height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--overlay-subtle);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: padding var(--motion-slow) var(--ease);
+  }
+
+  &__steam-id {
+    color: var(--color-subtext);
+    font-size: 13px;
+    font-weight: var(--weight-regular);
+    letter-spacing: 0.04em;
+    user-select: none;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    transition: opacity var(--motion-base) var(--ease);
+  }
+
+  &__steam-id--revealed {
+    animation: steamid-reveal var(--motion-slow) var(--ease) both;
+  }
+
+  &__steam-id--hidden {
+    animation: steamid-hide var(--motion-base) var(--ease) both;
+  }
+
+  &__steam-id-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-subtext);
+    cursor: pointer;
+    transition: color var(--motion-fast) ease;
+
+    &:hover {
+      color: var(--color-text);
+    }
+  }
+
+  &__steam-id-copy--copied {
+    color: var(--success);
+
+    &:hover {
+      color: var(--success-hover);
+    }
+  }
+
+  &__steam-id-copy {
+    position: relative;
+    overflow: hidden;
+    animation: steamid-copy-enter var(--motion-slow) var(--ease) both;
+  }
+
+  &__steam-id-copy-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    inset: 0;
+    transition: transform var(--motion-slow) var(--ease),
+                opacity var(--motion-slow) var(--ease);
+  }
+
+  &__steam-id-copy-icon--copy {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  &__steam-id-copy-icon--check {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  &__steam-id-copy--copied &__steam-id-copy-icon--copy {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  &__steam-id-copy--copied &__steam-id-copy-icon--check {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  &__discord-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 10px;
+    min-height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--overlay-subtle);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  &__discord-icon {
+    display: block;
+    width: 14px;
+    height: 14px;
+    fill: var(--color-subtext);
+    flex-shrink: 0;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+  }
+
+  &__discord-id {
+    color: var(--color-subtext);
+    font-size: 13px;
+    font-weight: var(--weight-regular);
+    letter-spacing: 0.04em;
+    user-select: none;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
 
   &__edit-button {
@@ -821,8 +1010,7 @@
     cursor: pointer;
     text-align: left;
     transition:
-      background-color var(--motion-base) ease,
-      transform var(--motion-base) ease;
+      background-color var(--motion-base) ease;
 
     & + .profile-page__top-game {
       border-top: 0;
@@ -930,6 +1118,9 @@
   }
 
   &__top-game-stat-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     overflow: hidden;
     color: var(--color-text);
     font-size: 11px;
@@ -1301,18 +1492,6 @@
     outline: 0;
   }
 
-  &__game-grid .game-card__cover::after {
-    opacity: 0;
-    transition: opacity var(--motion-base) ease;
-  }
-
-  &__game-grid .game-card__achievement-badge {
-    left: 50%;
-    bottom: 10px;
-    max-width: calc(100% - 24px);
-    transform: translate(-50%, 8px);
-  }
-
   &__tabs {
     display: flex;
     align-items: center;
@@ -1325,7 +1504,14 @@
     padding: 0 24px;
     margin: -44px 0 18px;
     overflow: hidden;
-    background: var(--profile-glass-background);
+    border-top: 1px solid var(--border-subtle);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--profile-glass-background) 82%, transparent) 0%,
+      var(--profile-glass-background) 100%
+    );
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
   &__collection-tabs {
@@ -1348,7 +1534,7 @@
 
   &__tab-indicator {
     position: absolute;
-    bottom: 3px;
+    bottom: 0;
     left: 0;
     height: 2px;
     border: 0;
@@ -1390,6 +1576,20 @@
     z-index: 2;
     transition: color var(--motion-base) ease;
 
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 7px 2px;
+      z-index: -1;
+      border-radius: var(--radius-sm);
+      background: var(--surface-hover);
+      opacity: 0;
+      transform: scale(0.92);
+      transition:
+        opacity var(--motion-base) var(--ease),
+        transform var(--motion-base) var(--ease);
+    }
+
     svg {
       flex: 0 0 auto;
       position: relative;
@@ -1401,6 +1601,11 @@
     &:not(.profile-page__tab--active):hover,
     &:not(.profile-page__tab--active):focus-visible {
       color: var(--color-text);
+
+      &::before {
+        opacity: 1;
+        transform: scale(1);
+      }
 
       svg {
         color: var(--text-strong);
@@ -1931,16 +2136,6 @@
     border-color: var(--border-hover);
   }
 
-  &__game-grid .game-card:hover .game-card__cover::after,
-  &__game-grid .game-card:focus-within .game-card__cover::after {
-    opacity: 1;
-  }
-
-  &__game-grid .game-card:hover .game-card__achievement-badge,
-  &__game-grid .game-card:focus-within .game-card__achievement-badge {
-    transform: translate(-50%, 0);
-  }
-
   &__load-more-sentinel {
     width: 100%;
     height: 1px;
@@ -1954,6 +2149,54 @@
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes steamid-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes steamid-hide {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes steamid-copy-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes profile-banner-reveal {
+  from {
+    opacity: 0;
+    transform: scale(1.045);
+  }
+
+  to {
+    opacity: 0.94;
+    transform: scale(1);
   }
 }
 
@@ -2036,7 +2279,6 @@
   &__top-game-console-row:hover,
   &__top-game-console-row:focus-visible {
     background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
-    transform: translateY(-3px);
   }
 
   &__recent-game:hover,

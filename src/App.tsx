@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { TitleBar } from "./components/layout/TitleBar";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { Toast } from "./components/ui/Toast";
@@ -211,8 +210,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   return (
     <div className="ghostbox-shell">
-      <TitleBar />
-
       <main className="app-main">
         <Sidebar
           activePage={page}

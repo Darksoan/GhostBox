@@ -47,7 +47,7 @@ pub fn start_local_achievement_monitor(
 
     {
         let initial =
-            crate::steam_appcache::read_local_unlocked_achievement_names(steam_path, &key);
+            crate::steam_appcache::read_local_unlocked_achievement_titles(steam_path, &key);
         snapshots()
             .lock()
             .unwrap_or_else(|error| error.into_inner())
@@ -125,7 +125,7 @@ pub fn stop_all_local_achievement_monitors() {
 }
 
 fn notify_new_unlocks(app: &AppHandle, app_id: &str, title: &str, steam_path: &str) {
-    let current = crate::steam_appcache::read_local_unlocked_achievement_names(steam_path, app_id);
+    let current = crate::steam_appcache::read_local_unlocked_achievement_titles(steam_path, app_id);
     let mut snapshots_guard = snapshots()
         .lock()
         .unwrap_or_else(|error| error.into_inner());

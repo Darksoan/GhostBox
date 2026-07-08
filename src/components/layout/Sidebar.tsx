@@ -5,7 +5,6 @@ import {
   Heart,
   Home,
   Layers,
-  LayoutGrid,
   LogOut,
   Pencil,
   RefreshCw,
@@ -24,10 +23,11 @@ import { settingsNavigationTabs, settingsTabLabelKeys, type SettingsTabId } from
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
 import { preloadGameModalAssets, preloadProfileImages } from "../../utils/image";
+import { Grid } from "reicon-react";
 
 const navigation: { id: Page; icon: LucideIcon; labelKey: string }[] = [
   { id: "home", labelKey: "nav.home", icon: Home },
-  { id: "catalogue", labelKey: "nav.catalogue", icon: LayoutGrid },
+  { id: "catalogue", labelKey: "nav.catalogue", icon: Grid },
   { id: "library", labelKey: "nav.library", icon: Layers },
 ];
 
@@ -241,7 +241,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onNavigate(id)}
                   >
-                    <Icon size={18} strokeWidth={2.0} />
+                    <Icon size={19} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -253,7 +253,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onRestartSteam()}
                   >
-                    <Icon size={18} strokeWidth={2.0} />
+                    <Icon size={19} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -268,7 +268,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onNavigate(id)}
                   >
-                    <Icon size={18} strokeWidth={2.0} />
+                    <Icon size={19} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -290,7 +290,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onSettingsTabChange(id)}
                   >
-                    <Icon size={18} strokeWidth={2.0} />
+                    <Icon size={19} />
                     <span className="sidebar__menu-item-label">{t(settingsTabLabelKeys[id])}</span>
                   </button>
                 </li>
@@ -487,7 +487,7 @@ export const Sidebar = memo(function Sidebar({
                   className="sidebar__menu-item-button sidebar__menu-item-button--back"
                   onClick={() => onBack()}
                 >
-                  <ChevronLeft size={18} strokeWidth={2.0} />
+                  <ChevronLeft size={19} strokeWidth={2.0} />
                   <span className="sidebar__menu-item-label">{t("header.back")}</span>
                 </button>
               </li>

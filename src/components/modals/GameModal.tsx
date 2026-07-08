@@ -9,8 +9,8 @@ import {
   Settings,
   Tags as TagsIcon,
   Trash2,
-  Trophy,
 } from "lucide-react";
+import { Cup } from "reicon-react";
 import {
   useEffect,
   useId,
@@ -1207,7 +1207,7 @@ export function GameModal({
                         }
                       >
                         <div className="modal__achievements-heading">
-                          <Trophy size={16} strokeWidth={2.0} />
+                          <Cup size={16} weight="Filled" strokeWidth={2.0} />
                           <strong>
                             {appearance.language === "en"
                               ? "Achievements"

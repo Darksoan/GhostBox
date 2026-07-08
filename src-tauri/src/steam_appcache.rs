@@ -120,43 +120,52 @@ fn user_stats_files(stats_path: &Path, app_id: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-fn collect_local_unlocked_achievement_bits(stats: &VdfObject) -> HashSet<String> {
-    let mut unlocked_bits = HashSet::new();
+// Achievements are grouped under numeric stat ids in the appcache (for example
+// stat "4" and stat "25" for The Forest). Each group keeps its own bit indices
+// starting at 0, so bit "1" in one group is a different achievement than bit "1"
+// in another group. These helpers preserve the stat -> bit association so that
+// names can be resolved against the matching stat group in the schema. Losing
+// this association causes a bit index to match multiple stat groups and inflates
+// the unlocked count.
+fn collect_local_unlocked_achievement_bits(stats: &VdfObject) -> HashMap<String, HashSet<String>> {
+    let mut unlocked_bits: HashMap<String, HashSet<String>> = HashMap::new();
     let Some(cache) = stats.get("cache").and_then(vdf_object) else {
         return unlocked_bits;
     };
 
-    for value in cache.values() {
+    for (stat_id, value) in cache {
         let Some(entry) = vdf_object(value) else {
             continue;
         };
         let Some(times) = entry.get("AchievementTimes").and_then(vdf_object) else {
             continue;
         };
+        let group = unlocked_bits.entry(stat_id.clone()).or_default();
         for bit in times.keys() {
-            unlocked_bits.insert(bit.clone());
+            group.insert(bit.clone());
         }
     }
 
     unlocked_bits
 }
 
-fn collect_local_achievement_times(stats: &VdfObject) -> HashMap<String, i64> {
-    let mut achievement_times = HashMap::new();
+fn collect_local_achievement_times(stats: &VdfObject) -> HashMap<String, HashMap<String, i64>> {
+    let mut achievement_times: HashMap<String, HashMap<String, i64>> = HashMap::new();
     let Some(cache) = stats.get("cache").and_then(vdf_object) else {
         return achievement_times;
     };
 
-    for value in cache.values() {
+    for (stat_id, value) in cache {
         let Some(entry) = vdf_object(value) else {
             continue;
         };
         let Some(times) = entry.get("AchievementTimes").and_then(vdf_object) else {
             continue;
         };
+        let group = achievement_times.entry(stat_id.clone()).or_default();
         for (bit, unlocked_at) in times {
             if let Some(timestamp) = vdf_i64(unlocked_at) {
-                achievement_times.insert(bit.clone(), timestamp);
+                group.insert(bit.clone(), timestamp);
             }
         }
     }
@@ -219,7 +228,7 @@ fn local_achievement_display_title(achievement: &VdfObject) -> String {
 fn local_achievement_unlocks_from_schema(
     schema: &VdfObject,
     app_id: &str,
-    achievement_times: &HashMap<String, i64>,
+    achievement_times: &HashMap<String, HashMap<String, i64>>,
 ) -> Vec<Value> {
     let mut unlocked = Vec::new();
     let Some(app_schema) = schema.get(app_id).and_then(vdf_object) else {
@@ -229,15 +238,17 @@ fn local_achievement_unlocks_from_schema(
         return unlocked;
     };
 
-    for stat in stats.values() {
-        let Some(stat_object) = vdf_object(stat) else {
-            continue;
-        };
-        let Some(bits) = stat_object.get("bits").and_then(vdf_object) else {
+    for (stat_id, times) in achievement_times {
+        let Some(bits) = stats
+            .get(stat_id)
+            .and_then(vdf_object)
+            .and_then(|stat_object| stat_object.get("bits"))
+            .and_then(vdf_object)
+        else {
             continue;
         };
 
-        for (bit, unlocked_at) in achievement_times {
+        for (bit, unlocked_at) in times {
             let Some(achievement) = bits.get(bit).and_then(vdf_object) else {
                 continue;
             };
@@ -274,38 +285,65 @@ fn local_achievement_unlocks_from_schema(
     unlocked
 }
 
-fn local_achievement_names_from_schema(
+// Resolves the unlocked bits (grouped per stat id) into pairs of
+// (api name, display title) using the schema. Each bit is only looked up within
+// its own stat group so a bit index cannot leak into a different achievement
+// group.
+fn resolve_local_unlocked_achievements(
     schema: &VdfObject,
     app_id: &str,
-    unlocked_bits: &HashSet<String>,
-) -> HashSet<String> {
-    let mut unlocked_names = HashSet::new();
-    let Some(app_schema) = schema.get(app_id).and_then(vdf_object) else {
-        return unlocked_names;
-    };
-    let Some(stats) = app_schema.get("stats").and_then(vdf_object) else {
-        return unlocked_names;
-    };
+    unlocked_bits: &HashMap<String, HashSet<String>>,
+) -> Vec<(String, String)> {
+    let mut resolved = Vec::new();
+    let stats = schema
+        .get(app_id)
+        .and_then(vdf_object)
+        .and_then(|app_schema| app_schema.get("stats"))
+        .and_then(vdf_object);
 
-    for stat in stats.values() {
-        let Some(stat_object) = vdf_object(stat) else {
-            continue;
-        };
-        let Some(bits) = stat_object.get("bits").and_then(vdf_object) else {
-            continue;
-        };
+    for (stat_id, bits_unlocked) in unlocked_bits {
+        let group_bits = stats
+            .and_then(|stats| stats.get(stat_id))
+            .and_then(vdf_object)
+            .and_then(|stat_object| stat_object.get("bits"))
+            .and_then(vdf_object);
 
-        for bit in unlocked_bits {
-            let Some(achievement) = bits.get(bit).and_then(vdf_object) else {
-                continue;
-            };
-            let name = achievement.get("name").map(vdf_string).unwrap_or_default();
-            if !name.is_empty() {
-                unlocked_names.insert(name);
+        for bit in bits_unlocked {
+            match group_bits.and_then(|bits| bits.get(bit)).and_then(vdf_object) {
+                Some(achievement) => {
+                    let name = achievement.get("name").map(vdf_string).unwrap_or_default();
+                    let title = local_achievement_display_title(achievement);
+                    resolved.push((name, title));
+                }
+                // Some emulator save formats key AchievementTimes by the
+                // achievement API name itself instead of a numeric bit index.
+                // In that case treat the key as the achievement name directly.
+                None if !bit.is_empty() => resolved.push((bit.clone(), String::new())),
+                None => {}
             }
         }
     }
 
+    resolved
+}
+
+// Returns the set of match keys (both API names and localized display titles)
+// for unlocked achievements. Used to flag entries in an achievement list that
+// may expose either the API name or the display title.
+fn local_achievement_names_from_schema(
+    schema: &VdfObject,
+    app_id: &str,
+    unlocked_bits: &HashMap<String, HashSet<String>>,
+) -> HashSet<String> {
+    let mut unlocked_names = HashSet::new();
+    for (name, title) in resolve_local_unlocked_achievements(schema, app_id, unlocked_bits) {
+        if !name.is_empty() {
+            unlocked_names.insert(name);
+        }
+        if !title.is_empty() {
+            unlocked_names.insert(title);
+        }
+    }
     unlocked_names
 }
 
@@ -326,11 +364,11 @@ pub fn read_steam_local_achievement_backup_file(
         return None;
     }
 
-    let mut achievement_times = HashMap::new();
+    let mut achievement_times: HashMap<String, HashMap<String, i64>> = HashMap::new();
     for file_path in user_stats_files {
         let buffer = std::fs::read(file_path).ok()?;
-        for (bit, unlocked_at) in collect_local_achievement_times(&parse_binary_vdf(&buffer)) {
-            achievement_times.insert(bit, unlocked_at);
+        for (stat_id, times) in collect_local_achievement_times(&parse_binary_vdf(&buffer)) {
+            achievement_times.entry(stat_id).or_default().extend(times);
         }
     }
 
@@ -367,17 +405,7 @@ pub fn read_local_unlocked_achievement_names(steam_path: &str, app_id: &str) -> 
         return HashSet::new();
     }
 
-    let mut unlocked_bits = HashSet::new();
-    for file_path in user_stats_files {
-        let buffer = std::fs::read(file_path).ok();
-        let Some(buffer) = buffer else {
-            continue;
-        };
-        unlocked_bits.extend(collect_local_unlocked_achievement_bits(&parse_binary_vdf(
-            &buffer,
-        )));
-    }
-
+    let unlocked_bits = read_local_unlocked_bits_by_stat(&stats_path, app_id, &user_stats_files);
     if unlocked_bits.is_empty() {
         return HashSet::new();
     }
@@ -389,6 +417,57 @@ pub fn read_local_unlocked_achievement_names(steam_path: &str, app_id: &str) -> 
     };
 
     local_achievement_names_from_schema(&parse_binary_vdf(&schema_buffer), app_id, &unlocked_bits)
+}
+
+// Reads all user stats files and merges the unlocked achievement bits keyed by
+// their stat group id.
+fn read_local_unlocked_bits_by_stat(
+    _stats_path: &Path,
+    _app_id: &str,
+    user_stats_files: &[PathBuf],
+) -> HashMap<String, HashSet<String>> {
+    let mut unlocked_bits: HashMap<String, HashSet<String>> = HashMap::new();
+    for file_path in user_stats_files {
+        let Some(buffer) = std::fs::read(file_path).ok() else {
+            continue;
+        };
+        for (stat_id, bits) in collect_local_unlocked_achievement_bits(&parse_binary_vdf(&buffer)) {
+            unlocked_bits.entry(stat_id).or_default().extend(bits);
+        }
+    }
+    unlocked_bits
+}
+
+// Returns the localized display titles (falling back to the API name) of the
+// unlocked achievements. This is used for user-facing unlock notifications so
+// they stay human-readable instead of exposing raw API identifiers.
+pub fn read_local_unlocked_achievement_titles(steam_path: &str, app_id: &str) -> HashSet<String> {
+    let stats_path = stats_directory(steam_path);
+    if !stats_path.is_dir() {
+        return HashSet::new();
+    }
+
+    let user_stats_files = user_stats_files(&stats_path, app_id);
+    if user_stats_files.is_empty() {
+        return HashSet::new();
+    }
+
+    let unlocked_bits = read_local_unlocked_bits_by_stat(&stats_path, app_id, &user_stats_files);
+    if unlocked_bits.is_empty() {
+        return HashSet::new();
+    }
+
+    let schema_buffer =
+        std::fs::read(stats_path.join(format!("UserGameStatsSchema_{app_id}.bin"))).ok();
+    let Some(schema_buffer) = schema_buffer else {
+        return HashSet::new();
+    };
+
+    resolve_local_unlocked_achievements(&parse_binary_vdf(&schema_buffer), app_id, &unlocked_bits)
+        .into_iter()
+        .map(|(name, title)| if title.is_empty() { name } else { title })
+        .filter(|value| !value.is_empty())
+        .collect()
 }
 
 pub fn read_local_achievement_stats(steam_path: &str, app_id: &str, persisted: &Value) -> Value {
@@ -454,19 +533,11 @@ pub fn read_local_achievement_stats(steam_path: &str, app_id: &str, persisted: &
         });
     }
 
-    let mut unlocked_bits = HashSet::new();
-    for file_path in user_stats_files(&stats_path, app_id) {
-        let buffer = std::fs::read(file_path).ok();
-        let Some(buffer) = buffer else {
-            continue;
-        };
-        unlocked_bits.extend(collect_local_unlocked_achievement_bits(&parse_binary_vdf(
-            &buffer,
-        )));
-    }
+    let unlocked_bits =
+        read_local_unlocked_bits_by_stat(&stats_path, app_id, &user_stats_files(&stats_path, app_id));
+    let unlocked_count: usize = unlocked_bits.values().map(|bits| bits.len()).sum();
 
-    let unlocked = unlocked_bits
-        .len()
+    let unlocked = unlocked_count
         .max(persisted_unlocked as usize)
         .min(total as usize) as u32;
     json!({

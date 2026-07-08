@@ -24,3 +24,6 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Local Cloudflare/Wrangler dev state (generated)
+.wrangler/

@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, CloudCheck, Trophy } from "lucide-react";
+import { Clock, CloudCheck } from "lucide-react";
+import { Cup } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
   useCachedImageSources,
@@ -22,7 +23,6 @@ interface GameCardProps {
   onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   portrait?: boolean;
   showAchievements?: boolean;
-  showAchievementSummary?: boolean;
   showBackupStatus?: boolean;
   hasBackup?: boolean;
   active?: boolean;
@@ -36,7 +36,6 @@ export const GameCard = memo(function GameCard({
   onContextMenu,
   portrait = false,
   showAchievements = false,
-  showAchievementSummary = false,
   showBackupStatus = false,
   hasBackup = false,
   active = false,
@@ -88,18 +87,17 @@ export const GameCard = memo(function GameCard({
     : previousCoverSourceRef.current;
   const coverSources = coverSource ? [coverSource] : [];
 
-  const shouldComputeAchievementData = showAchievements || showAchievementSummary;
-  const achievementListTotal = shouldComputeAchievementData
+  const achievementListTotal = showAchievements
     ? game.achievementList?.length ?? 0
     : 0;
-  const achievementTotal = shouldComputeAchievementData
+  const achievementTotal = showAchievements
     ? Math.max(
         achievementListTotal,
         game.achievements.total,
         game.achievements.unlocked
       )
     : 0;
-  const achievementUnlocked = shouldComputeAchievementData
+  const achievementUnlocked = showAchievements
     ? Math.min(
         achievementListTotal > 0
           ? (game.achievementList ?? []).filter(
@@ -109,13 +107,10 @@ export const GameCard = memo(function GameCard({
         achievementTotal
       )
     : 0;
-  const achievementProgress =
-    achievementTotal > 0 ? (achievementUnlocked / achievementTotal) * 100 : 0;
   const playtimeInMilliseconds = game.playTimeInMilliseconds ?? game.hours * 3_600_000;
   const compactPlaytime =
     playtimeInMilliseconds > 0 ? formatCompactPlaytime(playtimeInMilliseconds) : "0h";
-  const showAchievementProgress = showAchievements && achievementTotal > 0;
-  const showAchievementSummaryBadge = showAchievementSummary;
+  const showAchievementBadges = showAchievements && achievementTotal > 0;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     if (onContextMenu) {
@@ -163,36 +158,13 @@ export const GameCard = memo(function GameCard({
             Playing
           </span>
         )}
-        {showAchievementProgress && (
+        {showAchievementBadges && (
           <div
-            className="game-card__achievement-progress"
-            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
-          >
-            <div className="game-card__achievement-progress-count">
-              <Trophy size={16} strokeWidth={2.0} />
-              <span>
-                {achievementUnlocked} / {achievementTotal}
-              </span>
-              <span className="game-card__summary-metric">
-                <Clock size={16} strokeWidth={2.0} />
-                <span>{compactPlaytime}</span>
-              </span>
-            </div>
-            <div
-              className="game-card__achievement-progress-track"
-              aria-hidden="true"
-            >
-              <span style={{ width: `${achievementProgress}%` }} />
-            </div>
-          </div>
-        )}
-        {showAchievementSummaryBadge && !showAchievementProgress && (
-          <div
-            className="game-card__achievement-badge"
+            className="game-card__achievement-badges"
             aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
           >
             <span className="game-card__summary-metric">
-              <Trophy size={16} strokeWidth={2.0} />
+              <Cup size={16} weight="Filled" strokeWidth={2.0} />
               <span>
                 {achievementUnlocked} / {achievementTotal}
               </span>
@@ -223,7 +195,6 @@ interface GameGridProps {
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   portrait?: boolean;
   showAchievements?: boolean;
-  showAchievementSummary?: boolean;
   showBackupStatus?: boolean;
   hasBackupByAppId?: Set<string>;
   activeSessionAppIds?: Set<string>;
@@ -239,7 +210,6 @@ export function GameGrid({
   onGameContextMenu,
   portrait = false,
   showAchievements = false,
-  showAchievementSummary = false,
   showBackupStatus = false,
   hasBackupByAppId = new Set(),
   activeSessionAppIds = new Set(),
@@ -258,7 +228,6 @@ export function GameGrid({
           onContextMenu={onGameContextMenu}
           portrait={portrait}
           showAchievements={showAchievements}
-          showAchievementSummary={showAchievementSummary}
           showBackupStatus={showBackupStatus}
           hasBackup={hasBackupByAppId.has(game.appId)}
           active={activeSessionAppIds.has(game.appId)}

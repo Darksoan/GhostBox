@@ -1,9 +1,20 @@
-import { ChevronLeft, Bell, Heart, MessageSquareText, Search } from "lucide-react";
-import { memo, useState, useCallback } from "react";
+import {
+  ChevronLeft,
+  Bell,
+  Download,
+  Heart,
+  LoaderCircle,
+  MessageSquareText,
+  Minus,
+  Search,
+  X,
+} from "lucide-react";
+import { memo, useState, useCallback, useEffect } from "react";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import type { UpdateCheckResult } from "../../lib/ghostboxApi.types";
 import { preloadGameModalAssets } from "../../utils/image";
 import { FeedbackModal } from "../modals/FeedbackModal";
 import discordIcon from "../../../Icons/discord.svg";
@@ -51,9 +62,11 @@ export const Header = memo(function Header({
   onBack,
   onNavigateToNotifications,
 }: HeaderProps) {
-  const { t } = useSettings();
+  const { t, appearance } = useSettings();
   const [focused, setFocused] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const hasBackButton = canGoBack ?? page !== "home";
   const showDropdown =
     (page !== "catalogue" || allowSearchDropdown) &&
@@ -85,6 +98,40 @@ export const Header = memo(function Header({
       onQueryChange(event.target.value),
     [onQueryChange]
   );
+
+  const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
+  const handleClose = useCallback(() => void ghostboxApi.close(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkForUpdates = () => {
+      void ghostboxApi.checkForUpdates().then((result) => {
+        if (!cancelled) setUpdate(result?.updateAvailable ? result : null);
+      });
+    };
+
+    checkForUpdates();
+    const interval = window.setInterval(checkForUpdates, 60 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const handleInstallUpdate = useCallback(() => {
+    if (!update?.installerUrl || isUpdating) return;
+
+    setIsUpdating(true);
+    void ghostboxApi.installUpdate(update.installerUrl).finally(() => {
+      setIsUpdating(false);
+    });
+  }, [isUpdating, update?.installerUrl]);
+
+  const updateLabel = appearance.language === "en"
+    ? `Download GhostBox ${update?.latestVersion ?? ""}`
+    : `Baixar GhostBox ${update?.latestVersion ?? ""}`;
 
   return (
     <header className="header">
@@ -194,6 +241,41 @@ export const Header = memo(function Header({
               )}
             </div>
           )}
+        </div>
+
+        <div className="header__window-controls">
+          {update && (
+            <button
+              type="button"
+              className="header__window-controls-update"
+              aria-label={updateLabel}
+              title={updateLabel}
+              onClick={handleInstallUpdate}
+              disabled={isUpdating}
+            >
+              {isUpdating ? (
+                <LoaderCircle className="header__window-controls-spinner" size={13} />
+              ) : (
+                <Download size={13} />
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            className="header__window-controls-button"
+            aria-label={appearance.language === "en" ? "Minimize" : "Minimizar"}
+            onClick={handleMinimize}
+          >
+            <Minus size={17} />
+          </button>
+          <button
+            type="button"
+            className="header__window-controls-button header__window-controls-button--close"
+            aria-label={appearance.language === "en" ? "Close" : "Fechar"}
+            onClick={handleClose}
+          >
+            <X size={17} />
+          </button>
         </div>
       </div>
       <FeedbackModal

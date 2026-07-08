@@ -68,9 +68,9 @@ export const emptyGameDatabase: GameDatabaseResult = {
 };
 
 export const filterCategoryColors: Record<CatalogueFilterKey, string> = {
-  genres: "hsl(262deg 50% 47%)",
-  tags: "hsl(95deg 50% 24%)",
-  developers: "hsl(205deg 45% 36%)",
-  publishers: "hsl(330deg 36% 36%)",
-  years: "hsl(38deg 50% 40%)",
+  genres: "hsl(262deg 50% 62%)",
+  tags: "hsl(95deg 50% 48%)",
+  developers: "hsl(205deg 45% 55%)",
+  publishers: "hsl(330deg 36% 55%)",
+  years: "hsl(38deg 50% 58%)",
 };

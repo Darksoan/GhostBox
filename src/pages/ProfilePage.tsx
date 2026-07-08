@@ -13,7 +13,11 @@ import {
 import { createPortal } from "react-dom";
 import {
   Camera,
+  Check,
   ChevronDown,
+  Copy,
+  Eye,
+  EyeOff,
   Folder,
   Heart,
   Layers,
@@ -22,9 +26,9 @@ import {
   ShieldUser,
   SquarePen,
   Settings2,
-  Trophy,
   User,
 } from "lucide-react";
+import { Cup } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamProfile, UserCollection } from "../types";
 import { GameGrid } from "../components/ui/GameCard";
@@ -58,6 +62,8 @@ import {
   getRicherProfileAchievementGame as getRicherAchievementGame,
   isProfileAchievementUnlocked as isAchievementUnlocked,
 } from "../utils/profileAchievements";
+import { ghostboxApi } from "../lib/ghostboxApi";
+import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
@@ -579,6 +585,10 @@ export function ProfilePage({
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
   const [isTabIndicatorReady, setIsTabIndicatorReady] = useState(false);
+  const [isSteamIdVisible, setIsSteamIdVisible] = useState(false);
+  const [isSteamIdCopied, setIsSteamIdCopied] = useState(false);
+  const steamIdCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(null);
 
   const activeCollectionId =
     propActiveCollectionId ?? internalActiveCollectionId;
@@ -767,10 +777,23 @@ export function ProfilePage({
         getRicherAchievementGame(games.get(game.appId), game)
       );
     }
+    // Freshly hydrated local achievement details reflect the current local
+    // unlock state read from the Steam appcache, so they are authoritative and
+    // must override any previously cached/persisted achievement counts. The
+    // "richer wins" heuristic keeps the higher unlocked count, which would
+    // otherwise pin the profile to a stale/over-counted value that can never be
+    // corrected downward.
     for (const game of localAchievementGamesByAppId.values()) {
+      const base = games.get(game.appId);
       games.set(
         game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
+        base
+          ? {
+              ...base,
+              achievements: game.achievements,
+              achievementList: game.achievementList,
+            }
+          : game
       );
     }
     return [...games.values()];
@@ -1089,6 +1112,30 @@ export function ProfilePage({
     showcaseAchievementLimit - visibleAchievementHighlights.length
   );
 
+  useEffect(() => {
+    return () => {
+      if (steamIdCopiedTimeoutRef.current) {
+        clearTimeout(steamIdCopiedTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopySteamId = useCallback(() => {
+    if (!steamProfile?.steamId) return;
+    void navigator.clipboard
+      .writeText(steamProfile.steamId)
+      .then(() => {
+        setIsSteamIdCopied(true);
+        if (steamIdCopiedTimeoutRef.current) {
+          clearTimeout(steamIdCopiedTimeoutRef.current);
+        }
+        steamIdCopiedTimeoutRef.current = setTimeout(() => {
+          setIsSteamIdCopied(false);
+        }, 1800);
+      })
+      .catch(() => {});
+  }, [steamProfile?.steamId]);
+
   const handleToggleShowcaseAchievement = useCallback(
     (achievementKey: string) => {
       setSelectedShowcaseAchievementKeys((current) => {
@@ -1188,6 +1235,15 @@ export function ProfilePage({
   useEffect(() => {
     preloadProfileImages(steamProfile);
   }, [profileImageKey]);
+
+  useEffect(() => {
+    if (!steamProfile?.steamId) return;
+    let cancelled = false;
+    ghostboxApi.getDiscordLinkStatus(steamProfile.steamId).then((status) => {
+      if (!cancelled) setDiscordLink(status);
+    });
+    return () => { cancelled = true; };
+  }, [steamProfile?.steamId]);
 
   useEffect(() => {
     preloadGameListAssets(visibleGames, {
@@ -1325,6 +1381,58 @@ export function ProfilePage({
                   <Settings2 size={18} />
                 </button>
               </div>
+              <div className="profile-page__steam-id-row">
+                <div className="profile-page__steam-id-box">
+                  <svg role="img" viewBox="0 0 24 24" className="profile-page__steam-id-icon" aria-hidden="true">
+                    <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/>
+                  </svg>
+                  <span
+                    className={`profile-page__steam-id${
+                      isSteamIdVisible
+                        ? " profile-page__steam-id--revealed"
+                        : " profile-page__steam-id--hidden"
+                    }`}
+                    key={isSteamIdVisible ? "visible" : "masked"}
+                  >
+                    {isSteamIdVisible ? steamProfile.steamId : "•••••••••"}
+                  </span>
+                  <button
+                    type="button"
+                    className="profile-page__steam-id-toggle"
+                    onClick={() => setIsSteamIdVisible((v) => !v)}
+                    aria-label={isSteamIdVisible ? t("profile.hideSteamId") : t("profile.showSteamId")}
+                  >
+                    {isSteamIdVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+                  </button>
+                  {isSteamIdVisible && (
+                    <button
+                      type="button"
+                      className={`profile-page__steam-id-toggle profile-page__steam-id-copy${
+                        isSteamIdCopied ? " profile-page__steam-id-copy--copied" : ""
+                      }`}
+                      onClick={handleCopySteamId}
+                      aria-label={isSteamIdCopied ? t("profile.steamIdCopied") : t("profile.copySteamId")}
+                    >
+                      <span className="profile-page__steam-id-copy-icon profile-page__steam-id-copy-icon--copy">
+                        <Copy size={14} />
+                      </span>
+                      <span className="profile-page__steam-id-copy-icon profile-page__steam-id-copy-icon--check">
+                        <Check size={14} />
+                      </span>
+                    </button>
+                  )}
+                </div>
+                {discordLink?.linked && (
+                  <div className="profile-page__discord-box">
+                    <svg role="img" viewBox="0 -28.5 256 256" className="profile-page__discord-icon" aria-hidden="true">
+                      <path d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"/>
+                    </svg>
+                    <span className="profile-page__discord-id">
+                      {discordLink.discordUsername}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1361,7 +1469,7 @@ export function ProfilePage({
                         : collection.id === "favorites"
                           ? Heart
                           : collection.id === "achievements"
-                            ? Trophy
+                            ? Cup
                             : Folder;
 
                   return (
@@ -1385,11 +1493,20 @@ export function ProfilePage({
                       }
                       onFocus={() => handleCollectionTabHover(collection.id)}
                     >
-                      <TabIcon
-                        size={18}
-                        strokeWidth={2.0}
-                        aria-hidden="true"
-                      />
+                      {collection.id === "achievements" ? (
+                        <Cup
+                          size={18}
+                          weight="Filled"
+                          strokeWidth={2.0}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <TabIcon
+                          size={18}
+                          strokeWidth={2.0}
+                          aria-hidden="true"
+                        />
+                      )}
                       {!isIconOnlyTab && (
                         <span className="profile-page__tab-label">
                           {collection.name}
@@ -1537,7 +1654,7 @@ export function ProfilePage({
                                   <span className="profile-page__top-game-stat profile-page__top-game-stat--achievements">
                                     <span className="profile-page__top-game-stat-heading">
                                       <span className="profile-page__top-game-stat-label">
-                                        <Trophy size={14} strokeWidth={2.0} aria-hidden="true" />
+                                        <Cup size={14} weight="Filled" strokeWidth={2.0} aria-hidden="true" />
                                         {appearance.language === "en"
                                           ? "Achievements"
                                           : "Conquistas"}
@@ -1658,7 +1775,7 @@ export function ProfilePage({
                                   : `Progresso de conquistas de ${game.title}: ${achievementUnlocked} de ${achievementTotal}`
                               }
                             >
-                              <Trophy size={14} strokeWidth={2.0} aria-hidden="true" />
+                              <Cup size={14} weight="Filled" strokeWidth={2.0} aria-hidden="true" />
                               <span className="profile-page__achievement-game-progress-bar" aria-hidden="true">
                                 <span style={{ width: `${achievementProgress}%` }} />
                               </span>
@@ -1751,7 +1868,7 @@ export function ProfilePage({
               ) : (
                 <div className="profile-page__no-games">
                   <div className="profile-page__no-games-icon">
-                    <Trophy size={24} strokeWidth={2.0} />
+                    <Cup size={24} weight="Filled" strokeWidth={2.0} />
                   </div>
                   <h2>{t("profile.noAchievements")}</h2>
                 </div>
@@ -1765,7 +1882,7 @@ export function ProfilePage({
                     portrait
                     onOpenGame={onOpenGame}
                     onGameContextMenu={handleGameContextMenu}
-                    showAchievementSummary
+                    showAchievements
                     activeSessionAppIds={activeSessionAppIds}
                   />
                   {renderedGameCount < visibleGames.length && (

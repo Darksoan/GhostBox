@@ -45,6 +45,8 @@ import type {
   CloudRestoreResult,
   CloudSave,
   CloudSessionResult,
+  SubscriptionCheckoutResult,
+  SubscriptionPlanId,
   SubscriptionStatusResult,
 } from "./ghostboxApi.types";
 
@@ -163,6 +165,27 @@ export const ghostboxApi = {
     } catch {
       return null;
     }
+  },
+
+  async createSubscriptionCheckout(steamId: string, planId: SubscriptionPlanId): Promise<SubscriptionCheckoutResult | null> {
+    if ("__TAURI_INTERNALS__" in window) {
+      try {
+        return await invoke<SubscriptionCheckoutResult>("subscription_create_checkout", { steamId, planId });
+      } catch {
+        return null;
+      }
+    }
+
+    const response = await fetch(`${getSubscriptionsApiUrl()}/subscription/checkouts`, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ steamId, planId }),
+    });
+    if (!response.ok) return null;
+    return await response.json() as SubscriptionCheckoutResult;
   },
 
   async sendFeedback(request: FeedbackRequest): Promise<FeedbackResult> {

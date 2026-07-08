@@ -1,0 +1,71 @@
+name: Release Windows Installer
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-installer
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish NSIS
+    runs-on: windows-latest
+
+    env:
+      RELEASE_VERSION: 0.1.${{ github.run_number }}
+      VITE_APP_VERSION: 0.1.${{ github.run_number }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Set release version
+        run: node scripts/set-release-version.mjs $env:RELEASE_VERSION
+
+      - name: Build NSIS installer
+        run: npm run tauri -- build --bundles nsis
+
+      - name: Find installer
+        id: installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -LiteralPath "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not generated." }
+          "path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.RELEASE_VERSION }}
+          name: GhostBox v${{ env.RELEASE_VERSION }}
+          body: |
+            Automated Windows build for commit ${{ github.sha }}.
+          files: ${{ steps.installer.outputs.path }}
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

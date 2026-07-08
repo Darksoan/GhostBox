@@ -4,12 +4,12 @@ import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import type { DiscordLinkStatus, SubscriptionStatusResult } from "../../lib/ghostboxApi.types";
+import type { DiscordLinkStatus, SubscriptionPayment, SubscriptionPlanId as PaidSubscriptionPlanId, SubscriptionStatusResult } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
 
-type SubscriptionPlanId = "free" | "monthly" | "quarterly";
+type SubscriptionPlanId = "free" | PaidSubscriptionPlanId;
 
 type SubscriptionPlansProps = {
   surface?: "modal" | "settings";
@@ -21,17 +21,6 @@ type SubscriptionPlansProps = {
     lastBackupSuccess: boolean | null;
   }>;
   steamProfile?: SteamProfile | null;
-};
-
-type LatestPayment = {
-  id?: string;
-  planId?: string;
-  status?: string;
-  amountCents?: number;
-  currency?: string;
-  createdAt?: string;
-  confirmedAt?: string | null;
-  updatedAt?: string;
 };
 
 const benefits: Record<SubscriptionPlanId, string[]> = {
@@ -99,8 +88,8 @@ function formatCurrency(amountCents: number | undefined, currency: string | unde
   }).format(amountCents / 100);
 }
 
-function latestPayment(value: unknown): LatestPayment | null {
-  return value && typeof value === "object" ? value as LatestPayment : null;
+function latestPayment(value: unknown): SubscriptionPayment | null {
+  return value && typeof value === "object" ? value as SubscriptionPayment : null;
 }
 
 export function SubscriptionPlans({
@@ -117,6 +106,7 @@ export function SubscriptionPlans({
   const [discordLinkStatus, setDiscordLinkStatus] = useState<DiscordLinkStatus | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings" && Boolean(steamProfile?.steamId));
+  const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
   const linkedDiscordName = discordLinkStatus?.discordGlobalName || discordLinkStatus?.discordUsername;
   const language = appearance.language;
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
@@ -330,7 +320,7 @@ export function SubscriptionPlans({
     },
   ];
 
-  function handleSubscribe(planId: SubscriptionPlanId) {
+  async function handleSubscribe(planId: SubscriptionPlanId) {
     if (planId === "free") return;
     if (!steamProfile?.steamId) {
       void handleSteamSignIn();
@@ -345,11 +335,37 @@ export function SubscriptionPlans({
       return;
     }
 
-    showToast(
-      t("subscription.checkoutPending.title"),
-      t("subscription.checkoutPending.message"),
-      "success"
-    );
+    setCheckoutPlan(planId);
+    try {
+      const checkout = await ghostboxApi.createSubscriptionCheckout(steamProfile.steamId, planId);
+      const payment = checkout?.payment;
+      if (payment?.hostedCheckoutUrl) {
+        await ghostboxApi.openExternalUrl(payment.hostedCheckoutUrl);
+        showToast(
+          copy("Checkout aberto", "Checkout opened"),
+          copy("Finalize o pagamento na janela aberta e volte ao GhostBox para atualizar o status.", "Complete payment in the opened window and return to GhostBox to refresh status."),
+          "success"
+        );
+        return;
+      }
+
+      if (payment?.pixCode || payment?.pixQrCodeUrl) {
+        showToast(
+          copy("Checkout criado", "Checkout created"),
+          copy("O pagamento PIX foi criado, mas ainda não há tela de pagamento no app para exibir o QR Code.", "The PIX payment was created, but the app does not yet have a payment screen to show the QR code."),
+          "success"
+        );
+        return;
+      }
+
+      showToast(
+        copy("Não foi possível criar o checkout", "Could not create checkout"),
+        copy("Tente novamente em instantes.", "Try again in a moment."),
+        "error"
+      );
+    } finally {
+      setCheckoutPlan(null);
+    }
   }
 
   return (
@@ -412,10 +428,10 @@ export function SubscriptionPlans({
             <button
               type="button"
               className="subscription-plan-card__action"
-              disabled={plan.disabled}
-              onClick={() => handleSubscribe(plan.id)}
+              disabled={plan.disabled || checkoutPlan === plan.id}
+              onClick={() => void handleSubscribe(plan.id)}
             >
-              {plan.action}
+              {checkoutPlan === plan.id ? copy("Abrindo...", "Opening...") : plan.action}
             </button>
           </article>
         ))}

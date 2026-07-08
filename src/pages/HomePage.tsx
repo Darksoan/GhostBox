@@ -1,4 +1,5 @@
-import { ChevronLeft, ChevronRight, Clock, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { Cup } from "reicon-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
@@ -2024,9 +2025,10 @@ function HomeRecentBanner({
               </span>
             </small>
             <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
-              <Trophy
+              <Cup
                 className="home-recent-banner__meta-icon"
                 size={28}
+                weight="Filled"
                 strokeWidth={2.0}
                 aria-hidden="true"
               />

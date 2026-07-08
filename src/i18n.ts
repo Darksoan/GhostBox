@@ -124,6 +124,12 @@ const translations: Record<Language, TranslationTree> = {
       favorites: "Favoritos",
       library: "Biblioteca",
       editProfile: "Editar perfil",
+      showSteamId: "Mostrar Steam ID",
+      hideSteamId: "Ocultar Steam ID",
+      copySteamId: "Copiar Steam ID",
+      steamIdCopied: "Steam ID copiado",
+      showDiscordId: "Mostrar Discord ID",
+      hideDiscordId: "Ocultar Discord ID",
     },
     achievements: {
       title: "Conquistas",
@@ -155,10 +161,6 @@ const translations: Record<Language, TranslationTree> = {
       actions: {
         subscribe: "Assinar",
       },
-      checkoutPending: {
-        title: "Checkout em breve",
-        message: "A conta Steam e o Discord já estão vinculados. O checkout Premium entra na próxima fase.",
-      },
       discordLink: {
         title: "Vincular Steam ao Discord",
         description: "Conecte o Discord à conta Steam usada no GhostBox para receber Premium no servidor futuramente.",
@@ -171,9 +173,9 @@ const translations: Record<Language, TranslationTree> = {
         openedMessage: "Conclua a autorização no navegador para ligar sua Steam ao Discord.",
       },
       checkout: {
-        title: "Checkout seguro via Stripe",
+        title: "Checkout seguro via SumUp",
         label: "Checkout seguro via",
-        provider: "Stripe",
+        provider: "SumUp",
       },
       paymentMethods: {
         visa: "Visa",
@@ -195,15 +197,15 @@ const translations: Record<Language, TranslationTree> = {
       details: {
         payments: {
           title: "Pagamentos",
-          card: "Pagamentos e reembolsos aprovados são processados pela Stripe.",
-          methods: "Métodos, impostos e detalhes de cobrança são exibidos no Stripe Checkout antes da confirmação.",
+          card: "Pagamentos e reembolsos aprovados são processados pela SumUp.",
+          methods: "Métodos, impostos e detalhes de cobrança são exibidos no checkout SumUp antes da confirmação.",
           security: "O GhostBox não armazena número completo de cartão nem credenciais de pagamento.",
         },
         billing: {
           title: "Cobrança e acesso",
-          renewal: "A assinatura é recorrente e os termos finais aparecem no Stripe Checkout antes do pagamento.",
+          renewal: "A assinatura é recorrente e os termos finais aparecem no checkout SumUp antes do pagamento.",
           activation: "O Premium é liberado para a conta Steam usada no app após a confirmação do pagamento.",
-          receipt: "Comprovantes, status da assinatura e revisões de reembolso ficam vinculados ao pagamento na Stripe.",
+          receipt: "Comprovantes, status da assinatura e revisões de reembolso ficam vinculados ao pagamento na SumUp.",
         },
         refunds: {
           title: "Reembolso",
@@ -570,6 +572,12 @@ const translations: Record<Language, TranslationTree> = {
       favorites: "Favorites",
       library: "Library",
       editProfile: "Edit profile",
+      showSteamId: "Show Steam ID",
+      hideSteamId: "Hide Steam ID",
+      copySteamId: "Copy Steam ID",
+      steamIdCopied: "Steam ID copied",
+      showDiscordId: "Show Discord ID",
+      hideDiscordId: "Hide Discord ID",
     },
     achievements: {
       title: "Achievements",
@@ -601,10 +609,6 @@ const translations: Record<Language, TranslationTree> = {
       actions: {
         subscribe: "Subscribe",
       },
-      checkoutPending: {
-        title: "Checkout soon",
-        message: "Steam and Discord are linked. Premium checkout comes in the next phase.",
-      },
       discordLink: {
         title: "Link Steam to Discord",
         description: "Connect Discord to the Steam account used in GhostBox so Premium can be granted in the server later.",
@@ -617,9 +621,9 @@ const translations: Record<Language, TranslationTree> = {
         openedMessage: "Finish the browser authorization to link Steam with Discord.",
       },
       checkout: {
-        title: "Secure checkout via Stripe",
+        title: "Secure checkout via SumUp",
         label: "Secure checkout via",
-        provider: "Stripe",
+        provider: "SumUp",
       },
       paymentMethods: {
         visa: "Visa",
@@ -641,15 +645,15 @@ const translations: Record<Language, TranslationTree> = {
       details: {
         payments: {
           title: "Payments",
-          card: "Payments and approved refunds are processed by Stripe.",
-          methods: "Payment methods, taxes, and billing details are shown in Stripe Checkout before confirmation.",
+          card: "Payments and approved refunds are processed by SumUp.",
+          methods: "Payment methods, taxes, and billing details are shown in SumUp checkout before confirmation.",
           security: "GhostBox does not store full card numbers or payment credentials.",
         },
         billing: {
           title: "Billing and access",
-          renewal: "The subscription is recurring and final terms appear in Stripe Checkout before payment.",
+          renewal: "The subscription is recurring and final terms appear in SumUp checkout before payment.",
           activation: "Premium is unlocked for the Steam account used in the app after payment confirmation.",
-          receipt: "Receipts, subscription status, and refund reviews are linked to the Stripe payment.",
+          receipt: "Receipts, subscription status, and refund reviews are linked to the SumUp payment.",
         },
         refunds: {
           title: "Refunds",

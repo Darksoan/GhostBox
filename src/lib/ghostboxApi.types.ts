@@ -287,6 +287,29 @@ export type SubscriptionStatusResult = {
   discordLink?: DiscordLinkStatus;
 };
 
+export type SubscriptionPlanId = "monthly" | "quarterly";
+
+export type SubscriptionPayment = {
+  id: string;
+  checkoutReference: string;
+  checkoutId: string | null;
+  steamId: string;
+  planId: SubscriptionPlanId;
+  amountCents: number;
+  currency: string;
+  status: string;
+  hostedCheckoutUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt: string | null;
+  pixCode: string | null;
+  pixQrCodeUrl: string | null;
+};
+
+export type SubscriptionCheckoutResult = {
+  payment: SubscriptionPayment | null;
+};
+
 export type CloudSessionResult = {
   token: string;
   user: {

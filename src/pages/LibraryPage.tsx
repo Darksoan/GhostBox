@@ -309,7 +309,6 @@ export function LibraryPage({
           dense
           portrait
           showAchievements
-          showAchievementSummary
           showBackupStatus
           hasBackupByAppId={gamesWithBackup}
           activeSessionAppIds={activeSessionAppIds}
