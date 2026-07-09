@@ -13,7 +13,20 @@ const BACKUP_SETTINGS_CHANGED_EVENT: &str = "backup-settings-changed";
 const GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE: &str = "ghostbox-achievements.json";
 const LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE: &str = "eden-achievements.json";
 const LEGACY_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
+const GHOSTBOX_PLAYTIME_BACKUP_FILE: &str = "ghostbox-playtime.json";
 const BACKUP_ENTRY_RETENTION_LIMIT: usize = 3;
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ProfileProgressSnapshot {
+    pub has_achievements: bool,
+    pub has_playtime: bool,
+}
+
+impl ProfileProgressSnapshot {
+    pub fn has_any(&self) -> bool {
+        self.has_achievements || self.has_playtime
+    }
+}
 
 mod achievement_monitor;
 mod backup;
@@ -1346,6 +1359,176 @@ pub(crate) fn save_failed_backup_record(
     )
 }
 
+/// Export full profile progress for a game into a backup directory:
+/// Steam achievement stats files, GhostBox achievements JSON, and playtime.
+pub(crate) fn export_game_profile_progress(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    title: &str,
+    backup_path: &std::path::Path,
+) -> ProfileProgressSnapshot {
+    let mut snapshot = ProfileProgressSnapshot::default();
+    if app_id.is_empty() {
+        return snapshot;
+    }
+    let _ = std::fs::create_dir_all(backup_path);
+
+    let steam_path = resolve_steam_path(app, None).0;
+    if let Some(ref steam_path) = steam_path {
+        steam_appcache::backup_steam_achievement_files(steam_path, app_id, backup_path);
+        let achievements_dir = backup_path.join(steam_appcache::STEAM_ACHIEVEMENTS_BACKUP_FOLDER);
+        if achievements_dir.is_dir() && directory_has_content(&achievements_dir) {
+            snapshot.has_achievements = true;
+        }
+    }
+
+    let achievements_file = read_ghostbox_achievements_backup_file(app, app_id, title, None)
+        .or_else(|| {
+            steam_path.as_ref().and_then(|steam_path| {
+                steam_appcache::read_steam_local_achievement_backup_file(steam_path, app_id, title)
+            })
+        })
+        .or_else(|| {
+            // Prefer achievements already stored inside this backup folder (re-export).
+            read_ghostbox_achievements_backup_file(
+                app,
+                app_id,
+                title,
+                Some(backup_path.to_string_lossy().as_ref()),
+            )
+        });
+
+    if let Some(file) = achievements_file {
+        if write_ghostbox_achievements_backup_file(
+            app,
+            &file,
+            Some(backup_path.to_string_lossy().as_ref()),
+        )
+        .is_ok()
+        {
+            snapshot.has_achievements = true;
+            // Keep the canonical per-game achievements file in the backup root in sync.
+            let _ = write_ghostbox_achievements_backup_file(app, &file, None);
+        }
+    }
+
+    if let Some(playtime_entry) = playtime::load_game_playtimes(app).get(app_id).cloned() {
+        let play_time = playtime_entry
+            .get("playTimeInMilliseconds")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let payload = serde_json::json!({
+            "version": 1,
+            "appId": app_id,
+            "title": title,
+            "updatedAt": current_timestamp_string(),
+            "playTimeInMilliseconds": play_time,
+            "lastTimePlayed": playtime_entry.get("lastTimePlayed").cloned(),
+            "lastSessionRecordedAt": playtime_entry.get("lastSessionRecordedAt").cloned(),
+            "lastSessionDurationInMilliseconds": playtime_entry
+                .get("lastSessionDurationInMilliseconds")
+                .cloned(),
+        });
+        let playtime_path = backup_path.join(GHOSTBOX_PLAYTIME_BACKUP_FILE);
+        if let Ok(contents) = serde_json::to_string_pretty(&payload) {
+            if std::fs::write(&playtime_path, contents).is_ok() {
+                snapshot.has_playtime = play_time > 0
+                    || playtime_entry.get("lastTimePlayed").is_some()
+                    || playtime_entry.get("lastSessionRecordedAt").is_some();
+            }
+        }
+    }
+
+    snapshot
+}
+
+/// Restore full profile progress from a backup directory into this PC.
+pub(crate) fn import_game_profile_progress(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    title: &str,
+    backup_path: &std::path::Path,
+) -> ProfileProgressSnapshot {
+    let mut snapshot = ProfileProgressSnapshot::default();
+    if app_id.is_empty() || !backup_path.exists() {
+        return snapshot;
+    }
+
+    if let Some(steam_path) = resolve_steam_path(app, None).0 {
+        steam_appcache::restore_steam_achievement_files(&steam_path, app_id, backup_path);
+        let restored_dir = [
+            steam_appcache::STEAM_ACHIEVEMENTS_BACKUP_FOLDER,
+            "eden-steam-achievements",
+            "piratebox-steam-achievements",
+        ]
+        .into_iter()
+        .map(|folder| backup_path.join(folder))
+        .find(|path| path.is_dir());
+        if restored_dir.is_some() {
+            snapshot.has_achievements = true;
+        }
+    }
+
+    if let Some(file) =
+        read_ghostbox_achievements_backup_file(app, app_id, title, Some(backup_path.to_string_lossy().as_ref()))
+    {
+        if write_ghostbox_achievements_backup_file(app, &file, None).is_ok() {
+            snapshot.has_achievements = true;
+        }
+    }
+
+    let playtime_path = backup_path.join(GHOSTBOX_PLAYTIME_BACKUP_FILE);
+    if playtime_path.is_file() {
+        if let Ok(contents) = std::fs::read_to_string(&playtime_path) {
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&contents) {
+                if playtime::apply_playtime_from_backup(app, app_id, &payload).is_ok() {
+                    snapshot.has_playtime = true;
+                }
+            }
+        }
+    }
+
+    snapshot
+}
+
+/// Updates backup status after a successful cloud upload without requiring a local folder entry.
+pub(crate) fn save_cloud_backup_success_record(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    title: &str,
+    size_bytes: u64,
+) -> Result<serde_json::Value, String> {
+    let settings = load_backup_settings(app);
+    let current_record = settings
+        .get("backupRecords")
+        .and_then(|records| records.get(app_id));
+    let entries = get_backup_record_entries(current_record);
+    let last_path = current_record
+        .and_then(|record| record.get("lastBackupPath"))
+        .cloned()
+        .or_else(|| {
+            entries
+                .first()
+                .and_then(|entry| entry.get("path"))
+                .cloned()
+        })
+        .unwrap_or_else(|| serde_json::json!(""));
+
+    save_backup_record(
+        app,
+        app_id,
+        serde_json::json!({
+            "title": title,
+            "lastBackupAt": current_timestamp_string(),
+            "lastBackupSuccess": true,
+            "lastBackupPath": last_path,
+            "lastBackupSizeBytes": size_bytes,
+            "lastCloudBackupAt": current_timestamp_string(),
+            "entries": entries
+        }),
+    )
+}
+
 fn launch_custom_executable(
     app: &tauri::AppHandle,
     game: serde_json::Value,
@@ -1766,6 +1949,9 @@ pub fn run() {
             settings::app_get_morrenus_stats,
             steam::steam_get_profile,
             steam::steam_get_account_stats,
+            steam::steam_sync_playtimes,
+            steam::steam_get_player_level,
+            steam::steam_is_running,
             steam::steam_get_wishlist,
             steam::steam_get_recommended_tags_for_user,
             steam::steam_get_similar_app_ids,

@@ -61,10 +61,14 @@ export function mergeGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
     screenshots: preferArray(details.screenshots, game.screenshots),
     achievements: richerAchievementGame.achievements,
     achievementList: richerAchievementGame.achievementList,
+    // Prefer the higher Steam/synced total already on the game; do not adopt
+    // catalogue/details playtime (not personal Steam playtime_forever).
     playTimeInMilliseconds:
-      detailsPlaytime > gamePlaytime
-        ? details.playTimeInMilliseconds
-        : game.playTimeInMilliseconds ?? details.playTimeInMilliseconds,
+      gamePlaytime > 0
+        ? game.playTimeInMilliseconds
+        : detailsPlaytime > 0
+          ? details.playTimeInMilliseconds
+          : game.playTimeInMilliseconds ?? details.playTimeInMilliseconds,
     hours: Math.max(game.hours, details.hours),
     lastTimePlayed: game.lastTimePlayed ?? details.lastTimePlayed,
   };

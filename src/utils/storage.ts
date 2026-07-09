@@ -6,6 +6,7 @@ import type {
 } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { StartupPage, UserCollection, SteamProfile } from "../types";
+import { parseLastPlayed } from "./time";
 import {
   favoriteGamesStorageKey,
   userCollectionsStorageKey,
@@ -19,6 +20,7 @@ import {
   steamWishlistReviewCacheStorageKey,
   recentLibrarySessionLimit,
   librarySortStorageKey,
+  notificationsLastSeenStorageKey,
 } from "../constants/catalogue";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
@@ -62,7 +64,7 @@ function storedNumber(value: unknown, fallback = 0) {
 
 function hasCompletedPlaySession(game: GhostBoxGame) {
   return (
-    Number.isFinite(Date.parse(game.lastTimePlayed ?? "")) &&
+    Number.isFinite(parseLastPlayed(game.lastTimePlayed)) &&
     !/^Steam App \d+$/i.test(game.title.trim())
   );
 }
@@ -444,9 +446,20 @@ export function writeStoredProfileHistoryGames(games: GhostBoxGame[]) {
   if (typeof window === "undefined") return;
 
   try {
+    // Never persist playtime locally — Steam sync is the only source of truth.
+    const sanitized = games.slice(0, recentLibrarySessionLimit).map((game) => {
+      const {
+        playTimeInMilliseconds: _playTimeInMilliseconds,
+        lastSessionRecordedAt: _lastSessionRecordedAt,
+        lastSessionDurationInMilliseconds: _lastSessionDurationInMilliseconds,
+        sessionActive: _sessionActive,
+        ...rest
+      } = game;
+      return rest;
+    });
     window.localStorage.setItem(
       profileHistoryGamesStorageKey,
-      JSON.stringify(games.slice(0, recentLibrarySessionLimit))
+      JSON.stringify(sanitized)
     );
   } catch {
     // Profile history still works during the session if localStorage is unavailable.
@@ -703,5 +716,33 @@ export function writeStoredLibrarySortBy(sortBy: LibrarySortBy) {
     window.localStorage.setItem(librarySortStorageKey, sortBy);
   } catch {
     // The setting still works during the session if localStorage is unavailable.
+  }
+}
+
+/** Timestamp of last visit to the notifications page. First call seeds "now" (no badge spam). */
+export function readNotificationsLastSeenAt(): number {
+  if (typeof window === "undefined") return Date.now();
+
+  try {
+    const raw = window.localStorage.getItem(notificationsLastSeenStorageKey);
+    if (raw == null) {
+      const now = Date.now();
+      window.localStorage.setItem(notificationsLastSeenStorageKey, String(now));
+      return now;
+    }
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+export function writeNotificationsLastSeenAt(timestamp = Date.now()) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(notificationsLastSeenStorageKey, String(timestamp));
+  } catch {
+    // Session-only if localStorage is unavailable.
   }
 }

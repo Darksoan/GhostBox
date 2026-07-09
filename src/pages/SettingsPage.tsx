@@ -397,19 +397,21 @@ export function SettingsPage({
     <section className="settings-page settings-page--tabs" aria-label={t("nav.settings")}>
       <article className={`settings-panel${activeTab.id === "subscription" ? " settings-panel--bare" : ""}`}>
         <div key={activeTab.id} className="settings-panel__body">
-          <div className="settings-options">
-            {options.map((option, index) => (
-              <SettingRow
-                key={`${activeTab.id}-${option.label}`}
-                option={option}
-                enterDelay={`${0.04 + index * 0.035}s`}
-              />
-            ))}
-          </div>
+          {options.length > 0 && (
+            <div className="settings-options">
+              {options.map((option, index) => (
+                <SettingRow
+                  key={`${activeTab.id}-${option.label}`}
+                  option={option}
+                  enterDelay={`${0.04 + index * 0.035}s`}
+                />
+              ))}
+            </div>
+          )}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans
               surface="settings"
-              enterDelay={`${0.04 + options.length * 0.035}s`}
+              enterDelay="0.04s"
               cloudBackupGames={cloudBackupGames}
               steamProfile={steamProfile}
             />

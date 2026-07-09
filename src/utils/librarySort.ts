@@ -1,8 +1,9 @@
 import type { GhostBoxGame } from "../data";
 import type { LibrarySortBy } from "../utils/storage";
+import { parseLastPlayed } from "./time";
 
 function getLibraryLastPlayedTime(game: GhostBoxGame) {
-  const lastPlayedTime = Date.parse(game.lastTimePlayed ?? "");
+  const lastPlayedTime = parseLastPlayed(game.lastTimePlayed);
   return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
 }
 

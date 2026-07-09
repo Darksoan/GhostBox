@@ -46,6 +46,12 @@ type RecentAchievement = {
   unlockedAt: number;
 };
 
+type OwnedPlaytime = {
+  appId: string;
+  playtimeForever: number;
+  rtimeLastPlayed: number;
+};
+
 type AccountStats = {
   steamId: string;
   gamesCount: number;
@@ -62,6 +68,7 @@ type AccountStats = {
   hasApiKey: boolean;
   scanInProgress: boolean;
   recentAchievements: RecentAchievement[];
+  ownedPlaytimes: OwnedPlaytime[];
 };
 
 const accountCacheTtlSeconds = 6 * 60 * 60;
@@ -330,6 +337,11 @@ function buildStats(cache: StatsCache, privateProfile: boolean): AccountStats {
     .flatMap(([, entry]) => entry.recentAchievements ?? [])
     .sort((left, right) => right.unlockedAt - left.unlockedAt)
     .slice(0, 32);
+  const ownedPlaytimes = cache.ownedGames.map((game) => ({
+    appId: String(game.appid),
+    playtimeForever: game.playtime_forever,
+    rtimeLastPlayed: game.rtime_last_played ?? 0,
+  }));
 
   return {
     steamId: cache.steamId,
@@ -362,6 +374,7 @@ function buildStats(cache: StatsCache, privateProfile: boolean): AccountStats {
     hasApiKey: true,
     scanInProgress: cache.scanInProgress,
     recentAchievements,
+    ownedPlaytimes,
   };
 }
 
@@ -452,6 +465,109 @@ async function handleAccountStats(request: Request, env: Env, context: Execution
   return jsonResponse(buildStats(cache, privateProfile), env);
 }
 
+async function handlePlayerLevel(request: Request, env: Env) {
+  if (await rateLimitExceeded(request, env)) {
+    return jsonResponse({ error: "Rate limit exceeded" }, env, 429);
+  }
+
+  const url = new URL(request.url);
+  const steamId = url.searchParams.get("steamId");
+  if (!validSteamId(steamId)) {
+    return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  }
+  if (!env.STEAM_WEB_API_KEY) {
+    return jsonResponse({ error: "Steam Web API key is not configured" }, env, 500);
+  }
+
+  const cacheKey = `steam-level:v1:${steamId}`;
+  const cached = await env.STATS_CACHE.get<{ playerLevel: number; fetchedAt: number }>(
+    cacheKey,
+    "json"
+  );
+  const now = nowSeconds();
+  if (cached && now - cached.fetchedAt < 6 * 60 * 60) {
+    return jsonResponse({ steamId, playerLevel: cached.playerLevel }, env);
+  }
+
+  try {
+    const data = await steamJson<{ response?: { player_level?: number } }>(
+      "IPlayerService/GetSteamLevel/v1/",
+      { key: env.STEAM_WEB_API_KEY, steamid: steamId }
+    );
+    const playerLevel = Number(data?.response?.player_level ?? 0);
+    if (!Number.isFinite(playerLevel) || playerLevel < 0) {
+      return jsonResponse({ error: "Invalid player level" }, env, 502);
+    }
+    await env.STATS_CACHE.put(
+      cacheKey,
+      JSON.stringify({ playerLevel, fetchedAt: now }),
+      { expirationTtl: 24 * 60 * 60 }
+    );
+    return jsonResponse({ steamId, playerLevel }, env);
+  } catch {
+    return jsonResponse({ error: "Failed to fetch Steam level" }, env, 502);
+  }
+}
+
+async function handleOwnedGames(request: Request, env: Env) {
+  if (await rateLimitExceeded(request, env)) {
+    return jsonResponse({ error: "Rate limit exceeded" }, env, 429);
+  }
+
+  const url = new URL(request.url);
+  const steamId = url.searchParams.get("steamId");
+  if (!validSteamId(steamId)) {
+    return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  }
+  if (!env.STEAM_WEB_API_KEY) {
+    return jsonResponse({ error: "Steam Web API key is not configured" }, env, 500);
+  }
+
+  const cached = await env.STATS_CACHE.get<StatsCache>(statsCacheKey(steamId), "json");
+  const now = nowSeconds();
+  if (cached?.ownedGames?.length && now - cached.fetchedAt < 10 * 60) {
+    return jsonResponse(
+      {
+        steamId,
+        games: cached.ownedGames.map((game) => ({
+          appId: String(game.appid),
+          name: game.name ?? "",
+          playtimeForever: game.playtime_forever,
+          rtimeLastPlayed: game.rtime_last_played ?? 0,
+        })),
+      },
+      env
+    );
+  }
+
+  try {
+    const ownedGames = await fetchOwnedGames(steamId, env.STEAM_WEB_API_KEY);
+    const nextCache: StatsCache = {
+      steamId,
+      communitySummary: cached?.communitySummary,
+      ownedGames,
+      games: cached?.games ?? {},
+      fetchedAt: now,
+      scanInProgress: cached?.scanInProgress ?? false,
+    };
+    await saveCache(env, nextCache);
+    return jsonResponse(
+      {
+        steamId,
+        games: ownedGames.map((game) => ({
+          appId: String(game.appid),
+          name: game.name ?? "",
+          playtimeForever: game.playtime_forever,
+          rtimeLastPlayed: game.rtime_last_played ?? 0,
+        })),
+      },
+      env
+    );
+  } catch {
+    return jsonResponse({ error: "Failed to fetch owned games" }, env, 502);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, context: ExecutionContext) {
     if (request.method === "OPTIONS") return jsonResponse({}, env);
@@ -460,6 +576,12 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/steam/account-stats") {
       return handleAccountStats(request, env, context);
+    }
+    if (url.pathname === "/steam/owned-games") {
+      return handleOwnedGames(request, env);
+    }
+    if (url.pathname === "/steam/player-level") {
+      return handlePlayerLevel(request, env);
     }
 
     return jsonResponse({ error: "Not found" }, env, 404);

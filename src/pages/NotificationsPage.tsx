@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadGames, type GhostBoxGame } from "../data";
 import { useSettings } from "../context/settings";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import { writeNotificationsLastSeenAt } from "../utils/storage";
 
 const recentlyAddedLimit = 200;
 
@@ -90,6 +91,11 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
   useEffect(() => {
     return loadRecentGames();
   }, [loadRecentGames]);
+
+  useEffect(() => {
+    // Visiting the page clears the titlebar badge.
+    writeNotificationsLastSeenAt(Date.now());
+  }, []);
 
   useEffect(() => {
     return ghostboxApi.onCatalogueCacheUpdated(() => {

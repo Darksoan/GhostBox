@@ -196,7 +196,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
         />
         <span
           className="catalogue-filter-section__orb"
-          style={{ backgroundColor: filterCategoryColors[filterKey] }}
+          style={{ ["--filter-orb-color" as string]: filterCategoryColors[filterKey] }}
         />
         <strong>{title}</strong>
         <span>{selectedValues.length || values.length}</span>

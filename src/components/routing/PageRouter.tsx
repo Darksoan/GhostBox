@@ -296,6 +296,7 @@ export function PageRouter({
           onToggleFavorite={appData.toggleFavoriteGame}
           onAddGameToCollection={appData.addGameToUserCollection}
           onOpenGameAchievements={(game) => openAchievements(game)}
+          onSignOut={() => void appData.handleSteamSignOut()}
         />
       );
     }
@@ -378,8 +379,22 @@ export function PageRouter({
               )
               .then((result) => {
                 if (result.error) {
-                  showToast("Falha ao excluir backup", result.error);
+                  showToast(
+                    appearance.language === "en" ? "Failed to delete backup" : "Falha ao excluir backup",
+                    result.error
+                  );
+                  return;
                 }
+                if (result.settings) {
+                  appData.setBackupSettings(result.settings);
+                }
+                showToast(
+                  appearance.language === "en" ? "Backup deleted" : "Backup excluído",
+                  appearance.language === "en"
+                    ? `${pendingBackupDeletion.title} backup folder was removed.`
+                    : `A pasta de backup de ${pendingBackupDeletion.title} foi removida.`,
+                  "success"
+                );
               });
           }
           setPendingBackupDeletion(null);

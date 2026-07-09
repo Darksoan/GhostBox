@@ -1,4 +1,5 @@
 .profile-page {
+  /* Match edit-profile-cover-modal glass exactly */
   --profile-glass-blur: 4px;
   --profile-glass-background: var(--overlay-medium);
   --profile-cover-height: 280px;
@@ -7,7 +8,7 @@
   flex-direction: column;
   min-height: 100%;
   background: var(--background-dark);
-  color: var(--color-text);
+  color: var(--text-primary);
 
   &--empty {
     display: grid;
@@ -24,7 +25,7 @@
     min-height: 280px;
     border: 0;
     background: color-mix(in srgb, var(--surface-deep) 82%, transparent);
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     text-align: center;
   }
 
@@ -35,7 +36,9 @@
     position: relative;
     overflow: hidden;
     background: var(--background-dark);
-    contain: layout style paint;
+    /* layout+style only — paint containment breaks backdrop-filter glass on the bottom strip */
+    contain: layout style;
+    isolation: isolate;
 
     &--empty {
       background: var(--background-dark);
@@ -43,6 +46,21 @@
 
     &--placeholder {
       background: var(--profile-banner-placeholder-bg);
+    }
+
+    /* Frosted bottom strip — identical to .edit-profile-cover-modal__preview::after */
+    &::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 2;
+      height: 40px;
+      background: var(--profile-glass-background);
+      backdrop-filter: blur(var(--profile-glass-blur));
+      -webkit-backdrop-filter: blur(var(--profile-glass-blur));
+      pointer-events: none;
     }
   }
 
@@ -111,69 +129,87 @@
     min-height: 280px;
     padding: 24px 24px 12px;
     box-sizing: border-box;
+    /* Soft fade only — frosted glass strip is solely on __tabs (matches cover modal) */
     background: linear-gradient(
       to bottom,
       transparent 0%,
-      transparent 38%,
-      color-mix(in srgb, var(--profile-glass-background) 55%, transparent) 68%,
-      var(--profile-glass-background) 100%
+      transparent 42%,
+      color-mix(in srgb, var(--profile-glass-background) 35%, transparent) 78%,
+      color-mix(in srgb, var(--profile-glass-background) 55%, transparent) 100%
     );
-    backdrop-filter: blur(var(--profile-glass-blur));
-    -webkit-backdrop-filter: blur(var(--profile-glass-blur));
     justify-content: flex-end;
   }
 
-  &__banner-edit-button {
-    position: absolute;
-    top: 16px;
-    right: 24px;
+  /*
+   * Hero icon actions (edit profile + change cover).
+   * Cover hover → show steam/discord-style boxes instantly (no opacity fade on blur).
+   * Icon hover → lighten icon only (secondary → primary).
+   */
+  &__hero-action {
+    appearance: none;
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    width: 34px;
-    height: 34px;
-    min-height: 34px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    margin: 0;
     padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
+    /* Glass ready immediately — same as steam-id / discord boxes */
     background: var(--overlay-subtle);
-    color: var(--color-subtext);
-    backdrop-filter: blur(var(--profile-glass-blur));
-    -webkit-backdrop-filter: blur(var(--profile-glass-blur));
-    font-size: 14px;
-    font-weight: var(--weight-medium);
-    line-height: 1;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: none;
+    color: var(--text-secondary);
     cursor: pointer;
-    z-index: 10;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
-    transform: translateY(-4px);
-    transition:
-      opacity var(--motion-fast) ease,
-      color var(--motion-base) ease,
-      transform var(--motion-fast) ease;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Color only — never fade blur/backdrop (causes lag) */
+    transition: color var(--motion-fast) var(--ease);
 
     svg {
+      display: block;
       flex: 0 0 auto;
+      shape-rendering: geometricPrecision;
     }
 
-    &:hover {
-      color: var(--color-text);
-    }
-
+    /* Icon only lightens on the action itself */
+    &:hover,
     &:focus-visible {
-      color: var(--color-text);
-      outline: 0;
+      color: var(--text-primary);
+      outline: none;
+      box-shadow: none;
+      border: 0;
     }
 
+    &:focus,
+    &:active {
+      outline: none;
+      box-shadow: none;
+      border: 0;
+    }
+
+    &--banner {
+      position: absolute;
+      top: 16px;
+      right: 24px;
+      z-index: 10;
+      flex: none;
+    }
   }
 
-  &__content-box:hover &__banner-edit-button,
-  &__content-box:focus-within &__banner-edit-button,
-  &__content-box:hover &__edit-button,
-  &__content-box:focus-within &__edit-button {
+  /* Cover hover: show boxes instantly (no transition delay) */
+  &__content-box:hover &__hero-action,
+  &__content-box:focus-within &__hero-action {
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
   }
 
@@ -189,15 +225,15 @@
 
   &__avatar-button {
     display: grid;
-    width: 96px;
-    min-width: 96px;
-    height: 96px;
+    width: 120px;
+    min-width: 120px;
+    height: 120px;
     place-items: center;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-circle);
     background-color: var(--background);
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     cursor: pointer;
     transition:
       border-color var(--motion-base) var(--ease),
@@ -229,7 +265,7 @@
     gap: 8px;
     align-items: flex-start;
     min-width: 0;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     z-index: 1;
     overflow: visible;
   }
@@ -244,19 +280,24 @@
   &__display-name-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     max-width: 100%;
     min-height: 40px;
     padding: 4px 0;
     overflow: visible;
+
+    .profile-page__hero-action {
+      flex: 0 0 auto;
+      align-self: center;
+    }
   }
 
   &__display-name {
     position: relative;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
-    color: var(--color-text);
+    color: var(--text-primary);
     font-size: 28px;
     font-weight: var(--weight-medium);
     line-height: 34px;
@@ -264,6 +305,36 @@
     white-space: nowrap;
     margin: 0;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Steam level badge — same visual language as sidebar */
+  &__level {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    padding: 0;
+    border: 2px solid #c43c3c;
+    border-radius: var(--radius-circle);
+    background: transparent;
+    box-sizing: border-box;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    line-height: 1;
+    letter-spacing: 0;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  &__level-value {
+    display: block;
+    transform: translate(-0.6px, -1px);
   }
 
   &__steam-id-row {
@@ -275,18 +346,24 @@
 
   &__steam-id-icon {
     display: block;
-    width: 14px;
-    height: 14px;
-    fill: var(--color-subtext);
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+    object-fit: contain;
+    object-position: center;
+    /* Keep brand colors of steam-colored.svg — never monochrome-filter */
+    filter: none;
+    opacity: 1;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-select: none;
   }
 
   &__steam-id-box {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 4px 4px 10px;
+    gap: 6px;
+    padding: 4px 4px 4px 8px;
     min-height: 34px;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
@@ -296,12 +373,11 @@
   }
 
   &__steam-id {
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 13px;
-    font-weight: var(--weight-regular);
+    font-weight: var(--weight-medium);
     letter-spacing: 0.04em;
     user-select: none;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
     transition: opacity var(--motion-base) var(--ease);
   }
 
@@ -324,20 +400,20 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: color var(--motion-fast) ease;
 
     &:hover {
-      color: var(--color-text);
+      color: var(--text-primary);
     }
   }
 
   &__steam-id-copy--copied {
-    color: var(--success);
+    color: var(--text-primary);
 
     &:hover {
-      color: var(--success-hover);
+      color: var(--text-primary);
     }
   }
 
@@ -391,58 +467,20 @@
 
   &__discord-icon {
     display: block;
-    width: 14px;
-    height: 14px;
-    fill: var(--color-subtext);
+    width: 18px;
+    height: 18px;
+    fill: #5865f2;
     flex-shrink: 0;
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+    filter: none;
   }
 
   &__discord-id {
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 13px;
-    font-weight: var(--weight-regular);
+    font-weight: var(--weight-medium);
     letter-spacing: 0.04em;
     user-select: none;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
-
-  &__edit-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    min-height: 30px;
-    flex: 0 0 auto;
-    align-self: center;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--overlay-subtle);
-    color: var(--color-subtext);
-    cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      opacity var(--motion-fast) ease,
-      color var(--motion-base) ease;
-
-    svg {
-      display: block;
-      flex: 0 0 auto;
-      shape-rendering: geometricPrecision;
-    }
-
-    &:hover {
-      color: var(--color-text);
-    }
-
-    &:focus-visible {
-      color: var(--color-text);
-      outline: 0;
-    }
-
-}
 
   &__copy-button {
     display: flex;
@@ -455,7 +493,7 @@
     overflow: hidden;
     border-radius: var(--radius-md);
     background-color: rgba(0, 0, 0, 0.3);
-    color: var(--color-text);
+    color: var(--text-primary);
     cursor: pointer;
     transition: background-color ease 0.2s;
     white-space: nowrap;
@@ -482,7 +520,7 @@
     small {
       max-width: 520px;
       overflow: hidden;
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -493,7 +531,7 @@
     flex-direction: row;
     align-items: center;
     gap: 8px;
-    color: var(--color-text);
+    color: var(--text-primary);
   }
 
   &__hero-panel {
@@ -520,20 +558,20 @@
     align-items: center;
     gap: 10px;
     min-width: 150px;
-    color: var(--color-text);
+    color: var(--text-primary);
 
     strong {
       display: block;
       max-width: 180px;
       overflow: hidden;
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 14px;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     span {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
     }
   }
@@ -574,7 +612,7 @@
     grid-template-areas:
       "top top top top top top top top achievements achievements achievements achievements";
     align-items: start;
-    gap: 18px 44px;
+    gap: 16px 20px;
     width: min(100%, 1180px);
     margin: 0 auto;
   }
@@ -611,25 +649,46 @@
   &__top-games-console {
     grid-area: top;
     padding: 0;
+    min-width: 0;
   }
 
   &__overview-panel {
     position: relative;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--background-dark);
+    border-radius: var(--radius-md);
+    background: var(--surface-secondary);
   }
 
   &__overview-panel--showcase {
-    padding: 14px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 100%;
+    background: var(--background);
 
     .profile-page__overview-title-row {
-      min-height: 42px;
-      margin: -14px -14px 16px;
-      padding: 0 18px;
-      border-bottom: 1px solid var(--border-subtle);
-      background: var(--overlay-medium);
+      margin-bottom: 0;
+    }
+
+    .profile-page__achievement-showcase {
+      background: var(--background);
+    }
+  }
+
+  &__overview-panel--top-games {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Darker body than the default panel surface */
+    background: var(--background-dark);
+
+    .profile-page__overview-title-row {
+      margin-bottom: 0;
+    }
+
+    .profile-page__top-games-list {
+      background: var(--background-dark);
     }
   }
 
@@ -638,21 +697,25 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 16px;
-    min-height: 16px;
+    min-height: 40px;
+    margin-bottom: 0;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--overlay-medium);
 
     h3 {
       margin: 0;
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-semibold);
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
 
     span {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
+      font-weight: var(--weight-semibold);
     }
 
     &--showcase {
@@ -671,7 +734,7 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     cursor: pointer;
     transition:
       color var(--motion-base) ease;
@@ -679,47 +742,49 @@
     &:hover,
     &:focus-visible,
     &--active {
-      color: var(--color-text);
+      color: var(--text-primary);
       outline: 0;
     }
   }
 
   &__achievement-showcase {
     display: grid;
-    grid-template-columns: repeat(5, 42px);
-    justify-content: start;
-    gap: 9px;
-    margin: -4px 0 0;
-    padding: 4px 0 0;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 10px;
+    margin: 0;
+    padding: 14px 16px 16px;
     overflow: visible;
   }
 
   &__showcase-achievement {
     position: relative;
     display: grid;
-    width: 42px;
-    max-width: 42px;
+    width: 100%;
+    max-width: none;
     aspect-ratio: 1;
-    justify-self: center;
+    justify-self: stretch;
     place-items: center;
     overflow: hidden;
     box-sizing: border-box;
     padding: 0;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--color-subtext);
+    background: var(--surface-tertiary);
+    color: var(--text-secondary);
     box-shadow: none;
     transition:
       filter var(--motion-base) ease,
       opacity var(--motion-base) ease,
       transform var(--motion-base) ease,
-      box-shadow var(--motion-base) ease;
+      border-color var(--motion-base) ease,
+      background-color var(--motion-base) ease;
 
     &:hover,
     &:focus-visible {
-      filter: brightness(1.14);
-      transform: translateY(-3px);
+      filter: brightness(1.12);
+      transform: translateY(-2px);
+      border-color: var(--border-hover);
       outline: 0;
     }
 
@@ -750,8 +815,17 @@
   }
 
   &__showcase-achievement--empty {
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
+    background: color-mix(in srgb, var(--surface-tertiary) 88%, transparent);
+    pointer-events: none;
+
+    &:hover,
+    &:focus-visible {
+      filter: none;
+      transform: none;
+      border-color: var(--border-subtle);
+    }
   }
 
   &__showcase-achievement--locked {
@@ -770,7 +844,7 @@
     display: grid;
     place-items: center;
     background: var(--overlay-subtle);
-    color: var(--color-subtext);
+    color: var(--text-secondary);
   }
 
   &__showcase-modal {
@@ -830,7 +904,7 @@
 
   &__showcase-modal-empty {
     margin: 0;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 12px;
   }
 
@@ -873,7 +947,7 @@
     }
 
     strong {
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: clamp(30px, 5vw, 48px);
       font-weight: var(--weight-medium);
       line-height: 1;
@@ -881,7 +955,7 @@
     }
 
     span {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 14px;
       line-height: 1.25;
     }
@@ -896,18 +970,18 @@
   }
 
   &__recent-title-row {
-    min-height: 42px;
+    min-height: 40px;
     margin: 0;
-    padding: 0 18px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--border-subtle);
-    background: var(--overlay-subtle);
+    background: var(--overlay-medium);
   }
 
   &__top-games-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 0;
+    gap: 6px;
+    padding: 10px;
   }
 
   &__top-games-list--skeleton {
@@ -916,41 +990,44 @@
 
   &__top-game-console-row {
     display: grid;
-    grid-template-columns: 36px 70px minmax(0, 1fr);
+    grid-template-columns: 36px 58px minmax(0, 1fr);
     align-items: center;
     gap: 14px;
     width: 100%;
     min-width: 0;
-    min-height: 104px;
+    min-height: 96px;
     padding: 10px 12px;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text);
+    /* Darker than panel; hover lightens to #111111 */
+    background: var(--background-dark);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     transition:
       background-color var(--motion-base) ease,
-      box-shadow var(--motion-base) ease,
-      transform var(--motion-base) ease;
-    will-change: transform;
+      border-color var(--motion-base) ease;
 
+    &:hover,
     &:focus-visible {
       outline: 0;
+      border-color: transparent;
+      background: var(--surface-secondary); /* #111111 */
     }
   }
 
   &__top-game-console-row--skeleton {
     cursor: default;
-    background: transparent;
+    border-color: transparent;
+    background: var(--background-dark);
     opacity: 0.78;
-    transform: none;
 
     &.profile-page__top-game-console-row:hover,
     &.profile-page__top-game-console-row:focus-visible,
     &:hover,
     &:focus-visible {
-      background: transparent;
+      border-color: transparent;
+      background: var(--background-dark);
       box-shadow: none;
       transform: none;
     }
@@ -1006,7 +1083,7 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
-    color: var(--color-text);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     transition:
@@ -1027,10 +1104,10 @@
     height: 30px;
     place-items: center;
     border-radius: var(--radius-md);
-    background: var(--surface-hover);
-    color: var(--color-text);
+    background: var(--surface-primary);
+    color: var(--text-secondary);
     font-size: 13px;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-semibold);
   }
 
   &__top-game-rank.profile-page__skeleton-block {
@@ -1042,7 +1119,7 @@
     height: 82px;
     aspect-ratio: 2 / 3;
     min-height: 0;
-    border-radius: var(--radius-xs);
+    border-radius: var(--radius-sm);
     background-color: var(--surface-solid);
     background-size: var(--pb-background-size);
   }
@@ -1064,14 +1141,14 @@
 
     strong {
       min-width: 0;
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 14px;
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-semibold);
       line-height: 1.25;
     }
 
     > span:not(.profile-page__top-game-stats) {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
     }
   }
@@ -1122,10 +1199,10 @@
     align-items: center;
     gap: 4px;
     overflow: hidden;
-    color: var(--color-text);
-    font-size: 11px;
-    font-weight: var(--weight-medium);
-    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.06em;
     line-height: 1.1;
     text-overflow: ellipsis;
     text-transform: uppercase;
@@ -1134,8 +1211,9 @@
 
   &__top-game-stat-value {
     overflow: hidden;
-    color: var(--color-subtext);
+    color: var(--text-primary);
     font-size: 12px;
+    font-weight: var(--weight-semibold);
     line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1155,7 +1233,7 @@
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-medium);
     white-space: nowrap;
@@ -1206,7 +1284,7 @@
     padding: 0;
     border: 0;
     background: none;
-    color: var(--color-text);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     border-radius: 0;
@@ -1225,7 +1303,7 @@
     padding: 18px 10px 0 0;
     font-size: 12px;
     font-weight: var(--weight-medium);
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     text-align: right;
     white-space: nowrap;
     line-height: 1.3;
@@ -1308,13 +1386,13 @@
     }
 
     strong {
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 14px;
       font-weight: var(--weight-medium);
     }
 
     span {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
     }
   }
@@ -1325,7 +1403,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-medium);
     white-space: nowrap;
@@ -1340,7 +1418,7 @@
 
   &__achievement-timeline-item--first {
     .profile-page__achievement-timeline-date {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
     }
 
     .profile-page__achievement-timeline-dot {
@@ -1348,7 +1426,7 @@
     }
 
     .profile-page__achievement-timeline-percent {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       background: var(--surface);
     }
   }
@@ -1362,7 +1440,7 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.34);
-    color: var(--color-text);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     transition:
@@ -1407,14 +1485,14 @@
     }
 
     strong {
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 14px;
       font-weight: var(--weight-medium);
     }
 
     span,
     small {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
     }
   }
@@ -1430,7 +1508,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-medium);
   }
@@ -1473,7 +1551,7 @@
     justify-content: center;
     gap: 8px;
     min-height: 130px;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 14px;
   }
 
@@ -1495,23 +1573,19 @@
   &__tabs {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    gap: 16px;
+    justify-content: space-between;
+    gap: 12px;
     position: relative;
     z-index: 3;
-    isolation: isolate;
-    height: 44px;
+    height: 40px;
     padding: 0 24px;
-    margin: -44px 0 18px;
+    margin: -40px 0 18px;
     overflow: hidden;
-    border-top: 1px solid var(--border-subtle);
-    background: linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--profile-glass-background) 82%, transparent) 0%,
-      var(--profile-glass-background) 100%
-    );
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    border-top: 0;
+    /* Transparent — glass strip lives on content-box::after (same as cover modal actions over ::after) */
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   &__collection-tabs {
@@ -1519,7 +1593,8 @@
     align-items: center;
     height: 100%;
     gap: 8px;
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
     min-width: 0;
     position: relative;
     z-index: 1;
@@ -1529,6 +1604,32 @@
 
     &::-webkit-scrollbar {
       display: none;
+    }
+  }
+
+  &__sign-out {
+    display: inline-grid;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    place-items: center;
+    flex: 0 0 auto;
+    margin-left: auto;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--motion-fast) var(--ease);
+
+    &:hover,
+    &:focus-visible {
+      color: var(--text-primary);
+      outline: 0;
+    }
+
+    svg {
+      display: block;
     }
   }
 
@@ -1567,7 +1668,7 @@
     border: 0;
     border-radius: 0;
     background: transparent;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 14px;
     font-weight: var(--weight-medium);
@@ -1576,39 +1677,24 @@
     z-index: 2;
     transition: color var(--motion-base) ease;
 
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 7px 2px;
-      z-index: -1;
-      border-radius: var(--radius-sm);
-      background: var(--surface-hover);
-      opacity: 0;
-      transform: scale(0.92);
-      transition:
-        opacity var(--motion-base) var(--ease),
-        transform var(--motion-base) var(--ease);
-    }
-
     svg {
       flex: 0 0 auto;
       position: relative;
       top: -0.5px;
-      color: var(--text-soft);
-      transition: color var(--motion-base) var(--ease);
+      color: var(--text-secondary);
+      opacity: 0.6;
+      transition:
+        color var(--motion-base) var(--ease),
+        opacity var(--motion-base) var(--ease);
     }
 
     &:not(.profile-page__tab--active):hover,
     &:not(.profile-page__tab--active):focus-visible {
-      color: var(--color-text);
-
-      &::before {
-        opacity: 1;
-        transform: scale(1);
-      }
+      color: var(--text-primary);
 
       svg {
-        color: var(--text-strong);
+        color: var(--text-primary);
+        opacity: 1;
       }
     }
 
@@ -1617,11 +1703,12 @@
     }
 
     &--active {
-      color: var(--color-text);
+      color: var(--text-primary);
       font-weight: var(--weight-medium);
 
       svg {
-        color: var(--text-strong);
+        color: var(--text-primary);
+        opacity: 1;
       }
     }
 
@@ -1644,7 +1731,7 @@
   &__side-section {
     padding: 16px;
     border: solid 1px rgba(255, 255, 255, 0.08);
-    background-color: rgba(211, 211, 211, 0.03);
+    background-color: rgba(239, 243, 244, 0.03);
   }
 
   &__section-header {
@@ -1654,7 +1741,7 @@
     margin-bottom: 16px;
 
     h2 {
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 16px;
     }
   }
@@ -1670,8 +1757,8 @@
     min-width: 24px;
     padding: 4px 8px;
     border-radius: var(--radius-md);
-    background-color: rgba(211, 211, 211, 0.1);
-    color: var(--color-subtext);
+    background-color: rgba(239, 243, 244, 0.1);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-medium);
     text-align: center;
@@ -1690,7 +1777,7 @@
     }
 
     dt {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-size: 12px;
       font-weight: var(--weight-medium);
       letter-spacing: 0.04em;
@@ -1700,7 +1787,7 @@
     dd {
       margin: 0;
       overflow: hidden;
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 13px;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1719,7 +1806,7 @@
       width: 100%;
       padding: 8px;
       overflow: hidden;
-      color: var(--color-text);
+      color: var(--text-primary);
       cursor: pointer;
       text-align: left;
       text-overflow: ellipsis;
@@ -1727,7 +1814,7 @@
       transition: background-color ease 0.2s;
 
       &:hover {
-        background-color: rgba(211, 211, 211, 0.08);
+        background-color: rgba(239, 243, 244, 0.08);
       }
     }
   }
@@ -1769,7 +1856,7 @@
       min-width: 0;
       margin: 0;
       overflow: hidden;
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 15px;
       font-weight: var(--weight-semibold);
       letter-spacing: 0.02em;
@@ -1799,7 +1886,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     background: var(--background);
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-semibold);
     line-height: 1;
@@ -1812,7 +1899,7 @@
     &:hover,
     &:focus-visible {
       border-color: var(--border-hover);
-      color: var(--color-text);
+      color: var(--text-primary);
       outline: 0;
     }
   }
@@ -1823,7 +1910,7 @@
     min-width: 68px;
 
     strong {
-      color: var(--color-subtext);
+      color: var(--text-secondary);
       font-weight: var(--weight-semibold);
       flex: 0 0 auto;
     }
@@ -1853,7 +1940,7 @@
     place-items: center;
     border: 0;
     background: transparent;
-    color: var(--text-faint);
+    color: var(--text-tertiary);
     cursor: pointer;
     transition: color var(--motion-base) ease;
 
@@ -1863,7 +1950,7 @@
 
     &:hover,
     &:focus-visible {
-      color: var(--color-text);
+      color: var(--text-primary);
       outline: 0;
     }
 
@@ -1942,7 +2029,7 @@
     min-height: 50px;
     border-radius: var(--radius-sm);
     background: var(--surface-ui);
-    color: var(--color-text);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     transition: background-color var(--motion-base) ease;
@@ -2004,7 +2091,7 @@
       conic-gradient(var(--color-text) var(--achievement-progress), var(--surface-hover) 0);
 
     strong {
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 12px;
       font-weight: var(--weight-semibold);
       line-height: 1;
@@ -2016,13 +2103,13 @@
     align-items: center;
     justify-content: center;
     gap: 0;
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-semibold);
     line-height: 1.25;
 
     svg {
-      color: var(--text-soft);
+      color: var(--text-secondary);
     }
   }
 
@@ -2035,7 +2122,7 @@
     strong {
       display: -webkit-box;
       overflow: hidden;
-      color: var(--color-text);
+      color: var(--text-primary);
       font-size: 12px;
       font-weight: var(--weight-semibold);
       line-height: 1.25;
@@ -2048,7 +2135,7 @@
     display: -webkit-box;
     min-height: 0;
     overflow: hidden;
-    color: var(--text-soft);
+    color: var(--text-secondary);
     font-size: 11px;
     font-weight: var(--weight-semibold);
     line-height: 1.25;
@@ -2058,7 +2145,7 @@
 
   &__achievement-card-date {
     overflow: hidden;
-    color: var(--text-soft);
+    color: var(--text-secondary);
     font-size: 10px;
     font-weight: var(--weight-medium);
     text-overflow: ellipsis;
@@ -2079,7 +2166,7 @@
     justify-content: center;
     flex-direction: column;
     gap: 8px;
-    color: var(--color-text);
+    color: var(--text-primary);
   }
 
   &__no-games-icon {
@@ -2090,11 +2177,11 @@
     justify-content: center;
     margin-bottom: 16px;
     border-radius: var(--radius-circle);
-    background-color: rgba(211, 211, 211, 0.06);
+    background-color: rgba(239, 243, 244, 0.06);
   }
 
   &__empty-text {
-    color: var(--color-subtext);
+    color: var(--text-secondary);
     font-size: 14px;
   }
 
@@ -2246,7 +2333,8 @@
     }
 
     &__achievement-showcase {
-      justify-content: start;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      justify-content: stretch;
     }
 
     &__top-game-stats {
@@ -2273,12 +2361,13 @@
   }
 
   &__top-game-console-row {
-    background: transparent;
+    background: var(--background-dark);
   }
 
   &__top-game-console-row:hover,
   &__top-game-console-row:focus-visible {
-    background: color-mix(in srgb, var(--surface-hover) 58%, transparent);
+    background: var(--surface-secondary); /* #111111 */
+    border-color: transparent;
   }
 
   &__recent-game:hover,
@@ -2302,19 +2391,22 @@
   &__recent-main small,
   &__overview-empty,
   &__achievement-timeline-percent {
-    color: var(--color-subtext);
+    color: var(--text-secondary);
   }
 
-  &__top-game-stat-value,
   &__top-game-achievement-summary,
   &__recent-achievement-summary,
   &__achievement-timeline-content span {
-    color: var(--color-subtext);
+    color: var(--text-secondary);
+  }
+
+  &__top-game-stat-value {
+    color: var(--text-primary);
   }
 
   &__recent-progress,
   &__progress-track {
-    background: var(--surface-strong);
+    background: var(--surface-primary);
   }
 
   &__recent-progress span,
@@ -2328,7 +2420,7 @@
   }
 
   &__details-list dt {
-    color: var(--color-subtext);
+    color: var(--text-secondary);
   }
 }
 
@@ -2339,13 +2431,14 @@
     }
 
     &__achievement-showcase {
-      grid-template-columns: repeat(auto-fill, minmax(46px, 46px));
-      gap: 10px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
     }
 
     &__showcase-achievement {
-      width: 46px;
-      max-width: 46px;
+      width: 100%;
+      max-width: none;
     }
 
     &__recent-game {

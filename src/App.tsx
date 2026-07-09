@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
@@ -20,6 +20,10 @@ import type { SettingsTabId } from "./features/settings/settingsTabsShared";
 import "./app.scss";
 
 function AppSplash({ progress }: { progress: number }) {
+  const spinnerStyle = {
+    ["--app-splash-progress"]: `${progress}%`,
+  } as CSSProperties;
+
   return (
     <main
       className="app-splash app-splash--react"
@@ -33,7 +37,7 @@ function AppSplash({ progress }: { progress: number }) {
         <img className="app-splash__icon" src="/ghost-solid.png" alt="GhostBox" />
         <div
           className="app-splash__spinner"
-          style={{ "--app-splash-progress": `${progress}%` } as React.CSSProperties}
+          style={spinnerStyle}
           aria-hidden="true"
         />
       </div>
@@ -62,6 +66,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     page,
     navigate,
     back,
+    canGoBack,
     contentRef,
     saveScrollPosition,
     restorePendingScroll,
@@ -82,9 +87,17 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       return;
     }
 
-    const refreshSubscriptionStatus = () => void ghostboxApi.getSubscriptionStatus(steamId).then((status) => {
-      if (!cancelled) setIsPremium(status?.subscription.isPremium === true);
-    });
+    // Instant hydrate from premium cache (lifetime / previous session).
+    const cachedPremium = ghostboxApi.getCachedIsPremium(steamId);
+    if (cachedPremium !== null) setIsPremium(cachedPremium);
+
+    const refreshSubscriptionStatus = () =>
+      void ghostboxApi.isPremiumUser(steamId).then((premium) => {
+        if (!cancelled) setIsPremium(premium);
+      });
+
+    // Prefetch Discord link early so sidebar/profile paint without waiting on mount.
+    void ghostboxApi.getDiscordLinkStatus(steamId);
 
     refreshSubscriptionStatus();
     window.addEventListener("focus", refreshSubscriptionStatus);
@@ -119,21 +132,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     });
   }, [appearance.language, notifications.desktopNotificationsEnabled]);
 
-  const headerTitle = useMemo(() => {
-    if (selectedGame) return selectedGame.title;
-    if (achievementsView) return achievementsView.game.title;
-    if (page !== "favorites") return undefined;
-    if (shell.activeProfileCollectionId === "favorites") return undefined;
-    return appData.userCollections.find(
-      (collection) => collection.id === shell.activeProfileCollectionId
-    )?.name;
-  }, [
-    achievementsView,
-    appData.userCollections,
-    page,
-    selectedGame,
-    shell.activeProfileCollectionId,
-  ]);
 
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
@@ -224,7 +222,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           onOpenProfile={() => handleNavigate("profile")}
           onOpenGame={openGame}
           onSteamSignIn={() => void appData.handleSteamSignIn()}
-          onSteamSignOut={() => void appData.handleSteamSignOut()}
           onRestartSteam={appData.handleRestartSteam}
           onCreateCollection={appData.openCreateUserCollectionModal}
           onRemoveFavorite={appData.toggleFavoriteGame}
@@ -243,6 +240,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           onToggleFavorite={appData.toggleFavoriteGame}
           activeSettingsTabId={shell.activeSettingsTabId}
           onSettingsTabChange={handleSidebarSettingsTabChange}
+          isPremium={isPremium}
         />
 
         <article
@@ -250,11 +248,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         >
           <Header
             page={page}
-            title={headerTitle}
             canGoBack={
               Boolean(selectedGame) ||
               isAchievementsViewVisible ||
-              page !== "home"
+              canGoBack
+            }
+            navigationTitle={
+              achievementsView?.game.title ??
+              selectedGame?.title ??
+              null
             }
             query={shell.query}
             isSearching={shell.isSearchLoading}

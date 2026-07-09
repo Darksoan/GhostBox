@@ -105,17 +105,21 @@ function applyPlaytimeToGame(
   snapshot: GamePlaytimeSnapshot
 ): GhostBoxGame {
   const playtime = snapshot[game.appId];
-  return playtime
-    ? {
-        ...game,
-        playTimeInMilliseconds: playtime.playTimeInMilliseconds,
-        lastTimePlayed: playtime.lastTimePlayed,
-        lastSessionRecordedAt: playtime.lastSessionRecordedAt,
-        lastSessionDurationInMilliseconds:
-          playtime.lastSessionDurationInMilliseconds,
-        sessionActive: playtime.sessionActive === true,
-      }
-    : { ...game, sessionActive: false };
+  // Only overwrite when Steam snapshot has this app. Empty snapshot must not
+  // wipe existing UI values before sync finishes.
+  if (!playtime) {
+    return { ...game, sessionActive: false };
+  }
+
+  return {
+    ...game,
+    playTimeInMilliseconds: playtime.playTimeInMilliseconds,
+    lastTimePlayed: playtime.lastTimePlayed,
+    lastSessionRecordedAt: playtime.lastSessionRecordedAt,
+    lastSessionDurationInMilliseconds:
+      playtime.lastSessionDurationInMilliseconds,
+    sessionActive: playtime.sessionActive === true,
+  };
 }
 
 function applyPlaytimeSnapshotToGames(
@@ -123,14 +127,27 @@ function applyPlaytimeSnapshotToGames(
   snapshot: GamePlaytimeSnapshot
 ) {
   let changed = false;
+  const hasSteamData = Object.keys(snapshot).length > 0;
 
   const nextGames = games.map((game) => {
     const playtime = snapshot[game.appId];
 
     if (!playtime) {
-      if (game.sessionActive === false) return game;
+      // After a successful Steam sync, missing apps mean 0 Steam playtime.
+      if (!hasSteamData) {
+        if (game.sessionActive === false) return game;
+        changed = true;
+        return { ...game, sessionActive: false };
+      }
+      const alreadyCleared =
+        (game.playTimeInMilliseconds ?? 0) === 0 && game.sessionActive === false;
+      if (alreadyCleared) return game;
       changed = true;
-      return { ...game, sessionActive: false };
+      return {
+        ...game,
+        playTimeInMilliseconds: 0,
+        sessionActive: false,
+      };
     }
 
     const nextSessionActive = playtime.sessionActive === true;
@@ -239,7 +256,7 @@ interface AppDataContextValue {
 const AppDataContext = createContext<AppDataContextValue | undefined>(undefined);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { showToast, setCollectionModalOpen } = useOverlay();
+  const { showToast, setCollectionModalOpen, setPendingBackupDeletion } = useOverlay();
   const { appearance, notifications } = useSettings();
 
   const [favoriteGames, setFavoriteGames] = useState<GhostBoxGame[]>(() =>
@@ -299,6 +316,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Hard ceiling so a hung IPC/network call never leaves the splash forever.
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setCompletedInitialLoadSteps((current) => {
+        if (current.size >= initialLoadSteps.length) return current;
+        const next = new Set(current);
+        for (const step of initialLoadSteps) next.add(step);
+        return next;
+      });
+    }, 20_000);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
   const initialLoadingProgress = Math.round(
     (completedInitialLoadSteps.size / initialLoadSteps.length) * 100
   );
@@ -318,7 +348,39 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setAddedLibraryGames((current) =>
       applyPlaytimeSnapshotToGames(current, snapshot)
     );
+    setProfileHistoryGames((current) =>
+      applyPlaytimeSnapshotToGames(current, snapshot)
+    );
   }, []);
+
+  /** Pull Steam GetOwnedGames playtimes (proxy Web API key or local key) by steamId. */
+  const syncPlaytimesFromSteam = useCallback(
+    async (steamId?: string | null) => {
+      const id = steamId?.trim();
+      if (!id) return;
+      try {
+        const snapshot = await ghostboxApi.syncSteamPlaytimes(id);
+        if (snapshot && Object.keys(snapshot).length > 0) {
+          gamePlaytimesRef.current = snapshot;
+          setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
+          setFavoriteGames((current) =>
+            applyPlaytimeSnapshotToGames(current, snapshot)
+          );
+          setAddedLibraryGames((current) =>
+            applyPlaytimeSnapshotToGames(current, snapshot)
+          );
+          setProfileHistoryGames((current) =>
+            applyPlaytimeSnapshotToGames(current, snapshot)
+          );
+          return;
+        }
+        await refreshGamePlaytimes();
+      } catch {
+        await refreshGamePlaytimes().catch(() => undefined);
+      }
+    },
+    [refreshGamePlaytimes]
+  );
 
   useEffect(() => {
     return ghostboxApi.onGamePlaytimesChanged((snapshot) => {
@@ -328,6 +390,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         applyPlaytimeSnapshotToGames(current, snapshot)
       );
       setAddedLibraryGames((current) =>
+        applyPlaytimeSnapshotToGames(current, snapshot)
+      );
+      setProfileHistoryGames((current) =>
         applyPlaytimeSnapshotToGames(current, snapshot)
       );
     });
@@ -392,14 +457,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     void ghostboxApi
-      .getBackupSettings()
-      .then((settings) => {
-        if (cancelled || !settings) return;
+      .validateBackupRoot()
+      .then((status) => {
+        if (cancelled || !status) return;
 
-        backupSettingsRef.current = settings;
-        setBackupSettings(settings);
+        setBackupRootStatus(status);
+        backupSettingsRef.current = status.settings;
+        setBackupSettings(status.settings);
       })
-      .catch(() => undefined)
+      .catch(() =>
+        ghostboxApi.getBackupSettings().then((settings) => {
+          if (cancelled || !settings) return;
+          backupSettingsRef.current = settings;
+          setBackupSettings(settings);
+        })
+      )
       .finally(() => {
         if (!cancelled) markInitialLoadStepComplete("backupRoot");
       });
@@ -576,6 +648,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const requestId = ++steamProfileRequestSequenceRef.current;
 
+    // Never block the splash on playtime network sync — that runs in the
+    // dedicated "playtimes" step after the UI is ready.
     void ghostboxApi
       .getSteamProfile()
       .then((profile) => {
@@ -895,6 +969,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       setSteamProfile(profile);
       writeStoredSteamProfile(profile);
+      void syncPlaytimesFromSteam(profile?.steamId);
       showToast(
         appearance.language === "en" ? "Login complete" : "Login concluído",
         appearance.language === "en"
@@ -916,7 +991,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setIsSteamSigningIn(false);
       }
     }
-  }, [appearance.language, isSteamSigningIn, showToast, steamProfile]);
+  }, [
+    appearance.language,
+    isSteamSigningIn,
+    showToast,
+    steamProfile,
+    syncPlaytimesFromSteam,
+  ]);
 
   const handleSteamSignOut = useCallback(async () => {
     ++steamProfileRequestSequenceRef.current;
@@ -1055,17 +1136,38 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const steamId = steamProfile?.steamId ?? null;
+    const PLAYTIME_BOOT_TIMEOUT_MS = 12_000;
 
-    void refreshGamePlaytimes()
-      .catch(() => undefined)
-      .finally(() => {
+    // Fetch Steam-owned totals (non-blocking for other boot steps).
+    void (async () => {
+      try {
+        const work =
+          steamId != null && steamId.trim()
+            ? syncPlaytimesFromSteam(steamId)
+            : refreshGamePlaytimes();
+        await Promise.race([
+          work,
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, PLAYTIME_BOOT_TIMEOUT_MS);
+          }),
+        ]);
+      } catch {
+        await refreshGamePlaytimes().catch(() => undefined);
+      } finally {
         if (!cancelled) markInitialLoadStepComplete("playtimes");
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [markInitialLoadStepComplete, refreshGamePlaytimes]);
+  }, [
+    markInitialLoadStepComplete,
+    refreshGamePlaytimes,
+    steamProfile?.steamId,
+    syncPlaytimesFromSteam,
+  ]);
 
   const handleSelectBackupOutputPath = useCallback(async () => {
     const result = await ghostboxApi.selectBackupOutputPath();
@@ -1122,14 +1224,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const handleDeleteBackupFolder = useCallback(
     (appId: string, title: string, backupPath?: string) => {
-      void backupPath;
-      void appId;
-      void title;
+      setPendingBackupDeletion({ appId, title, backupPath });
     },
-    []
+    [setPendingBackupDeletion]
   );
 
   const handleCreateBackupRoot = useCallback(async () => {
+    const status = await ghostboxApi.ensureBackupRoot();
+    if (status) {
+      setBackupRootStatus(status);
+      backupSettingsRef.current = status.settings;
+      setBackupSettings(status.settings);
+      return;
+    }
     await handleSelectBackupOutputPath();
   }, [handleSelectBackupOutputPath]);
 
@@ -1137,6 +1244,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const status = await ghostboxApi.validateBackupRoot();
     if (status) {
       setBackupRootStatus(status);
+      backupSettingsRef.current = status.settings;
       setBackupSettings(status.settings);
     }
   }, []);

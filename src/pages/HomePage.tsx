@@ -13,6 +13,7 @@ import {
   useCachedImageSources,
   useLoadableImageCover,
 } from "../hooks/useCachedImageSources";
+import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import {
   readStoredPersonalCalendar,
   writeStoredPersonalCalendar,
@@ -29,7 +30,7 @@ import {
   withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle, uniqueSources } from "../utils/imageCache";
-import { formatCompactPlaytime } from "../utils/time";
+import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 
 type HomeGameSeed = {
   appId: string;
@@ -181,18 +182,15 @@ function formatLastSessionDate(
   value: string | null | undefined,
   language: "pt" | "en" = "pt"
 ) {
-  if (!value)
-    return language === "en" ? "Recently played" : "Jogado recentemente";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const time = parseLastPlayed(value);
+  if (!Number.isFinite(time)) {
     return language === "en" ? "Recently played" : "Jogado recentemente";
   }
 
   return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
     day: "numeric",
     month: "short",
-  }).format(date);
+  }).format(time);
 }
 
 function createHomeSeedFallbackGame(
@@ -200,7 +198,8 @@ function createHomeSeedFallbackGame(
   index: number,
   subtitle = "Mais avaliados na Steam"
 ): GhostBoxGame {
-  const accent = ["#ff2d35", "#f59e0b", "#35d07f", "#60a5fa", "#c084fc"][
+  // Brand-aligned card accents only (no blue UI tints).
+  const accent = ["#ff2d35", "#f59e0b", "#35d07f", "#8b5cf6", "#c084fc"][
     index % 5
   ];
   const headerImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/header.jpg`;
@@ -246,13 +245,13 @@ function hasCompletedPlaySession(
 ): game is GhostBoxGame {
   return Boolean(
     game &&
-      Number.isFinite(Date.parse(game.lastTimePlayed ?? "")) &&
+      Number.isFinite(parseLastPlayed(game.lastTimePlayed)) &&
       !/^Steam App \d+$/i.test(game.title.trim())
   );
 }
 
 function getLastPlayedTime(game: GhostBoxGame) {
-  const lastPlayedTime = Date.parse(game.lastTimePlayed ?? "");
+  const lastPlayedTime = parseLastPlayed(game.lastTimePlayed);
   return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
 }
 
@@ -1908,22 +1907,6 @@ function HomeRecentBanner({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const fallbackHeroSource = game
-    ? homeSteamCdnUrl(homeGameAppId(game), "library_hero.jpg")
-    : "";
-  const heroSources = fallbackHeroSource ? [fallbackHeroSource] : [];
-  const cachedSources = useCachedImageSources(heroSources);
-  const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
-  const achievementTotal = game?.achievements.total ?? 0;
-  const achievementUnlocked = Math.min(
-    game?.achievements.unlocked ?? 0,
-    achievementTotal
-  );
-  const achievementProgress =
-    achievementTotal > 0
-      ? Math.round((achievementUnlocked / achievementTotal) * 100)
-      : 0;
-
   if (!game) {
     return (
       <section className="home-recent-banner" aria-label={title}>
@@ -1931,12 +1914,11 @@ function HomeRecentBanner({
         <div className="home-recent-banner__card home-recent-banner__card--skeleton" aria-hidden="true">
           <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
           <span className="home-recent-banner__content home-recent-banner__content--skeleton">
-            <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
-            </strong>
-            <span className="home-recent-banner__description home-recent-banner__description--skeleton">
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--desc" />
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--desc home-recent-banner__skeleton-line--desc-short" />
+            <span className="home-recent-banner__title-row home-recent-banner__title-row--skeleton">
+              <span className="home-recent-banner__game-icon home-recent-banner__game-icon--skeleton" />
+              <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
+              </strong>
             </span>
             <span className="home-recent-banner__meta" aria-hidden="true">
               <small className="home-recent-banner__meta-item">
@@ -1965,6 +1947,45 @@ function HomeRecentBanner({
   }
 
   return (
+    <HomeRecentBannerCard
+      title={title}
+      game={game}
+      language={language}
+      onOpenGame={onOpenGame}
+      onGameContextMenu={onGameContextMenu}
+    />
+  );
+}
+
+function HomeRecentBannerCard({
+  title,
+  game,
+  language,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  title: string;
+  game: GhostBoxGame;
+  language: "pt" | "en";
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  const fallbackHeroSource = homeSteamCdnUrl(homeGameAppId(game), "library_hero.jpg");
+  const heroSources = [fallbackHeroSource];
+  const cachedSources = useCachedImageSources(heroSources);
+  const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
+  const iconUrl = useGameIconUrl(game);
+  const achievementTotal = game.achievements.total ?? 0;
+  const achievementUnlocked = Math.min(
+    game.achievements.unlocked ?? 0,
+    achievementTotal
+  );
+  const achievementProgress =
+    achievementTotal > 0
+      ? Math.round((achievementUnlocked / achievementTotal) * 100)
+      : 0;
+
+  return (
     <section className="home-recent-banner" aria-label={title}>
       <h3 className="home-recent-banner__heading">{title}</h3>
       <div
@@ -1991,9 +2012,25 @@ function HomeRecentBanner({
           aria-hidden="true"
         />
         <span className="home-recent-banner__content">
-          <strong className="home-recent-banner__title">{game.title}</strong>
-          <span className="home-recent-banner__description">
-            {getHomeShortDescription(game, language)}
+          <span className="home-recent-banner__title-row">
+            <span
+              className={`home-recent-banner__game-icon${
+                iconUrl ? "" : " home-recent-banner__game-icon--empty"
+              }`}
+              aria-hidden="true"
+            >
+              {iconUrl ? (
+                <img
+                  src={iconUrl}
+                  alt=""
+                  width={32}
+                  height={32}
+                  loading="lazy"
+                  decoding="async"
+                />
+              ) : null}
+            </span>
+            <strong className="home-recent-banner__title">{game.title}</strong>
           </span>
           <span className="home-recent-banner__meta">
             <small className="home-recent-banner__meta-item">
@@ -2026,10 +2063,11 @@ function HomeRecentBanner({
             </small>
             <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
               <Cup
-                className="home-recent-banner__meta-icon"
-                size={28}
+                className="home-recent-banner__meta-icon home-recent-banner__meta-icon--cup"
+                size={26}
                 weight="Filled"
                 strokeWidth={2.0}
+                color="var(--text-strong)"
                 aria-hidden="true"
               />
               <span className="home-recent-banner__meta-copy">

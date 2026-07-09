@@ -100,6 +100,12 @@ export type SteamProfile = {
   profileUrl: string;
 };
 
+export type SteamOwnedPlaytime = {
+  appId: string;
+  playtimeForever: number;
+  rtimeLastPlayed: number;
+};
+
 export type SteamAccountStats = {
   steamId: string;
   gamesCount: number;
@@ -116,6 +122,7 @@ export type SteamAccountStats = {
   hasApiKey: boolean;
   scanInProgress: boolean;
   recentAchievements: SteamRecentAchievement[];
+  ownedPlaytimes?: SteamOwnedPlaytime[];
 };
 
 export type SteamRecentAchievement = {

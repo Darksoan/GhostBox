@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, CloudCheck } from "lucide-react";
+import { Clock, Cloud } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
@@ -139,18 +139,17 @@ export const GameCard = memo(function GameCard({
       >
         {showBackupStatus && (
           <div
-            className={`game-card__backup-badge ${backupRootStatus?.status === "ok" && hasBackup ? "game-card__backup-badge--success" : "game-card__backup-badge--error"}`}
-            aria-label={
-              backupRootStatus?.status === "ok" && hasBackup
+            className={`game-card__backup-badge ${hasBackup ? "game-card__backup-badge--success" : "game-card__backup-badge--error"}`}
+            aria-label={hasBackup ? "Backup disponível" : "Backup indisponível"}
+            title={
+              hasBackup
                 ? "Backup disponível"
-                : "Backup dessincronizado"
+                : backupRootStatus?.status === "ok"
+                  ? "Sem backup recente"
+                  : "Pasta de backup não configurada"
             }
           >
-            {backupRootStatus?.status === "ok" && hasBackup ? (
-              <CloudCheck size={15} strokeWidth={2.0} />
-            ) : (
-              <CloudCheck size={15} strokeWidth={2.0} />
-            )}
+            <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
           </div>
         )}
         {active && (

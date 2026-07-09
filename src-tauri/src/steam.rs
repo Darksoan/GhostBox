@@ -31,6 +31,7 @@ static STEAM_STATS_SCAN_ACTIVE: std::sync::OnceLock<std::sync::Mutex<HashSet<Str
 struct SteamOwnedGameStats {
     appid: u64,
     playtime_forever: u64,
+    rtime_last_played: u64,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -66,6 +67,15 @@ pub(crate) struct SteamShowcaseAchievement {
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
+pub(crate) struct SteamOwnedPlaytime {
+    app_id: String,
+    playtime_forever: u64,
+    rtime_last_played: u64,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub(crate) struct SteamAccountStats {
     steam_id: String,
     games_count: u64,
@@ -82,6 +92,8 @@ pub(crate) struct SteamAccountStats {
     has_api_key: bool,
     scan_in_progress: bool,
     recent_achievements: Vec<SteamShowcaseAchievement>,
+    /// Per-game Steam playtimes used to sync local playtime snapshot.
+    owned_playtimes: Vec<SteamOwnedPlaytime>,
 }
 
 fn is_image_data_url(value: &str) -> bool {
@@ -370,6 +382,15 @@ fn build_steam_account_stats(
         .map(|game| game.playtime_forever)
         .sum::<u64>();
 
+    let owned_playtimes = owned_games
+        .iter()
+        .map(|game| SteamOwnedPlaytime {
+            app_id: game.appid.to_string(),
+            playtime_forever: game.playtime_forever,
+            rtime_last_played: game.rtime_last_played,
+        })
+        .collect();
+
     SteamAccountStats {
         steam_id: steam_id.to_string(),
         games_count: owned_games.len() as u64,
@@ -386,7 +407,47 @@ fn build_steam_account_stats(
         has_api_key,
         scan_in_progress,
         recent_achievements: Vec::new(),
+        owned_playtimes,
     }
+}
+
+fn parse_owned_game_entry(game: &serde_json::Value) -> Option<SteamOwnedGameStats> {
+    let appid = game
+        .get("appid")
+        .or_else(|| game.get("appId"))
+        .and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
+        })?;
+    let playtime_forever = game
+        .get("playtime_forever")
+        .or_else(|| game.get("playtimeForever"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or_default();
+    let rtime_last_played = game
+        .get("rtime_last_played")
+        .or_else(|| game.get("rtimeLastPlayed"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or_default();
+    Some(SteamOwnedGameStats {
+        appid,
+        playtime_forever,
+        rtime_last_played,
+    })
+}
+
+fn parse_owned_games_payload(value: &serde_json::Value) -> Vec<SteamOwnedGameStats> {
+    let games = value
+        .get("response")
+        .and_then(|response| response.get("games"))
+        .or_else(|| value.get("games"))
+        .or_else(|| value.as_array().map(|_| value))
+        .and_then(|games| games.as_array());
+
+    games
+        .map(|games| games.iter().filter_map(parse_owned_game_entry).collect())
+        .unwrap_or_default()
 }
 
 async fn fetch_steam_owned_games(
@@ -411,25 +472,47 @@ async fn fetch_steam_owned_games(
         .await
         .map_err(|error| error.to_string())?;
 
-    Ok(value
-        .get("response")
-        .and_then(|response| response.get("games"))
-        .and_then(|games| games.as_array())
-        .map(|games| {
-            games
-                .iter()
-                .filter_map(|game| {
-                    Some(SteamOwnedGameStats {
-                        appid: game.get("appid")?.as_u64()?,
-                        playtime_forever: game
-                            .get("playtime_forever")
-                            .and_then(|value| value.as_u64())
-                            .unwrap_or_default(),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default())
+    Ok(parse_owned_games_payload(&value))
+}
+
+/// Fetch owned games + playtime via GhostBox Steam stats proxy (uses server API key).
+async fn fetch_steam_owned_games_from_proxy(
+    proxy_url: &str,
+    steam_id: &str,
+) -> Result<Vec<SteamOwnedGameStats>, String> {
+    let value = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(25))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/owned-games"))
+        .query(&[("steamId", steam_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let games = parse_owned_games_payload(&value);
+    if games.is_empty() {
+        return Err("Steam owned-games proxy returned no games".to_string());
+    }
+    Ok(games)
+}
+
+/// Resolve owned games for playtime only via Cloudflare proxy (Steam Web API key on worker).
+async fn resolve_steam_owned_games_for_playtime(
+    _app: &tauri::AppHandle,
+    steam_id: &str,
+) -> Result<Vec<SteamOwnedGameStats>, String> {
+    let proxy_url = load_steam_stats_proxy_url();
+    if proxy_url.is_empty() {
+        return Err("Steam stats proxy URL is not configured".to_string());
+    }
+    fetch_steam_owned_games_from_proxy(&proxy_url, steam_id).await
 }
 
 async fn fetch_steam_account_stats_from_proxy(
@@ -886,6 +969,106 @@ pub fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
 }
 
+/// Rebuild playtime snapshot exclusively from Steam GetOwnedGames data.
+/// Drops legacy local accumulators (e.g. 56s session fakes).
+fn seed_playtimes_from_steam_owned_games(
+    app: &tauri::AppHandle,
+    owned_games: &[SteamOwnedGameStats],
+) {
+    if owned_games.is_empty() {
+        return;
+    }
+
+    let mut snapshot = serde_json::Map::new();
+
+    for game in owned_games {
+        let steam_playtime_ms = game.playtime_forever.saturating_mul(60_000);
+        if steam_playtime_ms == 0 && game.rtime_last_played == 0 {
+            continue;
+        }
+
+        let app_id = game.appid.to_string();
+        let mut entry = serde_json::json!({
+            "appId": app_id,
+            "playTimeInMilliseconds": steam_playtime_ms,
+            "source": "steam",
+        });
+        if game.rtime_last_played > 0 {
+            entry["lastTimePlayed"] =
+                serde_json::json!(playtime::unix_seconds_to_iso(game.rtime_last_played));
+        }
+        snapshot.insert(app_id, entry);
+    }
+
+    let value = serde_json::Value::Object(snapshot);
+    let _ = playtime::replace_playtimes_from_steam(app, &value);
+}
+
+/// Sync playtime totals from Steam (proxy Web API key or local Web API key).
+/// Always rebuilds `steam-owned-playtimes.json` from GetOwnedGames data.
+#[tauri::command]
+pub async fn steam_sync_playtimes(
+    app: tauri::AppHandle,
+    steam_id: String,
+) -> Result<serde_json::Value, String> {
+    let steam_id = steam_id.trim().to_string();
+    if steam_id.is_empty() || !steam_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("Steam ID is required".to_string());
+    }
+
+    let owned_games = resolve_steam_owned_games_for_playtime(&app, &steam_id).await?;
+    seed_playtimes_from_steam_owned_games(&app, &owned_games);
+    Ok(playtime::load_game_playtimes(&app))
+}
+
+async fn fetch_steam_level_from_proxy(
+    proxy_url: &str,
+    steam_id: &str,
+) -> Result<u32, String> {
+    let value = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/player-level"))
+        .query(&[("steamId", steam_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    value
+        .get("playerLevel")
+        .or_else(|| value.get("player_level"))
+        .or_else(|| value.get("level"))
+        .and_then(|value| value.as_u64())
+        .map(|value| value as u32)
+        .ok_or_else(|| "Steam player level missing from proxy response".to_string())
+}
+
+/// Get Steam player level only via Cloudflare proxy (Steam Web API key on worker).
+#[tauri::command]
+pub async fn steam_get_player_level(
+    _app: tauri::AppHandle,
+    steam_id: String,
+) -> Result<u32, String> {
+    let steam_id = steam_id.trim().to_string();
+    if steam_id.is_empty() || !steam_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("Steam ID is required".to_string());
+    }
+
+    let proxy_url = load_steam_stats_proxy_url();
+    if proxy_url.is_empty() {
+        return Err("Steam stats proxy URL is not configured".to_string());
+    }
+
+    fetch_steam_level_from_proxy(&proxy_url, &steam_id).await
+}
+
 #[tauri::command]
 pub async fn steam_get_account_stats(
     app: tauri::AppHandle,
@@ -896,9 +1079,16 @@ pub async fn steam_get_account_stats(
         return Err("Steam ID is required".to_string());
     }
 
+    // Always refresh playtimes from Steam owned-games (proxy or API key).
+    if let Ok(owned_games) = resolve_steam_owned_games_for_playtime(&app, &steam_id).await {
+        seed_playtimes_from_steam_owned_games(&app, &owned_games);
+    }
+
     let proxy_url = load_steam_stats_proxy_url();
     if !proxy_url.is_empty() {
-        return fetch_steam_account_stats_from_proxy(&proxy_url, &steam_id).await;
+        if let Ok(stats) = fetch_steam_account_stats_from_proxy(&proxy_url, &steam_id).await {
+            return Ok(stats);
+        }
     }
 
     let api_key = load_steam_web_api_key(&app);
@@ -931,6 +1121,8 @@ pub async fn steam_get_account_stats(
             ));
         }
     };
+
+    seed_playtimes_from_steam_owned_games(&app, &owned_games);
 
     let now = steam_unix_timestamp();
     let scan_needed = owned_games.iter().any(|game| {
@@ -1555,4 +1747,33 @@ fn terminate_steam_processes() {
             .args(["-TERM", process_name])
             .status();
     }
+}
+
+#[cfg(windows)]
+fn is_steam_process_running() -> bool {
+    let output = std::process::Command::new("tasklist")
+        .args(["/FI", "IMAGENAME eq steam.exe", "/NH"])
+        .output();
+    match output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+            stdout.contains("steam.exe")
+        }
+        _ => false,
+    }
+}
+
+#[cfg(not(windows))]
+fn is_steam_process_running() -> bool {
+    std::process::Command::new("pgrep")
+        .args(["-x", "steam"])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+/// Whether the local Steam client process is running.
+#[tauri::command]
+pub fn steam_is_running() -> bool {
+    is_steam_process_running()
 }

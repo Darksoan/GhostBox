@@ -3,7 +3,10 @@ use crate::settings::read_json_file;
 use crate::util::{text_value, EmptyStringExt};
 use crate::extract_app_id;
 
-const GAME_PLAYTIME_FILE: &str = "game-playtime.json";
+/// Steam-only playtime totals (playtime_forever). Local session accumulators are gone.
+const STEAM_PLAYTIME_FILE: &str = "steam-owned-playtimes.json";
+/// Legacy local accumulator — deleted on Steam sync; no longer used for totals.
+const LEGACY_GAME_PLAYTIME_FILE: &str = "game-playtime.json";
 const GAME_PLAYTIMES_CHANGED_EVENT: &str = "game-playtimes-changed";
 const STEAM_RUNNING_APP_MONITOR_INTERVAL_MS: u64 = 3000;
 const GAME_PLAYTIME_SNAPSHOT_INTERVAL_MS: u64 = 3000;
@@ -52,16 +55,36 @@ fn current_millis() -> u64 {
 }
 
 pub(crate) fn load_game_playtimes(app: &tauri::AppHandle) -> serde_json::Value {
-    read_json_file(app, GAME_PLAYTIME_FILE)
+    // Prefer Steam-owned cache. Never fall back to legacy local accumulators for totals.
+    if let Some(steam) = read_json_file(app, STEAM_PLAYTIME_FILE)
         .and_then(|value| value.as_object().cloned().map(serde_json::Value::Object))
-        .unwrap_or_else(|| serde_json::json!({}))
+    {
+        return steam;
+    }
+    serde_json::json!({})
 }
 
-fn save_game_playtimes(app: &tauri::AppHandle, snapshot: &serde_json::Value) -> Result<(), String> {
-    crate::settings::write_json_file(app, GAME_PLAYTIME_FILE, snapshot)
+pub(crate) fn save_game_playtimes(app: &tauri::AppHandle, snapshot: &serde_json::Value) -> Result<(), String> {
+    crate::settings::write_json_file(app, STEAM_PLAYTIME_FILE, snapshot)
 }
 
-fn emit_game_playtimes_changed(app: &tauri::AppHandle, snapshot: &serde_json::Value) {
+/// Wipe legacy local playtime accumulator so UI never reloads fake session totals.
+pub(crate) fn clear_legacy_local_playtime_cache(app: &tauri::AppHandle) {
+    let _ = crate::settings::remove_data_file(app, LEGACY_GAME_PLAYTIME_FILE);
+}
+
+/// Replace the entire playtime snapshot with Steam-owned totals only.
+pub(crate) fn replace_playtimes_from_steam(
+    app: &tauri::AppHandle,
+    snapshot: &serde_json::Value,
+) -> Result<(), String> {
+    clear_legacy_local_playtime_cache(app);
+    save_game_playtimes(app, snapshot)?;
+    emit_game_playtimes_changed(app, snapshot);
+    Ok(())
+}
+
+pub(crate) fn emit_game_playtimes_changed(app: &tauri::AppHandle, snapshot: &serde_json::Value) {
     use tauri::Emitter;
 
     let _ = app.emit(GAME_PLAYTIMES_CHANGED_EVENT, snapshot.clone());
@@ -81,6 +104,7 @@ fn get_game_playtime_snapshot(app: &tauri::AppHandle) -> serde_json::Value {
         return persisted;
     }
 
+    // Session overlay only marks "playing now" — never inflates Steam totals.
     let mut snapshot = persisted.as_object().cloned().unwrap_or_default();
     let now = std::time::SystemTime::now();
 
@@ -94,7 +118,7 @@ fn get_game_playtime_snapshot(app: &tauri::AppHandle) -> serde_json::Value {
             .get(&app_id)
             .cloned()
             .unwrap_or_else(|| serde_json::json!({ "appId": app_id }));
-        let base_playtime = current
+        let steam_playtime = current
             .get("playTimeInMilliseconds")
             .and_then(|value| value.as_u64())
             .unwrap_or(0);
@@ -107,7 +131,7 @@ fn get_game_playtime_snapshot(app: &tauri::AppHandle) -> serde_json::Value {
             app_id.clone(),
             serde_json::json!({
                 "appId": app_id,
-                "playTimeInMilliseconds": base_playtime.saturating_add(elapsed),
+                "playTimeInMilliseconds": steam_playtime,
                 "lastTimePlayed": last_time_played,
                 "lastSessionRecordedAt": current.get("lastSessionRecordedAt").cloned(),
                 "lastSessionDurationInMilliseconds": elapsed,
@@ -271,6 +295,34 @@ pub(crate) fn close_all_game_playtime_sessions(app: &tauri::AppHandle) {
     }
 }
 
+fn is_local_automatic_backup_enabled(app: &tauri::AppHandle, app_id: &str) -> bool {
+    let settings = crate::load_backup_settings(app);
+    if settings
+        .get("automaticBackupsForLibrary")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    settings
+        .get("automaticBackups")
+        .and_then(|value| value.get(app_id))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+fn has_cloud_session(app: &tauri::AppHandle) -> bool {
+    crate::cloud_save::cloud_get_session(app.clone())
+        .and_then(|session| {
+            session
+                .get("token")
+                .and_then(|value| value.as_str())
+                .map(|token| !token.trim().is_empty())
+        })
+        .unwrap_or(false)
+}
+
 pub(crate) fn run_automatic_backup_after_close(
     app: tauri::AppHandle,
     app_id: String,
@@ -294,6 +346,15 @@ pub(crate) fn run_automatic_backup_after_close(
             guard.backup_in_progress.insert(app_id.clone());
         }
 
+        let should_run_local = is_local_automatic_backup_enabled(&app, &app_id);
+        let should_run_cloud = has_cloud_session(&app);
+        if !should_run_local && !should_run_cloud {
+            if let Ok(mut guard) = steam_monitor_state().lock() {
+                guard.backup_in_progress.remove(&app_id);
+            }
+            return;
+        }
+
         std::thread::sleep(std::time::Duration::from_millis(
             AUTOMATIC_BACKUP_DELAY_AFTER_CLOSE_MS,
         ));
@@ -304,10 +365,41 @@ pub(crate) fn run_automatic_backup_after_close(
             game
         };
 
-        let _ = tauri::async_runtime::block_on(crate::cloud_save::cloud_backup_game(
-            app.clone(),
-            backup_game,
-        ));
+        let mut local_ok = false;
+        if should_run_local {
+            match crate::backup::backup_run_game_local(app.clone(), backup_game.clone()) {
+                Ok(result) => {
+                    local_ok = result
+                        .get("success")
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false);
+                }
+                Err(_) => {
+                    local_ok = false;
+                }
+            }
+        }
+
+        let mut cloud_ok = false;
+        if should_run_cloud {
+            cloud_ok = tauri::async_runtime::block_on(crate::cloud_save::cloud_backup_game(
+                app.clone(),
+                backup_game.clone(),
+            ))
+            .is_ok();
+        }
+
+        // If only cloud was attempted and it failed, record the failure so the UI can show it.
+        if !local_ok && should_run_cloud && !cloud_ok && !should_run_local {
+            let title = game_title(&backup_game, &app_id);
+            let _ = crate::save_failed_backup_record(
+                &app,
+                &app_id,
+                &title,
+                "",
+                "Falha no backup automático em nuvem.",
+            );
+        }
 
         if let Ok(mut guard) = steam_monitor_state().lock() {
             guard
@@ -624,14 +716,41 @@ pub(crate) fn monitor_game_process(
 
 #[tauri::command]
 pub(crate) fn game_get_playtimes(app: tauri::AppHandle) -> serde_json::Value {
+    // Drop legacy local accumulators so UI cannot re-read fake session totals.
+    clear_legacy_local_playtime_cache(&app);
     get_game_playtime_snapshot(&app)
 }
 
 fn current_timestamp_string() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis().to_string())
-        .unwrap_or_else(|_| "0".to_string())
+    unix_seconds_to_iso(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+    )
+}
+
+/// Convert a unix timestamp (seconds since epoch) to an ISO 8601 UTC string.
+/// Uses Howard Hinnant's civil-from-days algorithm to avoid external crates.
+pub(crate) fn unix_seconds_to_iso(epoch_secs: u64) -> String {
+    let days = (epoch_secs / 86400) as i64;
+    let time_of_day = epoch_secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let seconds = time_of_day % 60;
+
+    let z = days + 719_468;
+    let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+
+    format!("{y:04}-{m:02}-{d:02}T{hours:02}:{minutes:02}:{seconds:02}.000Z")
 }
 
 fn record_game_launch_playtime_impl(
@@ -674,22 +793,23 @@ fn record_game_session_playtime(
         return Ok(load_game_playtimes(app));
     }
 
+    // Do not accumulate local session time into totals — Steam is the only source.
+    // Only refresh last-played / session metadata for UI.
     let mut snapshot = load_game_playtimes(app);
     let now = current_timestamp_string();
     let current = snapshot
         .get(app_id)
         .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
+        .unwrap_or_else(|| serde_json::json!({ "appId": app_id }));
     let play_time = current
         .get("playTimeInMilliseconds")
         .and_then(|value| value.as_u64())
-        .unwrap_or(0)
-        .saturating_add(duration);
+        .unwrap_or(0);
 
     snapshot[app_id] = serde_json::json!({
         "appId": app_id,
         "playTimeInMilliseconds": play_time,
-        "lastTimePlayed": current.get("lastTimePlayed").cloned().unwrap_or_else(|| serde_json::json!(now)),
+        "lastTimePlayed": now,
         "lastSessionRecordedAt": now,
         "lastSessionDurationInMilliseconds": duration
     });
@@ -703,4 +823,93 @@ pub(crate) fn record_game_launch_playtime(
     app_id: &str,
 ) -> Result<serde_json::Value, String> {
     record_game_launch_playtime_impl(app, app_id)
+}
+
+pub(crate) fn rfc3339_millis(value: &str) -> i64 {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|value| value.timestamp_millis())
+        .unwrap_or(0)
+}
+
+/// Apply playtime restored from a backup snapshot for a single game.
+/// Uses the maximum of current vs backup playtime so multi-PC progress is not lost.
+pub(crate) fn apply_playtime_from_backup(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    payload: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let app_id: String = app_id.chars().filter(|ch| ch.is_ascii_digit()).collect();
+    if app_id.is_empty() {
+        return Err("AppId inválido para restaurar tempo de jogo.".to_string());
+    }
+
+    let backup_play_time = payload
+        .get("playTimeInMilliseconds")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let backup_last_played = payload
+        .get("lastTimePlayed")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    let backup_last_session_at = payload
+        .get("lastSessionRecordedAt")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    let backup_last_session_duration = payload
+        .get("lastSessionDurationInMilliseconds")
+        .and_then(|value| value.as_u64());
+
+    let mut snapshot = load_game_playtimes(app);
+    let current = snapshot
+        .get(&app_id)
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({ "appId": app_id }));
+    let current_play_time = current
+        .get("playTimeInMilliseconds")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0);
+    let play_time = current_play_time.max(backup_play_time);
+
+    let current_last_played = current
+        .get("lastTimePlayed")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    let last_time_played = match (current_last_played.as_deref(), backup_last_played.as_deref()) {
+        (Some(current_value), Some(backup_value)) => {
+            if rfc3339_millis(backup_value) >= rfc3339_millis(current_value) {
+                backup_value.to_string()
+            } else {
+                current_value.to_string()
+            }
+        }
+        (Some(current_value), None) => current_value.to_string(),
+        (None, Some(backup_value)) => backup_value.to_string(),
+        (None, None) => current_timestamp_string(),
+    };
+
+    let mut next = serde_json::json!({
+        "appId": app_id,
+        "playTimeInMilliseconds": play_time,
+        "lastTimePlayed": last_time_played,
+    });
+    if let Some(value) = backup_last_session_at.or_else(|| {
+        current
+            .get("lastSessionRecordedAt")
+            .and_then(|value| value.as_str())
+            .map(str::to_string)
+    }) {
+        next["lastSessionRecordedAt"] = serde_json::json!(value);
+    }
+    if let Some(value) = backup_last_session_duration.or_else(|| {
+        current
+            .get("lastSessionDurationInMilliseconds")
+            .and_then(|item| item.as_u64())
+    }) {
+        next["lastSessionDurationInMilliseconds"] = serde_json::json!(value);
+    }
+
+    snapshot[&app_id] = next;
+    save_game_playtimes(app, &snapshot)?;
+    emit_game_playtimes_changed(app, &snapshot);
+    Ok(snapshot)
 }

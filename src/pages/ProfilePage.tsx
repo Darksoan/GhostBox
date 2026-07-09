@@ -12,20 +12,20 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  Camera,
   Check,
   ChevronDown,
   Copy,
   Eye,
   EyeOff,
+  Camera,
   Folder,
   Heart,
   Layers,
   LibraryBig,
   Lock,
+  LogOut,
+  Pencil,
   ShieldUser,
-  SquarePen,
-  Settings2,
   User,
 } from "lucide-react";
 import { Cup } from "reicon-react";
@@ -38,13 +38,13 @@ import {
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useGameIconUrl } from "../hooks/useGameIconUrl";
+import steamIcon from "../../Icons/steam-colored.svg";
 import { EditProfileModal } from "../components/modals/EditProfileModal";
 import "./ProfilePage.scss";
 import {
   useCachedImageSources,
   useLoadableImageSource,
 } from "../hooks/useCachedImageSources";
-import { ModalCloseIcon } from "../components/ui/ModalCloseIcon";
 import {
   gamePortraitPreviewSources,
   layeredImageStyle,
@@ -53,7 +53,7 @@ import {
   profileBannerPlaceholderSource,
 } from "../utils/image";
 import { useSettings } from "../context/settings";
-import { formatCompactPlaytime } from "../utils/time";
+import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import {
@@ -293,6 +293,7 @@ interface ProfilePageProps {
     game: GhostBoxGame,
     achievementId?: string
   ) => void;
+  onSignOut?: () => void;
 }
 
 type ProfileCollection = {
@@ -321,48 +322,14 @@ const localAchievementHydrationLimit = 80;
 const localAchievementHydrationBatchSize = 5;
 let hasPreparedProfileOverviewData = false;
 
-function profileAchievementShowcaseStorageKey(steamId?: string) {
-  return `ghostbox:profile-achievement-showcase:${steamId || "local"}:v1`;
-}
-
-function readStoredProfileAchievementShowcase(steamId?: string) {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(profileAchievementShowcaseStorageKey(steamId)) ??
-        "[]"
-    ) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredProfileAchievementShowcase(
-  steamId: string | undefined,
-  achievementKeys: string[]
-) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(
-      profileAchievementShowcaseStorageKey(steamId),
-      JSON.stringify(achievementKeys)
-    );
-  } catch {
-    // The showcase still works for the current session if storage is unavailable.
-  }
-}
 
 function getGamePlaytime(game: GhostBoxGame) {
-  return game.playTimeInMilliseconds ?? game.hours * 3_600_000;
+  // Only Steam-synced totals (never catalogue `hours` or stale local cache).
+  return game.playTimeInMilliseconds ?? 0;
 }
 
 function formatProfileLastSession(value: string | null | undefined, language: string) {
-  const time = Date.parse(value ?? "");
+  const time = parseLastPlayed(value);
   if (!Number.isFinite(time)) {
     return language === "en" ? "Not recorded" : "Sem registro";
   }
@@ -555,6 +522,7 @@ export function ProfilePage({
   onToggleFavorite,
   onAddGameToCollection,
   onOpenGameAchievements,
+  onSignOut,
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
@@ -568,12 +536,6 @@ export function ProfilePage({
   );
   const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
     useState<Map<string, GhostBoxGame>>(() => new Map());
-  const [isAchievementShowcaseModalOpen, setIsAchievementShowcaseModalOpen] =
-    useState(false);
-  const [selectedShowcaseAchievementKeys, setSelectedShowcaseAchievementKeys] =
-    useState<string[]>(() =>
-      readStoredProfileAchievementShowcase(steamProfile?.steamId)
-    );
   const [showcaseAchievementLimit, setShowcaseAchievementLimit] = useState(
     showcaseAchievementMinLimit
   );
@@ -588,7 +550,11 @@ export function ProfilePage({
   const [isSteamIdVisible, setIsSteamIdVisible] = useState(false);
   const [isSteamIdCopied, setIsSteamIdCopied] = useState(false);
   const steamIdCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(null);
+  const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(() => {
+    const steamId = steamProfile?.steamId?.trim();
+    return steamId ? ghostboxApi.getCachedDiscordLinkStatus(steamId) : null;
+  });
+  const [steamLevel, setSteamLevel] = useState<number | null>(null);
 
   const activeCollectionId =
     propActiveCollectionId ?? internalActiveCollectionId;
@@ -663,24 +629,6 @@ export function ProfilePage({
   const isAchievementsActive = activeCollection.id === "achievements";
   const shouldBuildCollectionGameData = !isOverviewActive;
   const shouldComputeOverviewData = !isOverviewActive || isOverviewDataReady;
-
-  useEffect(() => {
-    setSelectedShowcaseAchievementKeys(
-      readStoredProfileAchievementShowcase(steamProfile?.steamId)
-    );
-    setIsAchievementShowcaseModalOpen(false);
-  }, [steamProfile?.steamId]);
-
-  useEffect(() => {
-    if (!isAchievementShowcaseModalOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsAchievementShowcaseModalOpen(false);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isAchievementShowcaseModalOpen]);
 
   useEffect(() => {
     if (!isOverviewActive || isOverviewDataReady) return;
@@ -1088,25 +1036,7 @@ export function ProfilePage({
     return unlockedAchievementHighlights.slice(0, showcaseAchievementLimit);
   }, [showcaseAchievementLimit, unlockedAchievementHighlights]);
 
-  const selectedShowcaseAchievementKeySet = useMemo(
-    () => new Set(selectedShowcaseAchievementKeys),
-    [selectedShowcaseAchievementKeys]
-  );
-  const selectedAchievementHighlights = useMemo(() => {
-    if (selectedShowcaseAchievementKeys.length === 0) return [];
-
-    const unlockedByKey = new Map(
-      unlockedAchievementHighlights.map((achievement) => [achievement.key, achievement])
-    );
-    return selectedShowcaseAchievementKeys.flatMap((key) => {
-      const achievement = unlockedByKey.get(key);
-      return achievement ? [achievement] : [];
-    });
-  }, [selectedShowcaseAchievementKeys, unlockedAchievementHighlights]);
-  const visibleAchievementHighlights =
-    selectedAchievementHighlights.length > 0
-      ? selectedAchievementHighlights.slice(0, showcaseAchievementLimit)
-      : achievementHighlights;
+  const visibleAchievementHighlights = achievementHighlights;
   const showcaseSkeletonCount = Math.max(
     0,
     showcaseAchievementLimit - visibleAchievementHighlights.length
@@ -1135,20 +1065,6 @@ export function ProfilePage({
       })
       .catch(() => {});
   }, [steamProfile?.steamId]);
-
-  const handleToggleShowcaseAchievement = useCallback(
-    (achievementKey: string) => {
-      setSelectedShowcaseAchievementKeys((current) => {
-        const exists = current.includes(achievementKey);
-        const next = exists
-          ? current.filter((key) => key !== achievementKey)
-          : [...current, achievementKey];
-        writeStoredProfileAchievementShowcase(steamProfile?.steamId, next);
-        return next;
-      });
-    },
-    [steamProfile?.steamId]
-  );
 
   const addedLibraryGameAppIds = useMemo(
     () => new Set(addedLibraryGames.map((game) => game.appId)),
@@ -1237,12 +1153,47 @@ export function ProfilePage({
   }, [profileImageKey]);
 
   useEffect(() => {
-    if (!steamProfile?.steamId) return;
+    const steamId = steamProfile?.steamId?.trim();
+    if (!steamId) {
+      setDiscordLink(null);
+      return;
+    }
     let cancelled = false;
-    ghostboxApi.getDiscordLinkStatus(steamProfile.steamId).then((status) => {
+    const cached = ghostboxApi.getCachedDiscordLinkStatus(steamId);
+    if (cached) setDiscordLink(cached);
+    ghostboxApi.getDiscordLinkStatus(steamId).then((status) => {
       if (!cancelled) setDiscordLink(status);
     });
     return () => { cancelled = true; };
+  }, [steamProfile?.steamId]);
+
+  useEffect(() => {
+    const steamId = steamProfile?.steamId?.trim();
+    if (!steamId) {
+      setSteamLevel(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const level = await ghostboxApi.getSteamPlayerLevel(steamId);
+        if (
+          !cancelled &&
+          typeof level === "number" &&
+          Number.isFinite(level) &&
+          level >= 0
+        ) {
+          setSteamLevel(Math.floor(level));
+        }
+      } catch {
+        if (!cancelled) setSteamLevel(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [steamProfile?.steamId]);
 
   useEffect(() => {
@@ -1345,11 +1296,11 @@ export function ProfilePage({
         <div className="profile-page__background-overlay">
           <button
             type="button"
-            className="profile-page__banner-edit-button"
+            className="profile-page__hero-action profile-page__hero-action--banner"
             onClick={() => setIsCoverModalOpen(true)}
             aria-label={t("profile.changeBanner")}
           >
-            <Camera size={16} />
+            <Camera size={14} strokeWidth={2.25} aria-hidden="true" />
           </button>
           <div className="profile-page__identity">
             <div className="profile-page__avatar-button">
@@ -1357,13 +1308,13 @@ export function ProfilePage({
                 <img
                   src={avatarSource}
                   alt={steamProfile.displayName}
-                  width={96}
-                  height={96}
+                  width={120}
+                  height={120}
                   decoding="async"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <ShieldUser size={36} />
+                <ShieldUser size={44} />
               )}
             </div>
 
@@ -1372,20 +1323,35 @@ export function ProfilePage({
                 <h2 className="profile-page__display-name">
                   {steamProfile.displayName}
                 </h2>
+                {steamLevel !== null ? (
+                  <span
+                    className="profile-page__level"
+                    title={
+                      appearance.language === "en"
+                        ? `Level ${steamLevel}`
+                        : `Nível ${steamLevel}`
+                    }
+                    aria-label={
+                      appearance.language === "en"
+                        ? `Level ${steamLevel}`
+                        : `Nível ${steamLevel}`
+                    }
+                  >
+                    <span className="profile-page__level-value">{steamLevel}</span>
+                  </span>
+                ) : null}
                 <button
                   type="button"
-                  className="profile-page__edit-button"
+                  className="profile-page__hero-action"
                   onClick={() => setIsEditModalOpen(true)}
                   aria-label={t("profile.editProfile")}
                 >
-                  <Settings2 size={18} />
+                  <Pencil size={14} strokeWidth={2.25} aria-hidden="true" />
                 </button>
               </div>
               <div className="profile-page__steam-id-row">
                 <div className="profile-page__steam-id-box">
-                  <svg role="img" viewBox="0 0 24 24" className="profile-page__steam-id-icon" aria-hidden="true">
-                    <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/>
-                  </svg>
+                  <img src={steamIcon} alt="" className="profile-page__steam-id-icon" aria-hidden="true" />
                   <span
                     className={`profile-page__steam-id${
                       isSteamIdVisible
@@ -1517,6 +1483,21 @@ export function ProfilePage({
                   );
                 })}
               </div>
+              {onSignOut ? (
+                <button
+                  type="button"
+                  className="profile-page__sign-out"
+                  onClick={onSignOut}
+                  aria-label={
+                    appearance.language === "en"
+                      ? "Sign out of Steam"
+                      : "Sair da conta Steam"
+                  }
+                  title={appearance.language === "en" ? "Sign out" : "Sair"}
+                >
+                  <LogOut size={16} strokeWidth={2.15} aria-hidden="true" />
+                </button>
+              ) : null}
             </div>
 
           <div className="profile-page__collection-content">
@@ -1527,66 +1508,47 @@ export function ProfilePage({
               >
                 <section className="profile-page__overview-console">
                   <div className="profile-page__achievement-rail">
-                    <div className="profile-page__overview-title-row profile-page__overview-title-row--showcase">
-                      <h3>{t("profile.achievementShowcase")}</h3>
-                      <button
-                        type="button"
-                        className={`profile-page__showcase-edit-button${
-                          isAchievementShowcaseModalOpen
-                            ? " profile-page__showcase-edit-button--active"
-                            : ""
-                        }`}
-                        onClick={() =>
-                          setIsAchievementShowcaseModalOpen(true)
-                        }
-                        aria-label={
-                          appearance.language === "en"
-                            ? "Edit achievement showcase"
-                            : "Editar destaque de conquistas"
-                        }
-                        aria-expanded={isAchievementShowcaseModalOpen}
-                      >
-                        <SquarePen size={16} strokeWidth={2.0} />
-                      </button>
-                    </div>
+                    <div className="profile-page__overview-panel profile-page__overview-panel--showcase">
+                      <div className="profile-page__overview-title-row profile-page__overview-title-row--showcase">
+                        <h3>{t("profile.achievementShowcase")}</h3>
+                      </div>
 
-                    <div
-                      ref={achievementShowcaseRef}
-                      className="profile-page__achievement-showcase"
-                    >
-                      {visibleAchievementHighlights.map((achievement) => (
-                        <ProfileAchievementShowcaseItem
-                          key={achievement.key}
-                          achievement={achievement}
-                          isSelected={selectedShowcaseAchievementKeySet.has(
-                            achievement.key
-                          )}
-                          onSelect={
-                            onOpenGameAchievements && achievement.game
-                              ? () => {
-                                  onOpenGameAchievements(
-                                    achievement.game!,
-                                    achievement.achievementId
-                                  );
-                                }
-                              : undefined
-                          }
-                        />
-                      ))}
-                      {Array.from({ length: showcaseSkeletonCount }, (_, index) => (
-                        <span
-                          key={`showcase-skeleton-${index}`}
-                          className="profile-page__showcase-achievement profile-page__showcase-achievement--empty"
-                          aria-hidden="true"
-                        />
-                      ))}
+                      <div
+                        ref={achievementShowcaseRef}
+                        className="profile-page__achievement-showcase"
+                      >
+                        {visibleAchievementHighlights.map((achievement) => (
+                          <ProfileAchievementShowcaseItem
+                            key={achievement.key}
+                            achievement={achievement}
+                            onSelect={
+                              onOpenGameAchievements && achievement.game
+                                ? () => {
+                                    onOpenGameAchievements(
+                                      achievement.game!,
+                                      achievement.achievementId
+                                    );
+                                  }
+                                : undefined
+                            }
+                          />
+                        ))}
+                        {Array.from({ length: showcaseSkeletonCount }, (_, index) => (
+                          <span
+                            key={`showcase-skeleton-${index}`}
+                            className="profile-page__showcase-achievement profile-page__showcase-achievement--empty"
+                            aria-hidden="true"
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
 
                   <div className="profile-page__top-games-console">
-                    <div className="profile-page__overview-title-row">
-                      <h3>{t("profile.topGames")}</h3>
-                    </div>
+                    <div className="profile-page__overview-panel profile-page__overview-panel--top-games">
+                      <div className="profile-page__overview-title-row">
+                        <h3>{t("profile.topGames")}</h3>
+                      </div>
 
                     {topGames.length > 0 ? (
                       <div className="profile-page__top-games-list">
@@ -1718,6 +1680,7 @@ export function ProfilePage({
                         ))}
                       </div>
                     )}
+                    </div>
                   </div>
                 </section>
               </div>
@@ -1925,99 +1888,7 @@ export function ProfilePage({
 
       </div>
 
-      {isAchievementShowcaseModalOpen && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="backdrop backdrop--collection profile-page__showcase-modal-backdrop"
-              onClick={() => setIsAchievementShowcaseModalOpen(false)}
-            >
-              <section
-                className="collection-modal profile-page__showcase-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="profile-achievement-showcase-modal-title"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <header className="collection-modal__header">
-                  <div>
-                    <h3 id="profile-achievement-showcase-modal-title">
-                      {appearance.language === "en"
-                        ? "Edit achievement showcase"
-                        : "Editar destaque de conquistas"}
-                    </h3>
-                    <p>
-                      {appearance.language === "en"
-                        ? "choose the unlocked achievements shown on your profile."
-                        : "escolha as conquistas desbloqueadas exibidas no perfil."}
-                    </p>
-                  </div>
 
-                  <button
-                    type="button"
-                    className="collection-modal__close"
-                    onClick={() => setIsAchievementShowcaseModalOpen(false)}
-                    aria-label={appearance.language === "en" ? "Close" : "Fechar"}
-                  >
-                    <ModalCloseIcon />
-                  </button>
-                </header>
-
-                <div className="collection-modal__content profile-page__showcase-modal-content">
-                  {unlockedAchievementHighlights.length > 0 ? (
-                    <div className="profile-page__showcase-modal-grid">
-                      {unlockedAchievementHighlights.map((achievement) => (
-                        <ProfileAchievementShowcaseItem
-                          key={achievement.key}
-                          achievement={achievement}
-                          isEditing
-                          isSelected={selectedShowcaseAchievementKeySet.has(
-                            achievement.key
-                          )}
-                          onSelect={() =>
-                            handleToggleShowcaseAchievement(achievement.key)
-                          }
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="profile-page__showcase-modal-empty">
-                      {appearance.language === "en"
-                        ? "No unlocked achievements available yet."
-                        : "Nenhuma conquista desbloqueada disponível ainda."}
-                    </p>
-                  )}
-
-                  <div className="collection-modal__actions profile-page__showcase-modal-actions">
-                    <button
-                      type="button"
-                      className="button button--outline"
-                      disabled={selectedShowcaseAchievementKeys.length === 0}
-                      onClick={() => {
-                        setSelectedShowcaseAchievementKeys([]);
-                        writeStoredProfileAchievementShowcase(
-                          steamProfile.steamId,
-                          []
-                        );
-                      }}
-                    >
-                      {appearance.language === "en"
-                        ? "Use automatic"
-                        : "Usar automático"}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button--primary"
-                      onClick={() => setIsAchievementShowcaseModalOpen(false)}
-                    >
-                      {appearance.language === "en" ? "Done" : "Concluir"}
-                    </button>
-                  </div>
-                </div>
-              </section>
-            </div>,
-            document.body
-          )
-        : null}
 
       <EditProfileModal
         open={isEditModalOpen}

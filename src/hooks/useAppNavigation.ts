@@ -3,13 +3,20 @@ import type { Page } from "../types";
 import { useSettings } from "../context/settings";
 import { runViewTransition } from "../utils/viewTransition";
 
+const historyLimit = 12;
+
 export function useAppNavigation(initialPage: Page = "home") {
   const { appearance } = useSettings();
   const [page, setPageState] = useState<Page>(initialPage);
+  const [canGoBack, setCanGoBack] = useState(false);
   const pageHistoryRef = useRef<Page[]>([]);
   const pageScrollPositionsRef = useRef<Partial<Record<Page, number>>>({});
   const pendingPageScrollRestoreRef = useRef<Page | null>(null);
   const contentRef = useRef<HTMLElement>(null);
+
+  const syncCanGoBack = useCallback(() => {
+    setCanGoBack(pageHistoryRef.current.length > 0);
+  }, []);
 
   const setPage = useCallback(
     (nextPage: Page) => {
@@ -27,12 +34,13 @@ export function useAppNavigation(initialPage: Page = "home") {
         pageHistoryRef.current = [
           ...pageHistoryRef.current.filter((item) => item !== page),
           page,
-        ].slice(-12);
+        ].slice(-historyLimit);
         pendingPageScrollRestoreRef.current = newPage;
+        syncCanGoBack();
         setPage(newPage);
       }
     },
-    [page, setPage]
+    [page, setPage, syncCanGoBack]
   );
 
   const back = useCallback(() => {
@@ -42,8 +50,9 @@ export function useAppNavigation(initialPage: Page = "home") {
     }
     const nextPage = previousPage ?? "home";
     pendingPageScrollRestoreRef.current = nextPage;
+    syncCanGoBack();
     setPage(nextPage);
-  }, [page, setPage]);
+  }, [page, setPage, syncCanGoBack]);
 
   const saveScrollPosition = useCallback(() => {
     if (contentRef.current) {
@@ -65,6 +74,7 @@ export function useAppNavigation(initialPage: Page = "home") {
     setPage,
     navigate,
     back,
+    canGoBack,
     contentRef,
     pageScrollPositionsRef,
     pendingPageScrollRestoreRef,

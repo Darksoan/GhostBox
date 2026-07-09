@@ -1,6 +1,5 @@
 use crate::catalogue::fetch_remote_game;
 use crate::ludusavi::{game_title, ludusavi_args, run_ludusavi};
-use crate::steam_appcache;
 use crate::util::text_value;
 use crate::{
     backup_details_for_path, backup_root_marker_exists, backup_root_status, backup_timestamp,
@@ -395,34 +394,27 @@ pub fn backup_run_game_local(
     let output_path_text = output_path.to_string_lossy().to_string();
     let args = ludusavi_args("backup", &app_id, Some(&output_path_text), false);
 
-    if let Err(error) = run_ludusavi(&app, &args) {
+    // Saves first; profile progress (achievements + playtime) is always layered on top.
+    let ludusavi_error = run_ludusavi(&app, &args).err();
+    let profile_progress =
+        crate::export_game_profile_progress(&app, &app_id, &title, &output_path);
+
+    if !directory_has_content(&output_path) {
         let _ = std::fs::remove_dir_all(&output_path);
+        let skipped = ludusavi_error.is_none() && !profile_progress.has_any();
+        let error = ludusavi_error.unwrap_or_else(|| {
+            "Nenhum save, conquista ou tempo de jogo encontrado para backup.".to_string()
+        });
         let settings = save_failed_backup_record(&app, &app_id, &title, &output_path_text, &error)
             .unwrap_or(settings);
         return Ok(serde_json::json!({
             "success": false,
             "appId": app_id,
             "title": title,
-            "outputPath": output_path_text,
+            "skipped": skipped,
             "error": error,
             "settings": settings
         }));
-    }
-
-    if !directory_has_content(&output_path) {
-        let _ = std::fs::remove_dir_all(&output_path);
-        return Ok(serde_json::json!({
-            "success": false,
-            "appId": app_id,
-            "title": title,
-            "skipped": true,
-            "error": "Nenhum save encontrado para backup.",
-            "settings": settings
-        }));
-    }
-
-    if let Some(steam_path) = resolve_steam_path(&app, None).0 {
-        steam_appcache::backup_steam_achievement_files(&steam_path, &app_id, &output_path);
     }
 
     let size_bytes = directory_size(std::path::Path::new(&output_path_text)).unwrap_or(0);
@@ -433,6 +425,12 @@ pub fn backup_run_game_local(
         "appId": app_id,
         "title": title,
         "outputPath": output_path_text,
+        "profileProgress": {
+            "achievements": profile_progress.has_achievements,
+            "playtime": profile_progress.has_playtime,
+            "saves": ludusavi_error.is_none()
+        },
+        "warning": ludusavi_error,
         "settings": settings
     }))
 }
@@ -472,19 +470,22 @@ pub fn backup_restore_game_local(
     }
 
     let args = ludusavi_args("restore", &app_id, Some(&selected_path), false);
-    if let Err(error) = run_ludusavi(&app, &args) {
+    // Restore saves when present; always restore profile progress (achievements + playtime).
+    let ludusavi_error = run_ludusavi(&app, &args).err();
+    let profile_progress =
+        crate::import_game_profile_progress(&app, &app_id, &title, &selected);
+
+    if ludusavi_error.is_some() && !profile_progress.has_any() {
         return Ok(serde_json::json!({
             "success": false,
             "appId": app_id,
             "title": title,
             "backupPath": selected_path,
-            "error": error,
+            "error": ludusavi_error.unwrap_or_else(|| {
+                "Nenhum save ou progresso de perfil encontrado para restaurar.".to_string()
+            }),
             "settings": settings
         }));
-    }
-
-    if let Some(steam_path) = resolve_steam_path(&app, None).0 {
-        steam_appcache::restore_steam_achievement_files(&steam_path, &app_id, &selected);
     }
 
     Ok(serde_json::json!({
@@ -493,6 +494,12 @@ pub fn backup_restore_game_local(
         "title": title,
         "backupPath": selected_path,
         "backupSizeBytes": directory_size(&selected).unwrap_or(0),
+        "profileProgress": {
+            "achievements": profile_progress.has_achievements,
+            "playtime": profile_progress.has_playtime,
+            "saves": ludusavi_error.is_none()
+        },
+        "warning": ludusavi_error,
         "settings": settings
     }))
 }

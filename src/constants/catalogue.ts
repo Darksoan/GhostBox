@@ -21,6 +21,7 @@ export const steamWishlistRecommendationsStorageKey = "ghostbox:steam-wishlist-r
 export const steamWishlistReviewCacheStorageKey = "ghostbox:steam-wishlist-review-cache:v1";
 export const recentLibrarySessionLimit = 50;
 export const librarySortStorageKey = "ghostbox:library-sort-by:v1";
+export const notificationsLastSeenStorageKey = "ghostbox:notifications-last-seen:v1";
 export const imageSourceCacheLimit = 800;
 
 const legacyStorageKeys: Record<string, string[]> = {
@@ -67,10 +68,11 @@ export const emptyGameDatabase: GameDatabaseResult = {
   source: "atualizardatabase.md",
 };
 
+/** Category orbs — one distinct accent per filter family (no repeats). */
 export const filterCategoryColors: Record<CatalogueFilterKey, string> = {
-  genres: "hsl(262deg 50% 62%)",
-  tags: "hsl(95deg 50% 48%)",
-  developers: "hsl(205deg 45% 55%)",
-  publishers: "hsl(330deg 36% 55%)",
-  years: "hsl(38deg 50% 58%)",
+  genres: "hsl(262deg 50% 47%)", // purple
+  tags: "hsl(95deg 50% 34%)", // green
+  developers: "hsl(205deg 45% 42%)", // blue
+  publishers: "hsl(330deg 36% 42%)", // pink
+  years: "hsl(4deg 62% 48%)", // red
 };

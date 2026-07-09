@@ -4,7 +4,7 @@ use crate::settings::{
     remove_data_file, write_binary_file,
 };
 use crate::util::text_value;
-use crate::{extract_app_id, resolve_steam_path};
+use crate::extract_app_id;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 
@@ -183,9 +183,15 @@ pub async fn cloud_backup_game(app: tauri::AppHandle, game: serde_json::Value) -
     let cleanup_path = temp_root.clone();
 
     let result = async {
-        run_ludusavi(&app, &args)?;
-        if let Some(steam_path) = resolve_steam_path(&app, None).0 {
-            crate::steam_appcache::backup_steam_achievement_files(&steam_path, &app_id, &backup_dir);
+        // Saves first; profile progress (achievements + playtime) is always layered on top.
+        let ludusavi_error = run_ludusavi(&app, &args).err();
+        let profile_progress =
+            crate::export_game_profile_progress(&app, &app_id, &title, &backup_dir);
+        if !crate::directory_has_content(&backup_dir) {
+            return Err(ludusavi_error.unwrap_or_else(|| {
+                "Nenhum save, conquista ou tempo de jogo encontrado para backup em nuvem."
+                    .to_string()
+            }));
         }
         let zip_path = temp_root.join("backup.zip");
         zip_directory(&backup_dir, &zip_path)?;
@@ -194,6 +200,7 @@ pub async fn cloud_backup_game(app: tauri::AppHandle, game: serde_json::Value) -
         if bytes.is_empty() {
             return Err("Nenhum save encontrado para backup em nuvem.".to_string());
         }
+        let backup_size_bytes = bytes.len() as u64;
         let device_name = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default();
         let response = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(120))
@@ -206,7 +213,19 @@ pub async fn cloud_backup_game(app: tauri::AppHandle, game: serde_json::Value) -
             .header("x-ghostbox-game-title", &title)
             .header("x-ghostbox-sha256", &sha256)
             .header("x-ghostbox-device-name", device_name)
-            .header("x-ghostbox-manifest", serde_json::json!({ "backupFormat": 1, "source": "ludusavi" }).to_string())
+            .header(
+                "x-ghostbox-manifest",
+                serde_json::json!({
+                    "backupFormat": 2,
+                    "source": "ludusavi",
+                    "profileProgress": {
+                        "achievements": profile_progress.has_achievements,
+                        "playtime": profile_progress.has_playtime,
+                        "saves": ludusavi_error.is_none()
+                    }
+                })
+                .to_string(),
+            )
             .body(bytes)
             .send()
             .await
@@ -214,13 +233,59 @@ pub async fn cloud_backup_game(app: tauri::AppHandle, game: serde_json::Value) -
         let status = response.status();
         let body = response.text().await.map_err(|error| error.to_string())?;
         if !status.is_success() {
-            return Err(body);
+            return Err(format_cloud_api_error(&body, status.as_u16()));
         }
-        serde_json::from_str(&body).map_err(|error| error.to_string())
+        let mut parsed = serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())?;
+        if let Some(object) = parsed.as_object_mut() {
+            object.insert(
+                "profileProgress".to_string(),
+                serde_json::json!({
+                    "achievements": profile_progress.has_achievements,
+                    "playtime": profile_progress.has_playtime,
+                    "saves": ludusavi_error.is_none()
+                }),
+            );
+            if let Some(warning) = ludusavi_error {
+                object.insert("warning".to_string(), serde_json::json!(warning));
+            }
+        }
+        let _ = crate::save_cloud_backup_success_record(
+            &app,
+            &app_id,
+            &title,
+            backup_size_bytes,
+        );
+        Ok(parsed)
     }.await;
 
     let _ = std::fs::remove_dir_all(cleanup_path);
     result
+}
+
+fn format_cloud_api_error(body: &str, status: u16) -> String {
+    let trimmed = body.trim();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        let code = value
+            .get("error")
+            .and_then(|item| item.as_str())
+            .unwrap_or_default();
+        return match code {
+            "premium_required" => "Backup em nuvem requer GhostBox Premium.".to_string(),
+            "unauthorized" | "invalid_token" => {
+                "Sessão de nuvem inválida. Reconecte a Steam.".to_string()
+            }
+            "backup_too_large" => "Backup em nuvem excede o limite de 50 MB.".to_string(),
+            "empty_backup" => "Nenhum save encontrado para backup em nuvem.".to_string(),
+            "storage_upload_failed" => "Falha ao enviar o backup para a nuvem.".to_string(),
+            other if !other.is_empty() => format!("Erro no backup em nuvem ({other})."),
+            _ => format!("Erro no backup em nuvem (HTTP {status})."),
+        };
+    }
+    if trimmed.is_empty() {
+        format!("Erro no backup em nuvem (HTTP {status}).")
+    } else {
+        trimmed.to_string()
+    }
 }
 
 #[tauri::command]
@@ -283,16 +348,28 @@ pub async fn cloud_restore_save(app: tauri::AppHandle, game: serde_json::Value, 
         unzip_to_directory(&zip_path, &restore_dir)?;
         let restore_path = restore_dir.to_string_lossy().to_string();
         let args = ludusavi_args("restore", &app_id, Some(&restore_path), false);
-        run_ludusavi(&app, &args)?;
-        if let Some(steam_path) = resolve_steam_path(&app, None).0 {
-            crate::steam_appcache::restore_steam_achievement_files(&steam_path, &app_id, &restore_dir);
+        // Restore saves when present; always restore profile progress (achievements + playtime).
+        let ludusavi_error = run_ludusavi(&app, &args).err();
+        let profile_progress =
+            crate::import_game_profile_progress(&app, &app_id, &title, &restore_dir);
+        if ludusavi_error.is_some() && !profile_progress.has_any() {
+            return Err(ludusavi_error.unwrap_or_else(|| {
+                "Nenhum save ou progresso de perfil encontrado para restaurar da nuvem."
+                    .to_string()
+            }));
         }
         Ok(serde_json::json!({
             "success": true,
             "appId": app_id,
             "title": title,
             "saveId": save_id,
-            "backupSizeBytes": bytes.len()
+            "backupSizeBytes": bytes.len(),
+            "profileProgress": {
+                "achievements": profile_progress.has_achievements,
+                "playtime": profile_progress.has_playtime,
+                "saves": ludusavi_error.is_none()
+            },
+            "warning": ludusavi_error
         }))
     }.await;
 

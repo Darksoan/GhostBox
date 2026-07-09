@@ -99,6 +99,90 @@ function getUpdatesApiUrl() {
   return import.meta.env.VITE_GHOSTBOX_UPDATES_API_URL?.trim() || defaultUpdatesApiUrl;
 }
 
+const DISCORD_LINK_CACHE_KEY = "ghostbox:discord-link-status";
+const PREMIUM_CACHE_KEY = "ghostbox:premium-status";
+
+type DiscordLinkCacheEntry = {
+  steamId: string;
+  status: DiscordLinkStatus;
+  cachedAt: number;
+};
+
+type PremiumCacheEntry = {
+  steamId: string;
+  isPremium: boolean;
+  cachedAt: number;
+};
+
+let memoryDiscordLinkCache: DiscordLinkCacheEntry | null = null;
+const discordLinkInFlight = new Map<string, Promise<DiscordLinkStatus | null>>();
+let memoryPremiumCache: PremiumCacheEntry | null = null;
+const premiumInFlight = new Map<string, Promise<boolean>>();
+
+function readDiscordLinkLocalCache(steamId: string): DiscordLinkStatus | null {
+  try {
+    const raw = localStorage.getItem(DISCORD_LINK_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DiscordLinkCacheEntry;
+    if (!parsed?.steamId || parsed.steamId !== steamId || !parsed.status) return null;
+    return parsed.status;
+  } catch {
+    return null;
+  }
+}
+
+function writeDiscordLinkCache(steamId: string, status: DiscordLinkStatus) {
+  const entry: DiscordLinkCacheEntry = {
+    steamId,
+    status,
+    cachedAt: Date.now(),
+  };
+  memoryDiscordLinkCache = entry;
+  try {
+    localStorage.setItem(DISCORD_LINK_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function readPremiumLocalCache(steamId: string): boolean | null {
+  try {
+    const raw = localStorage.getItem(PREMIUM_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PremiumCacheEntry;
+    if (!parsed?.steamId || parsed.steamId !== steamId) return null;
+    return parsed.isPremium === true;
+  } catch {
+    return null;
+  }
+}
+
+function writePremiumCache(steamId: string, isPremium: boolean) {
+  const entry: PremiumCacheEntry = {
+    steamId,
+    isPremium,
+    cachedAt: Date.now(),
+  };
+  memoryPremiumCache = entry;
+  try {
+    localStorage.setItem(PREMIUM_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // ignore
+  }
+}
+
+function resolveIsPremium(status: SubscriptionStatusResult | null | undefined): boolean {
+  if (!status?.subscription) return false;
+  const sub = status.subscription;
+  if (sub.isPremium === true) return true;
+  if (sub.status === "active") {
+    if (!sub.currentPeriodEnd) return true;
+    const end = Date.parse(sub.currentPeriodEnd);
+    return !Number.isFinite(end) || end > Date.now();
+  }
+  return false;
+}
+
 const emptyGameDatabase: GameDatabaseResult = {
   games: [],
   total: 0,
@@ -141,30 +225,117 @@ export const ghostboxApi = {
     return url.toString();
   },
 
+  /** Synchronous hydrate for UI — memory then localStorage. */
+  getCachedDiscordLinkStatus(steamId: string): DiscordLinkStatus | null {
+    const id = steamId.trim();
+    if (!id) return null;
+    if (memoryDiscordLinkCache?.steamId === id) return memoryDiscordLinkCache.status;
+    const local = readDiscordLinkLocalCache(id);
+    if (local) {
+      memoryDiscordLinkCache = { steamId: id, status: local, cachedAt: Date.now() };
+    }
+    return local;
+  },
+
+  cacheDiscordLinkStatus(status: DiscordLinkStatus | null | undefined) {
+    const steamId = status?.steamId?.trim();
+    if (!steamId || !status) return;
+    writeDiscordLinkCache(steamId, status);
+  },
+
+  getCachedIsPremium(steamId: string): boolean | null {
+    const id = steamId.trim();
+    if (!id) return null;
+    if (memoryPremiumCache?.steamId === id) return memoryPremiumCache.isPremium;
+    const local = readPremiumLocalCache(id);
+    if (local !== null) {
+      memoryPremiumCache = { steamId: id, isPremium: local, cachedAt: Date.now() };
+    }
+    return local;
+  },
+
+  cacheIsPremium(steamId: string, isPremium: boolean) {
+    const id = steamId.trim();
+    if (!id) return;
+    writePremiumCache(id, isPremium);
+  },
+
   async getDiscordLinkStatus(steamId: string): Promise<DiscordLinkStatus | null> {
-    const url = new URL(`${getSubscriptionsApiUrl()}/discord/link-status`);
-    url.searchParams.set("steamId", steamId);
+    const id = steamId.trim();
+    if (!id) return null;
+
+    const inFlight = discordLinkInFlight.get(id);
+    if (inFlight) return inFlight;
+
+    const promise = (async (): Promise<DiscordLinkStatus | null> => {
+      const url = new URL(`${getSubscriptionsApiUrl()}/discord/link-status`);
+      url.searchParams.set("steamId", id);
+
+      try {
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        if (!response.ok) {
+          return ghostboxApi.getCachedDiscordLinkStatus(id);
+        }
+        const status = (await response.json()) as DiscordLinkStatus;
+        writeDiscordLinkCache(id, status);
+        return status;
+      } catch {
+        return ghostboxApi.getCachedDiscordLinkStatus(id);
+      } finally {
+        discordLinkInFlight.delete(id);
+      }
+    })();
+
+    discordLinkInFlight.set(id, promise);
+    return promise;
+  },
+
+  async getSubscriptionStatus(steamId: string): Promise<SubscriptionStatusResult | null> {
+    const id = steamId.trim();
+    const url = new URL(`${getSubscriptionsApiUrl()}/subscription/status`);
+    url.searchParams.set("steamId", id);
 
     try {
-      const response = await fetch(url, { headers: { accept: "application/json" } });
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 10_000);
+      const response = await fetch(url, {
+        headers: { accept: "application/json" },
+        signal: controller.signal,
+      }).finally(() => window.clearTimeout(timeout));
       if (!response.ok) return null;
-      return await response.json() as DiscordLinkStatus;
+      const status = (await response.json()) as SubscriptionStatusResult;
+      if (status.discordLink) {
+        writeDiscordLinkCache(id, status.discordLink);
+      }
+      writePremiumCache(id, resolveIsPremium(status));
+      return status;
     } catch {
       return null;
     }
   },
 
-  async getSubscriptionStatus(steamId: string): Promise<SubscriptionStatusResult | null> {
-    const url = new URL(`${getSubscriptionsApiUrl()}/subscription/status`);
-    url.searchParams.set("steamId", steamId);
+  async isPremiumUser(steamId: string): Promise<boolean> {
+    const id = steamId.trim();
+    if (!id) return false;
 
-    try {
-      const response = await fetch(url, { headers: { accept: "application/json" } });
-      if (!response.ok) return null;
-      return await response.json() as SubscriptionStatusResult;
-    } catch {
-      return null;
-    }
+    const inFlight = premiumInFlight.get(id);
+    if (inFlight) return inFlight;
+
+    const promise = (async (): Promise<boolean> => {
+      try {
+        const status = await ghostboxApi.getSubscriptionStatus(id);
+        const premium = resolveIsPremium(status);
+        writePremiumCache(id, premium);
+        return premium;
+      } catch {
+        return ghostboxApi.getCachedIsPremium(id) === true;
+      } finally {
+        premiumInFlight.delete(id);
+      }
+    })();
+
+    premiumInFlight.set(id, promise);
+    return promise;
   },
 
   async createSubscriptionCheckout(steamId: string, planId: SubscriptionPlanId): Promise<SubscriptionCheckoutResult | null> {
@@ -396,6 +567,23 @@ export const ghostboxApi = {
       { steamId },
       null
     );
+  },
+
+  /** Fetch GetOwnedGames via Steam Web API (proxy key or local) and rebuild playtimes. */
+  syncSteamPlaytimes(steamId: string): Promise<GamePlaytimeSnapshot> {
+    return invokeOr<GamePlaytimeSnapshot>(
+      "steam_sync_playtimes",
+      { steamId },
+      {}
+    );
+  },
+
+  getSteamPlayerLevel(steamId: string): Promise<number | null> {
+    return invokeOr<number | null>("steam_get_player_level", { steamId }, null);
+  },
+
+  isSteamRunning(): Promise<boolean> {
+    return invokeOr<boolean>("steam_is_running", {}, false);
   },
 
   onSteamAccountStatsUpdated(

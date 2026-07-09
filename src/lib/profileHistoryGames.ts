@@ -67,8 +67,9 @@ export function mergeGameDetailsPreservingAchievements(
     title: isPlaceholderTitle && game.title ? game.title : details.title,
     achievements: achievementGame.achievements,
     achievementList: achievementGame.achievementList,
-    playTimeInMilliseconds:
-      game.playTimeInMilliseconds ?? details.playTimeInMilliseconds,
+    // Playtime comes only from the live Steam snapshot merge — never cache it
+    // from catalogue/details payloads.
+    playTimeInMilliseconds: game.playTimeInMilliseconds,
     lastTimePlayed: game.lastTimePlayed ?? details.lastTimePlayed,
   };
 }

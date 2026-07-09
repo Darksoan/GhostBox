@@ -15,6 +15,8 @@ async function waitForInterfaceFonts() {
     Promise.all([
       document.fonts.load('400 14px "Open Sans"'),
       document.fonts.load('500 14px "Open Sans"'),
+      document.fonts.load('600 14px "Open Sans"'),
+      document.fonts.load('700 14px "Open Sans"'),
     ]),
     new Promise((resolve) => window.setTimeout(resolve, 900)),
   ]);

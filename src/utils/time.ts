@@ -13,3 +13,24 @@ export function formatCompactPlaytime(milliseconds = 0) {
 
   return `${formattedHours}h`;
 }
+
+/**
+ * Parse a lastTimePlayed value into a unix-ms timestamp.
+ *
+ * Handles both formats:
+ *  - ISO 8601 strings ("2024-07-08T21:50:08.000Z") — current format
+ *  - Numeric ms-since-epoch strings ("1720475408000") — legacy format
+ *
+ * Returns NaN when the value is null, undefined, empty, or unparseable.
+ */
+export function parseLastPlayed(value: string | null | undefined): number {
+  if (!value) return NaN;
+
+  // Try ISO 8601 first (Date.parse handles this correctly)
+  const parsed = Date.parse(value);
+  if (Number.isFinite(parsed)) return parsed;
+
+  // Fallback: legacy numeric millisecond string
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : NaN;
+}

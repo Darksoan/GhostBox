@@ -5,7 +5,7 @@
   gap: 0;
   min-height: 100%;
   background: var(--background-dark);
-  color: var(--text);
+  color: var(--text-primary);
   font-family: var(--font-sans);
 
   &__summary-section {
@@ -26,7 +26,7 @@
   &__summary-playtime,
   &__summary-progress-text {
     margin: 0;
-    color: var(--text-soft);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-medium);
     line-height: 1.45;
@@ -37,23 +37,23 @@
   }
 
   &__summary-playtime strong {
-    color: var(--text-strong);
+    color: var(--text-primary);
     font-weight: var(--weight-medium);
   }
 
   &__progress-track {
     display: block;
     width: 100%;
-    height: 7px;
+    height: 5px;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: var(--surface-strong);
+    background: var(--surface-active);
 
     span {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: var(--success);
+      background: var(--text-strong);
       transition: width var(--motion-slow) var(--ease);
     }
   }
@@ -72,7 +72,7 @@
     justify-content: center;
     gap: 12px;
     padding: 48px 24px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 13px;
   }
 
@@ -136,7 +136,7 @@
     min-width: 0;
 
     strong {
-      color: var(--text-strong);
+      color: var(--text-primary);
       font-size: 14px;
       font-weight: var(--weight-medium);
       line-height: 1.25;
@@ -144,9 +144,9 @@
 
     p {
       margin: 0;
-      color: var(--text-soft);
+      color: var(--text-secondary);
       font-size: 12px;
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       line-height: 1.4;
     }
   }
@@ -154,7 +154,7 @@
   &__item-meta {
     flex: 0 0 auto;
     max-width: 220px;
-    color: var(--text-soft);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-medium);
     line-height: 1.35;
@@ -162,15 +162,16 @@
     white-space: nowrap;
 
     strong {
-      color: var(--text-strong);
+      color: var(--text-primary);
       font-weight: var(--weight-medium);
     }
   }
 
   &__empty {
     padding: 48px 24px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 13px;
+    font-weight: var(--weight-medium);
     text-align: center;
   }
 }

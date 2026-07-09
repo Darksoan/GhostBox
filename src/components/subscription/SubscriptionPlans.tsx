@@ -1,10 +1,10 @@
-import { CalendarClock, Check, CloudUpload, CreditCard, ExternalLink, Link, RefreshCw, ShieldCheck, UserRound, X } from "lucide-react";
+import { CalendarClock, Check, Cloud, CloudUpload, CreditCard, ExternalLink, Link, RefreshCw, ShieldCheck, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import type { DiscordLinkStatus, SubscriptionPayment, SubscriptionPlanId as PaidSubscriptionPlanId, SubscriptionStatusResult } from "../../lib/ghostboxApi.types";
+import type { CloudSave, DiscordLinkStatus, SubscriptionPayment, SubscriptionPlanId as PaidSubscriptionPlanId, SubscriptionStatusResult } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
@@ -21,6 +21,13 @@ type SubscriptionPlansProps = {
     lastBackupSuccess: boolean | null;
   }>;
   steamProfile?: SteamProfile | null;
+};
+
+type CloudBackupGameSummary = {
+  appId: string;
+  title: string;
+  lastBackupAt: string | null;
+  lastBackupSuccess: boolean;
 };
 
 const benefits: Record<SubscriptionPlanId, string[]> = {
@@ -106,6 +113,7 @@ export function SubscriptionPlans({
   const [discordLinkStatus, setDiscordLinkStatus] = useState<DiscordLinkStatus | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings" && Boolean(steamProfile?.steamId));
+  const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
   const linkedDiscordName = discordLinkStatus?.discordGlobalName || discordLinkStatus?.discordUsername;
   const language = appearance.language;
@@ -117,12 +125,20 @@ export function SubscriptionPlans({
     });
   }
 
+  function refreshCloudSaves() {
+    void ghostboxApi.listCloudSaves()
+      .then((saves) => setCloudSaves(saves))
+      .catch(() => setCloudSaves([]));
+  }
+
   function refreshSubscriptionStatus(steamId: string) {
     setSubscriptionLoading(true);
     void ghostboxApi.getSubscriptionStatus(steamId)
       .then((status) => {
         setSubscriptionStatus(status);
         if (status?.discordLink) setDiscordLinkStatus(status.discordLink);
+        if (status?.subscription.isPremium) refreshCloudSaves();
+        else setCloudSaves([]);
       })
       .finally(() => setSubscriptionLoading(false));
   }
@@ -131,6 +147,7 @@ export function SubscriptionPlans({
     let cancelled = false;
     if (!steamProfile?.steamId) {
       setDiscordLinkStatus(null);
+      setCloudSaves([]);
       return;
     }
 
@@ -148,19 +165,35 @@ export function SubscriptionPlans({
     const steamId = steamProfile?.steamId;
     if (!steamId) return;
 
-    const handleFocus = () => refreshDiscordLinkStatus(steamId);
-    const handleFocusSubscription = () => refreshSubscriptionStatus(steamId);
+    const handleFocus = () => {
+      refreshDiscordLinkStatus(steamId);
+      refreshSubscriptionStatus(steamId);
+    };
     window.addEventListener("focus", handleFocus);
-    window.addEventListener("focus", handleFocusSubscription);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("focus", handleFocusSubscription);
     };
   }, [steamProfile?.steamId]);
 
   const isPremium = subscriptionStatus?.subscription.isPremium === true;
   const payment = latestPayment(subscriptionStatus?.latestPayment);
+  const cloudBackupSummaries = (() => {
+    const byAppId = new Map<string, CloudBackupGameSummary>();
+    for (const save of cloudSaves) {
+      const current = byAppId.get(save.appId);
+      const updatedAt = save.updatedAt || save.createdAt || null;
+      if (!current || (updatedAt && (!current.lastBackupAt || Date.parse(updatedAt) > Date.parse(current.lastBackupAt)))) {
+        byAppId.set(save.appId, {
+          appId: save.appId,
+          title: save.gameTitle || cloudBackupGames.find((game) => game.appId === save.appId)?.title || save.appId,
+          lastBackupAt: updatedAt,
+          lastBackupSuccess: true,
+        });
+      }
+    }
+    return Array.from(byAppId.values()).sort((left, right) => left.title.localeCompare(right.title));
+  })();
 
   if (surface === "settings" && steamProfile?.steamId && subscriptionLoading && !subscriptionStatus) {
     return (
@@ -196,32 +229,32 @@ export function SubscriptionPlans({
             onClick={() => steamProfile?.steamId && refreshSubscriptionStatus(steamProfile.steamId)}
             disabled={subscriptionLoading || !steamProfile?.steamId}
           >
-            <RefreshCw size={15} aria-hidden="true" />
+            <RefreshCw size={14} strokeWidth={2.15} aria-hidden="true" />
             {copy("Atualizar", "Refresh")}
           </button>
         </header>
 
         <div className="subscription-account__summary-grid">
           <article className="subscription-account__summary-card">
-            <ShieldCheck size={18} aria-hidden="true" />
+            <ShieldCheck size={16} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Status", "Status")}</span>
             <strong>{copy("Premium ativo", "Premium active")}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CalendarClock size={18} aria-hidden="true" />
+            <CalendarClock size={16} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Expira em", "Expires on")}</span>
             <strong>{formatDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CloudUpload size={18} aria-hidden="true" />
+            <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Backups em nuvem", "Cloud backups")}</span>
-            <strong>{cloudBackupGames.length}</strong>
+            <strong>{cloudBackupSummaries.length}</strong>
           </article>
         </div>
 
         <div className="subscription-account__details-grid">
           <article className="subscription-account__panel">
-            <h4><CreditCard size={16} aria-hidden="true" />{copy("Pagamento e benefício", "Payment and benefit")}</h4>
+            <h4><CreditCard size={15} strokeWidth={2.15} aria-hidden="true" />{copy("Pagamento e benefício", "Payment and benefit")}</h4>
             <dl>
               <div><dt>{copy("Plano", "Plan")}</dt><dd>{subscriptionStatus.subscription.planId === "quarterly" ? copy("Trimestral", "Quarterly") : copy("Mensal", "Monthly")}</dd></div>
               <div><dt>{copy("Início", "Start")}</dt><dd>{formatDate(subscriptionStatus.subscription.currentPeriodStart, language)}</dd></div>
@@ -232,7 +265,7 @@ export function SubscriptionPlans({
           </article>
 
           <article className="subscription-account__panel">
-            <h4><UserRound size={16} aria-hidden="true" />Discord</h4>
+            <h4><UserRound size={15} strokeWidth={2.15} aria-hidden="true" />Discord</h4>
             <dl>
               <div><dt>{copy("Conta Steam", "Steam account")}</dt><dd>{steamProfile?.displayName || steamProfile?.steamId || copy("Não conectada", "Not connected")}</dd></div>
               <div><dt>{copy("Discord", "Discord")}</dt><dd>{linkedDiscordName || copy("Não vinculado", "Not linked")}</dd></div>
@@ -250,28 +283,32 @@ export function SubscriptionPlans({
                 void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
               }}
             >
-              <Link size={15} aria-hidden="true" />
+              <Link size={14} strokeWidth={2.15} aria-hidden="true" />
               {discordLinkStatus?.linked ? copy("Atualizar vínculo", "Update link") : copy("Vincular Discord", "Link Discord")}
             </button>
           </article>
         </div>
 
         <article className="subscription-account__panel subscription-account__panel--wide">
-          <h4><CloudUpload size={16} aria-hidden="true" />{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
-          {cloudBackupGames.length > 0 ? (
+          <h4><CloudUpload size={15} strokeWidth={2.15} aria-hidden="true" />{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
+          {cloudBackupSummaries.length > 0 ? (
             <ul className="subscription-account__backup-list">
-              {cloudBackupGames.map((game) => (
+              {cloudBackupSummaries.map((game) => (
                 <li key={game.appId}>
                   <strong>{game.title}</strong>
-                  <span>{game.lastBackupAt ? formatDate(game.lastBackupAt, language) : copy("Sem backup registrado", "No backup recorded")}</span>
-                  <em className={game.lastBackupSuccess === false ? "subscription-account__backup-status subscription-account__backup-status--error" : "subscription-account__backup-status"}>
-                    {game.lastBackupSuccess === false ? copy("Falhou", "Failed") : copy("Ativo", "Active")}
+                  {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
+                  <em
+                    className="subscription-account__backup-status"
+                    title={copy("Backup em nuvem ativo", "Cloud backup active")}
+                    aria-label={copy("Backup em nuvem ativo", "Cloud backup active")}
+                  >
+                    <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
                   </em>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="subscription-account__empty">{copy("Nenhum jogo está com backup automático em nuvem ativado agora.", "No game currently has automatic cloud backup enabled.")}</p>
+            <p className="subscription-account__empty">{copy("Nenhum backup em nuvem encontrado ainda.", "No cloud backups found yet.")}</p>
           )}
         </article>
       </section>
@@ -392,7 +429,11 @@ export function SubscriptionPlans({
         {plans.map((plan) => (
           <article
             key={plan.id}
-            className={`subscription-plan-card${plan.disabled ? " subscription-plan-card--disabled" : ""}`}
+            className={[
+              "subscription-plan-card",
+              plan.disabled ? "subscription-plan-card--disabled" : "",
+              plan.id === "quarterly" ? "subscription-plan-card--featured" : "",
+            ].filter(Boolean).join(" ")}
           >
             {plan.badge && <div className="subscription-plan-card__badge">{plan.badge}</div>}
 
@@ -409,9 +450,9 @@ export function SubscriptionPlans({
                   className={plan.id === "free" ? "subscription-plan-card__benefit--disabled" : undefined}
                 >
                   {plan.id === "free" ? (
-                    <X size={15} strokeWidth={2.0} aria-hidden="true" />
+                    <X size={14} strokeWidth={2.15} aria-hidden="true" />
                   ) : (
-                    <Check size={15} strokeWidth={2.0} aria-hidden="true" />
+                    <Check size={14} strokeWidth={2.15} aria-hidden="true" />
                   )}
                   <span>{t(benefitKey)}</span>
                 </li>
@@ -477,7 +518,7 @@ export function SubscriptionPlans({
             }}
             disabled={isSteamSigningIn}
           >
-            {steamProfile?.steamId ? <Link size={15} aria-hidden="true" /> : <ExternalLink size={15} aria-hidden="true" />}
+            {steamProfile?.steamId ? <Link size={14} strokeWidth={2.15} aria-hidden="true" /> : <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />}
             {steamProfile?.steamId
               ? discordLinkStatus?.linked
                 ? t("subscription.discordLink.relink")
@@ -486,7 +527,7 @@ export function SubscriptionPlans({
           </button>
           {discordLinkStatus?.linked && (
             <span className="subscription-plans__discord-status">
-              <Check size={14} aria-hidden="true" />
+              <Check size={13} strokeWidth={2.25} aria-hidden="true" />
               {t("subscription.discordLink.linked")}
             </span>
           )}

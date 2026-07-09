@@ -761,19 +761,25 @@ async function handleDiscordSync(request: Request, env: Env) {
   return jsonResponse(await syncDiscordPremiumRoles(env), env);
 }
 
-async function handleDiscordLinkStatus(request: Request, env: Env) {
+async function handleDiscordLinkStatus(request: Request, env: Env, context?: ExecutionContext) {
   const steamId = new URL(request.url).searchParams.get("steamId");
   if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
 
+  // Fast path: D1 only. Role sync talks to Discord and was blocking the UI.
   const [subscription, link] = await Promise.all([
     getSubscription(env, steamId),
     getDiscordLink(env, steamId),
   ]);
-  const roleSync = link
-    ? await syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription))
-    : null;
 
-  return jsonResponse(publicDiscordLink(steamId, link, roleSync), env);
+  if (link && context) {
+    context.waitUntil(
+      syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription)).catch((error) => {
+        console.warn("Background Discord role sync failed", error);
+      })
+    );
+  }
+
+  return jsonResponse(publicDiscordLink(steamId, link, null), env);
 }
 
 async function handleDiscordLinkStart(request: Request, env: Env) {
@@ -912,28 +918,33 @@ async function handleCreateCheckout(request: Request, env: Env) {
   return jsonResponse({ payment: payment ? publicPayment(payment, origin) : null }, env, 201);
 }
 
-async function handleStatus(request: Request, env: Env) {
+async function handleStatus(request: Request, env: Env, context?: ExecutionContext) {
   const url = new URL(request.url);
   const origin = url.origin;
   const steamId = url.searchParams.get("steamId");
   if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
 
-  const [subscription, latestPayment] = await Promise.all([
+  const [subscription, latestPayment, discordLink] = await Promise.all([
     getSubscription(env, steamId),
     env.SUBSCRIPTION_DB.prepare(
       `SELECT * FROM payments WHERE steam_id = ? ORDER BY created_at DESC LIMIT 1`
     ).bind(steamId).first<PaymentRow>(),
+    getDiscordLink(env, steamId),
   ]);
-  const discordLink = await getDiscordLink(env, steamId);
-  const premiumRole = discordLink
-    ? await syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription))
-    : null;
+
+  if (discordLink && context) {
+    context.waitUntil(
+      syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription)).catch((error) => {
+        console.warn("Background Discord role sync failed", error);
+      })
+    );
+  }
 
   return jsonResponse({
     steamId,
     subscription: publicSubscription(subscription),
     latestPayment: latestPayment ? publicPayment(latestPayment, origin) : null,
-    discordLink: publicDiscordLink(steamId, discordLink, premiumRole),
+    discordLink: publicDiscordLink(steamId, discordLink, null),
   }, env);
 }
 
@@ -1188,10 +1199,10 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
     return handleCreateCheckout(request, env);
   }
   if (request.method === "GET" && url.pathname === "/subscription/status") {
-    return handleStatus(request, env);
+    return handleStatus(request, env, context);
   }
   if (request.method === "GET" && url.pathname === "/discord/link-status") {
-    return handleDiscordLinkStatus(request, env);
+    return handleDiscordLinkStatus(request, env, context);
   }
   if (request.method === "GET" && url.pathname === "/discord/link") {
     return handleDiscordLinkStart(request, env);

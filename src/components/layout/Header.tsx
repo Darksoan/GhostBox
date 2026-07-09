@@ -1,25 +1,40 @@
 import {
-  ChevronLeft,
   Bell,
+  ChevronLeft,
   Download,
   Heart,
   LoaderCircle,
-  MessageSquareText,
   Minus,
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect } from "react";
+import { memo, useState, useCallback, useEffect, useMemo } from "react";
 import type { GhostBoxGame } from "../../data";
+import { loadGames } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import type { UpdateCheckResult } from "../../lib/ghostboxApi.types";
 import { preloadGameModalAssets } from "../../utils/image";
+import {
+  readNotificationsLastSeenAt,
+  writeNotificationsLastSeenAt,
+} from "../../utils/storage";
 import { FeedbackModal } from "../modals/FeedbackModal";
 import discordIcon from "../../../Icons/discord.svg";
+import feedbackIcon from "../../assets/icons/message.png";
 
 const discordInviteUrl = "https://discord.gg/Y7XTy5rKBc";
+
+const pageTitleKeys: Record<Page, string> = {
+  home: "header.home",
+  catalogue: "header.catalogue",
+  library: "header.library",
+  favorites: "header.favorites",
+  settings: "header.settings",
+  profile: "header.profile",
+  notifications: "header.notifications",
+};
 
 const HighlightedSearchText = memo(function HighlightedSearchText({
   text,
@@ -31,8 +46,9 @@ const HighlightedSearchText = memo(function HighlightedSearchText({
 
 interface HeaderProps {
   page: Page;
-  title?: string;
   canGoBack?: boolean;
+  /** Overrides the tab label (e.g. game title while a modal is open). */
+  navigationTitle?: string | null;
   query: string;
   isSearching: boolean;
   suggestions: GhostBoxGame[];
@@ -48,8 +64,8 @@ interface HeaderProps {
 
 export const Header = memo(function Header({
   page,
-  title,
-  canGoBack,
+  canGoBack = false,
+  navigationTitle = null,
   query,
   isSearching,
   suggestions,
@@ -63,11 +79,16 @@ export const Header = memo(function Header({
   onNavigateToNotifications,
 }: HeaderProps) {
   const { t, appearance } = useSettings();
+  const pageTitle = useMemo(() => {
+    const override = navigationTitle?.trim();
+    if (override) return override;
+    return t(pageTitleKeys[page]);
+  }, [navigationTitle, page, t]);
   const [focused, setFocused] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const hasBackButton = canGoBack ?? page !== "home";
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const showDropdown =
     (page !== "catalogue" || allowSearchDropdown) &&
     focused &&
@@ -102,6 +123,37 @@ export const Header = memo(function Header({
   const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
   const handleClose = useCallback(() => void ghostboxApi.close(), []);
 
+  const refreshUnreadNotifications = useCallback(() => {
+    if (page === "notifications") {
+      setUnreadNotificationCount(0);
+      return;
+    }
+
+    void loadGames({ limit: 200, sort: "recentlyAdded" })
+      .then((database) => {
+        const lastSeen = readNotificationsLastSeenAt();
+        const count = database.games.reduce((total, game) => {
+          const addedAt = game.databaseAddedAt ?? 0;
+          return addedAt > lastSeen ? total + 1 : total;
+        }, 0);
+        setUnreadNotificationCount(count);
+      })
+      .catch(() => setUnreadNotificationCount(0));
+  }, [page]);
+
+  useEffect(() => {
+    refreshUnreadNotifications();
+    return ghostboxApi.onCatalogueCacheUpdated(() => {
+      refreshUnreadNotifications();
+    });
+  }, [refreshUnreadNotifications]);
+
+  useEffect(() => {
+    if (page !== "notifications") return;
+    writeNotificationsLastSeenAt(Date.now());
+    setUnreadNotificationCount(0);
+  }, [page]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -133,22 +185,25 @@ export const Header = memo(function Header({
     ? `Download GhostBox ${update?.latestVersion ?? ""}`
     : `Baixar GhostBox ${update?.latestVersion ?? ""}`;
 
+  const tooltipText = appearance.language === "en"
+    ? `New version available: v${update?.latestVersion ?? ""}`
+    : `Nova versão disponível: v${update?.latestVersion ?? ""}`;
+
   return (
     <header className="header">
-      <div className="header__section header__section--left">
+      <div className="header__section header__section--left header__navigation-controls">
         <button
           type="button"
-          className={`header__back-button ${hasBackButton ? "header__back-button--enabled" : ""}`}
+          className="header__nav-btn"
           onClick={onBack}
+          disabled={!canGoBack}
           aria-label={t("header.back")}
         >
-          <ChevronLeft size={18} />
+          <ChevronLeft size={17} strokeWidth={2.0} aria-hidden="true" />
         </button>
-        <h2
-          className={`header__title ${hasBackButton ? "header__title--has-back-button" : ""}`}
-        >
-          {title ?? t(`header.${page}`)}
-        </h2>
+        <span className="header__page-title" title={pageTitle}>
+          {pageTitle}
+        </span>
       </div>
 
       <div className="header__section">
@@ -158,7 +213,19 @@ export const Header = memo(function Header({
           aria-label={t("header.feedback")}
           onClick={handleFeedbackClick}
         >
-          <MessageSquareText size={18} />
+          <img
+            className="header__feedback-icon"
+            src={feedbackIcon}
+            alt=""
+            width={20}
+            height={20}
+            draggable={false}
+            decoding="async"
+            aria-hidden="true"
+          />
+          <span className="header__tooltip">
+            {t("header.feedback")}
+          </span>
         </button>
         <button
           type="button"
@@ -167,14 +234,33 @@ export const Header = memo(function Header({
           onClick={handleDiscordClick}
         >
           <img src={discordIcon} alt="" aria-hidden="true" />
+          <span className="header__tooltip">
+            Discord
+          </span>
         </button>
         <button
           type="button"
           className="header__icon-button header__notification-button"
-          aria-label={t("header.notifications")}
-          onClick={onNavigateToNotifications}
+          aria-label={
+            unreadNotificationCount > 0
+              ? `${t("header.notifications")} (${unreadNotificationCount})`
+              : t("header.notifications")
+          }
+          onClick={() => {
+            writeNotificationsLastSeenAt(Date.now());
+            setUnreadNotificationCount(0);
+            onNavigateToNotifications?.();
+          }}
         >
           <Bell size={18} />
+          {unreadNotificationCount > 0 && (
+            <span className="header__notification-badge" aria-hidden="true">
+              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+            </span>
+          )}
+          <span className="header__tooltip">
+            {t("header.notifications")}
+          </span>
         </button>
         <div
           className="header__search-shell"
@@ -249,15 +335,17 @@ export const Header = memo(function Header({
               type="button"
               className="header__window-controls-update"
               aria-label={updateLabel}
-              title={updateLabel}
               onClick={handleInstallUpdate}
               disabled={isUpdating}
             >
               {isUpdating ? (
-                <LoaderCircle className="header__window-controls-spinner" size={13} />
+                <LoaderCircle className="header__window-controls-spinner" size={17} />
               ) : (
-                <Download size={13} />
+                <Download size={17} />
               )}
+              <span className="header__tooltip">
+                {tooltipText}
+              </span>
             </button>
           )}
           <button
