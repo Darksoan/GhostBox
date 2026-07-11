@@ -27,6 +27,11 @@ import type {
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
 import {
+  applyCloudProfileToLocal,
+  buildCloudProfileSnapshot,
+  isCloudSnapshotNewer,
+} from "../lib/cloudProfile";
+import {
   formatSteamLoginError,
   mergeSteamProfile,
 } from "../lib/steamProfile";
@@ -45,12 +50,14 @@ import {
   readStoredSteamProfile,
   readStoredStartupPage,
   readStoredShowSteamGames,
+  readStoredCloudProfileUpdatedAt,
   writeStoredFavoriteGames,
   writeStoredProfileHistoryGames,
   writeStoredUserCollections,
   writeStoredSteamProfile,
   writeStoredStartupPage,
   writeStoredShowSteamGames,
+  writeStoredCloudProfileUpdatedAt,
 } from "../utils/storage";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import {
@@ -302,9 +309,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const steamProfileRequestSequenceRef = useRef(0);
   const profileBackupSyncKeysRef = useRef(new Map<string, string>());
   const gamePlaytimesRef = useRef<GamePlaytimeSnapshot>({});
+  const cloudProfileSyncTimerRef = useRef<number | null>(null);
+  const cloudProfileSyncInFlightRef = useRef(false);
+  const cloudProfileRestoreInFlightRef = useRef(false);
+  const skipNextCloudProfileUploadRef = useRef(false);
+  const cloudProfileLocalUpdatedAtRef = useRef<string | null>(
+    readStoredCloudProfileUpdatedAt()
+  );
+  const steamProfileRef = useRef<SteamProfile | null>(steamProfile);
+  const userCollectionsRef = useRef<UserCollection[]>(userCollections);
+  const favoriteGamesRef = useRef<GhostBoxGame[]>(favoriteGames);
+  const addedLibraryGamesRef = useRef<GhostBoxGame[]>(addedLibraryGames);
   const [profileHistoryGames, setProfileHistoryGames] = useState<GhostBoxGame[]>(
     () => readStoredProfileHistoryGames()
   );
+  const profileHistoryGamesRef = useRef<GhostBoxGame[]>(profileHistoryGames);
+  const cloudProfileBootstrappedRef = useRef(false);
+  const cloudProfileRestoredSteamIdRef = useRef<string | null>(null);
   const [completedInitialLoadSteps, setCompletedInitialLoadSteps] = useState<
     Set<InitialLoadStep>
   >(() => new Set());
@@ -401,6 +422,148 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     backupSettingsRef.current = backupSettings;
   }, [backupSettings]);
+
+  useEffect(() => {
+    steamProfileRef.current = steamProfile;
+  }, [steamProfile]);
+
+  useEffect(() => {
+    userCollectionsRef.current = userCollections;
+  }, [userCollections]);
+
+  useEffect(() => {
+    favoriteGamesRef.current = favoriteGames;
+  }, [favoriteGames]);
+
+  useEffect(() => {
+    addedLibraryGamesRef.current = addedLibraryGames;
+  }, [addedLibraryGames]);
+
+  useEffect(() => {
+    profileHistoryGamesRef.current = profileHistoryGames;
+  }, [profileHistoryGames]);
+
+  const rehydrateCollectionGames = useCallback(
+    (collections: UserCollection[]): UserCollection[] => {
+      const gameById = new Map<string, GhostBoxGame>();
+      for (const game of favoriteGamesRef.current) gameById.set(game.id, game);
+      for (const game of addedLibraryGamesRef.current) gameById.set(game.id, game);
+      for (const game of profileHistoryGamesRef.current) gameById.set(game.id, game);
+
+      return collections.map((collection) => ({
+        ...collection,
+        games: collection.gameIds.flatMap((gameId) => {
+          const game = gameById.get(gameId);
+          return game ? [game] : [];
+        }),
+      }));
+    },
+    []
+  );
+
+  const markCloudProfileLocalUpdated = useCallback((iso = new Date().toISOString()) => {
+    cloudProfileLocalUpdatedAtRef.current = iso;
+    writeStoredCloudProfileUpdatedAt(iso);
+    return iso;
+  }, []);
+
+  const pushCloudProfileSnapshot = useCallback(async () => {
+    if (cloudProfileSyncInFlightRef.current) return;
+    const profile = steamProfileRef.current;
+    if (!profile?.steamId) return;
+
+    cloudProfileSyncInFlightRef.current = true;
+    try {
+      const session = await ghostboxApi.getCloudSession();
+      if (!session?.token || session.user?.isPremium !== true) return;
+
+      const updatedAt =
+        cloudProfileLocalUpdatedAtRef.current || markCloudProfileLocalUpdated();
+      const snapshot = buildCloudProfileSnapshot({
+        updatedAt,
+        steamProfile: profile,
+        userCollections: userCollectionsRef.current,
+      });
+      const saved = await ghostboxApi.saveCloudProfileSnapshot(snapshot);
+      if (saved?.updatedAt) {
+        cloudProfileLocalUpdatedAtRef.current = saved.updatedAt;
+        writeStoredCloudProfileUpdatedAt(saved.updatedAt);
+      }
+    } catch {
+      // Local data remains the source of truth if cloud sync fails.
+    } finally {
+      cloudProfileSyncInFlightRef.current = false;
+    }
+  }, [markCloudProfileLocalUpdated]);
+
+  const scheduleCloudProfileSync = useCallback(() => {
+    if (skipNextCloudProfileUploadRef.current) {
+      skipNextCloudProfileUploadRef.current = false;
+      return;
+    }
+    if (!steamProfileRef.current?.steamId) return;
+    markCloudProfileLocalUpdated();
+    if (cloudProfileSyncTimerRef.current !== null) {
+      window.clearTimeout(cloudProfileSyncTimerRef.current);
+    }
+    cloudProfileSyncTimerRef.current = window.setTimeout(() => {
+      cloudProfileSyncTimerRef.current = null;
+      void pushCloudProfileSnapshot();
+    }, 1500);
+  }, [markCloudProfileLocalUpdated, pushCloudProfileSnapshot]);
+
+  const restoreCloudProfileFromRemote = useCallback(async () => {
+    if (cloudProfileRestoreInFlightRef.current) return;
+    const currentProfile = steamProfileRef.current;
+    if (!currentProfile?.steamId) return;
+
+    cloudProfileRestoreInFlightRef.current = true;
+    try {
+      const session = await ghostboxApi.getCloudSession();
+      if (!session?.token || session.user?.isPremium !== true) return;
+
+      const remote = await ghostboxApi.getCloudProfileSnapshot();
+      if (!remote) {
+        void pushCloudProfileSnapshot();
+        return;
+      }
+
+      const localUpdatedAt = cloudProfileLocalUpdatedAtRef.current;
+      const localHasData =
+        Boolean(currentProfile.avatarUrl || currentProfile.bannerUrl) ||
+        userCollectionsRef.current.length > 0;
+
+      if (
+        localHasData &&
+        !isCloudSnapshotNewer(remote.updatedAt, localUpdatedAt)
+      ) {
+        if (isCloudSnapshotNewer(localUpdatedAt, remote.updatedAt)) {
+          void pushCloudProfileSnapshot();
+        }
+        return;
+      }
+
+      const applied = applyCloudProfileToLocal({
+        currentProfile,
+        snapshot: remote,
+      });
+
+      skipNextCloudProfileUploadRef.current = true;
+      if (applied.steamProfile) {
+        setSteamProfile(applied.steamProfile);
+        writeStoredSteamProfile(applied.steamProfile);
+        await ghostboxApi.saveSteamProfile(applied.steamProfile).catch(() => undefined);
+      }
+      setUserCollections(rehydrateCollectionGames(applied.userCollections));
+      writeStoredUserCollections(applied.userCollections);
+      cloudProfileLocalUpdatedAtRef.current = remote.updatedAt;
+      writeStoredCloudProfileUpdatedAt(remote.updatedAt);
+    } catch {
+      // Keep local profile/collections if remote restore fails.
+    } finally {
+      cloudProfileRestoreInFlightRef.current = false;
+    }
+  }, [pushCloudProfileSnapshot, rehydrateCollectionGames]);
 
   const queueBackupToast = useCallback(
     (record: BackupSettings["backupRecords"][string]) => {
@@ -500,7 +663,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     writeStoredUserCollections(userCollections);
-  }, [userCollections]);
+    if (!cloudProfileBootstrappedRef.current) {
+      cloudProfileBootstrappedRef.current = true;
+      return;
+    }
+    scheduleCloudProfileSync();
+  }, [scheduleCloudProfileSync, userCollections]);
+
+  useEffect(() => {
+    const steamId = steamProfile?.steamId?.trim();
+    if (!steamId || cloudProfileRestoredSteamIdRef.current === steamId) return;
+    cloudProfileRestoredSteamIdRef.current = steamId;
+    void restoreCloudProfileFromRemote();
+  }, [restoreCloudProfileFromRemote, steamProfile?.steamId]);
+
+  useEffect(() => {
+    setUserCollections((current) => {
+      if (current.length === 0) return current;
+      const next = rehydrateCollectionGames(current);
+      const changed = next.some((collection, index) => {
+        const previous = current[index];
+        return (previous?.games?.length ?? 0) !== (collection.games?.length ?? 0);
+      });
+      return changed ? next : current;
+    });
+  }, [addedLibraryGames, favoriteGames, profileHistoryGames, rehydrateCollectionGames]);
 
   useEffect(() => {
     writeStoredStartupPage(initialPage);
@@ -569,7 +756,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         setProfileHistoryGames((current) => {
           const existingGame = current.find((game) => game.appId === appId);
-          const isPlaceholderTitle = /^Steam \d+$/.test(
+          const isPlaceholderTitle = /^Steam(?: App)? \d+$/i.test(
             gameWithBackupAchievements.title
           );
 
@@ -970,6 +1157,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setSteamProfile(profile);
       writeStoredSteamProfile(profile);
       void syncPlaytimesFromSteam(profile?.steamId);
+      void restoreCloudProfileFromRemote();
       showToast(
         appearance.language === "en" ? "Login complete" : "Login concluído",
         appearance.language === "en"
@@ -994,6 +1182,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [
     appearance.language,
     isSteamSigningIn,
+    restoreCloudProfileFromRemote,
     showToast,
     steamProfile,
     syncPlaytimesFromSteam,
@@ -1002,8 +1191,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const handleSteamSignOut = useCallback(async () => {
     ++steamProfileRequestSequenceRef.current;
     await ghostboxApi.signOutSteam();
+    await ghostboxApi.signOutCloud().catch(() => undefined);
     setSteamProfile(null);
     writeStoredSteamProfile(null);
+    writeStoredCloudProfileUpdatedAt(null);
+    cloudProfileLocalUpdatedAtRef.current = null;
+    cloudProfileRestoredSteamIdRef.current = null;
   }, []);
 
   const handleRestartSteam = useCallback(async () => {
@@ -1042,8 +1235,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setSteamProfile(nextProfile);
       writeStoredSteamProfile(nextProfile);
       await ghostboxApi.saveSteamProfile(nextProfile);
+      scheduleCloudProfileSync();
     },
-    [steamProfile]
+    [scheduleCloudProfileSync, steamProfile]
   );
 
   const handleStartupSettingsChange = useCallback(

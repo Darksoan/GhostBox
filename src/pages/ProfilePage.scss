@@ -701,7 +701,7 @@
     margin-bottom: 0;
     padding: 0 16px;
     border-bottom: 1px solid var(--border-subtle);
-    background: var(--overlay-medium);
+    background: linear-gradient(180deg, var(--surface-secondary), var(--surface-tertiary));
 
     h3 {
       margin: 0;
@@ -974,7 +974,7 @@
     margin: 0;
     padding: 0 16px;
     border-bottom: 1px solid var(--border-subtle);
-    background: var(--overlay-medium);
+    background: linear-gradient(180deg, var(--surface-secondary), var(--surface-tertiary));
   }
 
   &__top-games-list {

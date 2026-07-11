@@ -55,7 +55,10 @@ import {
 import { useSettings } from "../context/settings";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
-import { loadGameAchievementDetailsCached } from "../utils/gameCache";
+import {
+  loadGameAchievementDetailsCached,
+  loadGameStoreDetailsCached,
+} from "../utils/gameCache";
 import {
   getProfileAchievementTotal as getAchievementTotal,
   getProfileUnlockedAchievementCount as getUnlockedAchievementCount,
@@ -340,6 +343,22 @@ function formatProfileLastSession(value: string | null | undefined, language: st
   }).format(time);
 }
 
+function isPlaceholderGameTitle(title: string | undefined) {
+  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
+}
+
+function getProfileGameTitle(
+  game: GhostBoxGame,
+  language: string,
+  resolvedTitle?: string
+) {
+  const title = resolvedTitle?.trim() || game.title;
+
+  return isPlaceholderGameTitle(title)
+    ? language === "en" ? "Steam game" : "Jogo Steam"
+    : title;
+}
+
 function mergeProfileGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
   return mergeGameCardData(game, details);
 }
@@ -536,6 +555,8 @@ export function ProfilePage({
   );
   const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
     useState<Map<string, GhostBoxGame>>(() => new Map());
+  const [resolvedGameTitlesByAppId, setResolvedGameTitlesByAppId] =
+    useState<Map<string, string>>(() => new Map());
   const [showcaseAchievementLimit, setShowcaseAchievementLimit] = useState(
     showcaseAchievementMinLimit
   );
@@ -1104,6 +1125,46 @@ export function ProfilePage({
       .slice(0, 3);
   }, [profileAchievementGames]);
 
+  useEffect(() => {
+    const gamesToResolve = topGames.filter(
+      (game) =>
+        game.appId &&
+        isPlaceholderGameTitle(game.title) &&
+        !resolvedGameTitlesByAppId.has(game.appId)
+    );
+    if (gamesToResolve.length === 0) return;
+
+    let cancelled = false;
+
+    void Promise.all(
+      gamesToResolve.map(async (game) => {
+        const details = await loadGameStoreDetailsCached(
+          game.id || `steam-${game.appId}`
+        ).catch(() => null);
+        const title = details?.title?.trim();
+        if (!title || isPlaceholderGameTitle(title)) return null;
+        return { appId: game.appId, title };
+      })
+    ).then((resolvedTitles) => {
+      if (cancelled) return;
+
+      setResolvedGameTitlesByAppId((current) => {
+        let changed = false;
+        const next = new Map(current);
+        for (const resolvedTitle of resolvedTitles) {
+          if (!resolvedTitle || next.has(resolvedTitle.appId)) continue;
+          next.set(resolvedTitle.appId, resolvedTitle.title);
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedGameTitlesByAppId, topGames]);
+
   const visibleGamesKey = visibleGames.map((game) => game.id).join("|");
   const profileImageKey = `${steamProfile?.avatarUrl ?? ""}\n${steamProfile?.bannerUrl ?? ""}`;
   const avatarSources = useCachedImageSources(
@@ -1553,6 +1614,10 @@ export function ProfilePage({
                     {topGames.length > 0 ? (
                       <div className="profile-page__top-games-list">
                         {topGames.map((game, index) => {
+                          const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
+                          const displayGame = resolvedTitle
+                            ? { ...game, title: resolvedTitle }
+                            : game;
                           const achievementTotal = getAchievementTotal(game);
                           const achievementUnlocked =
                             getUnlockedAchievementCount(game);
@@ -1565,16 +1630,16 @@ export function ProfilePage({
                               key={game.id}
                               type="button"
                               className="profile-page__top-game-console-row"
-                              onClick={() => onOpenGame(game)}
+                              onClick={() => onOpenGame(displayGame)}
                               onMouseEnter={() =>
-                                preloadGameListAssets([game], {
+                                preloadGameListAssets([displayGame], {
                                   variant: "portrait",
                                   limit: 1,
                                   idle: false,
                                 })
                               }
                               onFocus={() =>
-                                preloadGameListAssets([game], {
+                                preloadGameListAssets([displayGame], {
                                   variant: "portrait",
                                   limit: 1,
                                   idle: false,
@@ -1584,9 +1649,9 @@ export function ProfilePage({
                               <span className="profile-page__top-game-rank">
                                 {index + 1}
                               </span>
-                              <ProfileTopGameCover game={game} />
+                              <ProfileTopGameCover game={displayGame} />
                               <span className="profile-page__top-game-content">
-                                <strong>{game.title}</strong>
+                                <strong>{getProfileGameTitle(game, appearance.language, resolvedTitle)}</strong>
                                 <span className="profile-page__top-game-stats">
                                   <span className="profile-page__top-game-stat">
                                     <span className="profile-page__top-game-stat-label">

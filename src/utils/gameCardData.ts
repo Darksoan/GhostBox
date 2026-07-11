@@ -41,11 +41,15 @@ function preferArray(primary: string[] | undefined, fallback: string[]) {
   return primary?.length ? primary : fallback;
 }
 
+function isPlaceholderGameTitle(title: string | undefined) {
+  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
+}
+
 export function mergeGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
   const richerAchievementGame = getRicherAchievementGame(game, details);
   const gamePlaytime = game.playTimeInMilliseconds ?? 0;
   const detailsPlaytime = details.playTimeInMilliseconds ?? 0;
-  const isPlaceholderTitle = /^Steam \d+$/.test(details.title);
+  const isPlaceholderTitle = isPlaceholderGameTitle(details.title);
 
   return {
     ...game,

@@ -1,6 +1,8 @@
 import {
   Bell,
   ChevronLeft,
+  ChevronRight,
+  Crown,
   Download,
   Heart,
   LoaderCircle,
@@ -8,14 +10,15 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect, useMemo } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { memo, useState, useCallback, useEffect, useRef } from "react";
 import type { GhostBoxGame } from "../../data";
 import { loadGames } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import type { UpdateCheckResult } from "../../lib/ghostboxApi.types";
-import { preloadGameModalAssets } from "../../utils/image";
+import { preloadGameModalAssetsThrottled } from "../../utils/image";
 import {
   readNotificationsLastSeenAt,
   writeNotificationsLastSeenAt,
@@ -25,16 +28,6 @@ import discordIcon from "../../../Icons/discord.svg";
 import feedbackIcon from "../../assets/icons/message.png";
 
 const discordInviteUrl = "https://discord.gg/Y7XTy5rKBc";
-
-const pageTitleKeys: Record<Page, string> = {
-  home: "header.home",
-  catalogue: "header.catalogue",
-  library: "header.library",
-  favorites: "header.favorites",
-  settings: "header.settings",
-  profile: "header.profile",
-  notifications: "header.notifications",
-};
 
 const HighlightedSearchText = memo(function HighlightedSearchText({
   text,
@@ -47,8 +40,7 @@ const HighlightedSearchText = memo(function HighlightedSearchText({
 interface HeaderProps {
   page: Page;
   canGoBack?: boolean;
-  /** Overrides the tab label (e.g. game title while a modal is open). */
-  navigationTitle?: string | null;
+  canGoForward?: boolean;
   query: string;
   isSearching: boolean;
   suggestions: GhostBoxGame[];
@@ -56,16 +48,47 @@ interface HeaderProps {
   favoriteGameIds?: Set<string>;
   addedGameAppIds?: Set<string>;
   steamProfile?: SteamProfile | null;
+  isPremium?: boolean;
+  subscriptionPeriodEnd?: string | null;
   onQueryChange: (query: string) => void;
   onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
+  onForward: () => void;
   onNavigateToNotifications?: () => void;
+  onClickPremium?: () => void;
+}
+
+function formatSubscriptionExpiry(value: string | null | undefined, language: "pt" | "en") {
+  if (!value) return null;
+
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+
+  const parts = new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(timestamp);
+  const getPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const day = getPart("day");
+  const month = getPart("month");
+  const year = getPart("year");
+  const hour = getPart("hour");
+  const minute = getPart("minute");
+
+  return {
+    date: language === "en" ? `${month}/${day}/${year}` : `${day}/${month}/${year}`,
+    time: `${hour}:${minute}`,
+  };
 }
 
 export const Header = memo(function Header({
   page,
   canGoBack = false,
-  navigationTitle = null,
+  canGoForward = false,
   query,
   isSearching,
   suggestions,
@@ -73,22 +96,22 @@ export const Header = memo(function Header({
   favoriteGameIds = new Set(),
   addedGameAppIds = new Set(),
   steamProfile = null,
+  isPremium = false,
+  subscriptionPeriodEnd = null,
   onQueryChange,
   onSelectSuggestion,
   onBack,
+  onForward,
   onNavigateToNotifications,
+  onClickPremium,
 }: HeaderProps) {
   const { t, appearance } = useSettings();
-  const pageTitle = useMemo(() => {
-    const override = navigationTitle?.trim();
-    if (override) return override;
-    return t(pageTitleKeys[page]);
-  }, [navigationTitle, page, t]);
   const [focused, setFocused] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const lastSeenRef = useRef<number>(readNotificationsLastSeenAt());
   const showDropdown =
     (page !== "catalogue" || allowSearchDropdown) &&
     focused &&
@@ -122,25 +145,30 @@ export const Header = memo(function Header({
 
   const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
   const handleClose = useCallback(() => void ghostboxApi.close(), []);
+  const handleHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, input, textarea, select, a, [role='button']")) return;
+
+    void getCurrentWindow().startDragging();
+  }, []);
 
   const refreshUnreadNotifications = useCallback(() => {
-    if (page === "notifications") {
-      setUnreadNotificationCount(0);
-      return;
-    }
-
+    const seenAt = lastSeenRef.current;
     void loadGames({ limit: 200, sort: "recentlyAdded" })
       .then((database) => {
-        const lastSeen = readNotificationsLastSeenAt();
         const count = database.games.reduce((total, game) => {
           const addedAt = game.databaseAddedAt ?? 0;
-          return addedAt > lastSeen ? total + 1 : total;
+          return addedAt > seenAt ? total + 1 : total;
         }, 0);
         setUnreadNotificationCount(count);
       })
       .catch(() => setUnreadNotificationCount(0));
-  }, [page]);
+  }, []);
 
+  // Badge count is independent of the active page: refresh on mount, on
+  // catalogue cache updates, and when the notifications page is left.
   useEffect(() => {
     refreshUnreadNotifications();
     return ghostboxApi.onCatalogueCacheUpdated(() => {
@@ -148,9 +176,13 @@ export const Header = memo(function Header({
     });
   }, [refreshUnreadNotifications]);
 
+  // Mark as seen when entering the notifications page; update the seen
+  // watermark and clear the badge without re-running loadGames.
   useEffect(() => {
     if (page !== "notifications") return;
-    writeNotificationsLastSeenAt(Date.now());
+    const now = Date.now();
+    lastSeenRef.current = now;
+    writeNotificationsLastSeenAt(now);
     setUnreadNotificationCount(0);
   }, [page]);
 
@@ -188,9 +220,10 @@ export const Header = memo(function Header({
   const tooltipText = appearance.language === "en"
     ? `New version available: v${update?.latestVersion ?? ""}`
     : `Nova versão disponível: v${update?.latestVersion ?? ""}`;
+  const premiumExpiryText = formatSubscriptionExpiry(subscriptionPeriodEnd, appearance.language);
 
   return (
-    <header className="header">
+    <header className="header" onPointerDown={handleHeaderPointerDown}>
       <div className="header__section header__section--left header__navigation-controls">
         <button
           type="button"
@@ -201,9 +234,15 @@ export const Header = memo(function Header({
         >
           <ChevronLeft size={17} strokeWidth={2.0} aria-hidden="true" />
         </button>
-        <span className="header__page-title" title={pageTitle}>
-          {pageTitle}
-        </span>
+        <button
+          type="button"
+          className="header__nav-btn"
+          onClick={onForward}
+          disabled={!canGoForward}
+          aria-label={t("header.forward")}
+        >
+          <ChevronRight size={17} strokeWidth={2.0} aria-hidden="true" />
+        </button>
       </div>
 
       <div className="header__section">
@@ -238,6 +277,32 @@ export const Header = memo(function Header({
             Discord
           </span>
         </button>
+        {isPremium && (
+          <button
+            type="button"
+            className="header__premium-indicator"
+            aria-label="Premium"
+            onClick={onClickPremium}
+          >
+            <Crown className="header__premium-crown" size={18} aria-hidden="true" />
+            <span className="header__premium-label">
+              {appearance.language === "en" ? "Subscription" : "Assinatura"}
+            </span>
+            <span className="header__tooltip header__tooltip--premium">
+              {premiumExpiryText ? (
+                <>
+                  {appearance.language === "en" ? "Expires on " : "Expira em "}
+                  <span className="header__tooltip-date">{premiumExpiryText.date}</span>
+                  <span className="header__tooltip-connector">{appearance.language === "en" ? " at " : " às "}</span>
+                  <span className="header__tooltip-date">{premiumExpiryText.time}</span>
+                  {"."}
+                </>
+              ) : (
+                appearance.language === "en" ? "Active subscription." : "Assinatura ativa."
+              )}
+            </span>
+          </button>
+        )}
         <button
           type="button"
           className="header__icon-button header__notification-button"
@@ -247,7 +312,9 @@ export const Header = memo(function Header({
               : t("header.notifications")
           }
           onClick={() => {
-            writeNotificationsLastSeenAt(Date.now());
+            const now = Date.now();
+            lastSeenRef.current = now;
+            writeNotificationsLastSeenAt(now);
             setUnreadNotificationCount(0);
             onNavigateToNotifications?.();
           }}
@@ -294,8 +361,8 @@ export const Header = memo(function Header({
                           type="button"
                           className="header__search-dropdown-item"
                           onMouseDown={(event) => event.preventDefault()}
-                          onFocus={() => preloadGameModalAssets(game)}
-                          onMouseEnter={() => preloadGameModalAssets(game)}
+                          onFocus={() => preloadGameModalAssetsThrottled(game)}
+                          onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
                           onClick={() => {
                             setFocused(false);
                             onSelectSuggestion(game);

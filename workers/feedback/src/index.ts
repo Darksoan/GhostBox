@@ -89,7 +89,7 @@ function normalizeReleaseVersion(release: GitHubRelease) {
   return tagName.replace(/^v/i, "") || normalizeString(envLatestVersionFallback);
 }
 
-const envLatestVersionFallback = "0.1.0";
+const envLatestVersionFallback = "0.1.2";
 
 async function fetchLatestRelease(env: Env) {
   const config = getGitHubConfig(env);

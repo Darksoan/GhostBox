@@ -1,4 +1,4 @@
-import { CalendarClock, Check, Cloud, CloudUpload, CreditCard, ExternalLink, Link, RefreshCw, ShieldCheck, UserRound, X } from "lucide-react";
+import { CalendarClock, Check, Cloud, CloudUpload, CreditCard, ExternalLink, Link, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
@@ -99,6 +99,17 @@ function latestPayment(value: unknown): SubscriptionPayment | null {
   return value && typeof value === "object" ? value as SubscriptionPayment : null;
 }
 
+function effectivePaymentStatus(payment: SubscriptionPayment, subscription: SubscriptionStatusResult["subscription"]) {
+  if (subscription.isPremium && subscription.lastPaymentId === payment.id) return "paid";
+  return payment.status || "pending";
+}
+
+function visiblePayment(payment: SubscriptionPayment | null, subscription: SubscriptionStatusResult["subscription"] | undefined) {
+  if (!payment || !subscription) return null;
+  if (subscription.isPremium && !subscription.lastPaymentId) return null;
+  return payment;
+}
+
 export function SubscriptionPlans({
   surface = "settings",
   enterDelay,
@@ -144,40 +155,31 @@ export function SubscriptionPlans({
   }
 
   useEffect(() => {
-    let cancelled = false;
-    if (!steamProfile?.steamId) {
+    const steamId = steamProfile?.steamId;
+    if (!steamId) {
       setDiscordLinkStatus(null);
       setCloudSaves([]);
       return;
     }
 
-    void ghostboxApi.getDiscordLinkStatus(steamProfile.steamId).then((status) => {
-      if (!cancelled) setDiscordLinkStatus(status);
-    });
-    refreshSubscriptionStatus(steamProfile.steamId);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [steamProfile?.steamId]);
-
-  useEffect(() => {
-    const steamId = steamProfile?.steamId;
-    if (!steamId) return;
-
-    const handleFocus = () => {
+    const refreshSubscriptionData = () => {
       refreshDiscordLinkStatus(steamId);
       refreshSubscriptionStatus(steamId);
     };
-    window.addEventListener("focus", handleFocus);
+    refreshSubscriptionData();
+
+    if (surface !== "settings") return;
+
+    const intervalId = window.setInterval(refreshSubscriptionData, 10000);
 
     return () => {
-      window.removeEventListener("focus", handleFocus);
+      window.clearInterval(intervalId);
     };
-  }, [steamProfile?.steamId]);
+  }, [steamProfile?.steamId, surface]);
 
   const isPremium = subscriptionStatus?.subscription.isPremium === true;
-  const payment = latestPayment(subscriptionStatus?.latestPayment);
+  const payment = visiblePayment(latestPayment(subscriptionStatus?.latestPayment), subscriptionStatus?.subscription);
+  const paymentStatus = payment && subscriptionStatus ? effectivePaymentStatus(payment, subscriptionStatus.subscription) : null;
   const cloudBackupSummaries = (() => {
     const byAppId = new Map<string, CloudBackupGameSummary>();
     for (const save of cloudSaves) {
@@ -214,86 +216,80 @@ export function SubscriptionPlans({
     return (
       <section
         className="subscription-account settings-panel__animated-block"
-        style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
+        style={{
+          ...(enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : {}),
+          ["--subscription-ghost-icon" as string]: `url(${ghostIcon})`
+        }}
         aria-label={copy("Resumo da assinatura Premium", "Premium subscription summary")}
       >
         <header className="subscription-account__header">
-          <span className="subscription-account__eyebrow">GhostBox Premium</span>
           <div>
+            <span className="subscription-account__eyebrow">GhostBox Premium</span>
             <h3>{copy("Assinatura ativa", "Active subscription")}</h3>
-            <p>{copy("Seu benefício Premium está liberado para a conta Steam conectada.", "Your Premium benefit is enabled for the connected Steam account.")}</p>
           </div>
-          <button
-            type="button"
-            className="subscription-account__refresh"
-            onClick={() => steamProfile?.steamId && refreshSubscriptionStatus(steamProfile.steamId)}
-            disabled={subscriptionLoading || !steamProfile?.steamId}
-          >
-            <RefreshCw size={14} strokeWidth={2.15} aria-hidden="true" />
-            {copy("Atualizar", "Refresh")}
-          </button>
         </header>
 
         <div className="subscription-account__summary-grid">
           <article className="subscription-account__summary-card">
-            <ShieldCheck size={16} strokeWidth={2.15} aria-hidden="true" />
+            <ShieldCheck size={20} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Status", "Status")}</span>
             <strong>{copy("Premium ativo", "Premium active")}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CalendarClock size={16} strokeWidth={2.15} aria-hidden="true" />
+            <CalendarClock size={20} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Expira em", "Expires on")}</span>
             <strong>{formatDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />
+            <CloudUpload size={20} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Backups em nuvem", "Cloud backups")}</span>
             <strong>{cloudBackupSummaries.length}</strong>
           </article>
         </div>
 
-        <div className="subscription-account__details-grid">
-          <article className="subscription-account__panel">
-            <h4><CreditCard size={15} strokeWidth={2.15} aria-hidden="true" />{copy("Pagamento e benefício", "Payment and benefit")}</h4>
-            <dl>
-              <div><dt>{copy("Plano", "Plan")}</dt><dd>{subscriptionStatus.subscription.planId === "quarterly" ? copy("Trimestral", "Quarterly") : copy("Mensal", "Monthly")}</dd></div>
-              <div><dt>{copy("Início", "Start")}</dt><dd>{formatDate(subscriptionStatus.subscription.currentPeriodStart, language)}</dd></div>
-              <div><dt>{copy("Expiração", "Expiration")}</dt><dd>{formatDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</dd></div>
-              <div><dt>{copy("Último pagamento", "Latest payment")}</dt><dd>{payment ? `${formatCurrency(payment.amountCents, payment.currency, language)} · ${payment.status ?? "-"}` : copy("Benefício administrativo", "Administrative benefit")}</dd></div>
-              <div><dt>{copy("Data do pagamento", "Payment date")}</dt><dd>{formatDate(payment?.confirmedAt || payment?.createdAt, language)}</dd></div>
-            </dl>
-          </article>
-
-          <article className="subscription-account__panel">
-            <h4><UserRound size={15} strokeWidth={2.15} aria-hidden="true" />Discord</h4>
-            <dl>
-              <div><dt>{copy("Conta Steam", "Steam account")}</dt><dd>{steamProfile?.displayName || steamProfile?.steamId || copy("Não conectada", "Not connected")}</dd></div>
-              <div><dt>{copy("Discord", "Discord")}</dt><dd>{linkedDiscordName || copy("Não vinculado", "Not linked")}</dd></div>
-              <div><dt>{copy("Cargo Premium", "Premium role")}</dt><dd>{discordLinkStatus?.premiumRole?.synced ? copy("Sincronizado", "Synced") : discordLinkStatus?.linked ? copy("Aguardando servidor", "Waiting for server") : copy("Vincule sua conta", "Link your account")}</dd></div>
-              <div><dt>{copy("Vinculado em", "Linked at")}</dt><dd>{formatDate(discordLinkStatus?.linkedAt, language)}</dd></div>
-            </dl>
-            <button
-              type="button"
-              className="subscription-account__link-button"
-              onClick={() => {
-                if (!steamProfile?.steamId) {
-                  void handleSteamSignIn();
-                  return;
-                }
-                void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
-              }}
-            >
-              <Link size={14} strokeWidth={2.15} aria-hidden="true" />
-              {discordLinkStatus?.linked ? copy("Atualizar vínculo", "Update link") : copy("Vincular Discord", "Link Discord")}
-            </button>
-          </article>
-        </div>
+        <article className="subscription-account__panel">
+          <h4><CreditCard size={18} strokeWidth={2.15} aria-hidden="true" />{copy("Pagamentos", "Payments")}</h4>
+          {payment ? (
+            <ul className="subscription-account__payment-list">
+              <li>
+                <div>
+                  <strong>{formatCurrency(payment.amountCents, payment.currency, language)}</strong>
+                  <small>
+                    {subscriptionStatus.subscription.planId === "quarterly" ? copy("Trimestral", "Quarterly") : copy("Mensal", "Monthly")}
+                    {" · "}
+                    {formatDate(payment.confirmedAt || payment.createdAt, language)}
+                  </small>
+                </div>
+                <span>
+                  {paymentStatus === "paid"
+                    ? copy("pago", "paid")
+                    : paymentStatus === "expired"
+                      ? copy("fatura vencida", "invoice expired")
+                      : paymentStatus === "failed"
+                        ? copy("falhou", "failed")
+                        : paymentStatus === "cancelled"
+                          ? copy("cancelado", "cancelled")
+                          : copy("pendente", "pending")}
+                </span>
+              </li>
+            </ul>
+          ) : (
+            <p className="subscription-account__empty">{copy("Sem pagamentos registrados.", "No payments registered.")}</p>
+          )}
+        </article>
 
         <article className="subscription-account__panel subscription-account__panel--wide">
-          <h4><CloudUpload size={15} strokeWidth={2.15} aria-hidden="true" />{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
+          <h4><CloudUpload size={18} strokeWidth={2.15} aria-hidden="true" />{copy("Últimos backups em nuvem", "Recent cloud backups")}</h4>
           {cloudBackupSummaries.length > 0 ? (
             <ul className="subscription-account__backup-list">
-              {cloudBackupSummaries.map((game) => (
+              {[...cloudBackupSummaries]
+                .sort((a, b) => {
+                  const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
+                  const dateB = b.lastBackupAt ? Date.parse(b.lastBackupAt) : 0;
+                  return dateB - dateA;
+                })
+                .slice(0, 8)
+                .map((game) => (
                 <li key={game.appId}>
                   <strong>{game.title}</strong>
                   {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
@@ -302,7 +298,7 @@ export function SubscriptionPlans({
                     title={copy("Backup em nuvem ativo", "Cloud backup active")}
                     aria-label={copy("Backup em nuvem ativo", "Cloud backup active")}
                   >
-                    <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
+                    <Cloud size={17} strokeWidth={2.15} aria-hidden="true" />
                   </em>
                 </li>
               ))}

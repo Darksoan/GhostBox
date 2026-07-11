@@ -1963,6 +1963,8 @@ pub fn run() {
             cloud_save::cloud_list_saves,
             cloud_save::cloud_backup_game,
             cloud_save::cloud_restore_save,
+            cloud_save::cloud_get_profile_snapshot,
+            cloud_save::cloud_put_profile_snapshot,
             backup::backup_get_settings,
             backup::backup_validate_root,
             backup::backup_ensure_root,

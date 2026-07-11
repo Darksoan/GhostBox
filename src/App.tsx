@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
@@ -8,7 +8,7 @@ import { useContentOverlayState } from "./components/routing/ContentOverlay";
 import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellState } from "./hooks/useAppShellState";
 import { useAppData } from "./context/AppDataContext";
-import { useOverlay } from "./context/OverlayContext";
+import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
 import {
@@ -17,7 +17,13 @@ import {
 } from "./lib/trayNotifications";
 import { clearCatalogueGamesCache } from "./utils/gameCache";
 import type { SettingsTabId } from "./features/settings/settingsTabsShared";
+import type { SubscriptionStatusResult } from "./lib/ghostboxApi.types";
+import type { GhostBoxGame } from "./data";
 import "./app.scss";
+
+type OverlayForwardEntry =
+  | { kind: "game"; game: GhostBoxGame }
+  | { kind: "achievements"; view: NonNullable<AchievementsViewState> };
 
 function AppSplash({ progress }: { progress: number }) {
   const spinnerStyle = {
@@ -48,6 +54,7 @@ function AppSplash({ progress }: { progress: number }) {
 function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const {
     openGame,
+    openAchievements,
     toast,
     dismissToast,
     selectedGame,
@@ -66,17 +73,34 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     page,
     navigate,
     back,
+    forward,
     canGoBack,
+    canGoForward,
     contentRef,
     saveScrollPosition,
     restorePendingScroll,
   } = useAppNavigation();
+
+  // Overlay close via back can be reopened with forward (like page history).
+  const overlayForwardRef = useRef<OverlayForwardEntry | null>(null);
+  const [canForwardOverlay, setCanForwardOverlay] = useState(false);
+
+  const clearOverlayForward = useCallback(() => {
+    overlayForwardRef.current = null;
+    setCanForwardOverlay(false);
+  }, []);
+
+  const setOverlayForward = useCallback((entry: OverlayForwardEntry | null) => {
+    overlayForwardRef.current = entry;
+    setCanForwardOverlay(Boolean(entry));
+  }, []);
 
   const shell = useAppShellState(page);
   const { appearance, notifications } = useSettings();
   const queryClient = useQueryClient();
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +108,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
     if (!steamId) {
       setIsPremium(false);
+      setSubscriptionPeriodEnd(null);
       return;
     }
 
@@ -92,8 +117,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     if (cachedPremium !== null) setIsPremium(cachedPremium);
 
     const refreshSubscriptionStatus = () =>
-      void ghostboxApi.isPremiumUser(steamId).then((premium) => {
-        if (!cancelled) setIsPremium(premium);
+      void ghostboxApi.getSubscriptionStatus(steamId).then((status: SubscriptionStatusResult | null) => {
+        if (cancelled) return;
+        const subscription = status?.subscription;
+        const active = subscription?.isPremium === true || subscription?.status === "active";
+        const end = subscription?.currentPeriodEnd ?? null;
+        const endTime = end ? Date.parse(end) : NaN;
+
+        setIsPremium(active && (!end || !Number.isFinite(endTime) || endTime > Date.now()));
+        setSubscriptionPeriodEnd(active ? end : null);
       });
 
     // Prefetch Discord link early so sidebar/profile paint without waiting on mount.
@@ -136,16 +168,16 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
       saveScrollPosition();
+      clearOverlayForward();
       closeContentOverlay();
-      if (newPage !== page) {
-        navigate(newPage);
-      }
+      // navigate() no-ops when already on newPage (uses live pageRef, not React state).
+      navigate(newPage);
       shell.clearQuery();
       if (collectionId) {
         shell.setActiveProfileCollectionId(collectionId);
       }
     },
-    [closeContentOverlay, navigate, page, saveScrollPosition, shell]
+    [clearOverlayForward, closeContentOverlay, navigate, saveScrollPosition, shell]
   );
 
   useEffect(() => {
@@ -157,20 +189,69 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const handleBack = useCallback(() => {
     saveScrollPosition();
     shell.clearQuery();
+
+    // Overlay first: closing stores a forward entry so ">" can reopen it.
     if (achievementsView) {
+      if (achievementsView.reopenModalOnBack) {
+        // closeAchievements reopens the game modal — still in overlay flow.
+        clearOverlayForward();
+        closeAchievements();
+        return;
+      }
+      setOverlayForward({ kind: "achievements", view: achievementsView });
       closeAchievements();
       return;
     }
+
     if (selectedGame) {
+      setOverlayForward({ kind: "game", game: selectedGame });
       closeGame();
       return;
     }
+
+    // Page history back — clear overlay forward so ">" advances pages.
+    clearOverlayForward();
     back();
   }, [
     achievementsView,
     back,
+    clearOverlayForward,
     closeAchievements,
     closeGame,
+    saveScrollPosition,
+    selectedGame,
+    setOverlayForward,
+    shell,
+  ]);
+
+  const handleForward = useCallback(() => {
+    saveScrollPosition();
+    shell.clearQuery();
+
+    // Can't page-forward while an overlay is open.
+    if (achievementsView || selectedGame) return;
+
+    const overlayEntry = overlayForwardRef.current;
+    if (overlayEntry) {
+      clearOverlayForward();
+      if (overlayEntry.kind === "game") {
+        openGame(overlayEntry.game);
+        return;
+      }
+      openAchievements(overlayEntry.view.game, {
+        reopenModalOnBack: overlayEntry.view.reopenModalOnBack,
+        highlightAchievementId: overlayEntry.view.highlightAchievementId,
+      });
+      return;
+    }
+
+    forward();
+  }, [
+    achievementsView,
+    clearOverlayForward,
+    forward,
+    openAchievements,
+    openGame,
     saveScrollPosition,
     selectedGame,
     shell,
@@ -240,7 +321,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           onToggleFavorite={appData.toggleFavoriteGame}
           activeSettingsTabId={shell.activeSettingsTabId}
           onSettingsTabChange={handleSidebarSettingsTabChange}
-          isPremium={isPremium}
         />
 
         <article
@@ -253,19 +333,29 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               isAchievementsViewVisible ||
               canGoBack
             }
-            navigationTitle={
-              achievementsView?.game.title ??
-              selectedGame?.title ??
-              null
+            canGoForward={
+              !selectedGame &&
+              !isAchievementsViewVisible &&
+              (canGoForward || canForwardOverlay)
             }
             query={shell.query}
             isSearching={shell.isSearchLoading}
             suggestions={shell.headerSearchSuggestions}
             steamProfile={appData.steamProfile}
+            isPremium={isPremium}
+            subscriptionPeriodEnd={subscriptionPeriodEnd}
             onQueryChange={shell.handleQueryChange}
-            onSelectSuggestion={openGame}
+            onSelectSuggestion={(game) => {
+              clearOverlayForward();
+              openGame(game);
+            }}
             onBack={handleBack}
+            onForward={handleForward}
             onNavigateToNotifications={() => handleNavigate("notifications")}
+            onClickPremium={() => {
+              handleNavigate("settings");
+              handleSidebarSettingsTabChange("subscription");
+            }}
           />
 
           <section
@@ -278,7 +368,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               activeSettingsTabId={shell.activeSettingsTabId}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
-              pageEnterKey={shell.pageEnterKey}
               isMainPage={shell.isMainPage}
               contentRef={contentRef}
               steamPathModalLoading={steamPathModalLoading}

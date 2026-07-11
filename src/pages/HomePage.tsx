@@ -24,12 +24,13 @@ import {
   type StoredPersonalCalendar,
 } from "../utils/storage";
 import {
+  gameCatalogueHeaderSources,
   gameHeaderOnlySources,
   gameHeroCapsuleSources,
   layeredImageStyle,
   withoutHeaderImageSources,
 } from "../utils/image";
-import { loadedImageSources, runWhenIdle, uniqueSources } from "../utils/imageCache";
+import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 
 type HomeGameSeed = {
@@ -125,7 +126,10 @@ const homeRecommendedGroupPreloadTimeoutMs = 1800;
 const homeRecommendedAppIdGroups = [
   ["1693980", "208650", "413150", "1714320"],
 ];
-const homePersonalCalendarGameCount = 21;
+const homePersonalCalendarDays = 7;
+const homePersonalCalendarGamesPerDay = 2;
+const homePersonalCalendarGameCount =
+  homePersonalCalendarDays * homePersonalCalendarGamesPerDay;
 const homePersonalCalendarPageSize = 120;
 const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 5;
 const homePersonalCalendarEnrichmentLimit = 6;
@@ -136,15 +140,22 @@ const homeWishlistDetailsBatchSize = 8;
 const homeWishlistRecommendationSourceLimit = 10;
 const homeWishlistRecommendationAlgorithmVersion = "steam-morelike-v1";
 const homeWishlistCacheRefreshMs = 7 * 24 * 60 * 60 * 1000;
-function getHomeCalendarDates(): string[] {
+
+const homeCalendarWeekdayLabels = {
+  pt: ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."],
+  en: ["SUN.", "MON.", "TUE.", "WED.", "THU.", "FRI.", "SAT."],
+} as const;
+
+function getHomeCalendarDates(language: "pt" | "en"): string[] {
   const today = new Date();
+  const weekdayLabels = homeCalendarWeekdayLabels[language];
   const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < homePersonalCalendarDays; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
-    dates.push(`${day}/${month}`);
+    dates.push(`${weekdayLabels[date.getDay()]} ${day}/${month}`);
   }
   return dates;
 }
@@ -155,27 +166,6 @@ function homeSteamCdnUrl(appId: string, asset: string) {
 
 function homeGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
-}
-
-function homeCalendarPortraitSources(game: GhostBoxGame) {
-  const appId = homeGameAppId(game);
-  const customPortraitSources = [
-    game.coverUrl,
-    ...(game.coverFallbacks ?? []),
-  ].filter(
-    (source) =>
-      source &&
-      /(?:^|\/)library_600x900\.jpg(?:[?#].*)?$/i.test(source) &&
-      !game.screenshots.includes(source)
-  );
-
-  return uniqueSources([
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
-    ...customPortraitSources,
-  ]);
 }
 
 function formatLastSessionDate(
@@ -785,6 +775,7 @@ function HomeCategorySection({
   );
 }
 
+/*
 function getPlainSteamText(value?: string) {
   if (!value) return "";
 
@@ -801,7 +792,9 @@ function getPlainSteamText(value?: string) {
     .replace(/\s+/g, " ")
     .trim();
 }
+*/
 
+/*
 function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
   const source =
     getPlainSteamText(game.shortDescription) ||
@@ -816,6 +809,7 @@ function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
 
   return source.length > 150 ? `${source.slice(0, 147).trim()}...` : source;
 }
+*/
 
 function normalizeHomeCategory(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
@@ -1210,8 +1204,8 @@ function HomeCalendarGameCardComponent({
 }) {
   const cardRef = useRef<HTMLButtonElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
-  const portraitSources = useMemo(
-    () => (shouldLoadCover ? homeCalendarPortraitSources(game) : []),
+  const headerSources = useMemo(
+    () => (shouldLoadCover ? gameCatalogueHeaderSources(game) : []),
     [game, shouldLoadCover]
   );
 
@@ -1246,18 +1240,18 @@ function HomeCalendarGameCardComponent({
     [rootRef, shouldLoadCover]
   );
 
-  const coverSources = useCachedImageSources(portraitSources);
+  const coverSources = useCachedImageSources(headerSources);
   const { source: coverSource, loaded } = useLoadableImageCover(coverSources);
-  const hasLoadedPortraitCover =
+  const hasLoadedHeader =
     shouldLoadCover && loaded && coverSources.includes(coverSource);
-  const layeredSources = hasLoadedPortraitCover ? [coverSource] : [];
+  const layeredSources = hasLoadedHeader ? [coverSource] : [];
 
   return (
     <button
       ref={cardRef}
       type="button"
       className={`home-calendar-card${
-        hasLoadedPortraitCover ? "" : " home-calendar-card--skeleton"
+        hasLoadedHeader ? "" : " home-calendar-card--skeleton"
       }`}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
@@ -1268,11 +1262,14 @@ function HomeCalendarGameCardComponent({
     >
       <span
         className={`home-calendar-card__cover${
-          hasLoadedPortraitCover ? " home-calendar-card__cover--loaded" : ""
+          hasLoadedHeader ? " home-calendar-card__cover--loaded" : ""
         }`}
         style={layeredImageStyle(layeredSources, "")}
         aria-hidden="true"
       />
+      <span className="home-calendar-card__content" aria-hidden="true">
+        <strong>{game.title}</strong>
+      </span>
     </button>
   );
 }
@@ -1296,11 +1293,11 @@ function HomePersonalCalendar({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const weekdays = getHomeCalendarDates();
+  const weekdays = getHomeCalendarDates(language);
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const [isAtStart, setIsAtStart] = useState(true);
   const [isAtEnd, setIsAtEnd] = useState(false);
-  const gamesPerDay = 3;
+  const gamesPerDay = homePersonalCalendarGamesPerDay;
 
   const updateCalendarScrollState = () => {
     const carousel = carouselRef.current;
@@ -1364,7 +1361,7 @@ function HomePersonalCalendar({
                 <section className="home-calendar-day" key={date} aria-label={date}>
                   <h4 className="home-calendar-day__title">{date}</h4>
                   <div className="home-calendar-day__games">
-                    {Array.from({ length: 3 }, (_, gameIndex) => {
+                    {Array.from({ length: gamesPerDay }, (_, gameIndex) => {
                       const game = dayGames[gameIndex];
                       return game ? (
                         <HomeCalendarGameCard
@@ -1626,17 +1623,95 @@ function HomeWishlistCardComponent({
     () => withoutHeaderImageSources(recommendedGame.screenshots ?? []).slice(0, 6),
     [recommendedGame.screenshots]
   );
+  const coverRef = useRef<HTMLSpanElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [screenshotIndex, setScreenshotIndex] = useState<number | null>(null);
+  const [readyScreenshotIndexes, setReadyScreenshotIndexes] = useState<Set<number>>(
+    () => new Set()
+  );
   const screenshotTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const firstScreenshotFrameRef = useRef<number | null>(null);
+  const readyScreenshotIndexesRef = useRef(readyScreenshotIndexes);
+  readyScreenshotIndexesRef.current = readyScreenshotIndexes;
+
+  const markScreenshotReady = useCallback((index: number) => {
+    setReadyScreenshotIndexes((current) => {
+      if (current.has(index)) return current;
+      const next = new Set(current);
+      next.add(index);
+      return next;
+    });
+  }, []);
+
+  // Decode screenshots as soon as the card is near the viewport so hover swaps
+  // to a fully-decoded bitmap instead of a progressive soft paint.
+  useEffect(() => {
+    if (!screenshots.length) {
+      setReadyScreenshotIndexes(new Set());
+      return;
+    }
+
+    let cancelled = false;
+    const node = coverRef.current;
+    let started = false;
+    const controllers: AbortController[] = [];
+
+    const decodeSource = (source: string, index: number) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = source;
+      const finish = async () => {
+        try {
+          if (typeof img.decode === "function") {
+            await img.decode();
+          }
+        } catch {
+          // decode() can reject on abort/unsupported; complete still usable.
+        }
+        if (!cancelled && img.complete && img.naturalWidth > 0) {
+          markScreenshotReady(index);
+        }
+      };
+      if (img.complete) {
+        void finish();
+        return;
+      }
+      img.addEventListener("load", () => void finish(), { once: true });
+    };
+
+    const startPreload = () => {
+      if (started || cancelled) return;
+      started = true;
+      screenshots.forEach((source, index) => decodeSource(source, index));
+    };
+
+    if (!node || typeof IntersectionObserver === "undefined") {
+      startPreload();
+      return () => {
+        cancelled = true;
+        controllers.forEach((controller) => controller.abort());
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          startPreload();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "480px 0px", threshold: 0.01 }
+    );
+    observer.observe(node);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      controllers.forEach((controller) => controller.abort());
+    };
+  }, [markScreenshotReady, screenshots]);
 
   useEffect(() => {
     if (!isHovered || screenshots.length === 0) {
-      if (firstScreenshotFrameRef.current !== null) {
-        window.cancelAnimationFrame(firstScreenshotFrameRef.current);
-        firstScreenshotFrameRef.current = null;
-      }
       if (screenshotTimerRef.current) {
         clearInterval(screenshotTimerRef.current);
         screenshotTimerRef.current = null;
@@ -1645,50 +1720,51 @@ function HomeWishlistCardComponent({
       return;
     }
 
-    setScreenshotIndex(null);
-    firstScreenshotFrameRef.current = window.requestAnimationFrame(() => {
-      firstScreenshotFrameRef.current = null;
-      setScreenshotIndex(0);
-    });
-
-    // Preload the rotating screenshots off the critical path so creating the
-    // Image() probes never competes with the hover interaction itself.
-    const preloaded: HTMLImageElement[] = [];
-    const preload = () => {
-      screenshots.forEach((source) => {
-        const img = new Image();
-        img.decoding = "async";
-        img.src = source;
-        preloaded.push(img);
-      });
+    const pickFirstReady = () => {
+      const ready = readyScreenshotIndexesRef.current;
+      for (let index = 0; index < screenshots.length; index += 1) {
+        if (ready.has(index)) return index;
+      }
+      return null;
     };
-    const idleHandle =
-      typeof window.requestIdleCallback === "function"
-        ? window.requestIdleCallback(preload)
-        : window.setTimeout(preload, 0);
+
+    // Prefer a decoded frame immediately — never flash a half-decoded bitmap.
+    setScreenshotIndex(pickFirstReady());
 
     screenshotTimerRef.current = setInterval(() => {
-      setScreenshotIndex((current) =>
-        current === null ? 0 : (current + 1) % screenshots.length
-      );
+      setScreenshotIndex((current) => {
+        const ready = readyScreenshotIndexesRef.current;
+        if (ready.size === 0) return pickFirstReady();
+
+        const start = current === null ? -1 : current;
+        for (let step = 1; step <= screenshots.length; step += 1) {
+          const next = (start + step) % screenshots.length;
+          if (ready.has(next)) return next;
+        }
+        return current;
+      });
     }, 1400);
 
     return () => {
-      if (firstScreenshotFrameRef.current !== null) {
-        window.cancelAnimationFrame(firstScreenshotFrameRef.current);
-        firstScreenshotFrameRef.current = null;
-      }
-      if (typeof window.cancelIdleCallback === "function") {
-        window.cancelIdleCallback(idleHandle as number);
-      } else {
-        window.clearTimeout(idleHandle as number);
-      }
       if (screenshotTimerRef.current) {
         clearInterval(screenshotTimerRef.current);
         screenshotTimerRef.current = null;
       }
     };
   }, [isHovered, screenshots]);
+
+  // If the first ready screenshot arrives while already hovering, activate it.
+  useEffect(() => {
+    if (!isHovered || screenshotIndex !== null || readyScreenshotIndexes.size === 0) {
+      return;
+    }
+    for (let index = 0; index < screenshots.length; index += 1) {
+      if (readyScreenshotIndexes.has(index)) {
+        setScreenshotIndex(index);
+        return;
+      }
+    }
+  }, [isHovered, readyScreenshotIndexes, screenshotIndex, screenshots.length]);
 
   const sourceTitle = getDisplayGameTitle(sourceGame, "");
   const recommendedTitle = getDisplayGameTitle(
@@ -1743,15 +1819,13 @@ function HomeWishlistCardComponent({
       </span>
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span
+          ref={coverRef}
           className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : ""}`}
           role="button"
           tabIndex={0}
           onClick={handleClick}
           onContextMenu={handleContextMenu}
-          onMouseEnter={() => {
-            setScreenshotIndex(null);
-            setIsHovered(true);
-          }}
+          onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -1760,12 +1834,22 @@ function HomeWishlistCardComponent({
             }
           }}
         >
-          {imageSource && <img src={imageSource} alt="" draggable={false} />}
-          {isHovered && screenshots.map((source, index) => (
+          {imageSource && (
+            <img
+              src={imageSource}
+              alt=""
+              draggable={false}
+              decoding="async"
+            />
+          )}
+          {/* Keep screenshots mounted (hidden) so they decode before hover. */}
+          {screenshots.map((source, index) => (
             <img
               key={source}
               className={`home-wishlist-card__screenshot${
-                index === screenshotIndex
+                isHovered &&
+                index === screenshotIndex &&
+                readyScreenshotIndexes.has(index)
                   ? " home-wishlist-card__screenshot--active"
                   : ""
               }`}
@@ -1773,7 +1857,8 @@ function HomeWishlistCardComponent({
               alt=""
               draggable={false}
               decoding="async"
-              loading="lazy"
+              fetchPriority="low"
+              onLoad={() => markScreenshotReady(index)}
             />
           ))}
         </span>

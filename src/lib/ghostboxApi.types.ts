@@ -349,3 +349,31 @@ export type CloudRestoreResult = {
   saveId: string;
   backupSizeBytes: number;
 };
+
+export type CloudProfileBannerPosition = {
+  x: number;
+  y: number;
+  scale: number;
+};
+
+export type CloudProfileCollection = {
+  id: string;
+  name: string;
+  gameIds: string[];
+};
+
+export type CloudProfileSnapshot = {
+  version: number;
+  updatedAt: string;
+  steamProfile: {
+    displayName: string | null;
+    avatarUrl: string | null;
+    bannerUrl: string | null;
+    bannerPosition: CloudProfileBannerPosition | null;
+  };
+  userCollections: CloudProfileCollection[];
+};
+
+export type CloudProfileResult = {
+  profile: CloudProfileSnapshot | null;
+};

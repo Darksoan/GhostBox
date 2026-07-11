@@ -19,6 +19,7 @@ const translations: Record<Language, TranslationTree> = {
     },
     header: {
       back: "Voltar",
+      forward: "Avançar",
       searchPlaceholder: "Buscar jogos",
       searching: "Buscando...",
       home: "Início",
@@ -276,10 +277,10 @@ const translations: Record<Language, TranslationTree> = {
         },
         subscription: {
           label: "Assinatura",
-          eyebrow: "Ghost Premium",
-          title: "Planos Premium",
+          eyebrow: "Premium",
+          title: "Status da assinatura",
           description:
-            "Compare Free, Mensal e Trimestral antes de ativar o checkout.",
+            "Veja seu plano, pagamentos, expiração e backups em nuvem.",
         },
         notifications: {
           label: "Notificações",
@@ -467,6 +468,7 @@ const translations: Record<Language, TranslationTree> = {
     },
     header: {
       back: "Back",
+      forward: "Forward",
       searchPlaceholder: "Search games",
       searching: "Searching...",
       home: "Home",
@@ -723,10 +725,10 @@ const translations: Record<Language, TranslationTree> = {
         },
         subscription: {
           label: "Subscription",
-          eyebrow: "Ghost Premium",
-          title: "Premium plans",
+          eyebrow: "Premium",
+          title: "Subscription status",
           description:
-            "Compare Free, Monthly, and Quarterly before enabling checkout.",
+            "Review your plan, payments, expiration, and cloud backups.",
         },
         notifications: {
           label: "Notifications",

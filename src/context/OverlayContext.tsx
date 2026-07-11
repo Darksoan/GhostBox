@@ -13,7 +13,6 @@ import type { GhostBoxGame } from "../data";
 import type { ToastVariant } from "../components/ui/Toast";
 import { getToastVariant } from "../lib/toastUtils";
 import { useSettings } from "./settings";
-import { preloadGameModalAssets } from "../utils/image";
 
 export type AchievementsViewState = {
   game: GhostBoxGame;
@@ -121,7 +120,6 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     setIsGameModalExitPending(false);
     setAchievementsView(null);
     setSelectedGame(game);
-    window.setTimeout(() => preloadGameModalAssets(game), 0);
   }, []);
 
   const closeGame = useCallback(() => {

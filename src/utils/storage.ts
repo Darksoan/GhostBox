@@ -11,6 +11,7 @@ import {
   favoriteGamesStorageKey,
   userCollectionsStorageKey,
   steamProfileStorageKey,
+  cloudProfileUpdatedAtStorageKey,
   startupPageStorageKey,
   recentPlayedGamesStorageKey,
   profileHistoryGamesStorageKey,
@@ -672,6 +673,32 @@ export function writeStoredSteamProfile(profile: SteamProfile | null) {
     }
   } catch {
     // Profile still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredCloudProfileUpdatedAt(): string | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const value = window.localStorage.getItem(cloudProfileUpdatedAtStorageKey);
+    if (!value || !Number.isFinite(Date.parse(value))) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredCloudProfileUpdatedAt(value: string | null) {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (value) {
+      window.localStorage.setItem(cloudProfileUpdatedAtStorageKey, value);
+    } else {
+      window.localStorage.removeItem(cloudProfileUpdatedAtStorageKey);
+    }
+  } catch {
+    // Timestamp is best-effort for multi-device merge.
   }
 }
 

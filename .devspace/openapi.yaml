@@ -1,0 +1,231 @@
+openapi: 3.1.0
+info:
+  title: GhostBox DevSpace API
+  description: API local para permitir que o ChatGPT Web funcione como um editor de código lendo, escrevendo e editando arquivos no workspace GhostBox, além de executar comandos.
+  version: 1.0.0
+servers:
+  - url: https://SUA_URL_DO_TUNNEL.trycloudflare.com
+    description: URL temporária gerada pelo Cloudflare Tunnel
+paths:
+  /api/tree:
+    get:
+      summary: Listar estrutura do workspace
+      description: Retorna a árvore de diretórios e arquivos do workspace de forma recursiva.
+      operationId: getWorkspaceTree
+      parameters:
+        - name: depth
+          in: query
+          description: Nível máximo de recursão para listar os arquivos (default é 3).
+          required: false
+          schema:
+            type: integer
+            default: 3
+      responses:
+        '200':
+          description: Estrutura em árvore retornada com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tree:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileNode'
+        '401':
+          description: Token de autenticação inválido ou ausente.
+
+  /api/file:
+    get:
+      summary: Ler arquivo
+      description: Retorna o conteúdo textual de um arquivo específico.
+      operationId: readFile
+      parameters:
+        - name: path
+          in: query
+          description: Caminho relativo do arquivo dentro do workspace (ex. src/index.js).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conteúdo do arquivo retornado com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  content:
+                    type: string
+        '400':
+          description: Caminho inválido, arquivo binário ou fora do workspace.
+        '404':
+          description: Arquivo não encontrado.
+        '401':
+          description: Não autorizado.
+
+    post:
+      summary: Gravar ou Criar arquivo
+      description: Cria um novo arquivo ou sobrescreve o conteúdo de um arquivo existente.
+      operationId: writeFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - path
+                - content
+              properties:
+                path:
+                  type: string
+                  description: Caminho relativo do arquivo no workspace (ex. src/new_file.py).
+                content:
+                  type: string
+                  description: Conteúdo textual completo a ser escrito no arquivo.
+      responses:
+        '200':
+          description: Arquivo gravado com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Parâmetros inválidos.
+        '401':
+          description: Não autorizado.
+
+    delete:
+      summary: Excluir arquivo
+      description: Deleta um arquivo específico do workspace.
+      operationId: deleteFile
+      parameters:
+        - name: path
+          in: query
+          description: Caminho relativo do arquivo a ser excluído.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Arquivo deletado com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Parâmetro inválido ou caminho é um diretório.
+        '404':
+          description: Arquivo não encontrado.
+        '401':
+          description: Não autorizado.
+
+  /api/search:
+    get:
+      summary: Buscar termos em arquivos
+      description: Realiza busca textual rápida (grep) por termos nos arquivos legíveis do workspace.
+      operationId: searchFiles
+      parameters:
+        - name: q
+          in: query
+          description: O termo ou palavra-chave de busca.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resultados da busca retornados com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                        line:
+                          type: integer
+                        content:
+                          type: string
+        '401':
+          description: Não autorizado.
+
+  /api/exec:
+    post:
+      summary: Executar comando no terminal
+      description: Executa um comando do PowerShell a partir da raiz do workspace GhostBox e retorna a saída.
+      operationId: executeCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cmd
+              properties:
+                cmd:
+                  type: string
+                  description: Comando do PowerShell para executar (ex. npm run build, git status).
+      responses:
+        '200':
+          description: Comando executado e resposta recebida.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout:
+                    type: string
+                  stderr:
+                    type: string
+                  exit_code:
+                    type: integer
+        '401':
+          description: Não autorizado.
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: Insira o token de segurança gerado ao iniciar o servidor.
+  schemas:
+    FileNode:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [file, directory]
+        size:
+          type: integer
+          description: Tamanho do arquivo em bytes (apenas para arquivos).
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileNode'
+security:
+  - ApiKeyAuth: []

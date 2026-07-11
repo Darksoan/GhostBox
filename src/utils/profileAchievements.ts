@@ -20,6 +20,23 @@ export function getProfileAchievementTotal(game: GhostBoxGame) {
   );
 }
 
+function isPlaceholderGameTitle(title: string | undefined) {
+  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
+}
+
+function preferProfileGameTitle(
+  current: GhostBoxGame,
+  incoming: GhostBoxGame,
+  richer: GhostBoxGame
+) {
+  if (isPlaceholderGameTitle(richer.title)) {
+    if (!isPlaceholderGameTitle(current.title)) return current.title;
+    if (!isPlaceholderGameTitle(incoming.title)) return incoming.title;
+  }
+
+  return richer.title;
+}
+
 export function getRicherProfileAchievementGame(
   current: GhostBoxGame | undefined,
   incoming: GhostBoxGame
@@ -31,13 +48,21 @@ export function getRicherProfileAchievementGame(
   const currentUnlocked = getProfileUnlockedAchievementCount(current);
   const incomingUnlocked = getProfileUnlockedAchievementCount(incoming);
 
-  if (incomingTotal > currentTotal) return incoming;
-  if (incomingTotal < currentTotal) return current;
-  if (incomingUnlocked > currentUnlocked) return incoming;
-  if (incomingUnlocked < currentUnlocked) return current;
+  let richer: GhostBoxGame;
 
-  return (incoming.achievementList?.length ?? 0) >=
-    (current.achievementList?.length ?? 0)
-    ? incoming
-    : current;
+  if (incomingTotal > currentTotal) richer = incoming;
+  else if (incomingTotal < currentTotal) richer = current;
+  else if (incomingUnlocked > currentUnlocked) richer = incoming;
+  else if (incomingUnlocked < currentUnlocked) richer = current;
+  else {
+    richer = (incoming.achievementList?.length ?? 0) >=
+      (current.achievementList?.length ?? 0)
+      ? incoming
+      : current;
+  }
+
+  return {
+    ...richer,
+    title: preferProfileGameTitle(current, incoming, richer),
+  };
 }

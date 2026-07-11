@@ -11,6 +11,7 @@ export const hiddenLibraryAppIds = new Set(["228980"]);
 export const favoriteGamesStorageKey = "ghostbox:favorites:v1";
 export const userCollectionsStorageKey = "ghostbox:user-collections:v1";
 export const steamProfileStorageKey = "ghostbox:steam-profile:v1";
+export const cloudProfileUpdatedAtStorageKey = "ghostbox:cloud-profile-updated-at:v1";
 export const startupPageStorageKey = "ghostbox:startup-page:v1";
 export const imageSourceCacheKey = "ghostbox:image-source-cache:v1";
 export const recentPlayedGamesStorageKey = "ghostbox:recent-played-games:v3";
@@ -28,6 +29,10 @@ const legacyStorageKeys: Record<string, string[]> = {
   [favoriteGamesStorageKey]: ["eden:favorites:v1", "piratebox:favorites:v1"],
   [userCollectionsStorageKey]: ["eden:user-collections:v1", "piratebox:user-collections:v1"],
   [steamProfileStorageKey]: ["eden:steam-profile:v1", "piratebox:steam-profile:v1"],
+  [cloudProfileUpdatedAtStorageKey]: [
+    "eden:cloud-profile-updated-at:v1",
+    "piratebox:cloud-profile-updated-at:v1",
+  ],
   [startupPageStorageKey]: ["eden:startup-page:v1", "piratebox:startup-page:v1"],
   [imageSourceCacheKey]: ["eden:image-source-cache:v1", "piratebox:image-source-cache:v1"],
   [recentPlayedGamesStorageKey]: ["eden:recent-played-games:v3", "piratebox:recent-played-games:v3"],

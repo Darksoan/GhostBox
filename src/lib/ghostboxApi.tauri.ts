@@ -42,6 +42,8 @@ import type {
   UpdateManifest,
   DiscordLinkStatus,
   CloudBackupResult,
+  CloudProfileResult,
+  CloudProfileSnapshot,
   CloudRestoreResult,
   CloudSave,
   CloudSessionResult,
@@ -58,7 +60,7 @@ const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
 const defaultSubscriptionsApiUrl = "https://ghostbox-subscriptions.hella.workers.dev";
 const defaultFeedbackApiUrl = "https://ghostbox-feedback.hella.workers.dev/feedback";
 const defaultUpdatesApiUrl = "https://ghostbox-feedback.hella.workers.dev/updates/latest";
-const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.0";
+const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.2";
 
 function compareVersions(left: string, right: string) {
   const leftParts = left.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
@@ -649,6 +651,24 @@ export const ghostboxApi = {
       { game, saveId },
       null
     );
+  },
+
+  getCloudProfileSnapshot(): Promise<CloudProfileSnapshot | null> {
+    return invokeOr<CloudProfileResult | null>(
+      "cloud_get_profile_snapshot",
+      {},
+      null
+    ).then((result) => result?.profile ?? null);
+  },
+
+  saveCloudProfileSnapshot(
+    snapshot: CloudProfileSnapshot
+  ): Promise<CloudProfileSnapshot | null> {
+    return invokeOr<CloudProfileResult | null>(
+      "cloud_put_profile_snapshot",
+      { snapshot },
+      null
+    ).then((result) => result?.profile ?? null);
   },
 
   getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {

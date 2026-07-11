@@ -376,3 +376,47 @@ pub async fn cloud_restore_save(app: tauri::AppHandle, game: serde_json::Value, 
     let _ = std::fs::remove_dir_all(cleanup_path);
     result
 }
+
+#[tauri::command]
+pub async fn cloud_get_profile_snapshot(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{}/cloud-profile", cloud_api_url()))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn cloud_put_profile_snapshot(
+    app: tauri::AppHandle,
+    snapshot: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?
+        .put(format!("{}/cloud-profile", cloud_api_url()))
+        .bearer_auth(token)
+        .json(&snapshot)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body).map_err(|error| error.to_string())
+}

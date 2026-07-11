@@ -589,19 +589,16 @@ export function CataloguePage({
         </div>
 
         <aside className="catalogue-filters" aria-label={t("catalogue.filters.label")}>
-          <div className="catalogue-filters__header">
-            <div>
-              <span className="eyebrow">{t("catalogue.filters.label")}</span>
-            </div>
-            {selectedFilterCount > 0 && (
+          {selectedFilterCount > 0 && (
+            <div className="catalogue-filters__header">
               <button
                 type="button"
                 onClick={() => onFiltersChange(emptyCatalogueFilters)}
               >
                 {t("catalogue.filters.clearShort")}
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="catalogue-filters__sections">
             <section className="catalogue-filter-section catalogue-filter-section--sort">

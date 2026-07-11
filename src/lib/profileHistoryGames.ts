@@ -6,6 +6,10 @@ function normalizeAchievementKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+function isPlaceholderGameTitle(title: string | undefined) {
+  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
+}
+
 export function upsertProfileHistoryGame(
   games: GhostBoxGame[],
   nextGame: GhostBoxGame
@@ -49,7 +53,7 @@ export function mergeGameDetailsPreservingAchievements(
   game: GhostBoxGame,
   details: GhostBoxGame
 ): GhostBoxGame {
-  const isPlaceholderTitle = /^Steam \d+$/.test(details.title);
+  const isPlaceholderTitle = isPlaceholderGameTitle(details.title);
   const hasAchievementDetails =
     details.achievements.total > 0 || (details.achievementList ?? []).length > 0;
 

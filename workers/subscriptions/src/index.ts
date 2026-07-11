@@ -105,6 +105,79 @@ type CloudSaveRow = {
   updated_at: string;
 };
 
+type UserProfileCloudRow = {
+  steam_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  banner_position_x: number;
+  banner_position_y: number;
+  banner_position_scale: number;
+  updated_at: string;
+};
+
+type UserCollectionCloudRow = {
+  id: string;
+  steam_id: string;
+  name: string;
+  sort_order: number;
+  updated_at: string;
+};
+
+type UserCollectionGameCloudRow = {
+  steam_id: string;
+  collection_id: string;
+  game_id: string;
+  sort_order: number;
+};
+
+type CloudProfileCollectionInput = {
+  id?: unknown;
+  name?: unknown;
+  gameIds?: unknown;
+};
+
+type CloudProfileSnapshotInput = {
+  version?: unknown;
+  updatedAt?: unknown;
+  steamProfile?: {
+    displayName?: unknown;
+    avatarUrl?: unknown;
+    bannerUrl?: unknown;
+    bannerPosition?: {
+      x?: unknown;
+      y?: unknown;
+      scale?: unknown;
+    } | null;
+  } | null;
+  userCollections?: unknown;
+};
+
+const CLOUD_PROFILE_SCHEMA_VERSION = 1;
+const MAX_CLOUD_PROFILE_URL_LENGTH = 1024;
+const MAX_CLOUD_PROFILE_PAYLOAD_BYTES = 256 * 1024;
+const MAX_CLOUD_COLLECTION_NAME_LENGTH = 64;
+const MAX_CLOUD_COLLECTIONS = 100;
+const MAX_CLOUD_GAMES_PER_COLLECTION = 2000;
+
+const CLOUD_URL_PREFIXES: Array<{ compact: string; expand: string }> = [
+  { compact: "s-av:", expand: "https://avatars.cloudflare.steamstatic.com/" },
+  { compact: "s-av2:", expand: "https://avatars.akamai.steamstatic.com/" },
+  {
+    compact: "s-av3:",
+    expand: "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/",
+  },
+  { compact: "s-cdn:", expand: "https://cdn.cloudflare.steamstatic.com/steam/" },
+  {
+    compact: "s-cdn2:",
+    expand: "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/",
+  },
+  {
+    compact: "s-media:",
+    expand: "https://shared.akamai.steamstatic.com/store_item_assets/steam/",
+  },
+];
+
 type DiscordUserResponse = {
   id?: string;
   username?: string;
@@ -254,7 +327,7 @@ function jsonResponse(value: unknown, env: Env, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
-      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
       "access-control-allow-headers": "content-type, authorization",
       "cache-control": "no-store",
     },
@@ -348,6 +421,27 @@ function publicPayment(row: PaymentRow, origin?: string) {
     confirmedAt: row.confirmed_at,
     pixCode: pix.pixCode,
     pixQrCodeUrl: pix.pixQrCodeUrl,
+  };
+}
+
+async function reconcilePaymentWithSubscription(env: Env, payment: PaymentRow | null, subscription: SubscriptionRow | null) {
+  if (!payment || !isActiveSubscription(subscription) || subscription?.last_payment_id !== payment.id) {
+    return payment;
+  }
+
+  const confirmedAt = payment.confirmed_at || subscription.current_period_start || payment.updated_at;
+  if (payment.status === "paid" && payment.confirmed_at) return payment;
+
+  const updatedAt = nowIso();
+  await env.SUBSCRIPTION_DB.prepare(
+    `UPDATE payments SET status = 'paid', confirmed_at = ?, updated_at = ? WHERE id = ?`
+  ).bind(confirmedAt, updatedAt, payment.id).run();
+
+  return {
+    ...payment,
+    status: "paid" as PaymentStatus,
+    confirmed_at: confirmedAt,
+    updated_at: updatedAt,
   };
 }
 
@@ -924,13 +1018,16 @@ async function handleStatus(request: Request, env: Env, context?: ExecutionConte
   const steamId = url.searchParams.get("steamId");
   if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
 
-  const [subscription, latestPayment, discordLink] = await Promise.all([
+  const [subscription, latestPaymentRow, discordLink] = await Promise.all([
     getSubscription(env, steamId),
     env.SUBSCRIPTION_DB.prepare(
       `SELECT * FROM payments WHERE steam_id = ? ORDER BY created_at DESC LIMIT 1`
     ).bind(steamId).first<PaymentRow>(),
     getDiscordLink(env, steamId),
   ]);
+  const latestPayment = isActiveSubscription(subscription) && !subscription?.last_payment_id
+    ? null
+    : await reconcilePaymentWithSubscription(env, latestPaymentRow, subscription);
 
   if (discordLink && context) {
     context.waitUntil(
@@ -1076,6 +1173,264 @@ async function handleCloudSaveDownload(request: Request, env: Env, saveId: strin
   });
 }
 
+function clampCloudInt(value: unknown, min: number, max: number, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+function normalizeCloudUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MAX_CLOUD_PROFILE_URL_LENGTH) {
+    return trimmed.slice(0, MAX_CLOUD_PROFILE_URL_LENGTH);
+  }
+  return trimmed;
+}
+
+function compactCloudUrl(value: unknown): string | null {
+  const url = normalizeCloudUrl(value);
+  if (!url) return null;
+  for (const entry of CLOUD_URL_PREFIXES) {
+    if (url.startsWith(entry.expand)) {
+      const rest = url.slice(entry.expand.length);
+      return rest ? `${entry.compact}${rest}` : url;
+    }
+  }
+  return url;
+}
+
+function expandCloudUrl(value: unknown): string | null {
+  const raw = normalizeCloudUrl(value);
+  if (!raw) return null;
+  for (const entry of CLOUD_URL_PREFIXES) {
+    if (raw.startsWith(entry.compact)) {
+      return `${entry.expand}${raw.slice(entry.compact.length)}`;
+    }
+  }
+  return raw;
+}
+
+function normalizeCloudBannerPosition(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { x: 50, y: 50, scale: 100 };
+  }
+  const position = value as Record<string, unknown>;
+  const scaleRaw =
+    typeof position.scale === "number"
+      ? position.scale
+      : Number(position.scale);
+  const scale =
+    Number.isFinite(scaleRaw) && scaleRaw > 3
+      ? scaleRaw
+      : Math.round((Number.isFinite(scaleRaw) ? scaleRaw : 1) * 100);
+  return {
+    x: clampCloudInt(position.x, 0, 100, 50),
+    y: clampCloudInt(position.y, 0, 100, 50),
+    scale: clampCloudInt(scale, 100, 300, 100),
+  };
+}
+
+function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
+  if (!body || typeof body !== "object") {
+    return { error: "invalid_profile_snapshot" as const };
+  }
+
+  const profile = body.steamProfile && typeof body.steamProfile === "object"
+    ? body.steamProfile
+    : null;
+  const displayName =
+    typeof profile?.displayName === "string" ? profile.displayName.trim().slice(0, 80) : null;
+  const avatarUrl = compactCloudUrl(profile?.avatarUrl);
+  const bannerUrl = compactCloudUrl(profile?.bannerUrl);
+  const bannerPosition = normalizeCloudBannerPosition(profile?.bannerPosition);
+
+  const rawCollections = Array.isArray(body.userCollections)
+    ? (body.userCollections as CloudProfileCollectionInput[])
+    : [];
+  if (rawCollections.length > MAX_CLOUD_COLLECTIONS) {
+    return { error: "too_many_collections" as const };
+  }
+
+  const collections: Array<{ id: string; name: string; gameIds: string[] }> = [];
+  const usedCollectionIds = new Set<string>();
+  for (const [index, collection] of rawCollections.entries()) {
+    if (!collection || typeof collection !== "object") continue;
+    const baseId =
+      typeof collection.id === "string" && collection.id.trim()
+        ? collection.id.trim().slice(0, 80)
+        : `collection-${index}`;
+    let id = baseId;
+    if (usedCollectionIds.has(id)) id = `${id}-${index}`.slice(0, 80);
+    usedCollectionIds.add(id);
+    const name =
+      typeof collection.name === "string" ? collection.name.trim().slice(0, MAX_CLOUD_COLLECTION_NAME_LENGTH) : "";
+    if (!name) continue;
+
+    const gameIds = Array.isArray(collection.gameIds)
+      ? Array.from(
+          new Set(
+            collection.gameIds
+              .map((gameId) => (typeof gameId === "string" ? gameId.trim() : ""))
+              .filter(Boolean)
+              .slice(0, MAX_CLOUD_GAMES_PER_COLLECTION)
+          )
+        )
+      : [];
+
+    collections.push({ id, name, gameIds });
+  }
+
+  const updatedAt =
+    typeof body.updatedAt === "string" && Number.isFinite(Date.parse(body.updatedAt))
+      ? new Date(body.updatedAt).toISOString()
+      : nowIso();
+
+  return {
+    snapshot: {
+      version: CLOUD_PROFILE_SCHEMA_VERSION,
+      updatedAt,
+      displayName,
+      avatarUrl,
+      bannerUrl,
+      bannerPosition,
+      collections,
+    },
+  };
+}
+
+async function loadCloudProfileSnapshot(env: Env, steamId: string) {
+  const profile = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM user_profile_cloud WHERE steam_id = ? LIMIT 1`
+  ).bind(steamId).first<UserProfileCloudRow>();
+
+  const collectionsResult = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM user_collections_cloud WHERE steam_id = ? ORDER BY sort_order ASC, name ASC`
+  ).bind(steamId).all<UserCollectionCloudRow>();
+  const collections = collectionsResult.results || [];
+
+  const gamesResult = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM user_collection_games_cloud WHERE steam_id = ? ORDER BY sort_order ASC`
+  ).bind(steamId).all<UserCollectionGameCloudRow>();
+  const gamesByCollection = new Map<string, string[]>();
+  for (const row of gamesResult.results || []) {
+    const list = gamesByCollection.get(row.collection_id) || [];
+    list.push(row.game_id);
+    gamesByCollection.set(row.collection_id, list);
+  }
+
+  if (!profile && collections.length === 0) return null;
+
+  return {
+    version: CLOUD_PROFILE_SCHEMA_VERSION,
+    updatedAt: profile?.updated_at || collections[0]?.updated_at || nowIso(),
+    steamProfile: {
+      displayName: profile?.display_name || null,
+      avatarUrl: expandCloudUrl(profile?.avatar_url),
+      bannerUrl: expandCloudUrl(profile?.banner_url),
+      bannerPosition: {
+        x: clampCloudInt(profile?.banner_position_x, 0, 100, 50),
+        y: clampCloudInt(profile?.banner_position_y, 0, 100, 50),
+        scale: Number(
+          (clampCloudInt(profile?.banner_position_scale, 100, 300, 100) / 100).toFixed(2)
+        ),
+      },
+    },
+    userCollections: collections.map((collection) => ({
+      id: collection.id,
+      name: collection.name,
+      gameIds: gamesByCollection.get(collection.id) || [],
+    })),
+  };
+}
+
+async function handleCloudProfileGet(request: Request, env: Env) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+
+  const snapshot = await loadCloudProfileSnapshot(env, auth.session!.steamId);
+  return jsonResponse({ profile: snapshot }, env);
+}
+
+async function handleCloudProfilePut(request: Request, env: Env) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_CLOUD_PROFILE_PAYLOAD_BYTES) {
+    return jsonResponse({ error: "profile_snapshot_too_large" }, env, 413);
+  }
+
+  const text = await request.text().catch(() => "");
+  if (new TextEncoder().encode(text).byteLength > MAX_CLOUD_PROFILE_PAYLOAD_BYTES) {
+    return jsonResponse({ error: "profile_snapshot_too_large" }, env, 413);
+  }
+
+  let body: CloudProfileSnapshotInput | null = null;
+  try {
+    body = JSON.parse(text) as CloudProfileSnapshotInput;
+  } catch {
+    body = null;
+  }
+  const parsed = parseCloudProfileSnapshot(body);
+  if ("error" in parsed) {
+    return jsonResponse({ error: parsed.error }, env, 400);
+  }
+
+  const steamId = auth.session!.steamId;
+  const { snapshot } = parsed;
+  const now = snapshot.updatedAt;
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO user_profile_cloud (
+       steam_id, display_name, avatar_url, banner_url,
+       banner_position_x, banner_position_y, banner_position_scale, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(steam_id) DO UPDATE SET
+       display_name = excluded.display_name,
+       avatar_url = excluded.avatar_url,
+       banner_url = excluded.banner_url,
+       banner_position_x = excluded.banner_position_x,
+       banner_position_y = excluded.banner_position_y,
+       banner_position_scale = excluded.banner_position_scale,
+       updated_at = excluded.updated_at`
+  ).bind(
+    steamId,
+    snapshot.displayName,
+    snapshot.avatarUrl,
+    snapshot.bannerUrl,
+    snapshot.bannerPosition.x,
+    snapshot.bannerPosition.y,
+    snapshot.bannerPosition.scale,
+    now
+  ).run();
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `DELETE FROM user_collection_games_cloud WHERE steam_id = ?`
+  ).bind(steamId).run();
+  await env.SUBSCRIPTION_DB.prepare(
+    `DELETE FROM user_collections_cloud WHERE steam_id = ?`
+  ).bind(steamId).run();
+
+  for (const [collectionIndex, collection] of snapshot.collections.entries()) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_collections_cloud (id, steam_id, name, sort_order, updated_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(collection.id, steamId, collection.name, collectionIndex, now).run();
+
+    for (const [gameIndex, gameId] of collection.gameIds.entries()) {
+      await env.SUBSCRIPTION_DB.prepare(
+        `INSERT INTO user_collection_games_cloud (steam_id, collection_id, game_id, sort_order)
+         VALUES (?, ?, ?, ?)`
+      ).bind(steamId, collection.id, gameId, gameIndex).run();
+    }
+  }
+
+  const profile = await loadCloudProfileSnapshot(env, steamId);
+  return jsonResponse({ profile }, env);
+}
+
 async function handleRefreshPayment(request: Request, env: Env) {
   const url = new URL(request.url);
   const origin = url.origin;
@@ -1089,9 +1444,10 @@ async function handleRefreshPayment(request: Request, env: Env) {
   const checkout = await getSumUpCheckout(env, sumupId);
   const nextPayment = await updatePaymentFromSumUp(env, payment, checkout);
   const subscription = await getSubscription(env, payment.steam_id);
+  const reconciledPayment = await reconcilePaymentWithSubscription(env, nextPayment, subscription);
 
   return jsonResponse({
-    payment: publicPayment(nextPayment, origin),
+    payment: publicPayment(reconciledPayment || nextPayment, origin),
     subscription: publicSubscription(subscription),
   }, env);
 }
@@ -1194,6 +1550,12 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   const downloadMatch = url.pathname.match(/^\/cloud-saves\/([^/]+)\/download$/);
   if (request.method === "GET" && downloadMatch) {
     return handleCloudSaveDownload(request, env, downloadMatch[1]);
+  }
+  if (request.method === "GET" && url.pathname === "/cloud-profile") {
+    return handleCloudProfileGet(request, env);
+  }
+  if (request.method === "PUT" && url.pathname === "/cloud-profile") {
+    return handleCloudProfilePut(request, env);
   }
   if (request.method === "POST" && url.pathname === "/subscription/checkouts") {
     return handleCreateCheckout(request, env);

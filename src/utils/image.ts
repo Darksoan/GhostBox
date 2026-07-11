@@ -389,6 +389,49 @@ export function preloadGameModalAssets(game: GhostBoxGame, activeScreenshot = 0)
   });
 }
 
+// Throttled, deduped variant for hover/focus-driven preloads (sidebar items,
+// header search suggestions). Avoids firing dozens of preloads when the
+// pointer sweeps across a list rapidly.
+const PRELOAD_HOVER_THROTTLE_MS = 120;
+const preloadHoverLastRunRef = { current: 0 };
+const preloadHoverQueuedRef = { current: null as GhostBoxGame | null };
+const preloadHoverTimeoutRef = { current: undefined as number | undefined };
+const preloadedGameIds = new Set<string>();
+
+export function preloadGameModalAssetsThrottled(game: GhostBoxGame) {
+  if (preloadedGameIds.has(game.id)) return;
+
+  const now = Date.now();
+  const elapsed = now - preloadHoverLastRunRef.current;
+
+  preloadHoverQueuedRef.current = game;
+
+  if (elapsed >= PRELOAD_HOVER_THROTTLE_MS) {
+    flushPreloadHover();
+    return;
+  }
+
+  if (preloadHoverTimeoutRef.current !== undefined) return;
+  preloadHoverTimeoutRef.current = window.setTimeout(
+    flushPreloadHover,
+    PRELOAD_HOVER_THROTTLE_MS - elapsed
+  );
+}
+
+function flushPreloadHover() {
+  const game = preloadHoverQueuedRef.current;
+  if (preloadHoverTimeoutRef.current !== undefined) {
+    window.clearTimeout(preloadHoverTimeoutRef.current);
+    preloadHoverTimeoutRef.current = undefined;
+  }
+  if (!game) return;
+
+  preloadHoverQueuedRef.current = null;
+  preloadHoverLastRunRef.current = Date.now();
+  preloadedGameIds.add(game.id);
+  preloadGameModalAssets(game);
+}
+
 export function preloadGameListAssets(
   games: GhostBoxGame[],
   options: GameListPreloadOptions = {}

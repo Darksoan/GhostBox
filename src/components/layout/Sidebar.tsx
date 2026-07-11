@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+
   Folder,
   Heart,
   Home,
@@ -11,7 +12,7 @@ import {
   UserRound,
   type LucideIcon,
 } from "lucide-react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useDeferredValue, useMemo, useState } from "react";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { ContextMenu } from "../ui/ContextMenu";
@@ -20,11 +21,11 @@ import { useGameIconUrl } from "../../hooks/useGameIconUrl";
 import { settingsNavigationTabs, settingsTabLabelKeys, type SettingsTabId } from "../../features/settings/settingsTabsShared";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
-import { preloadGameModalAssets, preloadProfileImages } from "../../utils/image";
+import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import { BoltLightning, Grid } from "reicon-react";
+import { Grid } from "reicon-react";
 
-type SidebarNavIcon = LucideIcon | typeof Grid | typeof BoltLightning;
+type SidebarNavIcon = LucideIcon | typeof Grid;
 
 const navigation: { id: Page; icon: SidebarNavIcon; labelKey: string }[] = [
   { id: "home", labelKey: "nav.home", icon: Home },
@@ -71,12 +72,11 @@ interface SidebarProps {
   onToggleFavorite?: (game: GhostBoxGame) => void;
   activeSettingsTabId: SettingsTabId;
   onSettingsTabChange: (tabId: SettingsTabId) => void;
-  isPremium?: boolean;
 }
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
 const SIDEBAR_CURSOR_LOCK_MS = 700;
-const SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT = 30;
+const SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT = 10;
 
 let sidebarCursorLockTimeout: number | undefined;
 
@@ -130,7 +130,6 @@ export const Sidebar = memo(function Sidebar({
   onToggleFavorite,
   activeSettingsTabId,
   onSettingsTabChange,
-  isPremium = false,
 }: SidebarProps) {
   const isSettingsPage = activePage === "settings";
   const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(false);
@@ -171,12 +170,15 @@ export const Sidebar = memo(function Sidebar({
     onRemoveGameFromCollection,
   });
 
+  const deferredFavoriteGames = useDeferredValue(favoriteGames);
+  const deferredAddedLibraryGames = useDeferredValue(addedLibraryGames);
+
   const sidebarCollections = useMemo<SidebarCollection[]>(() => {
     const gamesById = new Map(
       [
         ...userCollections.flatMap((collection) => collection.games ?? []),
-        ...favoriteGames,
-        ...addedLibraryGames,
+        ...deferredFavoriteGames,
+        ...deferredAddedLibraryGames,
       ].map((game) => [game.id, game])
     );
 
@@ -184,7 +186,7 @@ export const Sidebar = memo(function Sidebar({
       {
         id: FAVORITES_COLLECTION_ID,
         name: t("profile.favorites"),
-        games: favoriteGames,
+        games: deferredFavoriteGames,
       },
       ...userCollections.map((collection) => ({
         id: collection.id,
@@ -195,9 +197,9 @@ export const Sidebar = memo(function Sidebar({
         }),
       })),
     ];
-  }, [addedLibraryGames, favoriteGames, userCollections, t]);
+  }, [deferredAddedLibraryGames, deferredFavoriteGames, userCollections, t]);
 
-  const toggleCollectionExpanded = (collectionId: string) => {
+  const toggleCollectionExpanded = useCallback((collectionId: string) => {
     setExpandedCollectionIds((current) => {
       const next = new Set(current);
       if (next.has(collectionId)) {
@@ -207,15 +209,18 @@ export const Sidebar = memo(function Sidebar({
       }
       return next;
     });
-  };
+  }, []);
 
-  const handleCollectionClick = (collection: SidebarCollection) => {
-    if (collection.id === FAVORITES_COLLECTION_ID) {
-      onNavigate("favorites", "favorites");
-    } else {
-      onNavigate("favorites", collection.id);
-    }
-  };
+  const handleCollectionClick = useCallback(
+    (collection: SidebarCollection) => {
+      if (collection.id === FAVORITES_COLLECTION_ID) {
+        onNavigate("favorites", "favorites");
+      } else {
+        onNavigate("favorites", collection.id);
+      }
+    },
+    [onNavigate]
+  );
 
   return (
     <aside className="sidebar" onPointerDown={lockSidebarPointerCursor}>
@@ -224,7 +229,6 @@ export const Sidebar = memo(function Sidebar({
           profile={steamProfile}
           isSigningIn={isSteamSigningIn}
           isActive={activePage === "profile"}
-          isPremium={isPremium}
           onOpenProfile={onOpenProfile}
           onSignIn={onSteamSignIn}
         />
@@ -403,8 +407,8 @@ export const Sidebar = memo(function Sidebar({
                                     type="button"
                                     className="sidebar__collection-game-button"
                                     onClick={() => onOpenGame(game)}
-                                    onFocus={() => preloadGameModalAssets(game)}
-                                    onMouseEnter={() => preloadGameModalAssets(game)}
+                                    onFocus={() => preloadGameModalAssetsThrottled(game)}
+                                    onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
                                     onContextMenu={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
@@ -508,7 +512,7 @@ interface SidebarGameItemProps {
   game: GhostBoxGame;
 }
 
-function SidebarGameItem({ game }: SidebarGameItemProps) {
+const SidebarGameItem = memo(function SidebarGameItem({ game }: SidebarGameItemProps) {
   const iconUrl = useGameIconUrl(game);
   return (
     <>
@@ -518,13 +522,12 @@ function SidebarGameItem({ game }: SidebarGameItemProps) {
       </span>
     </>
   );
-}
+});
 
 interface SidebarProfileProps {
   profile: SteamProfile | null;
   isSigningIn: boolean;
   isActive: boolean;
-  isPremium?: boolean;
   onOpenProfile: () => void;
   onSignIn: () => void;
 }
@@ -533,7 +536,6 @@ const SidebarProfile = memo(function SidebarProfile({
   profile,
   isSigningIn,
   isActive,
-  isPremium = false,
   onOpenProfile,
   onSignIn,
 }: SidebarProfileProps) {
@@ -543,25 +545,15 @@ const SidebarProfile = memo(function SidebarProfile({
   );
   const avatarSource = useLoadableImageSource(avatarSources);
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
-  const [localPremium, setLocalPremium] = useState(() => {
-    const steamId = profile?.steamId?.trim();
-    if (!steamId) return false;
-    return ghostboxApi.getCachedIsPremium(steamId) === true;
-  });
   const [steamRunning, setSteamRunning] = useState(false);
-  const showPremium = isPremium || localPremium;
 
   useEffect(() => {
     let cancelled = false;
     const steamId = profile?.steamId?.trim();
     if (!steamId) {
       setSteamLevel(null);
-      setLocalPremium(false);
       return;
     }
-
-    const cachedPremium = ghostboxApi.getCachedIsPremium(steamId);
-    if (cachedPremium !== null) setLocalPremium(cachedPremium);
 
     void (async () => {
       try {
@@ -579,18 +571,10 @@ const SidebarProfile = memo(function SidebarProfile({
       }
     })();
 
-    void ghostboxApi.isPremiumUser(steamId).then((premium) => {
-      if (!cancelled) setLocalPremium(premium);
-    });
-
     return () => {
       cancelled = true;
     };
   }, [profile?.steamId]);
-
-  useEffect(() => {
-    if (isPremium) setLocalPremium(true);
-  }, [isPremium]);
 
   useEffect(() => {
     if (!profile?.steamId) {
@@ -599,20 +583,49 @@ const SidebarProfile = memo(function SidebarProfile({
     }
 
     let cancelled = false;
+    let interval: number | undefined;
     const poll = () => {
       void ghostboxApi.isSteamRunning().then((running) => {
         if (!cancelled) setSteamRunning(running === true);
       });
     };
 
-    poll();
-    const interval = window.setInterval(poll, 4000);
-    const onFocus = () => poll();
+    const start = () => {
+      poll();
+      interval = window.setInterval(poll, 15000);
+    };
+
+    const stop = () => {
+      if (interval !== undefined) {
+        window.clearInterval(interval);
+        interval = undefined;
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    const onFocus = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+
+    if (document.visibilityState === "visible") {
+      start();
+    } else {
+      poll();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
     };
   }, [profile?.steamId]);
@@ -670,15 +683,6 @@ const SidebarProfile = memo(function SidebarProfile({
                     ? "Entrando..."
                     : "Entrar com Steam"}
               </span>
-              {profile && showPremium ? (
-                <span
-                  className="sidebar-profile__premium"
-                  title="GhostBox Premium"
-                  aria-label="GhostBox Premium"
-                >
-                  <BoltLightning size={16} weight="Filled" color="currentColor" />
-                </span>
-              ) : null}
               {profile && steamLevel !== null ? (
                 <span
                   className="sidebar-profile__level"

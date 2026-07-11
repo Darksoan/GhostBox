@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from "react";
-import type { RefObject } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
@@ -12,31 +12,76 @@ import { ConfirmModal } from "../modals/ConfirmModal";
 import { CollectionModal } from "../modals/CollectionModal";
 import { SteamPathModal } from "../modals/SteamPathModal";
 import { SubscriptionModal } from "../modals/SubscriptionModal";
+import { markPageLoaded } from "../../utils/loadedPages";
 
 const LazyHomePage = lazy(() =>
-  import("../../pages/HomePage").then((m) => ({ default: m.HomePage }))
+  import("../../pages/HomePage").then((m) => {
+    markPageLoaded("home");
+    return { default: m.HomePage };
+  })
 );
 const LazyCataloguePage = lazy(() =>
-  import("../../pages/CataloguePage").then((m) => ({ default: m.CataloguePage }))
+  import("../../pages/CataloguePage").then((m) => {
+    markPageLoaded("catalogue");
+    return { default: m.CataloguePage };
+  })
 );
 const LazyLibraryPage = lazy(() =>
-  import("../../pages/LibraryPage").then((m) => ({ default: m.LibraryPage }))
+  import("../../pages/LibraryPage").then((m) => {
+    markPageLoaded("library");
+    return { default: m.LibraryPage };
+  })
 );
 const LazyFavoritesPage = lazy(() =>
-  import("../../pages/FavoritesPage").then((m) => ({ default: m.FavoritesPage }))
+  import("../../pages/FavoritesPage").then((m) => {
+    markPageLoaded("favorites");
+    return { default: m.FavoritesPage };
+  })
 );
 const LazySettingsPage = lazy(() =>
-  import("../../pages/SettingsPage").then((m) => ({ default: m.SettingsPage }))
+  import("../../pages/SettingsPage").then((m) => {
+    markPageLoaded("settings");
+    return { default: m.SettingsPage };
+  })
 );
-const loadProfilePage = () => import("../../pages/ProfilePage");
+const loadProfilePage = () =>
+  import("../../pages/ProfilePage").then((m) => {
+    markPageLoaded("profile");
+    return m;
+  });
 const LazyProfilePage = lazy(() =>
   loadProfilePage().then((m) => ({ default: m.ProfilePage }))
 );
 const LazyNotificationsPage = lazy(() =>
-  import("../../pages/NotificationsPage").then((m) => ({
-    default: m.NotificationsPage,
-  }))
+  import("../../pages/NotificationsPage").then((m) => {
+    markPageLoaded("notifications");
+    return { default: m.NotificationsPage };
+  })
 );
+
+// Pages that stay mounted at all times after their first load so switching
+// back to them is instant (no Suspense fallback, no DOM remount).
+const KEEP_ALIVE_PAGES: Page[] = [
+  "home",
+  "catalogue",
+  "library",
+  "favorites",
+  "settings",
+  "profile",
+  "notifications",
+];
+
+// First-paint priorities for idle prefetching of the lazy chunks. Lower fires
+// sooner. Home and Catalogue are usually needed immediately.
+const PREFETCH_DELAYS_MS: Record<Page, number> = {
+  home: 0,
+  catalogue: 0,
+  library: 200,
+  favorites: 200,
+  settings: 400,
+  profile: 300,
+  notifications: 400,
+};
 
 function DeferredPagePlaceholder({ page }: { page: Page }) {
   return (
@@ -55,7 +100,6 @@ interface PageRouterProps {
   activeSettingsTabId: string;
   activeProfileCollectionId?: string;
   setActiveProfileCollectionId: (id: string | undefined) => void;
-  pageEnterKey: string;
   isMainPage: boolean;
   contentRef: RefObject<HTMLElement>;
   steamPathModalLoading: boolean;
@@ -70,7 +114,6 @@ export function PageRouter({
   activeSettingsTabId,
   activeProfileCollectionId,
   setActiveProfileCollectionId,
-  pageEnterKey,
   isMainPage,
   contentRef,
   steamPathModalLoading,
@@ -97,22 +140,71 @@ export function PageRouter({
 
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
 
+  // Tracks which secondary pages have already been mounted at least once.
+  // Primary pages are always mounted, so they're considered "mounted" from the
+  // start for visibility purposes.
+  const [mountedPages, setMountedPages] = useState<Set<Page>>(
+    () => new Set<Page>(["home", "catalogue", "library", "favorites"])
+  );
+
+  // Track the previously active page so only the freshly-activated wrapper
+  // receives the `page-enter` animation class (avoids re-animating siblings
+  // that were already mounted).
+  const previousPageRef = useRef<Page>(page);
+  const [enteringPage, setEnteringPage] = useState<Page | null>(page);
+
   useEffect(() => {
-    let timeout: number | undefined;
-    const frame = window.requestAnimationFrame(() => {
-      timeout = window.setTimeout(() => {
-        void loadProfilePage();
-      }, 300);
+    setMountedPages((current) => {
+      if (current.has(page)) return current;
+      const next = new Set(current);
+      next.add(page);
+      return next;
     });
 
-    return () => {
-      window.cancelAnimationFrame(frame);
-      if (timeout) window.clearTimeout(timeout);
+    if (previousPageRef.current !== page) {
+      previousPageRef.current = page;
+      setEnteringPage(page);
+    }
+  }, [page]);
+
+  // Idle prefetch of every lazy chunk so first visits to secondary tabs don't
+  // show the Suspense spinner. Uses requestIdleCallback when available.
+  useEffect(() => {
+    const schedule = (delay: number, loader: () => Promise<unknown>) => {
+      const run = () => {
+        const exec = () => void loader();
+        if (delay <= 0) {
+          exec();
+          return;
+        }
+        window.setTimeout(exec, delay);
+      };
+
+      const ric =
+        (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+          .requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1));
+      ric(run);
     };
+
+    schedule(PREFETCH_DELAYS_MS.home, () => import("../../pages/HomePage"));
+    schedule(PREFETCH_DELAYS_MS.catalogue, () =>
+      import("../../pages/CataloguePage")
+    );
+    schedule(PREFETCH_DELAYS_MS.library, () => import("../../pages/LibraryPage"));
+    schedule(PREFETCH_DELAYS_MS.favorites, () =>
+      import("../../pages/FavoritesPage")
+    );
+    schedule(PREFETCH_DELAYS_MS.settings, () =>
+      import("../../pages/SettingsPage")
+    );
+    schedule(PREFETCH_DELAYS_MS.profile, loadProfilePage);
+    schedule(PREFETCH_DELAYS_MS.notifications, () =>
+      import("../../pages/NotificationsPage")
+    );
   }, []);
 
-  function renderPage() {
-    if (page === "home") {
+  function renderPage(targetPage: Page): ReactNode {
+    if (targetPage === "home") {
       return (
         <LazyHomePage
           onOpenGame={openGame}
@@ -145,9 +237,9 @@ export function PageRouter({
       );
     }
 
-    if (page === "catalogue") {
+    if (targetPage === "catalogue") {
       const animateCatalogueFilterPlaceholders =
-        page === "catalogue" &&
+        targetPage === "catalogue" &&
         !catalogue.catalogueDatabase.games.length &&
         !debouncedQuery.trim();
 
@@ -193,7 +285,7 @@ export function PageRouter({
       );
     }
 
-    if (page === "library") {
+    if (targetPage === "library") {
       return (
         <LazyLibraryPage
           games={appData.addedLibraryGames}
@@ -219,7 +311,7 @@ export function PageRouter({
       );
     }
 
-    if (page === "favorites") {
+    if (targetPage === "favorites") {
       return (
         <LazyFavoritesPage
           games={appData.favoriteGames}
@@ -241,7 +333,7 @@ export function PageRouter({
       );
     }
 
-    if (page === "settings") {
+    if (targetPage === "settings") {
       return (
         <LazySettingsPage
           activeTabId={activeSettingsTabId as never}
@@ -270,7 +362,7 @@ export function PageRouter({
       );
     }
 
-    if (page === "profile") {
+    if (targetPage === "profile") {
       return (
         <LazyProfilePage
           steamProfile={appData.steamProfile}
@@ -301,26 +393,48 @@ export function PageRouter({
       );
     }
 
-    if (page === "notifications") {
+    if (targetPage === "notifications") {
       return <LazyNotificationsPage onOpenGame={openGame} />;
     }
 
     return null;
   }
 
+  const keepAlivePages = useMemo(
+    () => KEEP_ALIVE_PAGES.filter((p) => mountedPages.has(p)),
+    [mountedPages]
+  );
+
   return (
     <>
       {hasOverlay ? (
         <ContentOverlay page={page} />
       ) : (
-        <div
-          key={pageEnterKey}
-          className={`page page--${page} ${!appearance.disableTabAnimations ? "page-enter" : ""} ${isMainPage ? "page--main-pages page--active" : ""}`}
-        >
-          <Suspense fallback={<DeferredPagePlaceholder page={page} />}>
-            {renderPage()}
-          </Suspense>
-        </div>
+        <>
+          {keepAlivePages.map((targetPage) => {
+            const isActive = targetPage === page;
+            const shouldAnimate =
+              !appearance.disableTabAnimations &&
+              isActive &&
+              enteringPage === targetPage;
+            const wrapperClass = `page page--${targetPage} ${
+              shouldAnimate ? "page-enter" : ""
+            } ${isMainPage && isActive ? "page--main-pages page--active" : ""}`;
+
+            return (
+              <div
+                key={targetPage}
+                className={wrapperClass}
+                hidden={!isActive}
+                aria-hidden={!isActive}
+              >
+                <Suspense fallback={<DeferredPagePlaceholder page={targetPage} />}>
+                  {renderPage(targetPage)}
+                </Suspense>
+              </div>
+            );
+          })}
+        </>
       )}
 
       <CollectionModal

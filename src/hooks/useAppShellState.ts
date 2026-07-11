@@ -44,11 +44,6 @@ export function useAppShellState(page: Page) {
     setQuery("");
   }, []);
 
-  const pageEnterKey =
-    page === "favorites"
-      ? `favorites-${activeProfileCollectionId ?? "default"}`
-      : page;
-
   const isMainPage =
     page === "home" ||
     page === "catalogue" ||
@@ -67,7 +62,6 @@ export function useAppShellState(page: Page) {
     setActiveProfileCollectionId,
     headerSearchSuggestions,
     isSearchLoading,
-    pageEnterKey,
     isMainPage,
   };
 }
