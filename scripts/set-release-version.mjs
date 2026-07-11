@@ -15,12 +15,16 @@ function updateJson(path, updater) {
 
 function replaceVersion(path) {
   const content = readFileSync(path, "utf8");
-  const next = content.replace(/^(version\s*=\s*")[^"]+(")/m, `$1${version}$2`);
-
-  if (next === content) {
-    throw new Error(`Could not update version in ${path}`);
+  const match = content.match(/^(version\s*=\s*")([^"]+)(")/m);
+  if (!match) {
+    throw new Error(`Could not find version field in ${path}`);
   }
 
+  if (match[2] === version) {
+    return;
+  }
+
+  const next = content.replace(/^(version\s*=\s*")[^"]+(")/m, `$1${version}$2`);
   writeFileSync(path, next);
 }
 
