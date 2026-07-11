@@ -8,12 +8,14 @@ type Env = {
   LATEST_VERSION?: string;
   INSTALLER_URL?: string;
   RELEASE_NOTES_URL?: string;
+  UPDATE_SIGNATURE?: string;
 };
 
 type GitHubReleaseAsset = {
   id: number;
   name: string;
   size?: number;
+  browser_download_url?: string;
 };
 
 type GitHubRelease = {
@@ -21,6 +23,7 @@ type GitHubRelease = {
   name?: string;
   body?: string;
   html_url?: string;
+  published_at?: string;
   assets?: GitHubReleaseAsset[];
 };
 
@@ -34,6 +37,7 @@ type FeedbackPayload = {
 };
 
 const maxMessageLength = 1800;
+const envLatestVersionFallback = "0.1.2";
 
 function jsonResponse(
   body: Record<string, unknown>,
@@ -86,10 +90,8 @@ function githubHeaders(token: string, accept = "application/vnd.github+json") {
 
 function normalizeReleaseVersion(release: GitHubRelease) {
   const tagName = normalizeString(release.tag_name);
-  return tagName.replace(/^v/i, "") || normalizeString(envLatestVersionFallback);
+  return tagName.replace(/^v/i, "") || envLatestVersionFallback;
 }
-
-const envLatestVersionFallback = "0.1.2";
 
 async function fetchLatestRelease(env: Env) {
   const config = getGitHubConfig(env);
@@ -113,7 +115,33 @@ function findInstallerAsset(release: GitHubRelease, env: Env) {
     if (configuredAsset) return configuredAsset;
   }
 
-  return assets.find((asset) => asset.name.toLowerCase().endsWith(".exe"));
+  return assets.find((asset) => {
+    const name = asset.name.toLowerCase();
+    return name.endsWith(".exe") && !name.endsWith(".sig");
+  });
+}
+
+function findSignatureAsset(release: GitHubRelease, installerName: string) {
+  const assets = release.assets || [];
+  const exact = assets.find((asset) => asset.name === `${installerName}.sig`);
+  if (exact) return exact;
+  return assets.find((asset) => asset.name.toLowerCase().endsWith(".sig"));
+}
+
+async function fetchAssetText(assetId: number, env: Env) {
+  const config = getGitHubConfig(env);
+  if (!config) return "";
+
+  const response = await fetch(
+    `https://api.github.com/repos/${config.owner}/${config.repo}/releases/assets/${assetId}`,
+    {
+      headers: githubHeaders(config.token, "application/octet-stream"),
+      redirect: "follow",
+    }
+  );
+
+  if (!response.ok) return "";
+  return (await response.text()).trim();
 }
 
 async function handleFeedback(request: Request, env: Env) {
@@ -177,15 +205,35 @@ async function handleFeedback(request: Request, env: Env) {
 
 async function handleLatestUpdate(request: Request, env: Env) {
   const release = await fetchLatestRelease(env);
+  const origin = new URL(request.url).origin;
 
   if (release) {
     const asset = findInstallerAsset(release, env);
-    const origin = new URL(request.url).origin;
+    const version = normalizeReleaseVersion(release);
+    const installerUrl = asset ? `${origin}/updates/download/${asset.id}` : "";
+    let signature = normalizeString(env.UPDATE_SIGNATURE);
 
+    if (!signature && asset) {
+      const sigAsset = findSignatureAsset(release, asset.name);
+      if (sigAsset) {
+        signature = await fetchAssetText(sigAsset.id, env);
+      }
+    }
+
+    // Tauri updater format (+ legacy fields for older clients)
     return jsonResponse(
       {
-        latestVersion: normalizeReleaseVersion(release),
-        installerUrl: asset ? `${origin}/updates/download/${asset.id}` : "",
+        version,
+        notes: normalizeString(release.body) || normalizeString(release.name) || `GhostBox ${version}`,
+        pub_date: normalizeString(release.published_at) || new Date().toISOString(),
+        platforms: {
+          "windows-x86_64": {
+            signature,
+            url: installerUrl,
+          },
+        },
+        latestVersion: version,
+        installerUrl,
         releaseNotesUrl: normalizeString(release.html_url),
       },
       { status: 200 },
@@ -193,10 +241,23 @@ async function handleLatestUpdate(request: Request, env: Env) {
     );
   }
 
+  const version = normalizeString(env.LATEST_VERSION) || envLatestVersionFallback;
+  const installerUrl = normalizeString(env.INSTALLER_URL);
+  const signature = normalizeString(env.UPDATE_SIGNATURE);
+
   return jsonResponse(
     {
-      latestVersion: normalizeString(env.LATEST_VERSION) || envLatestVersionFallback,
-      installerUrl: normalizeString(env.INSTALLER_URL),
+      version,
+      notes: `GhostBox ${version}`,
+      pub_date: new Date().toISOString(),
+      platforms: {
+        "windows-x86_64": {
+          signature,
+          url: installerUrl,
+        },
+      },
+      latestVersion: version,
+      installerUrl,
       releaseNotesUrl: normalizeString(env.RELEASE_NOTES_URL),
     },
     { status: 200 },

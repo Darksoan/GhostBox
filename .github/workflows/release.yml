@@ -21,6 +21,8 @@ jobs:
     env:
       RELEASE_VERSION: 0.1.${{ github.run_number }}
       VITE_APP_VERSION: 0.1.${{ github.run_number }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -46,17 +48,35 @@ jobs:
       - name: Set release version
         run: node scripts/set-release-version.mjs $env:RELEASE_VERSION
 
+      - name: Require updater signing key
+        shell: pwsh
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "Missing secret TAURI_SIGNING_PRIVATE_KEY. Paste the contents of src-tauri/keys/ghostbox.key."
+          }
+
       - name: Build NSIS installer
         run: npm run tauri -- build --bundles nsis
 
-      - name: Find installer
+      - name: Find installer artifacts
         id: installer
         shell: pwsh
         run: |
-          $installer = Get-ChildItem -LiteralPath "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $installer = Get-ChildItem -LiteralPath $nsisDir -Filter "*.exe" | Select-Object -First 1
           if (-not $installer) { throw "NSIS installer was not generated." }
+
+          $sig = Get-ChildItem -LiteralPath $nsisDir -Filter "*.sig" | Select-Object -First 1
+          if (-not $sig) {
+            $sigBeside = Get-Item -LiteralPath ($installer.FullName + ".sig") -ErrorAction SilentlyContinue
+            if ($sigBeside) { $sig = $sigBeside }
+          }
+          if (-not $sig) { throw "Updater signature (.sig) was not generated. Check TAURI_SIGNING_PRIVATE_KEY." }
+
           "path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
           "name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+          "sig_path=$($sig.FullName)" >> $env:GITHUB_OUTPUT
+          "sig_name=$($sig.Name)" >> $env:GITHUB_OUTPUT
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -65,7 +85,9 @@ jobs:
           name: GhostBox v${{ env.RELEASE_VERSION }}
           body: |
             Automated Windows build for commit ${{ github.sha }}.
-          files: ${{ steps.installer.outputs.path }}
+          files: |
+            ${{ steps.installer.outputs.path }}
+            ${{ steps.installer.outputs.sig_path }}
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

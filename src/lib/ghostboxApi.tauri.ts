@@ -39,7 +39,7 @@ import type {
   FeedbackResult,
   UpdateCheckResult,
   UpdateInstallResult,
-  UpdateManifest,
+  UpdateProgressEvent,
   DiscordLinkStatus,
   CloudBackupResult,
   CloudProfileResult,
@@ -400,37 +400,107 @@ export const ghostboxApi = {
   },
 
   async checkForUpdates(): Promise<UpdateCheckResult | null> {
-    const apiUrl = getUpdatesApiUrl();
-
     try {
-      const url = new URL(apiUrl);
-      url.searchParams.set("currentVersion", appVersion);
-      const response = await fetch(url, { headers: { accept: "application/json" } });
-      if (!response.ok) return null;
-
-      const manifest = await response.json() as Partial<UpdateManifest>;
-      const latestVersion = manifest.latestVersion?.trim() || appVersion;
-      const installerUrl = manifest.installerUrl?.trim() || "";
-      const updateAvailable = compareVersions(latestVersion, appVersion) > 0 && installerUrl.startsWith("https://");
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (!update) {
+        return {
+          updateAvailable: false,
+          currentVersion: appVersion,
+          latestVersion: appVersion,
+        };
+      }
 
       return {
-        updateAvailable,
+        updateAvailable: true,
         currentVersion: appVersion,
-        latestVersion,
-        installerUrl: updateAvailable ? installerUrl : "",
-        releaseNotesUrl: manifest.releaseNotesUrl?.trim() || undefined,
+        latestVersion: update.version,
       };
     } catch {
-      return null;
+      // Fallback: HTTP manifest (no install without signed updater artifacts)
+      try {
+        const url = new URL(getUpdatesApiUrl());
+        url.searchParams.set("currentVersion", appVersion);
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        if (!response.ok) return null;
+        const manifest = (await response.json()) as Partial<{
+          version?: string;
+          latestVersion?: string;
+          notes?: string;
+          releaseNotesUrl?: string;
+        }>;
+        const latestVersion =
+          manifest.version?.trim() || manifest.latestVersion?.trim() || appVersion;
+        const updateAvailable = compareVersions(latestVersion, appVersion) > 0;
+        return {
+          updateAvailable,
+          currentVersion: appVersion,
+          latestVersion,
+          releaseNotesUrl: manifest.releaseNotesUrl?.trim() || undefined,
+        };
+      } catch {
+        return null;
+      }
     }
   },
 
-  installUpdate(installerUrl: string): Promise<UpdateInstallResult> {
-    return invokeOr<UpdateInstallResult>(
-      "app_download_and_run_update",
-      { request: { installerUrl } },
-      { success: false }
-    );
+  async installUpdate(
+    onProgress?: (event: UpdateProgressEvent) => void
+  ): Promise<UpdateInstallResult> {
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      const update = await check();
+      if (!update) {
+        return { success: false, error: "No update available." };
+      }
+
+      let downloaded = 0;
+      let contentLength = 0;
+
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          contentLength = event.data.contentLength ?? 0;
+          onProgress?.({
+            event: "Started",
+            downloaded: 0,
+            contentLength,
+            percent: 0,
+          });
+          return;
+        }
+        if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          const percent =
+            contentLength > 0
+              ? Math.min(100, Math.round((downloaded / contentLength) * 100))
+              : 0;
+          onProgress?.({
+            event: "Progress",
+            downloaded,
+            contentLength,
+            percent,
+          });
+          return;
+        }
+        if (event.event === "Finished") {
+          onProgress?.({
+            event: "Finished",
+            downloaded,
+            contentLength,
+            percent: 100,
+          });
+        }
+      });
+
+      await relaunch();
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   },
 
   getAppStatus(): Promise<AppStatus | undefined> {

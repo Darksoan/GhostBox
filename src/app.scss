@@ -530,6 +530,87 @@ body {
   background: var(--background-dark);
 }
 
+.update-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: var(--overlay-strong);
+  backdrop-filter: none;
+}
+
+.update-splash__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 28px 32px;
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-md);
+  background: var(--surface-solid);
+}
+
+.update-splash__icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.update-splash__spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-circle);
+  background: conic-gradient(
+    var(--text-strong) var(--app-splash-progress, 0%),
+    var(--border-subtle) 0
+  );
+  position: relative;
+  transition: background var(--motion-base) var(--ease);
+}
+
+.update-splash__spinner::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: var(--radius-circle);
+  background: var(--surface-solid);
+}
+
+.update-splash__title {
+  margin: 4px 0 0;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: var(--weight-semibold);
+}
+
+.update-splash__status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+
+.update-splash__dismiss {
+  margin-top: 4px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-sm);
+  background: var(--surface-ui);
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+}
+
+.update-splash__dismiss:hover {
+  background: var(--surface-hover);
+  color: #fff;
+}
+
 button,
 input {
   font: inherit;

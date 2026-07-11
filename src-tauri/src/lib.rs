@@ -41,7 +41,6 @@ mod playtime;
 mod settings;
 mod steam;
 mod steam_appcache;
-mod updater;
 mod util;
 mod window_lifecycle;
 
@@ -1922,7 +1921,11 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
             image_cache::start_image_cache_cleanup(app.handle().clone());
             catalogue_cache::start_catalogue_refresh_scheduler(app.handle().clone());
             window_lifecycle::setup_window_lifecycle(app)?;
@@ -1998,7 +2001,6 @@ pub fn run() {
             window_lifecycle::tray_hide_menu,
             window_lifecycle::tray_quit_application,
             window_lifecycle::shell_open_external,
-            updater::app_download_and_run_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

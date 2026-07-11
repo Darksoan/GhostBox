@@ -144,21 +144,32 @@ export type FeedbackResult = {
 
 export type UpdateManifest = {
   latestVersion: string;
-  installerUrl: string;
+  installerUrl?: string;
   releaseNotesUrl?: string;
+  version?: string;
+  notes?: string;
+  pub_date?: string;
+  platforms?: Record<string, { url?: string; signature?: string }>;
 };
 
 export type UpdateCheckResult = {
   updateAvailable: boolean;
   currentVersion: string;
   latestVersion: string;
-  installerUrl: string;
+  installerUrl?: string;
   releaseNotesUrl?: string;
+};
+
+export type UpdateProgressEvent = {
+  event: "Started" | "Progress" | "Finished";
+  downloaded: number;
+  contentLength: number;
+  percent: number;
 };
 
 export type UpdateInstallResult = {
   success: boolean;
-  installerPath?: string;
+  error?: string;
 };
 
 export type BackupOutputPathSelectionResult = {
