@@ -1,7 +1,7 @@
+use crate::extract_app_id;
 use crate::ludusavi::game_title;
 use crate::settings::read_json_file;
-use crate::util::{text_value, EmptyStringExt};
-use crate::extract_app_id;
+use crate::util::{silent_command, text_value, EmptyStringExt};
 
 /// Steam-only playtime totals (playtime_forever). Local session accumulators are gone.
 const STEAM_PLAYTIME_FILE: &str = "steam-owned-playtimes.json";
@@ -64,7 +64,10 @@ pub(crate) fn load_game_playtimes(app: &tauri::AppHandle) -> serde_json::Value {
     serde_json::json!({})
 }
 
-pub(crate) fn save_game_playtimes(app: &tauri::AppHandle, snapshot: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn save_game_playtimes(
+    app: &tauri::AppHandle,
+    snapshot: &serde_json::Value,
+) -> Result<(), String> {
     crate::settings::write_json_file(app, STEAM_PLAYTIME_FILE, snapshot)
 }
 
@@ -176,7 +179,7 @@ pub(crate) fn is_playtime_session_active(app_id: &str) -> bool {
 
 #[cfg(windows)]
 fn read_steam_running_app_id() -> Option<String> {
-    let output = std::process::Command::new("reg")
+    let output = silent_command("reg")
         .args(["query", r"HKCU\Software\Valve\Steam", "/v", "RunningAppID"])
         .output()
         .ok()?;
@@ -654,8 +657,8 @@ fn is_process_running_by_path(executable_path: &std::path::Path) -> bool {
             "$p = '{}'; [bool](Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -eq $p }} | Select-Object -First 1)",
             escaped
         );
-        return std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
+        return silent_command("powershell")
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
             .output()
             .ok()
             .map(|output| {
@@ -668,7 +671,7 @@ fn is_process_running_by_path(executable_path: &std::path::Path) -> bool {
 
     #[cfg(not(windows))]
     {
-        return std::process::Command::new("pgrep")
+        return silent_command("pgrep")
             .arg("-f")
             .arg(path.as_ref())
             .output()
@@ -874,7 +877,10 @@ pub(crate) fn apply_playtime_from_backup(
         .get("lastTimePlayed")
         .and_then(|value| value.as_str())
         .map(str::to_string);
-    let last_time_played = match (current_last_played.as_deref(), backup_last_played.as_deref()) {
+    let last_time_played = match (
+        current_last_played.as_deref(),
+        backup_last_played.as_deref(),
+    ) {
         (Some(current_value), Some(backup_value)) => {
             if rfc3339_millis(backup_value) >= rfc3339_millis(current_value) {
                 backup_value.to_string()

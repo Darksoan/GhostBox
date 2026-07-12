@@ -1,4 +1,4 @@
-use crate::util::{text_value, EmptyStringExt};
+use crate::util::{silent_command, text_value, EmptyStringExt};
 
 pub(crate) fn ludusavi_config_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     use tauri::Manager;
@@ -33,7 +33,7 @@ pub(crate) fn run_ludusavi(
 ) -> Result<serde_json::Value, String> {
     let binary = ludusavi_binary_path()?;
     let config_dir = ludusavi_config_dir(app)?;
-    let output = std::process::Command::new(binary)
+    let output = silent_command(binary)
         .arg("--config")
         .arg(config_dir)
         .args(args)

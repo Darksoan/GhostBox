@@ -32,8 +32,11 @@ pub(crate) struct SubscriptionPayment {
     created_at: String,
     updated_at: String,
     confirmed_at: Option<String>,
-    pix_code: Option<String>,
-    pix_qr_code_url: Option<String>,
+    stripe_checkout_session_id: Option<String>,
+    stripe_invoice_id: Option<String>,
+    stripe_payment_intent_id: Option<String>,
+    stripe_subscription_id: Option<String>,
+    provider: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

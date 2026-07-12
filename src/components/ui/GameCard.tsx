@@ -125,8 +125,8 @@ export const GameCard = memo(function GameCard({
       className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}`}
       style={gameStyle(game)}
       onClick={() => onOpenGame(game)}
-      onFocus={() => preloadGameModalAssets(game)}
-      onMouseEnter={() => preloadGameModalAssets(game)}
+      onFocus={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
+      onMouseEnter={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
       onContextMenu={handleContextMenu}
     >
       <div

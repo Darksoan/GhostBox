@@ -164,11 +164,29 @@ const steamLibraryAssetFallbackNames = new Set([
   "hero_capsule.jpg",
 ]);
 
+const steamPortraitLibraryAssetNames = new Set([
+  "library_600x900_2x.jpg",
+  "library_600x900.jpg",
+  "library_capsule_2x.jpg",
+  "library_capsule.jpg",
+]);
+
 function normalizeSteamLibraryAssetName(fileName: string) {
   if (fileName === "library_600x900_2x.jpg") return "library_600x900.jpg";
   if (fileName === "library_capsule.jpg") return "library_600x900.jpg";
   if (fileName === "library_capsule_2x.jpg") return "library_600x900.jpg";
   return fileName;
+}
+
+function isSteamPortraitLibraryAssetSource(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (!parsed) return false;
+  return steamPortraitLibraryAssetNames.has(parsed.asset.toLowerCase());
+}
+
+/** True when the caller is loading portrait covers, not landscape headers/heroes. */
+function sourceListRequestsPortraitLibraryCover(sources: string[]) {
+  return sources.some((source) => isSteamPortraitLibraryAssetSource(source));
 }
 
 function parseSteamAssetSource(source: string) {
@@ -265,6 +283,17 @@ function steamCdnFallbackForSource(source: string) {
   return `https://cdn.cloudflare.steamstatic.com/steam/apps/${parsed.appId}/${asset}`;
 }
 
+function isHigherDensityFallbackForStandardSteamAsset(
+  source: string,
+  cachedSource: string
+) {
+  const sourceAsset = parseSteamAssetSource(source)?.asset.toLowerCase();
+  const cachedAsset = parseSteamAssetSource(cachedSource)?.asset.toLowerCase();
+  if (!sourceAsset || !cachedAsset) return false;
+
+  return cachedAsset === sourceAsset.replace(/\.(jpg|jpeg|png|webp)$/i, "_2x.$1");
+}
+
 export function isPredictableSteamAssetSource(source: string) {
   return parseSteamAssetSource(source) !== null;
 }
@@ -277,7 +306,12 @@ function canResolveSteamLibraryAssetFallback(source: string) {
 }
 
 export function withCachedImageSources(sources: string[]) {
-  const resolvedCoverSource = resolvedSteamLibraryCoverSourceForSources(sources);
+  // Only inject the resolved library capsule for portrait requests. Prepending
+  // it for header/landscape lists (home calendar, catalogue rows, etc.) causes
+  // the correct header to flash and then swap to a vertical cover.
+  const resolvedCoverSource = sourceListRequestsPortraitLibraryCover(sources)
+    ? resolvedSteamLibraryCoverSourceForSources(sources)
+    : "";
 
   return uniqueSources(
     [
@@ -285,10 +319,17 @@ export function withCachedImageSources(sources: string[]) {
       ...sources.flatMap((source) => {
         const cachedSource = imageSourceCache.get(source);
         const cdnFallback = steamCdnFallbackForSource(source);
+        const shouldPrependCachedSource =
+          cachedSource &&
+          cachedSource !== source &&
+          !isHigherDensityFallbackForStandardSteamAsset(source, cachedSource);
         return uniqueSources([
-          ...(cachedSource && cachedSource !== source ? [cachedSource] : []),
           source,
+          ...(shouldPrependCachedSource ? [cachedSource] : []),
           ...(cdnFallback && cdnFallback !== source ? [cdnFallback] : []),
+          ...(!shouldPrependCachedSource && cachedSource && cachedSource !== source
+            ? [cachedSource]
+            : []),
         ]);
       }),
     ]

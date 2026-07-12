@@ -24,13 +24,13 @@ import {
   type StoredPersonalCalendar,
 } from "../utils/storage";
 import {
-  gameCatalogueHeaderSources,
   gameHeaderOnlySources,
   gameHeroCapsuleSources,
   layeredImageStyle,
   withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
+import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 
 type HomeGameSeed = {
@@ -236,7 +236,7 @@ function hasCompletedPlaySession(
   return Boolean(
     game &&
       Number.isFinite(parseLastPlayed(game.lastTimePlayed)) &&
-      !/^Steam App \d+$/i.test(game.title.trim())
+      !isSteamTitlePlaceholder(game.title, game.appId)
   );
 }
 
@@ -264,7 +264,7 @@ function getUniqueWishlistAppIds(
 }
 
 function isSteamFallbackTitle(title: string) {
-  return /^Steam App \d+$/i.test(title.trim());
+  return isSteamTitlePlaceholder(title);
 }
 
 function getDisplayGameTitle(game: GhostBoxGame, fallback: string) {
@@ -533,7 +533,7 @@ function getUniqueCalendarPool(games: GhostBoxGame[]) {
 
   return games.filter((game) => {
     const key = homeGameKey(game);
-    if (!key || seen.has(key) || /^Steam App \d+$/i.test(game.title.trim())) {
+    if (!key || seen.has(key) || isSteamTitlePlaceholder(game.title, game.appId)) {
       return false;
     }
 
@@ -1204,8 +1204,11 @@ function HomeCalendarGameCardComponent({
 }) {
   const cardRef = useRef<HTMLButtonElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
+  // Header-only: never include coverUrl/portrait fallbacks. Enrichment and the
+  // global library-capsule cache otherwise swap the landscape header for a
+  // vertical cover after the correct image already painted.
   const headerSources = useMemo(
-    () => (shouldLoadCover ? gameCatalogueHeaderSources(game) : []),
+    () => (shouldLoadCover ? gameHeaderOnlySources(game) : []),
     [game, shouldLoadCover]
   );
 

@@ -54,7 +54,6 @@ function loadImage(source: string) {
 
 async function cropAvatarDataUrl(
   source: string,
-  type: string,
   position: AvatarCropPosition = defaultAvatarCropPosition
 ) {
   const image = await loadImage(source);
@@ -84,7 +83,7 @@ async function cropAvatarDataUrl(
     avatarCropSize
   );
 
-  return canvas.toDataURL(type === "image/png" ? "image/png" : "image/jpeg", 0.92);
+  return canvas.toDataURL("image/webp", 0.85);
 }
 
 async function resizeBannerDataUrl(source: string) {
@@ -98,8 +97,6 @@ async function resizeBannerDataUrl(source: string) {
   const pixelScale = Math.min(1, Math.sqrt(bannerMaxPixels / (width * height)));
   const scale = Math.min(dimensionScale, pixelScale);
 
-  if (scale >= 1) return source;
-
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
@@ -111,7 +108,7 @@ async function resizeBannerDataUrl(source: string) {
   context.imageSmoothingQuality = "high";
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-  return canvas.toDataURL("image/jpeg", 0.94);
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 interface EditProfileModalProps {
@@ -254,7 +251,6 @@ export function EditProfileModal({
       setAvatarUrl(
         await cropAvatarDataUrl(
           pendingAvatar.source,
-          pendingAvatar.type,
           avatarCropPosition
         )
       );

@@ -309,7 +309,10 @@ fn resolve_local_unlocked_achievements(
             .and_then(vdf_object);
 
         for bit in bits_unlocked {
-            match group_bits.and_then(|bits| bits.get(bit)).and_then(vdf_object) {
+            match group_bits
+                .and_then(|bits| bits.get(bit))
+                .and_then(vdf_object)
+            {
                 Some(achievement) => {
                     let name = achievement.get("name").map(vdf_string).unwrap_or_default();
                     let title = local_achievement_display_title(achievement);
@@ -533,8 +536,11 @@ pub fn read_local_achievement_stats(steam_path: &str, app_id: &str, persisted: &
         });
     }
 
-    let unlocked_bits =
-        read_local_unlocked_bits_by_stat(&stats_path, app_id, &user_stats_files(&stats_path, app_id));
+    let unlocked_bits = read_local_unlocked_bits_by_stat(
+        &stats_path,
+        app_id,
+        &user_stats_files(&stats_path, app_id),
+    );
     let unlocked_count: usize = unlocked_bits.values().map(|bits| bits.len()).sum();
 
     let unlocked = unlocked_count

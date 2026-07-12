@@ -30,6 +30,7 @@ type GameListPreloadOptions = {
   detailsLimit?: number;
   idle?: boolean;
   limit?: number;
+  nativeResolve?: boolean;
   sourceLimit?: number;
   variant?: "header" | "portrait" | "hero";
 };
@@ -113,8 +114,12 @@ export function gameCatalogueHeaderSources(game: GhostBoxGame) {
 
 export function gameHeaderOnlySources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
+  const customHeaderSources = [game.coverUrl, ...(game.coverFallbacks ?? [])].filter(
+    (source) => isHeaderImageSource(source) || isLandscapeImageSource(source)
+  );
 
   return uniqueSources([
+    ...customHeaderSources,
     `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
@@ -381,11 +386,16 @@ export function preloadGameLogoSources(game: GhostBoxGame) {
   preloadImageSources(gameLogoSources(game), { limit: 3, decode: true });
 }
 
-export function preloadGameModalAssets(game: GhostBoxGame, activeScreenshot = 0) {
+export function preloadGameModalAssets(
+  game: GhostBoxGame,
+  activeScreenshot = 0,
+  options: { nativeResolve?: boolean } = {}
+) {
   preloadGameDetailsCached(game.id);
   preloadImageSources(gameModalAssetSources(game, activeScreenshot), {
     limit: 8,
     decode: true,
+    includeCached: options.nativeResolve === true,
   });
 }
 
@@ -429,7 +439,7 @@ function flushPreloadHover() {
   preloadHoverQueuedRef.current = null;
   preloadHoverLastRunRef.current = Date.now();
   preloadedGameIds.add(game.id);
-  preloadGameModalAssets(game);
+  preloadGameModalAssets(game, 0, { nativeResolve: false });
 }
 
 export function preloadGameListAssets(
@@ -461,6 +471,7 @@ export function preloadGameListAssets(
   preloadImageSources(sources, {
     decode: options.decode,
     idle: options.idle ?? true,
+    includeCached: options.nativeResolve === true,
   });
 }
 

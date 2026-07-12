@@ -228,7 +228,7 @@ export function CatalogueList({
 
     preloadTimeoutRef.current = window.setTimeout(() => {
       preloadTimeoutRef.current = null;
-      preloadGameModalAssets(game);
+      preloadGameModalAssets(game, 0, { nativeResolve: false });
     }, 80);
   }, []);
 

@@ -239,9 +239,7 @@ pub fn backup_open_folder(
     let selected_path = selected_backup_path(&settings, app_id.trim(), backup_path);
 
     if selected_path.is_empty() {
-        return Ok(
-            serde_json::json!({ "success": false, "error": "Caminho de backup inválido." }),
-        );
+        return Ok(serde_json::json!({ "success": false, "error": "Caminho de backup inválido." }));
     }
 
     let root = std::path::PathBuf::from(&output_path);
@@ -396,8 +394,7 @@ pub fn backup_run_game_local(
 
     // Saves first; profile progress (achievements + playtime) is always layered on top.
     let ludusavi_error = run_ludusavi(&app, &args).err();
-    let profile_progress =
-        crate::export_game_profile_progress(&app, &app_id, &title, &output_path);
+    let profile_progress = crate::export_game_profile_progress(&app, &app_id, &title, &output_path);
 
     if !directory_has_content(&output_path) {
         let _ = std::fs::remove_dir_all(&output_path);
@@ -472,8 +469,7 @@ pub fn backup_restore_game_local(
     let args = ludusavi_args("restore", &app_id, Some(&selected_path), false);
     // Restore saves when present; always restore profile progress (achievements + playtime).
     let ludusavi_error = run_ludusavi(&app, &args).err();
-    let profile_progress =
-        crate::import_game_profile_progress(&app, &app_id, &title, &selected);
+    let profile_progress = crate::import_game_profile_progress(&app, &app_id, &title, &selected);
 
     if ludusavi_error.is_some() && !profile_progress.has_any() {
         return Ok(serde_json::json!({

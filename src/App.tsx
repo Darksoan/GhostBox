@@ -17,7 +17,7 @@ import {
 } from "./lib/trayNotifications";
 import { clearCatalogueGamesCache } from "./utils/gameCache";
 import type { SettingsTabId } from "./features/settings/settingsTabsShared";
-import type { SubscriptionStatusResult } from "./lib/ghostboxApi.types";
+import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
 import type { GhostBoxGame } from "./data";
 import "./app.scss";
 
@@ -65,6 +65,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     closeAchievements,
     modalReturnScrollTopRef,
     setSubscriptionModalOpen,
+    showToast,
   } = useOverlay();
   const { isGameModalVisible, isAchievementsViewVisible } =
     useContentOverlayState();
@@ -101,6 +102,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = useState<string | null>(null);
+  const [subscriptionPortalFlow, setSubscriptionPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,6 +266,31 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     [shell]
   );
 
+  const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {
+    const steamId = appData.steamProfile?.steamId?.trim();
+    const copy = (pt: string, en: string) => appearance.language === "en" ? en : pt;
+    if (!steamId || subscriptionPortalFlow) return;
+
+    setSubscriptionPortalFlow(flow);
+    try {
+      const session = await ghostboxApi.createSubscriptionPortalSession(steamId, flow);
+      if (!session?.url) {
+        throw new Error(copy("Não foi possível abrir o portal de cobrança.", "Could not open the billing portal."));
+      }
+      await ghostboxApi.openExternalUrl(session.url);
+    } catch (error) {
+      showToast(
+        copy("Portal de assinatura", "Subscription portal"),
+        error instanceof Error && error.message
+          ? error.message
+          : copy("Não foi possível abrir o portal de cobrança.", "Could not open the billing portal."),
+        "error"
+      );
+    } finally {
+      setSubscriptionPortalFlow(null);
+    }
+  }, [appData.steamProfile?.steamId, appearance.language, showToast, subscriptionPortalFlow]);
+
   useLayoutEffect(() => {
     restorePendingScroll();
   }, [page, restorePendingScroll]);
@@ -294,6 +321,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           activePage={page}
           activeCollectionId={shell.activeProfileCollectionId}
           steamProfile={appData.steamProfile}
+          isCloudProfileRestoring={appData.isCloudProfileRestoring}
           isSteamSigningIn={appData.isSteamSigningIn}
           favoriteGames={appData.favoriteGames}
           addedLibraryGames={appData.addedLibraryGames}
@@ -356,6 +384,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               handleNavigate("settings");
               handleSidebarSettingsTabChange("subscription");
             }}
+            onOpenSubscriptionPortal={handleOpenSubscriptionPortal}
           />
 
           <section
@@ -387,11 +416,14 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 function AppShell() {
   const appData = useAppData();
 
-  if (appData.isInitialLoading) {
-    return <AppSplash progress={appData.initialLoadingProgress} />;
-  }
-
-  return <AppContent appData={appData} />;
+  return (
+    <>
+      <AppContent appData={appData} />
+      {appData.isInitialLoading ? (
+        <AppSplash progress={appData.initialLoadingProgress} />
+      ) : null}
+    </>
+  );
 }
 
 function App() {

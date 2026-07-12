@@ -72,8 +72,8 @@ export const FavoriteCard = memo(function FavoriteCard({
       className="favorites-grid__item"
       role="button"
       onClick={() => onOpenGame(game)}
-      onFocus={() => preloadGameModalAssets(game)}
-      onMouseEnter={() => preloadGameModalAssets(game)}
+      onFocus={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
+      onMouseEnter={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
       onContextMenu={(event) => {
         event.preventDefault();
         if (onContextMenu) {

@@ -1,4 +1,5 @@
 import type { GhostBoxGame } from "../data";
+import { isSteamTitlePlaceholder } from "./steamTitles";
 
 function getUnlockedAchievementCount(game: GhostBoxGame) {
   const explicitUnlocked = (game.achievementList ?? []).filter(
@@ -41,20 +42,25 @@ function preferArray(primary: string[] | undefined, fallback: string[]) {
   return primary?.length ? primary : fallback;
 }
 
-function isPlaceholderGameTitle(title: string | undefined) {
-  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
-}
-
 export function mergeGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
   const richerAchievementGame = getRicherAchievementGame(game, details);
   const gamePlaytime = game.playTimeInMilliseconds ?? 0;
   const detailsPlaytime = details.playTimeInMilliseconds ?? 0;
-  const isPlaceholderTitle = isPlaceholderGameTitle(details.title);
+  const detailsTitleIsPlaceholder = isSteamTitlePlaceholder(
+    details.title,
+    details.appId || game.appId
+  );
+  const gameTitleIsPlaceholder = isSteamTitlePlaceholder(game.title, game.appId);
+  const mergedTitle = detailsTitleIsPlaceholder
+    ? !gameTitleIsPlaceholder && game.title
+      ? game.title
+      : details.title || game.title
+    : details.title || game.title;
 
   return {
     ...game,
     ...details,
-    title: isPlaceholderTitle && game.title ? game.title : details.title || game.title,
+    title: mergedTitle,
     cover: preferString(details.cover, game.cover),
     hero: preferString(details.hero, game.hero),
     coverUrl: preferString(details.coverUrl, game.coverUrl),

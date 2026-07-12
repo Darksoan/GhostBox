@@ -23,6 +23,7 @@ import {
   librarySortStorageKey,
   notificationsLastSeenStorageKey,
 } from "../constants/catalogue";
+import { isSteamTitlePlaceholder } from "./steamTitles";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
 
@@ -66,7 +67,7 @@ function storedNumber(value: unknown, fallback = 0) {
 function hasCompletedPlaySession(game: GhostBoxGame) {
   return (
     Number.isFinite(parseLastPlayed(game.lastTimePlayed)) &&
-    !/^Steam App \d+$/i.test(game.title.trim())
+    !isSteamTitlePlaceholder(game.title, game.appId)
   );
 }
 

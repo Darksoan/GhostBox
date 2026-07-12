@@ -8,6 +8,7 @@ DISCORD_REDIRECT_URI = "https://ghostbox-subscriptions.hella.workers.dev/discord
 DISCORD_GUILD_ID = "1519331076831580291"
 DISCORD_PREMIUM_ROLE_ID = "1520811722770743388"
 CLOUD_SAVE_BUCKET = "cloud-saves"
+PROFILE_IMAGE_BUCKET = "profile-images"
 
 [triggers]
 crons = ["*/30 * * * *"]

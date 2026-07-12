@@ -13,6 +13,7 @@ import {
 import type { GhostBoxGame } from "../data";
 import {
   addGameViaLuaTools,
+  registerSteamLibraryGame,
   removeGameViaLuaTools,
 } from "../data";
 import type {
@@ -43,6 +44,7 @@ import {
 } from "../lib/backupNotifications";
 import { isHiddenLibraryGame } from "../utils/filters";
 import { preloadGamePortraitSources } from "../utils/image";
+import { normalizeSteamGameTitles } from "../utils/steamTitles";
 import {
   readStoredFavoriteGames,
   readStoredProfileHistoryGames,
@@ -59,7 +61,7 @@ import {
   writeStoredShowSteamGames,
   writeStoredCloudProfileUpdatedAt,
 } from "../utils/storage";
-import { loadGameAchievementDetailsCached } from "../utils/gameCache";
+import { loadGameAchievementDetailsCached, loadGameDetailsCached } from "../utils/gameCache";
 import {
   countUnlockedAchievements,
   createProfileHistoryFallbackGame,
@@ -86,10 +88,9 @@ const initialLoadSteps: InitialLoadStep[] = [
   "startupSettings",
   "steamProfile",
   "morrenusApiKey",
-  "steamLibrary",
-  "playtimes",
-  "backupRoot",
 ];
+
+const initialLoadStepSet = new Set<InitialLoadStep>(initialLoadSteps);
 
 const defaultBackupSettings: BackupSettings = {
   outputPath: "",
@@ -105,6 +106,23 @@ function upsertLibraryGameByAppId(games: GhostBoxGame[], nextGame: GhostBoxGame)
 
 function removeLibraryGameByAppId(games: GhostBoxGame[], appId: string) {
   return games.filter((game) => game.appId !== appId);
+}
+
+async function resolveCloudGames(gameIds: string[], knownGames: GhostBoxGame[]) {
+  const gamesById = new Map(knownGames.map((game) => [game.id, game]));
+  const missingIds = gameIds.filter((gameId) => !gamesById.has(gameId));
+  const batchSize = 8;
+
+  for (let index = 0; index < missingIds.length; index += batchSize) {
+    const loaded = await Promise.all(
+      missingIds.slice(index, index + batchSize).map((gameId) => loadGameDetailsCached(gameId))
+    );
+    for (const game of loaded) {
+      if (game) gamesById.set(game.id, game);
+    }
+  }
+
+  return { gamesById, games: Array.from(gamesById.values()) };
 }
 
 function applyPlaytimeToGame(
@@ -198,6 +216,7 @@ interface AppDataContextValue {
   addedLibraryGames: GhostBoxGame[];
   userCollections: UserCollection[];
   steamProfile: SteamProfile | null;
+  isCloudProfileRestoring: boolean;
   isSteamSigningIn: boolean;
   isScanningSteamLibrary: boolean;
   addingGameId: string | null;
@@ -276,6 +295,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [steamProfile, setSteamProfile] = useState<SteamProfile | null>(() =>
     readStoredSteamProfile()
   );
+  const [isCloudProfileRestoring, setIsCloudProfileRestoring] = useState(() =>
+    Boolean(readStoredSteamProfile()?.steamId)
+  );
   const [isSteamSigningIn, setIsSteamSigningIn] = useState(false);
   const [isScanningSteamLibrary, setIsScanningSteamLibrary] = useState(false);
   const [addingGameId, setAddingGameId] = useState<string | null>(null);
@@ -331,6 +353,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   >(() => new Set());
 
   const markInitialLoadStepComplete = useCallback((step: InitialLoadStep) => {
+    if (!initialLoadStepSet.has(step)) return;
+
     setCompletedInitialLoadSteps((current) => {
       if (current.has(step)) return current;
       return new Set(current).add(step);
@@ -444,11 +468,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [profileHistoryGames]);
 
   const rehydrateCollectionGames = useCallback(
-    (collections: UserCollection[]): UserCollection[] => {
+    (collections: UserCollection[], extraGames: GhostBoxGame[] = []): UserCollection[] => {
       const gameById = new Map<string, GhostBoxGame>();
       for (const game of favoriteGamesRef.current) gameById.set(game.id, game);
       for (const game of addedLibraryGamesRef.current) gameById.set(game.id, game);
       for (const game of profileHistoryGamesRef.current) gameById.set(game.id, game);
+      for (const game of extraGames) gameById.set(game.id, game);
 
       return collections.map((collection) => ({
         ...collection,
@@ -479,9 +504,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       const updatedAt =
         cloudProfileLocalUpdatedAtRef.current || markCloudProfileLocalUpdated();
+      let cloudProfile = profile;
+      if (/^data:/i.test(cloudProfile.avatarUrl || "")) {
+        const uploaded = await ghostboxApi.uploadProfileImage(cloudProfile.avatarUrl || "", "avatar");
+        if (!uploaded) return;
+        cloudProfile = { ...cloudProfile, avatarUrl: uploaded };
+      }
+      if (/^data:/i.test(cloudProfile.bannerUrl || "")) {
+        const uploaded = await ghostboxApi.uploadProfileImage(cloudProfile.bannerUrl || "", "banner");
+        if (!uploaded) return;
+        cloudProfile = { ...cloudProfile, bannerUrl: uploaded };
+      }
       const snapshot = buildCloudProfileSnapshot({
         updatedAt,
-        steamProfile: profile,
+        steamProfile: cloudProfile,
+        favoriteGames: favoriteGamesRef.current,
         userCollections: userCollectionsRef.current,
       });
       const saved = await ghostboxApi.saveCloudProfileSnapshot(snapshot);
@@ -515,9 +552,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const restoreCloudProfileFromRemote = useCallback(async () => {
     if (cloudProfileRestoreInFlightRef.current) return;
     const currentProfile = steamProfileRef.current;
-    if (!currentProfile?.steamId) return;
+    if (!currentProfile?.steamId) {
+      setIsCloudProfileRestoring(false);
+      return;
+    }
 
     cloudProfileRestoreInFlightRef.current = true;
+    setIsCloudProfileRestoring(true);
     try {
       const session = await ghostboxApi.getCloudSession();
       if (!session?.token || session.user?.isPremium !== true) return;
@@ -531,6 +572,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const localUpdatedAt = cloudProfileLocalUpdatedAtRef.current;
       const localHasData =
         Boolean(currentProfile.avatarUrl || currentProfile.bannerUrl) ||
+        favoriteGamesRef.current.length > 0 ||
         userCollectionsRef.current.length > 0;
 
       if (
@@ -547,6 +589,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         currentProfile,
         snapshot: remote,
       });
+      const cloudGameIds = Array.from(
+        new Set([
+          ...applied.favoriteGameIds,
+          ...applied.userCollections.flatMap((collection) => collection.gameIds),
+        ])
+      );
+      const { gamesById, games } = await resolveCloudGames(cloudGameIds, [
+        ...favoriteGamesRef.current,
+        ...addedLibraryGamesRef.current,
+        ...profileHistoryGamesRef.current,
+      ]);
+      const favoriteGames = applied.favoriteGameIds.flatMap((gameId) => {
+        const game = gamesById.get(gameId);
+        return game ? [game] : [];
+      });
 
       skipNextCloudProfileUploadRef.current = true;
       if (applied.steamProfile) {
@@ -554,7 +611,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         writeStoredSteamProfile(applied.steamProfile);
         await ghostboxApi.saveSteamProfile(applied.steamProfile).catch(() => undefined);
       }
-      setUserCollections(rehydrateCollectionGames(applied.userCollections));
+      setFavoriteGames(favoriteGames);
+      writeStoredFavoriteGames(favoriteGames);
+      setUserCollections(rehydrateCollectionGames(applied.userCollections, games));
       writeStoredUserCollections(applied.userCollections);
       cloudProfileLocalUpdatedAtRef.current = remote.updatedAt;
       writeStoredCloudProfileUpdatedAt(remote.updatedAt);
@@ -562,6 +621,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       // Keep local profile/collections if remote restore fails.
     } finally {
       cloudProfileRestoreInFlightRef.current = false;
+      setIsCloudProfileRestoring(false);
     }
   }, [pushCloudProfileSnapshot, rehydrateCollectionGames]);
 
@@ -659,7 +719,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     writeStoredFavoriteGames(favoriteGames);
-  }, [favoriteGames]);
+    if (!cloudProfileBootstrappedRef.current || skipNextCloudProfileUploadRef.current) return;
+    scheduleCloudProfileSync();
+  }, [favoriteGames, scheduleCloudProfileSync]);
 
   useEffect(() => {
     writeStoredUserCollections(userCollections);
@@ -672,8 +734,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const steamId = steamProfile?.steamId?.trim();
-    if (!steamId || cloudProfileRestoredSteamIdRef.current === steamId) return;
+    if (!steamId) {
+      setIsCloudProfileRestoring(false);
+      return;
+    }
+    if (cloudProfileRestoredSteamIdRef.current === steamId) return;
     cloudProfileRestoredSteamIdRef.current = steamId;
+    setIsCloudProfileRestoring(true);
     void restoreCloudProfileFromRemote();
   }, [restoreCloudProfileFromRemote, steamProfile?.steamId]);
 
@@ -842,11 +909,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       .then((profile) => {
         if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
 
-        setSteamProfile((currentProfile) => {
-          const merged = mergeSteamProfile(profile, currentProfile);
-          if (merged) writeStoredSteamProfile(merged);
-          return merged;
-        });
+        const merged = mergeSteamProfile(profile, steamProfileRef.current);
+        if (merged) {
+          setIsCloudProfileRestoring(true);
+          steamProfileRef.current = merged;
+          writeStoredSteamProfile(merged);
+        }
+        setSteamProfile(merged);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -893,18 +962,43 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [addedLibraryGames]
   );
 
-  const profileFavoriteGames = favoriteGames;
-  const profileAddedLibraryGames = addedLibraryGames;
-  const profileHistoryGamesWithPlaytime = useMemo(
-    () => profileHistoryGames.map(mergeGamePlaytime),
-    [mergeGamePlaytime, profileHistoryGames]
+  const profileFavoriteGames = useMemo(
+    () => normalizeSteamGameTitles(favoriteGames, [...addedLibraryGames, ...profileHistoryGames]),
+    [addedLibraryGames, favoriteGames, profileHistoryGames]
   );
+  const profileAddedLibraryGames = useMemo(
+    () => normalizeSteamGameTitles(addedLibraryGames, [...favoriteGames, ...profileHistoryGames]),
+    [addedLibraryGames, favoriteGames, profileHistoryGames]
+  );
+  const profileHistoryGamesWithPlaytime = useMemo(
+    () =>
+      normalizeSteamGameTitles(profileHistoryGames, [
+        ...addedLibraryGames,
+        ...favoriteGames,
+      ]).map(mergeGamePlaytime),
+    [addedLibraryGames, favoriteGames, mergeGamePlaytime, profileHistoryGames]
+  );
+
+  useEffect(() => {
+    if (!profileHistoryGames.length) return;
+    const normalizedGames = normalizeSteamGameTitles(profileHistoryGames, [
+      ...addedLibraryGames,
+      ...favoriteGames,
+    ]);
+    const changed = normalizedGames.some(
+      (game, index) => game.title !== profileHistoryGames[index]?.title
+    );
+    if (changed) setProfileHistoryGames(normalizedGames);
+  }, [addedLibraryGames, favoriteGames, profileHistoryGames]);
 
   const applySteamLibraryScanResult = useCallback(
     (result: SteamLibraryScanResult) => {
       if (result.status !== "ok") return;
 
-      const games = result.games.filter((game) => !isHiddenLibraryGame(game));
+      const games = normalizeSteamGameTitles(
+        result.games.filter((game) => !isHiddenLibraryGame(game)),
+        [...favoriteGamesRef.current, ...profileHistoryGamesRef.current]
+      );
       setSteamPathInput(result.steamPath);
       setAddedLibraryGames(games);
       setAddedLibraryGameAppIds(new Set(games.map((game) => game.appId)));
@@ -944,7 +1038,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       setAddingGameId(game.id);
       try {
-        const result = await addGameViaLuaTools(game);
+        const steamPlaytimeEntry = gamePlaytimesRef.current[game.appId] as
+          | (GamePlaytimeSnapshot[string] & { source?: string })
+          | undefined;
+        const isKnownSteamOwnedGame = steamPlaytimeEntry?.source === "steam";
+        const isSteamOwnedGame =
+          isKnownSteamOwnedGame ||
+          Boolean(
+            steamProfile?.steamId &&
+              (await ghostboxApi
+                .getSteamAccountStats(steamProfile.steamId)
+                .then((stats) =>
+                  stats?.ownedPlaytimes?.some(
+                    (playtime) => playtime.appId === game.appId
+                  ) ?? false
+                )
+                .catch(() => false))
+          );
+
+        const result = isSteamOwnedGame
+          ? await registerSteamLibraryGame(game)
+          : await addGameViaLuaTools(game);
         if (!result.success) {
           showToast("Falha ao adicionar", result.error);
           return;
@@ -959,7 +1073,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         );
         showToast(
           "Jogo adicionado",
-          `${result.libraryGame.title} foi adicionado à Biblioteca.`
+          isSteamOwnedGame
+            ? `${result.libraryGame.title} foi reconhecido na Biblioteca.`
+            : `${result.libraryGame.title} foi adicionado à Biblioteca.`
         );
       } catch (error) {
         showToast(
@@ -972,7 +1088,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setAddingGameId(null);
       }
     },
-    [addingGameId, availableLibraryGameAppIds, removingGameId, showToast]
+    [addingGameId, availableLibraryGameAppIds, removingGameId, showToast, steamProfile?.steamId]
   );
 
   const removeQueuedGame = useCallback(
@@ -1139,7 +1255,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [setCollectionModalOpen]);
 
   const handleSteamSignIn = useCallback(async () => {
-    if (isSteamSigningIn || steamProfile) return;
+    if (isSteamSigningIn) return;
+    if (steamProfile) {
+      const session = await ghostboxApi.getCloudSession();
+      if (session?.token) return;
+    }
 
     const requestId = ++steamProfileRequestSequenceRef.current;
     setIsSteamSigningIn(true);
@@ -1154,6 +1274,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const profile = await ghostboxApi.signInWithSteam();
       if (steamProfileRequestSequenceRef.current !== requestId) return;
 
+      setIsCloudProfileRestoring(true);
+      steamProfileRef.current = profile;
       setSteamProfile(profile);
       writeStoredSteamProfile(profile);
       void syncPlaytimesFromSteam(profile?.steamId);
@@ -1224,11 +1346,43 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ) => {
       if (!steamProfile) return;
 
-      const nextProfile: SteamProfile = {
+      const previousBannerUrl = steamProfile.bannerUrl;
+      const optimisticProfile: SteamProfile = {
         ...steamProfile,
         displayName,
         avatarUrl,
         bannerUrl,
+        bannerPosition,
+      };
+      setSteamProfile(optimisticProfile);
+      let persistedAvatarUrl = avatarUrl;
+      let persistedBannerUrl = bannerUrl;
+      try {
+        if (/^data:/i.test(persistedAvatarUrl)) {
+          persistedAvatarUrl = await ghostboxApi.uploadProfileImage(persistedAvatarUrl, "avatar") || "";
+          if (!persistedAvatarUrl) throw new Error("avatar upload failed");
+        }
+        if (/^data:/i.test(persistedBannerUrl)) {
+          persistedBannerUrl = await ghostboxApi.uploadProfileImage(persistedBannerUrl, "banner") || "";
+          if (!persistedBannerUrl) throw new Error("banner upload failed");
+        } else if (!persistedBannerUrl && previousBannerUrl) {
+          if (!(await ghostboxApi.deleteProfileBanner())) throw new Error("banner delete failed");
+        }
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+        const message = rawMessage.trim()
+          ? rawMessage
+          : "Não foi possível enviar as imagens para a nuvem.";
+        setSteamProfile(steamProfile);
+        showToast("Falha ao salvar perfil", message);
+        return;
+      }
+
+      const nextProfile: SteamProfile = {
+        ...steamProfile,
+        displayName,
+        avatarUrl: persistedAvatarUrl,
+        bannerUrl: persistedBannerUrl,
         bannerPosition,
       };
 
@@ -1237,7 +1391,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await ghostboxApi.saveSteamProfile(nextProfile);
       scheduleCloudProfileSync();
     },
-    [scheduleCloudProfileSync, steamProfile]
+    [scheduleCloudProfileSync, showToast, steamProfile]
   );
 
   const handleStartupSettingsChange = useCallback(
@@ -1451,6 +1605,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGames,
       userCollections,
       steamProfile,
+      isCloudProfileRestoring,
       isSteamSigningIn,
       isScanningSteamLibrary,
       addingGameId,
@@ -1510,6 +1665,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGames,
       userCollections,
       steamProfile,
+      isCloudProfileRestoring,
       isSteamSigningIn,
       isScanningSteamLibrary,
       addingGameId,

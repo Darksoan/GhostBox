@@ -122,6 +122,44 @@ pub fn upsert_ghostbox_library_game(app: &AppHandle, game: Value) -> Result<(), 
     write_ghostbox_library_games(app, &games)
 }
 
+#[tauri::command]
+pub fn ghostbox_library_register_steam_game(
+    app: AppHandle,
+    game: Value,
+) -> Result<Value, String> {
+    let app_id = extract_app_id(&game);
+    let title = text_value(game.get("title"));
+    if app_id.is_empty() || title.is_empty() {
+        return Ok(json!({
+            "success": false,
+            "error": "AppID inválido para registrar o jogo da Steam."
+        }));
+    }
+    if is_library_app_blocked(&app_id, &title) {
+        return Ok(json!({
+            "success": false,
+            "error": "Este item não é um jogo e foi bloqueado da Biblioteca."
+        }));
+    }
+
+    let mut library_game = game;
+    if let Some(object) = library_game.as_object_mut() {
+        object.insert("status".to_string(), json!("discover"));
+        object.remove("luaToolsManifests");
+        object.remove("luaToolsManifestFiles");
+    }
+
+    upsert_ghostbox_library_game(&app, library_game.clone())?;
+
+    Ok(json!({
+        "success": true,
+        "api": "steam",
+        "installedPath": "",
+        "manifestCount": 0,
+        "libraryGame": library_game
+    }))
+}
+
 pub fn remove_ghostbox_library_game(app: &AppHandle, app_id: &str) -> Result<(), String> {
     let app_id = app_id
         .chars()

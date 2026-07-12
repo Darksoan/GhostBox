@@ -1,6 +1,6 @@
+use crate::util::{silent_steamcmd_output, with_steamcmd_lock};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
@@ -523,18 +523,7 @@ fn get_library_asset_hash_from_steamcmd(
     let steamcmd = steamcmd_candidates(app)
         .into_iter()
         .find(|candidate| candidate.exists())?;
-    let output = Command::new(steamcmd)
-        .args([
-            "+login",
-            "anonymous",
-            "+app_info_update",
-            "1",
-            "+app_info_print",
-            app_id,
-            "+quit",
-        ])
-        .output()
-        .ok()?;
+    let output = with_steamcmd_lock(|| silent_steamcmd_output(&steamcmd, app_id))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let asset_name = file_name
         .rsplit_once('.')

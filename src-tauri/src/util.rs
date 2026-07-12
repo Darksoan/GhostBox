@@ -1,3 +1,63 @@
+pub(crate) fn silent_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW alone. Do NOT combine with DETACHED_PROCESS —
+        // Microsoft docs: CREATE_NO_WINDOW is ignored when used with
+        // DETACHED_PROCESS, so steamcmd (and other console tools) would flash
+        // a visible console while resolving icons / library assets.
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    command
+}
+
+/// Run steamcmd with no visible console and stdout capture.
+/// Sets the working directory to steamcmd's folder (required by steamcmd) and
+/// uses quiet flags so it does not prompt or linger.
+pub(crate) fn silent_steamcmd_output(
+    steamcmd: &std::path::Path,
+    app_id: &str,
+) -> Option<std::process::Output> {
+    let mut command = silent_command(steamcmd);
+    if let Some(dir) = steamcmd.parent() {
+        command.current_dir(dir);
+    }
+
+    command
+        .args([
+            "+@ShutdownOnFailedCommand",
+            "1",
+            "+@NoPromptForPassword",
+            "1",
+            "+login",
+            "anonymous",
+            "+app_info_update",
+            "1",
+            "+app_info_print",
+            app_id,
+            "+quit",
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+}
+
+pub(crate) fn with_steamcmd_lock<T>(operation: impl FnOnce() -> T) -> T {
+    static STEAMCMD_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    let lock = STEAMCMD_LOCK.get_or_init(|| std::sync::Mutex::new(()));
+
+    match lock.lock() {
+        Ok(_guard) => operation(),
+        Err(_) => operation(),
+    }
+}
+
 pub(crate) fn text_value(value: Option<&serde_json::Value>) -> String {
     value
         .and_then(|value| value.as_str())

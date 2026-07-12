@@ -1,21 +1,23 @@
 import type { GhostBoxGame } from "../data";
 import type { BackupDetails, BackupSettings } from "../types";
 import type { SteamAchievement } from "../data";
+import { isSteamTitlePlaceholder, normalizeSteamGameTitle } from "../utils/steamTitles";
 
 function normalizeAchievementKey(value: string) {
   return value.trim().toLowerCase();
-}
-
-function isPlaceholderGameTitle(title: string | undefined) {
-  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
 }
 
 export function upsertProfileHistoryGame(
   games: GhostBoxGame[],
   nextGame: GhostBoxGame
 ) {
+  const existingGame = games.find((game) => game.appId === nextGame.appId);
+  const normalizedNextGame = existingGame
+    ? normalizeSteamGameTitle(nextGame, [existingGame])
+    : nextGame;
+
   return [
-    nextGame,
+    normalizedNextGame,
     ...games.filter((game) => game.appId !== nextGame.appId),
   ].slice(0, 50);
 }
@@ -53,7 +55,7 @@ export function mergeGameDetailsPreservingAchievements(
   game: GhostBoxGame,
   details: GhostBoxGame
 ): GhostBoxGame {
-  const isPlaceholderTitle = isPlaceholderGameTitle(details.title);
+  const isPlaceholderTitle = isSteamTitlePlaceholder(details.title, details.appId);
   const hasAchievementDetails =
     details.achievements.total > 0 || (details.achievementList ?? []).length > 0;
 

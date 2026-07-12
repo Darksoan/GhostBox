@@ -1,9 +1,9 @@
 type Env = {
   SUBSCRIPTION_DB: D1Database;
-  SUMUP_API_KEY: string;
-  SUMUP_MERCHANT_CODE: string;
-  SUMUP_BASE_URL?: string;
   CHECKOUT_RETURN_URL?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PORTAL_RETURN_URL?: string;
   DISCORD_CLIENT_ID?: string;
   DISCORD_CLIENT_SECRET?: string;
   DISCORD_REDIRECT_URI?: string;
@@ -17,6 +17,7 @@ type Env = {
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   CLOUD_SAVE_BUCKET?: string;
+  PROFILE_IMAGE_BUCKET?: string;
 };
 
 type PlanId = "monthly" | "quarterly";
@@ -40,23 +41,15 @@ type PaymentRow = {
   currency: string;
   status: PaymentStatus;
   hosted_checkout_url: string | null;
-  sumup_payload: string | null;
+  stripe_checkout_session_id: string | null;
+  stripe_invoice_id: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_subscription_id: string | null;
+  provider: "stripe" | null;
+  provider_payload: string | null;
   created_at: string;
   updated_at: string;
   confirmed_at: string | null;
-};
-
-type PixArtefact = {
-  name?: string;
-  content_type?: string;
-  location?: string;
-  content?: string;
-  created_at?: string;
-};
-
-type SumUpProcessResponse = Record<string, unknown> & {
-  CheckoutSuccess?: Record<string, unknown> | null;
-  CheckoutAccepted?: Record<string, unknown> | null;
 };
 
 type SubscriptionRow = {
@@ -66,9 +59,15 @@ type SubscriptionRow = {
   current_period_start: string | null;
   current_period_end: string | null;
   last_payment_id: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  stripe_subscription_status?: string | null;
+  cancel_at_period_end?: number;
   created_at: string;
   updated_at: string;
 };
+
+type StripePortalFlow = "manage" | "payment_method_update";
 
 type DiscordLinkRow = {
   steam_id: string;
@@ -131,6 +130,10 @@ type UserCollectionGameCloudRow = {
   sort_order: number;
 };
 
+type UserFavoriteGameCloudRow = {
+  game_id: string;
+};
+
 type CloudProfileCollectionInput = {
   id?: unknown;
   name?: unknown;
@@ -150,15 +153,17 @@ type CloudProfileSnapshotInput = {
       scale?: unknown;
     } | null;
   } | null;
+  favoriteGameIds?: unknown;
   userCollections?: unknown;
 };
 
 const CLOUD_PROFILE_SCHEMA_VERSION = 1;
-const MAX_CLOUD_PROFILE_URL_LENGTH = 1024;
+const MAX_CLOUD_PROFILE_URL_LENGTH = 2048;
 const MAX_CLOUD_PROFILE_PAYLOAD_BYTES = 256 * 1024;
 const MAX_CLOUD_COLLECTION_NAME_LENGTH = 64;
 const MAX_CLOUD_COLLECTIONS = 100;
 const MAX_CLOUD_GAMES_PER_COLLECTION = 2000;
+const MAX_CLOUD_FAVORITES = 5000;
 
 const CLOUD_URL_PREFIXES: Array<{ compact: string; expand: string }> = [
   { compact: "s-av:", expand: "https://avatars.cloudflare.steamstatic.com/" },
@@ -199,20 +204,20 @@ const plans: Record<PlanId, Plan> = {
   },
 };
 
-const paidStatuses = new Set(["PAID", "SUCCESSFUL", "PAID_OUT"]);
-const failedStatuses = new Set(["FAILED", "CANCELLED", "CANCELED", "EXPIRED"]);
-
 function nowIso() {
   return new Date().toISOString();
 }
 
-function addMonths(date: Date, months: number) {
-  const next = new Date(date);
-  const day = next.getUTCDate();
-  next.setUTCMonth(next.getUTCMonth() + months, 1);
-  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-  next.setUTCDate(Math.min(day, lastDay));
-  return next;
+function stripeSubscriptionIsPremium(status: unknown) {
+  return status === "active" || status === "trialing";
+}
+
+function stripePeriodDate(value: unknown, fallback: string | null = null) {
+  return typeof value === "number" ? new Date(value * 1000).toISOString() : fallback;
+}
+
+function planIdFromStripe(value: unknown, fallback: PlanId = "monthly"): PlanId {
+  return value === "quarterly" || value === "monthly" ? value : fallback;
 }
 
 function validSteamId(value: unknown): value is string {
@@ -252,6 +257,49 @@ async function hmacSha256(secret: string, value: string) {
     ["sign"]
   );
   return base64Url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value))));
+}
+
+function hex(bytes: Uint8Array) {
+  let value = "";
+  for (const byte of bytes) {
+    value += byte.toString(16).padStart(2, "0");
+  }
+  return value;
+}
+
+async function hmacSha256Hex(secret: string, value: string) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return hex(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value))));
+}
+
+async function verifyStripeWebhookSignature(
+  signatureHeader: string | null,
+  payload: string,
+  secret: string
+): Promise<boolean> {
+  if (!signatureHeader || !secret) return false;
+  const parts = signatureHeader.split(",");
+  const tPart = parts.find((p) => p.startsWith("t="));
+  const v1Part = parts.find((p) => p.startsWith("v1="));
+  if (!tPart || !v1Part) return false;
+  const timestamp = tPart.split("=")[1];
+  const signature = v1Part.split("=")[1];
+  if (!timestamp || !signature) return false;
+
+  const now = Math.floor(Date.now() / 1000);
+  const diff = Math.abs(now - parseInt(timestamp, 10));
+  if (Number.isNaN(diff) || diff > 300) return false;
+
+  const signedPayload = `${timestamp}.${payload}`;
+  const expectedSignature = await hmacSha256Hex(secret, signedPayload);
+  return timingSafeEqual(signature, expectedSignature);
 }
 
 function getCloudSessionSecret(env: Env) {
@@ -327,7 +375,7 @@ function jsonResponse(value: unknown, env: Env, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
-      "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
+      "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
       "access-control-allow-headers": "content-type, authorization",
       "cache-control": "no-store",
     },
@@ -338,11 +386,60 @@ function cloudSaveBucket(env: Env) {
   return env.CLOUD_SAVE_BUCKET || "cloud-saves";
 }
 
+function profileImageBucket(env: Env) {
+  return env.PROFILE_IMAGE_BUCKET || "profile-images";
+}
+
 function requireSupabase(env: Env) {
   const url = env.SUPABASE_URL?.replace(/\/+$/, "");
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase cloud save storage is not configured");
   return { url, key, bucket: cloudSaveBucket(env) };
+}
+
+async function handleCloudProfileImageUpload(request: Request, env: Env, kind: "avatar" | "banner") {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (!contentType || !["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+    return jsonResponse({ error: "invalid_profile_image_type" }, env, 415);
+  }
+  const bytes = await request.arrayBuffer();
+  const maxBytes = kind === "avatar" ? 100 * 1024 : 350 * 1024;
+  if (bytes.byteLength === 0) return jsonResponse({ error: "empty_profile_image" }, env, 400);
+  if (bytes.byteLength > maxBytes) return jsonResponse({ error: "profile_image_too_large" }, env, 413);
+
+  const storage = requireSupabase(env);
+  const bucket = profileImageBucket(env);
+  const storagePath = `${auth.session!.steamId}/${kind}.webp`;
+  const upload = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(bucket)}/${storagePath}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${storage.key}`,
+      apikey: storage.key,
+      "content-type": contentType,
+      "x-upsert": "true",
+    },
+    body: bytes,
+  });
+  if (!upload.ok) return jsonResponse({ error: "profile_image_upload_failed" }, env, 502);
+  const publicUrl = new URL(`${storage.url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${storagePath}`);
+  publicUrl.searchParams.set("v", String(Date.now()));
+  return jsonResponse({ url: publicUrl.toString() }, env, 201);
+}
+
+async function handleCloudProfileImageDelete(request: Request, env: Env) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  const storage = requireSupabase(env);
+  const bucket = profileImageBucket(env);
+  const response = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${storage.key}`, apikey: storage.key, "content-type": "application/json" },
+    body: JSON.stringify({ prefixes: [`${auth.session!.steamId}/banner.webp`] }),
+  });
+  if (!response.ok) return jsonResponse({ error: "profile_image_delete_failed" }, env, 502);
+  return jsonResponse({ ok: true }, env);
 }
 
 function publicCloudSave(row: CloudSaveRow) {
@@ -370,46 +467,12 @@ async function requirePremiumSession(request: Request, env: Env) {
   return { session };
 }
 
-function normalizeSumUpStatus(status: unknown): PaymentStatus {
-  const normalized = String(status || "").trim().toUpperCase();
-  if (paidStatuses.has(normalized)) return "paid";
-  if (normalized === "EXPIRED") return "expired";
-  if (normalized === "CANCELLED" || normalized === "CANCELED") return "cancelled";
-  if (failedStatuses.has(normalized)) return "failed";
-  return "pending";
-}
-
-function pixArtefacts(value: unknown): PixArtefact[] {
-  if (!value || typeof value !== "object") return [];
-  const checkout = value as Record<string, unknown>;
-  const pix = checkout.pix && typeof checkout.pix === "object" ? checkout.pix as Record<string, unknown> : null;
-  const qrCodePix = checkout.qr_code_pix && typeof checkout.qr_code_pix === "object" ? checkout.qr_code_pix as Record<string, unknown> : null;
-  const artefacts = pix?.artefacts || qrCodePix?.artefacts;
-  return Array.isArray(artefacts) ? artefacts as PixArtefact[] : [];
-}
-
-function pixDetails(row: PaymentRow, origin?: string) {
-  const payload = row.sumup_payload ? JSON.parse(row.sumup_payload) : null;
-  const artefacts = pixArtefacts(payload);
-  const code = artefacts.find((artefact) => artefact.name === "code")?.content
-    || artefacts.find((artefact) => artefact.content_type === "text/plain")?.content
-    || null;
-  const barcode = artefacts.find((artefact) => artefact.name === "barcode")
-    || artefacts.find((artefact) => artefact.content_type?.startsWith("image/"));
-  return {
-    pixCode: code,
-    pixQrCodeUrl: origin && barcode?.location && row.checkout_id
-      ? `${origin}/subscription/pix-qr?checkoutId=${encodeURIComponent(row.checkout_id)}`
-      : null,
-  };
-}
-
 function publicPayment(row: PaymentRow, origin?: string) {
-  const pix = pixDetails(row, origin);
+  void origin;
   return {
     id: row.id,
     checkoutReference: row.checkout_reference,
-    checkoutId: row.checkout_id,
+    checkoutId: row.checkout_id || row.stripe_checkout_session_id,
     steamId: row.steam_id,
     planId: row.plan_id,
     amountCents: row.amount_cents,
@@ -419,8 +482,10 @@ function publicPayment(row: PaymentRow, origin?: string) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     confirmedAt: row.confirmed_at,
-    pixCode: pix.pixCode,
-    pixQrCodeUrl: pix.pixQrCodeUrl,
+    provider: row.provider,
+    stripeCheckoutSessionId: row.stripe_checkout_session_id,
+    stripeInvoiceId: row.stripe_invoice_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
   };
 }
 
@@ -613,97 +678,6 @@ async function handleSteamAuth(request: Request, env: Env) {
   }, env);
 }
 
-function getSumUpBaseUrl(env: Env) {
-  return (env.SUMUP_BASE_URL || "https://api.sumup.com").replace(/\/+$/, "");
-}
-
-async function sumupRequest<T>(env: Env, path: string, init: RequestInit = {}) {
-  if (!env.SUMUP_API_KEY) throw new Error("SUMUP_API_KEY is not configured");
-
-  const response = await fetch(`${getSumUpBaseUrl(env)}${path}`, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${env.SUMUP_API_KEY}`,
-      ...(init.body ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    const message = typeof data?.message === "string" ? data.message : `SumUp HTTP ${response.status}`;
-    throw new Error(message);
-  }
-  return data as T;
-}
-
-function hostedCheckoutUrl(data: Record<string, unknown>) {
-  const links = data.links;
-  if (typeof data.hosted_checkout_url === "string") return data.hosted_checkout_url;
-  if (typeof data.hosted_checkout_url === "object" && data.hosted_checkout_url) return String(data.hosted_checkout_url);
-  if (Array.isArray(links)) {
-    const hosted = links.find((entry) => {
-      if (!entry || typeof entry !== "object") return false;
-      const rel = "rel" in entry ? String(entry.rel) : "";
-      return rel === "hosted_checkout" || rel === "checkout";
-    }) as { href?: unknown } | undefined;
-    if (typeof hosted?.href === "string") return hosted.href;
-  }
-  if (typeof data.checkout_url === "string") return data.checkout_url;
-  return null;
-}
-
-function unwrapSumUpCheckout(data: SumUpProcessResponse) {
-  if (data.CheckoutSuccess && typeof data.CheckoutSuccess === "object") return data.CheckoutSuccess;
-  if (data.CheckoutAccepted && typeof data.CheckoutAccepted === "object") return data.CheckoutAccepted;
-  return data;
-}
-
-function hasPixTransaction(data: Record<string, unknown>) {
-  const transactions = data.transactions;
-  if (!Array.isArray(transactions)) return false;
-  return transactions.some((transaction) => {
-    if (!transaction || typeof transaction !== "object") return false;
-    const entryMode = "entry_mode" in transaction ? String(transaction.entry_mode).toUpperCase() : "";
-    return entryMode === "PIX" || entryMode === "QR_CODE_PIX";
-  });
-}
-
-async function createSumUpCheckout(env: Env, reference: string, plan: Plan) {
-  if (!env.SUMUP_MERCHANT_CODE) throw new Error("SUMUP_MERCHANT_CODE is not configured");
-  const returnUrl = env.CHECKOUT_RETURN_URL || "https://ghostbox-subscriptions.hella.workers.dev/subscription/return";
-  const payload = {
-    checkout_reference: reference,
-    amount: plan.amountCents / 100,
-    currency: "BRL",
-    merchant_code: env.SUMUP_MERCHANT_CODE,
-    description: plan.description,
-    return_url: returnUrl,
-    redirect_url: returnUrl,
-  };
-  return sumupRequest<Record<string, unknown>>(env, "/v0.1/checkouts", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-async function processSumUpPixCheckout(env: Env, checkoutId: string) {
-  const processed = await sumupRequest<SumUpProcessResponse>(
-    env,
-    `/v0.1/checkouts/${encodeURIComponent(checkoutId)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ payment_type: "pix" }),
-    }
-  );
-  return unwrapSumUpCheckout(processed);
-}
-
-async function getSumUpCheckout(env: Env, checkoutId: string) {
-  return sumupRequest<Record<string, unknown>>(env, `/v0.1/checkouts/${encodeURIComponent(checkoutId)}`);
-}
-
 async function ensureUser(env: Env, steamId: string) {
   const now = nowIso();
   await env.SUBSCRIPTION_DB.prepare(
@@ -715,66 +689,8 @@ async function ensureUser(env: Env, steamId: string) {
 
 async function getPaymentByCheckout(env: Env, checkoutId: string) {
   return env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM payments WHERE checkout_id = ? OR checkout_reference = ? LIMIT 1`
-  ).bind(checkoutId, checkoutId).first<PaymentRow>();
-}
-
-async function activateSubscription(env: Env, payment: PaymentRow) {
-  const now = new Date();
-  const existing = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM subscriptions WHERE steam_id = ? LIMIT 1`
-  ).bind(payment.steam_id).first<SubscriptionRow>();
-  const base = existing?.status === "active" && existing.current_period_end && new Date(existing.current_period_end).getTime() > now.getTime()
-    ? new Date(existing.current_period_end)
-    : now;
-  const plan = plans[payment.plan_id];
-  const periodStart = now.toISOString();
-  const periodEnd = addMonths(base, plan.months).toISOString();
-  const updatedAt = now.toISOString();
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO subscriptions (
-       steam_id, plan_id, status, current_period_start, current_period_end, last_payment_id, created_at, updated_at
-     ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?)
-     ON CONFLICT(steam_id) DO UPDATE SET
-       plan_id = excluded.plan_id,
-       status = 'active',
-       current_period_start = excluded.current_period_start,
-       current_period_end = excluded.current_period_end,
-       last_payment_id = excluded.last_payment_id,
-        updated_at = excluded.updated_at`
-  ).bind(payment.steam_id, payment.plan_id, periodStart, periodEnd, payment.id, updatedAt, updatedAt).run();
-
-  await syncPremiumRoleForSteam(env, payment.steam_id, true).catch((error) => {
-    console.warn("Discord Premium role grant failed", { steamId: payment.steam_id, error: error instanceof Error ? error.message : String(error) });
-  });
-}
-
-async function updatePaymentFromSumUp(env: Env, payment: PaymentRow, checkout: Record<string, unknown>) {
-  const status = normalizeSumUpStatus(checkout.status);
-  const checkoutId = typeof checkout.id === "string" ? checkout.id : payment.checkout_id;
-  const updatedAt = nowIso();
-  const confirmedAt = status === "paid" ? payment.confirmed_at || updatedAt : payment.confirmed_at;
-  const previousPayload = payment.sumup_payload ? JSON.parse(payment.sumup_payload) : null;
-  const nextCheckout = previousPayload && pixArtefacts(checkout).length === 0 && pixArtefacts(previousPayload).length > 0
-    ? { ...previousPayload, ...checkout, pix: previousPayload.pix, qr_code_pix: previousPayload.qr_code_pix }
-    : checkout;
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE payments SET
-       checkout_id = COALESCE(?, checkout_id),
-       status = ?,
-       sumup_payload = ?,
-       updated_at = ?,
-       confirmed_at = ?
-     WHERE id = ?`
-  ).bind(checkoutId, status, JSON.stringify(nextCheckout), updatedAt, confirmedAt, payment.id).run();
-
-  const nextPayment = { ...payment, checkout_id: checkoutId, status, sumup_payload: JSON.stringify(nextCheckout), updated_at: updatedAt, confirmed_at: confirmedAt };
-  if (status === "paid" && payment.status !== "paid") {
-    await activateSubscription(env, nextPayment);
-  }
-  return nextPayment;
+    `SELECT * FROM payments WHERE checkout_id = ? OR checkout_reference = ? OR stripe_checkout_session_id = ? LIMIT 1`
+  ).bind(checkoutId, checkoutId, checkoutId).first<PaymentRow>();
 }
 
 async function getSubscription(env: Env, steamId: string) {
@@ -964,6 +880,153 @@ async function handleDiscordCallback(request: Request, env: Env) {
   );
 }
 
+async function stripeRequest(
+  env: Env,
+  path: string,
+  init: { method?: string; body?: URLSearchParams } = {}
+) {
+  const secret = env.STRIPE_SECRET_KEY?.trim();
+  if (!secret) throw new Error("Stripe is not configured");
+
+  const response = await fetch(`https://api.stripe.com/v1${path}`, {
+    method: init.method || "GET",
+    headers: {
+      authorization: `Bearer ${secret}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: init.body,
+  });
+
+  const payload = await response.json<Record<string, unknown>>();
+  if (!response.ok) {
+    const error = payload.error && typeof payload.error === "object"
+      ? payload.error as Record<string, unknown>
+      : null;
+    const message =
+      (typeof error?.message === "string" && error.message) ||
+      (typeof payload.message === "string" && payload.message) ||
+      `Stripe request failed (${response.status})`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+async function saveStripeCustomerId(env: Env, steamId: string, customerId: string) {
+  const now = nowIso();
+  await ensureUser(env, steamId);
+  const existing = await getSubscription(env, steamId);
+  if (existing) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE subscriptions SET stripe_customer_id = ?, updated_at = ? WHERE steam_id = ?`
+    ).bind(customerId, now, steamId).run();
+    return;
+  }
+
+  // Premium portal can open for users who only have a Stripe customer record
+  // after checkout migration; seed a free row so the id persists.
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO subscriptions (
+       steam_id, plan_id, status, current_period_start, current_period_end,
+       last_payment_id, stripe_customer_id, created_at, updated_at
+     ) VALUES (?, 'monthly', 'free', NULL, NULL, NULL, ?, ?, ?)`
+  ).bind(steamId, customerId, now, now).run();
+}
+
+async function findStripeCustomerIdBySteam(env: Env, steamId: string) {
+  const query = `metadata['steam_id']:'${steamId}'`;
+  const payload = await stripeRequest(
+    env,
+    `/customers/search?query=${encodeURIComponent(query)}&limit=1`
+  );
+  const data = Array.isArray(payload.data) ? payload.data as Array<Record<string, unknown>> : [];
+  const customerId = typeof data[0]?.id === "string" ? data[0].id : null;
+  return customerId;
+}
+
+async function createStripeCustomerForSteam(env: Env, steamId: string) {
+  const body = new URLSearchParams();
+  body.set("metadata[steam_id]", steamId);
+  body.set("description", `GhostBox Premium · Steam ${steamId}`);
+  const customer = await stripeRequest(env, "/customers", { method: "POST", body });
+  const customerId = typeof customer.id === "string" ? customer.id : null;
+  if (!customerId) throw new Error("Stripe did not return a customer id");
+  return customerId;
+}
+
+async function resolveStripeCustomerId(env: Env, steamId: string, subscription: SubscriptionRow | null) {
+  const stored = subscription?.stripe_customer_id?.trim();
+  if (stored) return stored;
+
+  const searched = await findStripeCustomerIdBySteam(env, steamId).catch(() => null);
+  if (searched) {
+    await saveStripeCustomerId(env, steamId, searched);
+    return searched;
+  }
+
+  const created = await createStripeCustomerForSteam(env, steamId);
+  await saveStripeCustomerId(env, steamId, created);
+  return created;
+}
+
+function stripePortalReturnUrl(env: Env, request: Request) {
+  return (
+    env.STRIPE_PORTAL_RETURN_URL?.trim() ||
+    env.CHECKOUT_RETURN_URL?.trim() ||
+    `${new URL(request.url).origin}/subscription/return`
+  );
+}
+
+async function handleCreateBillingPortal(request: Request, env: Env) {
+  if (!env.STRIPE_SECRET_KEY?.trim()) {
+    return jsonResponse(
+      {
+        error:
+          "Stripe billing portal is not configured. Set STRIPE_SECRET_KEY on the subscriptions worker.",
+      },
+      env,
+      503
+    );
+  }
+
+  const body = await readJson(request);
+  const steamId = typeof body?.steamId === "string" ? body.steamId.trim() : "";
+  const flowRaw = typeof body?.flow === "string" ? body.flow.trim() : "manage";
+  const flow: StripePortalFlow =
+    flowRaw === "payment_method_update" ? "payment_method_update" : "manage";
+
+  if (!validSteamId(steamId)) {
+    return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  }
+
+  const subscription = await getSubscription(env, steamId);
+  if (!isActiveSubscription(subscription)) {
+    return jsonResponse(
+      { error: "An active Premium subscription is required to manage billing." },
+      env,
+      402
+    );
+  }
+
+  const customerId = await resolveStripeCustomerId(env, steamId, subscription);
+  const params = new URLSearchParams();
+  params.set("customer", customerId);
+  params.set("return_url", stripePortalReturnUrl(env, request));
+  if (flow === "payment_method_update") {
+    params.set("flow_data[type]", "payment_method_update");
+  }
+
+  const session = await stripeRequest(env, "/billing_portal/sessions", {
+    method: "POST",
+    body: params,
+  });
+  const url = typeof session.url === "string" ? session.url : null;
+  if (!url) {
+    return jsonResponse({ error: "Stripe did not return a portal URL." }, env, 502);
+  }
+
+  return jsonResponse({ url, flow, customerId }, env);
+}
+
 async function handleCreateCheckout(request: Request, env: Env) {
   const origin = new URL(request.url).origin;
   const body = await readJson(request);
@@ -976,34 +1039,56 @@ async function handleCreateCheckout(request: Request, env: Env) {
   const plan = plans[planId];
   await ensureUser(env, steamId);
 
+  const subscription = await getSubscription(env, steamId);
+  const customerId = await resolveStripeCustomerId(env, steamId, subscription);
+
+  const params = new URLSearchParams();
+  params.set("mode", "subscription");
+  params.set("customer", customerId);
+  params.set("success_url", `${env.CHECKOUT_RETURN_URL || origin + "/subscription/return"}?session_id={CHECKOUT_SESSION_ID}`);
+  params.set("cancel_url", `${env.CHECKOUT_RETURN_URL || origin + "/subscription/return"}?cancelled=1`);
+  params.set("line_items[0][price_data][currency]", "brl");
+  params.set("line_items[0][price_data][product_data][name]", plan.description);
+  params.set("line_items[0][price_data][recurring][interval]", "month");
+  params.set("line_items[0][price_data][recurring][interval_count]", planId === "quarterly" ? "3" : "1");
+  params.set("line_items[0][price_data][unit_amount]", String(plan.amountCents));
+  params.set("line_items[0][quantity]", "1");
+  params.set("metadata[steam_id]", steamId);
+  params.set("metadata[plan_id]", planId);
+  params.set("subscription_data[metadata][steam_id]", steamId);
+  params.set("subscription_data[metadata][plan_id]", planId);
+
+  const session = await stripeRequest(env, "/checkout/sessions", {
+    method: "POST",
+    body: params,
+  });
+
+  const sessionId = typeof session.id === "string" ? session.id : null;
+  const sessionUrl = typeof session.url === "string" ? session.url : null;
+  if (!sessionId || !sessionUrl) {
+    throw new Error("Stripe did not return a checkout session");
+  }
+
   const paymentId = crypto.randomUUID();
   const reference = `ghostbox-${steamId}-${planId}-${paymentId}`;
-  const createdCheckout = await createSumUpCheckout(env, reference, plan);
-  const createdCheckoutId = typeof createdCheckout.id === "string" ? createdCheckout.id : null;
-  if (!createdCheckoutId) {
-    throw new Error("SumUp did not return a checkout ID");
-  }
-  const checkout = await processSumUpPixCheckout(env, createdCheckoutId);
-  const checkoutId = typeof checkout.id === "string" ? checkout.id : null;
-  const checkoutUrl = hostedCheckoutUrl(checkout);
-  const status = normalizeSumUpStatus(checkout.status);
+  const status = "pending";
   const createdAt = nowIso();
 
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO payments (
        id, checkout_reference, checkout_id, steam_id, plan_id, amount_cents, currency,
-       status, hosted_checkout_url, sumup_payload, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, 'BRL', ?, ?, ?, ?, ?)`
+       status, hosted_checkout_url, stripe_checkout_session_id, provider, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, 'BRL', ?, ?, ?, 'stripe', ?, ?)`
   ).bind(
     paymentId,
     reference,
-    checkoutId,
+    sessionId,
     steamId,
     planId,
     plan.amountCents,
     status,
-    checkoutUrl,
-    JSON.stringify(checkout),
+    sessionUrl,
+    sessionId,
     createdAt,
     createdAt
   ).run();
@@ -1183,9 +1268,8 @@ function normalizeCloudUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (trimmed.length > MAX_CLOUD_PROFILE_URL_LENGTH) {
-    return trimmed.slice(0, MAX_CLOUD_PROFILE_URL_LENGTH);
-  }
+  if (/^data:/i.test(trimmed)) throw new Error("data_url_not_allowed");
+  if (trimmed.length > MAX_CLOUD_PROFILE_URL_LENGTH) throw new Error("profile_url_too_long");
   return trimmed;
 }
 
@@ -1232,6 +1316,13 @@ function normalizeCloudBannerPosition(value: unknown) {
   };
 }
 
+async function runD1Batch(database: D1Database, statements: D1PreparedStatement[]) {
+  const batchSize = 100;
+  for (let index = 0; index < statements.length; index += batchSize) {
+    await database.batch(statements.slice(index, index + batchSize));
+  }
+}
+
 function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
   if (!body || typeof body !== "object") {
     return { error: "invalid_profile_snapshot" as const };
@@ -1245,6 +1336,16 @@ function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
   const avatarUrl = compactCloudUrl(profile?.avatarUrl);
   const bannerUrl = compactCloudUrl(profile?.bannerUrl);
   const bannerPosition = normalizeCloudBannerPosition(profile?.bannerPosition);
+  const favoriteGameIds = Array.isArray(body.favoriteGameIds)
+    ? Array.from(
+        new Set(
+          body.favoriteGameIds
+            .map((gameId) => (typeof gameId === "string" ? gameId.trim() : ""))
+            .filter(Boolean)
+            .slice(0, MAX_CLOUD_FAVORITES)
+        )
+      )
+    : [];
 
   const rawCollections = Array.isArray(body.userCollections)
     ? (body.userCollections as CloudProfileCollectionInput[])
@@ -1295,6 +1396,7 @@ function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
       avatarUrl,
       bannerUrl,
       bannerPosition,
+      favoriteGameIds,
       collections,
     },
   };
@@ -1320,7 +1422,12 @@ async function loadCloudProfileSnapshot(env: Env, steamId: string) {
     gamesByCollection.set(row.collection_id, list);
   }
 
-  if (!profile && collections.length === 0) return null;
+  const favoritesResult = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT game_id FROM user_favorite_games_cloud WHERE steam_id = ? ORDER BY sort_order ASC`
+  ).bind(steamId).all<UserFavoriteGameCloudRow>();
+  const favoriteGameIds = (favoritesResult.results || []).map((row) => row.game_id);
+
+  if (!profile && collections.length === 0 && favoriteGameIds.length === 0) return null;
 
   return {
     version: CLOUD_PROFILE_SCHEMA_VERSION,
@@ -1337,6 +1444,7 @@ async function loadCloudProfileSnapshot(env: Env, steamId: string) {
         ),
       },
     },
+    favoriteGameIds,
     userCollections: collections.map((collection) => ({
       id: collection.id,
       name: collection.name,
@@ -1373,7 +1481,12 @@ async function handleCloudProfilePut(request: Request, env: Env) {
   } catch {
     body = null;
   }
-  const parsed = parseCloudProfileSnapshot(body);
+  let parsed: ReturnType<typeof parseCloudProfileSnapshot>;
+  try {
+    parsed = parseCloudProfileSnapshot(body);
+  } catch (error) {
+    return jsonResponse({ error: error instanceof Error ? error.message : "invalid_profile_snapshot" }, env, 400);
+  }
   if ("error" in parsed) {
     return jsonResponse({ error: parsed.error }, env, 400);
   }
@@ -1406,26 +1519,37 @@ async function handleCloudProfilePut(request: Request, env: Env) {
     now
   ).run();
 
-  await env.SUBSCRIPTION_DB.prepare(
-    `DELETE FROM user_collection_games_cloud WHERE steam_id = ?`
-  ).bind(steamId).run();
-  await env.SUBSCRIPTION_DB.prepare(
-    `DELETE FROM user_collections_cloud WHERE steam_id = ?`
-  ).bind(steamId).run();
-
+  const collectionStatements: D1PreparedStatement[] = [
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM user_favorite_games_cloud WHERE steam_id = ?`
+    ).bind(steamId),
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM user_collection_games_cloud WHERE steam_id = ?`
+    ).bind(steamId),
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM user_collections_cloud WHERE steam_id = ?`
+    ).bind(steamId),
+  ];
   for (const [collectionIndex, collection] of snapshot.collections.entries()) {
-    await env.SUBSCRIPTION_DB.prepare(
+    collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
       `INSERT INTO user_collections_cloud (id, steam_id, name, sort_order, updated_at)
        VALUES (?, ?, ?, ?, ?)`
-    ).bind(collection.id, steamId, collection.name, collectionIndex, now).run();
+    ).bind(collection.id, steamId, collection.name, collectionIndex, now));
 
     for (const [gameIndex, gameId] of collection.gameIds.entries()) {
-      await env.SUBSCRIPTION_DB.prepare(
+      collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
         `INSERT INTO user_collection_games_cloud (steam_id, collection_id, game_id, sort_order)
          VALUES (?, ?, ?, ?)`
-      ).bind(steamId, collection.id, gameId, gameIndex).run();
+      ).bind(steamId, collection.id, gameId, gameIndex));
     }
   }
+  for (const [gameIndex, gameId] of snapshot.favoriteGameIds.entries()) {
+    collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_favorite_games_cloud (steam_id, game_id, sort_order)
+       VALUES (?, ?, ?)`
+    ).bind(steamId, gameId, gameIndex));
+  }
+  await runD1Batch(env.SUBSCRIPTION_DB, collectionStatements);
 
   const profile = await loadCloudProfileSnapshot(env, steamId);
   return jsonResponse({ profile }, env);
@@ -1440,79 +1564,399 @@ async function handleRefreshPayment(request: Request, env: Env) {
   const payment = await getPaymentByCheckout(env, checkoutId);
   if (!payment) return jsonResponse({ error: "Payment not found" }, env, 404);
 
-  const sumupId = payment.checkout_id || checkoutId;
-  const checkout = await getSumUpCheckout(env, sumupId);
-  const nextPayment = await updatePaymentFromSumUp(env, payment, checkout);
+  const now = nowIso();
+
+  if (payment.stripe_checkout_session_id) {
+    try {
+      const session = await stripeRequest(env, `/checkout/sessions/${payment.stripe_checkout_session_id}`);
+      const paymentStatus = session.payment_status;
+      const status = paymentStatus === "paid" ? "paid" : payment.status;
+
+      if (status === "paid" && payment.status !== "paid") {
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE payments SET status = 'paid', provider = 'stripe', confirmed_at = ?, updated_at = ? WHERE id = ?`
+        ).bind(now, now, payment.id).run();
+
+        const subscriptionId = session.subscription;
+        if (subscriptionId) {
+          const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
+          const stripeStatus = subInfo.status;
+          const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+          const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, nowIso());
+          const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, nowIso());
+
+          await env.SUBSCRIPTION_DB.prepare(
+            `INSERT INTO subscriptions (
+                steam_id, plan_id, status, current_period_start, current_period_end,
+                last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(steam_id) DO UPDATE SET
+                plan_id = excluded.plan_id,
+                status = excluded.status,
+                current_period_start = excluded.current_period_start,
+                current_period_end = excluded.current_period_end,
+                last_payment_id = excluded.last_payment_id,
+                stripe_customer_id = excluded.stripe_customer_id,
+                stripe_subscription_id = excluded.stripe_subscription_id,
+               stripe_subscription_status = excluded.stripe_subscription_status,
+               updated_at = excluded.updated_at`
+          ).bind(
+            payment.steam_id,
+            payment.plan_id,
+            isPremium ? "active" : "expired",
+            currentPeriodStart,
+            currentPeriodEnd,
+            payment.id,
+            session.customer,
+            subscriptionId,
+            typeof stripeStatus === "string" ? stripeStatus : null,
+            now,
+            now
+          ).run();
+
+          await syncPremiumRoleForSteam(env, payment.steam_id, isPremium).catch(() => undefined);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to refresh stripe checkout", err);
+    }
+  }
+
+  const updatedPayment = await getPaymentByCheckout(env, checkoutId);
   const subscription = await getSubscription(env, payment.steam_id);
-  const reconciledPayment = await reconcilePaymentWithSubscription(env, nextPayment, subscription);
 
   return jsonResponse({
-    payment: publicPayment(reconciledPayment || nextPayment, origin),
+    payment: updatedPayment ? publicPayment(updatedPayment, origin) : null,
     subscription: publicSubscription(subscription),
   }, env);
 }
 
-async function handlePixQr(request: Request, env: Env) {
-  const url = new URL(request.url);
-  const checkoutId = url.searchParams.get("checkoutId");
-  if (!checkoutId) return jsonResponse({ error: "Missing checkoutId" }, env, 400);
-
-  const payment = await getPaymentByCheckout(env, checkoutId);
-  if (!payment?.sumup_payload) return jsonResponse({ error: "Payment not found" }, env, 404);
-  const payload = JSON.parse(payment.sumup_payload);
-  const barcode = pixArtefacts(payload).find((artefact) => artefact.name === "barcode")
-    || pixArtefacts(payload).find((artefact) => artefact.content_type?.startsWith("image/"));
-  if (!barcode?.location) return jsonResponse({ error: "Pix QR code not found" }, env, 404);
-
-  const artefactUrl = new URL(barcode.location);
-  if (artefactUrl.protocol !== "https:" || artefactUrl.hostname !== "api.sumup.com") {
-    return jsonResponse({ error: "Invalid Pix artifact URL" }, env, 400);
-  }
-
-  const response = await fetch(artefactUrl, {
-    headers: {
-      accept: barcode.content_type || "image/jpeg",
-      authorization: `Bearer ${env.SUMUP_API_KEY}`,
-    },
-  });
-  if (!response.ok) return jsonResponse({ error: "Could not load Pix QR code" }, env, 502);
-  return new Response(response.body, {
-    headers: {
-      "content-type": response.headers.get("content-type") || barcode.content_type || "image/jpeg",
-      "cache-control": "no-store",
-      "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
-    },
-  });
-}
-
-async function handleWebhook(request: Request, env: Env, context: ExecutionContext) {
+async function handleStripeWebhook(request: Request, env: Env, context: ExecutionContext) {
+  const signature = request.headers.get("stripe-signature");
   const payload = await request.text();
-  let parsed: Record<string, unknown> = {};
-  try {
-    parsed = payload ? JSON.parse(payload) : {};
-  } catch {
-    parsed = {};
+
+  const secret = env.STRIPE_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    return jsonResponse({ error: "Stripe webhook secret is not configured" }, env, 500);
   }
 
-  const eventId = typeof parsed.id === "string" ? parsed.id : crypto.randomUUID();
-  const eventType = typeof parsed.event_type === "string" ? parsed.event_type : typeof parsed.type === "string" ? parsed.type : null;
-  const checkoutId = typeof parsed.checkout_id === "string" ? parsed.checkout_id : typeof parsed.checkoutId === "string" ? parsed.checkoutId : typeof parsed.id === "string" ? parsed.id : null;
-  const checkoutReference = typeof parsed.checkout_reference === "string" ? parsed.checkout_reference : typeof parsed.checkoutReference === "string" ? parsed.checkoutReference : null;
+  const isValid = await verifyStripeWebhookSignature(signature, payload, secret);
+  if (!isValid) {
+    return jsonResponse({ error: "Invalid signature" }, env, 400);
+  }
 
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT OR IGNORE INTO webhook_events (id, event_type, checkout_id, checkout_reference, payload)
-     VALUES (?, ?, ?, ?, ?)`
-  ).bind(eventId, eventType, checkoutId, checkoutReference, payload).run();
+  let event: Record<string, any>;
+  try {
+    event = JSON.parse(payload);
+  } catch {
+    return jsonResponse({ error: "Invalid JSON" }, env, 400);
+  }
 
-  const lookup = checkoutId || checkoutReference;
-  if (lookup) {
-    context.waitUntil((async () => {
-      const payment = await getPaymentByCheckout(env, lookup);
-      if (!payment) return;
-      const sumupId = payment.checkout_id || checkoutId || lookup;
-      const checkout = await getSumUpCheckout(env, sumupId);
-      await updatePaymentFromSumUp(env, payment, checkout);
-    })());
+  const eventId = typeof event.id === "string" ? event.id : crypto.randomUUID();
+  const eventType = typeof event.type === "string" ? event.type : null;
+
+  const duplicate = await env.SUBSCRIPTION_DB.prepare(
+    `INSERT OR IGNORE INTO webhook_events (id, event_type, payload) VALUES (?, ?, ?)`
+  ).bind(eventId, eventType, payload).run();
+
+  if (duplicate.meta.changes === 0) {
+    return jsonResponse({ ok: true, note: "duplicate" }, env);
+  }
+
+  const data = event.data?.object as Record<string, any> | undefined;
+  if (!data) {
+    return jsonResponse({ ok: true }, env);
+  }
+
+  if (eventType === "checkout.session.completed") {
+    const steamId = data.metadata?.steam_id;
+    const planId = planIdFromStripe(data.metadata?.plan_id);
+    const customerId = data.customer;
+    const subscriptionId = data.subscription;
+    const sessionId = data.id;
+
+    if (validSteamId(steamId) && typeof subscriptionId === "string" && typeof sessionId === "string") {
+      try {
+        const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
+        const stripeStatus = subInfo.status;
+        const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+        const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, nowIso());
+        const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, nowIso());
+
+        const now = nowIso();
+        const paymentRow = await env.SUBSCRIPTION_DB.prepare(
+          `SELECT id FROM payments WHERE stripe_checkout_session_id = ? LIMIT 1`
+        ).bind(sessionId).first<{ id: string }>();
+
+        await env.SUBSCRIPTION_DB.prepare(
+          `INSERT INTO subscriptions (
+             steam_id, plan_id, status, current_period_start, current_period_end,
+             last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(steam_id) DO UPDATE SET
+             plan_id = excluded.plan_id,
+             status = excluded.status,
+             current_period_start = excluded.current_period_start,
+             current_period_end = excluded.current_period_end,
+             last_payment_id = excluded.last_payment_id,
+             stripe_customer_id = excluded.stripe_customer_id,
+             stripe_subscription_id = excluded.stripe_subscription_id,
+             stripe_subscription_status = excluded.stripe_subscription_status,
+             updated_at = excluded.updated_at`
+        ).bind(
+          steamId,
+          planId,
+          isPremium ? "active" : "expired",
+          currentPeriodStart,
+          currentPeriodEnd,
+          paymentRow?.id || null,
+          typeof customerId === "string" ? customerId : null,
+          subscriptionId,
+          typeof stripeStatus === "string" ? stripeStatus : null,
+          now,
+          now
+        ).run();
+
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE payments SET
+             status = 'paid',
+             provider = 'stripe',
+             stripe_subscription_id = ?,
+             confirmed_at = ?,
+             updated_at = ?
+           WHERE stripe_checkout_session_id = ?`
+        ).bind(subscriptionId, now, now, sessionId).run();
+
+        await syncPremiumRoleForSteam(env, steamId, isPremium).catch((error) => {
+          console.warn("Discord Premium role grant failed in webhook", error);
+        });
+      } catch (err) {
+        console.error("Failed to process checkout.session.completed", err);
+      }
+    }
+  } else if (eventType === "customer.subscription.created" || eventType === "customer.subscription.updated") {
+    const subscriptionId = data.id;
+    const status = data.status;
+    const currentPeriodStart = stripePeriodDate(data.current_period_start);
+    const currentPeriodEnd = stripePeriodDate(data.current_period_end);
+    const cancelAtPeriodEnd = data.cancel_at_period_end ? 1 : 0;
+    const steamId = data.metadata?.steam_id;
+    const planId = planIdFromStripe(data.metadata?.plan_id);
+
+    if (validSteamId(steamId) && typeof subscriptionId === "string") {
+      const now = nowIso();
+      const isPremium = stripeSubscriptionIsPremium(status);
+      const subStatus = isPremium ? "active" : "expired";
+
+      await env.SUBSCRIPTION_DB.prepare(
+        `INSERT INTO subscriptions (
+           steam_id, plan_id, status, current_period_start, current_period_end,
+           stripe_subscription_id, stripe_subscription_status, cancel_at_period_end, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(steam_id) DO UPDATE SET
+           plan_id = COALESCE(excluded.plan_id, plan_id),
+           status = excluded.status,
+           current_period_start = COALESCE(excluded.current_period_start, current_period_start),
+           current_period_end = COALESCE(excluded.current_period_end, current_period_end),
+           stripe_subscription_id = excluded.stripe_subscription_id,
+           stripe_subscription_status = excluded.stripe_subscription_status,
+           cancel_at_period_end = excluded.cancel_at_period_end,
+           updated_at = excluded.updated_at`
+      ).bind(
+        steamId,
+        planId,
+        subStatus,
+        currentPeriodStart,
+        currentPeriodEnd,
+        subscriptionId,
+        status,
+        cancelAtPeriodEnd,
+        now,
+        now
+      ).run();
+
+      await syncPremiumRoleForSteam(env, steamId, isPremium).catch((error) => {
+        console.warn("Discord Premium role sync failed in subscription hook", error);
+      });
+    }
+  } else if (eventType === "customer.subscription.deleted") {
+    const subscriptionId = data.id;
+    const steamId = data.metadata?.steam_id;
+    const now = nowIso();
+
+    if (validSteamId(steamId)) {
+      await env.SUBSCRIPTION_DB.prepare(
+        `UPDATE subscriptions SET
+           status = 'expired',
+           stripe_subscription_status = 'canceled',
+           updated_at = ?
+         WHERE steam_id = ?`
+      ).bind(now, steamId).run();
+
+      await syncPremiumRoleForSteam(env, steamId, false).catch((error) => {
+        console.warn("Discord Premium role revoke failed in webhook", error);
+      });
+    } else if (typeof subscriptionId === "string") {
+      const subRow = await env.SUBSCRIPTION_DB.prepare(
+        `SELECT steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+      ).bind(subscriptionId).first<{ steam_id: string }>();
+
+      if (subRow) {
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE subscriptions SET
+             status = 'expired',
+             stripe_subscription_status = 'canceled',
+             updated_at = ?
+           WHERE steam_id = ?`
+        ).bind(now, subRow.steam_id).run();
+
+        await syncPremiumRoleForSteam(env, subRow.steam_id, false).catch((error) => {
+          console.warn("Discord Premium role revoke failed in webhook", error);
+        });
+      }
+    }
+  } else if (eventType === "invoice.payment_succeeded") {
+    const subscriptionId = data.subscription;
+    const invoiceId = typeof data.id === "string" ? data.id : crypto.randomUUID();
+    const paymentIntentId = typeof data.payment_intent === "string" ? data.payment_intent : null;
+    const amountPaid = typeof data.amount_paid === "number" ? data.amount_paid : 0;
+    const currency = data.currency?.toUpperCase() || "BRL";
+    const now = nowIso();
+
+    if (typeof subscriptionId === "string") {
+      const existing = await env.SUBSCRIPTION_DB.prepare(
+        `SELECT steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+      ).bind(subscriptionId).first<{ steam_id: string; plan_id: PlanId }>();
+      const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
+      const steamId = existing?.steam_id || (typeof subInfo.metadata?.steam_id === "string" ? subInfo.metadata.steam_id : null);
+      const planId = planIdFromStripe(subInfo.metadata?.plan_id, existing?.plan_id || "monthly");
+
+      if (steamId && validSteamId(steamId)) {
+        const paymentId = crypto.randomUUID();
+        const reference = `stripe-invoice-${invoiceId}`;
+
+        await env.SUBSCRIPTION_DB.prepare(
+          `INSERT OR IGNORE INTO payments (
+             id, checkout_reference, steam_id, plan_id, amount_cents, currency,
+             status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at, confirmed_at
+           ) VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, 'stripe', ?, ?, ?)`
+        ).bind(
+          paymentId,
+          reference,
+          steamId,
+          planId,
+          amountPaid,
+          currency,
+          invoiceId,
+          paymentIntentId,
+          subscriptionId,
+          now,
+          now,
+          now
+        ).run();
+
+        const paymentRow = await env.SUBSCRIPTION_DB.prepare(
+          `SELECT id FROM payments WHERE stripe_invoice_id = ? OR checkout_reference = ? LIMIT 1`
+        ).bind(invoiceId, reference).first<{ id: string }>();
+        const stripeStatus = subInfo.status;
+        const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+        const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, now);
+        const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, now);
+        const customerId = typeof subInfo.customer === "string" ? subInfo.customer : null;
+
+        await env.SUBSCRIPTION_DB.prepare(
+          `INSERT INTO subscriptions (
+             steam_id, plan_id, status, current_period_start, current_period_end,
+             last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status, cancel_at_period_end, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(steam_id) DO UPDATE SET
+             plan_id = excluded.plan_id,
+             status = excluded.status,
+             current_period_start = excluded.current_period_start,
+             current_period_end = excluded.current_period_end,
+             last_payment_id = excluded.last_payment_id,
+             stripe_customer_id = COALESCE(excluded.stripe_customer_id, stripe_customer_id),
+             stripe_subscription_id = excluded.stripe_subscription_id,
+             stripe_subscription_status = excluded.stripe_subscription_status,
+             cancel_at_period_end = excluded.cancel_at_period_end,
+             updated_at = excluded.updated_at`
+        ).bind(
+          steamId,
+          planId,
+          isPremium ? "active" : "expired",
+          currentPeriodStart,
+          currentPeriodEnd,
+          paymentRow?.id || null,
+          customerId,
+          subscriptionId,
+          typeof stripeStatus === "string" ? stripeStatus : null,
+          subInfo.cancel_at_period_end ? 1 : 0,
+          now,
+          now
+        ).run();
+
+        await syncPremiumRoleForSteam(env, steamId, isPremium).catch((error) => {
+          console.warn("Discord Premium role sync failed on paid invoice hook", error);
+        });
+      }
+    }
+  } else if (eventType === "invoice.payment_failed") {
+    const subscriptionId = data.subscription;
+    const invoiceId = typeof data.id === "string" ? data.id : null;
+    const paymentIntentId = typeof data.payment_intent === "string" ? data.payment_intent : null;
+    const amountDue = typeof data.amount_due === "number"
+      ? data.amount_due
+      : typeof data.amount_remaining === "number"
+        ? data.amount_remaining
+        : 0;
+    const currency = data.currency?.toUpperCase() || "BRL";
+    const now = nowIso();
+
+    if (typeof subscriptionId === "string") {
+      const subRow = await env.SUBSCRIPTION_DB.prepare(
+        `SELECT steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+      ).bind(subscriptionId).first<{ steam_id: string; plan_id: PlanId }>();
+
+      if (subRow) {
+        if (invoiceId) {
+          await env.SUBSCRIPTION_DB.prepare(
+            `INSERT OR IGNORE INTO payments (
+               id, checkout_reference, steam_id, plan_id, amount_cents, currency,
+               status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, 'stripe', ?, ?)`
+          ).bind(
+            crypto.randomUUID(),
+            `stripe-invoice-${invoiceId}`,
+            subRow.steam_id,
+            subRow.plan_id || "monthly",
+            amountDue,
+            currency,
+            invoiceId,
+            paymentIntentId,
+            subscriptionId,
+            now,
+            now
+          ).run();
+        }
+
+        try {
+          const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
+          const status = subInfo.status;
+          const isPremium = stripeSubscriptionIsPremium(status);
+          if (!isPremium) {
+            await env.SUBSCRIPTION_DB.prepare(
+              `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ? WHERE steam_id = ?`
+            ).bind(status, now, subRow.steam_id).run();
+
+            await syncPremiumRoleForSteam(env, subRow.steam_id, false).catch((error) => {
+              console.warn("Discord Premium role revoke failed on failed invoice hook", error);
+            });
+          }
+        } catch (err) {
+          console.error("Failed to query stripe subscription in invoice.payment_failed", err);
+        }
+      }
+    }
   }
 
   return jsonResponse({ ok: true }, env);
@@ -1520,7 +1964,7 @@ async function handleWebhook(request: Request, env: Env, context: ExecutionConte
 
 async function handleReturn(env: Env) {
   return new Response(
-    `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>GhostBox Premium</title></head><body><p>Pagamento recebido pela SumUp. Volte ao GhostBox para atualizar o status.</p><script>setTimeout(() => window.close(), 1500)</script></body></html>`,
+    `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>GhostBox Premium</title></head><body><p>Processando pagamento via Stripe. Você já pode voltar ao GhostBox.</p><script>setTimeout(() => window.close(), 1500)</script></body></html>`,
     {
       headers: {
         "content-type": "text/html; charset=utf-8",
@@ -1557,8 +2001,20 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "PUT" && url.pathname === "/cloud-profile") {
     return handleCloudProfilePut(request, env);
   }
+  if (request.method === "POST" && url.pathname === "/cloud-profile/avatar") {
+    return handleCloudProfileImageUpload(request, env, "avatar");
+  }
+  if (request.method === "POST" && url.pathname === "/cloud-profile/banner") {
+    return handleCloudProfileImageUpload(request, env, "banner");
+  }
+  if (request.method === "DELETE" && url.pathname === "/cloud-profile/banner") {
+    return handleCloudProfileImageDelete(request, env);
+  }
   if (request.method === "POST" && url.pathname === "/subscription/checkouts") {
     return handleCreateCheckout(request, env);
+  }
+  if (request.method === "POST" && url.pathname === "/subscription/portal") {
+    return handleCreateBillingPortal(request, env);
   }
   if (request.method === "GET" && url.pathname === "/subscription/status") {
     return handleStatus(request, env, context);
@@ -1578,14 +2034,11 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if ((request.method === "GET" || request.method === "POST") && url.pathname === "/subscription/refresh") {
     return handleRefreshPayment(request, env);
   }
-  if (request.method === "GET" && url.pathname === "/subscription/pix-qr") {
-    return handlePixQr(request, env);
-  }
   if (request.method === "GET" && url.pathname === "/subscription/return") {
     return handleReturn(env);
   }
-  if (request.method === "POST" && url.pathname === "/sumup/webhook") {
-    return handleWebhook(request, env, context);
+  if (request.method === "POST" && url.pathname === "/stripe/webhook") {
+    return handleStripeWebhook(request, env, context);
   }
 
   return jsonResponse({ error: "Not found" }, env, 404);

@@ -45,6 +45,7 @@ interface SidebarProps {
   activePage: Page;
   activeCollectionId?: string;
   steamProfile: SteamProfile | null;
+  isCloudProfileRestoring?: boolean;
   isSteamSigningIn: boolean;
   favoriteGames: GhostBoxGame[];
   addedLibraryGames: GhostBoxGame[];
@@ -103,6 +104,7 @@ export const Sidebar = memo(function Sidebar({
   activePage,
   activeCollectionId,
   steamProfile,
+  isCloudProfileRestoring = false,
   isSteamSigningIn,
   favoriteGames,
   addedLibraryGames,
@@ -227,6 +229,7 @@ export const Sidebar = memo(function Sidebar({
       <div className="sidebar__content">
         <SidebarProfile
           profile={steamProfile}
+          isCloudProfileRestoring={isCloudProfileRestoring}
           isSigningIn={isSteamSigningIn}
           isActive={activePage === "profile"}
           onOpenProfile={onOpenProfile}
@@ -526,6 +529,7 @@ const SidebarGameItem = memo(function SidebarGameItem({ game }: SidebarGameItemP
 
 interface SidebarProfileProps {
   profile: SteamProfile | null;
+  isCloudProfileRestoring: boolean;
   isSigningIn: boolean;
   isActive: boolean;
   onOpenProfile: () => void;
@@ -534,6 +538,7 @@ interface SidebarProfileProps {
 
 const SidebarProfile = memo(function SidebarProfile({
   profile,
+  isCloudProfileRestoring,
   isSigningIn,
   isActive,
   onOpenProfile,
@@ -544,6 +549,12 @@ const SidebarProfile = memo(function SidebarProfile({
     profile?.avatarUrl ? [profile.avatarUrl] : []
   );
   const avatarSource = useLoadableImageSource(avatarSources);
+  const shouldHoldSteamAvatar = Boolean(
+    isCloudProfileRestoring &&
+      profile?.avatarUrl &&
+      !profile.avatarUrl.startsWith("data:") &&
+      !profile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
+  );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
   const [steamRunning, setSteamRunning] = useState(false);
 
@@ -641,7 +652,9 @@ const SidebarProfile = memo(function SidebarProfile({
 
   const levelLabel =
     steamLevel === null
-      ? null
+      ? appearance.language === "en"
+        ? "Steam level unavailable"
+        : "Nível Steam indisponível"
       : appearance.language === "en"
         ? `Level ${steamLevel}`
         : `Nível ${steamLevel}`;
@@ -660,7 +673,9 @@ const SidebarProfile = memo(function SidebarProfile({
       >
         <div className="sidebar-profile__button-content">
           <span className="sidebar-profile__avatar" aria-hidden="true">
-            {avatarSource ? (
+            {shouldHoldSteamAvatar || (isCloudProfileRestoring && !avatarSource) ? (
+              <span className="sidebar-profile__avatar-skeleton" />
+            ) : avatarSource ? (
               <img
                 src={avatarSource}
                 alt=""
@@ -683,13 +698,15 @@ const SidebarProfile = memo(function SidebarProfile({
                     ? "Entrando..."
                     : "Entrar com Steam"}
               </span>
-              {profile && steamLevel !== null ? (
+              {profile ? (
                 <span
                   className="sidebar-profile__level"
-                  title={levelLabel ?? undefined}
-                  aria-label={levelLabel ?? undefined}
+                  title={levelLabel}
+                  aria-label={levelLabel}
                 >
-                  <span className="sidebar-profile__level-value">{steamLevel}</span>
+                  <span className="sidebar-profile__level-value">
+                    {steamLevel ?? ""}
+                  </span>
                 </span>
               ) : null}
             </span>

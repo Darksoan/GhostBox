@@ -1,4 +1,5 @@
 import type { GhostBoxGame, SteamAchievement } from "../data";
+import { isSteamTitlePlaceholder } from "./steamTitles";
 
 export function isProfileAchievementUnlocked(achievement: SteamAchievement) {
   return achievement.unlocked === true;
@@ -20,18 +21,14 @@ export function getProfileAchievementTotal(game: GhostBoxGame) {
   );
 }
 
-function isPlaceholderGameTitle(title: string | undefined) {
-  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
-}
-
 function preferProfileGameTitle(
   current: GhostBoxGame,
   incoming: GhostBoxGame,
   richer: GhostBoxGame
 ) {
-  if (isPlaceholderGameTitle(richer.title)) {
-    if (!isPlaceholderGameTitle(current.title)) return current.title;
-    if (!isPlaceholderGameTitle(incoming.title)) return incoming.title;
+  if (isSteamTitlePlaceholder(richer.title, richer.appId)) {
+    if (!isSteamTitlePlaceholder(current.title, current.appId)) return current.title;
+    if (!isSteamTitlePlaceholder(incoming.title, incoming.appId)) return incoming.title;
   }
 
   return richer.title;

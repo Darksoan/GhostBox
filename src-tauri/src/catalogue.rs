@@ -1,10 +1,10 @@
 use crate::catalogue_cache;
 use crate::image_cache;
+use crate::util::{silent_steamcmd_output, with_steamcmd_lock};
 use crate::{FACETS_VERSION, RANKING_VERSION};
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::Duration;
 use tauri::Manager;
 
@@ -504,6 +504,22 @@ fn read_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str) -> Opti
         return None;
     }
     cached.get("data").cloned()
+}
+
+pub(crate) fn read_cached_steam_store_title(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
+    let details = read_cached_steam_store_details(app, app_id)?;
+    let title = text(details.get("name"));
+    (!title.is_empty()).then_some(title)
+}
+
+fn read_string_after_binary_key(section: &[u8], key: &[u8]) -> Option<String> {
+    let key_index = section.windows(key.len()).position(|window| window == key)?;
+    let value_start = key_index + key.len();
+    let value_end = section[value_start..].iter().position(|byte| *byte == 0)?;
+    let value = String::from_utf8_lossy(&section[value_start..value_start + value_end])
+        .trim()
+        .to_string();
+    (!value.is_empty()).then_some(value)
 }
 
 fn write_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str, details: &Value) {
@@ -1081,6 +1097,38 @@ fn read_client_icon_from_vdf(bytes: &[u8], app_id: &str) -> Option<String> {
     None
 }
 
+pub(crate) fn read_local_steam_app_title(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
+    let app_id_number = app_id.parse::<u32>().ok()?;
+    let app_id_bytes = app_id_number.to_le_bytes();
+    let (steam_path, _) = crate::resolve_steam_path(app, None);
+    let steam_path = steam_path?;
+    let vdf_path = std::path::Path::new(&steam_path)
+        .join("appcache")
+        .join("appinfo.vdf");
+    let bytes = fs::read(vdf_path).ok()?;
+    let mut pos = 0usize;
+
+    while pos + app_id_bytes.len() < bytes.len() {
+        let Some(relative_index) = bytes[pos..]
+            .windows(app_id_bytes.len())
+            .position(|window| window == app_id_bytes)
+        else {
+            break;
+        };
+        let index = pos + relative_index;
+        let section_end = (index + 8192).min(bytes.len());
+        let section = &bytes[index..section_end];
+
+        if let Some(title) = read_string_after_binary_key(section, b"name\0") {
+            return Some(title);
+        }
+
+        pos = index + app_id_bytes.len();
+    }
+
+    None
+}
+
 fn get_game_icon_from_local_appinfo(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
     let (steam_path, _) = crate::resolve_steam_path(app, None);
     let steam_path = steam_path?;
@@ -1137,18 +1185,7 @@ fn get_game_icon_from_steamcmd(app: &tauri::AppHandle, app_id: &str) -> Option<S
     let steamcmd = steamcmd_candidates(app)
         .into_iter()
         .find(|candidate| candidate.exists())?;
-    let output = Command::new(steamcmd)
-        .args([
-            "+login",
-            "anonymous",
-            "+app_info_update",
-            "1",
-            "+app_info_print",
-            app_id,
-            "+quit",
-        ])
-        .output()
-        .ok()?;
+    let output = with_steamcmd_lock(|| silent_steamcmd_output(&steamcmd, app_id))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let hash = extract_client_icon_hash(&stdout)?;
     Some(steam_community_icon_url(app_id, &hash))

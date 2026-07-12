@@ -97,7 +97,7 @@ export function TrayMenu() {
 
   return (
     <main className="tray-menu-shell" aria-label={isEnglish ? "GhostBox tray menu" : "Menu da bandeja do GhostBox"}>
-      <nav className="tray-menu" data-tauri-drag-region>
+      <nav className="tray-menu">
         {games.length > 0 && (
           <section className="tray-menu__library" aria-label={isEnglish ? "My games" : "Meus jogos"}>
             <div className="tray-menu__section-title">{isEnglish ? "My games" : "Meus jogos"}</div>

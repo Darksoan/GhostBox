@@ -8,6 +8,7 @@ import {
   resolveSteamLibraryCoverSource,
   steamAppIdFromImageSource,
 } from "../utils/imageCache";
+import { isHeaderImageSource, isHeroImageSource } from "../utils/image";
 
 export interface LoadableImageState {
   source: string;
@@ -99,14 +100,6 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
     let cancelled = false;
     let resolved = false;
 
-    // Priority index is derived from the `sources` array ordering (0 = highest
-    // priority). We track it so that if we temporarily commit a lower
-    // priority "fallback", we can attempt an upgrade back to preferred
-    // sources without requiring an app restart.
-    let fallbackRetryAttemptsLeft = 2;
-    let upgradeDone = false;
-    let upgradeScheduled = false;
-
     const firstSource = sources[0] ?? "";
 
     if (!firstSource) {
@@ -115,86 +108,21 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
       return;
     }
 
-    const getPriorityIndex = (source: string) => sources.indexOf(source);
-
-    const commit = (source: string, options?: { upgrade?: boolean; priorityIndex?: number }) => {
+    const commit = (source: string) => {
       if (cancelled) return;
-      // Only block commits after the initial resolution, unless this commit
-      // is explicitly an "upgrade" (used to replace a fallback).
-      if (!options?.upgrade && resolved) return;
+      if (resolved) return;
 
       resolved = true;
-      const priorityIndex = options?.priorityIndex ?? getPriorityIndex(source);
-
       loadedImageSources.add(source);
       lastGoodSourceRef.current = source;
       setState({ source, loaded: true });
-
-      // If we committed a lower-priority source (a fallback), schedule a
-      // best-effort upgrade attempt back to preferred sources.
-      if (
-        options?.upgrade !== true &&
-        !upgradeDone &&
-        !upgradeScheduled &&
-        priorityIndex > 0 &&
-        fallbackRetryAttemptsLeft > 0
-      ) {
-        upgradeScheduled = true;
-
-        const preferredSources = sources.slice(0, priorityIndex);
-        const scheduleUpgrade = () => {
-          if (cancelled || upgradeDone) return;
-          if (fallbackRetryAttemptsLeft <= 0) return;
-
-          fallbackRetryAttemptsLeft -= 1;
-
-          // Try the preferred sources in parallel; commit whichever loads first.
-          let pending = preferredSources.length;
-          preferredSources.forEach((preferredSource) => {
-            if (cancelled) return;
-
-            if (loadedImageSources.has(preferredSource)) {
-              upgradeDone = true;
-              commit(preferredSource, { upgrade: true });
-              return;
-            }
-
-            const image = new Image();
-            image.decoding = "async";
-            image.referrerPolicy = "no-referrer";
-            image.onload = () => {
-              if (cancelled || upgradeDone) return;
-              upgradeDone = true;
-              commit(preferredSource, { upgrade: true });
-            };
-            image.onerror = () => {
-              pending -= 1;
-              if (cancelled || upgradeDone) return;
-
-              if (pending === 0) {
-                if (fallbackRetryAttemptsLeft > 0) {
-                  window.setTimeout(scheduleUpgrade, 2500);
-                }
-              }
-            };
-            image.src = preferredSource;
-          });
-        };
-
-        window.setTimeout(scheduleUpgrade, 2500);
-      }
     };
 
     // Synchronous shortcut: a source from this set already decoded before, so
     // paint it immediately (no reset, no extra Image() round-trip).
     const readySource = findReadySource(sources);
     if (readySource) {
-      const readyPriorityIndex = sources.findIndex(
-        (source) => source === readySource || imageSourceCache.get(source) === readySource
-      );
-      commit(readySource, {
-        priorityIndex: readyPriorityIndex === -1 ? 0 : readyPriorityIndex,
-      });
+      commit(readySource);
       return () => {
         cancelled = true;
       };
@@ -220,85 +148,80 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
       return { source: firstSource, loaded: false };
     });
 
-    const loadBatch = (startIndex: number) => {
-      const batch = sources.slice(startIndex, startIndex + 4);
-      if (!batch.length) return;
+    const loadSource = (index: number) => {
+      const source = sources[index];
+      if (!source || cancelled || resolved) return;
 
       if (typeof Image === "undefined") {
-        commit(batch[0], { priorityIndex: getPriorityIndex(batch[0]) });
+        commit(source);
         return;
       }
 
-      let failedCount = 0;
+      if (loadedImageSources.has(source)) {
+        commit(source);
+        return;
+      }
 
-      batch.forEach((source) => {
-        if (loadedImageSources.has(source)) {
-          commit(source, { priorityIndex: getPriorityIndex(source) });
-          return;
-        }
+      const tryNextSource = () => {
+        if (!cancelled && !resolved) loadSource(index + 1);
+      };
 
-        const markFailed = () => {
-          failedCount += 1;
-          if (!cancelled && !resolved && failedCount === batch.length) {
-            loadBatch(startIndex + batch.length);
+      const tryResolvedFallback = () => {
+        const loadFallbackImage = (resolvedSource: string) => {
+          if (cancelled || resolved || !resolvedSource || resolvedSource === source) {
+            tryNextSource();
+            return;
           }
+
+          const fallbackImage = new Image();
+          fallbackImage.decoding = "async";
+          fallbackImage.referrerPolicy = "no-referrer";
+          fallbackImage.onload = () => commit(resolvedSource);
+          fallbackImage.onerror = tryNextSource;
+          fallbackImage.src = resolvedSource;
         };
 
-        const tryResolvedFallback = () => {
-          const loadFallbackImage = (resolvedSource: string) => {
-            if (
-              cancelled ||
-              resolved ||
-              !resolvedSource ||
-              resolvedSource === source
-            ) {
-              markFailed();
+        const tryHashedSteamLibraryCover = () => {
+          // Library capsule is portrait-only. Never substitute it for failed
+          // header/hero loads — that swaps a correct landscape art for a
+          // vertical cover after first paint.
+          if (isHeaderImageSource(source) || isHeroImageSource(source)) {
+            tryNextSource();
+            return;
+          }
+
+          const appId = steamAppIdFromImageSource(source);
+          if (!appId) {
+            tryNextSource();
+            return;
+          }
+
+          void resolveSteamLibraryCoverSource(appId)
+            .then(loadFallbackImage)
+            .catch(tryNextSource);
+        };
+
+        void resolveCachedImageSource(source, { steamAssetFallback: true })
+          .then((resolvedSource) => {
+            if (!resolvedSource || resolvedSource === source) {
+              tryHashedSteamLibraryCover();
               return;
             }
 
-            const fallbackImage = new Image();
-            fallbackImage.decoding = "async";
-            fallbackImage.referrerPolicy = "no-referrer";
-            fallbackImage.onload = () =>
-              commit(resolvedSource, { priorityIndex: getPriorityIndex(source) });
-            fallbackImage.onerror = markFailed;
-            fallbackImage.src = resolvedSource;
-          };
+            loadFallbackImage(resolvedSource);
+          })
+          .catch(tryHashedSteamLibraryCover);
+      };
 
-          const tryHashedSteamLibraryCover = () => {
-            const appId = steamAppIdFromImageSource(source);
-            if (!appId) {
-              markFailed();
-              return;
-            }
-
-            void resolveSteamLibraryCoverSource(appId)
-              .then(loadFallbackImage)
-              .catch(markFailed);
-          };
-
-          void resolveCachedImageSource(source, { steamAssetFallback: true })
-            .then((resolvedSource) => {
-              if (!resolvedSource || resolvedSource === source) {
-                tryHashedSteamLibraryCover();
-                return;
-              }
-
-              loadFallbackImage(resolvedSource);
-            })
-            .catch(tryHashedSteamLibraryCover);
-        };
-
-        const image = new Image();
-        image.decoding = "async";
-        image.referrerPolicy = "no-referrer";
-        image.onload = () => commit(source, { priorityIndex: getPriorityIndex(source) });
-        image.onerror = tryResolvedFallback;
-        image.src = source;
-      });
+      const image = new Image();
+      image.decoding = "async";
+      image.referrerPolicy = "no-referrer";
+      image.onload = () => commit(source);
+      image.onerror = tryResolvedFallback;
+      image.src = source;
     };
 
-    loadBatch(0);
+    loadSource(0);
 
     return () => {
       cancelled = true;

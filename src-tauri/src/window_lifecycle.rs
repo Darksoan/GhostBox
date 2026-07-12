@@ -69,21 +69,26 @@ fn request_close_main_window(
     window: &tauri::WebviewWindow,
 ) -> Result<(), String> {
     if IS_QUITTING.load(std::sync::atomic::Ordering::SeqCst) {
-        return window.close().map_err(|error| error.to_string());
+        quit_application(app);
+        return Ok(());
     }
 
+    // Only hide when the user explicitly enabled "minimize on close".
+    // Closing the main window alone is not enough: the preloaded tray-menu
+    // window keeps the process (and tray icon) alive as a zombie.
     if is_startup_setting_enabled(app, "minimizeToTray") {
         hide_main_window_to_tray(app, window);
         return Ok(());
     }
 
-    IS_QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
-    shutdown_app_services(app);
-    window.close().map_err(|error| error.to_string())
+    quit_application(app);
+    Ok(())
 }
 
 fn quit_application(app: &tauri::AppHandle) {
-    IS_QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
+    if IS_QUITTING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
     shutdown_app_services(app);
     app.exit(0);
 }
@@ -122,7 +127,53 @@ fn tray_game_app_id(game: &serde_json::Value) -> String {
         .to_string()
 }
 
-fn normalize_tray_library_games(games: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+fn tray_text_value(value: Option<&serde_json::Value>) -> String {
+    value
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn is_tray_title_placeholder(title: &str, app_id: &str) -> bool {
+    let normalized_title = title
+        .chars()
+        .filter(|character| !character.is_whitespace() && *character != '-' && *character != '_')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let normalized_app_id = app_id.trim().to_ascii_lowercase();
+
+    normalized_title.is_empty()
+        || normalized_title == normalized_app_id
+        || normalized_title == format!("steamapp{normalized_app_id}")
+        || normalized_title == format!("steamappid{normalized_app_id}")
+        || normalized_title == format!("steam{normalized_app_id}")
+}
+
+fn normalize_tray_game_title(app: &tauri::AppHandle, mut game: serde_json::Value) -> serde_json::Value {
+    let app_id = tray_game_app_id(&game);
+    let title = tray_text_value(game.get("title"));
+
+    if app_id.is_empty() || !is_tray_title_placeholder(&title, &app_id) {
+        return game;
+    }
+
+    if let Some(title) = crate::catalogue::read_cached_steam_store_title(app, &app_id)
+        .or_else(|| crate::catalogue::read_local_steam_app_title(app, &app_id))
+    {
+        if let Some(object) = game.as_object_mut() {
+            object.insert("title".to_string(), serde_json::Value::String(title));
+        }
+    }
+
+    game
+}
+
+fn normalize_tray_library_games(
+    app: &tauri::AppHandle,
+    games: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
     let mut deduped = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -131,7 +182,7 @@ fn normalize_tray_library_games(games: Vec<serde_json::Value>) -> Vec<serde_json
         if app_id.is_empty() || !seen.insert(app_id) {
             continue;
         }
-        deduped.push(game);
+        deduped.push(normalize_tray_game_title(app, game));
         if deduped.len() >= TRAY_LIBRARY_LIMIT {
             break;
         }
@@ -150,7 +201,10 @@ fn cached_tray_library_games(app: &tauri::AppHandle) -> Vec<serde_json::Value> {
         return cached_games;
     }
 
-    let persisted_games = normalize_tray_library_games(crate::ghostbox_library::read_ghostbox_library_games(app));
+    let persisted_games = normalize_tray_library_games(
+        app,
+        crate::ghostbox_library::read_ghostbox_library_games(app),
+    );
     if let Ok(mut tray_games) = TRAY_LIBRARY_GAMES.lock() {
         *tray_games = persisted_games.clone();
     }
@@ -192,8 +246,7 @@ fn build_tray_menu_window(app: &tauri::AppHandle, x: f64, y: f64, visible: bool)
     .background_color(WINDOW_BACKGROUND)
     .inner_size(TRAY_MENU_WIDTH, TRAY_MENU_HEIGHT)
     .position(x, y)
-    .build()
-    else {
+    .build() else {
         return;
     };
 
@@ -220,20 +273,18 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id("main-tray")
         .tooltip("GhostBox")
         .show_menu_on_left_click(false)
-        .on_tray_icon_event(|tray, event| {
-            match event {
-                TrayIconEvent::Click {
-                    position,
-                    button_state,
-                    ..
-                } if matches!(button_state, tauri::tray::MouseButtonState::Down) => {
-                    show_tray_menu(tray.app_handle(), position);
-                }
-                TrayIconEvent::DoubleClick { position, .. } => {
-                    show_tray_menu(tray.app_handle(), position);
-                }
-                _ => {}
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
+                position,
+                button_state,
+                ..
+            } if matches!(button_state, tauri::tray::MouseButtonState::Down) => {
+                show_tray_menu(tray.app_handle(), position);
             }
+            TrayIconEvent::DoubleClick { position, .. } => {
+                show_tray_menu(tray.app_handle(), position);
+            }
+            _ => {}
         });
 
     if let Some(icon) = ghostbox_tray_icon()
@@ -249,9 +300,10 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[tauri::command]
 pub fn tray_set_library_games(
+    app: tauri::AppHandle,
     games: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-    let deduped = normalize_tray_library_games(games);
+    let deduped = normalize_tray_library_games(&app, games);
 
     if let Ok(mut tray_games) = TRAY_LIBRARY_GAMES.lock() {
         *tray_games = deduped;
@@ -266,7 +318,10 @@ pub fn tray_get_library_games(app: tauri::AppHandle) -> Vec<serde_json::Value> {
 }
 
 #[tauri::command]
-pub fn tray_launch_game(app: tauri::AppHandle, app_id: String) -> Result<serde_json::Value, String> {
+pub fn tray_launch_game(
+    app: tauri::AppHandle,
+    app_id: String,
+) -> Result<serde_json::Value, String> {
     let game = cached_tray_library_games(&app)
         .into_iter()
         .find(|game| tray_game_app_id(game) == app_id.trim());
@@ -341,18 +396,21 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
         let close_window = window.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Always handle close ourselves so a leftover tray-menu window
+                // cannot keep the process alive after the main UI is gone.
+                api.prevent_close();
+
                 if IS_QUITTING.load(std::sync::atomic::Ordering::SeqCst) {
+                    quit_application(&close_app);
                     return;
                 }
 
                 if is_startup_setting_enabled(&close_app, "minimizeToTray") {
-                    api.prevent_close();
                     hide_main_window_to_tray(&close_app, &close_window);
                     return;
                 }
 
-                IS_QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
-                shutdown_app_services(&close_app);
+                quit_application(&close_app);
             }
         });
 

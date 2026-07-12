@@ -65,6 +65,7 @@ import {
   getRicherProfileAchievementGame as getRicherAchievementGame,
   isProfileAchievementUnlocked as isAchievementUnlocked,
 } from "../utils/profileAchievements";
+import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
 
@@ -266,6 +267,7 @@ function normalizeBannerPosition(
 
 interface ProfilePageProps {
   steamProfile: SteamProfile | null;
+  isCloudProfileRestoring?: boolean;
   favoriteGames: GhostBoxGame[];
   addedLibraryGames: GhostBoxGame[];
   achievementHistoryGames?: GhostBoxGame[];
@@ -343,10 +345,6 @@ function formatProfileLastSession(value: string | null | undefined, language: st
   }).format(time);
 }
 
-function isPlaceholderGameTitle(title: string | undefined) {
-  return /^Steam(?: App)? \d+$/i.test(title?.trim() ?? "");
-}
-
 function getProfileGameTitle(
   game: GhostBoxGame,
   language: string,
@@ -354,9 +352,20 @@ function getProfileGameTitle(
 ) {
   const title = resolvedTitle?.trim() || game.title;
 
-  return isPlaceholderGameTitle(title)
-    ? language === "en" ? "Steam game" : "Jogo Steam"
+  return isSteamTitlePlaceholder(title, game.appId)
+    ? language === "en"
+      ? "Steam game"
+      : "Jogo Steam"
     : title;
+}
+
+function withResolvedProfileGameTitle(
+  game: GhostBoxGame,
+  resolvedTitlesByAppId: Map<string, string>
+): GhostBoxGame {
+  const resolvedTitle = resolvedTitlesByAppId.get(game.appId)?.trim();
+  if (!resolvedTitle || resolvedTitle === game.title) return game;
+  return { ...game, title: resolvedTitle };
 }
 
 function mergeProfileGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
@@ -519,6 +528,7 @@ function ProfileAchievementShowcaseItem({
 
 export function ProfilePage({
   steamProfile,
+  isCloudProfileRestoring = false,
   favoriteGames,
   addedLibraryGames,
   achievementHistoryGames = [],
@@ -746,6 +756,14 @@ export function ProfilePage({
         getRicherAchievementGame(games.get(game.appId), game)
       );
     }
+    // Favorites often already carry real store titles; prefer them over
+    // history placeholders like "STEAM APP 242760".
+    for (const game of favoriteGames) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
     // Freshly hydrated local achievement details reflect the current local
     // unlock state read from the Steam appcache, so they are authoritative and
     // must override any previously cached/persisted achievement counts. The
@@ -759,14 +777,28 @@ export function ProfilePage({
         base
           ? {
               ...base,
+              title:
+                !isSteamTitlePlaceholder(game.title, game.appId)
+                  ? game.title
+                  : base.title,
               achievements: game.achievements,
               achievementList: game.achievementList,
             }
           : game
       );
     }
-    return [...games.values()];
-  }, [achievementHistoryGames, addedLibraryGames, localAchievementGamesByAppId, shouldComputeOverviewData]);
+
+    return [...games.values()].map((game) =>
+      withResolvedProfileGameTitle(game, resolvedGameTitlesByAppId)
+    );
+  }, [
+    achievementHistoryGames,
+    addedLibraryGames,
+    favoriteGames,
+    localAchievementGamesByAppId,
+    resolvedGameTitlesByAppId,
+    shouldComputeOverviewData,
+  ]);
 
   useEffect(() => {
     if (!shouldComputeOverviewData) return;
@@ -812,12 +844,26 @@ export function ProfilePage({
           candidates
             .slice(index, index + localAchievementHydrationBatchSize)
             .map(async (game) => {
-            const details = await loadGameAchievementDetailsCached(
-              game.id || `steam-${game.appId}`
-            ).catch(() => null);
+            const gameId = game.id || `steam-${game.appId}`;
+            const needsTitle = isSteamTitlePlaceholder(game.title, game.appId);
+            const [details, storeDetails] = await Promise.all([
+              loadGameAchievementDetailsCached(gameId).catch(() => null),
+              needsTitle
+                ? loadGameStoreDetailsCached(gameId).catch(() => null)
+                : Promise.resolve(null),
+            ]);
             if (!details?.achievementList?.length) return null;
+
+            const resolvedTitle = storeDetails?.title?.trim();
+            const title =
+              resolvedTitle &&
+              !isSteamTitlePlaceholder(resolvedTitle, game.appId)
+                ? resolvedTitle
+                : game.title;
+
             return {
               ...game,
+              title,
               achievements: details.achievements,
               achievementList: details.achievementList,
             };
@@ -831,6 +877,23 @@ export function ProfilePage({
           for (const game of hydratedGames) {
             if (!game || next.has(game.appId)) continue;
             next.set(game.appId, game);
+            changed = true;
+          }
+          return changed ? next : current;
+        });
+
+        setResolvedGameTitlesByAppId((current) => {
+          let changed = false;
+          const next = new Map(current);
+          for (const game of hydratedGames) {
+            if (
+              !game ||
+              next.has(game.appId) ||
+              isSteamTitlePlaceholder(game.title, game.appId)
+            ) {
+              continue;
+            }
+            next.set(game.appId, game.title);
             changed = true;
           }
           return changed ? next : current;
@@ -918,6 +981,7 @@ export function ProfilePage({
         variant: "portrait",
         limit: 12,
         idle: false,
+        nativeResolve: false,
       });
     },
     [getGamesForCollection]
@@ -1121,15 +1185,16 @@ export function ProfilePage({
     return profileAchievementGames
       .filter((game) => getGamePlaytime(game) > 0)
       .slice()
-      .sort((left, right) => getGamePlaytime(right) - getGamePlaytime(left))
-      .slice(0, 3);
+      .sort((left, right) => getGamePlaytime(right) - getGamePlaytime(left));
   }, [profileAchievementGames]);
 
   useEffect(() => {
-    const gamesToResolve = topGames.filter(
+    // Resolve real store titles for overview top games and the achievements
+    // tab — history/local appcache entries often arrive as "STEAM APP 123456".
+    const gamesToResolve = profileAchievementGames.filter(
       (game) =>
         game.appId &&
-        isPlaceholderGameTitle(game.title) &&
+        isSteamTitlePlaceholder(game.title, game.appId) &&
         !resolvedGameTitlesByAppId.has(game.appId)
     );
     if (gamesToResolve.length === 0) return;
@@ -1142,7 +1207,7 @@ export function ProfilePage({
           game.id || `steam-${game.appId}`
         ).catch(() => null);
         const title = details?.title?.trim();
-        if (!title || isPlaceholderGameTitle(title)) return null;
+        if (!title || isSteamTitlePlaceholder(title, game.appId)) return null;
         return { appId: game.appId, title };
       })
     ).then((resolvedTitles) => {
@@ -1163,7 +1228,7 @@ export function ProfilePage({
     return () => {
       cancelled = true;
     };
-  }, [resolvedGameTitlesByAppId, topGames]);
+  }, [profileAchievementGames, resolvedGameTitlesByAppId]);
 
   const visibleGamesKey = visibleGames.map((game) => game.id).join("|");
   const profileImageKey = `${steamProfile?.avatarUrl ?? ""}\n${steamProfile?.bannerUrl ?? ""}`;
@@ -1181,6 +1246,12 @@ export function ProfilePage({
   const avatarSource = steamProfile?.avatarUrl?.startsWith("data:")
     ? steamProfile.avatarUrl
     : avatarSources[0] ?? steamProfile?.avatarUrl ?? "";
+  const shouldHoldSteamAvatar = Boolean(
+    isCloudProfileRestoring &&
+      steamProfile?.avatarUrl &&
+      !steamProfile.avatarUrl.startsWith("data:") &&
+      !steamProfile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
+  );
   const requestedBannerImageSource = !shouldUseBannerCache && steamProfile?.bannerUrl
     ? steamProfile.bannerUrl
     : bannerSources[0] ?? profileBannerPlaceholderSource;
@@ -1365,7 +1436,9 @@ export function ProfilePage({
           </button>
           <div className="profile-page__identity">
             <div className="profile-page__avatar-button">
-              {avatarSource ? (
+              {shouldHoldSteamAvatar ? (
+                <span className="profile-page__avatar-skeleton" />
+              ) : avatarSource ? (
                 <img
                   src={avatarSource}
                   alt={steamProfile.displayName}
@@ -1384,23 +1457,31 @@ export function ProfilePage({
                 <h2 className="profile-page__display-name">
                   {steamProfile.displayName}
                 </h2>
-                {steamLevel !== null ? (
-                  <span
-                    className="profile-page__level"
-                    title={
-                      appearance.language === "en"
+                <span
+                  className="profile-page__level"
+                  title={
+                    steamLevel === null
+                      ? appearance.language === "en"
+                        ? "Steam level unavailable"
+                        : "Nível Steam indisponível"
+                      : appearance.language === "en"
                         ? `Level ${steamLevel}`
                         : `Nível ${steamLevel}`
-                    }
-                    aria-label={
-                      appearance.language === "en"
+                  }
+                  aria-label={
+                    steamLevel === null
+                      ? appearance.language === "en"
+                        ? "Steam level unavailable"
+                        : "Nível Steam indisponível"
+                      : appearance.language === "en"
                         ? `Level ${steamLevel}`
                         : `Nível ${steamLevel}`
-                    }
-                  >
-                    <span className="profile-page__level-value">{steamLevel}</span>
+                  }
+                >
+                  <span className="profile-page__level-value">
+                    {steamLevel ?? ""}
                   </span>
-                ) : null}
+                </span>
                 <button
                   type="button"
                   className="profile-page__hero-action"
@@ -1570,10 +1651,6 @@ export function ProfilePage({
                 <section className="profile-page__overview-console">
                   <div className="profile-page__achievement-rail">
                     <div className="profile-page__overview-panel profile-page__overview-panel--showcase">
-                      <div className="profile-page__overview-title-row profile-page__overview-title-row--showcase">
-                        <h3>{t("profile.achievementShowcase")}</h3>
-                      </div>
-
                       <div
                         ref={achievementShowcaseRef}
                         className="profile-page__achievement-showcase"
@@ -1607,13 +1684,9 @@ export function ProfilePage({
 
                   <div className="profile-page__top-games-console">
                     <div className="profile-page__overview-panel profile-page__overview-panel--top-games">
-                      <div className="profile-page__overview-title-row">
-                        <h3>{t("profile.topGames")}</h3>
-                      </div>
-
                     {topGames.length > 0 ? (
                       <div className="profile-page__top-games-list">
-                        {topGames.map((game, index) => {
+                        {topGames.map((game) => {
                           const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
                           const displayGame = resolvedTitle
                             ? { ...game, title: resolvedTitle }
@@ -1636,6 +1709,7 @@ export function ProfilePage({
                                   variant: "portrait",
                                   limit: 1,
                                   idle: false,
+                                  nativeResolve: false,
                                 })
                               }
                               onFocus={() =>
@@ -1643,12 +1717,10 @@ export function ProfilePage({
                                   variant: "portrait",
                                   limit: 1,
                                   idle: false,
+                                  nativeResolve: false,
                                 })
                               }
                             >
-                              <span className="profile-page__top-game-rank">
-                                {index + 1}
-                              </span>
                               <ProfileTopGameCover game={displayGame} />
                               <span className="profile-page__top-game-content">
                                 <strong>{getProfileGameTitle(game, appearance.language, resolvedTitle)}</strong>
@@ -1719,7 +1791,6 @@ export function ProfilePage({
                             key={index}
                             className="profile-page__top-game-console-row profile-page__top-game-console-row--skeleton"
                           >
-                            <span className="profile-page__top-game-rank profile-page__skeleton-block" />
                             <span className="profile-page__top-game-cover profile-page__skeleton-block" />
                             <span className="profile-page__top-game-content profile-page__top-game-content--skeleton">
                               <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />

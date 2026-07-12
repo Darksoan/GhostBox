@@ -313,12 +313,23 @@ export type SubscriptionPayment = {
   createdAt: string;
   updatedAt: string;
   confirmedAt: string | null;
-  pixCode: string | null;
-  pixQrCodeUrl: string | null;
+  stripeCheckoutSessionId?: string | null;
+  stripeInvoiceId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeSubscriptionId?: string | null;
+  provider?: "stripe" | null;
 };
 
 export type SubscriptionCheckoutResult = {
   payment: SubscriptionPayment | null;
+};
+
+export type SubscriptionPortalFlow = "manage" | "payment_method_update";
+
+export type SubscriptionPortalResult = {
+  url: string;
+  flow: SubscriptionPortalFlow;
+  customerId?: string;
 };
 
 export type CloudSessionResult = {
@@ -382,6 +393,7 @@ export type CloudProfileSnapshot = {
     bannerUrl: string | null;
     bannerPosition: CloudProfileBannerPosition | null;
   };
+  favoriteGameIds: string[];
   userCollections: CloudProfileCollection[];
 };
 

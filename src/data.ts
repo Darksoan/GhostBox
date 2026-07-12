@@ -218,6 +218,12 @@ export async function addGameViaLuaTools(
   return ghostboxApi.addGameViaLuaTools(game);
 }
 
+export async function registerSteamLibraryGame(
+  game: GhostBoxGame
+): Promise<AddGameResult> {
+  return ghostboxApi.registerSteamLibraryGame(game);
+}
+
 export async function removeGameViaLuaTools(
   game: GhostBoxGame
 ): Promise<RemoveGameResult> {

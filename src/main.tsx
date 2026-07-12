@@ -8,20 +8,6 @@ import { AppDataProvider } from "./context/AppDataContext";
 import { queryClient } from "./lib/queryClient";
 import { TrayMenu } from "./components/tray/TrayMenu";
 
-async function waitForInterfaceFonts() {
-  if (!("fonts" in document)) return;
-
-  await Promise.race([
-    Promise.all([
-      document.fonts.load('400 14px "Open Sans"'),
-      document.fonts.load('500 14px "Open Sans"'),
-      document.fonts.load('600 14px "Open Sans"'),
-      document.fonts.load('700 14px "Open Sans"'),
-    ]),
-    new Promise((resolve) => window.setTimeout(resolve, 900)),
-  ]);
-}
-
 const isTrayMenu = new URLSearchParams(window.location.search).get("tray") === "1";
 
 function renderApp() {
@@ -46,8 +32,4 @@ function renderApp() {
   );
 }
 
-if (isTrayMenu) {
-  renderApp();
-} else {
-  void waitForInterfaceFonts().finally(renderApp);
-}
+renderApp();

@@ -1,11 +1,12 @@
 import type { SteamProfile, UserCollection } from "../types";
 
-export const CLOUD_PROFILE_SCHEMA_VERSION = 1 as const;
+export const CLOUD_PROFILE_SCHEMA_VERSION = 2 as const;
 
-const MAX_URL_LENGTH = 1024;
+const MAX_URL_LENGTH = 2048;
 const MAX_COLLECTION_NAME_LENGTH = 64;
 const MAX_COLLECTIONS = 100;
 const MAX_GAMES_PER_COLLECTION = 2000;
+const MAX_FAVORITES = 5000;
 
 const URL_PREFIXES: Array<{ compact: string; expand: string }> = [
   {
@@ -55,6 +56,7 @@ export type CloudProfileSnapshot = {
     bannerUrl: string | null;
     bannerPosition: CloudProfileBannerPosition | null;
   };
+  favoriteGameIds: string[];
   userCollections: CloudProfileCollection[];
 };
 
@@ -67,7 +69,10 @@ function normalizeUrl(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (trimmed.length > MAX_URL_LENGTH) return trimmed.slice(0, MAX_URL_LENGTH);
+  if (/^data:/i.test(trimmed)) {
+    throw new Error("Cloud profile images must be uploaded to storage before syncing.");
+  }
+  if (trimmed.length > MAX_URL_LENGTH) throw new Error("Cloud profile URL is too long.");
   return trimmed;
 }
 
@@ -130,6 +135,7 @@ export function buildCloudProfileSnapshot(input: {
     SteamProfile,
     "displayName" | "avatarUrl" | "bannerUrl" | "bannerPosition"
   > | null;
+  favoriteGames: Array<{ id: string }>;
   userCollections: UserCollection[];
 }): CloudProfileSnapshot {
   const usedCollectionIds = new Set<string>();
@@ -154,6 +160,13 @@ export function buildCloudProfileSnapshot(input: {
       return { id, name, gameIds };
     })
     .filter((collection) => collection.id && collection.name);
+  const favoriteGameIds = Array.from(
+    new Set(
+      input.favoriteGames
+        .map((game) => String(game.id || "").trim())
+        .filter(Boolean)
+    )
+  ).slice(0, MAX_FAVORITES);
 
   return {
     version: CLOUD_PROFILE_SCHEMA_VERSION,
@@ -164,6 +177,7 @@ export function buildCloudProfileSnapshot(input: {
       bannerUrl: compactCloudUrl(input.steamProfile?.bannerUrl),
       bannerPosition: compactBannerPosition(input.steamProfile?.bannerPosition),
     },
+    favoriteGameIds,
     userCollections: collections,
   };
 }
@@ -185,6 +199,15 @@ export function expandCloudProfileSnapshot(
       bannerUrl: expandCloudUrl(snapshot.steamProfile?.bannerUrl),
       bannerPosition: compactBannerPosition(snapshot.steamProfile?.bannerPosition),
     },
+    favoriteGameIds: Array.isArray(snapshot.favoriteGameIds)
+      ? Array.from(
+          new Set(
+            snapshot.favoriteGameIds
+              .map((gameId) => String(gameId || "").trim())
+              .filter(Boolean)
+          )
+        ).slice(0, MAX_FAVORITES)
+      : [],
     userCollections: Array.isArray(snapshot.userCollections)
       ? snapshot.userCollections
           .slice(0, MAX_COLLECTIONS)
@@ -211,12 +234,14 @@ export function applyCloudProfileToLocal(input: {
   snapshot: CloudProfileSnapshot;
 }): {
   steamProfile: SteamProfile | null;
+  favoriteGameIds: string[];
   userCollections: UserCollection[];
 } {
   const expanded = expandCloudProfileSnapshot(input.snapshot);
   if (!expanded) {
     return {
       steamProfile: input.currentProfile,
+      favoriteGameIds: [],
       userCollections: [],
     };
   }
@@ -243,7 +268,7 @@ export function applyCloudProfileToLocal(input: {
     })
   );
 
-  return { steamProfile, userCollections };
+  return { steamProfile, favoriteGameIds: expanded.favoriteGameIds, userCollections };
 }
 
 export function isCloudSnapshotNewer(

@@ -37,7 +37,7 @@ type FeedbackPayload = {
 };
 
 const maxMessageLength = 1800;
-const envLatestVersionFallback = "0.1.2";
+const envLatestVersionFallback = "0.1.3";
 
 function jsonResponse(
   body: Record<string, unknown>,

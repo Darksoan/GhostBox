@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
+import { useSettings } from "../../context/settings";
 import type { Page } from "../../types";
 
 const LazyGameModal = lazy(() =>
@@ -32,6 +33,7 @@ interface ContentOverlayProps {
 
 export function ContentOverlay({ page }: ContentOverlayProps) {
   const appData = useAppData();
+  const { appearance } = useSettings();
   const {
     selectedGame,
     achievementsView,
@@ -39,9 +41,15 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
     openAchievements,
   } = useOverlay();
 
+  // Same entry motion as tab switches (`page-block-in` via `.page-enter`).
+  const enterClass = appearance.disableTabAnimations ? "" : " page-enter";
+
   if (achievementsView) {
     return (
-      <div className="page page--game-achievements">
+      <div
+        className={`page page--game-achievements${enterClass}`}
+        key={`achievements-${achievementsView.game.id}`}
+      >
         <Suspense fallback={<DeferredPagePlaceholder page={page} />}>
           <LazyGameAchievementsPage
             game={achievementsView.game}
@@ -60,7 +68,10 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
       selectedGame;
     const isSessionActive = appData.activeSessionAppIds.has(selectedGame.appId);
     return (
-      <div className="page page--game-modal">
+      <div
+        className={`page page--game-modal${enterClass}`}
+        key={`game-modal-${selectedGame.id}`}
+      >
         <Suspense fallback={<DeferredPagePlaceholder page={page} />}>
           <LazyGameModal
             game={mergedGame}

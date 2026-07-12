@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadGames, type GhostBoxGame } from "../data";
 import { useSettings } from "../context/settings";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
+import { gameHeaderOnlySources, layeredImageStyle } from "../utils/image";
 import { writeNotificationsLastSeenAt } from "../utils/storage";
 
 const recentlyAddedLimit = 200;
@@ -39,6 +41,41 @@ function formatDateGroup(timestamp: number | undefined, locale: string, language
 type NotificationsPageProps = {
   onOpenGame: (game: GhostBoxGame) => void;
 };
+
+function NotificationGameItem({
+  game,
+  onOpenGame,
+}: {
+  game: GhostBoxGame;
+  onOpenGame: (game: GhostBoxGame) => void;
+}) {
+  const rawHeaderSources = useMemo(() => gameHeaderOnlySources(game), [game]);
+  const headerSources = useCachedImageSources(rawHeaderSources);
+  const { source: coverSource, loaded } = useLoadableImageCover(headerSources);
+  const displayedCoverSources = loaded && coverSource ? [coverSource] : [];
+
+  function getGameDeveloperLabel(game: GhostBoxGame) {
+    return game.developers?.[0] || "";
+  }
+
+  return (
+    <button
+      type="button"
+      className="notification-game"
+      onClick={() => onOpenGame(game)}
+    >
+      <span
+        className={`notification-game__cover${loaded ? " notification-game__cover--loaded" : ""}`}
+        style={layeredImageStyle(displayedCoverSources, "")}
+        aria-hidden="true"
+      />
+      <div className="notification-game__content">
+        <strong>{game.title}</strong>
+        {getGameDeveloperLabel(game) ? <span>{getGameDeveloperLabel(game)}</span> : null}
+      </div>
+    </button>
+  );
+}
 
 export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
   const { appearance, t } = useSettings();
@@ -83,10 +120,6 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
 
     return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
   }, [appearance.language, locale, recentGames]);
-
-  function getGameDeveloperLabel(game: GhostBoxGame) {
-    return game.developers?.[0] || "";
-  }
 
   useEffect(() => {
     return loadRecentGames();
@@ -144,18 +177,11 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
                 {isOpen && (
                   <div className="notifications-list notifications-list--games">
                     {group.games.map((game) => (
-                      <button
-                        type="button"
-                        className="notification-game"
+                      <NotificationGameItem
                         key={game.id}
-                        onClick={() => onOpenGame(game)}
-                      >
-                        <img src={game.coverUrl} alt="" className="notification-game__cover" loading="lazy" />
-                        <div className="notification-game__content">
-                          <strong>{game.title}</strong>
-                          {getGameDeveloperLabel(game) ? <span>{getGameDeveloperLabel(game)}</span> : null}
-                        </div>
-                      </button>
+                        game={game}
+                        onOpenGame={onOpenGame}
+                      />
                     ))}
                   </div>
                 )}

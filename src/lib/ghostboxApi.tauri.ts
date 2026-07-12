@@ -48,6 +48,8 @@ import type {
   CloudSave,
   CloudSessionResult,
   SubscriptionCheckoutResult,
+  SubscriptionPortalFlow,
+  SubscriptionPortalResult,
   SubscriptionPlanId,
   SubscriptionStatusResult,
 } from "./ghostboxApi.types";
@@ -60,7 +62,7 @@ const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
 const defaultSubscriptionsApiUrl = "https://ghostbox-subscriptions.hella.workers.dev";
 const defaultFeedbackApiUrl = "https://ghostbox-feedback.hella.workers.dev/feedback";
 const defaultUpdatesApiUrl = "https://ghostbox-feedback.hella.workers.dev/updates/latest";
-const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.2";
+const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.3";
 
 function compareVersions(left: string, right: string) {
   const leftParts = left.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
@@ -361,6 +363,33 @@ export const ghostboxApi = {
     return await response.json() as SubscriptionCheckoutResult;
   },
 
+  async createSubscriptionPortalSession(
+    steamId: string,
+    flow: SubscriptionPortalFlow = "manage"
+  ): Promise<SubscriptionPortalResult | null> {
+    const id = steamId.trim();
+    if (!id) return null;
+
+    try {
+      const response = await fetch(`${getSubscriptionsApiUrl()}/subscription/portal`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ steamId: id, flow }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || "Could not open billing portal.");
+      }
+      return (await response.json()) as SubscriptionPortalResult;
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error("Could not open billing portal.");
+    }
+  },
+
   async sendFeedback(request: FeedbackRequest): Promise<FeedbackResult> {
     const apiUrl = getFeedbackApiUrl();
 
@@ -584,6 +613,14 @@ export const ghostboxApi = {
     );
   },
 
+  registerSteamLibraryGame(game: GhostBoxGame): Promise<AddGameResult> {
+    return invokeOr<AddGameResult>(
+      "ghostbox_library_register_steam_game",
+      { game },
+      { success: false, error: "Não foi possível registrar o jogo da Steam." }
+    );
+  },
+
   removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",
@@ -739,6 +776,26 @@ export const ghostboxApi = {
       { snapshot },
       null
     ).then((result) => result?.profile ?? null);
+  },
+
+  async uploadProfileImage(imageData: string, kind: "avatar" | "banner"): Promise<string> {
+    try {
+      const result = await invoke<{ url?: string }>("cloud_upload_profile_image", { imageData, kind });
+      if (!result?.url) throw new Error("O servidor não retornou a URL da imagem.");
+      return result.url;
+    } catch (error) {
+      throw new Error(typeof error === "string" ? error : error instanceof Error ? error.message : "Falha ao enviar a imagem para a nuvem.");
+    }
+  },
+
+  async deleteProfileBanner(): Promise<boolean> {
+    try {
+      const result = await invoke<{ ok?: boolean }>("cloud_delete_profile_banner", {});
+      if (result?.ok !== true) throw new Error("O servidor não confirmou a remoção da capa.");
+      return true;
+    } catch (error) {
+      throw new Error(typeof error === "string" ? error : error instanceof Error ? error.message : "Falha ao remover a capa da nuvem.");
+    }
   },
 
   getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {

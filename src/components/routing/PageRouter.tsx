@@ -366,6 +366,7 @@ export function PageRouter({
       return (
         <LazyProfilePage
           steamProfile={appData.steamProfile}
+          isCloudProfileRestoring={appData.isCloudProfileRestoring}
           favoriteGames={appData.profileFavoriteGames}
           addedLibraryGames={appData.profileAddedLibraryGames}
           achievementHistoryGames={appData.profileHistoryGames}

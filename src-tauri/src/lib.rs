@@ -50,7 +50,7 @@ pub(crate) use settings::load_startup_settings;
 use ludusavi::game_title;
 use settings::{read_json_file, write_json_file};
 use tauri::Manager;
-use util::{merge_object_defaults, object_or_empty, text_value, EmptyStringExt};
+use util::{merge_object_defaults, object_or_empty, silent_command, text_value, EmptyStringExt};
 
 struct AchievementServerState {
     url: String,
@@ -1468,9 +1468,12 @@ pub(crate) fn import_game_profile_progress(
         }
     }
 
-    if let Some(file) =
-        read_ghostbox_achievements_backup_file(app, app_id, title, Some(backup_path.to_string_lossy().as_ref()))
-    {
+    if let Some(file) = read_ghostbox_achievements_backup_file(
+        app,
+        app_id,
+        title,
+        Some(backup_path.to_string_lossy().as_ref()),
+    ) {
         if write_ghostbox_achievements_backup_file(app, &file, None).is_ok() {
             snapshot.has_achievements = true;
         }
@@ -1505,12 +1508,7 @@ pub(crate) fn save_cloud_backup_success_record(
     let last_path = current_record
         .and_then(|record| record.get("lastBackupPath"))
         .cloned()
-        .or_else(|| {
-            entries
-                .first()
-                .and_then(|entry| entry.get("path"))
-                .cloned()
-        })
+        .or_else(|| entries.first().and_then(|entry| entry.get("path")).cloned())
         .unwrap_or_else(|| serde_json::json!(""));
 
     save_backup_record(
@@ -1547,7 +1545,7 @@ fn launch_custom_executable(
     let achievement_env = start_ghostbox_achievement_server(app.clone()).ok();
     let launched_title = game_title(&game, app_id);
 
-    let mut command = std::process::Command::new(&executable);
+    let mut command = silent_command(&executable);
     if let Some(parent) = executable.parent() {
         command.current_dir(parent);
     }
@@ -1968,6 +1966,8 @@ pub fn run() {
             cloud_save::cloud_restore_save,
             cloud_save::cloud_get_profile_snapshot,
             cloud_save::cloud_put_profile_snapshot,
+            cloud_save::cloud_upload_profile_image,
+            cloud_save::cloud_delete_profile_banner,
             backup::backup_get_settings,
             backup::backup_validate_root,
             backup::backup_ensure_root,
@@ -1989,6 +1989,7 @@ pub fn run() {
             backup::backup_get_details,
             backup::backup_run_game_local,
             backup::backup_restore_game_local,
+            ghostbox_library::ghostbox_library_register_steam_game,
             luatools::luatools_add_game,
             luatools::luatools_remove_game,
             window_lifecycle::window_minimize,

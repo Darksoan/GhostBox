@@ -1,10 +1,18 @@
-import { CalendarClock, Check, Cloud, CloudUpload, CreditCard, ExternalLink, Link, ShieldCheck, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarClock, Check, Cloud, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, ShieldCheck, X } from "lucide-react";
+import { CupStar, ServerUpdate, UserEdit } from "reicon-react";
+import { useEffect, useRef, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import type { CloudSave, DiscordLinkStatus, SubscriptionPayment, SubscriptionPlanId as PaidSubscriptionPlanId, SubscriptionStatusResult } from "../../lib/ghostboxApi.types";
+import type {
+  CloudSave,
+  DiscordLinkStatus,
+  SubscriptionPayment,
+  SubscriptionPlanId as PaidSubscriptionPlanId,
+  SubscriptionPortalFlow,
+  SubscriptionStatusResult,
+} from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
@@ -110,6 +118,13 @@ function visiblePayment(payment: SubscriptionPayment | null, subscription: Subsc
   return payment;
 }
 
+function renderBenefitIcon(benefitKey: string, disabled: boolean) {
+  if (disabled) return <X size={14} strokeWidth={2.15} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.sync") return <ScreenShare size={14} strokeWidth={2.15} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.automaticRestore") return <RotateCcw size={14} strokeWidth={2.15} aria-hidden="true" />;
+  return <CloudUpload size={14} strokeWidth={2.15} aria-hidden="true" />;
+}
+
 export function SubscriptionPlans({
   surface = "settings",
   enterDelay,
@@ -126,9 +141,46 @@ export function SubscriptionPlans({
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings" && Boolean(steamProfile?.steamId));
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
+  const [portalFlow, setPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
+  const subscriptionRequestIdRef = useRef(0);
   const linkedDiscordName = discordLinkStatus?.discordGlobalName || discordLinkStatus?.discordUsername;
   const language = appearance.language;
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
+  const isSettingsSurface = surface === "settings";
+
+  async function openBillingPortal(flow: SubscriptionPortalFlow) {
+    const steamId = steamProfile?.steamId?.trim();
+    if (!steamId || portalFlow) return;
+
+    setPortalFlow(flow);
+    try {
+      const session = await ghostboxApi.createSubscriptionPortalSession(steamId, flow);
+      if (!session?.url) {
+        throw new Error(
+          copy(
+            "Não foi possível abrir o portal de cobrança.",
+            "Could not open the billing portal."
+          )
+        );
+      }
+      await ghostboxApi.openExternalUrl(session.url);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : copy(
+              "Não foi possível abrir o portal de cobrança.",
+              "Could not open the billing portal."
+            );
+      showToast(
+        copy("Portal de assinatura", "Subscription portal"),
+        message,
+        "error"
+      );
+    } finally {
+      setPortalFlow(null);
+    }
+  }
 
   function refreshDiscordLinkStatus(steamId: string) {
     void ghostboxApi.getDiscordLinkStatus(steamId).then((status) => {
@@ -143,24 +195,33 @@ export function SubscriptionPlans({
   }
 
   function refreshSubscriptionStatus(steamId: string) {
+    const requestId = ++subscriptionRequestIdRef.current;
     setSubscriptionLoading(true);
     void ghostboxApi.getSubscriptionStatus(steamId)
       .then((status) => {
+        if (requestId !== subscriptionRequestIdRef.current) return;
         setSubscriptionStatus(status);
         if (status?.discordLink) setDiscordLinkStatus(status.discordLink);
         if (status?.subscription.isPremium) refreshCloudSaves();
         else setCloudSaves([]);
       })
-      .finally(() => setSubscriptionLoading(false));
+      .finally(() => {
+        if (requestId === subscriptionRequestIdRef.current) setSubscriptionLoading(false);
+      });
   }
 
   useEffect(() => {
     const steamId = steamProfile?.steamId;
     if (!steamId) {
+      subscriptionRequestIdRef.current += 1;
       setDiscordLinkStatus(null);
+      setSubscriptionStatus(null);
+      setSubscriptionLoading(false);
       setCloudSaves([]);
       return;
     }
+
+    setSubscriptionStatus(null);
 
     const refreshSubscriptionData = () => {
       refreshDiscordLinkStatus(steamId);
@@ -307,6 +368,37 @@ export function SubscriptionPlans({
             <p className="subscription-account__empty">{copy("Nenhum backup em nuvem encontrado ainda.", "No cloud backups found yet.")}</p>
           )}
         </article>
+
+        <div className="subscription-account__actions" role="group" aria-label={copy("Gerenciar assinatura", "Manage subscription")}>
+          <button
+            type="button"
+            className="subscription-account__action-button"
+            disabled={Boolean(portalFlow)}
+            onClick={() => void openBillingPortal("manage")}
+          >
+            <Settings2 size={15} strokeWidth={2.15} aria-hidden="true" />
+            <span>
+              {portalFlow === "manage"
+                ? copy("Abrindo…", "Opening…")
+                : copy("Gerenciar assinatura", "Manage subscription")}
+            </span>
+            <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="subscription-account__action-button"
+            disabled={Boolean(portalFlow)}
+            onClick={() => void openBillingPortal("payment_method_update")}
+          >
+            <CreditCard size={15} strokeWidth={2.15} aria-hidden="true" />
+            <span>
+              {portalFlow === "payment_method_update"
+                ? copy("Abrindo…", "Opening…")
+                : copy("Alterar método de pagamento", "Change payment method")}
+            </span>
+            <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
+          </button>
+        </div>
       </section>
     );
   }
@@ -316,6 +408,7 @@ export function SubscriptionPlans({
     title: string;
     price: string;
     cadence: string;
+    description: string;
     badge?: string;
     savings?: {
       label: string;
@@ -329,6 +422,7 @@ export function SubscriptionPlans({
       title: t("subscription.plans.free.title"),
       price: t("subscription.plans.free.price"),
       cadence: t("subscription.plans.free.cadence"),
+      description: copy("Comece com o básico e desbloqueie nuvem quando precisar.", "Start with the basics and unlock cloud when you need it."),
       action: t("subscription.plans.free.action"),
       disabled: true,
     },
@@ -337,6 +431,7 @@ export function SubscriptionPlans({
       title: t("subscription.plans.monthly.title"),
       price: "R$ 6,99",
       cadence: t("subscription.plans.monthly.cadence"),
+      description: copy("Ideal para testar a sincronização premium sem compromisso longo.", "Ideal for trying premium sync without a long commitment."),
       action: t("subscription.actions.subscribe"),
     },
     {
@@ -344,12 +439,39 @@ export function SubscriptionPlans({
       title: t("subscription.plans.quarterly.title"),
       price: "R$ 14,99",
       cadence: t("subscription.plans.quarterly.cadence"),
-      badge: t("subscription.plans.quarterly.badge"),
+      description: copy("Mais economia para manter seus saves protegidos por mais tempo.", "Better value to keep your saves protected for longer."),
       savings: {
         label: t("subscription.plans.quarterly.savingsLabel"),
         value: t("subscription.plans.quarterly.savingsValue"),
       },
       action: t("subscription.actions.subscribe"),
+    },
+  ];
+
+  const highlightCards = [
+    {
+      title: copy("Conquistas", "Achievements"),
+      description: copy(
+        "Acompanhe seus marcos e mantenha seu histórico de progresso sempre preservado.",
+        "Track your milestones and keep your progress history preserved."
+      ),
+      icon: CupStar,
+    },
+    {
+      title: copy("Restauração de backups", "Backup restore"),
+      description: copy(
+        "Recupere seus saves com mais segurança quando trocar de PC ou reinstalar um jogo.",
+        "Recover your saves with more confidence when switching PCs or reinstalling a game."
+      ),
+      icon: ServerUpdate,
+    },
+    {
+      title: copy("Personalização de perfil", "Profile customization"),
+      description: copy(
+        "Deixe seu perfil com mais identidade e destaque suas escolhas dentro do GhostBox.",
+        "Give your profile more identity and highlight your choices inside GhostBox."
+      ),
+      icon: UserEdit,
     },
   ];
 
@@ -367,7 +489,6 @@ export function SubscriptionPlans({
       );
       return;
     }
-
     setCheckoutPlan(planId);
     try {
       const checkout = await ghostboxApi.createSubscriptionCheckout(steamProfile.steamId, planId);
@@ -377,15 +498,6 @@ export function SubscriptionPlans({
         showToast(
           copy("Checkout aberto", "Checkout opened"),
           copy("Finalize o pagamento na janela aberta e volte ao GhostBox para atualizar o status.", "Complete payment in the opened window and return to GhostBox to refresh status."),
-          "success"
-        );
-        return;
-      }
-
-      if (payment?.pixCode || payment?.pixQrCodeUrl) {
-        showToast(
-          copy("Checkout criado", "Checkout created"),
-          copy("O pagamento PIX foi criado, mas ainda não há tela de pagamento no app para exibir o QR Code.", "The PIX payment was created, but the app does not yet have a payment screen to show the QR code."),
           "success"
         );
         return;
@@ -417,8 +529,15 @@ export function SubscriptionPlans({
           {"GhostBox "}
           <strong className="subscription-plans__eyebrow-premium">Premium</strong>
         </span>
-        <h3>{t("subscription.title")}</h3>
-        <p>{t("subscription.description")}</p>
+        <h3><Cloudy size={18} strokeWidth={2.15} aria-hidden="true" /> {t("subscription.title")}</h3>
+        {isSettingsSurface && (
+          <p>
+            {copy(
+              "Tenha seu progresso, conquistas e perfil sempre com você.",
+              "Have your progress, achievements, and profile always with you."
+            )}
+          </p>
+        )}
       </header>
 
       <div className="subscription-plans__grid">
@@ -437,6 +556,7 @@ export function SubscriptionPlans({
               <h4>{plan.title}</h4>
               <div className="subscription-plan-card__price">{plan.price}</div>
               <span>{plan.cadence}</span>
+              <p>{plan.description}</p>
             </div>
 
             <ul className="subscription-plan-card__benefits">
@@ -445,22 +565,23 @@ export function SubscriptionPlans({
                   key={benefitKey}
                   className={plan.id === "free" ? "subscription-plan-card__benefit--disabled" : undefined}
                 >
-                  {plan.id === "free" ? (
-                    <X size={14} strokeWidth={2.15} aria-hidden="true" />
-                  ) : (
-                    <Check size={14} strokeWidth={2.15} aria-hidden="true" />
-                  )}
+                  {renderBenefitIcon(benefitKey, plan.id === "free")}
                   <span>{t(benefitKey)}</span>
                 </li>
               ))}
             </ul>
 
-            {plan.savings && (
-              <div className="subscription-plan-card__savings">
-                <span>{plan.savings.label}</span>
-                <strong>{plan.savings.value}</strong>
-              </div>
-            )}
+            <div
+              className={`subscription-plan-card__savings${plan.savings ? "" : " subscription-plan-card__savings--empty"}`}
+              aria-hidden={plan.savings ? undefined : "true"}
+            >
+              {plan.savings && (
+                <>
+                  <span>{plan.savings.label}</span>
+                  <strong>{plan.savings.value}</strong>
+                </>
+              )}
+            </div>
 
             <button
               type="button"
@@ -474,79 +595,99 @@ export function SubscriptionPlans({
         ))}
       </div>
 
-      <div className="subscription-plans__steps" aria-label={t("subscription.steps.title")}>
-        {steps.map((stepKey, index) => (
-          <div key={stepKey} className="subscription-plans__step">
-            <span>{index + 1}</span>
-            <strong>{t(stepKey)}</strong>
-          </div>
-        ))}
-      </div>
-
-      <section className="subscription-plans__discord-link" aria-label={t("subscription.discordLink.title")}>
-        <div className="subscription-plans__discord-copy">
-          <img
-            className="subscription-plans__discord-icon"
-            src={discordIcon}
-            alt=""
-            aria-hidden="true"
-          />
-          <div>
-            <h4>{t("subscription.discordLink.title")}</h4>
-            <p>
-              {discordLinkStatus?.linked && linkedDiscordName
-                ? t("subscription.discordLink.linkedAs").replace("{name}", linkedDiscordName)
-                : t("subscription.discordLink.description")}
-            </p>
-          </div>
+      {isSettingsSurface && (
+        <div className="subscription-plans__highlight-grid" aria-label={copy("Benefícios Premium", "Premium benefits")}>
+          {highlightCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <article key={card.title} className="subscription-plans__highlight-card">
+                <div>
+                  <h4><Icon size={22} strokeWidth={2.15} /> {card.title}</h4>
+                  <p>{card.description}</p>
+                </div>
+              </article>
+            );
+          })}
         </div>
-        <div className="subscription-plans__discord-actions">
-          <button
-            type="button"
-            className="subscription-plans__discord-action"
-            onClick={() => {
-              if (!steamProfile?.steamId) {
-                void handleSteamSignIn();
-                return;
-              }
-              void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
-              window.setTimeout(() => refreshDiscordLinkStatus(steamProfile.steamId), 3000);
-            }}
-            disabled={isSteamSigningIn}
-          >
-            {steamProfile?.steamId ? <Link size={14} strokeWidth={2.15} aria-hidden="true" /> : <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />}
-            {steamProfile?.steamId
-              ? discordLinkStatus?.linked
-                ? t("subscription.discordLink.relink")
-                : t("subscription.discordLink.link")
-              : t("subscription.discordLink.signInSteam")}
-          </button>
-          {discordLinkStatus?.linked && (
-            <span className="subscription-plans__discord-status">
-              <Check size={13} strokeWidth={2.25} aria-hidden="true" />
-              {t("subscription.discordLink.linked")}
-            </span>
-          )}
-        </div>
-      </section>
+      )}
 
-      <div className="subscription-plans__details">
-        {details.map((section) => (
-          <article key={section.title} className="subscription-plans__detail-card">
-            <h4>{t(section.title)}</h4>
-            <ul>
-              {section.items.map((item) => (
-                <li key={item}>{t(item)}</li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </div>
+      {!isSettingsSurface && (
+        <>
+          <div className="subscription-plans__steps" aria-label={t("subscription.steps.title")}>
+            {steps.map((stepKey, index) => (
+              <div key={stepKey} className="subscription-plans__step">
+                <span>{index + 1}</span>
+                <strong>{t(stepKey)}</strong>
+              </div>
+            ))}
+          </div>
 
-      <footer className="subscription-plans__policy-note">
-        <strong>{t("subscription.policy.title")}</strong>
-        <p>{t("subscription.policy.description")}</p>
-      </footer>
+          <section className="subscription-plans__discord-link" aria-label={t("subscription.discordLink.title")}>
+            <div className="subscription-plans__discord-copy">
+              <img
+                className="subscription-plans__discord-icon"
+                src={discordIcon}
+                alt=""
+                aria-hidden="true"
+              />
+              <div>
+                <h4>{t("subscription.discordLink.title")}</h4>
+                <p>
+                  {discordLinkStatus?.linked && linkedDiscordName
+                    ? t("subscription.discordLink.linkedAs").replace("{name}", linkedDiscordName)
+                    : t("subscription.discordLink.description")}
+                </p>
+              </div>
+            </div>
+            <div className="subscription-plans__discord-actions">
+              <button
+                type="button"
+                className="subscription-plans__discord-action"
+                onClick={() => {
+                  if (!steamProfile?.steamId) {
+                    void handleSteamSignIn();
+                    return;
+                  }
+                  void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
+                  window.setTimeout(() => refreshDiscordLinkStatus(steamProfile.steamId), 3000);
+                }}
+                disabled={isSteamSigningIn}
+              >
+                {steamProfile?.steamId ? <Link size={14} strokeWidth={2.15} aria-hidden="true" /> : <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />}
+                {steamProfile?.steamId
+                  ? discordLinkStatus?.linked
+                    ? t("subscription.discordLink.relink")
+                    : t("subscription.discordLink.link")
+                  : t("subscription.discordLink.signInSteam")}
+              </button>
+              {discordLinkStatus?.linked && (
+                <span className="subscription-plans__discord-status">
+                  <Check size={13} strokeWidth={2.25} aria-hidden="true" />
+                  {t("subscription.discordLink.linked")}
+                </span>
+              )}
+            </div>
+          </section>
+
+          <div className="subscription-plans__details">
+            {details.map((section) => (
+              <article key={section.title} className="subscription-plans__detail-card">
+                <h4>{t(section.title)}</h4>
+                <ul>
+                  {section.items.map((item) => (
+                    <li key={item}>{t(item)}</li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+
+          <footer className="subscription-plans__policy-note">
+            <strong>{t("subscription.policy.title")}</strong>
+            <p>{t("subscription.policy.description")}</p>
+          </footer>
+        </>
+      )}
     </section>
   );
 }

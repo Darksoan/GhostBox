@@ -4,7 +4,7 @@ use crate::settings::{
     load_steam_stats_proxy_url, load_steam_web_api_key, read_json_file, remove_data_file,
     write_json_file,
 };
-use crate::util::{escape_html, text_value, xml_text, EmptyStringExt};
+use crate::util::{escape_html, silent_command, text_value, xml_text, EmptyStringExt};
 use crate::{
     enrich_game_with_local_achievement_stats, extract_app_id, load_saved_steam_path,
     merge_playtime_into_game, normalize_steam_root_path, resolve_steam_path, save_steam_path,
@@ -916,9 +916,8 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
         return Err("Steam login was cancelled".to_string());
     }
 
-    let is_valid = validate_steam_openid(&callback).await?;
     let steam_id = steam_id_from_openid(&callback);
-    if !is_valid || steam_id.is_empty() {
+    if steam_id.is_empty() {
         write_http_response(
             &mut stream,
             "400 Bad Request",
@@ -951,14 +950,15 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
         &steam_login_page_html(true, &success_message),
     );
 
+    let cloud_session = crate::cloud_save::cloud_authenticate_steam_callback(app, callback.as_str(), &profile)
+        .await
+        .ok();
+    if cloud_session.is_none() && !validate_steam_openid(&callback).await? {
+        return Err("Steam OpenID validation failed".to_string());
+    }
+
     let mut saved_profile = save_steam_profile(app, profile)?;
-    if let Ok(session) = crate::cloud_save::cloud_authenticate_steam_callback(
-        app,
-        callback.as_str(),
-        &saved_profile,
-    )
-    .await
-    {
+    if let Some(session) = cloud_session {
         saved_profile["cloudSession"] = session;
     }
     Ok(saved_profile)
@@ -1021,10 +1021,7 @@ pub async fn steam_sync_playtimes(
     Ok(playtime::load_game_playtimes(&app))
 }
 
-async fn fetch_steam_level_from_proxy(
-    proxy_url: &str,
-    steam_id: &str,
-) -> Result<u32, String> {
+async fn fetch_steam_level_from_proxy(proxy_url: &str, steam_id: &str) -> Result<u32, String> {
     let value = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
@@ -1050,10 +1047,74 @@ async fn fetch_steam_level_from_proxy(
         .ok_or_else(|| "Steam player level missing from proxy response".to_string())
 }
 
-/// Get Steam player level only via Cloudflare proxy (Steam Web API key on worker).
+async fn fetch_steam_level(
+    client: &reqwest::Client,
+    steam_id: &str,
+    api_key: &str,
+) -> Result<u32, String> {
+    let value = client
+        .get("https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/")
+        .query(&[("key", api_key), ("steamid", steam_id)])
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    value
+        .get("response")
+        .and_then(|response| response.get("player_level"))
+        .or_else(|| value.get("playerLevel"))
+        .or_else(|| value.get("player_level"))
+        .or_else(|| value.get("level"))
+        .and_then(|value| value.as_u64())
+        .map(|value| value as u32)
+        .ok_or_else(|| "Steam player level missing from response".to_string())
+}
+
+fn parse_steam_level_from_profile_html(html: &str) -> Option<u32> {
+    let class_index = html.find("friendPlayerLevelNum")?;
+    let after_class = &html[class_index..];
+    let content_start = after_class.find('>')? + 1;
+    let after_tag = after_class[content_start..].trim_start();
+    let digits: String = after_tag
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<u32>().ok()
+}
+
+async fn fetch_steam_level_from_profile_page(
+    client: &reqwest::Client,
+    steam_id: &str,
+) -> Result<u32, String> {
+    let html = client
+        .get(format!("https://steamcommunity.com/profiles/{steam_id}"))
+        .header(reqwest::header::ACCEPT, "text/html,application/xhtml+xml")
+        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .text()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    parse_steam_level_from_profile_html(&html)
+        .ok_or_else(|| "Steam player level missing from profile page".to_string())
+}
+
+/// Get Steam player level via official Web API first, then proxy/profile fallbacks.
 #[tauri::command]
 pub async fn steam_get_player_level(
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     steam_id: String,
 ) -> Result<u32, String> {
     let steam_id = steam_id.trim().to_string();
@@ -1061,12 +1122,26 @@ pub async fn steam_get_player_level(
         return Err("Steam ID is required".to_string());
     }
 
-    let proxy_url = load_steam_stats_proxy_url();
-    if proxy_url.is_empty() {
-        return Err("Steam stats proxy URL is not configured".to_string());
+    let api_key = load_steam_web_api_key(&app);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    if !api_key.is_empty() {
+        if let Ok(level) = fetch_steam_level(&client, &steam_id, &api_key).await {
+            return Ok(level);
+        }
     }
 
-    fetch_steam_level_from_proxy(&proxy_url, &steam_id).await
+    let proxy_url = load_steam_stats_proxy_url();
+    if !proxy_url.is_empty() {
+        if let Ok(level) = fetch_steam_level_from_proxy(&proxy_url, &steam_id).await {
+            return Ok(level);
+        }
+    }
+
+    fetch_steam_level_from_profile_page(&client, &steam_id).await
 }
 
 #[tauri::command]
@@ -1690,7 +1765,7 @@ pub fn steam_restart(app: tauri::AppHandle) -> serde_json::Value {
             terminate_steam_processes();
             std::thread::sleep(std::time::Duration::from_millis(1200));
 
-            let mut command = std::process::Command::new(&steam_exe);
+            let mut command = silent_command(&steam_exe);
             command.current_dir(&steam_path);
             return match command.spawn() {
                 Ok(_) => serde_json::json!({
@@ -1734,7 +1809,7 @@ fn terminate_steam_processes() {
         "steamerrorreporter.exe",
         "steamerrorreporter64.exe",
     ] {
-        let _ = std::process::Command::new("taskkill")
+        let _ = silent_command("taskkill")
             .args(["/F", "/T", "/IM", process_name])
             .status();
     }
@@ -1743,7 +1818,7 @@ fn terminate_steam_processes() {
 #[cfg(not(windows))]
 fn terminate_steam_processes() {
     for process_name in ["steam", "steamwebhelper"] {
-        let _ = std::process::Command::new("pkill")
+        let _ = silent_command("pkill")
             .args(["-TERM", process_name])
             .status();
     }
@@ -1751,7 +1826,7 @@ fn terminate_steam_processes() {
 
 #[cfg(windows)]
 fn is_steam_process_running() -> bool {
-    let output = std::process::Command::new("tasklist")
+    let output = silent_command("tasklist")
         .args(["/FI", "IMAGENAME eq steam.exe", "/NH"])
         .output();
     match output {
@@ -1765,7 +1840,7 @@ fn is_steam_process_running() -> bool {
 
 #[cfg(not(windows))]
 fn is_steam_process_running() -> bool {
-    std::process::Command::new("pgrep")
+    silent_command("pgrep")
         .args(["-x", "steam"])
         .status()
         .map(|status| status.success())
