@@ -1162,11 +1162,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
   const profileHistoryGamesWithPlaytime = useMemo(
     () =>
-      normalizeSteamGameTitles(profileHistoryGames, [
-        ...addedLibraryGames,
-        ...favoriteGames,
-      ]).map(mergeGamePlaytime),
-    [addedLibraryGames, favoriteGames, mergeGamePlaytime, profileHistoryGames],
+      mergeSteamAchievementsIntoGames(
+        normalizeSteamGameTitles(profileHistoryGames, [
+          ...addedLibraryGames,
+          ...favoriteGames,
+        ]).map(mergeGamePlaytime),
+        steamAccountStats,
+      ),
+    [
+      addedLibraryGames,
+      favoriteGames,
+      mergeGamePlaytime,
+      profileHistoryGames,
+      steamAccountStats,
+    ],
   );
 
   useEffect(() => {

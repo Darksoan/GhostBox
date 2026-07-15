@@ -136,28 +136,6 @@ function compareOwnedGamesForAchievementScan(left: OwnedGame, right: OwnedGame) 
   return right.playtime_forever - left.playtime_forever;
 }
 
-function parseLocalizedNumber(value: string) {
-  const normalized = value.replace(/[.,](?=\d{3}(\D|$))/g, "").replace(",", ".");
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function extractShowcaseValue(showcase: string, labels: string | string[]) {
-  for (const label of Array.isArray(labels) ? labels : [labels]) {
-    const pattern = new RegExp(
-      `<div\\s+class="value">\\s*([^<]+?)\\s*</div>\\s*<div\\s+class="label">\\s*${escapeRegex(label)}\\s*</div>`,
-      "i"
-    );
-    const value = showcase.match(pattern)?.[1];
-    if (value) return Math.round(parseLocalizedNumber(value.replace("%", "")));
-  }
-  return undefined;
-}
-
 function rateLimitKey(request: Request) {
   const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
   return `rate:${Math.floor(Date.now() / 60_000)}:${ip}`;
@@ -194,42 +172,6 @@ async function fetchOwnedGames(steamId: string, apiKey: string) {
     }
   );
   return value.response?.games ?? [];
-}
-
-async function fetchCommunityAchievementSummary(steamId: string): Promise<AchievementSummary | undefined> {
-  // Showcase totals live on the main profile page, not /stats/?tab=achievements.
-  const response = await fetch(
-    `https://steamcommunity.com/profiles/${steamId}/?l=english`,
-    {
-      headers: {
-        accept: "text/html,application/xhtml+xml",
-        "user-agent": "Mozilla/5.0 GhostBox/1.0 SteamStatsProxy",
-      },
-    }
-  );
-  if (!response.ok) return undefined;
-
-  const html = await response.text();
-  const showcase =
-    html.match(/showcase_stats_row[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/i)?.[0] ??
-    html.match(
-      /(?:Achievement Showcase|Vitrine de Conquistas)[\s\S]*?(?:Recent Activity|Atividade recente|View\s+All Recently Played|$)/i
-    )?.[0] ??
-    html;
-
-  const achievements = extractShowcaseValue(showcase, ["Achievements", "Conquistas"]);
-  const perfect = extractShowcaseValue(showcase, ["Perfect Games", "Jogos perfeitos"]);
-  const average = extractShowcaseValue(showcase, [
-    "Avg. Game Completion Rate",
-    "Média de conquistas por jogo",
-  ]);
-  if (achievements === undefined && perfect === undefined && average === undefined) return undefined;
-
-  return {
-    unlockedAchievements: achievements ?? 0,
-    perfectGames: perfect ?? 0,
-    averageProgress: average ?? 0,
-  };
 }
 
 async function fetchGameAchievementSchema(appId: string, apiKey: string) {
@@ -503,36 +445,29 @@ async function handleAccountStats(request: Request, env: Env, context: Execution
     const pendingCached = cached.ownedGames.filter((game) =>
       shouldRefresh(cached.games[String(game.appid)], game, now)
     );
-    const needsCommunitySummary = !cached.communitySummary;
-
     // Always try to resume unfinished work. The scan lock prevents overlaps;
     // requiring !scanInProgress previously stuck scans after the first batch.
     if (pendingCached.length > 0) {
       const resumeCache: StatsCache = { ...cached, scanInProgress: true, fetchedAt: now };
       await saveCache(env, resumeCache);
       context.waitUntil(scanAchievements(env, resumeCache, pendingCached));
-      if (!needsCommunitySummary) {
-        return jsonResponse(buildStats(resumeCache, false), env);
-      }
-    } else if (!needsCommunitySummary) {
-      const idleCache: StatsCache = cached.scanInProgress
-        ? { ...cached, scanInProgress: false, fetchedAt: now }
-        : cached;
-      if (idleCache !== cached) await saveCache(env, idleCache);
-      return jsonResponse(buildStats(idleCache, false), env);
+      return jsonResponse(buildStats(resumeCache, false), env);
     }
+
+    const idleCache: StatsCache = cached.scanInProgress
+      ? { ...cached, scanInProgress: false, fetchedAt: now }
+      : cached;
+    if (idleCache !== cached) await saveCache(env, idleCache);
+    return jsonResponse(buildStats(idleCache, false), env);
   }
 
   let ownedGames = cached?.ownedGames ?? [];
   let communitySummary = cached?.communitySummary;
   let privateProfile = false;
   try {
-    const [games, summary] = await Promise.all([
-      fetchOwnedGames(steamId, env.STEAM_WEB_API_KEY),
-      fetchCommunityAchievementSummary(steamId),
-    ]);
-    ownedGames = games;
-    communitySummary = summary ?? communitySummary;
+    ownedGames = await fetchOwnedGames(steamId, env.STEAM_WEB_API_KEY);
+    // Keep any previously cached communitySummary; do not scrape profile HTML.
+    communitySummary = cached?.communitySummary;
   } catch {
     privateProfile = true;
   }

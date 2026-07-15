@@ -93,6 +93,7 @@ export function getPriorityScreenshotSources(
 
 export function gameHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
+  const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
 
   return uniqueSources([
     game.coverUrl,
@@ -103,11 +104,13 @@ export function gameHeaderSources(game: GhostBoxGame) {
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    screenshotFallback,
   ]);
 }
 
 export function gameCatalogueHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
+  const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
 
   return uniqueSources([
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
@@ -115,11 +118,13 @@ export function gameCatalogueHeaderSources(game: GhostBoxGame) {
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
     game.coverUrl,
     ...(game.coverFallbacks ?? []).slice(0, 2),
+    screenshotFallback,
   ]);
 }
 
 export function gameHeaderOnlySources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
+  const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
   const customHeaderSources = [game.coverUrl, ...(game.coverFallbacks ?? [])].filter(
     (source) => isHeaderImageSource(source) || isLandscapeImageSource(source)
   );
@@ -130,6 +135,11 @@ export function gameHeaderOnlySources(game: GhostBoxGame) {
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+    screenshotFallback,
   ]);
 }
 
@@ -278,6 +288,7 @@ export function gamePortraitSources(game: GhostBoxGame) {
 export function gamePortraitPreviewSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const screenshots = game.screenshots ?? [];
+  const screenshotFallback = withoutHeaderImageSources(screenshots)[0];
   const customPortraitSources = [
     game.coverUrl,
     ...(game.coverFallbacks ?? []),
@@ -294,6 +305,7 @@ export function gamePortraitPreviewSources(game: GhostBoxGame) {
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
     ...customPortraitSources,
+    screenshotFallback,
   ]);
 }
 

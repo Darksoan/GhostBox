@@ -182,6 +182,8 @@ fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
         }
     }
 
+    merge_header_image(object, text(store_data.get("header_image")));
+
     let screenshots: Vec<Value> = store_data
         .get("screenshots")
         .and_then(|value| value.as_array())
@@ -322,6 +324,7 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
     })
 }
 
+#[allow(dead_code)]
 fn is_steam_app_title_placeholder(title: &str, app_id: &str) -> bool {
     let title = title.trim();
     title.is_empty()
@@ -329,10 +332,35 @@ fn is_steam_app_title_placeholder(title: &str, app_id: &str) -> bool {
         || title.eq_ignore_ascii_case(&format!("Steam {app_id}"))
 }
 
+#[allow(dead_code)]
 fn set_game_title(game: &mut Value, title: String) {
     if let Some(object) = game.as_object_mut() {
         object.insert("title".to_string(), Value::String(title));
     }
+}
+
+fn merge_header_image(object: &mut serde_json::Map<String, Value>, header_image: String) {
+    if header_image.is_empty() {
+        return;
+    }
+
+    object.insert("cover".to_string(), Value::String(header_image.clone()));
+    object.insert("coverUrl".to_string(), Value::String(header_image.clone()));
+
+    let mut fallbacks = vec![Value::String(header_image.clone())];
+    if let Some(existing) = object
+        .get("coverFallbacks")
+        .and_then(|value| value.as_array())
+    {
+        for fallback in existing {
+            let fallback_text = text(Some(fallback));
+            if fallback_text.is_empty() || fallback_text == header_image {
+                continue;
+            }
+            fallbacks.push(Value::String(fallback_text));
+        }
+    }
+    object.insert("coverFallbacks".to_string(), Value::Array(fallbacks));
 }
 
 fn extract_between(value: &str, start: &str, end: &str) -> Option<String> {
@@ -342,6 +370,7 @@ fn extract_between(value: &str, start: &str, end: &str) -> Option<String> {
     Some(after_start[..end_index].to_string())
 }
 
+#[allow(dead_code)]
 fn extract_steam_store_page_title(html: &str) -> Option<String> {
     let apphub_title = extract_between(html, "<div class=\"apphub_AppName\">", "</div>")
         .or_else(|| extract_between(html, "<div class='apphub_AppName'>", "</div>"));
@@ -424,6 +453,8 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
             object.insert("title".to_string(), Value::String(name));
         }
     }
+
+    merge_header_image(object, text(details.get("headerImage")));
 
     let screenshots = text_array(details.get("screenshots"), 8);
     if !screenshots.is_empty() {
@@ -664,30 +695,11 @@ async fn fetch_steam_store_details(app_id: &str) -> Option<Value> {
     app.get("data").cloned()
 }
 
-async fn fetch_steam_store_page_title(app_id: &str) -> Option<String> {
-    let url = format!("https://store.steampowered.com/app/{app_id}/?l=portuguese&cc=br");
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(8))
-        .build()
-        .ok()?;
-    let html = client
-        .get(url)
-        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
-        .header(reqwest::header::ACCEPT, "text/html,*/*")
-        .header(
-            reqwest::header::COOKIE,
-            "birthtime=568022401; lastagecheckage=1-January-1988",
-        )
-        .send()
-        .await
-        .ok()?
-        .error_for_status()
-        .ok()?
-        .text()
-        .await
-        .ok()?;
-
-    extract_steam_store_page_title(&html)
+// Intentionally disabled: scraping the Steam store HTML page triggers blocks.
+// Titles come from JSON APIs / proxy / local catalogue only.
+#[allow(dead_code)]
+async fn fetch_steam_store_page_title(_app_id: &str) -> Option<String> {
+    None
 }
 
 fn steam_reviews_language(language: Option<String>) -> &'static str {
@@ -906,6 +918,7 @@ fn attribute_value(value: &str, attribute: &str) -> String {
     String::new()
 }
 
+#[allow(dead_code)]
 fn parse_community_achievements(html: &str) -> Vec<Value> {
     html.split("achieveRow")
         .skip(1)
@@ -940,23 +953,10 @@ fn parse_community_achievements(html: &str) -> Vec<Value> {
         .collect()
 }
 
-async fn fetch_steam_achievements_from_community(app_id: &str) -> Vec<Value> {
-    for language in ["brazilian", "english"] {
-        let url = format!(
-            "https://steamcommunity.com/stats/{}/achievements/?l={}",
-            app_id, language
-        );
-        let Ok(response) = reqwest::get(url).await else {
-            continue;
-        };
-        let Ok(html) = response.text().await else {
-            continue;
-        };
-        let achievements = parse_community_achievements(&html);
-        if !achievements.is_empty() {
-            return achievements;
-        }
-    }
+// Intentionally disabled: community stats HTML scraping triggers Steam blocks.
+// Prefer Web API schema, then local appcache definitions.
+#[allow(dead_code)]
+async fn fetch_steam_achievements_from_community(_app_id: &str) -> Vec<Value> {
     Vec::new()
 }
 
@@ -1021,12 +1021,8 @@ async fn fetch_steam_achievements(
         return schema_achievements;
     }
 
-    let community_achievements = fetch_steam_achievements_from_community(app_id).await;
-    if !community_achievements.is_empty() {
-        return community_achievements;
-    }
-
-    // Offline / blocked network: build a basic list from local Steam schema.
+    // Offline / no API key: build a basic list from local Steam schema.
+    // Do not scrape steamcommunity.com HTML (rate-limits / IP blocks).
     crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id)
 }
 
@@ -1455,11 +1451,6 @@ pub async fn database_get_game_store_details(
     if let Some(cached_details) = latest_cached_details.as_ref() {
         merge_normalized_steam_details(&mut game, cached_details);
         if has_complete_steam_store_details(cached_details) {
-            if is_steam_app_title_placeholder(&text(game.get("title")), &app_id) {
-                if let Some(title) = fetch_steam_store_page_title(&app_id).await {
-                    set_game_title(&mut game, title);
-                }
-            }
             return Ok(Some(game));
         }
     }
@@ -1472,11 +1463,6 @@ pub async fn database_get_game_store_details(
             latest_cached_details = Some(proxy_details);
         }
         if has_complete_proxy_details {
-            if is_steam_app_title_placeholder(&text(game.get("title")), &app_id) {
-                if let Some(title) = fetch_steam_store_page_title(&app_id).await {
-                    set_game_title(&mut game, title);
-                }
-            }
             return Ok(Some(game));
         }
     }
@@ -1489,12 +1475,7 @@ pub async fn database_get_game_store_details(
         }
     }
 
-    if is_steam_app_title_placeholder(&text(game.get("title")), &app_id) {
-        if let Some(title) = fetch_steam_store_page_title(&app_id).await {
-            set_game_title(&mut game, title);
-        }
-    }
-
+    // No HTML store-page scrape fallback: Steam blocks aggressive page fetches.
     Ok(Some(game))
 }
 

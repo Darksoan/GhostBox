@@ -21,6 +21,55 @@ export function getProfileAchievementTotal(game: GhostBoxGame) {
   );
 }
 
+const steamSoftwareLabelMarkers = [
+  "software",
+  "utilities",
+  "utilitários",
+  "utilitarios",
+  "animation & modeling",
+  "animação e modelagem",
+  "animacao e modelagem",
+  "video production",
+  "produção de vídeo",
+  "producao de video",
+  "design & illustration",
+  "web publishing",
+  "education",
+  "educação",
+  "educacao",
+  "accounting",
+  "photo editing",
+  "audio production",
+  "game development",
+  "desenvolvimento de jogos",
+];
+
+export function isSteamSoftwareLikeGame(game: GhostBoxGame) {
+  const labels = [...(game.genres ?? []), ...(game.tags ?? [])]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (labels.length === 0) return false;
+
+  return labels.some((label) =>
+    steamSoftwareLabelMarkers.some(
+      (marker) => label === marker || label.includes(marker),
+    ),
+  );
+}
+
+/** Steam profile recognition: playtime + unlocked achievements, never software. */
+export function isRecognizedSteamProfileGame(
+  game: GhostBoxGame,
+  playtimeInMilliseconds: number,
+) {
+  if (playtimeInMilliseconds <= 0) return false;
+  // Require at least one unlocked achievement — total-only (e.g. 0 of 53) is not enough.
+  if (getProfileUnlockedAchievementCount(game) <= 0) return false;
+  if (isSteamSoftwareLikeGame(game)) return false;
+  return true;
+}
+
 function preferProfileGameTitle(
   current: GhostBoxGame,
   incoming: GhostBoxGame,

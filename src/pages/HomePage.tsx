@@ -461,7 +461,7 @@ async function loadWishlistRecommendationForGame(
   if (similarAppIds.length > 0) {
     const similarGames = (
       await Promise.all(
-        similarAppIds.slice(0, 14).map((appId) =>
+        similarAppIds.slice(0, 8).map((appId) =>
           loadGameStoreDetails(appId).catch(() => null)
         )
       )

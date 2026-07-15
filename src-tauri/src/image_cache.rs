@@ -207,6 +207,8 @@ fn legacy_library_capsule_alias(file_name: &str) -> Option<&'static str> {
 
 fn library_asset_file_candidates(file_name: &str) -> Vec<&'static str> {
     match file_name.to_ascii_lowercase().as_str() {
+        "header.jpg" => vec!["header.jpg", "capsule_616x353.jpg"],
+        "capsule_616x353.jpg" => vec!["capsule_616x353.jpg", "header.jpg"],
         "hero_capsule.jpg" => vec![
             "hero_capsule.jpg",
             "library_600x900.jpg",
@@ -400,9 +402,7 @@ fn library_asset_path_candidates(asset_reference: &str, file_name: &str) -> Vec<
         let alias = legacy_library_capsule_alias(file_name);
         return [
             alias.map(|alias| format!("{reference}.{alias}")),
-            file_name
-                .starts_with("library_capsule")
-                .then(|| format!("{reference}.{file_name}")),
+            Some(format!("{reference}.{file_name}")),
             Some(format!("{reference}/{file_name}")),
             alias.map(|alias| format!("{reference}/{alias}")),
         ]

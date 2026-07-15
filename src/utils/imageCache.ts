@@ -9,11 +9,99 @@ export const imageResolvePromises = new Map<string, Promise<string>>();
 export const screenshotPreloadCache = new Set<string>();
 const steamLibraryCoverSourceCache = new Map<string, string>();
 const steamLibraryCoverResolvePromises = new Map<string, Promise<string>>();
+const steamHeaderSourceCache = new Map<string, string>();
+const steamHeaderResolvePromises = new Map<string, Promise<string>>();
 // Sources that have actually finished loading at least once. Unlike
 // screenshotPreloadCache (which is set optimistically when a load starts and
 // removed on failure), this only holds sources we know decoded successfully,
 // so consumers can paint them synchronously without a flicker.
 export const loadedImageSources = new Set<string>();
+
+export type GameCoverKind = "portrait" | "header";
+
+type GameCoverStatus = "available" | "failed";
+
+const gameCoverStatusByKey = new Map<string, GameCoverStatus>();
+const gameCoverStatusListeners = new Set<() => void>();
+let gameCoverStatusVersion = 0;
+
+function gameCoverStatusKey(appId: string, kind: GameCoverKind) {
+  return `${appId}:${kind}`;
+}
+
+let gameCoverStatusNotifyHandle: number | null = null;
+
+function flushGameCoverStatusListeners() {
+  gameCoverStatusNotifyHandle = null;
+  gameCoverStatusVersion += 1;
+  for (const listener of gameCoverStatusListeners) {
+    listener();
+  }
+}
+
+function notifyGameCoverStatusListeners() {
+  // Batch list refilters so many cover outcomes in one frame don't thrash React.
+  if (gameCoverStatusNotifyHandle !== null) return;
+  if (typeof window === "undefined") {
+    flushGameCoverStatusListeners();
+    return;
+  }
+  if (typeof window.requestAnimationFrame === "function") {
+    gameCoverStatusNotifyHandle = window.requestAnimationFrame(() => {
+      flushGameCoverStatusListeners();
+    });
+    return;
+  }
+  gameCoverStatusNotifyHandle = window.setTimeout(() => {
+    flushGameCoverStatusListeners();
+  }, 0) as unknown as number;
+}
+
+export function getGameCoverStatusVersion() {
+  return gameCoverStatusVersion;
+}
+
+export function subscribeGameCoverStatus(listener: () => void) {
+  gameCoverStatusListeners.add(listener);
+  return () => {
+    gameCoverStatusListeners.delete(listener);
+  };
+}
+
+export function getGameCoverStatus(appId: string, kind: GameCoverKind) {
+  if (!appId) return undefined;
+  return gameCoverStatusByKey.get(gameCoverStatusKey(appId, kind));
+}
+
+export function isGameCoverFailed(appId: string, kind: GameCoverKind) {
+  return getGameCoverStatus(appId, kind) === "failed";
+}
+
+export function isGameCoverAvailable(appId: string, kind: GameCoverKind) {
+  return getGameCoverStatus(appId, kind) === "available";
+}
+
+export function markGameCoverAvailable(appId: string, kind: GameCoverKind) {
+  if (!appId) return;
+  const key = gameCoverStatusKey(appId, kind);
+  const previous = gameCoverStatusByKey.get(key);
+  if (previous === "available") return;
+  gameCoverStatusByKey.set(key, "available");
+  // Lists only refilter when a failure is cleared.
+  if (previous === "failed") {
+    notifyGameCoverStatusListeners();
+  }
+}
+
+export function markGameCoverFailed(appId: string, kind: GameCoverKind) {
+  if (!appId) return;
+  const key = gameCoverStatusKey(appId, kind);
+  if (gameCoverStatusByKey.get(key) === "failed") return;
+  // Never demote a known-good cover to failed in the same session.
+  if (gameCoverStatusByKey.get(key) === "available") return;
+  gameCoverStatusByKey.set(key, "failed");
+  notifyGameCoverStatusListeners();
+}
 
 type ImagePreloadOptions = {
   decode?: boolean;
@@ -176,6 +264,13 @@ const steamPortraitLibraryAssetNames = new Set([
   "library_capsule.jpg",
 ]);
 
+const steamHeaderAssetNames = new Set([
+  "header.jpg",
+  "capsule_616x353.jpg",
+  "capsule_467x181.jpg",
+  "capsule_231x87.jpg",
+]);
+
 function normalizeSteamLibraryAssetName(fileName: string) {
   if (fileName === "library_600x900_2x.jpg") return "library_600x900.jpg";
   if (fileName === "library_capsule.jpg") return "library_600x900.jpg";
@@ -189,9 +284,19 @@ function isSteamPortraitLibraryAssetSource(source: string) {
   return steamPortraitLibraryAssetNames.has(parsed.asset.toLowerCase());
 }
 
+function isSteamHeaderAssetSource(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (!parsed) return false;
+  return steamHeaderAssetNames.has(parsed.asset.toLowerCase());
+}
+
 /** True when the caller is loading portrait covers, not landscape headers/heroes. */
 function sourceListRequestsPortraitLibraryCover(sources: string[]) {
   return sources.some((source) => isSteamPortraitLibraryAssetSource(source));
+}
+
+function sourceListRequestsSteamHeader(sources: string[]) {
+  return sources.some((source) => isSteamHeaderAssetSource(source));
 }
 
 function parseSteamAssetSource(source: string) {
@@ -254,6 +359,18 @@ function resolvedSteamLibraryCoverSourceForSources(sources: string[]) {
   return "";
 }
 
+function resolvedSteamHeaderSourceForSources(sources: string[]) {
+  for (const source of sources) {
+    const appId = steamAppIdFromImageSource(source);
+    if (!appId) continue;
+
+    const resolvedSource = steamHeaderSourceCache.get(appId);
+    if (resolvedSource) return resolvedSource;
+  }
+
+  return "";
+}
+
 export function resolveSteamLibraryCoverSource(appId: string) {
   if (!/^\d+$/.test(appId)) return Promise.resolve("");
 
@@ -277,6 +394,32 @@ export function resolveSteamLibraryCoverSource(appId: string) {
     });
 
   steamLibraryCoverResolvePromises.set(appId, promise);
+  return promise;
+}
+
+export function resolveSteamHeaderSource(appId: string) {
+  if (!/^\d+$/.test(appId)) return Promise.resolve("");
+
+  const cachedSource = steamHeaderSourceCache.get(appId);
+  if (cachedSource) return Promise.resolve(cachedSource);
+
+  const pending = steamHeaderResolvePromises.get(appId);
+  if (pending) return pending;
+
+  const promise = resolveSteamLibraryAsset(appId, "header.jpg")
+    .then((source) => {
+      if (/^https?:\/\//i.test(source)) {
+        steamHeaderSourceCache.set(appId, source);
+        return source;
+      }
+      return "";
+    })
+    .catch(() => "")
+    .finally(() => {
+      steamHeaderResolvePromises.delete(appId);
+    });
+
+  steamHeaderResolvePromises.set(appId, promise);
   return promise;
 }
 
@@ -317,10 +460,14 @@ export function withCachedImageSources(sources: string[]) {
   const resolvedCoverSource = sourceListRequestsPortraitLibraryCover(sources)
     ? resolvedSteamLibraryCoverSourceForSources(sources)
     : "";
+  const resolvedHeaderSource = sourceListRequestsSteamHeader(sources)
+    ? resolvedSteamHeaderSourceForSources(sources)
+    : "";
 
   return uniqueSources(
     [
       ...(resolvedCoverSource ? [resolvedCoverSource] : []),
+      ...(resolvedHeaderSource ? [resolvedHeaderSource] : []),
       ...sources.flatMap((source) => {
         const cachedSource = imageSourceCache.get(source);
         const cdnFallback = steamCdnFallbackForSource(source);

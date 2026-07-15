@@ -5,14 +5,47 @@ import {
   imageSourceCache,
   loadedImageSources,
   isPredictableSteamAssetSource,
+  markGameCoverAvailable,
+  markGameCoverFailed,
+  resolveSteamHeaderSource,
   resolveSteamLibraryCoverSource,
   steamAppIdFromImageSource,
+  type GameCoverKind,
 } from "../utils/imageCache";
-import { isHeaderImageSource, isHeroImageSource } from "../utils/image";
+import {
+  isHeaderImageSource,
+  isHeroImageSource,
+  isLandscapeImageSource,
+} from "../utils/image";
 
 export interface LoadableImageState {
   source: string;
   loaded: boolean;
+  failed: boolean;
+}
+
+function inferCoverKind(sources: string[]): GameCoverKind | null {
+  if (sources.some((source) => isHeaderImageSource(source) || isLandscapeImageSource(source))) {
+    return "header";
+  }
+  if (
+    sources.some(
+      (source) =>
+        /library_(?:600x900|capsule)/i.test(source) ||
+        /hero_capsule/i.test(source),
+    )
+  ) {
+    return "portrait";
+  }
+  return null;
+}
+
+function inferCoverAppId(sources: string[]) {
+  for (const source of sources) {
+    const appId = steamAppIdFromImageSource(source);
+    if (appId) return appId;
+  }
+  return "";
 }
 
 // Returns a source we already know decoded successfully (this session), so it
@@ -80,43 +113,86 @@ export function useCachedImageSources(sources: string[]) {
   return cachedSources;
 }
 
-export function useLoadableImageState(sources: string[]): LoadableImageState {
+export type LoadableImageOptions = {
+  appId?: string;
+  kind?: GameCoverKind;
+  /** Force failure after this many ms so lists can hide broken covers. */
+  failTimeoutMs?: number;
+};
+
+export function useLoadableImageState(
+  sources: string[],
+  options: LoadableImageOptions = {},
+): LoadableImageState {
   const sourceKey = sources.join("\n");
   // The last source we successfully painted. Kept across source-array identity
   // changes (e.g. when the cache resolution reorders the array) so the cover
   // never resets to the raw URL and flickers while a new source resolves.
   const lastGoodSourceRef = useRef<string>("");
+  const coverKind = options.kind ?? inferCoverKind(sources);
+  const coverAppId = options.appId || inferCoverAppId(sources);
+  const failTimeoutMs = options.failTimeoutMs ?? 0;
 
   const [state, setState] = useState<LoadableImageState>(() => {
     const readySource = findReadySource(sources);
     if (readySource) {
       lastGoodSourceRef.current = readySource;
-      return { source: readySource, loaded: true };
+      return { source: readySource, loaded: true, failed: false };
     }
-    return { source: sources[0] ?? "", loaded: false };
+    return { source: sources[0] ?? "", loaded: false, failed: false };
   });
 
   useEffect(() => {
     let cancelled = false;
     let resolved = false;
+    let failTimer: ReturnType<typeof setTimeout> | null = null;
 
     const firstSource = sources[0] ?? "";
 
+    // Empty source list means "not loading yet" (e.g. lazy GameCard), not a failure.
     if (!firstSource) {
       lastGoodSourceRef.current = "";
-      setState({ source: "", loaded: false });
+      setState({ source: "", loaded: false, failed: false });
       return;
     }
+
+    const fail = () => {
+      if (cancelled || resolved) return;
+      resolved = true;
+      if (failTimer !== null) {
+        clearTimeout(failTimer);
+        failTimer = null;
+      }
+      lastGoodSourceRef.current = "";
+      // Only mark app covers failed when we actually attempted a full cascade.
+      if (coverAppId && coverKind && sources.length > 0) {
+        markGameCoverFailed(coverAppId, coverKind);
+      }
+      setState({ source: "", loaded: false, failed: true });
+    };
 
     const commit = (source: string) => {
       if (cancelled) return;
       if (resolved) return;
 
       resolved = true;
+      if (failTimer !== null) {
+        clearTimeout(failTimer);
+        failTimer = null;
+      }
       loadedImageSources.add(source);
       lastGoodSourceRef.current = source;
-      setState({ source, loaded: true });
+      if (coverAppId && coverKind) {
+        markGameCoverAvailable(coverAppId, coverKind);
+      }
+      setState({ source, loaded: true, failed: false });
     };
+
+    if (failTimeoutMs > 0) {
+      failTimer = setTimeout(() => {
+        fail();
+      }, failTimeoutMs);
+    }
 
     // Synchronous shortcut: a source from this set already decoded before, so
     // paint it immediately (no reset, no extra Image() round-trip).
@@ -141,16 +217,25 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
 
       if (loadedImageSources.has(firstSource)) {
         lastGoodSourceRef.current = firstSource;
-        return { source: firstSource, loaded: true };
+        return { source: firstSource, loaded: true, failed: false };
       }
 
       lastGoodSourceRef.current = "";
-      return { source: firstSource, loaded: false };
+      return { source: firstSource, loaded: false, failed: false };
     });
 
     const loadSource = (index: number) => {
+      if (cancelled || resolved) return;
+      if (index >= sources.length) {
+        fail();
+        return;
+      }
+
       const source = sources[index];
-      if (!source || cancelled || resolved) return;
+      if (!source) {
+        fail();
+        return;
+      }
 
       if (typeof Image === "undefined") {
         commit(source);
@@ -185,7 +270,23 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
           // Library capsule is portrait-only. Never substitute it for failed
           // header/hero loads — that swaps a correct landscape art for a
           // vertical cover after first paint.
-          if (isHeaderImageSource(source) || isHeroImageSource(source)) {
+          if (
+            isHeaderImageSource(source) ||
+            isLandscapeImageSource(source)
+          ) {
+            const appId = steamAppIdFromImageSource(source);
+            if (!appId) {
+              tryNextSource();
+              return;
+            }
+
+            void resolveSteamHeaderSource(appId)
+              .then(loadFallbackImage)
+              .catch(tryNextSource);
+            return;
+          }
+
+          if (isHeroImageSource(source)) {
             tryNextSource();
             return;
           }
@@ -225,16 +326,25 @@ export function useLoadableImageState(sources: string[]): LoadableImageState {
 
     return () => {
       cancelled = true;
+      if (failTimer !== null) {
+        clearTimeout(failTimer);
+      }
     };
-  }, [sourceKey]);
+  }, [sourceKey, coverAppId, coverKind, failTimeoutMs]);
 
   return state;
 }
 
-export function useLoadableImageSource(sources: string[]) {
-  return useLoadableImageState(sources).source;
+export function useLoadableImageSource(
+  sources: string[],
+  options: LoadableImageOptions = {},
+) {
+  return useLoadableImageState(sources, options).source;
 }
 
-export function useLoadableImageCover(sources: string[]) {
-  return useLoadableImageState(sources);
+export function useLoadableImageCover(
+  sources: string[],
+  options: LoadableImageOptions = {},
+) {
+  return useLoadableImageState(sources, options);
 }

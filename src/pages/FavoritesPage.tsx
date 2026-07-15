@@ -33,7 +33,10 @@ export const FavoriteCard = memo(function FavoriteCard({
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const rawCoverSources = useMemo(() => gamePortraitPreviewSources(game), [game]);
   const coverSources = useCachedImageSources(shouldLoadCover ? rawCoverSources : []);
-  const coverSource = useLoadableImageSource(coverSources);
+  const coverSource = useLoadableImageSource(coverSources, {
+    appId: game.appId,
+    kind: "portrait",
+  });
   const achievementTotal = game.achievements.total;
   const achievementUnlocked = Math.min(
     game.achievements.unlocked,

@@ -11,6 +11,7 @@ import {
   gameHeaderOnlySources,
   gamePortraitPreviewSources,
   gameStyle,
+  getGameAppId,
   preloadGameModalAssets,
 } from "../../utils/image";
 import { formatCompactPlaytime } from "../../utils/time";
@@ -48,7 +49,10 @@ export const GameCard = memo(function GameCard({
   const headerSources = useCachedImageSources(
     shouldLoadCover ? rawHeaderSources : [],
   );
-  const coverImage = useLoadableImageState(headerSources);
+  const coverImage = useLoadableImageState(headerSources, {
+    appId: getGameAppId(game),
+    kind: portrait ? "portrait" : "header",
+  });
   const previousCoverSourceRef = useRef(
     coverImage.loaded ? coverImage.source : "",
   );

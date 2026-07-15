@@ -15,10 +15,14 @@ use tauri::Emitter;
 
 const STEAM_PROFILE_FILE: &str = "steam-profile.json";
 const STEAM_ACCOUNT_STATS_CACHE_FILE: &str = "steam-account-stats-cache.json";
+const STEAM_MORELIKE_CACHE_FILE: &str = "steam-morelike-cache.json";
 const STEAM_ACCOUNT_STATS_UPDATED_EVENT: &str = "steam-account-stats-updated";
 const STEAM_ACHIEVEMENT_SCAN_CONCURRENCY: usize = 8;
 const STEAM_ACHIEVEMENT_CACHE_MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
 const STEAM_NO_STATS_CACHE_MAX_AGE_SECONDS: u64 = 30 * 24 * 60 * 60;
+const STEAM_MORELIKE_CACHE_MAX_AGE_SECONDS: u64 = 14 * 24 * 60 * 60;
+const STEAM_MORELIKE_MIN_FETCH_INTERVAL_MS: u64 = 4_000;
+const STEAM_MORELIKE_MAX_RESULTS: usize = 12;
 const MAX_PROFILE_AVATAR_BYTES: usize = 512 * 1024;
 const STEAM_OPENID_ENDPOINT: &str = "https://steamcommunity.com/openid/login";
 const STEAM_WISHLIST_USER_AGENT: &str = "Mozilla/5.0 GhostBox/0.1";
@@ -26,6 +30,9 @@ const STEAM_WISHLIST_USER_AGENT: &str = "Mozilla/5.0 GhostBox/0.1";
 static STEAM_SIGN_IN_ACTIVE: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 static STEAM_STATS_SCAN_ACTIVE: std::sync::OnceLock<std::sync::Mutex<HashSet<String>>> =
     std::sync::OnceLock::new();
+static STEAM_MORELIKE_FETCH_LOCK: std::sync::OnceLock<
+    std::sync::Mutex<std::time::Instant>,
+> = std::sync::OnceLock::new();
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct SteamOwnedGameStats {
@@ -1109,6 +1116,7 @@ async fn fetch_steam_level(
         .ok_or_else(|| "Steam player level missing from response".to_string())
 }
 
+#[allow(dead_code)]
 fn parse_steam_level_from_profile_html(html: &str) -> Option<u32> {
     let class_index = html.find("friendPlayerLevelNum")?;
     let after_class = &html[class_index..];
@@ -1124,25 +1132,13 @@ fn parse_steam_level_from_profile_html(html: &str) -> Option<u32> {
     digits.parse::<u32>().ok()
 }
 
+// Intentionally disabled: scraping profile HTML triggers Steam blocks.
+#[allow(dead_code)]
 async fn fetch_steam_level_from_profile_page(
-    client: &reqwest::Client,
-    steam_id: &str,
+    _client: &reqwest::Client,
+    _steam_id: &str,
 ) -> Result<u32, String> {
-    let html = client
-        .get(format!("https://steamcommunity.com/profiles/{steam_id}"))
-        .header(reqwest::header::ACCEPT, "text/html,application/xhtml+xml")
-        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
-        .send()
-        .await
-        .map_err(|error| error.to_string())?
-        .error_for_status()
-        .map_err(|error| error.to_string())?
-        .text()
-        .await
-        .map_err(|error| error.to_string())?;
-
-    parse_steam_level_from_profile_html(&html)
-        .ok_or_else(|| "Steam player level missing from profile page".to_string())
+    Err("Steam profile HTML scraping is disabled".to_string())
 }
 
 /// Get Steam player level via official Web API first, then proxy/profile fallbacks.
@@ -1175,7 +1171,10 @@ pub async fn steam_get_player_level(
         }
     }
 
-    fetch_steam_level_from_profile_page(&client, &steam_id).await
+    // Do not scrape steamcommunity profile HTML (rate-limits / IP blocks).
+    // Official Web API + stats proxy only.
+    let _ = client;
+    Err("Steam player level unavailable without Web API or stats proxy".to_string())
 }
 
 #[tauri::command]
@@ -1476,7 +1475,7 @@ fn parse_steam_similar_app_ids(html: &str, source_app_id: &str) -> Vec<String> {
             && seen.insert(app_id.to_string())
         {
             app_ids.push(app_id.to_string());
-            if app_ids.len() >= 30 {
+            if app_ids.len() >= STEAM_MORELIKE_MAX_RESULTS {
                 break;
             }
         }
@@ -1487,38 +1486,146 @@ fn parse_steam_similar_app_ids(html: &str, source_app_id: &str) -> Vec<String> {
     app_ids
 }
 
-#[tauri::command]
-pub async fn steam_get_similar_app_ids(app_id: String) -> Result<Vec<String>, String> {
-    let app_id = app_id.trim();
-    if app_id.is_empty() || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
-        return Ok(Vec::new());
+fn unix_timestamp_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+fn read_morelike_cache(app: &tauri::AppHandle) -> serde_json::Map<String, serde_json::Value> {
+    read_json_file(app, STEAM_MORELIKE_CACHE_FILE)
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default()
+}
+
+fn write_morelike_cache(
+    app: &tauri::AppHandle,
+    cache: &serde_json::Map<String, serde_json::Value>,
+) {
+    let _ = write_json_file(app, STEAM_MORELIKE_CACHE_FILE, &serde_json::Value::Object(cache.clone()));
+}
+
+fn cached_morelike_app_ids(app: &tauri::AppHandle, app_id: &str) -> Option<Vec<String>> {
+    let cache = read_morelike_cache(app);
+    let entry = cache.get(app_id)?;
+    let fetched_at = entry.get("fetchedAt").and_then(|value| value.as_u64())?;
+    let now = unix_timestamp_seconds();
+    if now.saturating_sub(fetched_at) > STEAM_MORELIKE_CACHE_MAX_AGE_SECONDS {
+        return None;
     }
+
+    let app_ids = entry
+        .get("appIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .filter(|value| value.chars().all(|ch| ch.is_ascii_digit()))
+                .map(ToOwned::to_owned)
+                .take(STEAM_MORELIKE_MAX_RESULTS)
+                .collect::<Vec<_>>()
+        })?;
+
+    Some(app_ids)
+}
+
+fn store_morelike_app_ids(app: &tauri::AppHandle, app_id: &str, app_ids: &[String]) {
+    let mut cache = read_morelike_cache(app);
+    cache.insert(
+        app_id.to_string(),
+        serde_json::json!({
+            "appIds": app_ids,
+            "fetchedAt": unix_timestamp_seconds(),
+        }),
+    );
+    write_morelike_cache(app, &cache);
+}
+
+async fn throttle_morelike_fetch() {
+    let lock = STEAM_MORELIKE_FETCH_LOCK
+        .get_or_init(|| std::sync::Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(60)));
+    let wait_ms = {
+        let Ok(mut last_fetch) = lock.lock() else {
+            return;
+        };
+        let elapsed = last_fetch.elapsed();
+        let min_interval = std::time::Duration::from_millis(STEAM_MORELIKE_MIN_FETCH_INTERVAL_MS);
+        if elapsed < min_interval {
+            (min_interval - elapsed).as_millis() as u64
+        } else {
+            0
+        }
+    };
+
+    if wait_ms > 0 {
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+        })
+        .await;
+    }
+
+    if let Ok(mut last_fetch) = lock.lock() {
+        *last_fetch = std::time::Instant::now();
+    }
+}
+
+async fn fetch_steam_similar_app_ids_live(app_id: &str) -> Vec<String> {
+    throttle_morelike_fetch().await;
 
     let url = format!(
         "https://store.steampowered.com/recommended/morelike/app/{app_id}/?l=english&cc=br"
     );
     let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(8))
         .build()
-        .map_err(|error| error.to_string())?
-        .get(url)
-        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
-        .header(reqwest::header::ACCEPT, "text/html,*/*")
-        .send()
-        .await;
+        .ok()
+        .map(|client| {
+            client
+                .get(url)
+                .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
+                .header(reqwest::header::ACCEPT, "text/html,*/*")
+                .header(
+                    reqwest::header::COOKIE,
+                    "birthtime=568022401; lastagecheckage=1-January-1988; wants_mature_content=1",
+                )
+        });
 
-    let Ok(response) = response else {
-        return Ok(Vec::new());
+    let Some(request) = response else {
+        return Vec::new();
+    };
+    let Ok(response) = request.send().await else {
+        return Vec::new();
     };
     if !response.status().is_success() {
+        return Vec::new();
+    }
+    let Ok(html) = response.text().await else {
+        return Vec::new();
+    };
+
+    parse_steam_similar_app_ids(&html, app_id)
+}
+
+#[tauri::command]
+pub async fn steam_get_similar_app_ids(
+    app: tauri::AppHandle,
+    app_id: String,
+) -> Result<Vec<String>, String> {
+    let app_id = app_id.trim().to_string();
+    if app_id.is_empty() || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
         return Ok(Vec::new());
     }
 
-    let Ok(html) = response.text().await else {
-        return Ok(Vec::new());
-    };
+    if let Some(cached) = cached_morelike_app_ids(&app, &app_id) {
+        return Ok(cached);
+    }
 
-    Ok(parse_steam_similar_app_ids(&html, app_id))
+    // Minimal scraping: one page, long-lived cache, global throttle between fetches.
+    let app_ids = fetch_steam_similar_app_ids_live(&app_id).await;
+    store_morelike_app_ids(&app, &app_id, &app_ids);
+    Ok(app_ids)
 }
 
 #[tauri::command]
