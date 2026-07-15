@@ -1503,6 +1503,7 @@ pub fn run() {
             catalogue::database_get_game_reviews,
             catalogue::catalogue_get_home,
             catalogue::steam_get_game_icon_url,
+            catalogue::steam_get_game_icon_urls,
             catalogue::app_is_steamtools_installed,
             catalogue::app_install_steamtools,
             catalogue::cache_get_image,

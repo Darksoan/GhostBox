@@ -326,9 +326,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const gamePlaytimesRef = useRef<GamePlaytimeSnapshot>({});
   const cloudProfileSyncTimerRef = useRef<number | null>(null);
   const cloudProfileSyncInFlightRef = useRef(false);
+  const cloudProfilePendingUploadRef = useRef(false);
   const cloudProfileRestoreInFlightRef = useRef(false);
+  const cloudProfileRestoreRetryTimerRef = useRef<number | null>(null);
   const appliedProfileBackupKeysRef = useRef<Map<string, string>>(new Map());
-  const skipNextCloudProfileUploadRef = useRef(false);
+  const skipCloudProfileUploadCountRef = useRef(0);
   const cloudProfileLocalUpdatedAtRef = useRef<string | null>(
     readStoredCloudProfileUpdatedAt(),
   );
@@ -342,6 +344,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const profileHistoryGamesRef = useRef<GhostBoxGame[]>(profileHistoryGames);
   const cloudProfileBootstrappedRef = useRef(false);
   const cloudProfileRestoredSteamIdRef = useRef<string | null>(null);
+  const cloudProfileFavoriteGameIdsRef = useRef<string[]>([]);
+  const [cloudProfileRestoreRetryTick, setCloudProfileRestoreRetryTick] =
+    useState(0);
   const [completedInitialLoadSteps, setCompletedInitialLoadSteps] = useState<
     Set<InitialLoadStep>
   >(() => new Set());
@@ -511,15 +516,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const hasPremiumCloudProfileAccess = useCallback(async () => {
+    const profile = steamProfileRef.current;
+    if (!profile?.steamId) return false;
+
+    const session = await ghostboxApi.getCloudSession();
+    if (!session?.token) return false;
+
+    return ghostboxApi.isPremiumUser(profile.steamId);
+  }, []);
+
   const pushCloudProfileSnapshot = useCallback(async () => {
-    if (cloudProfileSyncInFlightRef.current) return;
+    if (cloudProfileSyncInFlightRef.current) {
+      cloudProfilePendingUploadRef.current = true;
+      return;
+    }
+    if (cloudProfileRestoreInFlightRef.current) {
+      cloudProfilePendingUploadRef.current = true;
+      return;
+    }
     const profile = steamProfileRef.current;
     if (!profile?.steamId) return;
 
     cloudProfileSyncInFlightRef.current = true;
     try {
-      const session = await ghostboxApi.getCloudSession();
-      if (!session?.token || session.user?.isPremium !== true) return;
+      if (!(await hasPremiumCloudProfileAccess())) return;
 
       const updatedAt =
         cloudProfileLocalUpdatedAtRef.current || markCloudProfileLocalUpdated();
@@ -544,6 +565,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         updatedAt,
         steamProfile: cloudProfile,
         favoriteGames: favoriteGamesRef.current,
+        favoriteGameIds: cloudProfileFavoriteGameIdsRef.current,
         userCollections: userCollectionsRef.current,
       });
       const saved = await ghostboxApi.saveCloudProfileSnapshot(snapshot);
@@ -554,15 +576,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch {
     } finally {
       cloudProfileSyncInFlightRef.current = false;
+      if (
+        cloudProfilePendingUploadRef.current &&
+        !cloudProfileRestoreInFlightRef.current
+      ) {
+        cloudProfilePendingUploadRef.current = false;
+        window.setTimeout(() => void pushCloudProfileSnapshot(), 0);
+      }
     }
-  }, [markCloudProfileLocalUpdated]);
+  }, [hasPremiumCloudProfileAccess, markCloudProfileLocalUpdated]);
 
   const scheduleCloudProfileSync = useCallback(() => {
-    if (skipNextCloudProfileUploadRef.current) {
-      skipNextCloudProfileUploadRef.current = false;
+    if (skipCloudProfileUploadCountRef.current > 0) {
+      skipCloudProfileUploadCountRef.current -= 1;
       return;
     }
     if (!steamProfileRef.current?.steamId) return;
+    if (cloudProfileRestoreInFlightRef.current) {
+      cloudProfilePendingUploadRef.current = true;
+      return;
+    }
     markCloudProfileLocalUpdated();
     if (cloudProfileSyncTimerRef.current !== null) {
       window.clearTimeout(cloudProfileSyncTimerRef.current);
@@ -573,29 +606,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }, 1500);
   }, [markCloudProfileLocalUpdated, pushCloudProfileSnapshot]);
 
-  const restoreCloudProfileFromRemote = useCallback(async () => {
-    if (cloudProfileRestoreInFlightRef.current) return;
+  const restoreCloudProfileFromRemote = useCallback(async (): Promise<boolean> => {
+    if (cloudProfileRestoreInFlightRef.current) return false;
     const currentProfile = steamProfileRef.current;
     if (!currentProfile?.steamId) {
       setIsCloudProfileRestoring(false);
-      return;
+      return false;
     }
 
     cloudProfileRestoreInFlightRef.current = true;
-    setIsCloudProfileRestoring(true);
+    let shouldFlushPendingUpload = false;
     try {
-      const session = await ghostboxApi.getCloudSession();
-      if (!session?.token || session.user?.isPremium !== true) return;
+      if (!(await hasPremiumCloudProfileAccess())) return false;
+      setIsCloudProfileRestoring(true);
 
       const remote = await ghostboxApi.getCloudProfileSnapshot();
       if (!remote) {
-        void pushCloudProfileSnapshot();
-        return;
+        cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+        cloudProfilePendingUploadRef.current = true;
+        shouldFlushPendingUpload = true;
+        return true;
       }
 
       const localUpdatedAt = cloudProfileLocalUpdatedAtRef.current;
       const localHasData =
-        Boolean(currentProfile.avatarUrl || currentProfile.bannerUrl) ||
+        Boolean(currentProfile.bannerUrl) ||
         favoriteGamesRef.current.length > 0 ||
         userCollectionsRef.current.length > 0;
 
@@ -604,9 +639,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         !isCloudSnapshotNewer(remote.updatedAt, localUpdatedAt)
       ) {
         if (isCloudSnapshotNewer(localUpdatedAt, remote.updatedAt)) {
-          void pushCloudProfileSnapshot();
+          cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+          cloudProfilePendingUploadRef.current = true;
+          shouldFlushPendingUpload = true;
         }
-        return;
+        cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+        return true;
       }
 
       const applied = applyCloudProfileToLocal({
@@ -631,7 +669,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return game ? [game] : [];
       });
 
-      skipNextCloudProfileUploadRef.current = true;
+      cloudProfileFavoriteGameIdsRef.current = applied.favoriteGameIds.filter(
+        (gameId) => !gamesById.has(gameId),
+      );
+      skipCloudProfileUploadCountRef.current = 2;
       if (applied.steamProfile) {
         setSteamProfile(applied.steamProfile);
         writeStoredSteamProfile(applied.steamProfile);
@@ -647,12 +688,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       writeStoredUserCollections(applied.userCollections);
       cloudProfileLocalUpdatedAtRef.current = remote.updatedAt;
       writeStoredCloudProfileUpdatedAt(remote.updatedAt);
+      cloudProfilePendingUploadRef.current = false;
+      cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+      return true;
     } catch {
+      return false;
     } finally {
       cloudProfileRestoreInFlightRef.current = false;
       setIsCloudProfileRestoring(false);
+      if (shouldFlushPendingUpload && cloudProfilePendingUploadRef.current) {
+        cloudProfilePendingUploadRef.current = false;
+        window.setTimeout(() => void pushCloudProfileSnapshot(), 0);
+      }
     }
-  }, [pushCloudProfileSnapshot, rehydrateCollectionGames]);
+  }, [hasPremiumCloudProfileAccess, pushCloudProfileSnapshot, rehydrateCollectionGames]);
 
   const queueBackupToast = useCallback(
     (record: BackupSettings["backupRecords"][string]) => {
@@ -779,11 +828,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     writeStoredFavoriteGames(favoriteGames);
+    const resolvedFavoriteIds = new Set(favoriteGames.map((game) => game.id));
+    cloudProfileFavoriteGameIdsRef.current =
+      cloudProfileFavoriteGameIdsRef.current.filter(
+        (gameId) => !resolvedFavoriteIds.has(gameId),
+      );
     if (
-      !cloudProfileBootstrappedRef.current ||
-      skipNextCloudProfileUploadRef.current
+      !cloudProfileBootstrappedRef.current
     )
       return;
+    if (skipCloudProfileUploadCountRef.current > 0) {
+      skipCloudProfileUploadCountRef.current -= 1;
+      return;
+    }
     scheduleCloudProfileSync();
   }, [favoriteGames, scheduleCloudProfileSync]);
 
@@ -800,13 +857,38 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const steamId = steamProfile?.steamId?.trim();
     if (!steamId) {
       setIsCloudProfileRestoring(false);
+      if (cloudProfileRestoreRetryTimerRef.current !== null) {
+        window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
+        cloudProfileRestoreRetryTimerRef.current = null;
+      }
       return;
     }
     if (cloudProfileRestoredSteamIdRef.current === steamId) return;
-    cloudProfileRestoredSteamIdRef.current = steamId;
-    setIsCloudProfileRestoring(true);
-    void restoreCloudProfileFromRemote();
-  }, [restoreCloudProfileFromRemote, steamProfile?.steamId]);
+    void restoreCloudProfileFromRemote().then((restored) => {
+      if (
+        restored ||
+        steamProfileRef.current?.steamId !== steamId ||
+        cloudProfileRestoredSteamIdRef.current === steamId
+      ) {
+        return;
+      }
+
+      if (cloudProfileRestoreRetryTimerRef.current !== null) {
+        window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
+      }
+      cloudProfileRestoreRetryTimerRef.current = window.setTimeout(() => {
+        cloudProfileRestoreRetryTimerRef.current = null;
+        setCloudProfileRestoreRetryTick((tick) => tick + 1);
+      }, 15_000);
+    });
+
+    return () => {
+      if (cloudProfileRestoreRetryTimerRef.current !== null) {
+        window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
+        cloudProfileRestoreRetryTimerRef.current = null;
+      }
+    };
+  }, [cloudProfileRestoreRetryTick, restoreCloudProfileFromRemote, steamProfile?.steamId]);
 
   useEffect(() => {
     setUserCollections((current) => {
@@ -1332,6 +1414,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     writeStoredCloudProfileUpdatedAt(null);
     cloudProfileLocalUpdatedAtRef.current = null;
     cloudProfileRestoredSteamIdRef.current = null;
+    cloudProfileFavoriteGameIdsRef.current = [];
+    cloudProfilePendingUploadRef.current = false;
+    skipCloudProfileUploadCountRef.current = 0;
+    if (cloudProfileRestoreRetryTimerRef.current !== null) {
+      window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
+      cloudProfileRestoreRetryTimerRef.current = null;
+    }
   }, []);
 
   const handleRestartSteam = useCallback(async () => {

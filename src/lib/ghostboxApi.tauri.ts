@@ -1137,6 +1137,10 @@ export const ghostboxApi = {
     return invokeOr<string | null>("steam_get_game_icon_url", { appId }, null);
   },
 
+  getGameIconUrls(appIds: string[]): Promise<Record<string, string>> {
+    return invokeOr<Record<string, string>>("steam_get_game_icon_urls", { appIds }, {});
+  },
+
   onSteamCmdReady(callback: () => void): () => void {
     void callback;
     return noopUnsubscribe;

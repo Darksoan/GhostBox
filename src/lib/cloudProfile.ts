@@ -136,6 +136,7 @@ export function buildCloudProfileSnapshot(input: {
     "displayName" | "avatarUrl" | "bannerUrl" | "bannerPosition"
   > | null;
   favoriteGames: Array<{ id: string }>;
+  favoriteGameIds?: string[];
   userCollections: UserCollection[];
 }): CloudProfileSnapshot {
   const usedCollectionIds = new Set<string>();
@@ -164,6 +165,11 @@ export function buildCloudProfileSnapshot(input: {
     new Set(
       input.favoriteGames
         .map((game) => String(game.id || "").trim())
+        .concat(
+          (input.favoriteGameIds ?? []).map((gameId) =>
+            String(gameId || "").trim()
+          )
+        )
         .filter(Boolean)
     )
   ).slice(0, MAX_FAVORITES);

@@ -3,6 +3,7 @@ use crate::image_cache;
 use crate::util::{silent_steamcmd_output, with_steamcmd_lock};
 use crate::{FACETS_VERSION, RANKING_VERSION};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -863,8 +864,8 @@ fn normalize_achievement(achievement: &Value) -> Option<Value> {
         .if_empty_then(|| text(achievement.get("title")))
         .if_empty_then(|| name.clone());
     let icon = text(achievement.get("icon"));
-    let icon_gray = text(achievement.get("icongray"))
-        .if_empty_then(|| text(achievement.get("iconGray")));
+    let icon_gray =
+        text(achievement.get("icongray")).if_empty_then(|| text(achievement.get("iconGray")));
     // Local schema fallback may omit icons; keep name/title-only entries.
     if name.is_empty() || title.is_empty() {
         return None;
@@ -977,9 +978,9 @@ async fn fetch_steam_achievements_from_schema(app_id: &str, api_key: &str) -> Ve
         return Vec::new();
     }
 
-    let Ok(mut url) = reqwest::Url::parse(
-        "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/",
-    ) else {
+    let Ok(mut url) =
+        reqwest::Url::parse("https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/")
+    else {
         return Vec::new();
     };
     url.query_pairs_mut()
@@ -1080,6 +1081,55 @@ fn steam_community_icon_url(app_id: &str, hash: &str) -> String {
     )
 }
 
+fn steam_icon_url_cache_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    Some(
+        app.path()
+            .app_data_dir()
+            .ok()?
+            .join("steam-icon-url-cache.json"),
+    )
+}
+
+fn read_steam_icon_url_cache(app: &tauri::AppHandle) -> HashMap<String, String> {
+    let Some(path) = steam_icon_url_cache_path(app) else {
+        return HashMap::new();
+    };
+
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| serde_json::from_str::<HashMap<String, String>>(&value).ok())
+        .unwrap_or_default()
+}
+
+fn write_steam_icon_url_cache(app: &tauri::AppHandle, cache: &HashMap<String, String>) {
+    let Some(path) = steam_icon_url_cache_path(app) else {
+        return;
+    };
+
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if let Ok(value) = serde_json::to_string(cache) {
+        let _ = fs::write(path, value);
+    }
+}
+
+fn cached_steam_icon_url(cache: &HashMap<String, String>, app_id: &str) -> Option<String> {
+    let url = cache.get(app_id)?.trim();
+    if url.starts_with("https://") && url.contains(&format!("/apps/{app_id}/")) {
+        Some(url.to_string())
+    } else {
+        None
+    }
+}
+
+fn cache_steam_icon_url(app: &tauri::AppHandle, app_id: &str, icon_url: &str) {
+    let mut cache = read_steam_icon_url_cache(app);
+    cache.insert(app_id.to_string(), icon_url.to_string());
+    write_steam_icon_url_cache(app, &cache);
+}
+
 fn extract_client_icon_hash(value: &str) -> Option<String> {
     let marker = "\"clienticon\"";
     let marker_index = value.find(marker)?;
@@ -1171,6 +1221,30 @@ fn get_game_icon_from_local_appinfo(app: &tauri::AppHandle, app_id: &str) -> Opt
     let bytes = fs::read(vdf_path).ok()?;
     let hash = read_client_icon_from_vdf(&bytes, app_id)?;
     Some(steam_community_icon_url(app_id, &hash))
+}
+
+fn get_game_icons_from_local_appinfo(
+    app: &tauri::AppHandle,
+    app_ids: &[String],
+) -> HashMap<String, String> {
+    let (steam_path, _) = crate::resolve_steam_path(app, None);
+    let Some(steam_path) = steam_path else {
+        return HashMap::new();
+    };
+    let vdf_path = std::path::Path::new(&steam_path)
+        .join("appcache")
+        .join("appinfo.vdf");
+    let Ok(bytes) = fs::read(vdf_path) else {
+        return HashMap::new();
+    };
+
+    app_ids
+        .iter()
+        .filter_map(|app_id| {
+            read_client_icon_from_vdf(&bytes, app_id)
+                .map(|hash| (app_id.clone(), steam_community_icon_url(app_id, &hash)))
+        })
+        .collect()
 }
 
 fn steamcmd_candidates(app: &tauri::AppHandle) -> Vec<PathBuf> {
@@ -1451,11 +1525,67 @@ pub async fn steam_get_game_icon_url(app: tauri::AppHandle, app_id: String) -> O
         return None;
     }
 
-    if let Some(icon_url) = get_game_icon_from_local_appinfo(&app, &app_id) {
+    let cache = read_steam_icon_url_cache(&app);
+    if let Some(icon_url) = cached_steam_icon_url(&cache, &app_id) {
         return Some(icon_url);
     }
 
-    get_game_icon_from_steamcmd(&app, &app_id)
+    if let Some(icon_url) = get_game_icon_from_local_appinfo(&app, &app_id) {
+        cache_steam_icon_url(&app, &app_id, &icon_url);
+        return Some(icon_url);
+    }
+
+    let icon_url = get_game_icon_from_steamcmd(&app, &app_id)?;
+    cache_steam_icon_url(&app, &app_id, &icon_url);
+    Some(icon_url)
+}
+
+#[tauri::command]
+pub async fn steam_get_game_icon_urls(
+    app: tauri::AppHandle,
+    app_ids: Vec<String>,
+) -> HashMap<String, String> {
+    let app_ids: Vec<String> = app_ids
+        .into_iter()
+        .map(|app_id| {
+            app_id
+                .chars()
+                .filter(char::is_ascii_digit)
+                .collect::<String>()
+        })
+        .filter(|app_id| !app_id.is_empty())
+        .collect();
+    if app_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut cache = read_steam_icon_url_cache(&app);
+    let mut resolved = HashMap::new();
+    let mut missing = Vec::new();
+
+    for app_id in app_ids {
+        if resolved.contains_key(&app_id) {
+            continue;
+        }
+
+        if let Some(icon_url) = cached_steam_icon_url(&cache, &app_id) {
+            resolved.insert(app_id, icon_url);
+        } else {
+            missing.push(app_id);
+        }
+    }
+
+    if missing.is_empty() {
+        return resolved;
+    }
+
+    for (app_id, icon_url) in get_game_icons_from_local_appinfo(&app, &missing) {
+        cache.insert(app_id.clone(), icon_url.clone());
+        resolved.insert(app_id, icon_url);
+    }
+
+    write_steam_icon_url_cache(&app, &cache);
+    resolved
 }
 
 #[tauri::command]

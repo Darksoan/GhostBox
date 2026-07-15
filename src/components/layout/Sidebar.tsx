@@ -18,7 +18,7 @@ import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { ContextMenu } from "../ui/ContextMenu";
 import { useCollectionContextMenu } from "../../hooks/useCollectionContextMenu";
-import { useGameIconUrl } from "../../hooks/useGameIconUrl";
+import { preloadGameIconUrls, useGameIconUrl } from "../../hooks/useGameIconUrl";
 import { settingsNavigationTabs, settingsTabLabelKeys, type SettingsTabId } from "../../features/settings/settingsTabsShared";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
@@ -221,6 +221,20 @@ export const Sidebar = memo(function Sidebar({
     deferredFavoriteGames,
     userCollections,
   ]);
+
+  const visibleSidebarIconGames = useMemo(() => {
+    const games = sidebarCollections.flatMap((collection) => {
+      if (!expandedCollectionIds.has(collection.id)) return [];
+      return collection.games.slice(0, SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT);
+    });
+
+    if (activeSessionGame) games.push(activeSessionGame);
+    return games;
+  }, [activeSessionGame, expandedCollectionIds, sidebarCollections]);
+
+  useEffect(() => {
+    preloadGameIconUrls(visibleSidebarIconGames);
+  }, [visibleSidebarIconGames]);
 
   const toggleCollectionExpanded = useCallback((collectionId: string) => {
     setExpandedCollectionIds((current) => {

@@ -68,6 +68,35 @@ function loadIconUrl(appId: string) {
   return request;
 }
 
+export function preloadGameIconUrls(games: GhostBoxGame[]) {
+  const appIds = [
+    ...new Set(
+      games
+        .map(getGameAppId)
+        .filter((appId) => /^\d+$/.test(appId) && !cache.has(appId))
+    ),
+  ];
+
+  if (appIds.length === 0) return;
+
+  void ghostboxApi
+    .getGameIconUrls(appIds)
+    .then((result) => {
+      let changed = false;
+      Object.entries(result).forEach(([appId, url]) => {
+        if (/^\d+$/.test(appId) && typeof url === "string" && url) {
+          cache.set(appId, url);
+          changed = true;
+        }
+      });
+
+      if (changed) writeStoredCache();
+    })
+    .catch(() => {
+      // Individual hooks still resolve icons if the batch preload fails.
+    });
+}
+
 readStoredCache();
 
 export function useGameIconUrl(game: GhostBoxGame) {

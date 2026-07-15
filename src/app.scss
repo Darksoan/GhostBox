@@ -7693,25 +7693,20 @@ p {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-sm);
-    background: var(--surface-tertiary);
+    background: var(--surface-secondary);
     color: var(--surface-tertiary);
-    transition: border-color var(--motion-fast) var(--ease);
+    transition: background var(--motion-fast) var(--ease);
   }
 
-  /* Hover: lighten label text + checkbox border only */
+  /* Hover: lighten label text only */
   &:hover {
     background: transparent;
     color: var(--text-primary);
   }
 
-  &:hover &__box {
-    border-color: var(--border-hover);
-  }
-
   input:checked + &__box {
-    border-color: var(--text-primary);
     background: var(--text-primary);
     color: var(--surface-tertiary);
   }
@@ -11672,10 +11667,6 @@ html.no-tab-animations {
 
     &:hover {
       color: var(--text-secondary);
-    }
-
-    &:hover .catalogue-filter-option__box {
-      border-color: var(--border-ui);
     }
 
     &--disabled {
