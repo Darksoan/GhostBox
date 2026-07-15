@@ -6,7 +6,6 @@ import {
   useCachedImageSources,
   useLoadableImageState,
 } from "../../hooks/useCachedImageSources";
-import type { BackupRootStatus } from "../../types";
 import {
   layeredImageStyle,
   gameHeaderOnlySources,
@@ -26,7 +25,6 @@ interface GameCardProps {
   showBackupStatus?: boolean;
   hasBackup?: boolean;
   active?: boolean;
-  backupRootStatus?: BackupRootStatus | null;
   libraryCoverFade?: boolean;
 }
 
@@ -38,19 +36,22 @@ export const GameCard = memo(function GameCard({
   showAchievements = false,
   showBackupStatus = false,
   hasBackup = false,
-  active = false,
-  backupRootStatus = null,
   libraryCoverFade = false,
 }: GameCardProps) {
   const cardRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const rawHeaderSources = useMemo(
-    () => (portrait ? gamePortraitPreviewSources(game) : gameHeaderOnlySources(game)),
-    [game, portrait]
+    () =>
+      portrait ? gamePortraitPreviewSources(game) : gameHeaderOnlySources(game),
+    [game, portrait],
   );
-  const headerSources = useCachedImageSources(shouldLoadCover ? rawHeaderSources : []);
+  const headerSources = useCachedImageSources(
+    shouldLoadCover ? rawHeaderSources : [],
+  );
   const coverImage = useLoadableImageState(headerSources);
-  const previousCoverSourceRef = useRef(coverImage.loaded ? coverImage.source : "");
+  const previousCoverSourceRef = useRef(
+    coverImage.loaded ? coverImage.source : "",
+  );
 
   useEffect(() => {
     if (shouldLoadCover) return;
@@ -69,7 +70,7 @@ export const GameCard = memo(function GameCard({
           observer.disconnect();
         }
       },
-      { rootMargin: "420px 0px", threshold: 0.01 }
+      { rootMargin: "420px 0px", threshold: 0.01 },
     );
 
     observer.observe(node);
@@ -88,28 +89,31 @@ export const GameCard = memo(function GameCard({
   const coverSources = coverSource ? [coverSource] : [];
 
   const achievementListTotal = showAchievements
-    ? game.achievementList?.length ?? 0
+    ? (game.achievementList?.length ?? 0)
     : 0;
   const achievementTotal = showAchievements
     ? Math.max(
         achievementListTotal,
         game.achievements.total,
-        game.achievements.unlocked
+        game.achievements.unlocked,
       )
     : 0;
   const achievementUnlocked = showAchievements
     ? Math.min(
         achievementListTotal > 0
           ? (game.achievementList ?? []).filter(
-              (achievement) => achievement.unlocked === true
+              (achievement) => achievement.unlocked === true,
             ).length
           : game.achievements.unlocked,
-        achievementTotal
+        achievementTotal,
       )
     : 0;
-  const playtimeInMilliseconds = game.playTimeInMilliseconds ?? game.hours * 3_600_000;
+  const playtimeInMilliseconds =
+    game.playTimeInMilliseconds ?? game.hours * 3_600_000;
   const compactPlaytime =
-    playtimeInMilliseconds > 0 ? formatCompactPlaytime(playtimeInMilliseconds) : "0h";
+    playtimeInMilliseconds > 0
+      ? formatCompactPlaytime(playtimeInMilliseconds)
+      : "0h";
   const showAchievementBadges = showAchievements && achievementTotal > 0;
 
   const handleContextMenu = (event: React.MouseEvent) => {
@@ -126,7 +130,9 @@ export const GameCard = memo(function GameCard({
       style={gameStyle(game)}
       onClick={() => onOpenGame(game)}
       onFocus={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
-      onMouseEnter={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
+      onMouseEnter={() =>
+        preloadGameModalAssets(game, 0, { nativeResolve: false })
+      }
       onContextMenu={handleContextMenu}
     >
       <div
@@ -134,7 +140,7 @@ export const GameCard = memo(function GameCard({
         style={layeredImageStyle(
           coverSources,
           "",
-          portrait ? "cover" : "100% 100%"
+          portrait ? "cover" : "100% 100%",
         )}
       >
         {showBackupStatus && (
@@ -143,19 +149,12 @@ export const GameCard = memo(function GameCard({
             aria-label={hasBackup ? "Backup disponível" : "Backup indisponível"}
             title={
               hasBackup
-                ? "Backup disponível"
-                : backupRootStatus?.status === "ok"
-                  ? "Sem backup recente"
-                  : "Pasta de backup não configurada"
+                ? "Backup em nuvem disponível"
+                : "Sem backup em nuvem recente"
             }
           >
             <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
           </div>
-        )}
-        {active && (
-          <span className="game-card__active-badge" aria-label="Playing now">
-            Playing
-          </span>
         )}
         {showAchievementBadges && (
           <div
@@ -163,13 +162,13 @@ export const GameCard = memo(function GameCard({
             aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
           >
             <span className="game-card__summary-metric">
-              <Cup size={16} weight="Filled" strokeWidth={2.0} />
+              <Cup size={14} weight="Filled" strokeWidth={2.0} />
               <span>
                 {achievementUnlocked} / {achievementTotal}
               </span>
             </span>
             <span className="game-card__summary-metric">
-              <Clock size={16} strokeWidth={2.0} />
+              <Clock size={14} strokeWidth={2.0} />
               <span>{compactPlaytime}</span>
             </span>
           </div>
@@ -197,7 +196,6 @@ interface GameGridProps {
   showBackupStatus?: boolean;
   hasBackupByAppId?: Set<string>;
   activeSessionAppIds?: Set<string>;
-  backupRootStatus?: BackupRootStatus | null;
   libraryCoverFade?: boolean;
 }
 
@@ -212,7 +210,6 @@ export function GameGrid({
   showBackupStatus = false,
   hasBackupByAppId = new Set(),
   activeSessionAppIds = new Set(),
-  backupRootStatus = null,
   libraryCoverFade = false,
 }: GameGridProps) {
   return (
@@ -230,7 +227,6 @@ export function GameGrid({
           showBackupStatus={showBackupStatus}
           hasBackup={hasBackupByAppId.has(game.appId)}
           active={activeSessionAppIds.has(game.appId)}
-          backupRootStatus={backupRootStatus}
           libraryCoverFade={libraryCoverFade}
         />
       ))}

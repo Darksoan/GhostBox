@@ -506,14 +506,19 @@ fn read_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str) -> Opti
     cached.get("data").cloned()
 }
 
-pub(crate) fn read_cached_steam_store_title(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
+pub(crate) fn read_cached_steam_store_title(
+    app: &tauri::AppHandle,
+    app_id: &str,
+) -> Option<String> {
     let details = read_cached_steam_store_details(app, app_id)?;
     let title = text(details.get("name"));
     (!title.is_empty()).then_some(title)
 }
 
 fn read_string_after_binary_key(section: &[u8], key: &[u8]) -> Option<String> {
-    let key_index = section.windows(key.len()).position(|window| window == key)?;
+    let key_index = section
+        .windows(key.len())
+        .position(|window| window == key)?;
     let value_start = key_index + key.len();
     let value_end = section[value_start..].iter().position(|byte| *byte == 0)?;
     let value = String::from_utf8_lossy(&section[value_start..value_start + value_end])
@@ -854,10 +859,14 @@ async fn fetch_steam_review_histogram(app_id: &str) -> Option<Value> {
 
 fn normalize_achievement(achievement: &Value) -> Option<Value> {
     let name = text(achievement.get("name"));
-    let title = text(achievement.get("displayName")).if_empty_then(|| name.clone());
+    let title = text(achievement.get("displayName"))
+        .if_empty_then(|| text(achievement.get("title")))
+        .if_empty_then(|| name.clone());
     let icon = text(achievement.get("icon"));
-    let icon_gray = text(achievement.get("icongray"));
-    if name.is_empty() || title.is_empty() || (icon.is_empty() && icon_gray.is_empty()) {
+    let icon_gray = text(achievement.get("icongray"))
+        .if_empty_then(|| text(achievement.get("iconGray")));
+    // Local schema fallback may omit icons; keep name/title-only entries.
+    if name.is_empty() || title.is_empty() {
         return None;
     }
     Some(serde_json::json!({
@@ -963,19 +972,29 @@ impl EmptyThen for String {
     }
 }
 
-async fn fetch_steam_achievements(app_id: &str) -> Vec<Value> {
-    let url = format!(
-        "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid={}&l=portuguese",
-        app_id
-    );
+async fn fetch_steam_achievements_from_schema(app_id: &str, api_key: &str) -> Vec<Value> {
+    if api_key.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(mut url) = reqwest::Url::parse(
+        "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/",
+    ) else {
+        return Vec::new();
+    };
+    url.query_pairs_mut()
+        .append_pair("key", api_key)
+        .append_pair("appid", app_id)
+        .append_pair("l", "portuguese");
+
     let Ok(response) = reqwest::get(url).await else {
-        return fetch_steam_achievements_from_community(app_id).await;
+        return Vec::new();
     };
     let Ok(value) = response.json::<Value>().await else {
-        return fetch_steam_achievements_from_community(app_id).await;
+        return Vec::new();
     };
 
-    let achievements: Vec<Value> = value
+    value
         .get("game")
         .and_then(|game| game.get("availableGameStats"))
         .and_then(|stats| stats.get("achievements"))
@@ -986,13 +1005,27 @@ async fn fetch_steam_achievements(app_id: &str) -> Vec<Value> {
                 .filter_map(normalize_achievement)
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
 
-    if achievements.is_empty() {
-        fetch_steam_achievements_from_community(app_id).await
-    } else {
-        achievements
+async fn fetch_steam_achievements(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    steam_path: &str,
+) -> Vec<Value> {
+    let api_key = crate::settings::load_steam_web_api_key(app);
+    let schema_achievements = fetch_steam_achievements_from_schema(app_id, &api_key).await;
+    if !schema_achievements.is_empty() {
+        return schema_achievements;
     }
+
+    let community_achievements = fetch_steam_achievements_from_community(app_id).await;
+    if !community_achievements.is_empty() {
+        return community_achievements;
+    }
+
+    // Offline / blocked network: build a basic list from local Steam schema.
+    crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id)
 }
 
 fn merge_achievement_list(game: &mut Value, achievements: Vec<Value>) {
@@ -1348,10 +1381,12 @@ pub async fn database_get_game_achievement_details(
         return Ok(None);
     }
 
-    let remote_game = fetch_remote_game(&app, game_id, api_url).await?;
-    let Some(mut game) = remote_game else {
-        return Ok(None);
-    };
+    let mut game = fetch_remote_game(&app, game_id, api_url)
+        .await?
+        .unwrap_or_else(|| steam_app_fallback_game(&app_id));
+
+    let (steam_path, _) = crate::resolve_steam_path(&app, None);
+    let steam_path = steam_path.as_deref().unwrap_or_default();
 
     if game
         .get("achievementList")
@@ -1359,15 +1394,12 @@ pub async fn database_get_game_achievement_details(
         .map(|achievements| achievements.is_empty())
         .unwrap_or(true)
     {
-        let achievements = fetch_steam_achievements(&app_id).await;
+        let achievements = fetch_steam_achievements(&app, &app_id, steam_path).await;
         merge_achievement_list(&mut game, achievements);
     }
 
-    let (steam_path, _) = crate::resolve_steam_path(&app, None);
     Ok(Some(crate::merge_game_achievement_details(
-        &app,
-        game,
-        steam_path.as_deref().unwrap_or_default(),
+        &app, game, steam_path,
     )))
 }
 

@@ -35,6 +35,7 @@ import { GameGrid } from "../components/ui/GameCard";
 import {
   ContextMenu,
 } from "../components/ui/ContextMenu";
+import { EmptyState } from "../components/ui/LoadingStates";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useGameIconUrl } from "../hooks/useGameIconUrl";
@@ -322,7 +323,7 @@ type ProfileAchievementHighlight = {
 
 const showcaseAchievementMinLimit = 15;
 const showcaseAchievementMaxLimit = 32;
-const showcaseAchievementEstimatedSlotWidth = 66;
+const showcaseAchievementEstimatedSlotWidth = 54;
 const localAchievementHydrationLimit = 80;
 const localAchievementHydrationBatchSize = 5;
 let hasPreparedProfileOverviewData = false;
@@ -391,20 +392,6 @@ function achievementShowcaseIcon(
 function achievementUnlockedTime(unlockedAt?: string) {
   const time = Date.parse(unlockedAt ?? "");
   return Number.isFinite(time) ? time : 0;
-}
-
-function formatProfileAchievementUnlockedDate(
-  value: string | undefined,
-  language: string
-) {
-  const time = Date.parse(value ?? "");
-  if (!Number.isFinite(time)) return "";
-
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(time);
 }
 
 function ProfileAchievementShowcaseItem({
@@ -485,6 +472,13 @@ function ProfileAchievementShowcaseItem({
         achievement.unlocked
           ? ""
           : " profile-page__showcase-achievement--locked"
+      }${
+        achievement.unlocked &&
+        typeof achievement.globalPercent === "number" &&
+        Number.isFinite(achievement.globalPercent) &&
+        achievement.globalPercent <= 10
+          ? " profile-page__showcase-achievement--rare"
+          : ""
       }${onSelect ? " profile-page__showcase-achievement--clickable" : ""}${
         isEditing ? " profile-page__showcase-achievement--editing" : ""
       }${isSelected ? " profile-page__showcase-achievement--selected" : ""}`}
@@ -1236,9 +1230,10 @@ export function ProfilePage({
     steamProfile?.avatarUrl ? [steamProfile.avatarUrl] : []
   );
   const shouldUseBannerCache = !steamProfile?.bannerUrl?.startsWith("data:");
+  const bannerUrl = steamProfile?.bannerUrl ?? "";
   const bannerSources = useCachedImageSources(
-    shouldUseBannerCache && steamProfile?.bannerUrl
-      ? [steamProfile.bannerUrl]
+    shouldUseBannerCache && bannerUrl
+      ? [bannerUrl]
       : shouldUseBannerCache
         ? [profileBannerPlaceholderSource]
         : []
@@ -1252,33 +1247,13 @@ export function ProfilePage({
       !steamProfile.avatarUrl.startsWith("data:") &&
       !steamProfile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
   );
-  const requestedBannerImageSource = !shouldUseBannerCache && steamProfile?.bannerUrl
-    ? steamProfile.bannerUrl
-    : bannerSources[0] ?? profileBannerPlaceholderSource;
+  const cachedBannerSource = shouldUseBannerCache && bannerUrl
+    ? bannerSources.find((source) => source !== bannerUrl)
+    : "";
+  const bannerImageSource = !shouldUseBannerCache && bannerUrl
+    ? bannerUrl
+    : cachedBannerSource || bannerUrl || bannerSources[0] || profileBannerPlaceholderSource;
   const isBannerPlaceholder = !steamProfile?.bannerUrl;
-  const [bannerImageSource, setBannerImageSource] = useState(() =>
-    steamProfile?.bannerUrl ? "" : requestedBannerImageSource
-  );
-
-  useEffect(() => {
-    if (!steamProfile?.bannerUrl) {
-      setBannerImageSource(requestedBannerImageSource);
-      return;
-    }
-
-    setBannerImageSource("");
-    let timeout: number | undefined;
-    const frame = window.requestAnimationFrame(() => {
-      timeout = window.setTimeout(() => {
-        startTransition(() => setBannerImageSource(requestedBannerImageSource));
-      }, 80);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      if (timeout) window.clearTimeout(timeout);
-    };
-  }, [requestedBannerImageSource, steamProfile?.bannerUrl]);
 
   useEffect(() => {
     preloadProfileImages(steamProfile);
@@ -1888,10 +1863,6 @@ export function ProfilePage({
                             const unlocked = isAchievementUnlocked(achievement);
                             const icon = achievementShowcaseIcon(achievement, unlocked);
                             const achievementId = achievement.name || achievement.title;
-                            const unlockedDate = formatProfileAchievementUnlockedDate(
-                              achievement.unlockedAt,
-                              appearance.language
-                            );
 
                             return (
                               <button
@@ -1927,13 +1898,6 @@ export function ProfilePage({
                                       {achievement.description}
                                     </span>
                                   ) : null}
-                                  {unlocked && unlockedDate ? (
-                                    <span className="profile-page__achievement-card-date">
-                                      {appearance.language === "en"
-                                        ? `Unlocked on ${unlockedDate}`
-                                        : `Desbloqueado em ${unlockedDate}`}
-                                    </span>
-                                  ) : null}
                                 </span>
                               </button>
                             );
@@ -1965,12 +1929,16 @@ export function ProfilePage({
                   })}
                 </div>
               ) : (
-                <div className="profile-page__no-games">
-                  <div className="profile-page__no-games-icon">
-                    <Cup size={24} weight="Filled" strokeWidth={2.0} />
-                  </div>
-                  <h2>{t("profile.noAchievements")}</h2>
-                </div>
+                <EmptyState
+                  className="profile-page__no-games"
+                  title={t("profile.noAchievements")}
+                  message={
+                    appearance.language === "en"
+                      ? "Unlocked and locked achievements will show up here."
+                      : "Conquistas desbloqueadas e bloqueadas aparecerão aqui."
+                  }
+                  icon={<Cup size={24} weight="Filled" strokeWidth={2.0} />}
+                />
               )
             ) : renderedGames.length > 0 ? (
                 <>
@@ -1993,21 +1961,20 @@ export function ProfilePage({
                   )}
                 </>
               ) : (
-                <div className="profile-page__no-games">
-                  <div className="profile-page__no-games-icon">
-                    <LibraryBig size={24} />
-                  </div>
-                  <h2>
-                    {appearance.language === "en"
+                <EmptyState
+                  className="profile-page__no-games"
+                  title={
+                    appearance.language === "en"
                       ? `No games in ${activeCollection.name}`
-                      : `Nenhum jogo em ${activeCollection.name}`}
-                  </h2>
-                  <p>
-                    {appearance.language === "en"
+                      : `Nenhum jogo em ${activeCollection.name}`
+                  }
+                  message={
+                    appearance.language === "en"
                       ? "This collection has no games yet."
-                      : "Esta coleção ainda não possui jogos."}
-                  </p>
-                </div>
+                      : "Esta coleção ainda não possui jogos."
+                  }
+                  icon={<LibraryBig size={24} strokeWidth={1.75} />}
+                />
               )}
             </div>
           </>

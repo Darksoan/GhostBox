@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { BarChart3, MessageCircle } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronLeft, MessageCircle } from "lucide-react";
 import type { SteamGameReview, SteamGameReviewsResult } from "../../lib/ghostboxApi.types";
 import { loadGameReviewsCached } from "../../utils/gameCache";
+import { useCollapsiblePanelHeight } from "../../hooks/useCollapsiblePanelHeight";
 import { formatCompactPlaytime } from "../../utils/time";
 
 function steamReviewAvatarUrl(hash: string) {
@@ -21,9 +23,9 @@ const steamReviewFilters: SteamReviewFilter[] = ["all", "positive", "negative"];
 const reviewsPerPage = 6;
 
 function steamReviewFilterLabel(filter: SteamReviewFilter, language: "pt" | "en") {
-  if (filter === "positive") return language === "en" ? "Positive" : "Positivas";
-  if (filter === "negative") return language === "en" ? "Negative" : "Negativas";
-  return language === "en" ? "Recent" : "Recentes";
+  if (filter === "positive") return language === "en" ? "Most positive" : "Mais positivas";
+  if (filter === "negative") return language === "en" ? "Most negative" : "Mais negativas";
+  return language === "en" ? "Most recent" : "Mais recentes";
 }
 
 function getRecommendedPercent(summary?: SteamGameReviewsResult["query_summary"]) {
@@ -88,7 +90,12 @@ function ReviewRecommendationSidebar({
   const totalReviews =
     getReviewSummaryTotal(displaySummary) ||
     (typeof fallbackReviewCount === "number" && Number.isFinite(fallbackReviewCount) ? fallbackReviewCount : 0);
+  const positiveReviews = displaySummary?.total_positive ?? 0;
+  const negativeReviews = displaySummary?.total_negative ?? 0;
+  const hasBreakdown = positiveReviews > 0 || negativeReviews > 0;
   const meterFill = getReviewScoreFillColor(overallPercent ?? 0);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [reviewPanelRef, reviewPanelHeight] = useCollapsiblePanelHeight();
 
   if (!isLoading && overallPercent === null) return null;
 
@@ -97,17 +104,35 @@ function ReviewRecommendationSidebar({
       className="modal__review-summary-section"
       aria-label={language === "en" ? "Review recommendation" : "Recomendação das análises"}
     >
-      <div className="modal__review-summary-heading">
-        <BarChart3 size={16} aria-hidden="true" />
+      <button
+        type="button"
+        className="modal__review-summary-heading modal__sidebar-section-toggle"
+        aria-expanded={!isCollapsed}
+        aria-controls="modal-review-summary-panel"
+        onClick={() => setIsCollapsed((value) => !value)}
+      >
+        <BarChart3 size={18} aria-hidden="true" />
         <strong>{language === "en" ? "Recommendation" : "Recomendação"}</strong>
-      </div>
+        <ChevronDown
+          className="modal__sidebar-section-chevron"
+          size={16}
+          aria-hidden="true"
+        />
+      </button>
 
-      {isLoading && overallPercent === null ? (
-        <div className="modal__review-summary-loading">
-          {language === "en" ? "Loading reviews" : "Carregando análises"}
-        </div>
-      ) : (
-        <>
+      <div
+        ref={reviewPanelRef}
+        className="modal__sidebar-section-content"
+        id="modal-review-summary-panel"
+        aria-hidden={isCollapsed}
+        data-collapsed={isCollapsed ? "true" : "false"}
+        style={{ height: isCollapsed ? 0 : reviewPanelHeight } as CSSProperties}
+      >
+        {isLoading && overallPercent === null ? (
+          <div className="modal__review-summary-loading">
+            {language === "en" ? "Loading reviews" : "Carregando análises"}
+          </div>
+        ) : (
           <div className="modal__review-summary-card">
             <div className="modal__review-summary-score">
               <strong>{overallPercent}%</strong>
@@ -116,15 +141,28 @@ function ReviewRecommendationSidebar({
             <span className="modal__review-summary-sentiment">
               {getReviewSentimentLabel(overallPercent ?? 0, totalReviews, language)}
             </span>
-            <span className="modal__review-summary-count">
-              {formatReviewCountLabel(totalReviews, language)}
-            </span>
             <div className="modal__review-summary-meter" aria-hidden="true">
               <span style={{ width: `${overallPercent ?? 0}%`, backgroundColor: meterFill }} />
             </div>
+            {hasBreakdown ? (
+              <div className="modal__review-summary-breakdown">
+                <span className="modal__review-summary-breakdown-item modal__review-summary-breakdown-item--positive">
+                  <strong>{formatReviewNumber(positiveReviews, language)}</strong>
+                  <span>{language === "en" ? "positive" : "positivas"}</span>
+                </span>
+                <span className="modal__review-summary-breakdown-item modal__review-summary-breakdown-item--negative">
+                  <strong>{formatReviewNumber(negativeReviews, language)}</strong>
+                  <span>{language === "en" ? "negative" : "negativas"}</span>
+                </span>
+              </div>
+            ) : (
+              <span className="modal__review-summary-count">
+                {formatReviewCountLabel(totalReviews, language)}
+              </span>
+            )}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </section>
   );
 }
@@ -221,7 +259,33 @@ export function GameReviewsSection({
   const [activeReviewPage, setActiveReviewPage] = useState(1);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
   const [nearViewport, setNearViewport] = useState(false);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
+  const sortDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!sortDropdownOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        sortDropdownRef.current &&
+        !sortDropdownRef.current.contains(event.target as Node)
+      ) {
+        setSortDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSortDropdownOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [sortDropdownOpen]);
 
   useEffect(() => {
     if (nearViewport) return;
@@ -368,28 +432,51 @@ export function GameReviewsSection({
             <MessageCircle size={16} aria-hidden="true" />
             <strong>{language === "en" ? "Player reviews" : "Reviews dos jogadores"}</strong>
           </div>
-        </div>
 
-        <div
-          className="modal__reviews-filters"
-          role="tablist"
-          aria-label={language === "en" ? "Review filters" : "Filtros de reviews"}
-        >
-          {steamReviewFilters.map((filter) => (
+          <div
+            className={`settings-dropdown modal__reviews-sort ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
+            ref={sortDropdownRef}
+          >
             <button
               type="button"
-              className={`modal__reviews-filter ${activeReviewFilter === filter ? "modal__reviews-filter--active" : ""}`}
-              onClick={() => {
-                setActiveReviewFilter(filter);
-                setActiveReviewPage(1);
-              }}
-              aria-selected={activeReviewFilter === filter}
-              role="tab"
-              key={filter}
+              className="settings-dropdown__trigger modal__reviews-sort-trigger"
+              aria-haspopup="listbox"
+              aria-expanded={sortDropdownOpen}
+              aria-label={language === "en" ? "Sort reviews" : "Ordenar reviews"}
+              onClick={() => setSortDropdownOpen((current) => !current)}
             >
-              {steamReviewFilterLabel(filter, language)}
+              <span className="modal__reviews-sort-label">
+                <small>{language === "en" ? "Sort" : "Ordenar"}</small>
+                <span>{steamReviewFilterLabel(activeReviewFilter, language)}</span>
+              </span>
+              <ChevronLeft size={14} aria-hidden="true" />
             </button>
-          ))}
+            {sortDropdownOpen && (
+              <div
+                className="settings-dropdown__menu"
+                role="listbox"
+                aria-label={language === "en" ? "Sort reviews by" : "Ordenar reviews por"}
+              >
+                {steamReviewFilters
+                  .filter((filter) => filter !== activeReviewFilter)
+                  .map((filter) => (
+                    <button
+                      type="button"
+                      className="settings-dropdown__option"
+                      role="option"
+                      key={filter}
+                      onClick={() => {
+                        setActiveReviewFilter(filter);
+                        setActiveReviewPage(1);
+                        setSortDropdownOpen(false);
+                      }}
+                    >
+                      <span>{steamReviewFilterLabel(filter, language)}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {isLoadingReviews ? (

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import type { SteamMovie } from "../../data";
+import { useSettings } from "../../context/settings";
 import { VideoPlayer } from "./VideoPlayer";
 
 interface MediaItem {
@@ -13,16 +14,23 @@ interface MediaItem {
   alt: string;
 }
 
-function getMovieSource(movie: SteamMovie) {
-  const sourceOptions = [
-    { src: movie.hls_h264, type: "application/x-mpegURL" },
-    { src: movie.mp4?.max, type: "video/mp4" },
-    { src: movie.mp4?.["480"], type: "video/mp4" },
-    { src: movie.webm?.max, type: "video/webm" },
-    { src: movie.webm?.["480"], type: "video/webm" },
-    { src: movie.dash_h264, type: "application/dash+xml" },
-    { src: movie.dash_av1, type: "application/dash+xml" },
-  ];
+function getMovieSource(movie: SteamMovie, quality: "high" | "low") {
+  const sourceOptions = quality === "low"
+    ? [
+        { src: movie.mp4?.["480"], type: "video/mp4" },
+        { src: movie.webm?.["480"], type: "video/webm" },
+        { src: movie.webm?.max, type: "video/webm" },
+        { src: movie.mp4?.max, type: "video/mp4" },
+      ]
+    : [
+        { src: movie.hls_h264, type: "application/x-mpegURL" },
+        { src: movie.mp4?.max, type: "video/mp4" },
+        { src: movie.mp4?.["480"], type: "video/mp4" },
+        { src: movie.webm?.max, type: "video/webm" },
+        { src: movie.webm?.["480"], type: "video/webm" },
+        { src: movie.dash_h264, type: "application/dash+xml" },
+        { src: movie.dash_av1, type: "application/dash+xml" },
+      ];
 
   const source = sourceOptions.find((option) => option.src?.trim());
   if (!source?.src) return null;
@@ -48,6 +56,7 @@ export function GallerySlider({
   gameTitle,
   language,
 }: GallerySliderProps) {
+  const { appearance } = useSettings();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const viewportRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -57,7 +66,7 @@ export function GallerySlider({
 
     if (movies) {
       movies.forEach((movie, index) => {
-        const source = getMovieSource(movie);
+        const source = getMovieSource(movie, appearance.trailerQuality);
         if (source) {
           items.push({
             id: `movie-${movie.id}`,
@@ -83,7 +92,7 @@ export function GallerySlider({
     });
 
     return items;
-  }, [screenshots, movies, gameTitle, language]);
+  }, [screenshots, movies, gameTitle, language, appearance.trailerQuality]);
 
   const scrollPrev = useCallback(() => {
     setSelectedIndex((prev) =>
@@ -158,7 +167,7 @@ export function GallerySlider({
                   videoSrc={item.videoSrc!}
                   videoType={item.videoType}
                   poster={item.poster}
-                  autoplay={index === selectedIndex}
+                  autoplay={index === selectedIndex && appearance.trailerAutoplay}
                   loop
                   muted
                   controls

@@ -116,7 +116,8 @@ function loadCachedGameRequest(
   gameId: string,
   cache: Map<string, GhostBoxGame | null>,
   requestCache: Map<string, Promise<GhostBoxGame | null>>,
-  loader: (gameId: string) => Promise<GhostBoxGame | null>
+  loader: (gameId: string) => Promise<GhostBoxGame | null>,
+  options?: { cacheEmpty?: boolean }
 ) {
   if (cache.has(gameId)) {
     return Promise.resolve(cache.get(gameId) ?? null);
@@ -125,9 +126,22 @@ function loadCachedGameRequest(
   const pending = requestCache.get(gameId);
   if (pending) return pending;
 
+  const cacheEmpty = options?.cacheEmpty !== false;
+
   const request = loader(gameId)
     .then((game) => {
-      cache.set(gameId, game);
+      if (cacheEmpty) {
+        cache.set(gameId, game);
+      } else {
+        // Achievement loads: only pin successful non-empty lists so a failed
+        // first attempt does not stick for the whole session.
+        const hasAchievements =
+          (game?.achievementList?.length ?? 0) > 0 ||
+          (game?.achievements?.total ?? 0) > 0;
+        if (game && hasAchievements) {
+          cache.set(gameId, game);
+        }
+      }
       return game;
     })
     .finally(() => {
@@ -162,7 +176,8 @@ export function loadGameAchievementDetailsCached(gameId: string) {
     gameId,
     gameAchievementDetailsCache,
     gameAchievementDetailsRequestCache,
-    loadGameAchievementDetails
+    loadGameAchievementDetails,
+    { cacheEmpty: false }
   );
 }
 

@@ -6,14 +6,9 @@ import type {
   AddGameResult,
   AppStatus,
   BackupDetails,
-  BackupFolderDeletionResult,
-  BackupOutputPathSelectionResult,
-  BackupPathActionResult,
-  BackupRootStatus,
   BackupSettings,
   GameDatabaseRequest,
   GameDatabaseResult,
-  GameExecutableSelectionResult,
   GamePlaytimeSnapshot,
   SteamGameReviewsResult,
   SteamRecommendedTag,
@@ -21,8 +16,6 @@ import type {
   CatalogueCacheUpdatedPayload,
   LaunchGameResult,
   LocalAchievementsUnlockedPayload,
-  LocalBackupResult,
-  LocalRestoreResult,
   LudusaviBackupPreviewGame,
   MorrenusStatsResult,
   NotificationSettings,
@@ -46,6 +39,8 @@ import type {
   CloudProfileSnapshot,
   CloudRestoreResult,
   CloudSave,
+  CloudSaveDeletionResult,
+  CloudSavePinnedResult,
   CloudSessionResult,
   SubscriptionCheckoutResult,
   SubscriptionPortalFlow,
@@ -59,14 +54,21 @@ function noopUnsubscribe() {
 }
 
 const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
-const defaultSubscriptionsApiUrl = "https://ghostbox-subscriptions.hella.workers.dev";
-const defaultFeedbackApiUrl = "https://ghostbox-feedback.hella.workers.dev/feedback";
-const defaultUpdatesApiUrl = "https://ghostbox-feedback.hella.workers.dev/updates/latest";
+const defaultSubscriptionsApiUrl =
+  "https://ghostbox-subscriptions.hella.workers.dev";
+const defaultFeedbackApiUrl =
+  "https://ghostbox-feedback.hella.workers.dev/feedback";
+const defaultUpdatesApiUrl =
+  "https://ghostbox-feedback.hella.workers.dev/updates/latest";
 const appVersion = import.meta.env.VITE_APP_VERSION?.trim() || "0.1.3";
 
 function compareVersions(left: string, right: string) {
-  const leftParts = left.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
-  const rightParts = right.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
+  const leftParts = left
+    .split(/[.-]/)
+    .map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = right
+    .split(/[.-]/)
+    .map((part) => Number.parseInt(part, 10) || 0);
   const length = Math.max(leftParts.length, rightParts.length, 3);
 
   for (let index = 0; index < length; index += 1) {
@@ -96,11 +98,17 @@ function getSubscriptionsApiUrl() {
 }
 
 function getFeedbackApiUrl() {
-  return import.meta.env.VITE_GHOSTBOX_FEEDBACK_API_URL?.trim() || defaultFeedbackApiUrl;
+  return (
+    import.meta.env.VITE_GHOSTBOX_FEEDBACK_API_URL?.trim() ||
+    defaultFeedbackApiUrl
+  );
 }
 
 function getUpdatesApiUrl() {
-  return import.meta.env.VITE_GHOSTBOX_UPDATES_API_URL?.trim() || defaultUpdatesApiUrl;
+  return (
+    import.meta.env.VITE_GHOSTBOX_UPDATES_API_URL?.trim() ||
+    defaultUpdatesApiUrl
+  );
 }
 
 const DISCORD_LINK_CACHE_KEY = "ghostbox:discord-link-status";
@@ -119,7 +127,10 @@ type PremiumCacheEntry = {
 };
 
 let memoryDiscordLinkCache: DiscordLinkCacheEntry | null = null;
-const discordLinkInFlight = new Map<string, Promise<DiscordLinkStatus | null>>();
+const discordLinkInFlight = new Map<
+  string,
+  Promise<DiscordLinkStatus | null>
+>();
 let memoryPremiumCache: PremiumCacheEntry | null = null;
 const premiumInFlight = new Map<string, Promise<boolean>>();
 
@@ -128,7 +139,8 @@ function readDiscordLinkLocalCache(steamId: string): DiscordLinkStatus | null {
     const raw = localStorage.getItem(DISCORD_LINK_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DiscordLinkCacheEntry;
-    if (!parsed?.steamId || parsed.steamId !== steamId || !parsed.status) return null;
+    if (!parsed?.steamId || parsed.steamId !== steamId || !parsed.status)
+      return null;
     return parsed.status;
   } catch {
     return null;
@@ -175,7 +187,9 @@ function writePremiumCache(steamId: string, isPremium: boolean) {
   }
 }
 
-function resolveIsPremium(status: SubscriptionStatusResult | null | undefined): boolean {
+function resolveIsPremium(
+  status: SubscriptionStatusResult | null | undefined,
+): boolean {
   if (!status?.subscription) return false;
   const sub = status.subscription;
   if (sub.isPremium === true) return true;
@@ -205,7 +219,7 @@ const emptyHomeResult: HomeResult = {
 async function invokeOr<T>(
   command: string,
   args: Record<string, unknown>,
-  fallback: T
+  fallback: T,
 ): Promise<T> {
   try {
     return await invoke<T>(command, args);
@@ -233,10 +247,15 @@ export const ghostboxApi = {
   getCachedDiscordLinkStatus(steamId: string): DiscordLinkStatus | null {
     const id = steamId.trim();
     if (!id) return null;
-    if (memoryDiscordLinkCache?.steamId === id) return memoryDiscordLinkCache.status;
+    if (memoryDiscordLinkCache?.steamId === id)
+      return memoryDiscordLinkCache.status;
     const local = readDiscordLinkLocalCache(id);
     if (local) {
-      memoryDiscordLinkCache = { steamId: id, status: local, cachedAt: Date.now() };
+      memoryDiscordLinkCache = {
+        steamId: id,
+        status: local,
+        cachedAt: Date.now(),
+      };
     }
     return local;
   },
@@ -253,7 +272,11 @@ export const ghostboxApi = {
     if (memoryPremiumCache?.steamId === id) return memoryPremiumCache.isPremium;
     const local = readPremiumLocalCache(id);
     if (local !== null) {
-      memoryPremiumCache = { steamId: id, isPremium: local, cachedAt: Date.now() };
+      memoryPremiumCache = {
+        steamId: id,
+        isPremium: local,
+        cachedAt: Date.now(),
+      };
     }
     return local;
   },
@@ -264,7 +287,9 @@ export const ghostboxApi = {
     writePremiumCache(id, isPremium);
   },
 
-  async getDiscordLinkStatus(steamId: string): Promise<DiscordLinkStatus | null> {
+  async getDiscordLinkStatus(
+    steamId: string,
+  ): Promise<DiscordLinkStatus | null> {
     const id = steamId.trim();
     if (!id) return null;
 
@@ -276,7 +301,9 @@ export const ghostboxApi = {
       url.searchParams.set("steamId", id);
 
       try {
-        const response = await fetch(url, { headers: { accept: "application/json" } });
+        const response = await fetch(url, {
+          headers: { accept: "application/json" },
+        });
         if (!response.ok) {
           return ghostboxApi.getCachedDiscordLinkStatus(id);
         }
@@ -294,7 +321,9 @@ export const ghostboxApi = {
     return promise;
   },
 
-  async getSubscriptionStatus(steamId: string): Promise<SubscriptionStatusResult | null> {
+  async getSubscriptionStatus(
+    steamId: string,
+  ): Promise<SubscriptionStatusResult | null> {
     const id = steamId.trim();
     const url = new URL(`${getSubscriptionsApiUrl()}/subscription/status`);
     url.searchParams.set("steamId", id);
@@ -342,45 +371,59 @@ export const ghostboxApi = {
     return promise;
   },
 
-  async createSubscriptionCheckout(steamId: string, planId: SubscriptionPlanId): Promise<SubscriptionCheckoutResult | null> {
+  async createSubscriptionCheckout(
+    steamId: string,
+    planId: SubscriptionPlanId,
+  ): Promise<SubscriptionCheckoutResult | null> {
     if ("__TAURI_INTERNALS__" in window) {
       try {
-        return await invoke<SubscriptionCheckoutResult>("subscription_create_checkout", { steamId, planId });
+        return await invoke<SubscriptionCheckoutResult>(
+          "subscription_create_checkout",
+          { steamId, planId },
+        );
       } catch {
         return null;
       }
     }
 
-    const response = await fetch(`${getSubscriptionsApiUrl()}/subscription/checkouts`, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ steamId, planId }),
-    });
-    if (!response.ok) return null;
-    return await response.json() as SubscriptionCheckoutResult;
-  },
-
-  async createSubscriptionPortalSession(
-    steamId: string,
-    flow: SubscriptionPortalFlow = "manage"
-  ): Promise<SubscriptionPortalResult | null> {
-    const id = steamId.trim();
-    if (!id) return null;
-
-    try {
-      const response = await fetch(`${getSubscriptionsApiUrl()}/subscription/portal`, {
+    const response = await fetch(
+      `${getSubscriptionsApiUrl()}/subscription/checkouts`,
+      {
         method: "POST",
         headers: {
           accept: "application/json",
           "content-type": "application/json",
         },
-        body: JSON.stringify({ steamId: id, flow }),
-      });
+        body: JSON.stringify({ steamId, planId }),
+      },
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as SubscriptionCheckoutResult;
+  },
+
+  async createSubscriptionPortalSession(
+    steamId: string,
+    flow: SubscriptionPortalFlow = "manage",
+  ): Promise<SubscriptionPortalResult | null> {
+    const id = steamId.trim();
+    if (!id) return null;
+
+    try {
+      const response = await fetch(
+        `${getSubscriptionsApiUrl()}/subscription/portal`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ steamId: id, flow }),
+        },
+      );
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(payload?.error || "Could not open billing portal.");
       }
       return (await response.json()) as SubscriptionPortalResult;
@@ -415,7 +458,9 @@ export const ghostboxApi = {
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         return {
           success: false,
           error: payload?.error || "Could not send feedback.",
@@ -450,7 +495,9 @@ export const ghostboxApi = {
       try {
         const url = new URL(getUpdatesApiUrl());
         url.searchParams.set("currentVersion", appVersion);
-        const response = await fetch(url, { headers: { accept: "application/json" } });
+        const response = await fetch(url, {
+          headers: { accept: "application/json" },
+        });
         if (!response.ok) return null;
         const manifest = (await response.json()) as Partial<{
           version?: string;
@@ -459,7 +506,9 @@ export const ghostboxApi = {
           releaseNotesUrl?: string;
         }>;
         const latestVersion =
-          manifest.version?.trim() || manifest.latestVersion?.trim() || appVersion;
+          manifest.version?.trim() ||
+          manifest.latestVersion?.trim() ||
+          appVersion;
         const updateAvailable = compareVersions(latestVersion, appVersion) > 0;
         return {
           updateAvailable,
@@ -474,7 +523,7 @@ export const ghostboxApi = {
   },
 
   async installUpdate(
-    onProgress?: (event: UpdateProgressEvent) => void
+    onProgress?: (event: UpdateProgressEvent) => void,
   ): Promise<UpdateInstallResult> {
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
@@ -540,7 +589,7 @@ export const ghostboxApi = {
     return invokeOr<HomeResult>(
       "catalogue_get_home",
       { apiUrl: getGamesApiUrl() },
-      emptyHomeResult
+      emptyHomeResult,
     );
   },
 
@@ -548,7 +597,7 @@ export const ghostboxApi = {
     return invokeOr<GameDatabaseResult>(
       "database_get_games",
       { request: request ?? null, apiUrl: getGamesApiUrl() },
-      emptyGameDatabase
+      emptyGameDatabase,
     );
   },
 
@@ -556,7 +605,7 @@ export const ghostboxApi = {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_details",
       { gameId, apiUrl: getGamesApiUrl() },
-      null
+      null,
     );
   },
 
@@ -564,7 +613,7 @@ export const ghostboxApi = {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_store_details",
       { gameId, apiUrl: getGamesApiUrl() },
-      null
+      null,
     );
   },
 
@@ -572,19 +621,19 @@ export const ghostboxApi = {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_achievement_details",
       { gameId, apiUrl: getGamesApiUrl() },
-      null
+      null,
     );
   },
 
   getGameReviews(
     gameId: string,
     language: "all" | "brazilian" | "english",
-    reviewType: "all" | "positive" | "negative" = "all"
+    reviewType: "all" | "positive" | "negative" = "all",
   ): Promise<SteamGameReviewsResult> {
     return invokeOr<SteamGameReviewsResult>(
       "database_get_game_reviews",
       { gameId, language, reviewType },
-      { success: 0, reviews: [] }
+      { success: 0, reviews: [] },
     );
   },
 
@@ -601,7 +650,7 @@ export const ghostboxApi = {
     return invokeOr<string>(
       "cache_resolve_steam_library_asset",
       { appId, fileName },
-      ""
+      "",
     );
   },
 
@@ -609,7 +658,10 @@ export const ghostboxApi = {
     return invokeOr<AddGameResult>(
       "luatools_add_game",
       { game },
-      { success: false, error: "Não foi possível adicionar o jogo via LuaTools." }
+      {
+        success: false,
+        error: "Não foi possível adicionar o jogo via LuaTools.",
+      },
     );
   },
 
@@ -617,7 +669,7 @@ export const ghostboxApi = {
     return invokeOr<AddGameResult>(
       "ghostbox_library_register_steam_game",
       { game },
-      { success: false, error: "Não foi possível registrar o jogo da Steam." }
+      { success: false, error: "Não foi possível registrar o jogo da Steam." },
     );
   },
 
@@ -625,7 +677,10 @@ export const ghostboxApi = {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",
       { game },
-      { success: false, error: "Não foi possível remover o jogo via LuaTools." }
+      {
+        success: false,
+        error: "Não foi possível remover o jogo via LuaTools.",
+      },
     );
   },
 
@@ -634,7 +689,7 @@ export const ghostboxApi = {
   },
 
   onGamePlaytimesChanged(
-    callback: (snapshot: GamePlaytimeSnapshot) => void
+    callback: (snapshot: GamePlaytimeSnapshot) => void,
   ): () => void {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -662,7 +717,7 @@ export const ghostboxApi = {
     return invokeOr<{ success: boolean; error?: string }>(
       "app_install_steamtools",
       {},
-      { success: true }
+      { success: true },
     );
   },
 
@@ -674,7 +729,7 @@ export const ghostboxApi = {
     return invokeOr<SteamAccountStats | null>(
       "steam_get_account_stats",
       { steamId },
-      null
+      null,
     );
   },
 
@@ -683,7 +738,7 @@ export const ghostboxApi = {
     return invokeOr<GamePlaytimeSnapshot>(
       "steam_sync_playtimes",
       { steamId },
-      {}
+      {},
     );
   },
 
@@ -696,7 +751,7 @@ export const ghostboxApi = {
   },
 
   onSteamAccountStatsUpdated(
-    callback: (stats: SteamAccountStats) => void
+    callback: (stats: SteamAccountStats) => void,
   ): () => void {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -744,19 +799,45 @@ export const ghostboxApi = {
     return invokeOr<{ saves: CloudSave[] }>(
       "cloud_list_saves",
       { appId: appId ?? null },
-      { saves: [] }
+      { saves: [] },
     ).then((result) => result.saves ?? []);
   },
 
   backupGameToCloud(game: GhostBoxGame): Promise<CloudBackupResult | null> {
-    return invokeOr<CloudBackupResult | null>("cloud_backup_game", { game }, null);
+    return invokeOr<CloudBackupResult | null>(
+      "cloud_backup_game",
+      { game },
+      null,
+    );
   },
 
-  restoreCloudSave(game: GhostBoxGame, saveId: string): Promise<CloudRestoreResult | null> {
+  restoreCloudSave(
+    game: GhostBoxGame,
+    saveId: string,
+  ): Promise<CloudRestoreResult | null> {
     return invokeOr<CloudRestoreResult | null>(
       "cloud_restore_save",
       { game, saveId },
-      null
+      null,
+    );
+  },
+
+  deleteCloudSave(saveId: string): Promise<CloudSaveDeletionResult | null> {
+    return invokeOr<CloudSaveDeletionResult | null>(
+      "cloud_delete_save",
+      { saveId },
+      null,
+    );
+  },
+
+  setCloudSavePinned(
+    saveId: string,
+    pinned: boolean,
+  ): Promise<CloudSavePinnedResult | null> {
+    return invokeOr<CloudSavePinnedResult | null>(
+      "cloud_set_save_pinned",
+      { saveId, pinned },
+      null,
     );
   },
 
@@ -764,76 +845,93 @@ export const ghostboxApi = {
     return invokeOr<CloudProfileResult | null>(
       "cloud_get_profile_snapshot",
       {},
-      null
+      null,
     ).then((result) => result?.profile ?? null);
   },
 
   saveCloudProfileSnapshot(
-    snapshot: CloudProfileSnapshot
+    snapshot: CloudProfileSnapshot,
   ): Promise<CloudProfileSnapshot | null> {
     return invokeOr<CloudProfileResult | null>(
       "cloud_put_profile_snapshot",
       { snapshot },
-      null
+      null,
     ).then((result) => result?.profile ?? null);
   },
 
-  async uploadProfileImage(imageData: string, kind: "avatar" | "banner"): Promise<string> {
+  async uploadProfileImage(
+    imageData: string,
+    kind: "avatar" | "banner",
+  ): Promise<string> {
     try {
-      const result = await invoke<{ url?: string }>("cloud_upload_profile_image", { imageData, kind });
-      if (!result?.url) throw new Error("O servidor não retornou a URL da imagem.");
+      const result = await invoke<{ url?: string }>(
+        "cloud_upload_profile_image",
+        { imageData, kind },
+      );
+      if (!result?.url)
+        throw new Error("O servidor não retornou a URL da imagem.");
       return result.url;
     } catch (error) {
-      throw new Error(typeof error === "string" ? error : error instanceof Error ? error.message : "Falha ao enviar a imagem para a nuvem.");
+      throw new Error(
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Falha ao enviar a imagem para a nuvem.",
+      );
     }
   },
 
   async deleteProfileBanner(): Promise<boolean> {
     try {
-      const result = await invoke<{ ok?: boolean }>("cloud_delete_profile_banner", {});
-      if (result?.ok !== true) throw new Error("O servidor não confirmou a remoção da capa.");
+      const result = await invoke<{ ok?: boolean }>(
+        "cloud_delete_profile_banner",
+        {},
+      );
+      if (result?.ok !== true)
+        throw new Error("O servidor não confirmou a remoção da capa.");
       return true;
     } catch (error) {
-      throw new Error(typeof error === "string" ? error : error instanceof Error ? error.message : "Falha ao remover a capa da nuvem.");
+      throw new Error(
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Falha ao remover a capa da nuvem.",
+      );
     }
   },
 
   getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {
-    return invokeOr<SteamWishlistItem[]>(
-      "steam_get_wishlist",
-      { steamId },
-      []
-    );
+    return invokeOr<SteamWishlistItem[]>("steam_get_wishlist", { steamId }, []);
   },
 
-  getSteamRecommendedTagsForUser(steamId: string): Promise<SteamRecommendedTag[]> {
+  getSteamRecommendedTagsForUser(
+    steamId: string,
+  ): Promise<SteamRecommendedTag[]> {
     return invokeOr<SteamRecommendedTag[]>(
       "steam_get_recommended_tags_for_user",
       { steamId },
-      []
+      [],
     );
   },
 
   getSteamSimilarAppIds(appId: string): Promise<string[]> {
-    return invokeOr<string[]>(
-      "steam_get_similar_app_ids",
-      { appId },
-      []
-    );
+    return invokeOr<string[]>("steam_get_similar_app_ids", { appId }, []);
   },
 
   restartSteam(): Promise<SteamRestartResult | undefined> {
     return invokeOr<SteamRestartResult | undefined>(
       "steam_restart",
       {},
-      undefined
+      undefined,
     );
   },
 
   scanSteamLibrary(
     steamPath?: string,
     forceRefreshOwnedGames?: boolean,
-    includeOwnedGames?: boolean
+    includeOwnedGames?: boolean,
   ): Promise<SteamLibraryScanResult | undefined> {
     return invokeOr<SteamLibraryScanResult | undefined>(
       "steam_scan_library",
@@ -842,7 +940,7 @@ export const ghostboxApi = {
         forceRefreshOwnedGames: forceRefreshOwnedGames ?? false,
         includeOwnedGames: includeOwnedGames ?? true,
       },
-      undefined
+      undefined,
     );
   },
 
@@ -860,7 +958,7 @@ export const ghostboxApi = {
     return invokeOr<SteamPathSelectionResult | undefined>(
       "steam_select_path",
       { steamPath: selectedPath },
-      undefined
+      undefined,
     );
   },
 
@@ -868,26 +966,34 @@ export const ghostboxApi = {
     return invokeOr<StartupSettings | undefined>(
       "app_get_startup_settings",
       {},
-      undefined
+      undefined,
     );
   },
 
   setStartupSettings(
-    settings: Partial<StartupSettings>
+    settings: Partial<StartupSettings>,
   ): Promise<StartupSettings | undefined> {
     return invokeOr<StartupSettings | undefined>(
       "app_set_startup_settings",
       { settings },
-      undefined
+      undefined,
     );
   },
 
   setNotificationSettings(settings: NotificationSettings): Promise<void> {
-    return invokeOr<void>("app_set_notification_settings", { settings }, undefined);
+    return invokeOr<void>(
+      "app_set_notification_settings",
+      { settings },
+      undefined,
+    );
   },
 
   getMorrenusApiKey(): Promise<string | undefined> {
-    return invokeOr<string | undefined>("app_get_morrenus_api_key", {}, undefined);
+    return invokeOr<string | undefined>(
+      "app_get_morrenus_api_key",
+      {},
+      undefined,
+    );
   },
 
   setMorrenusApiKey(apiKey: string): Promise<string> {
@@ -898,23 +1004,7 @@ export const ghostboxApi = {
     return invokeOr<MorrenusStatsResult | undefined>(
       "app_get_morrenus_stats",
       { apiKey },
-      undefined
-    );
-  },
-
-  validateBackupRoot(): Promise<BackupRootStatus | undefined> {
-    return invokeOr<BackupRootStatus | undefined>(
-      "backup_validate_root",
-      {},
-      undefined
-    );
-  },
-
-  ensureBackupRoot(): Promise<BackupRootStatus | undefined> {
-    return invokeOr<BackupRootStatus | undefined>(
-      "backup_ensure_root",
-      {},
-      undefined
+      undefined,
     );
   },
 
@@ -922,20 +1012,31 @@ export const ghostboxApi = {
     return invokeOr<BackupSettings | undefined>(
       "backup_get_settings",
       {},
-      undefined
+      undefined,
     );
   },
 
-  setBackupOutputPath(outputPath: string): Promise<BackupSettings | undefined> {
+  removeBackupRecord(appId: string): Promise<BackupSettings | undefined> {
     return invokeOr<BackupSettings | undefined>(
-      "backup_set_output_path",
-      { outputPath },
-      undefined
+      "backup_remove_record",
+      { appId },
+      undefined,
+    );
+  },
+
+  getBackupDetails(
+    appId: string,
+    backupPath?: string | null,
+  ): Promise<BackupDetails | null> {
+    return invokeOr<BackupDetails | null>(
+      "backup_get_details",
+      { appId, backupPath: backupPath ?? null, apiUrl: getGamesApiUrl() },
+      null,
     );
   },
 
   onBackupSettingsChanged(
-    callback: (settings: BackupSettings) => void
+    callback: (settings: BackupSettings) => void,
   ): () => void {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -955,168 +1056,9 @@ export const ghostboxApi = {
     };
   },
 
-  async selectBackupOutputPath(): Promise<BackupOutputPathSelectionResult | undefined> {
-    const settings = await invokeOr<BackupSettings | undefined>(
-      "backup_get_settings",
-      {},
-      undefined
-    );
-    const selectedPath = await open({
-      directory: true,
-      multiple: false,
-      title: "Selecione a pasta de backups",
-      defaultPath: settings?.outputPath,
-    });
-
-    if (typeof selectedPath !== "string") {
-      return settings ? { status: "cancelled", settings } : undefined;
-    }
-
-    const nextSettings = await invoke<BackupSettings>("backup_set_output_path", {
-      outputPath: selectedPath,
-    });
-    return { status: "ok", settings: nextSettings };
-  },
-
-  openBackupFolder(
-    appId: string,
-    backupPath?: string
-  ): Promise<BackupPathActionResult> {
-    return invokeOr<BackupPathActionResult>(
-      "backup_open_folder",
-      { appId, backupPath: backupPath ?? null },
-      { success: false, error: "Não foi possível abrir a pasta de backup." }
-    );
-  },
-
-  deleteBackupFolder(
-    appId: string,
-    backupPath?: string
-  ): Promise<BackupFolderDeletionResult> {
-    return invokeOr<BackupFolderDeletionResult>(
-      "backup_delete_folder",
-      { appId, backupPath: backupPath ?? null },
-      { success: false, error: "Não foi possível excluir a pasta de backup." }
-    );
-  },
-
-  getBackupDetails(
-    appId: string,
-    backupPath?: string
-  ): Promise<BackupDetails | null> {
-    return invokeOr<BackupDetails | null>(
-      "backup_get_details",
-      { appId, backupPath: backupPath ?? null, apiUrl: getGamesApiUrl() },
-      null
-    );
-  },
-
-  runGameLocalBackup(
-    game: LudusaviBackupPreviewGame
-  ): Promise<LocalBackupResult | undefined> {
-    return invokeOr<LocalBackupResult | undefined>(
-      "backup_run_game_local",
-      { game },
-      undefined
-    );
-  },
-
-  restoreGameLocalBackup(
+  launchGame(
     game: LudusaviBackupPreviewGame,
-    backupPath?: string
-  ): Promise<LocalRestoreResult | undefined> {
-    return invokeOr<LocalRestoreResult | undefined>(
-      "backup_restore_game_local",
-      { game, backupPath: backupPath ?? null },
-      undefined
-    );
-  },
-
-  setGameAutomaticBackup(
-    appId: string,
-    enabled: boolean
-  ): Promise<BackupSettings | undefined> {
-    return invokeOr<BackupSettings | undefined>(
-      "backup_set_game_automatic",
-      { appId, enabled },
-      undefined
-    );
-  },
-
-  setLibraryAutomaticBackups(
-    enabled: boolean,
-    appIds: string[]
-  ): Promise<BackupSettings | undefined> {
-    return invokeOr<BackupSettings | undefined>(
-      "backup_set_library_automatic",
-      { enabled, appIds },
-      undefined
-    );
-  },
-
-  setBackupEntryPinned(
-    appId: string,
-    backupPath: string,
-    pinned: boolean
-  ): Promise<BackupSettings | undefined> {
-    return invokeOr<BackupSettings | undefined>(
-      "backup_set_entry_pinned",
-      { appId, backupPath, pinned },
-      undefined
-    );
-  },
-
-  refreshGameBackupMetadata(appId: string): Promise<BackupSettings | null> {
-    return invokeOr<BackupSettings | null>(
-      "backup_refresh_game_metadata",
-      { appId },
-      null
-    );
-  },
-
-  async selectGameExecutable(
-    game: GhostBoxGame
-  ): Promise<GameExecutableSelectionResult | undefined> {
-    const executablePath = await open({
-      directory: false,
-      multiple: false,
-      title: "Selecione o executável do jogo",
-      filters: [{ name: "Executável", extensions: ["exe"] }],
-    });
-
-    if (typeof executablePath !== "string") {
-      return undefined;
-    }
-
-    return invokeOr<GameExecutableSelectionResult | undefined>(
-      "backup_select_game_executable",
-      { game, executablePath },
-      undefined
-    );
-  },
-
-  getLudusaviBackupPreviews(
-    games: LudusaviBackupPreviewGame[]
-  ): Promise<LudusaviBackupPreviewGame[]> {
-    return invokeOr<LudusaviBackupPreviewGame[]>(
-      "ludusavi_get_backup_previews",
-      { games },
-      []
-    );
-  },
-
-  setGameCustomExecutable(
-    appId: string,
-    executablePath: string | null
-  ): Promise<BackupSettings | undefined> {
-    return invokeOr<BackupSettings | undefined>(
-      "backup_set_game_custom_executable",
-      { appId, executablePath },
-      undefined
-    );
-  },
-
-  launchGame(game: LudusaviBackupPreviewGame): Promise<LaunchGameResult | undefined> {
+  ): Promise<LaunchGameResult | undefined> {
     return invokeOr<LaunchGameResult | undefined>(
       "game_launch",
       { game },
@@ -1124,7 +1066,7 @@ export const ghostboxApi = {
         success: false,
         appId: game.appId,
         error: "Não foi possível iniciar o jogo.",
-      }
+      },
     );
   },
 
@@ -1144,7 +1086,7 @@ export const ghostboxApi = {
         success: false,
         appId,
         error: "Não foi possível iniciar o jogo.",
-      }
+      },
     );
   },
 
@@ -1152,19 +1094,23 @@ export const ghostboxApi = {
     return invokeOr<void>("tray_show_main_window", {}, undefined);
   },
 
-  navigateFromTray(page: "home" | "catalogue" | "library" | "profile"): Promise<void> {
+  navigateFromTray(
+    page: "home" | "catalogue" | "library" | "profile",
+  ): Promise<void> {
     return invokeOr<void>("tray_navigate", { page }, undefined);
   },
 
   onTrayNavigate(
-    callback: (payload: { page: "home" | "catalogue" | "library" | "profile" }) => void
+    callback: (payload: {
+      page: "home" | "catalogue" | "library" | "profile";
+    }) => void,
   ): () => void {
     let disposed = false;
     let unlisten: (() => void) | undefined;
 
     void listen<{ page: "home" | "catalogue" | "library" | "profile" }>(
       "tray-navigate",
-      (event) => callback(event.payload)
+      (event) => callback(event.payload),
     ).then((nextUnlisten) => {
       if (disposed) {
         nextUnlisten();
@@ -1188,11 +1134,7 @@ export const ghostboxApi = {
   },
 
   getGameIconUrl(appId: string): Promise<string | null> {
-    return invokeOr<string | null>(
-      "steam_get_game_icon_url",
-      { appId },
-      null
-    );
+    return invokeOr<string | null>("steam_get_game_icon_url", { appId }, null);
   },
 
   onSteamCmdReady(callback: () => void): () => void {
@@ -1201,7 +1143,7 @@ export const ghostboxApi = {
   },
 
   onCatalogueCacheUpdated(
-    callback: (payload: CatalogueCacheUpdatedPayload) => void
+    callback: (payload: CatalogueCacheUpdatedPayload) => void,
   ): () => void {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -1209,7 +1151,7 @@ export const ghostboxApi = {
       "catalogue-cache-updated",
       (event) => {
         callback(event.payload);
-      }
+      },
     ).then((nextUnlisten) => {
       if (disposed) {
         nextUnlisten();
@@ -1225,7 +1167,7 @@ export const ghostboxApi = {
   },
 
   onLocalAchievementsUnlocked(
-    callback: (payload: LocalAchievementsUnlockedPayload) => void
+    callback: (payload: LocalAchievementsUnlockedPayload) => void,
   ): () => void {
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -1233,7 +1175,7 @@ export const ghostboxApi = {
       "local-achievements-unlocked",
       (event) => {
         callback(event.payload);
-      }
+      },
     ).then((nextUnlisten) => {
       if (disposed) {
         nextUnlisten();

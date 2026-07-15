@@ -1,4 +1,4 @@
-import { CalendarClock, Check, Cloud, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, ShieldCheck, X } from "lucide-react";
+import { CalendarClock, Check, Cloud, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
 import { CupStar, ServerUpdate, UserEdit } from "reicon-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
@@ -14,6 +14,7 @@ import type {
   SubscriptionStatusResult,
 } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
+import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
 
@@ -101,6 +102,46 @@ function formatCurrency(amountCents: number | undefined, currency: string | unde
     style: "currency",
     currency: currency || "BRL",
   }).format(amountCents / 100);
+}
+
+function formatBillingDate(value: string | null | undefined, language: "pt" | "en") {
+  if (!value) return language === "en" ? "Not available" : "Indisponível";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
+    dateStyle: "medium",
+  }).format(timestamp);
+}
+
+function formatCardBrand(brand: string | null | undefined) {
+  if (!brand) return null;
+  const normalized = brand.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    visa: "Visa",
+    mastercard: "Mastercard",
+    amex: "Amex",
+    american_express: "Amex",
+    elo: "Elo",
+    hipercard: "Hipercard",
+    diners: "Diners",
+    discover: "Discover",
+    jcb: "JCB",
+    unionpay: "UnionPay",
+  };
+  return labels[normalized] || brand.charAt(0).toUpperCase() + brand.slice(1);
+}
+
+function formatPaymentMethodLabel(
+  paymentMethod: { brand: string | null; last4: string | null; type: string | null } | null | undefined,
+  language: "pt" | "en"
+) {
+  if (!paymentMethod) return language === "en" ? "Not available" : "Indisponível";
+  const brand = formatCardBrand(paymentMethod.brand);
+  if (brand && paymentMethod.last4) return `${brand} ···· ${paymentMethod.last4}`;
+  if (brand) return brand;
+  if (paymentMethod.last4) return `···· ${paymentMethod.last4}`;
+  if (paymentMethod.type === "card") return language === "en" ? "Card" : "Cartão";
+  return language === "en" ? "Not available" : "Indisponível";
 }
 
 function latestPayment(value: unknown): SubscriptionPayment | null {
@@ -246,10 +287,13 @@ export function SubscriptionPlans({
     for (const save of cloudSaves) {
       const current = byAppId.get(save.appId);
       const updatedAt = save.updatedAt || save.createdAt || null;
+      const localTitle = cloudBackupGames.find((game) => game.appId === save.appId)?.title;
+      const remoteTitle = isSteamTitlePlaceholder(save.gameTitle, save.appId) ? null : save.gameTitle;
+      const fallbackTitle = localTitle && !isSteamTitlePlaceholder(localTitle, save.appId) ? localTitle : null;
       if (!current || (updatedAt && (!current.lastBackupAt || Date.parse(updatedAt) > Date.parse(current.lastBackupAt)))) {
         byAppId.set(save.appId, {
           appId: save.appId,
-          title: save.gameTitle || cloudBackupGames.find((game) => game.appId === save.appId)?.title || save.appId,
+          title: remoteTitle || fallbackTitle || localTitle || save.appId,
           lastBackupAt: updatedAt,
           lastBackupSuccess: true,
         });
@@ -274,6 +318,45 @@ export function SubscriptionPlans({
   }
 
   if (surface === "settings" && isPremium) {
+    const planId = subscriptionStatus.subscription.planId;
+    const planLabel =
+      planId === "quarterly"
+        ? copy("Plano trimestral", "Quarterly plan")
+        : planId === "monthly"
+          ? copy("Plano mensal", "Monthly plan")
+          : copy("Plano Premium", "Premium plan");
+    const planShortLabel =
+      planId === "quarterly"
+        ? copy("Trimestral", "Quarterly")
+        : planId === "monthly"
+          ? copy("Mensal", "Monthly")
+          : copy("Premium", "Premium");
+    const paymentStatusLabel =
+      paymentStatus === "paid"
+        ? copy("Pago", "Paid")
+        : paymentStatus === "expired"
+          ? copy("Vencida", "Expired")
+          : paymentStatus === "failed"
+            ? copy("Falhou", "Failed")
+            : paymentStatus === "cancelled"
+              ? copy("Cancelado", "Cancelled")
+              : copy("Pendente", "Pending");
+    const paymentStatusMod =
+      paymentStatus === "paid"
+        ? "paid"
+        : paymentStatus === "failed" || paymentStatus === "expired"
+          ? "failed"
+          : paymentStatus === "cancelled"
+            ? "cancelled"
+            : "pending";
+    const recentBackups = [...cloudBackupSummaries]
+      .sort((a, b) => {
+        const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
+        const dateB = b.lastBackupAt ? Date.parse(b.lastBackupAt) : 0;
+        return dateB - dateA;
+      })
+      .slice(0, 8);
+
     return (
       <section
         className="subscription-account settings-panel__animated-block"
@@ -284,90 +367,116 @@ export function SubscriptionPlans({
         aria-label={copy("Resumo da assinatura Premium", "Premium subscription summary")}
       >
         <header className="subscription-account__header">
-          <div>
-            <span className="subscription-account__eyebrow">GhostBox Premium</span>
-            <h3>{copy("Assinatura ativa", "Active subscription")}</h3>
+          <div className="subscription-account__header-main">
+            <span className="subscription-account__brand-icon" aria-hidden="true" />
+            <div>
+              <span className="subscription-account__eyebrow">GhostBox Premium</span>
+              <h3>{copy("Assinatura ativa", "Active subscription")}</h3>
+              <p>{planLabel}</p>
+            </div>
           </div>
+          <span className="subscription-account__status-badge">
+            <span className="subscription-account__status-dot" aria-hidden="true" />
+            {copy("Ativa", "Active")}
+          </span>
         </header>
 
         <div className="subscription-account__summary-grid">
           <article className="subscription-account__summary-card">
-            <ShieldCheck size={20} strokeWidth={2.15} aria-hidden="true" />
-            <span>{copy("Status", "Status")}</span>
-            <strong>{copy("Premium ativo", "Premium active")}</strong>
+            <CalendarClock size={18} strokeWidth={2.15} aria-hidden="true" />
+            <span>
+              {subscriptionStatus.subscription.cancelAtPeriodEnd
+                ? copy("Acesso até", "Access until")
+                : copy("Próxima cobrança", "Next billing")}
+            </span>
+            <strong>{formatBillingDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CalendarClock size={20} strokeWidth={2.15} aria-hidden="true" />
-            <span>{copy("Expira em", "Expires on")}</span>
-            <strong>{formatDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
+            <Wallet size={18} strokeWidth={2.15} aria-hidden="true" />
+            <span>{copy("Método de pagamento", "Payment method")}</span>
+            <strong>{formatPaymentMethodLabel(subscriptionStatus.paymentMethod, language)}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CloudUpload size={20} strokeWidth={2.15} aria-hidden="true" />
+            <CloudUpload size={18} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Backups em nuvem", "Cloud backups")}</span>
             <strong>{cloudBackupSummaries.length}</strong>
           </article>
         </div>
 
-        <article className="subscription-account__panel">
-          <h4><CreditCard size={18} strokeWidth={2.15} aria-hidden="true" />{copy("Pagamentos", "Payments")}</h4>
-          {payment ? (
-            <ul className="subscription-account__payment-list">
-              <li>
-                <div>
-                  <strong>{formatCurrency(payment.amountCents, payment.currency, language)}</strong>
-                  <small>
-                    {subscriptionStatus.subscription.planId === "quarterly" ? copy("Trimestral", "Quarterly") : copy("Mensal", "Monthly")}
-                    {" · "}
-                    {formatDate(payment.confirmedAt || payment.createdAt, language)}
-                  </small>
-                </div>
-                <span>
-                  {paymentStatus === "paid"
-                    ? copy("pago", "paid")
-                    : paymentStatus === "expired"
-                      ? copy("fatura vencida", "invoice expired")
-                      : paymentStatus === "failed"
-                        ? copy("falhou", "failed")
-                        : paymentStatus === "cancelled"
-                          ? copy("cancelado", "cancelled")
-                          : copy("pendente", "pending")}
-                </span>
-              </li>
-            </ul>
-          ) : (
-            <p className="subscription-account__empty">{copy("Sem pagamentos registrados.", "No payments registered.")}</p>
-          )}
-        </article>
-
-        <article className="subscription-account__panel subscription-account__panel--wide">
-          <h4><CloudUpload size={18} strokeWidth={2.15} aria-hidden="true" />{copy("Últimos backups em nuvem", "Recent cloud backups")}</h4>
-          {cloudBackupSummaries.length > 0 ? (
-            <ul className="subscription-account__backup-list">
-              {[...cloudBackupSummaries]
-                .sort((a, b) => {
-                  const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
-                  const dateB = b.lastBackupAt ? Date.parse(b.lastBackupAt) : 0;
-                  return dateB - dateA;
-                })
-                .slice(0, 8)
-                .map((game) => (
-                <li key={game.appId}>
-                  <strong>{game.title}</strong>
-                  {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
-                  <em
-                    className="subscription-account__backup-status"
-                    title={copy("Backup em nuvem ativo", "Cloud backup active")}
-                    aria-label={copy("Backup em nuvem ativo", "Cloud backup active")}
-                  >
-                    <Cloud size={17} strokeWidth={2.15} aria-hidden="true" />
-                  </em>
+        <div className="subscription-account__details-grid">
+          <article className="subscription-account__panel">
+            <h4>
+              <CreditCard size={16} strokeWidth={2.15} aria-hidden="true" />
+              {copy("Pagamentos", "Payments")}
+            </h4>
+            {payment ? (
+              <ul className="subscription-account__payment-list">
+                <li>
+                  <div>
+                    <strong>{formatCurrency(payment.amountCents, payment.currency, language)}</strong>
+                    <small>
+                      {planShortLabel}
+                      {" · "}
+                      {formatDate(payment.confirmedAt || payment.createdAt, language)}
+                    </small>
+                  </div>
+                  <span className={`subscription-account__payment-status subscription-account__payment-status--${paymentStatusMod}`}>
+                    {paymentStatusLabel}
+                  </span>
                 </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="subscription-account__empty">{copy("Nenhum backup em nuvem encontrado ainda.", "No cloud backups found yet.")}</p>
-          )}
-        </article>
+              </ul>
+            ) : (
+              <div className="subscription-account__empty">
+                <strong>{copy("Nenhum pagamento listado", "No payments listed")}</strong>
+                <p>{copy("O histórico aparece após a confirmação no Stripe.", "History appears after Stripe confirmation.")}</p>
+              </div>
+            )}
+          </article>
+
+          <article className="subscription-account__panel">
+            <h4>
+              <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />
+              {copy("Últimos backups em nuvem", "Recent cloud backups")}
+            </h4>
+            {recentBackups.length > 0 ? (
+              <ul className="subscription-account__backup-list">
+                {recentBackups.map((game) => {
+                  const backupOk = game.lastBackupSuccess !== false;
+                  return (
+                    <li key={game.appId}>
+                      <strong>{game.title}</strong>
+                      {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
+                      <em
+                        className={
+                          backupOk
+                            ? "subscription-account__backup-status"
+                            : "subscription-account__backup-status subscription-account__backup-status--error"
+                        }
+                        title={
+                          backupOk
+                            ? copy("Backup em nuvem ativo", "Cloud backup active")
+                            : copy("Último backup com falha", "Last backup failed")
+                        }
+                        aria-label={
+                          backupOk
+                            ? copy("Backup em nuvem ativo", "Cloud backup active")
+                            : copy("Último backup com falha", "Last backup failed")
+                        }
+                      >
+                        <Cloud size={16} strokeWidth={2.15} aria-hidden="true" />
+                      </em>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="subscription-account__empty">
+                <strong>{copy("Nenhum backup em nuvem", "No cloud backups yet")}</strong>
+                <p>{copy("Faça backup de um jogo para ver o histórico aqui.", "Back up a game to see history here.")}</p>
+              </div>
+            )}
+          </article>
+        </div>
 
         <div className="subscription-account__actions" role="group" aria-label={copy("Gerenciar assinatura", "Manage subscription")}>
           <button

@@ -950,9 +950,10 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
         &steam_login_page_html(true, &success_message),
     );
 
-    let cloud_session = crate::cloud_save::cloud_authenticate_steam_callback(app, callback.as_str(), &profile)
-        .await
-        .ok();
+    let cloud_session =
+        crate::cloud_save::cloud_authenticate_steam_callback(app, callback.as_str(), &profile)
+            .await
+            .ok();
     if cloud_session.is_none() && !validate_steam_openid(&callback).await? {
         return Err("Steam OpenID validation failed".to_string());
     }

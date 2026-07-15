@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
+import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page } from "../../types";
 
 const LazyGameModal = lazy(() =>
@@ -15,17 +16,6 @@ const LazyGameAchievementsPage = lazy(() =>
     default: module.GameAchievementsPage,
   }))
 );
-
-function DeferredPagePlaceholder({ page }: { page: Page }) {
-  return (
-    <section
-      className={`deferred-page-placeholder deferred-page-placeholder--${page}`}
-      aria-hidden="true"
-    >
-      <span className="deferred-page-placeholder__spinner" />
-    </section>
-  );
-}
 
 interface ContentOverlayProps {
   page: Page;
@@ -50,7 +40,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
         className={`page page--game-achievements${enterClass}`}
         key={`achievements-${achievementsView.game.id}`}
       >
-        <Suspense fallback={<DeferredPagePlaceholder page={page} />}>
+        <Suspense fallback={<PagePlaceholder page={page} />}>
           <LazyGameAchievementsPage
             game={achievementsView.game}
             highlightAchievementId={achievementsView.highlightAchievementId}
@@ -72,7 +62,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
         className={`page page--game-modal${enterClass}`}
         key={`game-modal-${selectedGame.id}`}
       >
-        <Suspense fallback={<DeferredPagePlaceholder page={page} />}>
+        <Suspense fallback={<PagePlaceholder page={page} />}>
           <LazyGameModal
             game={mergedGame}
             isAdding={appData.addingGameId === selectedGame.id}
@@ -82,9 +72,6 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             isPlaying={appData.launchingGameId === selectedGame.id}
             isSessionActive={isSessionActive}
             isFavorite={appData.favoriteGameIds.has(selectedGame.id)}
-            customExecutablePath={
-              appData.backupSettings?.customExecutables[selectedGame.appId] ?? ""
-            }
             userCollections={appData.userCollections}
             steamProfile={appData.steamProfile}
             onClose={closeGame}
@@ -93,8 +80,6 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             onToggleFavorite={appData.toggleFavoriteGame}
             onAddGameToCollection={appData.addGameToUserCollection}
             onRemoveGameFromCollection={appData.removeGameFromCollection}
-            onSelectGameExecutable={appData.handleSelectGameExecutable}
-            onRemoveGameExecutable={appData.handleRemoveGameExecutable}
             onPlayGame={appData.handlePlayGame}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })

@@ -17,7 +17,6 @@ import {
   removeGameViaLuaTools,
 } from "../data";
 import type {
-  BackupRootStatus,
   BackupSettings,
   StartupPage,
   StartupSettings,
@@ -32,10 +31,7 @@ import {
   buildCloudProfileSnapshot,
   isCloudSnapshotNewer,
 } from "../lib/cloudProfile";
-import {
-  formatSteamLoginError,
-  mergeSteamProfile,
-} from "../lib/steamProfile";
+import { formatSteamLoginError, mergeSteamProfile } from "../lib/steamProfile";
 import {
   createBackupToastFromRecord,
   getLatestChangedBackupRecord,
@@ -61,14 +57,15 @@ import {
   writeStoredShowSteamGames,
   writeStoredCloudProfileUpdatedAt,
 } from "../utils/storage";
-import { loadGameAchievementDetailsCached, loadGameDetailsCached } from "../utils/gameCache";
 import {
-  countUnlockedAchievements,
+  loadGameAchievementDetailsCached,
+  loadGameDetailsCached,
+} from "../utils/gameCache";
+import {
   createProfileHistoryFallbackGame,
   getBackupRecordLatestKey,
-  mergeBackupAchievementsIntoGame,
   mergeGameDetailsPreservingAchievements,
-  removeProfileHistoryGameByAppId,
+  mergeBackupAchievementsIntoGame,
   upsertProfileHistoryGame,
 } from "../lib/profileHistoryGames";
 import { showAchievementDesktopNotification } from "../lib/trayNotifications";
@@ -97,10 +94,12 @@ const defaultBackupSettings: BackupSettings = {
   automaticBackupsForLibrary: false,
   automaticBackups: {},
   backupRecords: {},
-  customExecutables: {},
 };
 
-function upsertLibraryGameByAppId(games: GhostBoxGame[], nextGame: GhostBoxGame) {
+function upsertLibraryGameByAppId(
+  games: GhostBoxGame[],
+  nextGame: GhostBoxGame,
+) {
   return [nextGame, ...games.filter((game) => game.appId !== nextGame.appId)];
 }
 
@@ -108,14 +107,19 @@ function removeLibraryGameByAppId(games: GhostBoxGame[], appId: string) {
   return games.filter((game) => game.appId !== appId);
 }
 
-async function resolveCloudGames(gameIds: string[], knownGames: GhostBoxGame[]) {
+async function resolveCloudGames(
+  gameIds: string[],
+  knownGames: GhostBoxGame[],
+) {
   const gamesById = new Map(knownGames.map((game) => [game.id, game]));
   const missingIds = gameIds.filter((gameId) => !gamesById.has(gameId));
   const batchSize = 8;
 
   for (let index = 0; index < missingIds.length; index += batchSize) {
     const loaded = await Promise.all(
-      missingIds.slice(index, index + batchSize).map((gameId) => loadGameDetailsCached(gameId))
+      missingIds
+        .slice(index, index + batchSize)
+        .map((gameId) => loadGameDetailsCached(gameId)),
     );
     for (const game of loaded) {
       if (game) gamesById.set(game.id, game);
@@ -127,11 +131,9 @@ async function resolveCloudGames(gameIds: string[], knownGames: GhostBoxGame[]) 
 
 function applyPlaytimeToGame(
   game: GhostBoxGame,
-  snapshot: GamePlaytimeSnapshot
+  snapshot: GamePlaytimeSnapshot,
 ): GhostBoxGame {
   const playtime = snapshot[game.appId];
-  // Only overwrite when Steam snapshot has this app. Empty snapshot must not
-  // wipe existing UI values before sync finishes.
   if (!playtime) {
     return { ...game, sessionActive: false };
   }
@@ -149,7 +151,7 @@ function applyPlaytimeToGame(
 
 function applyPlaytimeSnapshotToGames(
   games: GhostBoxGame[],
-  snapshot: GamePlaytimeSnapshot
+  snapshot: GamePlaytimeSnapshot,
 ) {
   let changed = false;
   const hasSteamData = Object.keys(snapshot).length > 0;
@@ -158,14 +160,14 @@ function applyPlaytimeSnapshotToGames(
     const playtime = snapshot[game.appId];
 
     if (!playtime) {
-      // After a successful Steam sync, missing apps mean 0 Steam playtime.
       if (!hasSteamData) {
         if (game.sessionActive === false) return game;
         changed = true;
         return { ...game, sessionActive: false };
       }
       const alreadyCleared =
-        (game.playTimeInMilliseconds ?? 0) === 0 && game.sessionActive === false;
+        (game.playTimeInMilliseconds ?? 0) === 0 &&
+        game.sessionActive === false;
       if (alreadyCleared) return game;
       changed = true;
       return {
@@ -205,7 +207,7 @@ function collectActiveSessionAppIds(snapshot: GamePlaytimeSnapshot) {
   return new Set(
     Object.values(snapshot)
       .filter((entry) => entry.sessionActive === true)
-      .map((entry) => entry.appId)
+      .map((entry) => entry.appId),
   );
 }
 
@@ -228,7 +230,6 @@ interface AppDataContextValue {
   availableLibraryGameAppIds: Set<string>;
   playableGameAppIds: Set<string>;
   backupSettings: BackupSettings | null;
-  backupRootStatus: BackupRootStatus | null;
   morrenusApiKey: string;
   startupSettings: StartupSettings | null;
   initialPage: StartupPage;
@@ -254,49 +255,42 @@ interface AppDataContextValue {
     displayName: string,
     avatarUrl: string,
     bannerUrl: string,
-    bannerPosition: NonNullable<SteamProfile["bannerPosition"]>
+    bannerPosition: NonNullable<SteamProfile["bannerPosition"]>,
   ) => Promise<void>;
   setBackupSettings: (settings: BackupSettings | null) => void;
   setMorrenusApiKey: (key: string) => void;
   setInitialPage: Dispatch<SetStateAction<StartupPage>>;
   setSteamPathInput: (path: string) => void;
   setShowSteamGames: (value: boolean) => void;
-  handleStartupSettingsChange: (settings: Partial<StartupSettings>) => Promise<void>;
+  handleStartupSettingsChange: (
+    settings: Partial<StartupSettings>,
+  ) => Promise<void>;
   handleMorrenusApiKeySave: (key: string) => Promise<void>;
   handleSelectSteamPath: () => Promise<void>;
-  handleSelectBackupOutputPath: () => Promise<void>;
-  handleToggleLibraryAutomaticBackups: (enabled: boolean) => Promise<void>;
-  handleToggleAutomaticBackup: (game: GhostBoxGame, enabled: boolean) => Promise<void>;
-  handleSelectGameExecutable: (game: GhostBoxGame) => Promise<void>;
-  handleRemoveGameExecutable: (game: GhostBoxGame) => Promise<void>;
-  handleOpenBackupFolder: (appId: string, backupPath?: string) => Promise<void>;
-  handleDeleteBackupFolder: (
-    appId: string,
-    title: string,
-    backupPath?: string
-  ) => void;
-  handleCreateBackupRoot: () => Promise<void>;
-  refreshBackupRootStatus: () => Promise<void>;
 }
 
-const AppDataContext = createContext<AppDataContextValue | undefined>(undefined);
+const AppDataContext = createContext<AppDataContextValue | undefined>(
+  undefined,
+);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { showToast, setCollectionModalOpen, setPendingBackupDeletion } = useOverlay();
+  const { showToast, setCollectionModalOpen } = useOverlay();
   const { appearance, notifications } = useSettings();
 
   const [favoriteGames, setFavoriteGames] = useState<GhostBoxGame[]>(() =>
-    readStoredFavoriteGames()
+    readStoredFavoriteGames(),
   );
-  const [addedLibraryGames, setAddedLibraryGames] = useState<GhostBoxGame[]>([]);
+  const [addedLibraryGames, setAddedLibraryGames] = useState<GhostBoxGame[]>(
+    [],
+  );
   const [userCollections, setUserCollections] = useState<UserCollection[]>(() =>
-    readStoredUserCollections()
+    readStoredUserCollections(),
   );
   const [steamProfile, setSteamProfile] = useState<SteamProfile | null>(() =>
-    readStoredSteamProfile()
+    readStoredSteamProfile(),
   );
   const [isCloudProfileRestoring, setIsCloudProfileRestoring] = useState(() =>
-    Boolean(readStoredSteamProfile()?.steamId)
+    Boolean(readStoredSteamProfile()?.steamId),
   );
   const [isSteamSigningIn, setIsSteamSigningIn] = useState(false);
   const [isScanningSteamLibrary, setIsScanningSteamLibrary] = useState(false);
@@ -304,47 +298,47 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [removingGameId, setRemovingGameId] = useState<string | null>(null);
   const [launchingGameId, setLaunchingGameId] = useState<string | null>(null);
   const [activeSessionAppIds, setActiveSessionAppIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
   const [addedLibraryGameAppIds, setAddedLibraryGameAppIds] = useState<
     Set<string>
   >(() => new Set());
   const [backupSettings, setBackupSettings] = useState<BackupSettings | null>(
-    defaultBackupSettings
+    defaultBackupSettings,
   );
-  const [backupRootStatus, setBackupRootStatus] =
-    useState<BackupRootStatus | null>(null);
   const [morrenusApiKey, setMorrenusApiKey] = useState("");
   const [startupSettings, setStartupSettings] =
     useState<StartupSettings | null>(null);
-  const [initialPage, setInitialPage] = useState<StartupPage>(() =>
-    readStoredStartupPage() ?? "home"
+  const [initialPage, setInitialPage] = useState<StartupPage>(
+    () => readStoredStartupPage() ?? "home",
   );
   const [steamPathInput, setSteamPathInput] = useState(
-    "C:\\Program Files (x86)\\Steam"
+    "C:\\Program Files (x86)\\Steam",
   );
   const [showSteamGames, setShowSteamGames] = useState(() =>
-    readStoredShowSteamGames()
+    readStoredShowSteamGames(),
   );
-  const backupSettingsRef = useRef<BackupSettings | null>(defaultBackupSettings);
+  const backupSettingsRef = useRef<BackupSettings | null>(
+    defaultBackupSettings,
+  );
   const pendingBackupToastRef = useRef<BackupToastPayload | null>(null);
   const steamProfileRequestSequenceRef = useRef(0);
-  const profileBackupSyncKeysRef = useRef(new Map<string, string>());
   const gamePlaytimesRef = useRef<GamePlaytimeSnapshot>({});
   const cloudProfileSyncTimerRef = useRef<number | null>(null);
   const cloudProfileSyncInFlightRef = useRef(false);
   const cloudProfileRestoreInFlightRef = useRef(false);
+  const appliedProfileBackupKeysRef = useRef<Map<string, string>>(new Map());
   const skipNextCloudProfileUploadRef = useRef(false);
   const cloudProfileLocalUpdatedAtRef = useRef<string | null>(
-    readStoredCloudProfileUpdatedAt()
+    readStoredCloudProfileUpdatedAt(),
   );
   const steamProfileRef = useRef<SteamProfile | null>(steamProfile);
   const userCollectionsRef = useRef<UserCollection[]>(userCollections);
   const favoriteGamesRef = useRef<GhostBoxGame[]>(favoriteGames);
   const addedLibraryGamesRef = useRef<GhostBoxGame[]>(addedLibraryGames);
-  const [profileHistoryGames, setProfileHistoryGames] = useState<GhostBoxGame[]>(
-    () => readStoredProfileHistoryGames()
-  );
+  const [profileHistoryGames, setProfileHistoryGames] = useState<
+    GhostBoxGame[]
+  >(() => readStoredProfileHistoryGames());
   const profileHistoryGamesRef = useRef<GhostBoxGame[]>(profileHistoryGames);
   const cloudProfileBootstrappedRef = useRef(false);
   const cloudProfileRestoredSteamIdRef = useRef<string | null>(null);
@@ -361,7 +355,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Hard ceiling so a hung IPC/network call never leaves the splash forever.
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setCompletedInitialLoadSteps((current) => {
@@ -375,9 +368,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const initialLoadingProgress = Math.round(
-    (completedInitialLoadSteps.size / initialLoadSteps.length) * 100
+    (completedInitialLoadSteps.size / initialLoadSteps.length) * 100,
   );
-  const isInitialLoading = completedInitialLoadSteps.size < initialLoadSteps.length;
+  const isInitialLoading =
+    completedInitialLoadSteps.size < initialLoadSteps.length;
 
   const mergeGamePlaytime = useCallback((game: GhostBoxGame): GhostBoxGame => {
     return applyPlaytimeToGame(game, gamePlaytimesRef.current);
@@ -388,17 +382,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     gamePlaytimesRef.current = snapshot;
     setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
     setFavoriteGames((current) =>
-      applyPlaytimeSnapshotToGames(current, snapshot)
+      applyPlaytimeSnapshotToGames(current, snapshot),
     );
     setAddedLibraryGames((current) =>
-      applyPlaytimeSnapshotToGames(current, snapshot)
+      applyPlaytimeSnapshotToGames(current, snapshot),
     );
     setProfileHistoryGames((current) =>
-      applyPlaytimeSnapshotToGames(current, snapshot)
+      applyPlaytimeSnapshotToGames(current, snapshot),
     );
   }, []);
 
-  /** Pull Steam GetOwnedGames playtimes (proxy Web API key or local key) by steamId. */
   const syncPlaytimesFromSteam = useCallback(
     async (steamId?: string | null) => {
       const id = steamId?.trim();
@@ -409,13 +402,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           gamePlaytimesRef.current = snapshot;
           setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
           setFavoriteGames((current) =>
-            applyPlaytimeSnapshotToGames(current, snapshot)
+            applyPlaytimeSnapshotToGames(current, snapshot),
           );
           setAddedLibraryGames((current) =>
-            applyPlaytimeSnapshotToGames(current, snapshot)
+            applyPlaytimeSnapshotToGames(current, snapshot),
           );
           setProfileHistoryGames((current) =>
-            applyPlaytimeSnapshotToGames(current, snapshot)
+            applyPlaytimeSnapshotToGames(current, snapshot),
           );
           return;
         }
@@ -424,7 +417,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         await refreshGamePlaytimes().catch(() => undefined);
       }
     },
-    [refreshGamePlaytimes]
+    [refreshGamePlaytimes],
   );
 
   useEffect(() => {
@@ -432,13 +425,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       gamePlaytimesRef.current = snapshot;
       setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
       setFavoriteGames((current) =>
-        applyPlaytimeSnapshotToGames(current, snapshot)
+        applyPlaytimeSnapshotToGames(current, snapshot),
       );
       setAddedLibraryGames((current) =>
-        applyPlaytimeSnapshotToGames(current, snapshot)
+        applyPlaytimeSnapshotToGames(current, snapshot),
       );
       setProfileHistoryGames((current) =>
-        applyPlaytimeSnapshotToGames(current, snapshot)
+        applyPlaytimeSnapshotToGames(current, snapshot),
       );
     });
   }, []);
@@ -467,12 +460,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     profileHistoryGamesRef.current = profileHistoryGames;
   }, [profileHistoryGames]);
 
+  const applyBackupAchievementsToProfileHistory = useCallback(
+    async (game: GhostBoxGame, backupPath?: string | null) => {
+      const backupDetails = await ghostboxApi.getBackupDetails(
+        game.appId,
+        backupPath,
+      );
+      if (!backupDetails?.achievements.length) return;
+
+      setProfileHistoryGames((current) =>
+        upsertProfileHistoryGame(
+          current,
+          mergeBackupAchievementsIntoGame(game, backupDetails),
+        ),
+      );
+    },
+    [],
+  );
+
   const rehydrateCollectionGames = useCallback(
-    (collections: UserCollection[], extraGames: GhostBoxGame[] = []): UserCollection[] => {
+    (
+      collections: UserCollection[],
+      extraGames: GhostBoxGame[] = [],
+    ): UserCollection[] => {
       const gameById = new Map<string, GhostBoxGame>();
       for (const game of favoriteGamesRef.current) gameById.set(game.id, game);
-      for (const game of addedLibraryGamesRef.current) gameById.set(game.id, game);
-      for (const game of profileHistoryGamesRef.current) gameById.set(game.id, game);
+      for (const game of addedLibraryGamesRef.current)
+        gameById.set(game.id, game);
+      for (const game of profileHistoryGamesRef.current)
+        gameById.set(game.id, game);
       for (const game of extraGames) gameById.set(game.id, game);
 
       return collections.map((collection) => ({
@@ -483,14 +499,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }),
       }));
     },
-    []
+    [],
   );
 
-  const markCloudProfileLocalUpdated = useCallback((iso = new Date().toISOString()) => {
-    cloudProfileLocalUpdatedAtRef.current = iso;
-    writeStoredCloudProfileUpdatedAt(iso);
-    return iso;
-  }, []);
+  const markCloudProfileLocalUpdated = useCallback(
+    (iso = new Date().toISOString()) => {
+      cloudProfileLocalUpdatedAtRef.current = iso;
+      writeStoredCloudProfileUpdatedAt(iso);
+      return iso;
+    },
+    [],
+  );
 
   const pushCloudProfileSnapshot = useCallback(async () => {
     if (cloudProfileSyncInFlightRef.current) return;
@@ -506,12 +525,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cloudProfileLocalUpdatedAtRef.current || markCloudProfileLocalUpdated();
       let cloudProfile = profile;
       if (/^data:/i.test(cloudProfile.avatarUrl || "")) {
-        const uploaded = await ghostboxApi.uploadProfileImage(cloudProfile.avatarUrl || "", "avatar");
+        const uploaded = await ghostboxApi.uploadProfileImage(
+          cloudProfile.avatarUrl || "",
+          "avatar",
+        );
         if (!uploaded) return;
         cloudProfile = { ...cloudProfile, avatarUrl: uploaded };
       }
       if (/^data:/i.test(cloudProfile.bannerUrl || "")) {
-        const uploaded = await ghostboxApi.uploadProfileImage(cloudProfile.bannerUrl || "", "banner");
+        const uploaded = await ghostboxApi.uploadProfileImage(
+          cloudProfile.bannerUrl || "",
+          "banner",
+        );
         if (!uploaded) return;
         cloudProfile = { ...cloudProfile, bannerUrl: uploaded };
       }
@@ -527,7 +552,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         writeStoredCloudProfileUpdatedAt(saved.updatedAt);
       }
     } catch {
-      // Local data remains the source of truth if cloud sync fails.
     } finally {
       cloudProfileSyncInFlightRef.current = false;
     }
@@ -592,8 +616,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const cloudGameIds = Array.from(
         new Set([
           ...applied.favoriteGameIds,
-          ...applied.userCollections.flatMap((collection) => collection.gameIds),
-        ])
+          ...applied.userCollections.flatMap(
+            (collection) => collection.gameIds,
+          ),
+        ]),
       );
       const { gamesById, games } = await resolveCloudGames(cloudGameIds, [
         ...favoriteGamesRef.current,
@@ -609,16 +635,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (applied.steamProfile) {
         setSteamProfile(applied.steamProfile);
         writeStoredSteamProfile(applied.steamProfile);
-        await ghostboxApi.saveSteamProfile(applied.steamProfile).catch(() => undefined);
+        await ghostboxApi
+          .saveSteamProfile(applied.steamProfile)
+          .catch(() => undefined);
       }
       setFavoriteGames(favoriteGames);
       writeStoredFavoriteGames(favoriteGames);
-      setUserCollections(rehydrateCollectionGames(applied.userCollections, games));
+      setUserCollections(
+        rehydrateCollectionGames(applied.userCollections, games),
+      );
       writeStoredUserCollections(applied.userCollections);
       cloudProfileLocalUpdatedAtRef.current = remote.updatedAt;
       writeStoredCloudProfileUpdatedAt(remote.updatedAt);
     } catch {
-      // Keep local profile/collections if remote restore fails.
     } finally {
       cloudProfileRestoreInFlightRef.current = false;
       setIsCloudProfileRestoring(false);
@@ -636,18 +665,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const pendingToast = createBackupToastFromRecord(record);
 
       if (isAppFocused()) {
-        showToast(pendingToast.title, pendingToast.message, pendingToast.variant);
+        showToast(
+          pendingToast.title,
+          pendingToast.message,
+          pendingToast.variant,
+        );
       } else {
         pendingBackupToastRef.current = pendingToast;
       }
 
-      const desktopEnabled = record.lastBackupSuccess !== false
-        ? notifications.backupSuccessEnabled
-        : notifications.backupErrorEnabled;
+      const desktopEnabled =
+        record.lastBackupSuccess !== false
+          ? notifications.backupSuccessEnabled
+          : notifications.backupErrorEnabled;
 
       showDesktopBackupNotification(
         pendingToast,
-        notifications.desktopNotificationsEnabled && desktopEnabled
+        notifications.desktopNotificationsEnabled && desktopEnabled,
       );
     },
     [
@@ -655,7 +689,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       notifications.backupSuccessEnabled,
       notifications.desktopNotificationsEnabled,
       showToast,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -680,21 +714,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     void ghostboxApi
-      .validateBackupRoot()
-      .then((status) => {
-        if (cancelled || !status) return;
-
-        setBackupRootStatus(status);
-        backupSettingsRef.current = status.settings;
-        setBackupSettings(status.settings);
+      .getBackupSettings()
+      .then((settings) => {
+        if (cancelled || !settings) return;
+        backupSettingsRef.current = settings;
+        setBackupSettings(settings);
       })
-      .catch(() =>
-        ghostboxApi.getBackupSettings().then((settings) => {
-          if (cancelled || !settings) return;
-          backupSettingsRef.current = settings;
-          setBackupSettings(settings);
-        })
-      )
       .finally(() => {
         if (!cancelled) markInitialLoadStepComplete("backupRoot");
       });
@@ -704,7 +729,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       const changedRecord = getLatestChangedBackupRecord(
         backupSettingsRef.current,
-        settings
+        settings,
       );
       backupSettingsRef.current = settings;
       setBackupSettings(settings);
@@ -718,8 +743,47 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [markInitialLoadStepComplete, queueBackupToast]);
 
   useEffect(() => {
+    const records = backupSettings?.backupRecords ?? {};
+    const recordEntries = Object.entries(records);
+    if (!recordEntries.length) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const knownGames = [
+        ...profileHistoryGamesRef.current,
+        ...addedLibraryGamesRef.current,
+        ...favoriteGamesRef.current,
+      ];
+
+      for (const [appId, record] of recordEntries) {
+        if (cancelled) return;
+        const latestKey = getBackupRecordLatestKey(record);
+        if (appliedProfileBackupKeysRef.current.get(appId) === latestKey) {
+          continue;
+        }
+
+        appliedProfileBackupKeysRef.current.set(appId, latestKey);
+        const game =
+          knownGames.find((item) => item.appId === appId) ??
+          createProfileHistoryFallbackGame(appId, record.title || appId);
+
+        await applyBackupAchievementsToProfileHistory(game).catch(() => undefined);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyBackupAchievementsToProfileHistory, backupSettings]);
+
+  useEffect(() => {
     writeStoredFavoriteGames(favoriteGames);
-    if (!cloudProfileBootstrappedRef.current || skipNextCloudProfileUploadRef.current) return;
+    if (
+      !cloudProfileBootstrappedRef.current ||
+      skipNextCloudProfileUploadRef.current
+    )
+      return;
     scheduleCloudProfileSync();
   }, [favoriteGames, scheduleCloudProfileSync]);
 
@@ -750,11 +814,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const next = rehydrateCollectionGames(current);
       const changed = next.some((collection, index) => {
         const previous = current[index];
-        return (previous?.games?.length ?? 0) !== (collection.games?.length ?? 0);
+        return (
+          (previous?.games?.length ?? 0) !== (collection.games?.length ?? 0)
+        );
       });
       return changed ? next : current;
     });
-  }, [addedLibraryGames, favoriteGames, profileHistoryGames, rehydrateCollectionGames]);
+  }, [
+    addedLibraryGames,
+    favoriteGames,
+    profileHistoryGames,
+    rehydrateCollectionGames,
+  ]);
 
   useEffect(() => {
     writeStoredStartupPage(initialPage);
@@ -773,87 +844,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [addedLibraryGames]);
 
   useEffect(() => {
-    const records = backupSettings?.backupRecords;
-    if (!records) return;
-
-    let cancelled = false;
-    const backupGames = Object.entries(records).filter(([, record]) =>
-      Boolean(record.entries?.length || record.lastBackupSuccess)
-    );
-
-    void (async () => {
-      for (const [appId, record] of backupGames) {
-        if (cancelled) return;
-
-        const backupPath = record.entries?.[0]?.path ?? record.lastBackupPath;
-        const backupDetails = await ghostboxApi
-          .getBackupDetails(appId, backupPath)
-          .catch(() => null);
-        if (cancelled || !backupDetails?.achievements.length) continue;
-
-        const backupUnlockedCount = backupDetails.achievements.length;
-        const profileGame = profileHistoryGames.find(
-          (game) => game.appId === appId
-        );
-        const profileUnlockedCount = countUnlockedAchievements(profileGame);
-        const syncKey = `${getBackupRecordLatestKey(record)}|${backupUnlockedCount}|${profileUnlockedCount}`;
-        if (
-          profileBackupSyncKeysRef.current.get(appId) === syncKey &&
-          backupUnlockedCount <= profileUnlockedCount
-        ) {
-          continue;
-        }
-        profileBackupSyncKeysRef.current.set(appId, syncKey);
-
-        const details = await loadGameAchievementDetailsCached(
-          `steam-${appId}`
-        ).catch(() => null);
-        if (cancelled) continue;
-
-        const baseGame =
-          details ??
-          createProfileHistoryFallbackGame(
-            appId,
-            record.title || `Steam ${appId}`
-          );
-        const gameWithBackupAchievements = mergeBackupAchievementsIntoGame(
-          baseGame,
-          backupDetails
-        );
-
-        setProfileHistoryGames((current) => {
-          const existingGame = current.find((game) => game.appId === appId);
-          const isPlaceholderTitle = /^Steam(?: App)? \d+$/i.test(
-            gameWithBackupAchievements.title
-          );
-
-          return upsertProfileHistoryGame(current, {
-            ...(existingGame ?? gameWithBackupAchievements),
-            ...gameWithBackupAchievements,
-            title:
-              existingGame?.title ||
-              (isPlaceholderTitle
-                ? record.title
-                : gameWithBackupAchievements.title),
-            playTimeInMilliseconds:
-              existingGame?.playTimeInMilliseconds ??
-              gameWithBackupAchievements.playTimeInMilliseconds,
-            lastTimePlayed:
-              existingGame?.lastTimePlayed ??
-              gameWithBackupAchievements.lastTimePlayed,
-          });
-        });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [addedLibraryGameAppIds, backupSettings?.backupRecords, profileHistoryGames]);
-
-  useEffect(() => {
     const achievementUnlockedTitle =
-      appearance.language === "en" ? "Achievement unlocked" : "Conquista desbloqueada";
+      appearance.language === "en"
+        ? "Achievement unlocked"
+        : "Conquista desbloqueada";
 
     return ghostboxApi.onLocalAchievementsUnlocked((payload) => {
       if (!notifications.achievementsEnabled) return;
@@ -861,14 +855,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       for (const achievementName of payload.achievements) {
         const message = `${payload.title}: ${achievementName}`;
 
-        if (notifications.inAppToastsEnabled) {
-          showToast(achievementUnlockedTitle, message);
-        }
-
         showAchievementDesktopNotification(
           achievementUnlockedTitle,
           message,
-          notifications.desktopNotificationsEnabled
+          notifications.desktopNotificationsEnabled,
         );
       }
     });
@@ -876,8 +866,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     appearance.language,
     notifications.achievementsEnabled,
     notifications.desktopNotificationsEnabled,
-    notifications.inAppToastsEnabled,
-    showToast,
   ]);
 
   useEffect(() => {
@@ -902,12 +890,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const requestId = ++steamProfileRequestSequenceRef.current;
 
-    // Never block the splash on playtime network sync — that runs in the
-    // dedicated "playtimes" step after the UI is ready.
     void ghostboxApi
       .getSteamProfile()
       .then((profile) => {
-        if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
+        if (cancelled || steamProfileRequestSequenceRef.current !== requestId)
+          return;
 
         const merged = mergeSteamProfile(profile, steamProfileRef.current);
         if (merged) {
@@ -919,7 +906,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => undefined)
       .finally(() => {
-        if (!cancelled && steamProfileRequestSequenceRef.current === requestId) {
+        if (
+          !cancelled &&
+          steamProfileRequestSequenceRef.current === requestId
+        ) {
           markInitialLoadStepComplete("steamProfile");
         }
       });
@@ -949,26 +939,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const favoriteGameIds = useMemo(
     () => new Set(favoriteGames.map((game) => game.id)),
-    [favoriteGames]
+    [favoriteGames],
   );
 
   const availableLibraryGameAppIds = useMemo(
     () => new Set(addedLibraryGames.map((game) => game.appId)),
-    [addedLibraryGames]
+    [addedLibraryGames],
   );
 
   const playableGameAppIds = useMemo(
     () => new Set(addedLibraryGames.map((game) => game.appId)),
-    [addedLibraryGames]
+    [addedLibraryGames],
   );
 
   const profileFavoriteGames = useMemo(
-    () => normalizeSteamGameTitles(favoriteGames, [...addedLibraryGames, ...profileHistoryGames]),
-    [addedLibraryGames, favoriteGames, profileHistoryGames]
+    () =>
+      normalizeSteamGameTitles(favoriteGames, [
+        ...addedLibraryGames,
+        ...profileHistoryGames,
+      ]),
+    [addedLibraryGames, favoriteGames, profileHistoryGames],
   );
   const profileAddedLibraryGames = useMemo(
-    () => normalizeSteamGameTitles(addedLibraryGames, [...favoriteGames, ...profileHistoryGames]),
-    [addedLibraryGames, favoriteGames, profileHistoryGames]
+    () =>
+      normalizeSteamGameTitles(addedLibraryGames, [
+        ...favoriteGames,
+        ...profileHistoryGames,
+      ]),
+    [addedLibraryGames, favoriteGames, profileHistoryGames],
   );
   const profileHistoryGamesWithPlaytime = useMemo(
     () =>
@@ -976,7 +974,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...addedLibraryGames,
         ...favoriteGames,
       ]).map(mergeGamePlaytime),
-    [addedLibraryGames, favoriteGames, mergeGamePlaytime, profileHistoryGames]
+    [addedLibraryGames, favoriteGames, mergeGamePlaytime, profileHistoryGames],
   );
 
   useEffect(() => {
@@ -986,7 +984,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ...favoriteGames,
     ]);
     const changed = normalizedGames.some(
-      (game, index) => game.title !== profileHistoryGames[index]?.title
+      (game, index) => game.title !== profileHistoryGames[index]?.title,
     );
     if (changed) setProfileHistoryGames(normalizedGames);
   }, [addedLibraryGames, favoriteGames, profileHistoryGames]);
@@ -997,13 +995,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       const games = normalizeSteamGameTitles(
         result.games.filter((game) => !isHiddenLibraryGame(game)),
-        [...favoriteGamesRef.current, ...profileHistoryGamesRef.current]
+        [...favoriteGamesRef.current, ...profileHistoryGamesRef.current],
       );
       setSteamPathInput(result.steamPath);
       setAddedLibraryGames(games);
       setAddedLibraryGameAppIds(new Set(games.map((game) => game.appId)));
     },
-    []
+    [],
   );
 
   const toggleFavoriteGame = useCallback(
@@ -1014,16 +1012,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setFavoriteGames((current) =>
         isFavorite
           ? current.filter((item) => item.id !== game.id)
-          : [...current.filter((item) => item.id !== game.id), game]
+          : [...current.filter((item) => item.id !== game.id), game],
       );
       showToast(
         isFavorite ? "Removido dos favoritos" : "Adicionado aos favoritos",
         isFavorite
           ? `${game.title} saiu dos favoritos.`
-          : `${game.title} foi salvo nos favoritos.`
+          : `${game.title} foi salvo nos favoritos.`,
       );
     },
-    [favoriteGameIds, showToast]
+    [favoriteGameIds, showToast],
   );
 
   const queueGame = useCallback(
@@ -1039,21 +1037,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAddingGameId(game.id);
       try {
         const steamPlaytimeEntry = gamePlaytimesRef.current[game.appId] as
-          | (GamePlaytimeSnapshot[string] & { source?: string })
-          | undefined;
+          (GamePlaytimeSnapshot[string] & { source?: string }) | undefined;
         const isKnownSteamOwnedGame = steamPlaytimeEntry?.source === "steam";
         const isSteamOwnedGame =
           isKnownSteamOwnedGame ||
           Boolean(
             steamProfile?.steamId &&
-              (await ghostboxApi
-                .getSteamAccountStats(steamProfile.steamId)
-                .then((stats) =>
+            (await ghostboxApi
+              .getSteamAccountStats(steamProfile.steamId)
+              .then(
+                (stats) =>
                   stats?.ownedPlaytimes?.some(
-                    (playtime) => playtime.appId === game.appId
-                  ) ?? false
-                )
-                .catch(() => false))
+                    (playtime) => playtime.appId === game.appId,
+                  ) ?? false,
+              )
+              .catch(() => false)),
           );
 
         const result = isSteamOwnedGame
@@ -1066,29 +1064,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (isHiddenLibraryGame(result.libraryGame)) return;
 
         setAddedLibraryGames((current) =>
-          upsertLibraryGameByAppId(current, result.libraryGame)
+          upsertLibraryGameByAppId(current, result.libraryGame),
         );
         setAddedLibraryGameAppIds((current) =>
-          new Set(current).add(result.libraryGame.appId)
+          new Set(current).add(result.libraryGame.appId),
         );
         showToast(
           "Jogo adicionado",
           isSteamOwnedGame
             ? `${result.libraryGame.title} foi reconhecido na Biblioteca.`
-            : `${result.libraryGame.title} foi adicionado à Biblioteca.`
+            : `${result.libraryGame.title} foi adicionado à Biblioteca.`,
         );
       } catch (error) {
         showToast(
           "Falha ao adicionar",
           error instanceof Error
             ? error.message
-            : "Não foi possível concluir o fluxo LuaTools."
+            : "Não foi possível concluir o fluxo LuaTools.",
         );
       } finally {
         setAddingGameId(null);
       }
     },
-    [addingGameId, availableLibraryGameAppIds, removingGameId, showToast, steamProfile?.steamId]
+    [
+      addingGameId,
+      availableLibraryGameAppIds,
+      removingGameId,
+      showToast,
+      steamProfile?.steamId,
+    ],
   );
 
   const removeQueuedGame = useCallback(
@@ -1104,7 +1108,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
 
         setAddedLibraryGames((current) =>
-          removeLibraryGameByAppId(current, result.appId)
+          removeLibraryGameByAppId(current, result.appId),
         );
         setAddedLibraryGameAppIds((current) => {
           const next = new Set(current);
@@ -1114,7 +1118,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         const historyGame = mergeGamePlaytime(game);
         setProfileHistoryGames((current) =>
-          upsertProfileHistoryGame(current, historyGame)
+          upsertProfileHistoryGame(current, historyGame),
+        );
+        void applyBackupAchievementsToProfileHistory(historyGame).catch(
+          () => undefined,
         );
         void loadGameAchievementDetailsCached(game.id)
           .then((details) => {
@@ -1124,7 +1131,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 ...historyGame,
                 achievements: details.achievements,
                 achievementList: details.achievementList,
-              })
+              }),
             );
           })
           .catch(() => undefined);
@@ -1135,13 +1142,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           "Falha ao remover",
           error instanceof Error
             ? error.message
-            : "Não foi possível remover o jogo."
+            : "Não foi possível remover o jogo.",
         );
       } finally {
         setRemovingGameId(null);
       }
     },
-    [addingGameId, mergeGamePlaytime, removingGameId, showToast]
+    [
+      addingGameId,
+      applyBackupAchievementsToProfileHistory,
+      mergeGamePlaytime,
+      removingGameId,
+      showToast,
+    ],
   );
 
   const handleGameDetailsLoaded = useCallback((details: GhostBoxGame) => {
@@ -1151,7 +1164,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       return upsertProfileHistoryGame(
         current,
-        mergeGameDetailsPreservingAchievements(existingGame, details)
+        mergeGameDetailsPreservingAchievements(existingGame, details),
       );
     });
   }, []);
@@ -1164,7 +1177,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (result && !result.success) {
           showToast(
             "Falha ao iniciar",
-            result.error ?? "Não foi possível iniciar o jogo."
+            result.error ?? "Não foi possível iniciar o jogo.",
           );
         }
         if (result?.success) {
@@ -1174,7 +1187,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setLaunchingGameId((current) => (current === game.id ? null : current));
       }
     },
-    [refreshGamePlaytimes, showToast]
+    [refreshGamePlaytimes, showToast],
   );
 
   const addGameToUserCollection = useCallback(
@@ -1188,11 +1201,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 gameIds: [...collection.gameIds, game.id],
                 games: [...(collection.games ?? []), game],
               }
-            : collection
-        )
+            : collection,
+        ),
       );
     },
-    []
+    [],
   );
 
   const removeGameFromCollection = useCallback(
@@ -1204,19 +1217,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 ...collection,
                 gameIds: collection.gameIds.filter((id) => id !== game.id),
                 games: (collection.games ?? []).filter(
-                  (item) => item.id !== game.id
+                  (item) => item.id !== game.id,
                 ),
               }
-            : collection
-        )
+            : collection,
+        ),
       );
     },
-    []
+    [],
   );
 
   const deleteCollection = useCallback((collectionId: string) => {
     setUserCollections((current) =>
-      current.filter((collection) => collection.id !== collectionId)
+      current.filter((collection) => collection.id !== collectionId),
     );
   }, []);
 
@@ -1247,7 +1260,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setCollectionModalOpen(false);
       showToast("Coleção criada", `${trimmed} foi adicionada ao perfil.`);
     },
-    [setCollectionModalOpen, showToast, userCollections]
+    [setCollectionModalOpen, showToast, userCollections],
   );
 
   const openCreateUserCollectionModal = useCallback(() => {
@@ -1267,7 +1280,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       appearance.language === "en" ? "Waiting for Steam" : "Aguardando Steam",
       appearance.language === "en"
         ? "Complete the login in your browser."
-        : "Conclua o login no navegador aberto."
+        : "Conclua o login no navegador aberto.",
     );
 
     try {
@@ -1284,7 +1297,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         appearance.language === "en" ? "Login complete" : "Login concluído",
         appearance.language === "en"
           ? `Signed in as ${profile.displayName}.`
-          : `Conectado como ${profile.displayName}.`
+          : `Conectado como ${profile.displayName}.`,
       );
     } catch (error) {
       if (steamProfileRequestSequenceRef.current !== requestId) return;
@@ -1294,7 +1307,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? "Steam login failed"
           : "Login com Steam falhou",
         formatSteamLoginError(error, appearance.language),
-        "error"
+        "error",
       );
     } finally {
       if (steamProfileRequestSequenceRef.current === requestId) {
@@ -1324,16 +1337,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const handleRestartSteam = useCallback(async () => {
     const result = await ghostboxApi.restartSteam();
     if (result?.success) {
-      showToast(
-        "Steam reiniciada",
-        "Steam foi reiniciada com sucesso."
-      );
+      showToast("Steam reiniciada", "Steam foi reiniciada com sucesso.");
       return;
     }
 
     showToast(
       "Falha ao abrir Steam",
-      result?.error ?? "Não foi possível localizar ou abrir a Steam."
+      result?.error ?? "Não foi possível localizar ou abrir a Steam.",
     );
   }, [showToast]);
 
@@ -1342,7 +1352,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       displayName: string,
       avatarUrl: string,
       bannerUrl: string,
-      bannerPosition: NonNullable<SteamProfile["bannerPosition"]>
+      bannerPosition: NonNullable<SteamProfile["bannerPosition"]>,
     ) => {
       if (!steamProfile) return;
 
@@ -1359,17 +1369,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       let persistedBannerUrl = bannerUrl;
       try {
         if (/^data:/i.test(persistedAvatarUrl)) {
-          persistedAvatarUrl = await ghostboxApi.uploadProfileImage(persistedAvatarUrl, "avatar") || "";
+          persistedAvatarUrl =
+            (await ghostboxApi.uploadProfileImage(
+              persistedAvatarUrl,
+              "avatar",
+            )) || "";
           if (!persistedAvatarUrl) throw new Error("avatar upload failed");
         }
         if (/^data:/i.test(persistedBannerUrl)) {
-          persistedBannerUrl = await ghostboxApi.uploadProfileImage(persistedBannerUrl, "banner") || "";
+          persistedBannerUrl =
+            (await ghostboxApi.uploadProfileImage(
+              persistedBannerUrl,
+              "banner",
+            )) || "";
           if (!persistedBannerUrl) throw new Error("banner upload failed");
         } else if (!persistedBannerUrl && previousBannerUrl) {
-          if (!(await ghostboxApi.deleteProfileBanner())) throw new Error("banner delete failed");
+          if (!(await ghostboxApi.deleteProfileBanner()))
+            throw new Error("banner delete failed");
         }
       } catch (error) {
-        const rawMessage = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+        const rawMessage =
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : "";
         const message = rawMessage.trim()
           ? rawMessage
           : "Não foi possível enviar as imagens para a nuvem.";
@@ -1391,7 +1415,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await ghostboxApi.saveSteamProfile(nextProfile);
       scheduleCloudProfileSync();
     },
-    [scheduleCloudProfileSync, showToast, steamProfile]
+    [scheduleCloudProfileSync, showToast, steamProfile],
   );
 
   const handleStartupSettingsChange = useCallback(
@@ -1399,7 +1423,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const next = await ghostboxApi.setStartupSettings(settings);
       if (next) setStartupSettings(next);
     },
-    []
+    [],
   );
 
   const handleMorrenusApiKeySave = useCallback(
@@ -1413,7 +1437,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             : "Chave HubCap's salva",
           appearance.language === "en"
             ? "Your Hubcap's Manifest API key was saved."
-            : "A chave do Hubcap's Manifest foi salva."
+            : "A chave do Hubcap's Manifest foi salva.",
         );
       } catch (error) {
         showToast(
@@ -1425,11 +1449,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             : appearance.language === "en"
               ? "Could not save the API key."
               : "Não foi possível salvar a chave.",
-          "error"
+          "error",
         );
       }
     },
-    [appearance.language, showToast]
+    [appearance.language, showToast],
   );
 
   const handleSelectSteamPath = useCallback(async () => {
@@ -1443,7 +1467,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           applySteamLibraryScanResult(scanResult);
           showToast(
             "Biblioteca Steam sincronizada",
-            `${scanResult.games.length} jogos instalados encontrados.`
+            `${scanResult.games.length} jogos instalados encontrados.`,
           );
         } else if (scanResult?.status === "missing") {
           showToast("Steam não encontrada", scanResult.message);
@@ -1487,7 +1511,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const steamId = steamProfile?.steamId ?? null;
     const PLAYTIME_BOOT_TIMEOUT_MS = 12_000;
 
-    // Fetch Steam-owned totals (non-blocking for other boot steps).
     void (async () => {
       try {
         const work =
@@ -1517,86 +1540,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     syncPlaytimesFromSteam,
   ]);
 
-  const handleSelectBackupOutputPath = useCallback(async () => {
-    const result = await ghostboxApi.selectBackupOutputPath();
-    if (result?.settings) setBackupSettings(result.settings);
-  }, []);
-
-  const handleToggleLibraryAutomaticBackups = useCallback(
-    async (enabled: boolean) => {
-      const settings = await ghostboxApi.setLibraryAutomaticBackups(
-        enabled,
-        addedLibraryGames.map((game) => game.appId)
-      );
-      if (settings) setBackupSettings(settings);
-    },
-    [addedLibraryGames]
-  );
-
-  const handleToggleAutomaticBackup = useCallback(
-    async (game: GhostBoxGame, enabled: boolean) => {
-      const settings = await ghostboxApi.setGameAutomaticBackup(
-        game.appId,
-        enabled
-      );
-      if (settings) setBackupSettings(settings);
-    },
-    []
-  );
-
-  const handleSelectGameExecutable = useCallback(
-    async (game: GhostBoxGame) => {
-      const result = await ghostboxApi.selectGameExecutable(game);
-      if (result?.settings) setBackupSettings(result.settings);
-      if (result?.status === "ok" && result.libraryGame && !isHiddenLibraryGame(result.libraryGame)) {
-        setProfileHistoryGames((current) =>
-          removeProfileHistoryGameByAppId(current, result.libraryGame!.appId)
-        );
-      }
-    },
-    []
-  );
-
-  const handleRemoveGameExecutable = useCallback(async (game: GhostBoxGame) => {
-    const settings = await ghostboxApi.setGameCustomExecutable(game.appId, null);
-    if (settings) setBackupSettings(settings);
-  }, []);
-
-  const handleOpenBackupFolder = useCallback(
-    async (appId: string, backupPath?: string) => {
-      const result = await ghostboxApi.openBackupFolder(appId, backupPath);
-      if (result.error) showToast("Falha ao abrir pasta", result.error);
-    },
-    [showToast]
-  );
-
-  const handleDeleteBackupFolder = useCallback(
-    (appId: string, title: string, backupPath?: string) => {
-      setPendingBackupDeletion({ appId, title, backupPath });
-    },
-    [setPendingBackupDeletion]
-  );
-
-  const handleCreateBackupRoot = useCallback(async () => {
-    const status = await ghostboxApi.ensureBackupRoot();
-    if (status) {
-      setBackupRootStatus(status);
-      backupSettingsRef.current = status.settings;
-      setBackupSettings(status.settings);
-      return;
-    }
-    await handleSelectBackupOutputPath();
-  }, [handleSelectBackupOutputPath]);
-
-  const refreshBackupRootStatus = useCallback(async () => {
-    const status = await ghostboxApi.validateBackupRoot();
-    if (status) {
-      setBackupRootStatus(status);
-      backupSettingsRef.current = status.settings;
-      setBackupSettings(status.settings);
-    }
-  }, []);
-
   const value = useMemo<AppDataContextValue>(
     () => ({
       isInitialLoading,
@@ -1617,7 +1560,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       availableLibraryGameAppIds,
       playableGameAppIds,
       backupSettings,
-      backupRootStatus,
       morrenusApiKey,
       startupSettings,
       initialPage,
@@ -1648,15 +1590,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,
-      handleSelectBackupOutputPath,
-      handleToggleLibraryAutomaticBackups,
-      handleToggleAutomaticBackup,
-      handleSelectGameExecutable,
-      handleRemoveGameExecutable,
-      handleOpenBackupFolder,
-      handleDeleteBackupFolder,
-      handleCreateBackupRoot,
-      refreshBackupRootStatus,
     }),
     [
       favoriteGames,
@@ -1677,7 +1610,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       availableLibraryGameAppIds,
       playableGameAppIds,
       backupSettings,
-      backupRootStatus,
       morrenusApiKey,
       startupSettings,
       initialPage,
@@ -1703,16 +1635,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,
-      handleSelectBackupOutputPath,
-      handleToggleLibraryAutomaticBackups,
-      handleToggleAutomaticBackup,
-      handleSelectGameExecutable,
-      handleRemoveGameExecutable,
-      handleOpenBackupFolder,
-      handleDeleteBackupFolder,
-      handleCreateBackupRoot,
-      refreshBackupRootStatus,
-    ]
+    ],
   );
 
   return (

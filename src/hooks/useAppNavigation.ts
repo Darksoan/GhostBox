@@ -1,14 +1,5 @@
-import {
-  useCallback,
-  useRef,
-  useState,
-  startTransition,
-  useLayoutEffect,
-} from "react";
+import { useCallback, useRef, useState, useLayoutEffect } from "react";
 import type { Page } from "../types";
-import { useSettings } from "../context/settings";
-import { runViewTransition } from "../utils/viewTransition";
-import { isPageLoaded } from "../utils/loadedPages";
 
 const historyLimit = 24;
 
@@ -25,7 +16,6 @@ function flagsFromCursor(index: number, length: number): HistoryFlags {
 }
 
 export function useAppNavigation(initialPage: Page = "home") {
-  const { appearance } = useSettings();
   const [page, setPageState] = useState<Page>(initialPage);
   const [historyFlags, setHistoryFlags] = useState<HistoryFlags>({
     canGoBack: false,
@@ -58,35 +48,13 @@ export function useAppNavigation(initialPage: Page = "home") {
     });
   }, []);
 
-  const setPage = useCallback(
-    (nextPage: Page) => {
-      // Sync before any deferred visual transition so history ops never race
-      // against a stale pageRef (View Transition / rAF).
-      pageRef.current = nextPage;
-
-      const animationsEnabled = !appearance.disableTabAnimations;
-      const ready = isPageLoaded(nextPage);
-      const useTransitionApi = animationsEnabled && ready;
-
-      const apply = () => {
-        startTransition(() => {
-          setPageState(nextPage);
-        });
-        if (useTransitionApi) {
-          restorePendingScroll();
-        }
-      };
-
-      if (useTransitionApi) {
-        window.requestAnimationFrame(() => {
-          runViewTransition(apply, true);
-        });
-      } else {
-        apply();
-      }
-    },
-    [appearance.disableTabAnimations, restorePendingScroll]
-  );
+  const setPage = useCallback((nextPage: Page) => {
+    // Keep pageRef in lockstep so history ops never race a stale page.
+    pageRef.current = nextPage;
+    // Synchronous commit so keep-alive tabs un-hide and queries/observers
+    // (catalogue, virtualizers, image IO) run in the same frame as the click.
+    setPageState(nextPage);
+  }, []);
 
   const navigate = useCallback(
     (newPage: Page) => {
@@ -161,16 +129,8 @@ export function useAppNavigation(initialPage: Page = "home") {
   }, []);
 
   useLayoutEffect(() => {
-    const pendingPage = pendingPageScrollRestoreRef.current;
-    if (!pendingPage) return;
-    if (isPageLoaded(pendingPage)) {
-      return;
-    }
-    pendingPageScrollRestoreRef.current = null;
-    contentRef.current?.scrollTo({
-      top: pageScrollPositionsRef.current[pendingPage] ?? 0,
-    });
-  }, [page]);
+    restorePendingScroll();
+  }, [page, restorePendingScroll]);
 
   return {
     page,

@@ -35,6 +35,12 @@ type GameListPreloadOptions = {
   variant?: "header" | "portrait" | "hero";
 };
 
+let preferLowResCovers = false;
+
+export function setPreferLowResCovers(value: boolean) {
+  preferLowResCovers = value;
+}
+
 export function layeredImageStyle(
   sources: string[],
   gradient: string,
@@ -236,20 +242,27 @@ export function gameHeroSources(game: GhostBoxGame) {
 
 export function gamePortraitSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
+  const highDensitySteamPortraitSources = [
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900_2x.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
+  ];
+  const standardSteamPortraitSources = [
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+  ];
   const customPortraitSources = [
     game.coverUrl,
     ...(game.coverFallbacks ?? []),
   ].filter((source) => !isHeaderImageSource(source));
 
   return uniqueSources([
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
+    ...(preferLowResCovers
+      ? [...standardSteamPortraitSources, ...highDensitySteamPortraitSources]
+      : [...highDensitySteamPortraitSources, ...standardSteamPortraitSources]),
     ...customPortraitSources.filter(
       (source) =>
         // Avoid landscape (horizontal) assets being used as portrait cover.
@@ -516,8 +529,8 @@ export function preloadProfileImages(
     [profile.bannerUrl ?? profileBannerPlaceholderSource],
     {
       limit: 1,
-      idle: true,
-      decode: false,
+      idle: false,
+      decode: true,
     }
   );
 }

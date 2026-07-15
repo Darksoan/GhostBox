@@ -1,7 +1,8 @@
-import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import { useSettings } from "../context/settings";
+import { AchievementsListLoadingState, EmptyState } from "../components/ui/LoadingStates";
+import { Cup } from "reicon-react";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import { formatCompactPlaytime } from "../utils/time";
 import "./GameAchievementsPage.scss";
@@ -54,6 +55,11 @@ function AchievementListItem({
   const preferredSource = achievementIconSource(achievement, unlocked);
   const [source, setSource] = useState(preferredSource);
   const unlockedDate = formatUnlockedDate(achievement.unlockedAt, language);
+  const isRare =
+    unlocked &&
+    typeof achievement.globalPercent === "number" &&
+    Number.isFinite(achievement.globalPercent) &&
+    achievement.globalPercent <= 10;
   const globalPercent =
     typeof achievement.globalPercent === "number" &&
     Number.isFinite(achievement.globalPercent)
@@ -71,19 +77,25 @@ function AchievementListItem({
       } ${highlighted ? "game-achievements-page__item--highlighted" : ""}`}
       data-achievement-id={achievement.name}
     >
-      <img
-        className="game-achievements-page__icon"
-        src={source}
-        alt=""
-        aria-hidden="true"
-        decoding="async"
-        loading="lazy"
-        onError={() => {
-          if (source !== achievement.iconGray) {
-            setSource(achievement.iconGray);
-          }
-        }}
-      />
+      <span
+        className={`game-achievements-page__icon-wrap${
+          isRare ? " game-achievements-page__icon-wrap--rare" : ""
+        }`}
+      >
+        <img
+          className="game-achievements-page__icon"
+          src={source}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          loading="lazy"
+          onError={() => {
+            if (source !== achievement.iconGray) {
+              setSource(achievement.iconGray);
+            }
+          }}
+        />
+      </span>
       <div className="game-achievements-page__item-content">
         <strong>{achievement.title}</strong>
         {achievement.description ? <p>{achievement.description}</p> : null}
@@ -233,20 +245,18 @@ export function GameAchievementsPage({
 
       <div className="game-achievements-page__content">
         {isLoading ? (
-          <div className="game-achievements-page__loading" role="status">
-            <Loader2
-              size={24}
-              className="game-achievements-page__loading-spinner"
-              aria-hidden="true"
-            />
-            <span>
-              {appearance.language === "en"
-                ? "Loading achievements"
-                : "Carregando conquistas"}
-            </span>
-          </div>
+          <AchievementsListLoadingState count={8} />
         ) : achievements.length === 0 ? (
-          <p className="game-achievements-page__empty">{t("achievements.empty")}</p>
+          <EmptyState
+            className="game-achievements-page__empty"
+            title={t("achievements.empty")}
+            message={
+              appearance.language === "en"
+                ? "This game has no tracked achievements."
+                : "Este jogo não possui conquistas rastreadas."
+            }
+            icon={<Cup size={24} weight="Filled" strokeWidth={2.0} />}
+          />
         ) : (
           <ul className="game-achievements-page__list">
             {achievements.map((achievement) => (

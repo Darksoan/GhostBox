@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+  CloudUpload,
 
   Folder,
   Heart,
@@ -31,6 +32,7 @@ const navigation: { id: Page; icon: SidebarNavIcon; labelKey: string }[] = [
   { id: "home", labelKey: "nav.home", icon: Home },
   { id: "catalogue", labelKey: "nav.catalogue", icon: Grid },
   { id: "library", labelKey: "nav.library", icon: Layers },
+  { id: "backup", labelKey: "nav.backup", icon: CloudUpload },
 ];
 
 const sidebarFooterNavigation: { id: Page; icon: LucideIcon; labelKey: string }[] = [
@@ -65,6 +67,7 @@ interface SidebarProps {
   libraryGameAppIds?: Set<string>;
   removableGameAppIds?: Set<string>;
   playableGameAppIds?: Set<string>;
+  activeSessionAppIds?: Set<string>;
   addingGameId?: string | null;
   launchingGameId?: string | null;
   onAddGame?: (game: GhostBoxGame) => void;
@@ -124,6 +127,7 @@ export const Sidebar = memo(function Sidebar({
   libraryGameAppIds = new Set(),
   removableGameAppIds = new Set(),
   playableGameAppIds = new Set(),
+  activeSessionAppIds = new Set(),
   addingGameId = null,
   launchingGameId = null,
   onAddGame,
@@ -201,6 +205,23 @@ export const Sidebar = memo(function Sidebar({
     ];
   }, [deferredAddedLibraryGames, deferredFavoriteGames, userCollections, t]);
 
+  const activeSessionGame = useMemo(() => {
+    if (activeSessionAppIds.size === 0) return null;
+
+    const games = [
+      ...deferredAddedLibraryGames,
+      ...deferredFavoriteGames,
+      ...userCollections.flatMap((collection) => collection.games ?? []),
+    ];
+
+    return games.find((game) => activeSessionAppIds.has(game.appId)) ?? null;
+  }, [
+    activeSessionAppIds,
+    deferredAddedLibraryGames,
+    deferredFavoriteGames,
+    userCollections,
+  ]);
+
   const toggleCollectionExpanded = useCallback((collectionId: string) => {
     setExpandedCollectionIds((current) => {
       const next = new Set(current);
@@ -232,6 +253,7 @@ export const Sidebar = memo(function Sidebar({
           isCloudProfileRestoring={isCloudProfileRestoring}
           isSigningIn={isSteamSigningIn}
           isActive={activePage === "profile"}
+          activeGame={activeSessionGame}
           onOpenProfile={onOpenProfile}
           onSignIn={onSteamSignIn}
         />
@@ -532,6 +554,7 @@ interface SidebarProfileProps {
   isCloudProfileRestoring: boolean;
   isSigningIn: boolean;
   isActive: boolean;
+  activeGame: GhostBoxGame | null;
   onOpenProfile: () => void;
   onSignIn: () => void;
 }
@@ -541,6 +564,7 @@ const SidebarProfile = memo(function SidebarProfile({
   isCloudProfileRestoring,
   isSigningIn,
   isActive,
+  activeGame,
   onOpenProfile,
   onSignIn,
 }: SidebarProfileProps) {
@@ -557,6 +581,10 @@ const SidebarProfile = memo(function SidebarProfile({
   );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
   const [steamRunning, setSteamRunning] = useState(false);
+
+  useEffect(() => {
+    preloadProfileImages(profile);
+  }, [profile?.avatarUrl, profile?.bannerUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -713,12 +741,18 @@ const SidebarProfile = memo(function SidebarProfile({
             {profile ? (
               <span
                 className={`sidebar-profile__presence${
-                  steamRunning
-                    ? " sidebar-profile__presence--online"
-                    : " sidebar-profile__presence--offline"
+                  activeGame
+                    ? " sidebar-profile__presence--playing"
+                    : steamRunning
+                      ? " sidebar-profile__presence--online"
+                      : " sidebar-profile__presence--offline"
                 }`}
               >
-                {presenceLabel}
+                {activeGame ? (
+                  <SidebarPlayingPresence game={activeGame} />
+                ) : (
+                  presenceLabel
+                )}
               </span>
             ) : null}
           </span>
@@ -727,3 +761,31 @@ const SidebarProfile = memo(function SidebarProfile({
     </div>
   );
 });
+
+function SidebarPlayingPresence({ game }: { game: GhostBoxGame }) {
+  const { appearance } = useSettings();
+  const iconUrl = useGameIconUrl(game);
+  const label = appearance.language === "en" ? "Playing" : "Jogando";
+
+  return (
+    <>
+      <span className="sidebar-profile__presence-label">{label}</span>
+      {iconUrl ? (
+        <img
+          src={iconUrl}
+          alt=""
+          className="sidebar-profile__presence-game-icon"
+          aria-hidden="true"
+        />
+      ) : (
+        <span
+          className="sidebar-profile__presence-game-icon sidebar-profile__presence-game-icon--empty"
+          aria-hidden="true"
+        />
+      )}
+      <span className="sidebar-profile__presence-game-title" title={game.title}>
+        {game.title}
+      </span>
+    </>
+  );
+}

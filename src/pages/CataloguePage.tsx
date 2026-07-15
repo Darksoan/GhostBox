@@ -1,8 +1,9 @@
-import { ChevronRight, Check, X } from "lucide-react";
+import { ChevronRight, Check, LibraryBig, X } from "lucide-react";
 import {
   memo,
   useDeferredValue,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -40,6 +41,7 @@ import {
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useSettings } from "../context/settings";
+import { useCollapsiblePanelHeight } from "../hooks/useCollapsiblePanelHeight";
 import { preloadGameListAssets } from "../utils/image";
 
 const maxVisibleFilterOptions = 160;
@@ -149,6 +151,8 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
 }: CatalogueFilterSectionProps) {
   const { appearance, t } = useSettings();
   const [isOpen, setIsOpen] = useState(() => selectedValues.length > 0);
+  const contentId = useId();
+  const [contentInnerRef, contentHeight] = useCollapsiblePanelHeight();
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const normalizedSearchTerm = deferredSearchTerm.trim().toLowerCase();
@@ -185,6 +189,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
         className="catalogue-filter-section__header"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
+        aria-controls={contentId}
       >
         <ChevronRight
           className={
@@ -202,9 +207,15 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
         <span>{selectedValues.length || values.length}</span>
       </button>
 
-      {isOpen && (
-        <div className="catalogue-filter-section__content">
-          {selectedValues.length > 0 ? (
+      <div
+        className="catalogue-filter-section__content"
+        id={contentId}
+        aria-hidden={!isOpen}
+        data-collapsed={isOpen ? "false" : "true"}
+        style={{ height: isOpen ? contentHeight : 0 } as CSSProperties}
+      >
+        <div className="catalogue-filter-section__content-inner" ref={contentInnerRef}>
+          {selectedValues.length > 0 && (
             <button
               type="button"
               className="catalogue-filter-section__clear"
@@ -212,10 +223,6 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
             >
               {t("catalogue.filters.clear", { count: selectedValues.length })}
             </button>
-          ) : (
-            <span className="catalogue-filter-section__count">
-              {t("catalogue.filters.options", { count: values.length })}
-            </span>
           )}
 
           <input
@@ -266,7 +273,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
             )}
           </div>
         </div>
-      )}
+      </div>
     </section>
   );
 });
@@ -574,6 +581,7 @@ export function CataloguePage({
                 hasActiveFilters ? t("catalogue.filters.clearAll") : undefined
               }
               onAction={hasActiveFilters ? () => onFiltersChange(emptyCatalogueFilters) : undefined}
+              icon={<LibraryBig size={24} strokeWidth={1.75} />}
             />
           )}
 
@@ -589,17 +597,6 @@ export function CataloguePage({
         </div>
 
         <aside className="catalogue-filters" aria-label={t("catalogue.filters.label")}>
-          {selectedFilterCount > 0 && (
-            <div className="catalogue-filters__header">
-              <button
-                type="button"
-                onClick={() => onFiltersChange(emptyCatalogueFilters)}
-              >
-                {t("catalogue.filters.clearShort")}
-              </button>
-            </div>
-          )}
-
           <div className="catalogue-filters__sections">
             <section className="catalogue-filter-section catalogue-filter-section--sort">
               <div className="catalogue-filter-section__sort-header">
@@ -626,13 +623,31 @@ export function CataloguePage({
               </div>
             </section>
             {filtersLoading && (
-              <div className="catalogue-filters__loading" role="status">
-                <span
-                  className="deferred-page-placeholder__spinner"
-                  aria-hidden="true"
-                />
-                <span>Carregando filtros...</span>
-              </div>
+              <>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div
+                    className="catalogue-filter-section catalogue-filter-section--placeholder"
+                    key={`filter-loading-inline-${index}`}
+                  >
+                    <div className="catalogue-filter-section__header-placeholder loading-wave">
+                      <span className="catalogue-filter-section__chevron-placeholder loading-wave" />
+                      <span className="catalogue-filter-section__header-title-placeholder loading-wave" />
+                      <span className="catalogue-filter-section__header-count-placeholder loading-wave" />
+                    </div>
+                    <div className="catalogue-filter-section__search-placeholder loading-wave" />
+                    <div className="catalogue-filter-section__options-placeholder">
+                      <label className="catalogue-filter-option catalogue-filter-option--placeholder">
+                        <span className="catalogue-filter-option__box placeholder loading-wave" />
+                        <span className="catalogue-filter-option__text-placeholder loading-wave" />
+                      </label>
+                      <label className="catalogue-filter-option catalogue-filter-option--placeholder">
+                        <span className="catalogue-filter-option__box placeholder loading-wave" />
+                        <span className="catalogue-filter-option__text-placeholder loading-wave" />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
             {filterSections.map((section) => (
               <CatalogueFilterSection

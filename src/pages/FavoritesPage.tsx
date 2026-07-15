@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
-import { Clock } from "lucide-react";
+import { Clock, Heart } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { UserCollection } from "../types";
 import {
@@ -15,6 +15,7 @@ import {
   preloadGameModalAssets,
 } from "../utils/image";
 import { ContextMenu } from "../components/ui/ContextMenu";
+import { EmptyState } from "../components/ui/LoadingStates";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 
 interface FavoriteCardProps {
@@ -198,12 +199,11 @@ export function FavoritesPage({
   if (!games.length) {
     return (
       <section className="favorites-page content-section content-section--full favorites-page--empty">
-        <div className="empty-state">
-          <div>
-            <h3>{emptyTitle}</h3>
-            <p>{emptyMessage}</p>
-          </div>
-        </div>
+        <EmptyState
+          title={emptyTitle}
+          message={emptyMessage}
+          icon={<Heart size={24} strokeWidth={1.75} />}
+        />
       </section>
     );
   }

@@ -8,6 +8,6 @@ GITHUB_OWNER = "Darksoan"
 GITHUB_REPO = "GhostBox"
 # Leave empty so the worker picks the latest .exe from the GitHub release.
 RELEASE_ASSET_NAME = ""
-LATEST_VERSION = "0.1.3"
+LATEST_VERSION = "0.1.4"
 INSTALLER_URL = ""
 RELEASE_NOTES_URL = ""

@@ -52,14 +52,15 @@ const translations: Record<Language, TranslationTree> = {
       emptyMessage: "Nenhum jogo recente foi encontrado no banco de dados.",
     },
     backup: {
-      eyebrow: "Backup local",
-      title: "Jogos com preview do Ludusavi",
-      description:
-        "Lista vertical de todos os jogos encontrados pelo Ludusavi nesta máquina.",
+      eyebrow: "Backup em nuvem",
+      title: "Backups em nuvem",
+      description: "Lista vertical dos jogos com backups salvos na nuvem.",
       refresh: "Atualizar",
-      loading: "Buscando por saves locais...",
-      empty: "Nenhum jogo encontrado no preview.",
-      listAria: "Jogos com backup disponível",
+      loading: "Carregando backups em nuvem...",
+      empty: "Nenhum backup encontrado",
+      emptyTitle: "Nenhum backup encontrado",
+      emptyMessage: "Os backups em nuvem dos seus jogos aparecerão aqui.",
+      listAria: "Jogos com backup em nuvem disponível",
     },
     loading: {
       catalogue: "Carregando catálogo",
@@ -158,20 +159,23 @@ const translations: Record<Language, TranslationTree> = {
     subscription: {
       eyebrow: "Ghost Premium",
       title: "Desbloqueie sincronização em nuvem",
-      description: "Backup automático, restauração rápida e progresso sincronizado entre PCs.",
+      description:
+        "Backup automático, restauração rápida e progresso sincronizado entre PCs.",
       actions: {
         subscribe: "Assinar",
       },
       discordLink: {
         title: "Vincular Steam ao Discord",
-        description: "Conecte o Discord à conta Steam usada no GhostBox para receber Premium no servidor futuramente.",
+        description:
+          "Conecte o Discord à conta Steam usada no GhostBox para receber Premium no servidor futuramente.",
         signInSteam: "Entrar com Steam",
         link: "Vincular Discord",
         relink: "Atualizar vínculo",
         linked: "Vinculado",
         linkedAs: "Discord vinculado como {name}.",
         openedTitle: "Discord aberto",
-        openedMessage: "Conclua a autorização no navegador para ligar sua Steam ao Discord.",
+        openedMessage:
+          "Conclua a autorização no navegador para ligar sua Steam ao Discord.",
       },
       checkout: {
         title: "Checkout seguro via Stripe",
@@ -194,31 +198,42 @@ const translations: Record<Language, TranslationTree> = {
         payments: {
           title: "Pagamentos",
           card: "Pagamentos e reembolsos aprovados são processados pela Stripe.",
-          methods: "Métodos, impostos e detalhes de cobrança são exibidos no checkout Stripe antes da confirmação.",
-          security: "O GhostBox não armazena número completo de cartão nem credenciais de pagamento.",
+          methods:
+            "Métodos, impostos e detalhes de cobrança são exibidos no checkout Stripe antes da confirmação.",
+          security:
+            "O GhostBox não armazena número completo de cartão nem credenciais de pagamento.",
         },
         billing: {
           title: "Cobrança e acesso",
-          renewal: "A assinatura é recorrente e os termos finais aparecem no checkout Stripe antes do pagamento.",
-          activation: "O Premium é liberado para a conta Steam usada no app após a confirmação do pagamento.",
-          receipt: "Comprovantes, status da assinatura e revisões de reembolso ficam vinculados ao pagamento na Stripe.",
+          renewal:
+            "A assinatura é recorrente e os termos finais aparecem no checkout Stripe antes do pagamento.",
+          activation:
+            "O Premium é liberado para a conta Steam usada no app após a confirmação do pagamento.",
+          receipt:
+            "Comprovantes, status da assinatura e revisões de reembolso ficam vinculados ao pagamento na Stripe.",
         },
         refunds: {
           title: "Reembolso",
-          window: "Solicitações devem ser enviadas em até 7 dias do pagamento original sempre que possível.",
-          prorated: "Reembolsos não são automáticos; cada pedido é revisado por status da conta, pagamento e motivo.",
-          abuse: "Reembolsos parciais do período não são garantidos, exceto quando exigidos por lei ou por falha técnica confirmada.",
+          window:
+            "Solicitações devem ser enviadas em até 7 dias do pagamento original sempre que possível.",
+          prorated:
+            "Reembolsos não são automáticos; cada pedido é revisado por status da conta, pagamento e motivo.",
+          abuse:
+            "Reembolsos parciais do período não são garantidos, exceto quando exigidos por lei ou por falha técnica confirmada.",
         },
         cancel: {
           title: "Cancelamento",
-          anytime: "Você pode cancelar a assinatura para impedir renovações futuras.",
-          access: "Ao cancelar, o acesso Premium continua ativo até o fim do período já pago.",
+          anytime:
+            "Você pode cancelar a assinatura para impedir renovações futuras.",
+          access:
+            "Ao cancelar, o acesso Premium continua ativo até o fim do período já pago.",
           data: "Cancelar não reembolsa automaticamente cobranças anteriores nem o período atual.",
         },
       },
       policy: {
         title: "Resumo importante",
-        description: "A assinatura cobre recursos Premium opcionais do GhostBox, como backups automáticos, pontos de restauração e sincronização em nuvem. Para suporte ou revisão de reembolso, envie a conta, data da cobrança e descrição do problema para ghostbox@mail.com.",
+        description:
+          "A assinatura cobre recursos Premium opcionais do GhostBox, como backups automáticos, pontos de restauração e sincronização em nuvem. Para suporte ou revisão de reembolso, envie a conta, data da cobrança e descrição do problema para ghostbox@mail.com.",
       },
       plans: {
         free: {
@@ -265,10 +280,10 @@ const translations: Record<Language, TranslationTree> = {
         },
         backups: {
           label: "Backups",
-          eyebrow: "Saves locais",
-          title: "Destino dos backups",
+          eyebrow: "Nuvem",
+          title: "Backups em nuvem",
           description:
-            "Configure onde o GhostBox salva backups locais criados pelo Ludusavi.",
+            "Backups automáticos em nuvem disponíveis para contas Premium.",
         },
         subscription: {
           label: "Assinatura",
@@ -326,15 +341,55 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
-        disableCoverZoom: {
-          label: "Remover zoom em capas",
-          description:
-            "Desativa o efeito de zoom ao passar o mouse nas capas dos jogos.",
-        },
         disableTabAnimations: {
           label: "Remover animações de troca de abas",
           description:
             "Desativa animações ao navegar entre páginas e seções do app.",
+        },
+        reduceAllAnimations: {
+          label: "Desativar todas as animações",
+          description:
+            "Remove animações, pulsos e transições visuais pesadas em todo o app.",
+        },
+        disableBackdropBlur: {
+          label: "Desativar blur/glass",
+          description:
+            "Troca efeitos de vidro por fundos sólidos para reduzir custo de renderização.",
+        },
+        disableExplorePan: {
+          label: "Desativar pan do Explore",
+          description:
+            "Pausa o movimento automático das capas nos cards de exploração da tela inicial.",
+        },
+        trailerQuality: {
+          label: "Qualidade de trailer",
+          description:
+            "Escolhe a fonte de vídeo preferida para trailers dentro dos detalhes do jogo.",
+          high: "Alta qualidade",
+          low: "Economia de dados",
+        },
+        trailerAutoplay: {
+          label: "Autoplay de trailer",
+          description:
+            "Reproduz automaticamente o trailer selecionado na galeria do jogo.",
+        },
+        preferLowResCovers: {
+          label: "Capas em resolução menor",
+          description:
+            "Prioriza capas 1x da Steam antes das versões 2x para poupar memória e rede.",
+        },
+        imagePreloadConcurrency: {
+          label: "Preload de imagens",
+          description:
+            "Define quantas imagens podem ser pré-carregadas ao mesmo tempo.",
+          low: "Leve (2)",
+          medium: "Equilibrado (4)",
+          high: "Rápido (6)",
+        },
+        disablePageKeepAlive: {
+          label: "Desativar keep-alive de páginas",
+          description:
+            "Mantém apenas a página atual montada para reduzir uso de memória.",
         },
       },
       library: {
@@ -346,12 +401,13 @@ const translations: Record<Language, TranslationTree> = {
       },
       backups: {
         outputPath: {
-          label: "Pasta de backups",
-          description: "Onde os backups são salvos.",
+          label: "Backups em nuvem",
+          description: "Backups são salvos na nuvem para contas Premium.",
         },
         automaticLibrary: {
-          label: "Backup automático da biblioteca",
-          description: "Ativa por padrão em novos jogos da biblioteca.",
+          label: "Backup automático em nuvem",
+          description:
+            "Salva backups na nuvem ao fechar jogos, para contas Premium.",
         },
       },
       notifications: {
@@ -496,14 +552,15 @@ const translations: Record<Language, TranslationTree> = {
       emptyMessage: "No recently added games were found in the database.",
     },
     backup: {
-      eyebrow: "Local backup",
-      title: "Games with Ludusavi preview",
-      description:
-        "Vertical list of every game Ludusavi found on this machine.",
+      eyebrow: "Cloud backup",
+      title: "Cloud backups",
+      description: "Vertical list of games with backups saved in the cloud.",
       refresh: "Refresh",
-      loading: "Searching local saves...",
-      empty: "No games found in preview.",
-      listAria: "Games with available backup",
+      loading: "Loading cloud backups...",
+      empty: "No backups found",
+      emptyTitle: "No backups found",
+      emptyMessage: "Cloud backups for your games will appear here.",
+      listAria: "Games with available cloud backup",
     },
     loading: {
       catalogue: "Loading catalogue",
@@ -580,8 +637,7 @@ const translations: Record<Language, TranslationTree> = {
       title: "Achievements",
       pageAria: "Achievements for {title}",
       personalAchievements: "Personal achievements",
-      progressSummary:
-        "{unlocked} of {total} ({percent}%) achievements earned",
+      progressSummary: "{unlocked} of {total} ({percent}%) achievements earned",
       viewMore: "View more",
       globalPercent: "{percent} of players",
       empty: "This game has no achievements.",
@@ -602,20 +658,23 @@ const translations: Record<Language, TranslationTree> = {
     subscription: {
       eyebrow: "Ghost Premium",
       title: "Unlock cloud sync",
-      description: "Automatic backup, fast restore, and progress synced across PCs.",
+      description:
+        "Automatic backup, fast restore, and progress synced across PCs.",
       actions: {
         subscribe: "Subscribe",
       },
       discordLink: {
         title: "Link Steam to Discord",
-        description: "Connect Discord to the Steam account used in GhostBox so Premium can be granted in the server later.",
+        description:
+          "Connect Discord to the Steam account used in GhostBox so Premium can be granted in the server later.",
         signInSteam: "Sign in with Steam",
         link: "Link Discord",
         relink: "Update link",
         linked: "Linked",
         linkedAs: "Discord linked as {name}.",
         openedTitle: "Discord opened",
-        openedMessage: "Finish the browser authorization to link Steam with Discord.",
+        openedMessage:
+          "Finish the browser authorization to link Steam with Discord.",
       },
       checkout: {
         title: "Secure checkout via Stripe",
@@ -638,31 +697,41 @@ const translations: Record<Language, TranslationTree> = {
         payments: {
           title: "Payments",
           card: "Payments and approved refunds are processed by Stripe.",
-          methods: "Payment methods, taxes, and billing details are shown in Stripe checkout before confirmation.",
-          security: "GhostBox does not store full card numbers or payment credentials.",
+          methods:
+            "Payment methods, taxes, and billing details are shown in Stripe checkout before confirmation.",
+          security:
+            "GhostBox does not store full card numbers or payment credentials.",
         },
         billing: {
           title: "Billing and access",
-          renewal: "The subscription is recurring and final terms appear in Stripe checkout before payment.",
-          activation: "Premium is unlocked for the Steam account used in the app after payment confirmation.",
-          receipt: "Receipts, subscription status, and refund reviews are linked to the Stripe payment.",
+          renewal:
+            "The subscription is recurring and final terms appear in Stripe checkout before payment.",
+          activation:
+            "Premium is unlocked for the Steam account used in the app after payment confirmation.",
+          receipt:
+            "Receipts, subscription status, and refund reviews are linked to the Stripe payment.",
         },
         refunds: {
           title: "Refunds",
-          window: "Requests should be sent within 7 days of the original payment whenever possible.",
-          prorated: "Refunds are not automatic; each request is reviewed by account status, payment record, and reason.",
-          abuse: "Partial-period refunds are not guaranteed unless required by law or caused by a confirmed technical issue.",
+          window:
+            "Requests should be sent within 7 days of the original payment whenever possible.",
+          prorated:
+            "Refunds are not automatic; each request is reviewed by account status, payment record, and reason.",
+          abuse:
+            "Partial-period refunds are not guaranteed unless required by law or caused by a confirmed technical issue.",
         },
         cancel: {
           title: "Cancellation",
           anytime: "You can cancel the subscription to stop future renewals.",
-          access: "After cancellation, Premium access remains active until the end of the paid period.",
+          access:
+            "After cancellation, Premium access remains active until the end of the paid period.",
           data: "Cancellation does not automatically refund previous charges or the current billing period.",
         },
       },
       policy: {
         title: "Important summary",
-        description: "The subscription covers optional GhostBox Premium features such as automatic backups, restore points, and cloud sync. For support or refund review, send the account, billing date, and issue description to ghostbox@mail.com.",
+        description:
+          "The subscription covers optional GhostBox Premium features such as automatic backups, restore points, and cloud sync. For support or refund review, send the account, billing date, and issue description to ghostbox@mail.com.",
       },
       plans: {
         free: {
@@ -708,10 +777,10 @@ const translations: Record<Language, TranslationTree> = {
         },
         backups: {
           label: "Backups",
-          eyebrow: "Local saves",
-          title: "Backup destination",
+          eyebrow: "Cloud",
+          title: "Cloud backups",
           description:
-            "Configure where GhostBox saves local backups created by Ludusavi.",
+            "Automatic cloud backups available for Premium accounts.",
         },
         subscription: {
           label: "Subscription",
@@ -769,14 +838,55 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
-        disableCoverZoom: {
-          label: "Remove cover zoom",
-          description: "Disables the zoom effect when hovering game covers.",
-        },
         disableTabAnimations: {
           label: "Remove tab switch animations",
           description:
             "Disables animations when navigating between pages and sections.",
+        },
+        reduceAllAnimations: {
+          label: "Disable all animations",
+          description:
+            "Removes animations, pulses, and heavier visual transitions across the app.",
+        },
+        disableBackdropBlur: {
+          label: "Disable blur/glass",
+          description:
+            "Replaces glass effects with solid surfaces to reduce rendering cost.",
+        },
+        disableExplorePan: {
+          label: "Disable Explore pan",
+          description:
+            "Pauses automatic cover movement in the home Explore cards.",
+        },
+        trailerQuality: {
+          label: "Trailer quality",
+          description:
+            "Chooses the preferred video source for trailers in game details.",
+          high: "High quality",
+          low: "Data saver",
+        },
+        trailerAutoplay: {
+          label: "Trailer autoplay",
+          description:
+            "Automatically plays the selected trailer in the game gallery.",
+        },
+        preferLowResCovers: {
+          label: "Lower-resolution covers",
+          description:
+            "Prioritizes Steam 1x covers before 2x versions to save memory and network.",
+        },
+        imagePreloadConcurrency: {
+          label: "Image preload",
+          description:
+            "Sets how many images can be preloaded at the same time.",
+          low: "Light (2)",
+          medium: "Balanced (4)",
+          high: "Fast (6)",
+        },
+        disablePageKeepAlive: {
+          label: "Disable page keep-alive",
+          description:
+            "Keeps only the current page mounted to reduce memory usage.",
         },
       },
       library: {
@@ -787,12 +897,13 @@ const translations: Record<Language, TranslationTree> = {
       },
       backups: {
         outputPath: {
-          label: "Backup folder",
-          description: "Where backups are saved.",
+          label: "Cloud backups",
+          description: "Backups are saved in the cloud for Premium accounts.",
         },
         automaticLibrary: {
-          label: "Library auto-backup",
-          description: "Keeps it on for new library games.",
+          label: "Automatic cloud backup",
+          description:
+            "Saves backups to the cloud after closing games, for Premium accounts.",
         },
       },
       notifications: {
@@ -830,7 +941,8 @@ const translations: Record<Language, TranslationTree> = {
         },
         backupRestore: {
           label: "Backup and restore notifications",
-          description: "Notifies about completed or failed backups and restores.",
+          description:
+            "Notifies about completed or failed backups and restores.",
         },
         backupSuccess: {
           label: "Completed backups",
@@ -898,7 +1010,7 @@ function getValue(tree: TranslationTree, path: string): string | undefined {
 export function translate(
   language: Language,
   key: string,
-  params?: Record<string, string | number>
+  params?: Record<string, string | number>,
 ) {
   const raw =
     getValue(translations[language], key) ??
@@ -908,6 +1020,6 @@ export function translate(
 
   return Object.entries(params).reduce(
     (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
-    raw
+    raw,
   );
 }

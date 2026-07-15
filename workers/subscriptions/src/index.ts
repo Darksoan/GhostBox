@@ -100,9 +100,14 @@ type CloudSaveRow = {
   sha256: string;
   manifest_json: string | null;
   device_name: string | null;
+  pinned?: number | boolean | null;
   created_at: string;
   updated_at: string;
 };
+
+const MAX_CLOUD_SAVES_PER_GAME = 3;
+
+let cloudSavesPinnedColumnReady: Promise<void> | null = null;
 
 type UserProfileCloudRow = {
   steam_id: string;
@@ -452,9 +457,31 @@ function publicCloudSave(row: CloudSaveRow) {
     sha256: row.sha256,
     manifest: row.manifest_json ? JSON.parse(row.manifest_json) : null,
     deviceName: row.device_name,
+    pinned: row.pinned === true || row.pinned === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function ensureCloudSavesPinnedColumn(env: Env) {
+  if (!cloudSavesPinnedColumnReady) {
+    cloudSavesPinnedColumnReady = env.SUBSCRIPTION_DB.prepare(
+      `ALTER TABLE cloud_saves ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`
+    )
+      .run()
+      .then(() => undefined)
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        const normalized = message.toLowerCase();
+        if (normalized.includes("duplicate column") || normalized.includes("already exists")) {
+          return;
+        }
+        cloudSavesPinnedColumnReady = null;
+        throw error;
+      });
+  }
+
+  return cloudSavesPinnedColumnReady;
 }
 
 async function requirePremiumSession(request: Request, env: Env) {
@@ -519,6 +546,7 @@ function publicSubscription(row: SubscriptionRow | null) {
       currentPeriodStart: null,
       currentPeriodEnd: null,
       lastPaymentId: null,
+      cancelAtPeriodEnd: false,
       updatedAt: null,
     };
   }
@@ -531,8 +559,55 @@ function publicSubscription(row: SubscriptionRow | null) {
     currentPeriodStart: row.current_period_start,
     currentPeriodEnd: row.current_period_end,
     lastPaymentId: row.last_payment_id,
+    cancelAtPeriodEnd: Boolean(row.cancel_at_period_end),
     updatedAt: row.updated_at,
   };
+}
+
+function publicPaymentMethod(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const paymentMethod = value as Record<string, unknown>;
+  const type = typeof paymentMethod.type === "string" ? paymentMethod.type : null;
+  const card =
+    paymentMethod.card && typeof paymentMethod.card === "object"
+      ? paymentMethod.card as Record<string, unknown>
+      : null;
+  const brand = typeof card?.brand === "string" ? card.brand : null;
+  const last4 = typeof card?.last4 === "string" ? card.last4 : null;
+  if (!type && !brand && !last4) return null;
+  return { type, brand, last4 };
+}
+
+async function resolveStripePaymentMethod(env: Env, subscription: SubscriptionRow | null) {
+  if (!subscription || !env.STRIPE_SECRET_KEY?.trim()) return null;
+
+  try {
+    const subscriptionId = subscription.stripe_subscription_id?.trim();
+    if (subscriptionId) {
+      const stripeSubscription = await stripeRequest(
+        env,
+        `/subscriptions/${encodeURIComponent(subscriptionId)}?expand[]=default_payment_method`
+      );
+      const fromSubscription = publicPaymentMethod(stripeSubscription.default_payment_method);
+      if (fromSubscription) return fromSubscription;
+    }
+
+    const customerId = subscription.stripe_customer_id?.trim();
+    if (!customerId) return null;
+
+    const customer = await stripeRequest(
+      env,
+      `/customers/${encodeURIComponent(customerId)}?expand[]=invoice_settings.default_payment_method`
+    );
+    const invoiceSettings =
+      customer.invoice_settings && typeof customer.invoice_settings === "object"
+        ? customer.invoice_settings as Record<string, unknown>
+        : null;
+    return publicPaymentMethod(invoiceSettings?.default_payment_method);
+  } catch (error) {
+    console.warn("Failed to resolve Stripe payment method", error);
+    return null;
+  }
 }
 
 type DiscordRoleSyncResult = {
@@ -1113,6 +1188,9 @@ async function handleStatus(request: Request, env: Env, context?: ExecutionConte
   const latestPayment = isActiveSubscription(subscription) && !subscription?.last_payment_id
     ? null
     : await reconcilePaymentWithSubscription(env, latestPaymentRow, subscription);
+  const paymentMethod = isActiveSubscription(subscription)
+    ? await resolveStripePaymentMethod(env, subscription)
+    : null;
 
   if (discordLink && context) {
     context.waitUntil(
@@ -1126,6 +1204,7 @@ async function handleStatus(request: Request, env: Env, context?: ExecutionConte
     steamId,
     subscription: publicSubscription(subscription),
     latestPayment: latestPayment ? publicPayment(latestPayment, origin) : null,
+    paymentMethod,
     discordLink: publicDiscordLink(steamId, discordLink, null),
   }, env);
 }
@@ -1133,15 +1212,24 @@ async function handleStatus(request: Request, env: Env, context?: ExecutionConte
 async function handleCloudSavesList(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
+  await ensureCloudSavesPinnedColumn(env);
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId")?.trim();
   const query = appId
     ? env.SUBSCRIPTION_DB.prepare(
-        `SELECT * FROM cloud_saves WHERE steam_id = ? AND app_id = ? ORDER BY updated_at DESC LIMIT 20`
-      ).bind(auth.session!.steamId, appId)
+        `SELECT * FROM (
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
+           FROM cloud_saves
+           WHERE steam_id = ? AND app_id = ?
+         ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 20`
+      ).bind(auth.session!.steamId, appId, MAX_CLOUD_SAVES_PER_GAME)
     : env.SUBSCRIPTION_DB.prepare(
-        `SELECT * FROM cloud_saves WHERE steam_id = ? ORDER BY updated_at DESC LIMIT 100`
-      ).bind(auth.session!.steamId);
+        `SELECT * FROM (
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
+           FROM cloud_saves
+           WHERE steam_id = ?
+         ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 100`
+      ).bind(auth.session!.steamId, MAX_CLOUD_SAVES_PER_GAME);
   const rows = await query.all<CloudSaveRow>();
   return jsonResponse({ saves: (rows.results || []).map(publicCloudSave) }, env);
 }
@@ -1149,6 +1237,7 @@ async function handleCloudSavesList(request: Request, env: Env) {
 async function handleCloudSaveUpload(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
+  await ensureCloudSavesPinnedColumn(env);
   const appId = request.headers.get("x-ghostbox-app-id")?.trim() || "";
   const gameTitle = request.headers.get("x-ghostbox-game-title")?.trim() || appId;
   const sha256 = request.headers.get("x-ghostbox-sha256")?.trim().toLowerCase() || "";
@@ -1194,13 +1283,7 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, auth.session!.steamId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
 
-  const stale = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM cloud_saves WHERE steam_id = ? AND app_id = ? ORDER BY updated_at DESC LIMIT 100 OFFSET 3`
-  ).bind(auth.session!.steamId, appId).all<CloudSaveRow>();
-  for (const row of stale.results || []) {
-    await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
-    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
-  }
+  await pruneCloudSavesForGame(env, auth.session!.steamId, appId, id);
 
   return jsonResponse({ save: publicCloudSave({
     id,
@@ -1212,9 +1295,38 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
     sha256,
     manifest_json: manifest ? JSON.stringify(manifest) : null,
     device_name: deviceName,
+    pinned: 0,
     created_at: now,
     updated_at: now,
   }) }, env, 201);
+}
+
+async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: string) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  await ensureCloudSavesPinnedColumn(env);
+  const normalizedSaveId = saveId.trim();
+  if (!normalizedSaveId) return jsonResponse({ error: "invalid_save_id" }, env, 400);
+
+  const payload = await request.json().catch(() => null) as { pinned?: unknown } | null;
+  const pinned = payload?.pinned === true;
+
+  const row = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
+  ).bind(normalizedSaveId, auth.session!.steamId).first<CloudSaveRow>();
+  if (!row) return jsonResponse({ error: "not_found" }, env, 404);
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `UPDATE cloud_saves SET pinned = ?, updated_at = ? WHERE id = ? AND steam_id = ?`
+  ).bind(pinned ? 1 : 0, nowIso(), normalizedSaveId, auth.session!.steamId).run();
+
+  await pruneCloudSavesForGame(env, auth.session!.steamId, row.app_id, normalizedSaveId);
+
+  const updated = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
+  ).bind(normalizedSaveId, auth.session!.steamId).first<CloudSaveRow>();
+
+  return jsonResponse({ save: publicCloudSave(updated || { ...row, pinned: pinned ? 1 : 0 }) }, env);
 }
 
 async function deleteCloudSaveObject(env: Env, storagePath: string) {
@@ -1228,6 +1340,21 @@ async function deleteCloudSaveObject(env: Env, storagePath: string) {
     },
     body: JSON.stringify({ prefixes: [storagePath] }),
   });
+}
+
+async function pruneCloudSavesForGame(env: Env, steamId: string, appId: string, protectedSaveId: string) {
+  const rows = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM cloud_saves
+     WHERE steam_id = ? AND app_id = ?
+     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, pinned DESC, updated_at DESC
+     LIMIT 100`
+  ).bind(steamId, appId, protectedSaveId).all<CloudSaveRow>();
+  const stale = (rows.results || []).slice(MAX_CLOUD_SAVES_PER_GAME);
+
+  for (const row of stale) {
+    await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
+    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
+  }
 }
 
 async function handleCloudSaveDownload(request: Request, env: Env, saveId: string) {
@@ -1256,6 +1383,32 @@ async function handleCloudSaveDownload(request: Request, env: Env, saveId: strin
       "cache-control": "no-store",
     },
   });
+}
+
+async function handleCloudSaveDelete(request: Request, env: Env, saveId: string) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  const normalizedSaveId = saveId.trim();
+  if (!normalizedSaveId) return jsonResponse({ error: "invalid_save_id" }, env, 400);
+
+  const row = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
+  ).bind(normalizedSaveId, auth.session!.steamId).first<CloudSaveRow>();
+  if (!row) return jsonResponse({ error: "not_found" }, env, 404);
+
+  await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
+  await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
+
+  const remaining = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT COUNT(*) AS count FROM cloud_saves WHERE steam_id = ? AND app_id = ?`
+  ).bind(auth.session!.steamId, row.app_id).first<{ count: number }>();
+
+  return jsonResponse({
+    success: true,
+    saveId: row.id,
+    appId: row.app_id,
+    remainingSaves: remaining?.count ?? 0,
+  }, env);
 }
 
 function clampCloudInt(value: unknown, min: number, max: number, fallback: number) {
@@ -1994,6 +2147,14 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   const downloadMatch = url.pathname.match(/^\/cloud-saves\/([^/]+)\/download$/);
   if (request.method === "GET" && downloadMatch) {
     return handleCloudSaveDownload(request, env, downloadMatch[1]);
+  }
+  const cloudSaveMatch = url.pathname.match(/^\/cloud-saves\/([^/]+)$/);
+  const cloudSavePinnedMatch = url.pathname.match(/^\/cloud-saves\/([^/]+)\/pinned$/);
+  if (request.method === "PATCH" && cloudSavePinnedMatch) {
+    return handleCloudSavePinnedUpdate(request, env, cloudSavePinnedMatch[1]);
+  }
+  if (request.method === "DELETE" && cloudSaveMatch) {
+    return handleCloudSaveDelete(request, env, cloudSaveMatch[1]);
   }
   if (request.method === "GET" && url.pathname === "/cloud-profile") {
     return handleCloudProfileGet(request, env);

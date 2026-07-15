@@ -9,15 +9,24 @@ import {
 } from "react";
 import { translate } from "../i18n";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import { setPreferLowResCovers } from "../utils/image";
+import { setImagePreloadConcurrency } from "../utils/imageCache";
 
-interface AppearanceSettings {
+export interface AppearanceSettings {
   theme: "dark" | "light";
   gridColumns: 3 | 4 | 5 | 6;
   cardSize: "small" | "medium" | "large";
   bannerAutoplay: boolean;
   language: "pt" | "en";
-  disableCoverZoom: boolean;
   disableTabAnimations: boolean;
+  reduceAllAnimations: boolean;
+  disableBackdropBlur: boolean;
+  disableExplorePan: boolean;
+  trailerQuality: "high" | "low";
+  trailerAutoplay: boolean;
+  preferLowResCovers: boolean;
+  imagePreloadConcurrency: 2 | 4 | 6;
+  disablePageKeepAlive: boolean;
 }
 
 export type NotificationSettings = {
@@ -46,8 +55,15 @@ const defaultAppearance: AppearanceSettings = {
   cardSize: "medium",
   bannerAutoplay: true,
   language: "pt",
-  disableCoverZoom: false,
   disableTabAnimations: false,
+  reduceAllAnimations: false,
+  disableBackdropBlur: false,
+  disableExplorePan: false,
+  trailerQuality: "high",
+  trailerAutoplay: true,
+  preferLowResCovers: false,
+  imagePreloadConcurrency: 4,
+  disablePageKeepAlive: false,
 };
 
 const defaultNotifications: NotificationSettings = {
@@ -69,6 +85,11 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
 
   const appearance = value as Partial<AppearanceSettings> & Record<string, unknown>;
   const legacyReduceAnimations = appearance.reduceAnimations === true;
+  const imagePreloadConcurrency =
+    appearance.imagePreloadConcurrency === 2 ||
+    appearance.imagePreloadConcurrency === 6
+      ? appearance.imagePreloadConcurrency
+      : 4;
 
   return {
     theme: appearance.theme === "light" ? "light" : "dark",
@@ -76,8 +97,15 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     cardSize: appearance.cardSize === "small" || appearance.cardSize === "large" ? appearance.cardSize : "medium",
     bannerAutoplay: appearance.bannerAutoplay !== false,
     language: appearance.language === "en" ? "en" : "pt",
-    disableCoverZoom: appearance.disableCoverZoom === true || legacyReduceAnimations,
     disableTabAnimations: appearance.disableTabAnimations === true || legacyReduceAnimations,
+    reduceAllAnimations: appearance.reduceAllAnimations === true,
+    disableBackdropBlur: appearance.disableBackdropBlur === true,
+    disableExplorePan: appearance.disableExplorePan === true,
+    trailerQuality: appearance.trailerQuality === "low" ? "low" : "high",
+    trailerAutoplay: appearance.trailerAutoplay ?? appearance.bannerAutoplay ?? true,
+    preferLowResCovers: appearance.preferLowResCovers === true,
+    imagePreloadConcurrency,
+    disablePageKeepAlive: appearance.disablePageKeepAlive === true,
   };
 }
 
@@ -168,9 +196,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [appearance.language]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("no-cover-zoom", appearance.disableCoverZoom);
     document.documentElement.classList.toggle("no-tab-animations", appearance.disableTabAnimations);
-  }, [appearance.disableCoverZoom, appearance.disableTabAnimations]);
+  }, [appearance.disableTabAnimations]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("no-animations", appearance.reduceAllAnimations);
+  }, [appearance.reduceAllAnimations]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("no-backdrop-blur", appearance.disableBackdropBlur);
+  }, [appearance.disableBackdropBlur]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("no-explore-pan", appearance.disableExplorePan);
+  }, [appearance.disableExplorePan]);
+
+  useEffect(() => {
+    setImagePreloadConcurrency(appearance.imagePreloadConcurrency);
+  }, [appearance.imagePreloadConcurrency]);
+
+  useEffect(() => {
+    setPreferLowResCovers(appearance.preferLowResCovers);
+  }, [appearance.preferLowResCovers]);
 
   useEffect(() => {
     void ghostboxApi.setNotificationSettings(notifications).catch(() => undefined);

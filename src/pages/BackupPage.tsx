@@ -1,32 +1,39 @@
-import { useEffect, useMemo, useRef } from "react";
-import { CloudAlert, CloudCheck, FolderInput, Trash } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
+import type { KeyboardEvent } from "react";
+import {
+  ChevronLeft,
+  Cloud,
+  CloudAlert,
+  CloudCheck,
+  Pin,
+  PinOff,
+  RotateCcw,
+  Trash,
+} from "lucide-react";
 import type { GhostBoxGame } from "../data";
-import type { BackupEntry, BackupRootStatus, BackupSettings } from "../types";
+import type { BackupSettings } from "../types";
 import { useSettings } from "../context/settings";
+import { useOverlay } from "../context/OverlayContext";
+import { BackupListLoadingState, EmptyState } from "../components/ui/LoadingStates";
+import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
+import { gameHeaderOnlySources, layeredImageStyle } from "../utils/image";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import type { CloudSave } from "../lib/ghostboxApi.types";
 
 type BackupPageProps = {
   games: GhostBoxGame[];
-  installedGameAppIds?: Set<string>;
-  isRefreshingInstallationStatus?: boolean;
-  backupSettings: BackupSettings | null;
-  backupRootStatus?: BackupRootStatus | null;
-  onLocateBackupRoot?: () => void;
-  onCreateBackupRoot?: () => void;
-  onBackupSettingsChange?: (settings: BackupSettings) => void;
-  onOpenBackupFolder?: (appId: string, backupPath?: string) => void;
-  onDeleteBackupFolder?: (
-    appId: string,
-    title: string,
-    backupPath?: string
-  ) => void;
+  backupSettings?: BackupSettings | null;
 };
 
 type BackupListItem = {
   appId: string;
   title: string;
-  record?: BackupSettings["backupRecords"][string];
+  game?: GhostBoxGame;
+  cloudSaves: CloudSave[];
 };
+
+type BackupVersionItem = { date: string; save: CloudSave };
 
 function formatBackupDate(value: string | undefined, language: "pt" | "en") {
   if (!value) return "";
@@ -43,173 +50,329 @@ function formatBackupDate(value: string | undefined, language: "pt" | "en") {
   });
 }
 
-function getBackupEntries(
-  record: BackupSettings["backupRecords"][string] | undefined
-): BackupEntry[] {
-  if (record?.entries?.length) return record.entries;
-
-  if (record?.lastBackupSuccess === true && record.lastBackupPath) {
-    return [
-      {
-        path: record.lastBackupPath,
-        backupAt: record.lastBackupAt,
-        sizeBytes: record.lastBackupSizeBytes,
-      },
-    ];
-  }
-
-  return [];
+function cloudSaveDate(save: CloudSave) {
+  return save.updatedAt || save.createdAt || "";
 }
 
-function backupErrorMessage(error: string | undefined, language: "pt" | "en") {
-  const normalized = error?.trim();
-  if (!normalized) {
-    return language === "en"
-      ? "Backup did not finish successfully."
-      : "O backup não terminou com sucesso.";
-  }
-
-  const lower = normalized.toLowerCase();
-  if (lower.includes("sidecar") || lower.includes("ludusavi")) {
-    return language === "en"
-      ? `Ludusavi is not available: ${normalized}`
-      : `Ludusavi não está disponível: ${normalized}`;
-  }
-  if (lower.includes("no saves") || lower.includes("sem saves")) {
-    return language === "en"
-      ? "No compatible saves were found for this game."
-      : "Nenhum save compatível foi encontrado para este jogo.";
-  }
-  if (lower.includes("path") || lower.includes("caminho") || lower.includes("pasta")) {
-    return language === "en"
-      ? `Backup path problem: ${normalized}`
-      : `Problema no caminho do backup: ${normalized}`;
-  }
-
-  return normalized;
+function isSteamTitlePlaceholder(title: string | undefined, appId: string) {
+  if (!title) return true;
+  return new RegExp(`^Steam(?: App)? ${appId}$`, "i").test(title.trim());
 }
 
-export function BackupPage({
-  games,
-  backupSettings,
-  backupRootStatus,
-  onLocateBackupRoot,
-  onCreateBackupRoot,
-  onBackupSettingsChange,
-  onOpenBackupFolder,
-  onDeleteBackupFolder,
-}: BackupPageProps) {
-  const { appearance } = useSettings();
+function createBackupRestoreGame(appId: string, title: string): GhostBoxGame {
+  return {
+    appId,
+    id: `steam-${appId}`,
+    title,
+    subtitle: "",
+    status: "discover",
+    hours: 0,
+    rating: 0,
+    size: "",
+    release: "",
+    progress: 0,
+    accent: "",
+    cover: "",
+    hero: "",
+    coverUrl: "",
+    heroUrl: "",
+    coverFallbacks: [],
+    heroFallbacks: [],
+    logo: "",
+    tags: [],
+    genres: [],
+    screenshots: [],
+    achievements: { unlocked: 0, total: 0, progress: 0 },
+    achievementList: [],
+  };
+}
+
+function BackupGameIcon({
+  appId,
+  game,
+  title,
+  fallback,
+}: {
+  appId: string;
+  game?: GhostBoxGame;
+  title: string;
+  fallback: "success" | "missing";
+}) {
+  const iconGame = game ?? createBackupRestoreGame(appId, title);
+  const rawHeaderSources = useMemo(
+    () => gameHeaderOnlySources(iconGame),
+    [iconGame],
+  );
+  const headerSources = useCachedImageSources(rawHeaderSources);
+  const { source: headerSource, loaded } = useLoadableImageCover(headerSources);
+  const displayedSources =
+    loaded && headerSource ? [headerSource] : [];
+
+  if (displayedSources.length > 0) {
+    return (
+      <span
+        className="backup-list__game-header"
+        style={layeredImageStyle(displayedSources, "")}
+        aria-hidden="true"
+      />
+    );
+  }
+
+  return fallback === "success" ? (
+    <CloudCheck className="backup-list__icon" size={28} aria-hidden="true" />
+  ) : (
+    <CloudAlert className="backup-list__icon" size={28} aria-hidden="true" />
+  );
+}
+
+export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
+  const { appearance, t } = useSettings();
+  const { showToast } = useOverlay();
   const language = appearance.language;
-  const refreshedMetadataSignatureRef = useRef("");
-
-  const backupGames = useMemo(() => {
-    const records = backupSettings?.backupRecords ?? {};
-    const gamesByAppId = new Map(games.map((game) => [game.appId, game]));
-
-    return Object.entries(records)
-      .filter(
-        ([, record]) =>
-          getBackupEntries(record).length > 0 ||
-          record?.lastBackupSuccess === false ||
-          Boolean(record?.lastBackupError)
-      )
-      .map<BackupListItem>(([appId, record]) => {
-        const game = gamesByAppId.get(appId);
-
-        return {
-          appId,
-          title: game?.title ?? record?.title ?? appId,
-          record,
-        };
-      })
-      .sort((a, b) => a.title.localeCompare(b.title));
-  }, [backupSettings, games]);
+  const [restoringBackupPath, setRestoringBackupPath] = useState<string | null>(
+    null,
+  );
+  const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
+  const [isCloudSavesLoading, setIsCloudSavesLoading] = useState(false);
+  const [expandedBackupAppIds, setExpandedBackupAppIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
-    if (backupRootStatus?.status !== "ok" || !backupGames.length) return;
-
-    const metadataSignature = backupGames
-      .map(
-        ({ appId, record }) =>
-          `${appId}:${getBackupEntries(record)
-            .map((entry) => entry.path)
-            .join("|")}`
-      )
-      .join(";");
-    if (refreshedMetadataSignatureRef.current === metadataSignature) return;
-    refreshedMetadataSignatureRef.current = metadataSignature;
-
     let cancelled = false;
+    setIsCloudSavesLoading(true);
 
-    void (async () => {
-      let latestSettings = backupSettings;
-      let changed = false;
+    void ghostboxApi
+      .listCloudSaves()
+      .then((saves) => {
+        if (cancelled) return;
+        setCloudSaves(saves);
 
-      for (const { appId, record } of backupGames.slice(0, 25)) {
-        if (cancelled) continue;
+        const cloudBackupAppIds = new Set(saves.map((save) => save.appId));
+        const libraryGameAppIds = new Set(games.map((game) => game.appId));
+        const staleRecordAppIds = Object.keys(
+          backupSettings?.backupRecords ?? {},
+        ).filter(
+          (appId) => libraryGameAppIds.has(appId) && !cloudBackupAppIds.has(appId),
+        );
 
-        const settings = await ghostboxApi
-          .refreshGameBackupMetadata(appId)
-          .catch(() => null);
-        const nextRecord = settings?.backupRecords[appId];
-        if (
-          settings &&
-          JSON.stringify(nextRecord ?? null) !== JSON.stringify(record ?? null)
-        ) {
-          latestSettings = settings;
-          changed = true;
+        for (const appId of staleRecordAppIds) {
+          void ghostboxApi.removeBackupRecord(appId).catch(() => undefined);
         }
-      }
-
-      if (!cancelled && changed && latestSettings) {
-        onBackupSettingsChange?.(latestSettings);
-      }
-    })();
+      })
+      .catch(() => {
+        if (!cancelled) setCloudSaves([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsCloudSavesLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [
-    backupGames,
-    backupRootStatus?.status,
-    backupSettings,
-    onBackupSettingsChange,
-  ]);
+  }, [backupSettings, games]);
+
+  const backupGames = useMemo(() => {
+    const gamesByAppId = new Map(games.map((game) => [game.appId, game]));
+    const cloudSavesByAppId = new Map<string, CloudSave[]>();
+
+    for (const save of cloudSaves) {
+      const entries = cloudSavesByAppId.get(save.appId) ?? [];
+      entries.push(save);
+      cloudSavesByAppId.set(save.appId, entries);
+    }
+
+    for (const entries of cloudSavesByAppId.values()) {
+      entries.sort(
+        (a, b) => Date.parse(cloudSaveDate(b)) - Date.parse(cloudSaveDate(a)),
+      );
+    }
+
+    return [...cloudSavesByAppId.entries()]
+      .map<BackupListItem>(([appId, saves]) => {
+        const game = gamesByAppId.get(appId);
+        const cloudTitle = saves.find(
+          (save) => !isSteamTitlePlaceholder(save.gameTitle, appId),
+        )?.gameTitle;
+
+        return {
+          appId,
+          title: game?.title ?? cloudTitle ?? appId,
+          game,
+          cloudSaves: saves,
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [cloudSaves, games]);
+
+  const handleRestoreCloudBackup = async (
+    appId: string,
+    title: string,
+    save: CloudSave,
+  ) => {
+    const busyKey = `cloud:${save.id}`;
+    if (restoringBackupPath) return;
+
+    const confirmed = window.confirm(
+      language === "en"
+        ? `Restore this cloud backup for ${title}? Current saves, achievements, and playtime for this game on this PC may be replaced.`
+        : `Restaurar este backup em nuvem de ${title}? Saves, conquistas e tempo de jogo atuais deste jogo neste PC podem ser substituídos.`,
+    );
+    if (!confirmed) return;
+
+    const game =
+      games.find((candidate) => candidate.appId === appId) ??
+      createBackupRestoreGame(appId, title);
+
+    setRestoringBackupPath(busyKey);
+    try {
+      const result = await ghostboxApi.restoreCloudSave(game, save.id);
+      if (!result?.success) {
+        throw new Error(
+          language === "en"
+            ? "Failed to restore cloud backup."
+            : "Falha ao restaurar backup em nuvem.",
+        );
+      }
+      showToast(
+        language === "en"
+          ? "Cloud backup restored"
+          : "Backup em nuvem restaurado",
+        language === "en"
+          ? `${title} was restored from the selected cloud backup.`
+          : `${title} foi restaurado a partir do backup em nuvem selecionado.`,
+        "success",
+      );
+    } catch (error) {
+      showToast(
+        language === "en"
+          ? "Failed to restore cloud backup"
+          : "Falha ao restaurar backup em nuvem",
+        error instanceof Error ? error.message : "",
+        "error",
+      );
+    } finally {
+      setRestoringBackupPath(null);
+    }
+  };
+
+  const handleDeleteCloudBackup = async (title: string, save: CloudSave) => {
+    const busyKey = `cloud:${save.id}`;
+    if (restoringBackupPath) return;
+
+    const confirmed = window.confirm(
+      language === "en"
+        ? `Delete this cloud backup for ${title}? This cannot be undone.`
+        : `Excluir este backup em nuvem de ${title}? Isso não pode ser desfeito.`,
+    );
+    if (!confirmed) return;
+
+    setRestoringBackupPath(busyKey);
+    try {
+      const result = await ghostboxApi.deleteCloudSave(save.id);
+      if (!result?.success) {
+        throw new Error(
+          result?.error ||
+            (language === "en"
+              ? "Failed to delete cloud backup."
+              : "Falha ao excluir backup em nuvem."),
+        );
+      }
+      setCloudSaves((current) => current.filter((item) => item.id !== save.id));
+      showToast(
+        language === "en" ? "Cloud backup deleted" : "Backup em nuvem excluído",
+        language === "en"
+          ? `${title} cloud backup was removed.`
+          : `O backup em nuvem de ${title} foi removido.`,
+        "success",
+      );
+    } catch (error) {
+      showToast(
+        language === "en"
+          ? "Failed to delete cloud backup"
+          : "Falha ao excluir backup em nuvem",
+        error instanceof Error ? error.message : "",
+        "error",
+      );
+    } finally {
+      setRestoringBackupPath(null);
+    }
+  };
+
+  const handleToggleCloudBackupPinned = async (
+    title: string,
+    save: CloudSave,
+  ) => {
+    const pinned = !Boolean(save.pinned);
+    const busyKey = `cloud-pin:${save.id}`;
+    if (restoringBackupPath) return;
+
+    setRestoringBackupPath(busyKey);
+    try {
+      const result = await ghostboxApi.setCloudSavePinned(save.id, pinned);
+      if (!result?.save) {
+        throw new Error(
+          language === "en"
+            ? "Failed to update cloud backup."
+            : "Falha ao atualizar backup em nuvem.",
+        );
+      }
+      setCloudSaves((current) =>
+        current.map((item) => (item.id === save.id ? result.save : item)),
+      );
+      showToast(
+        pinned
+          ? language === "en"
+            ? "Cloud backup pinned"
+            : "Backup em nuvem fixado"
+          : language === "en"
+            ? "Cloud backup unpinned"
+            : "Backup em nuvem desafixado",
+        pinned
+          ? language === "en"
+            ? `${title} cloud backup will not be replaced by automatic rotation.`
+            : `O backup em nuvem de ${title} não será substituído pela rotação automática.`
+          : language === "en"
+            ? `${title} cloud backup can be replaced by future automatic backups.`
+            : `O backup em nuvem de ${title} poderá ser substituído por backups automáticos futuros.`,
+        "success",
+      );
+    } catch (error) {
+      showToast(
+        language === "en"
+          ? "Failed to update cloud backup"
+          : "Falha ao atualizar backup em nuvem",
+        error instanceof Error ? error.message : "",
+        "error",
+      );
+    } finally {
+      setRestoringBackupPath(null);
+    }
+  };
+
+  const toggleBackupVersions = (appId: string) => {
+    setExpandedBackupAppIds((current) => {
+      const next = new Set(current);
+      if (next.has(appId)) {
+        next.delete(appId);
+      } else {
+        next.add(appId);
+      }
+      return next;
+    });
+  };
+
+  const handleCardKeyDown = (
+    event: KeyboardEvent<HTMLDivElement>,
+    appId: string,
+  ) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    toggleBackupVersions(appId);
+  };
 
   return (
     <section className="backup-page content-section content-section--full">
-      {backupRootStatus && backupRootStatus.status !== "ok" && (
-        <div className="backup-page__sync-warning" role="status">
-          <CloudAlert size={22} aria-hidden="true" />
-          <div>
-            <strong>
-              {language === "en"
-                ? "Backup folder not found"
-                : "Pasta de backups não encontrada"}
-            </strong>
-            <span>{backupRootStatus.message}</span>
-            <small>{backupRootStatus.outputPath}</small>
-          </div>
-          <div className="backup-page__sync-warning-actions">
-            <button
-              className="button button--ghost"
-              type="button"
-              onClick={onLocateBackupRoot}
-            >
-              {language === "en" ? "Locate folder" : "Localizar pasta"}
-            </button>
-            <button
-              className="button button--primary"
-              type="button"
-              onClick={onCreateBackupRoot}
-            >
-              {language === "en" ? "Create again" : "Criar novamente"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {backupGames.length > 0 ? (
         <ul
           className="backup-list"
@@ -219,108 +382,220 @@ export function BackupPage({
               : "Jogos com backup automático"
           }
         >
-          {backupGames.map(({ appId, title, record }) => {
-            const recordEntries = getBackupEntries(record);
-            const backupPath = recordEntries[0]?.path;
-            const canResolveBackupFolder = Boolean(
-              backupPath || record?.lastBackupSuccess === true
-            );
-            const canOpenBackupFolder = Boolean(
-              canResolveBackupFolder && onOpenBackupFolder
-            );
-            const canDeleteBackupFolder = Boolean(
-              canResolveBackupFolder && onDeleteBackupFolder
-            );
-            const latestBackupDate = formatBackupDate(
-              recordEntries[0]?.backupAt,
-              language
-            );
-            const hasSuccessfulBackup = recordEntries.length > 0;
-            const backupError =
-              record?.lastBackupSuccess === false || record?.lastBackupError
-                ? backupErrorMessage(record?.lastBackupError, language)
-                : "";
-            const isRootSynced = backupRootStatus?.status === "ok";
-            const useSuccessIcon = hasSuccessfulBackup && isRootSynced;
-
-            return (
-              <li
-                key={appId}
-                className={`backup-list__item ${
-                  useSuccessIcon
-                    ? "backup-list__item--success"
-                    : "backup-list__item--missing"
-                }`}
-              >
-                <div className="backup-list__content" role="group">
-                  <div className="backup-list__copy-row">
-                    {useSuccessIcon ? (
-                      <CloudCheck
-                        className="backup-list__icon"
-                        size={28}
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <CloudAlert
-                        className="backup-list__icon"
-                        size={28}
-                        aria-hidden="true"
-                      />
-                    )}
+          {backupGames.map(
+            ({ appId, title, game, cloudSaves: gameCloudSaves }) => {
+              const versionItems: BackupVersionItem[] = gameCloudSaves
+                .map((save) => ({
+                  date: cloudSaveDate(save),
+                  save,
+                }))
+                .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+              const latestBackupDate = formatBackupDate(
+                versionItems[0]?.date,
+                language,
+              );
+              const hasSuccessfulBackup = versionItems.length > 0;
+              const isExpanded = expandedBackupAppIds.has(appId);
+              const versionsListId = `backup-versions-${appId}`;
+              return (
+                <li
+                  key={appId}
+                  className={`backup-list__item ${
+                    hasSuccessfulBackup
+                      ? "backup-list__item--success"
+                      : "backup-list__item--missing"
+                  } ${isExpanded ? "backup-list__item--expanded" : ""}`}
+                >
+                  <div
+                    className="backup-list__content"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-controls={versionsListId}
+                    onClick={() => toggleBackupVersions(appId)}
+                    onKeyDown={(event) => handleCardKeyDown(event, appId)}
+                  >
+                    <BackupGameIcon
+                      appId={appId}
+                      game={game}
+                      title={title}
+                      fallback={hasSuccessfulBackup ? "success" : "missing"}
+                    />
                     <div className="backup-list__copy">
                       <strong>{title}</strong>
-                      {backupError && (
-                        <span className="backup-list__error">{backupError}</span>
-                      )}
                       {latestBackupDate && <small>{latestBackupDate}</small>}
                     </div>
-                  </div>
 
-                  <div className="backup-list__actions">
-                    <button
-                      type="button"
-                      className="backup-list__action-button"
-                      disabled={!canOpenBackupFolder}
-                      aria-label={
-                        language === "en"
-                          ? "Open backup folder"
-                          : "Abrir pasta do backup"
-                      }
-                      onClick={() =>
-                        canOpenBackupFolder &&
-                        onOpenBackupFolder?.(appId, backupPath)
-                      }
-                    >
-                      <FolderInput size={16} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="backup-list__action-button backup-list__action-button--danger"
-                      disabled={!canDeleteBackupFolder}
-                      aria-label={
-                        language === "en"
-                          ? "Delete backup folder"
-                          : "Excluir pasta do backup"
-                      }
-                      onClick={() =>
-                        canDeleteBackupFolder &&
-                        onDeleteBackupFolder?.(appId, title, backupPath)
-                      }
-                    >
-                      <Trash size={16} aria-hidden="true" />
-                    </button>
+                    <div className="backup-list__actions">
+                      {versionItems.length > 0 && (
+                        <ChevronLeft
+                          className="backup-list__chevron"
+                          size={18}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
-              </li>
-            );
-          })}
+                  {versionItems.length > 0 && (
+                    <div
+                      className={`backup-list__versions-wrapper ${isExpanded ? "backup-list__versions-wrapper--expanded" : ""}`}
+                      aria-hidden={!isExpanded}
+                      style={
+                        {
+                          "--backup-versions-height": `${versionItems.length * 58 + 16}px`,
+                        } as CSSProperties
+                      }
+                    >
+                      <ul
+                        id={versionsListId}
+                        className="backup-list__versions"
+                        aria-label={
+                          language === "en"
+                            ? `${title} backup versions`
+                            : `Versões de backup de ${title}`
+                        }
+                      >
+                        {versionItems.map((version, index) => {
+                          const entryDate = formatBackupDate(
+                            version.date,
+                            language,
+                          );
+                          const entryLabel =
+                            entryDate ||
+                            (language === "en"
+                              ? `Version ${index + 1}`
+                              : `Versão ${index + 1}`);
+                          const isLatest = index === 0;
+                          const busyKey = `cloud:${version.save.id}`;
+                          const isBusy = Boolean(restoringBackupPath);
+                          const isPinned = Boolean(version.save.pinned);
+
+                          return (
+                            <li className="backup-list__version" key={busyKey}>
+                              <Cloud
+                                className="backup-list__version-icon"
+                                size={16}
+                                strokeWidth={2}
+                                aria-hidden="true"
+                              />
+                              <div className="backup-list__version-copy">
+                                <strong>{entryLabel}</strong>
+                                <span>
+                                  {isLatest
+                                    ? language === "en"
+                                      ? "Most recent"
+                                      : "Mais recente"
+                                    : language === "en"
+                                      ? "Older backup"
+                                      : "Backup antigo"}
+                                  {isPinned
+                                    ? language === "en"
+                                      ? " - pinned"
+                                      : " - fixado"
+                                    : ""}
+                                </span>
+                              </div>
+                              <div className="backup-list__version-actions">
+                                <button
+                                  type="button"
+                                  className={`backup-list__action-button ${isPinned ? "backup-list__action-button--pinned" : ""}`}
+                                  disabled={isBusy}
+                                  aria-label={
+                                    isPinned
+                                      ? language === "en"
+                                        ? `Unpin ${entryLabel}`
+                                        : `Desafixar ${entryLabel}`
+                                      : language === "en"
+                                        ? `Pin ${entryLabel}`
+                                        : `Fixar ${entryLabel}`
+                                  }
+                                  title={
+                                    isPinned
+                                      ? language === "en"
+                                        ? "Allow automatic replacement"
+                                        : "Permitir substituição automática"
+                                      : language === "en"
+                                        ? "Keep this backup"
+                                        : "Manter este backup"
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleToggleCloudBackupPinned(
+                                      title,
+                                      version.save,
+                                    );
+                                  }}
+                                >
+                                  {isPinned ? (
+                                    <PinOff size={16} aria-hidden="true" />
+                                  ) : (
+                                    <Pin size={16} aria-hidden="true" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="backup-list__action-button"
+                                  disabled={isBusy}
+                                  aria-label={
+                                    language === "en"
+                                      ? `Restore ${entryLabel}`
+                                      : `Restaurar ${entryLabel}`
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleRestoreCloudBackup(
+                                      appId,
+                                      title,
+                                      version.save,
+                                    );
+                                  }}
+                                >
+                                  <RotateCcw size={16} aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="backup-list__action-button backup-list__action-button--danger"
+                                  disabled={isBusy}
+                                  aria-label={
+                                    language === "en"
+                                      ? `Delete ${entryLabel}`
+                                      : `Excluir ${entryLabel}`
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleDeleteCloudBackup(
+                                      title,
+                                      version.save,
+                                    );
+                                  }}
+                                >
+                                  <Trash size={16} aria-hidden="true" />
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </li>
+              );
+            },
+          )}
         </ul>
       ) : (
-        <div className="backup-page__empty">
-          {language === "en"
-            ? "No backups found."
-            : "Nenhum backup encontrado."}
-        </div>
+        isCloudSavesLoading ? (
+          <div className="backup-page__empty backup-page__loading-skeleton" role="status">
+            <BackupListLoadingState count={4} />
+          </div>
+        ) : (
+          <EmptyState
+            className="backup-page__empty"
+            title={t("backup.emptyTitle")}
+            message={t("backup.emptyMessage")}
+            icon={<Cloud size={24} strokeWidth={1.75} />}
+          />
+        )
       )}
     </section>
   );

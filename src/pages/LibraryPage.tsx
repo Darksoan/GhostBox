@@ -1,8 +1,8 @@
-import { ChevronLeft, Folder, Heart } from "lucide-react";
+import { ChevronLeft, Folder, Heart, LibraryBig } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
-import type { BackupRootStatus, BackupSettings } from "../types";
+import type { BackupSettings } from "../types";
 import { GameGrid, GameGridLoadingState } from "../components/ui/GameCard";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
@@ -23,7 +23,10 @@ const sortOptions: Array<{ value: LibrarySortBy; pt: string; en: string }> = [
   { value: "playtime", pt: "Mais jogados", en: "Most Played" },
 ];
 
-function addLibraryGameKey(keys: Set<string>, value: string | null | undefined) {
+function addLibraryGameKey(
+  keys: Set<string>,
+  value: string | null | undefined,
+) {
   const key = value?.trim();
   if (!key) return;
 
@@ -69,7 +72,6 @@ interface LibraryPageProps {
   onToggleFavorite?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   backupSettings?: BackupSettings | null;
-  backupRootStatus?: BackupRootStatus | null;
   activeSessionAppIds?: Set<string>;
 }
 
@@ -91,13 +93,20 @@ export function LibraryPage({
   onToggleFavorite,
   onAddGameToCollection,
   backupSettings = null,
-  backupRootStatus = null,
   activeSessionAppIds = new Set(),
 }: LibraryPageProps) {
   const { appearance } = useSettings();
-  const [sortBy, setSortBy] = useState<LibrarySortBy>(() => readStoredLibrarySortBy());
-  const [internalActiveCollectionId, setInternalActiveCollectionId] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ game: GhostBoxGame; x: number; y: number } | null>(null);
+  const [sortBy, setSortBy] = useState<LibrarySortBy>(() =>
+    readStoredLibrarySortBy(),
+  );
+  const [internalActiveCollectionId, setInternalActiveCollectionId] = useState<
+    string | null
+  >(null);
+  const [contextMenu, setContextMenu] = useState<{
+    game: GhostBoxGame;
+    x: number;
+    y: number;
+  } | null>(null);
   const language = appearance.language;
   const selectedCollectionId =
     propActiveCollectionId === undefined
@@ -112,11 +121,15 @@ export function LibraryPage({
     userCollections.some((collection) => collection.id === selectedCollectionId)
       ? selectedCollectionId
       : null;
-  const gamesWithBackup = useMemo(() => new Set(
-    Object.entries(backupSettings?.backupRecords ?? {})
-      .filter(([, record]) => record?.lastBackupSuccess === true)
-      .map(([appId]) => appId)
-  ), [backupSettings]);
+  const gamesWithBackup = useMemo(
+    () =>
+      new Set(
+        Object.entries(backupSettings?.backupRecords ?? {})
+          .filter(([, record]) => record?.lastBackupSuccess === true)
+          .map(([appId]) => appId),
+      ),
+    [backupSettings],
+  );
   const changeActiveCollection = (collectionId: string | null) => {
     setInternalActiveCollectionId(collectionId);
     onActiveCollectionChange?.(collectionId);
@@ -138,25 +151,31 @@ export function LibraryPage({
     if (favoritesOnly) {
       addGames(favoriteGames);
       const favoriteKeys = new Set<string>();
-      favoriteGameIds.forEach((gameId) => addLibraryGameKey(favoriteKeys, gameId));
+      favoriteGameIds.forEach((gameId) =>
+        addLibraryGameKey(favoriteKeys, gameId),
+      );
       favoriteGames.forEach((game) => {
         for (const key of getLibraryGameKeys(game)) favoriteKeys.add(key);
       });
       filteredGames = [...gamesByKey.values()].filter((game) =>
-        gameMatchesLibraryKeys(game, favoriteKeys)
+        gameMatchesLibraryKeys(game, favoriteKeys),
       );
     } else if (activeCollectionId) {
-      const collection = userCollections.find((c) => c.id === activeCollectionId);
+      const collection = userCollections.find(
+        (c) => c.id === activeCollectionId,
+      );
       if (collection) {
         const collectionGames = collection.games ?? [];
         addGames(collectionGames);
         const collectionKeys = new Set<string>();
-        collection.gameIds.forEach((gameId) => addLibraryGameKey(collectionKeys, gameId));
+        collection.gameIds.forEach((gameId) =>
+          addLibraryGameKey(collectionKeys, gameId),
+        );
         collectionGames.forEach((game) => {
           for (const key of getLibraryGameKeys(game)) collectionKeys.add(key);
         });
         filteredGames = [...gamesByKey.values()].filter((game) =>
-          gameMatchesLibraryKeys(game, collectionKeys)
+          gameMatchesLibraryKeys(game, collectionKeys),
         );
       }
     }
@@ -184,7 +203,10 @@ export function LibraryPage({
   useEffect(() => {
     if (!sortDropdownOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
-      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target as Node)) {
+      if (
+        sortDropdownRef.current &&
+        !sortDropdownRef.current.contains(event.target as Node)
+      ) {
         setSortDropdownOpen(false);
       }
     };
@@ -234,44 +256,60 @@ export function LibraryPage({
 
   return (
     <section className="content-section content-section--full content-section--library">
-      <div className="library-toolbar" aria-label={language === "en" ? "Library filters" : "Filtros da biblioteca"}>
+      <div
+        className="library-toolbar"
+        aria-label={
+          language === "en" ? "Library filters" : "Filtros da biblioteca"
+        }
+      >
         <div className="library-toolbar__row">
-          <div className={`settings-dropdown ${sortDropdownOpen ? "settings-dropdown--open" : ""}`} ref={sortDropdownRef}>
+          <div
+            className={`settings-dropdown ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
+            ref={sortDropdownRef}
+          >
             <button
-                type="button"
-                className="settings-dropdown__trigger"
-                aria-haspopup="listbox"
-                aria-expanded={sortDropdownOpen}
-                onClick={() => setSortDropdownOpen((current) => !current)}
+              type="button"
+              className="settings-dropdown__trigger"
+              aria-haspopup="listbox"
+              aria-expanded={sortDropdownOpen}
+              onClick={() => setSortDropdownOpen((current) => !current)}
+            >
+              <span>{sortLabel}</span>
+              <ChevronLeft size={14} />
+            </button>
+            {sortDropdownOpen && (
+              <div
+                className="settings-dropdown__menu"
+                role="listbox"
+                aria-label={language === "en" ? "Sort by" : "Ordenar por"}
               >
-                <span>{sortLabel}</span>
-                <ChevronLeft size={14} />
-              </button>
-              {sortDropdownOpen && (
-                <div className="settings-dropdown__menu" role="listbox" aria-label={language === "en" ? "Sort by" : "Ordenar por"}>
-                  {sortOptions
-                    .filter((option) => option.value !== sortBy)
-                    .map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`settings-dropdown__option ${option.value === sortBy ? "settings-dropdown__option--active" : ""}`}
-                        onClick={() => {
-                          setSortBy(option.value);
-                          setSortDropdownOpen(false);
-                        }}
-                      >
-                        <span>{option[language]}</span>
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
+                {sortOptions
+                  .filter((option) => option.value !== sortBy)
+                  .map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`settings-dropdown__option ${option.value === sortBy ? "settings-dropdown__option--active" : ""}`}
+                      onClick={() => {
+                        setSortBy(option.value);
+                        setSortDropdownOpen(false);
+                      }}
+                    >
+                      <span>{option[language]}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
 
           <div className="library-toolbar__chips">
             <button
               type="button"
-              className={favoritesOnly ? "library-chip library-chip--active" : "library-chip"}
+              className={
+                favoritesOnly
+                  ? "library-chip library-chip--active"
+                  : "library-chip"
+              }
               aria-pressed={favoritesOnly}
               onClick={() => {
                 changeActiveCollection(favoritesOnly ? null : "favorites");
@@ -285,10 +323,16 @@ export function LibraryPage({
               <button
                 key={collection.id}
                 type="button"
-                className={activeCollectionId === collection.id ? "library-chip library-chip--active" : "library-chip"}
+                className={
+                  activeCollectionId === collection.id
+                    ? "library-chip library-chip--active"
+                    : "library-chip"
+                }
                 aria-pressed={activeCollectionId === collection.id}
                 onClick={() => {
-                  changeActiveCollection(activeCollectionId === collection.id ? null : collection.id);
+                  changeActiveCollection(
+                    activeCollectionId === collection.id ? null : collection.id,
+                  );
                 }}
               >
                 <Folder size={15} strokeWidth={2.0} />
@@ -300,7 +344,7 @@ export function LibraryPage({
       </div>
 
       {loading ? (
-        <GameGridLoadingState dense count={8} />
+        <GameGridLoadingState dense count={8} portrait showAchievements showBackupStatus libraryCoverFade />
       ) : libraryGames.length > 0 ? (
         <GameGrid
           games={libraryGames}
@@ -312,11 +356,10 @@ export function LibraryPage({
           showBackupStatus
           hasBackupByAppId={gamesWithBackup}
           activeSessionAppIds={activeSessionAppIds}
-          backupRootStatus={backupRootStatus}
           libraryCoverFade
         />
       ) : (
-        <EmptyState query={query} />
+        <EmptyState query={query} icon={<LibraryBig size={24} strokeWidth={1.75} />} />
       )}
 
       {contextMenu && collectionContextMenuItems.length > 0 && (

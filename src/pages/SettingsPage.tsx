@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import { useSettings } from "../context/settings";
+import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
@@ -357,15 +357,13 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance.language, appearance.disableCoverZoom, appearance.disableTabAnimations, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, () => {
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, () => {
         onMorrenusApiKeySave();
         void refreshMorrenusStats();
       }),
     [
       activeTab,
-      appearance.disableCoverZoom,
-      appearance.disableTabAnimations,
-      appearance.language,
+      appearance,
       backupSettings,
       drafts,
       morrenusApiKey,
@@ -445,11 +443,9 @@ function buildTabOptions(
   activeTab: SettingsTab,
   currentValues: Record<string, DraftValue>,
   onChangeValue: (tabId: SettingsTabId, key: string, value: DraftValue) => void,
-  language: "pt" | "en",
-  disableCoverZoom: boolean,
-  disableTabAnimations: boolean,
+  appearance: AppearanceSettings,
   notifications: ReturnType<typeof useSettings>["notifications"],
-  updateAppearance: (settings: { disableCoverZoom?: boolean; disableTabAnimations?: boolean }) => void,
+  updateAppearance: ReturnType<typeof useSettings>["updateAppearance"],
   updateNotifications: ReturnType<typeof useSettings>["updateNotifications"],
   t: (key: string, params?: Record<string, string | number>) => string,
   steamPath: string,
@@ -464,7 +460,7 @@ function buildTabOptions(
         label: t("settings.general.language.label"),
         description: t("settings.general.language.description"),
         control: "select" as const,
-        value: (currentValues.language as string) ?? language,
+        value: (currentValues.language as string) ?? appearance.language,
         choices: [
           { label: t("settings.general.language.portuguese"), value: "pt" },
           { label: t("settings.general.language.english"), value: "en" },
@@ -514,18 +510,76 @@ function buildTabOptions(
   if (activeTab.id === "performance") {
     return [
       {
-        label: t("settings.performance.disableCoverZoom.label"),
-        description: t("settings.performance.disableCoverZoom.description"),
-        control: "toggle" as const,
-        checked: disableCoverZoom,
-        onToggle: (next: boolean) => updateAppearance({ disableCoverZoom: next }),
-      },
-      {
         label: t("settings.performance.disableTabAnimations.label"),
         description: t("settings.performance.disableTabAnimations.description"),
         control: "toggle" as const,
-        checked: disableTabAnimations,
+        checked: appearance.disableTabAnimations,
         onToggle: (next: boolean) => updateAppearance({ disableTabAnimations: next }),
+      },
+      {
+        label: t("settings.performance.reduceAllAnimations.label"),
+        description: t("settings.performance.reduceAllAnimations.description"),
+        control: "toggle" as const,
+        checked: appearance.reduceAllAnimations,
+        onToggle: (next: boolean) => updateAppearance({ reduceAllAnimations: next }),
+      },
+      {
+        label: t("settings.performance.disableBackdropBlur.label"),
+        description: t("settings.performance.disableBackdropBlur.description"),
+        control: "toggle" as const,
+        checked: appearance.disableBackdropBlur,
+        onToggle: (next: boolean) => updateAppearance({ disableBackdropBlur: next }),
+      },
+      {
+        label: t("settings.performance.disableExplorePan.label"),
+        description: t("settings.performance.disableExplorePan.description"),
+        control: "toggle" as const,
+        checked: appearance.disableExplorePan,
+        onToggle: (next: boolean) => updateAppearance({ disableExplorePan: next }),
+      },
+      {
+        label: t("settings.performance.trailerQuality.label"),
+        description: t("settings.performance.trailerQuality.description"),
+        control: "select" as const,
+        value: appearance.trailerQuality,
+        choices: [
+          { label: t("settings.performance.trailerQuality.high"), value: "high" },
+          { label: t("settings.performance.trailerQuality.low"), value: "low" },
+        ],
+        onChange: (value: string) => updateAppearance({ trailerQuality: value === "low" ? "low" : "high" }),
+      },
+      {
+        label: t("settings.performance.trailerAutoplay.label"),
+        description: t("settings.performance.trailerAutoplay.description"),
+        control: "toggle" as const,
+        checked: appearance.trailerAutoplay,
+        onToggle: (next: boolean) => updateAppearance({ trailerAutoplay: next, bannerAutoplay: next }),
+      },
+      {
+        label: t("settings.performance.preferLowResCovers.label"),
+        description: t("settings.performance.preferLowResCovers.description"),
+        control: "toggle" as const,
+        checked: appearance.preferLowResCovers,
+        onToggle: (next: boolean) => updateAppearance({ preferLowResCovers: next }),
+      },
+      {
+        label: t("settings.performance.imagePreloadConcurrency.label"),
+        description: t("settings.performance.imagePreloadConcurrency.description"),
+        control: "select" as const,
+        value: String(appearance.imagePreloadConcurrency),
+        choices: [
+          { label: t("settings.performance.imagePreloadConcurrency.low"), value: "2" },
+          { label: t("settings.performance.imagePreloadConcurrency.medium"), value: "4" },
+          { label: t("settings.performance.imagePreloadConcurrency.high"), value: "6" },
+        ],
+        onChange: (value: string) => updateAppearance({ imagePreloadConcurrency: value === "2" ? 2 : value === "6" ? 6 : 4 }),
+      },
+      {
+        label: t("settings.performance.disablePageKeepAlive.label"),
+        description: t("settings.performance.disablePageKeepAlive.description"),
+        control: "toggle" as const,
+        checked: appearance.disablePageKeepAlive,
+        onToggle: (next: boolean) => updateAppearance({ disablePageKeepAlive: next }),
       },
     ];
   }

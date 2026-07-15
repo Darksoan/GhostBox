@@ -60,6 +60,44 @@ pub(crate) fn game_title(game: &serde_json::Value, app_id: &str) -> String {
     text_value(game.get("title")).if_empty(app_id.to_string())
 }
 
+pub(crate) fn is_steam_app_title_placeholder(title: &str, app_id: &str) -> bool {
+    let normalized_title = title
+        .trim()
+        .chars()
+        .filter(|character| !character.is_whitespace() && *character != '-' && *character != '_')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let normalized_app_id = app_id.trim().to_ascii_lowercase();
+
+    if normalized_title.is_empty() {
+        return true;
+    }
+    if normalized_app_id.is_empty() {
+        return false;
+    }
+
+    normalized_title == normalized_app_id
+        || normalized_title == format!("steam{normalized_app_id}")
+        || normalized_title == format!("steamapp{normalized_app_id}")
+        || normalized_title == format!("steamappid{normalized_app_id}")
+}
+
+pub(crate) fn resolved_game_title(
+    app: &tauri::AppHandle,
+    game: &serde_json::Value,
+    app_id: &str,
+) -> String {
+    let title = game_title(game, app_id);
+    if !is_steam_app_title_placeholder(&title, app_id) {
+        return title;
+    }
+
+    crate::catalogue::read_cached_steam_store_title(app, app_id)
+        .or_else(|| crate::catalogue::read_local_steam_app_title(app, app_id))
+        .filter(|title| !is_steam_app_title_placeholder(title, app_id))
+        .unwrap_or_else(|| app_id.to_string())
+}
+
 pub(crate) fn ludusavi_args(
     command: &str,
     app_id: &str,
@@ -112,7 +150,7 @@ pub fn ludusavi_get_backup_previews(
             previews.push(serde_json::json!({
                 "id": text_value(game.get("id")).if_empty(format!("steam-{app_id}")),
                 "appId": app_id,
-                "title": game_title(&game, &app_id)
+                "title": resolved_game_title(&app, &game, &app_id)
             }));
         }
     }

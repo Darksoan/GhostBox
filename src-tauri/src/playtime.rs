@@ -1,5 +1,5 @@
 use crate::extract_app_id;
-use crate::ludusavi::game_title;
+use crate::ludusavi::resolved_game_title;
 use crate::settings::read_json_file;
 use crate::util::{silent_command, text_value, EmptyStringExt};
 
@@ -252,7 +252,7 @@ pub(crate) fn open_game_playtime_session(app: &tauri::AppHandle, game: &serde_js
         return;
     }
 
-    let title = game_title(game, &app_id);
+    let title = resolved_game_title(app, game, &app_id);
     guard.playtime_sessions.insert(
         app_id.clone(),
         GamePlaytimeSession {
@@ -298,23 +298,6 @@ pub(crate) fn close_all_game_playtime_sessions(app: &tauri::AppHandle) {
     }
 }
 
-fn is_local_automatic_backup_enabled(app: &tauri::AppHandle, app_id: &str) -> bool {
-    let settings = crate::load_backup_settings(app);
-    if settings
-        .get("automaticBackupsForLibrary")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-    {
-        return true;
-    }
-
-    settings
-        .get("automaticBackups")
-        .and_then(|value| value.get(app_id))
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-}
-
 fn has_cloud_session(app: &tauri::AppHandle) -> bool {
     crate::cloud_save::cloud_get_session(app.clone())
         .and_then(|session| {
@@ -349,9 +332,8 @@ pub(crate) fn run_automatic_backup_after_close(
             guard.backup_in_progress.insert(app_id.clone());
         }
 
-        let should_run_local = is_local_automatic_backup_enabled(&app, &app_id);
         let should_run_cloud = has_cloud_session(&app);
-        if !should_run_local && !should_run_cloud {
+        if !should_run_cloud {
             if let Ok(mut guard) = steam_monitor_state().lock() {
                 guard.backup_in_progress.remove(&app_id);
             }
@@ -368,21 +350,6 @@ pub(crate) fn run_automatic_backup_after_close(
             game
         };
 
-        let mut local_ok = false;
-        if should_run_local {
-            match crate::backup::backup_run_game_local(app.clone(), backup_game.clone()) {
-                Ok(result) => {
-                    local_ok = result
-                        .get("success")
-                        .and_then(|value| value.as_bool())
-                        .unwrap_or(false);
-                }
-                Err(_) => {
-                    local_ok = false;
-                }
-            }
-        }
-
         let mut cloud_ok = false;
         if should_run_cloud {
             cloud_ok = tauri::async_runtime::block_on(crate::cloud_save::cloud_backup_game(
@@ -392,9 +359,9 @@ pub(crate) fn run_automatic_backup_after_close(
             .is_ok();
         }
 
-        // If only cloud was attempted and it failed, record the failure so the UI can show it.
-        if !local_ok && should_run_cloud && !cloud_ok && !should_run_local {
-            let title = game_title(&backup_game, &app_id);
+        // Record cloud failures so backup status can reflect the latest attempt.
+        if should_run_cloud && !cloud_ok {
+            let title = resolved_game_title(&app, &backup_game, &app_id);
             let _ = crate::save_failed_backup_record(
                 &app,
                 &app_id,
@@ -710,7 +677,7 @@ pub(crate) fn monitor_game_process(
             run_automatic_backup_after_close(
                 app.clone(),
                 app_id,
-                game_title(&game, &extract_app_id(&game)),
+                resolved_game_title(&app, &game, &extract_app_id(&game)),
                 game,
             );
         }

@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type {
   GhostBoxGame,
@@ -26,6 +27,7 @@ import type {
 } from "../../data";
 import type { SteamProfile, UserCollection } from "../../types";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
+import { mergeGameDetailsPreservingAchievements } from "../../lib/profileHistoryGames";
 import {
   loadGameAchievementDetailsCached,
   loadGameStoreDetailsCached,
@@ -45,6 +47,7 @@ import {
 } from "../../utils/image";
 import { lazy, Suspense } from "react";
 import { useSettings } from "../../context/settings";
+import { useCollapsiblePanelHeight } from "../../hooks/useCollapsiblePanelHeight";
 
 const LazyGallerySlider = lazy(() =>
   import("../ui/GallerySlider").then((m) => ({ default: m.GallerySlider }))
@@ -63,8 +66,12 @@ function GameRequirementsSection({
 }) {
   const { appearance } = useSettings();
   const requirementsId = useId();
+  const requirementsSectionPanelId = `${requirementsId}-section-panel`;
   const minimum = requirements?.minimum ?? [];
   const recommended = requirements?.recommended ?? [];
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [requirementsPanelRef, requirementsPanelHeight] =
+    useCollapsiblePanelHeight();
   const [activeRequirement, setActiveRequirement] = useState<
     "minimum" | "recommended"
   >(minimum.length ? "minimum" : "recommended");
@@ -81,13 +88,33 @@ function GameRequirementsSection({
           : "Requisitos do sistema"
       }
     >
-      <div className="modal__requirements-header">
-        <Cpu size={16} aria-hidden="true" />
+      <button
+        type="button"
+        className="modal__requirements-header modal__sidebar-section-toggle"
+        aria-expanded={!isCollapsed}
+        aria-controls={requirementsSectionPanelId}
+        onClick={() => setIsCollapsed((value) => !value)}
+      >
+        <Cpu size={18} aria-hidden="true" />
         <strong>
           {appearance.language === "en" ? "Requirements" : "Requisitos"}
         </strong>
-      </div>
-      <div className="modal__requirements-panel">
+        <ChevronDown
+          className="modal__sidebar-section-chevron"
+          size={16}
+          aria-hidden="true"
+        />
+      </button>
+      <div
+        ref={requirementsPanelRef}
+        className="modal__requirements-panel modal__sidebar-section-content"
+        id={requirementsSectionPanelId}
+        aria-hidden={isCollapsed}
+        data-collapsed={isCollapsed ? "true" : "false"}
+        style={{
+          height: isCollapsed ? 0 : requirementsPanelHeight,
+        } as CSSProperties}
+      >
         <div
           className="modal__requirements-tabs"
           role="tablist"
@@ -260,6 +287,11 @@ function AchievementIcon({
   const { appearance } = useSettings();
   const itemRef = useRef<HTMLLIElement>(null);
   const isUnlocked = achievement.unlocked === true;
+  const isRare =
+    isUnlocked &&
+    typeof achievement.globalPercent === "number" &&
+    Number.isFinite(achievement.globalPercent) &&
+    achievement.globalPercent <= 10;
   const preferredSource = isUnlocked
     ? achievement.icon || achievement.iconGray
     : achievement.iconGray || achievement.icon;
@@ -333,7 +365,7 @@ function AchievementIcon({
 
   return (
     <li
-      className={`modal__achievement-item ${isUnlocked ? "modal__achievement-item--unlocked" : "modal__achievement-item--locked"}${onSelect ? " modal__achievement-item--clickable" : ""}`}
+      className={`modal__achievement-item ${isUnlocked ? "modal__achievement-item--unlocked" : "modal__achievement-item--locked"}${isRare ? " modal__achievement-item--rare" : ""}${onSelect ? " modal__achievement-item--clickable" : ""}`}
       tabIndex={0}
       aria-label={ariaLabel}
       ref={itemRef}
@@ -401,7 +433,6 @@ interface GameModalProps {
   isPlaying: boolean;
   isSessionActive?: boolean;
   isFavorite: boolean;
-  customExecutablePath: string;
   userCollections: UserCollection[];
   steamProfile: SteamProfile | null;
   onClose: () => void;
@@ -416,8 +447,6 @@ interface GameModalProps {
     game: GhostBoxGame,
     collectionId: string
   ) => void | Promise<void>;
-  onSelectGameExecutable: (game: GhostBoxGame) => void | Promise<void>;
-  onRemoveGameExecutable: (game: GhostBoxGame) => void | Promise<void>;
   onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
   onDetailsLoaded?: (game: GhostBoxGame) => void;
   onViewAchievements?: (game: GhostBoxGame) => void;
@@ -432,7 +461,6 @@ export function GameModal({
   isPlaying,
   isSessionActive = false,
   isFavorite,
-  customExecutablePath,
   userCollections,
   steamProfile,
   onClose,
@@ -441,14 +469,11 @@ export function GameModal({
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
-  onSelectGameExecutable,
-  onRemoveGameExecutable,
   onPlayGame,
   onDetailsLoaded,
   onViewAchievements,
 }: GameModalProps) {
   const { appearance, t } = useSettings();
-  const hasCustomExecutable = Boolean(customExecutablePath);
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [detailGame, setDetailGame] = useState<GhostBoxGame | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -466,6 +491,13 @@ export function GameModal({
   const [isBackupOptionsOpen, setIsBackupOptionsOpen] = useState(false);
   const [reviewSummaryContainer, setReviewSummaryContainer] =
     useState<HTMLDivElement | null>(null);
+  const achievementsPanelId = useId();
+  const chipsPanelId = useId();
+  const [isAchievementsCollapsed, setIsAchievementsCollapsed] = useState(false);
+  const [isChipsCollapsed, setIsChipsCollapsed] = useState(false);
+  const [achievementsPanelRef, achievementsPanelHeight] =
+    useCollapsiblePanelHeight();
+  const [chipsPanelRef, chipsPanelHeight] = useCollapsiblePanelHeight();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const aboutContentShellRef = useRef<HTMLDivElement | null>(null);
   const aboutActionsRef = useRef<HTMLDivElement | null>(null);
@@ -501,13 +533,12 @@ export function GameModal({
     const mergeStoreDetails = (details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
 
+      // Store/catalogue payloads often ship empty achievementList. Merge must
+      // never wipe achievements already loaded by the achievements request.
       setDetailGame((current) => {
         const base = current ?? game;
-        const isPlaceholderTitle = /^Steam \d+$/.test(details.title);
         return {
-          ...base,
-          ...details,
-          title: isPlaceholderTitle && base?.title ? base.title : details.title,
+          ...mergeGameDetailsPreservingAchievements(base, details),
           playTimeInMilliseconds:
             current?.playTimeInMilliseconds ?? game.playTimeInMilliseconds,
           lastTimePlayed: current?.lastTimePlayed ?? game.lastTimePlayed,
@@ -517,6 +548,11 @@ export function GameModal({
     };
     const mergeAchievementDetails = (details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
+
+      const hasIncoming =
+        (details.achievementList?.length ?? 0) > 0 ||
+        (details.achievements?.total ?? 0) > 0;
+      if (!hasIncoming) return;
 
       setDetailGame((current) => ({
         ...(current ?? game),
@@ -609,9 +645,6 @@ export function GameModal({
       ),
     [displayGame?.achievementList]
   );
-  const unlockedAchievementsCount = achievements.filter(
-    (achievement) => achievement.unlocked === true
-  ).length;
   const visibleAchievements = achievements.slice(0, 12);
   const hasMoreAchievements = achievements.length > 12;
   const screenshotsKey = showcaseSources.join("\n");
@@ -954,7 +987,7 @@ export function GameModal({
                 <div
                   className={`modal__actions ${isAdding ? "modal__actions--adding" : ""}`}
                 >
-                  {(isInstalled || hasCustomExecutable) && (
+                  {isInstalled && (
                     <button
                       type="button"
                       className="button button--primary modal__play-button"
@@ -1063,18 +1096,16 @@ export function GameModal({
                     </>
                   ) : (
                     <>
-                      {!hasCustomExecutable && (
-                        <button
-                          type="button"
-                          className="button button--primary modal__add-button"
-                          onClick={() => onQueueGame(displayGame)}
-                        >
-                          <Download size={20} />
-                          <span className="button__label modal__action-label">
-                            {appearance.language === "en" ? "Add" : "Adicionar"}
-                          </span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="button button--primary modal__add-button"
+                        onClick={() => onQueueGame(displayGame)}
+                      >
+                        <Download size={20} />
+                        <span className="button__label modal__action-label">
+                          {appearance.language === "en" ? "Add" : "Adicionar"}
+                        </span>
+                      </button>
                       <button
                         type="button"
                         className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
@@ -1116,16 +1147,6 @@ export function GameModal({
 
             <section className="modal__details">
               <div className="modal__details-main">
-                <div className="modal__main-title-block">
-                  <h3>{displayGame.title}</h3>
-                  <div className="modal__main-title-meta">
-                    {displayGame.publishers?.filter(Boolean).join(", ") && (
-                      <span>{displayGame.publishers.filter(Boolean).join(", ")}</span>
-                    )}
-                    {displayGame.release && <span>{displayGame.release}</span>}
-                  </div>
-                </div>
-
                 {(screenshots.length > 0 || Boolean(displayGame.movies?.length)) && (
                   <Suspense fallback={null}>
                     <LazyGallerySlider
@@ -1146,13 +1167,6 @@ export function GameModal({
                         : "Sobre o jogo"
                     }
                   >
-                    <div className="modal__about-heading">
-                      <strong>
-                        {appearance.language === "en"
-                          ? "About the game"
-                          : "Sobre o jogo"}
-                      </strong>
-                    </div>
                     <div
                       ref={aboutContentShellRef}
                       className={`modal__about-content-shell ${isAboutExpanded ? "modal__about-content-shell--expanded" : ""}`}
@@ -1206,40 +1220,67 @@ export function GameModal({
                             : "Conquistas"
                         }
                       >
-                        <div className="modal__achievements-heading">
-                          <Cup size={16} weight="Filled" strokeWidth={2.0} />
+                        <button
+                          type="button"
+                          className="modal__achievements-heading modal__sidebar-section-toggle"
+                          aria-expanded={!isAchievementsCollapsed}
+                          aria-controls={achievementsPanelId}
+                          onClick={() =>
+                            setIsAchievementsCollapsed((value) => !value)
+                          }
+                        >
+                          <Cup size={18} weight="Filled" strokeWidth={2.0} />
                           <strong>
                             {appearance.language === "en"
                               ? "Achievements"
                               : "Conquistas"}
                           </strong>
-                          <span>{unlockedAchievementsCount}</span>
+                          <ChevronDown
+                            className="modal__sidebar-section-chevron"
+                            size={16}
+                            aria-hidden="true"
+                          />
+                        </button>
+
+                        <div
+                          ref={achievementsPanelRef}
+                          className="modal__sidebar-section-content"
+                          id={achievementsPanelId}
+                          aria-hidden={isAchievementsCollapsed}
+                          data-collapsed={
+                            isAchievementsCollapsed ? "true" : "false"
+                          }
+                          style={{
+                            height: isAchievementsCollapsed
+                              ? 0
+                              : achievementsPanelHeight,
+                          } as CSSProperties}
+                        >
+                          <ul className="modal__achievements-grid">
+                            {visibleAchievements.map((achievement) => (
+                              <AchievementIcon
+                                achievement={achievement}
+                                key={achievement.name}
+                                onSelect={
+                                  onViewAchievements
+                                    ? handleViewAchievements
+                                    : undefined
+                                }
+                              />
+                            ))}
+                          </ul>
+
+                          {hasMoreAchievements && onViewAchievements && (
+                            <button
+                              type="button"
+                              className="modal__achievements-toggle"
+                              onClick={handleViewAchievements}
+                            >
+                              {t("achievements.viewMore")}
+                              <ChevronDown size={16} />
+                            </button>
+                          )}
                         </div>
-
-                        <ul className="modal__achievements-grid">
-                          {visibleAchievements.map((achievement) => (
-                            <AchievementIcon
-                              achievement={achievement}
-                              key={achievement.name}
-                              onSelect={
-                                onViewAchievements
-                                  ? handleViewAchievements
-                                  : undefined
-                              }
-                            />
-                          ))}
-                        </ul>
-
-                        {hasMoreAchievements && onViewAchievements && (
-                          <button
-                            type="button"
-                            className="modal__achievements-toggle"
-                            onClick={handleViewAchievements}
-                          >
-                            {t("achievements.viewMore")}
-                            <ChevronDown size={16} />
-                          </button>
-                        )}
                       </section>
                     )}
 
@@ -1256,15 +1297,35 @@ export function GameModal({
                             : "Gêneros e Tags"
                         }
                       >
-                        <div className="modal__chips-heading">
-                          <TagsIcon size={16} />
+                        <button
+                          type="button"
+                          className="modal__chips-heading modal__sidebar-section-toggle"
+                          aria-expanded={!isChipsCollapsed}
+                          aria-controls={chipsPanelId}
+                          onClick={() => setIsChipsCollapsed((value) => !value)}
+                        >
+                          <TagsIcon size={18} />
                           <strong>
                             {appearance.language === "en"
                               ? "Genres and tags"
                               : "Gêneros e Tags"}
                           </strong>
-                        </div>
-                        <div className="modal__chips">
+                          <ChevronDown
+                            className="modal__sidebar-section-chevron"
+                            size={16}
+                            aria-hidden="true"
+                          />
+                        </button>
+                        <div
+                          ref={chipsPanelRef}
+                          className="modal__chips modal__sidebar-section-content"
+                          id={chipsPanelId}
+                          aria-hidden={isChipsCollapsed}
+                          data-collapsed={isChipsCollapsed ? "true" : "false"}
+                          style={{
+                            height: isChipsCollapsed ? 0 : chipsPanelHeight,
+                          } as CSSProperties}
+                        >
                           {visibleChips.map((chip) => (
                             <span className="modal__chip" key={chip}>
                               {chip}
@@ -1303,17 +1364,8 @@ export function GameModal({
             game={displayGame}
             gameTitle={displayGame?.title ?? ""}
             steamProfile={steamProfile}
-            customExecutablePath={customExecutablePath}
             userCollections={userCollections}
             onClose={() => setIsBackupOptionsOpen(false)}
-            onSelectGameExecutable={() => {
-              if (!displayGame) return;
-              onSelectGameExecutable(displayGame);
-            }}
-            onRemoveGameExecutable={() => {
-              if (!displayGame) return;
-              onRemoveGameExecutable(displayGame);
-            }}
             onAddGameToCollection={(collectionId) => {
               if (!displayGame) return;
               onAddGameToCollection?.(displayGame, collectionId);

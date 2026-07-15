@@ -30,3 +30,18 @@ supabase/.temp/
 
 # Tauri updater signing keys (never commit private key)
 src-tauri/keys/
+
+# Referencia — third-party reference code, not part of the active app
+Referencia/
+
+# Rust build artifacts
+src-tauri/target/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Husky hooks (generated)
+.husky/
+
+# Generated capability schemas
+src-tauri/gen/

@@ -5,7 +5,7 @@ use crate::playtime::{
 use crate::settings::{
     apply_autostart_settings, is_startup_setting_enabled, startup_setting_enabled,
 };
-use crate::{load_startup_settings, stop_ghostbox_achievement_server};
+use crate::load_startup_settings;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_WINDOW_LABEL: &str = "tray-menu";
@@ -54,7 +54,6 @@ pub(crate) fn shutdown_app_services(app: &tauri::AppHandle) {
 
     close_all_game_playtime_sessions(app);
     crate::achievement_monitor::stop_all_local_achievement_monitors();
-    stop_ghostbox_achievement_server();
 }
 
 fn hide_main_window_to_tray(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
@@ -64,25 +63,18 @@ fn hide_main_window_to_tray(app: &tauri::AppHandle, window: &tauri::WebviewWindo
     let _ = app.emit(WINDOW_HIDDEN_TO_TRAY_EVENT, ());
 }
 
-fn request_close_main_window(
-    app: &tauri::AppHandle,
-    window: &tauri::WebviewWindow,
-) -> Result<(), String> {
+fn request_close_main_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     if IS_QUITTING.load(std::sync::atomic::Ordering::SeqCst) {
         quit_application(app);
-        return Ok(());
+        return;
     }
 
-    // Only hide when the user explicitly enabled "minimize on close".
-    // Closing the main window alone is not enough: the preloaded tray-menu
-    // window keeps the process (and tray icon) alive as a zombie.
     if is_startup_setting_enabled(app, "minimizeToTray") {
         hide_main_window_to_tray(app, window);
-        return Ok(());
+        return;
     }
 
     quit_application(app);
-    Ok(())
 }
 
 fn quit_application(app: &tauri::AppHandle) {
@@ -151,7 +143,10 @@ fn is_tray_title_placeholder(title: &str, app_id: &str) -> bool {
         || normalized_title == format!("steam{normalized_app_id}")
 }
 
-fn normalize_tray_game_title(app: &tauri::AppHandle, mut game: serde_json::Value) -> serde_json::Value {
+fn normalize_tray_game_title(
+    app: &tauri::AppHandle,
+    mut game: serde_json::Value,
+) -> serde_json::Value {
     let app_id = tray_game_app_id(&game);
     let title = tray_text_value(game.get("title"));
 
@@ -238,6 +233,7 @@ fn build_tray_menu_window(app: &tauri::AppHandle, x: f64, y: f64, visible: bool)
     .title("GhostBox")
     .decorations(false)
     .resizable(false)
+    .maximizable(false)
     .skip_taskbar(true)
     .always_on_top(true)
     .focused(visible)
@@ -387,6 +383,8 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.set_background_color(Some(WINDOW_BACKGROUND));
+        let _ = window.set_resizable(false);
+        let _ = window.set_maximizable(false);
 
         if let Some(icon) = ghostbox_icon() {
             let _ = window.set_icon(icon);
@@ -429,7 +427,8 @@ pub fn window_minimize(window: tauri::Window) -> Result<(), String> {
 
 #[tauri::command]
 pub fn window_close(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
-    request_close_main_window(&app, &window)
+    request_close_main_window(&app, &window);
+    Ok(())
 }
 
 fn is_allowed_external_url(url: &str) -> bool {

@@ -31,9 +31,14 @@ type IdleWindow = Window & {
 const imagePreloadPromises = new Map<string, Promise<void>>();
 const imagePreloadFailures = new Map<string, number>();
 const imagePreloadQueue: Array<() => void> = [];
-const maxConcurrentImagePreloads = 4;
+let maxConcurrentImagePreloads = 4;
 const imagePreloadRetryDelayMs = 10_000;
 let activeImagePreloads = 0;
+
+export function setImagePreloadConcurrency(value: 2 | 4 | 6) {
+  maxConcurrentImagePreloads = value;
+  runNextImagePreload();
+}
 
 function runNextImagePreload() {
   while (

@@ -204,17 +204,16 @@ fn local_achievement_total_from_schema(schema: &VdfObject, app_id: &str) -> u32 
     total
 }
 
-fn local_achievement_display_title(achievement: &VdfObject) -> String {
-    let fallback = achievement.get("name").map(vdf_string).unwrap_or_default();
+fn local_achievement_localized_field(achievement: &VdfObject, field: &str) -> String {
     let Some(display) = achievement.get("display").and_then(vdf_object) else {
-        return fallback;
+        return String::new();
     };
-    let Some(name) = display.get("name").and_then(vdf_object) else {
-        return fallback;
+    let Some(values) = display.get(field).and_then(vdf_object) else {
+        return String::new();
     };
 
     for key in ["brazilian", "portuguese", "english"] {
-        if let Some(value) = name.get(key) {
+        if let Some(value) = values.get(key) {
             let text = vdf_string(value);
             if !text.is_empty() {
                 return text;
@@ -222,7 +221,78 @@ fn local_achievement_display_title(achievement: &VdfObject) -> String {
         }
     }
 
-    fallback
+    String::new()
+}
+
+fn local_achievement_display_title(achievement: &VdfObject) -> String {
+    let fallback = achievement.get("name").map(vdf_string).unwrap_or_default();
+    let title = local_achievement_localized_field(achievement, "name");
+    if title.is_empty() {
+        fallback
+    } else {
+        title
+    }
+}
+
+fn local_achievement_display_description(achievement: &VdfObject) -> String {
+    local_achievement_localized_field(achievement, "desc")
+}
+
+/// Full achievement definitions from local Steam schema (name/title/description).
+/// Icons are left empty; callers should prefer network schema/community when available.
+pub fn read_local_achievement_definitions(steam_path: &str, app_id: &str) -> Vec<Value> {
+    let stats_path = stats_directory(steam_path);
+    let schema_buffer =
+        match std::fs::read(stats_path.join(format!("UserGameStatsSchema_{app_id}.bin"))) {
+            Ok(buffer) => buffer,
+            Err(_) => return Vec::new(),
+        };
+
+    let schema = parse_binary_vdf(&schema_buffer);
+    let Some(app_schema) = schema.get(app_id).and_then(vdf_object) else {
+        return Vec::new();
+    };
+    let Some(stats) = app_schema.get("stats").and_then(vdf_object) else {
+        return Vec::new();
+    };
+
+    let mut achievements = Vec::new();
+    for stat in stats.values() {
+        let Some(stat_object) = vdf_object(stat) else {
+            continue;
+        };
+        let Some(bits) = stat_object.get("bits").and_then(vdf_object) else {
+            continue;
+        };
+
+        let mut bit_entries: Vec<_> = bits.iter().collect();
+        bit_entries.sort_by(|(left, _), (right, _)| {
+            left.parse::<u32>()
+                .unwrap_or(u32::MAX)
+                .cmp(&right.parse::<u32>().unwrap_or(u32::MAX))
+                .then_with(|| left.cmp(right))
+        });
+
+        for (_bit, achievement_value) in bit_entries {
+            let Some(achievement) = vdf_object(achievement_value) else {
+                continue;
+            };
+            let name = achievement.get("name").map(vdf_string).unwrap_or_default();
+            if name.is_empty() {
+                continue;
+            }
+            let title = local_achievement_display_title(achievement);
+            achievements.push(json!({
+                "name": name,
+                "title": if title.is_empty() { name.clone() } else { title },
+                "description": local_achievement_display_description(achievement),
+                "icon": "",
+                "iconGray": ""
+            }));
+        }
+    }
+
+    achievements
 }
 
 fn local_achievement_unlocks_from_schema(

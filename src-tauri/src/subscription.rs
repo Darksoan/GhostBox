@@ -7,6 +7,17 @@ const DEFAULT_SUBSCRIPTION_API_URL: &str = "https://ghostbox-subscriptions.hella
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct SubscriptionPaymentMethod {
+    #[serde(default)]
+    r#type: Option<String>,
+    #[serde(default)]
+    brand: Option<String>,
+    #[serde(default)]
+    last4: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SubscriptionInfo {
     status: String,
     is_premium: bool,
@@ -14,6 +25,8 @@ pub(crate) struct SubscriptionInfo {
     current_period_start: Option<String>,
     current_period_end: Option<String>,
     last_payment_id: Option<String>,
+    #[serde(default)]
+    cancel_at_period_end: Option<bool>,
     updated_at: Option<String>,
 }
 
@@ -46,6 +59,8 @@ pub(crate) struct SubscriptionStatusResponse {
     subscription: SubscriptionInfo,
     latest_payment: Option<SubscriptionPayment>,
     #[serde(default)]
+    payment_method: Option<SubscriptionPaymentMethod>,
+    #[serde(default)]
     cached: bool,
 }
 
@@ -68,6 +83,8 @@ struct SubscriptionStatusCache {
     steam_id: String,
     subscription: SubscriptionInfo,
     latest_payment: Option<SubscriptionPayment>,
+    #[serde(default)]
+    payment_method: Option<SubscriptionPaymentMethod>,
     cached_at: String,
 }
 
@@ -105,6 +122,7 @@ fn cache_status(app: &tauri::AppHandle, status: &SubscriptionStatusResponse) -> 
         steam_id: status.steam_id.clone(),
         subscription: status.subscription.clone(),
         latest_payment: status.latest_payment.clone(),
+        payment_method: status.payment_method.clone(),
         cached_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     };
     let payload = serde_json::to_string(&cache).map_err(|error| error.to_string())?;
@@ -137,6 +155,7 @@ fn load_cached_status(
 
     Some(SubscriptionStatusResponse {
         steam_id: cache.steam_id,
+        payment_method: cache.payment_method,
         subscription,
         latest_payment: cache.latest_payment,
         cached: true,
@@ -253,6 +272,7 @@ pub async fn subscription_refresh_status(
         steam_id: refresh.payment.steam_id.clone(),
         subscription: refresh.subscription.clone(),
         latest_payment: Some(refresh.payment.clone()),
+        payment_method: None,
         cached: false,
     };
     let _ = cache_status(&app, &status);

@@ -123,10 +123,7 @@ pub fn upsert_ghostbox_library_game(app: &AppHandle, game: Value) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn ghostbox_library_register_steam_game(
-    app: AppHandle,
-    game: Value,
-) -> Result<Value, String> {
+pub fn ghostbox_library_register_steam_game(app: AppHandle, game: Value) -> Result<Value, String> {
     let app_id = extract_app_id(&game);
     let title = text_value(game.get("title"));
     if app_id.is_empty() || title.is_empty() {

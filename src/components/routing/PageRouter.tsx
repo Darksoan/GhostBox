@@ -1,14 +1,13 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { PagePlaceholder } from "../ui/LoadingStates";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { useCatalogueState } from "../../hooks/useCatalogueState";
-import { ghostboxApi } from "../../lib/ghostboxApi";
 import type { CatalogueFilterKey, Page, SteamProfile } from "../../types";
 import { emptyCatalogueFilters } from "../../constants/catalogue";
 import { ContentOverlay, useContentOverlayState } from "./ContentOverlay";
-import { ConfirmModal } from "../modals/ConfirmModal";
 import { CollectionModal } from "../modals/CollectionModal";
 import { SteamPathModal } from "../modals/SteamPathModal";
 import { SubscriptionModal } from "../modals/SubscriptionModal";
@@ -18,31 +17,37 @@ const LazyHomePage = lazy(() =>
   import("../../pages/HomePage").then((m) => {
     markPageLoaded("home");
     return { default: m.HomePage };
-  })
+  }),
 );
 const LazyCataloguePage = lazy(() =>
   import("../../pages/CataloguePage").then((m) => {
     markPageLoaded("catalogue");
     return { default: m.CataloguePage };
-  })
+  }),
 );
 const LazyLibraryPage = lazy(() =>
   import("../../pages/LibraryPage").then((m) => {
     markPageLoaded("library");
     return { default: m.LibraryPage };
-  })
+  }),
 );
 const LazyFavoritesPage = lazy(() =>
   import("../../pages/FavoritesPage").then((m) => {
     markPageLoaded("favorites");
     return { default: m.FavoritesPage };
-  })
+  }),
+);
+const LazyBackupPage = lazy(() =>
+  import("../../pages/BackupPage").then((m) => {
+    markPageLoaded("backup");
+    return { default: m.BackupPage };
+  }),
 );
 const LazySettingsPage = lazy(() =>
   import("../../pages/SettingsPage").then((m) => {
     markPageLoaded("settings");
     return { default: m.SettingsPage };
-  })
+  }),
 );
 const loadProfilePage = () =>
   import("../../pages/ProfilePage").then((m) => {
@@ -50,49 +55,36 @@ const loadProfilePage = () =>
     return m;
   });
 const LazyProfilePage = lazy(() =>
-  loadProfilePage().then((m) => ({ default: m.ProfilePage }))
+  loadProfilePage().then((m) => ({ default: m.ProfilePage })),
 );
 const LazyNotificationsPage = lazy(() =>
   import("../../pages/NotificationsPage").then((m) => {
     markPageLoaded("notifications");
     return { default: m.NotificationsPage };
-  })
+  }),
 );
 
-// Pages that stay mounted at all times after their first load so switching
-// back to them is instant (no Suspense fallback, no DOM remount).
 const KEEP_ALIVE_PAGES: Page[] = [
   "home",
   "catalogue",
   "library",
+  "backup",
   "favorites",
   "settings",
   "profile",
   "notifications",
 ];
 
-// First-paint priorities for idle prefetching of the lazy chunks. Lower fires
-// sooner. Home and Catalogue are usually needed immediately.
 const PREFETCH_DELAYS_MS: Record<Page, number> = {
   home: 0,
   catalogue: 0,
   library: 200,
+  backup: 300,
   favorites: 200,
   settings: 400,
   profile: 300,
   notifications: 400,
 };
-
-function DeferredPagePlaceholder({ page }: { page: Page }) {
-  return (
-    <section
-      className={`deferred-page-placeholder deferred-page-placeholder--${page}`}
-      aria-hidden="true"
-    >
-      <span className="deferred-page-placeholder__spinner" />
-    </section>
-  );
-}
 
 interface PageRouterProps {
   page: Page;
@@ -129,46 +121,45 @@ export function PageRouter({
     collectionModalOpen,
     steamPathModalOpen,
     subscriptionModalOpen,
-    pendingBackupDeletion,
     setCollectionModalOpen,
     setSteamPathModalOpen,
     setSubscriptionModalOpen,
-    setPendingBackupDeletion,
-    showToast,
   } = useOverlay();
   const { hasOverlay } = useContentOverlayState();
 
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
 
-  // Tracks which secondary pages have already been mounted at least once.
-  // Primary pages are always mounted, so they're considered "mounted" from the
-  // start for visibility purposes.
   const [mountedPages, setMountedPages] = useState<Set<Page>>(
-    () => new Set<Page>(["home", "catalogue", "library", "favorites"])
+    () => new Set<Page>(["home", "catalogue", "library", "favorites"]),
   );
 
-  // Track the previously active page so only the freshly-activated wrapper
-  // receives the `page-enter` animation class (avoids re-animating siblings
-  // that were already mounted).
-  const previousPageRef = useRef<Page>(page);
-  const [enteringPage, setEnteringPage] = useState<Page | null>(page);
+  const [pageEnterState, setPageEnterState] = useState({
+    page,
+    sequence: 0,
+    overlayLocked: false,
+  });
 
-  useEffect(() => {
-    setMountedPages((current) => {
-      if (current.has(page)) return current;
-      const next = new Set(current);
-      next.add(page);
-      return next;
-    });
+  // Keep-alive mount + enter class must align with `page` before paint.
+  // Adjusting during render (React-supported) avoids a blank/stale frame where
+  // the tab is active but not yet mounted or still missing `page-enter`.
+  if (!appearance.disablePageKeepAlive && !mountedPages.has(page)) {
+    const nextMounted = new Set(mountedPages);
+    nextMounted.add(page);
+    setMountedPages(nextMounted);
+  }
 
-    if (previousPageRef.current !== page) {
-      previousPageRef.current = page;
-      setEnteringPage(page);
+  if (hasOverlay) {
+    if (!pageEnterState.overlayLocked) {
+      setPageEnterState({ ...pageEnterState, overlayLocked: true });
     }
-  }, [page]);
+  } else if (pageEnterState.overlayLocked || pageEnterState.page !== page) {
+    setPageEnterState({
+      page,
+      sequence: pageEnterState.sequence + 1,
+      overlayLocked: false,
+    });
+  }
 
-  // Idle prefetch of every lazy chunk so first visits to secondary tabs don't
-  // show the Suspense spinner. Uses requestIdleCallback when available.
   useEffect(() => {
     const schedule = (delay: number, loader: () => Promise<unknown>) => {
       const run = () => {
@@ -181,25 +172,36 @@ export function PageRouter({
       };
 
       const ric =
-        (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
-          .requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1));
+        (
+          window as unknown as {
+            requestIdleCallback?: (cb: () => void) => number;
+          }
+        ).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1));
       ric(run);
     };
 
     schedule(PREFETCH_DELAYS_MS.home, () => import("../../pages/HomePage"));
-    schedule(PREFETCH_DELAYS_MS.catalogue, () =>
-      import("../../pages/CataloguePage")
+    schedule(
+      PREFETCH_DELAYS_MS.catalogue,
+      () => import("../../pages/CataloguePage"),
     );
-    schedule(PREFETCH_DELAYS_MS.library, () => import("../../pages/LibraryPage"));
-    schedule(PREFETCH_DELAYS_MS.favorites, () =>
-      import("../../pages/FavoritesPage")
+    schedule(
+      PREFETCH_DELAYS_MS.library,
+      () => import("../../pages/LibraryPage"),
     );
-    schedule(PREFETCH_DELAYS_MS.settings, () =>
-      import("../../pages/SettingsPage")
+    schedule(PREFETCH_DELAYS_MS.backup, () => import("../../pages/BackupPage"));
+    schedule(
+      PREFETCH_DELAYS_MS.favorites,
+      () => import("../../pages/FavoritesPage"),
+    );
+    schedule(
+      PREFETCH_DELAYS_MS.settings,
+      () => import("../../pages/SettingsPage"),
     );
     schedule(PREFETCH_DELAYS_MS.profile, loadProfilePage);
-    schedule(PREFETCH_DELAYS_MS.notifications, () =>
-      import("../../pages/NotificationsPage")
+    schedule(
+      PREFETCH_DELAYS_MS.notifications,
+      () => import("../../pages/NotificationsPage"),
     );
   }, []);
 
@@ -225,7 +227,7 @@ export function PageRouter({
           onRemoveGameFromCollection={appData.removeGameFromCollection}
           onOpenCatalogueCategory={(
             key: Extract<CatalogueFilterKey, "genres" | "tags">,
-            value: string
+            value: string,
           ) => {
             catalogue.handleCatalogueFiltersChange({
               ...emptyCatalogueFilters,
@@ -301,11 +303,12 @@ export function PageRouter({
           favoriteGameIds={appData.favoriteGameIds}
           userCollections={appData.userCollections}
           activeCollectionId={activeProfileCollectionId ?? null}
-          onActiveCollectionChange={(id) => setActiveProfileCollectionId(id ?? undefined)}
+          onActiveCollectionChange={(id) =>
+            setActiveProfileCollectionId(id ?? undefined)
+          }
           onToggleFavorite={appData.toggleFavoriteGame}
           onAddGameToCollection={appData.addGameToUserCollection}
           backupSettings={appData.backupSettings}
-          backupRootStatus={appData.backupRootStatus}
           activeSessionAppIds={appData.activeSessionAppIds}
         />
       );
@@ -329,6 +332,15 @@ export function PageRouter({
           onRemoveGame={appData.removeQueuedGame}
           onAddGameToCollection={appData.addGameToUserCollection}
           onRemoveGameFromCollection={appData.removeGameFromCollection}
+        />
+      );
+    }
+
+    if (targetPage === "backup") {
+      return (
+        <LazyBackupPage
+          games={appData.addedLibraryGames}
+          backupSettings={appData.backupSettings}
         />
       );
     }
@@ -402,8 +414,8 @@ export function PageRouter({
   }
 
   const keepAlivePages = useMemo(
-    () => KEEP_ALIVE_PAGES.filter((p) => mountedPages.has(p)),
-    [mountedPages]
+    () => appearance.disablePageKeepAlive ? [page] : KEEP_ALIVE_PAGES.filter((p) => mountedPages.has(p)),
+    [appearance.disablePageKeepAlive, mountedPages, page],
   );
 
   return (
@@ -416,10 +428,15 @@ export function PageRouter({
             const isActive = targetPage === page;
             const shouldAnimate =
               !appearance.disableTabAnimations &&
+              !appearance.reduceAllAnimations &&
               isActive &&
-              enteringPage === targetPage;
+              pageEnterState.page === targetPage;
+            const enterVariant =
+              pageEnterState.sequence % 2 === 0
+                ? "page-enter--a"
+                : "page-enter--b";
             const wrapperClass = `page page--${targetPage} ${
-              shouldAnimate ? "page-enter" : ""
+              shouldAnimate ? `page-enter ${enterVariant}` : ""
             } ${isMainPage && isActive ? "page--main-pages page--active" : ""}`;
 
             return (
@@ -429,7 +446,9 @@ export function PageRouter({
                 hidden={!isActive}
                 aria-hidden={!isActive}
               >
-                <Suspense fallback={<DeferredPagePlaceholder page={targetPage} />}>
+                <Suspense
+                  fallback={<PagePlaceholder page={targetPage} />}
+                >
                   {renderPage(targetPage)}
                 </Suspense>
               </div>
@@ -466,54 +485,6 @@ export function PageRouter({
       <SubscriptionModal
         open={subscriptionModalOpen}
         onClose={() => setSubscriptionModalOpen(false)}
-      />
-
-      <ConfirmModal
-        open={Boolean(pendingBackupDeletion)}
-        title={
-          appearance.language === "en"
-            ? "Delete backup folder?"
-            : "Excluir pasta de backup?"
-        }
-        description={
-          pendingBackupDeletion
-            ? appearance.language === "en"
-              ? `This will permanently delete the backup folder for ${pendingBackupDeletion.title}.`
-              : `Isso vai excluir permanentemente a pasta de backup de ${pendingBackupDeletion.title}.`
-            : ""
-        }
-        confirmLabel={appearance.language === "en" ? "Delete" : "Excluir"}
-        cancelLabel={appearance.language === "en" ? "Cancel" : "Cancelar"}
-        onClose={() => setPendingBackupDeletion(null)}
-        onConfirm={() => {
-          if (pendingBackupDeletion) {
-            void ghostboxApi
-              .deleteBackupFolder(
-                pendingBackupDeletion.appId,
-                pendingBackupDeletion.backupPath
-              )
-              .then((result) => {
-                if (result.error) {
-                  showToast(
-                    appearance.language === "en" ? "Failed to delete backup" : "Falha ao excluir backup",
-                    result.error
-                  );
-                  return;
-                }
-                if (result.settings) {
-                  appData.setBackupSettings(result.settings);
-                }
-                showToast(
-                  appearance.language === "en" ? "Backup deleted" : "Backup excluído",
-                  appearance.language === "en"
-                    ? `${pendingBackupDeletion.title} backup folder was removed.`
-                    : `A pasta de backup de ${pendingBackupDeletion.title} foi removida.`,
-                  "success"
-                );
-              });
-          }
-          setPendingBackupDeletion(null);
-        }}
       />
     </>
   );

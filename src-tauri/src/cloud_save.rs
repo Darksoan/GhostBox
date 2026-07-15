@@ -1,12 +1,12 @@
 use crate::extract_app_id;
-use crate::ludusavi::{game_title, ludusavi_args, run_ludusavi};
+use crate::ludusavi::{ludusavi_args, resolved_game_title, run_ludusavi};
 use crate::settings::{
     decrypt_secret_for_current_user, encrypt_secret_for_current_user, read_binary_file,
     remove_data_file, write_binary_file,
 };
 use crate::util::text_value;
-use sha2::{Digest, Sha256};
 use base64::Engine;
+use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 
 const CLOUD_SESSION_FILE: &str = "cloud-session.bin";
@@ -192,7 +192,7 @@ pub async fn cloud_backup_game(
 ) -> Result<serde_json::Value, String> {
     let token = session_token(&app)?;
     let app_id = extract_app_id(&game);
-    let title = game_title(&game, &app_id);
+    let title = resolved_game_title(&app, &game, &app_id);
     if app_id.is_empty() {
         return Err("Jogo inválido para backup em nuvem.".to_string());
     }
@@ -298,9 +298,7 @@ fn format_cloud_api_error(body: &str, status: u16) -> String {
             "backup_too_large" => "Backup em nuvem excede o limite de 50 MB.".to_string(),
             "empty_backup" => "Nenhum save encontrado para backup em nuvem.".to_string(),
             "storage_upload_failed" => "Falha ao enviar o backup para a nuvem.".to_string(),
-            "invalid_profile_image_type" => {
-                "A imagem deve estar em JPEG, PNG ou WebP.".to_string()
-            }
+            "invalid_profile_image_type" => "A imagem deve estar em JPEG, PNG ou WebP.".to_string(),
             "empty_profile_image" => "A imagem selecionada está vazia.".to_string(),
             "profile_image_too_large" => {
                 "A imagem de perfil excede o tamanho permitido.".to_string()
@@ -347,7 +345,20 @@ pub async fn cloud_list_saves(
     if !status.is_success() {
         return Err(body);
     }
-    serde_json::from_str(&body).map_err(|error| error.to_string())
+    let parsed: serde_json::Value =
+        serde_json::from_str(&body).map_err(|error| error.to_string())?;
+    let app_id = parsed
+        .get("appId")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+    let remaining_saves = parsed
+        .get("remainingSaves")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(1);
+    if !app_id.is_empty() && remaining_saves == 0 {
+        let _ = crate::remove_backup_record(&app, app_id);
+    }
+    Ok(parsed)
 }
 
 #[tauri::command]
@@ -358,7 +369,7 @@ pub async fn cloud_restore_save(
 ) -> Result<serde_json::Value, String> {
     let token = session_token(&app)?;
     let app_id = extract_app_id(&game);
-    let title = game_title(&game, &app_id);
+    let title = resolved_game_title(&app, &game, &app_id);
     let temp_root = cloud_temp_dir(&app)?.join(uuid::Uuid::new_v4().to_string());
     std::fs::create_dir_all(&temp_root).map_err(|error| error.to_string())?;
     let cleanup_path = temp_root.clone();
@@ -431,6 +442,68 @@ pub async fn cloud_restore_save(
 }
 
 #[tauri::command]
+pub async fn cloud_delete_save(
+    app: tauri::AppHandle,
+    save_id: String,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
+    let save_id = save_id.trim().to_string();
+    if save_id.is_empty() {
+        return Err("Backup em nuvem inválido.".to_string());
+    }
+
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?
+        .delete(format!("{}/cloud-saves/{}", cloud_api_url(), save_id))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn cloud_set_save_pinned(
+    app: tauri::AppHandle,
+    save_id: String,
+    pinned: bool,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
+    let save_id = save_id.trim().to_string();
+    if save_id.is_empty() {
+        return Err("Backup em nuvem inválido.".to_string());
+    }
+
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?
+        .patch(format!(
+            "{}/cloud-saves/{}/pinned",
+            cloud_api_url(),
+            save_id
+        ))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "pinned": pinned }))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn cloud_get_profile_snapshot(
     app: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
@@ -483,37 +556,67 @@ pub async fn cloud_upload_profile_image(
     kind: String,
 ) -> Result<serde_json::Value, String> {
     let token = load_cloud_session(&app)
-        .and_then(|session| session.get("token").and_then(|value| value.as_str()).map(str::to_string))
+        .and_then(|session| {
+            session
+                .get("token")
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+        })
         .ok_or_else(|| "Cloud session unavailable".to_string())?;
-    let (mime, encoded) = image_data.split_once(",").ok_or_else(|| "Invalid image data".to_string())?;
-    let mime = mime.strip_prefix("data:").and_then(|value| value.strip_suffix(";base64"))
+    let (mime, encoded) = image_data
+        .split_once(",")
+        .ok_or_else(|| "Invalid image data".to_string())?;
+    let mime = mime
+        .strip_prefix("data:")
+        .and_then(|value| value.strip_suffix(";base64"))
         .ok_or_else(|| "Invalid image data".to_string())?;
     if !matches!(mime, "image/jpeg" | "image/png" | "image/webp") {
         return Err("Unsupported profile image type".to_string());
     }
-    if !matches!(kind.as_str(), "avatar" | "banner") { return Err("Invalid profile image kind".to_string()); }
-    let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|error| error.to_string())?;
+    if !matches!(kind.as_str(), "avatar" | "banner") {
+        return Err("Invalid profile image kind".to_string());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|error| error.to_string())?;
     let response = reqwest::Client::new()
         .post(format!("{}/cloud-profile/{}", cloud_api_url(), kind))
         .bearer_auth(token)
         .header("content-type", mime)
         .body(bytes)
-        .send().await.map_err(|error| error.to_string())?;
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     let body = response.text().await.map_err(|error| error.to_string())?;
-    if !status.is_success() { return Err(format_cloud_api_error(&body, status.as_u16())); }
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
     serde_json::from_str(&body).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub async fn cloud_delete_profile_banner(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn cloud_delete_profile_banner(
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
     let token = load_cloud_session(&app)
-        .and_then(|session| session.get("token").and_then(|value| value.as_str()).map(str::to_string))
+        .and_then(|session| {
+            session
+                .get("token")
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+        })
         .ok_or_else(|| "Cloud session unavailable".to_string())?;
-    let response = reqwest::Client::new().delete(format!("{}/cloud-profile/banner", cloud_api_url()))
-        .bearer_auth(token).send().await.map_err(|error| error.to_string())?;
+    let response = reqwest::Client::new()
+        .delete(format!("{}/cloud-profile/banner", cloud_api_url()))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     let body = response.text().await.map_err(|error| error.to_string())?;
-    if !status.is_success() { return Err(format_cloud_api_error(&body, status.as_u16())); }
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
     serde_json::from_str(&body).map_err(|error| error.to_string())
 }

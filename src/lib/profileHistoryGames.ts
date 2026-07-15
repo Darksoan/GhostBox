@@ -13,7 +13,10 @@ export function upsertProfileHistoryGame(
 ) {
   const existingGame = games.find((game) => game.appId === nextGame.appId);
   const normalizedNextGame = existingGame
-    ? normalizeSteamGameTitle(nextGame, [existingGame])
+    ? normalizeSteamGameTitle(
+        mergeGameDetailsPreservingAchievements(existingGame, nextGame),
+        [existingGame]
+      )
     : nextGame;
 
   return [
@@ -56,23 +59,47 @@ export function mergeGameDetailsPreservingAchievements(
   details: GhostBoxGame
 ): GhostBoxGame {
   const isPlaceholderTitle = isSteamTitlePlaceholder(details.title, details.appId);
-  const hasAchievementDetails =
-    details.achievements.total > 0 || (details.achievementList ?? []).length > 0;
+  // Prefer the payload with the richer list. Catalogue/store often has
+  // achievements.total > 0 with an empty achievementList — that must never
+  // wipe a previously loaded full list (e.g. DayZ appears then disappears).
+  const gameListLength = game.achievementList?.length ?? 0;
+  const detailsListLength = details.achievementList?.length ?? 0;
+  const gameUnlocked = countUnlockedAchievements(game);
+  const detailsUnlocked = countUnlockedAchievements(details);
+  const preferDetailsList =
+    detailsListLength > gameListLength ||
+    (detailsListLength === gameListLength &&
+      detailsListLength > 0 &&
+      detailsUnlocked > gameUnlocked);
 
-  const achievementGame = hasAchievementDetails
-    ? {
-        ...game,
-        achievements: details.achievements,
-        achievementList: details.achievementList ?? [],
-      }
-    : game;
+  const achievementList = preferDetailsList
+    ? (details.achievementList ?? [])
+    : (game.achievementList ?? []);
+  const unlocked = Math.max(
+    gameUnlocked,
+    detailsUnlocked,
+    achievementList.filter(
+      (achievement) =>
+        achievement.unlocked === true || Boolean(achievement.unlockedAt)
+    ).length
+  );
+  const total = Math.max(
+    game.achievements?.total ?? 0,
+    details.achievements?.total ?? 0,
+    achievementList.length,
+    unlocked
+  );
 
   return {
     ...game,
     ...details,
     title: isPlaceholderTitle && game.title ? game.title : details.title,
-    achievements: achievementGame.achievements,
-    achievementList: achievementGame.achievementList,
+    achievements: {
+      unlocked,
+      total,
+      progress: total > 0 ? Math.round((unlocked / total) * 100) : 0,
+    },
+    achievementList,
     // Playtime comes only from the live Steam snapshot merge — never cache it
     // from catalogue/details payloads.
     playTimeInMilliseconds: game.playTimeInMilliseconds,

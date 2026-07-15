@@ -35,13 +35,12 @@ interface OverlayContextValue {
   collectionModalOpen: boolean;
   steamPathModalOpen: boolean;
   subscriptionModalOpen: boolean;
-  pendingBackupDeletion: { appId: string; title: string; backupPath?: string } | null;
   openGame: (game: GhostBoxGame) => void;
   closeGame: () => void;
   closeContentOverlay: () => void;
   openAchievements: (
     game: GhostBoxGame,
-    options?: { reopenModalOnBack?: boolean; highlightAchievementId?: string }
+    options?: { reopenModalOnBack?: boolean; highlightAchievementId?: string },
   ) => void;
   closeAchievements: () => void;
   showToast: (title: string, message: string, variant?: ToastVariant) => void;
@@ -49,15 +48,14 @@ interface OverlayContextValue {
   setCollectionModalOpen: (open: boolean) => void;
   setSteamPathModalOpen: (open: boolean) => void;
   setSubscriptionModalOpen: (open: boolean) => void;
-  setPendingBackupDeletion: (
-    value: { appId: string; title: string; backupPath?: string } | null
-  ) => void;
   setIsGameModalExitPending: (value: boolean) => void;
   modalReturnScrollTopRef: MutableRefObject<number>;
   restoreContentScrollAfterModalRef: MutableRefObject<boolean>;
 }
 
-const OverlayContext = createContext<OverlayContextValue | undefined>(undefined);
+const OverlayContext = createContext<OverlayContextValue | undefined>(
+  undefined,
+);
 
 export function OverlayProvider({ children }: { children: ReactNode }) {
   const { notifications } = useSettings();
@@ -69,11 +67,6 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
   const [steamPathModalOpen, setSteamPathModalOpen] = useState(false);
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
-  const [pendingBackupDeletion, setPendingBackupDeletion] = useState<{
-    appId: string;
-    title: string;
-    backupPath?: string;
-  } | null>(null);
   const toastIdRef = useRef(0);
   const modalReturnScrollTopRef = useRef(0);
   const restoreContentScrollAfterModalRef = useRef(false);
@@ -100,7 +93,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       notifications.inAppErrorToastsEnabled,
       notifications.inAppSuccessToastsEnabled,
       notifications.inAppToastsEnabled,
-    ]
+    ],
   );
 
   const dismissToast = useCallback(() => setToast(null), []);
@@ -155,7 +148,10 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   const openAchievements = useCallback(
     (
       game: GhostBoxGame,
-      options?: { reopenModalOnBack?: boolean; highlightAchievementId?: string }
+      options?: {
+        reopenModalOnBack?: boolean;
+        highlightAchievementId?: string;
+      },
     ) => {
       setSelectedGame(null);
       setAchievementsView({
@@ -164,7 +160,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         highlightAchievementId: options?.highlightAchievementId,
       });
     },
-    []
+    [],
   );
 
   const closeAchievements = useCallback(() => {
@@ -183,7 +179,6 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       collectionModalOpen,
       steamPathModalOpen,
       subscriptionModalOpen,
-      pendingBackupDeletion,
       openGame,
       closeGame,
       closeContentOverlay,
@@ -194,7 +189,6 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       setCollectionModalOpen,
       setSteamPathModalOpen,
       setSubscriptionModalOpen,
-      setPendingBackupDeletion,
       setIsGameModalExitPending,
       modalReturnScrollTopRef,
       restoreContentScrollAfterModalRef,
@@ -207,7 +201,6 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       collectionModalOpen,
       steamPathModalOpen,
       subscriptionModalOpen,
-      pendingBackupDeletion,
       openGame,
       closeGame,
       closeContentOverlay,
@@ -215,7 +208,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       closeAchievements,
       showToast,
       dismissToast,
-    ]
+    ],
   );
 
   return (

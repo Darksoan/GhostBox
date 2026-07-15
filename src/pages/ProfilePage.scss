@@ -7,7 +7,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  background: var(--background-dark);
+  background: transparent;
   color: var(--text-primary);
 
   &--empty {
@@ -35,13 +35,13 @@
     flex-direction: column;
     position: relative;
     overflow: hidden;
-    background: var(--background-dark);
+    background: transparent;
     /* layout+style only — paint containment breaks backdrop-filter glass on the bottom strip */
     contain: layout style;
     isolation: isolate;
 
     &--empty {
-      background: var(--background-dark);
+      background: transparent;
     }
 
     &--placeholder {
@@ -66,7 +66,7 @@
 
   &__banner-viewport {
     position: absolute;
-    inset: 0 0 -1px;
+    inset: 0;
     overflow: hidden;
     contain: paint;
     pointer-events: none;
@@ -311,7 +311,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     margin: 0;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    text-shadow: var(--text-shadow-on-media-soft);
   }
 
   /* Steam level badge — same visual language as sidebar */
@@ -718,21 +718,21 @@
 
   &__achievement-showcase {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    justify-content: stretch;
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 48px));
+    justify-content: start;
+    gap: 6px;
     margin: 0;
-    padding: 14px 16px 16px;
+    padding: 12px;
     overflow: visible;
   }
 
   &__showcase-achievement {
     position: relative;
     display: grid;
-    width: 100%;
-    max-width: none;
+    width: 48px;
+    max-width: 48px;
     aspect-ratio: 1;
-    justify-self: stretch;
+    justify-self: start;
     place-items: center;
     overflow: hidden;
     box-sizing: border-box;
@@ -783,7 +783,8 @@
     background: var(--success);
   }
 
-  &__showcase-achievement--empty {
+  &__showcase-achievement--skeleton {
+    animation: pulse-skeleton 1.6s ease-in-out infinite;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-tertiary) 88%, transparent);
@@ -805,6 +806,47 @@
 
   &__showcase-achievement--clickable {
     cursor: pointer;
+  }
+
+  &__showcase-achievement--rare {
+    border-color: transparent;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      border-radius: inherit;
+      padding: 1.5px;
+      background: conic-gradient(
+        from var(--premium-border-angle),
+        transparent 0deg,
+        transparent 180deg,
+        color-mix(in srgb, var(--premium-gold) 18%, transparent) 230deg,
+        color-mix(in srgb, var(--premium-gold) 45%, transparent) 275deg,
+        color-mix(in srgb, var(--premium-gold) 72%, #fff 8%) 305deg,
+        color-mix(in srgb, var(--premium-gold) 90%, #fff 18%) 328deg,
+        color-mix(in srgb, var(--premium-gold) 55%, transparent) 345deg,
+        color-mix(in srgb, var(--premium-gold) 22%, transparent) 355deg,
+        transparent 360deg
+      );
+      pointer-events: none;
+      opacity: 1;
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: subscription-premium-border-shine 7s linear infinite;
+    }
+
+    &:hover,
+    &:focus-visible {
+      border-color: transparent;
+    }
   }
 
   &__showcase-lock {
@@ -1585,7 +1627,24 @@
   }
 
   &__tab-indicator {
-    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    display: block;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--color-text);
+    pointer-events: none;
+    transform: translate3d(0, 0, 0);
+    transition:
+      left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity var(--motion-fast) var(--ease);
+
+    &--ready {
+      will-change: left, width;
+    }
   }
 
   &__tab {
@@ -1612,18 +1671,7 @@
     transition: color var(--motion-base) ease;
 
     &::after {
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      width: 28px;
-      height: 2px;
-      border-radius: var(--radius-pill);
-      background: var(--color-text);
-      content: "";
-      opacity: 0;
-      pointer-events: none;
-      transform: translateX(-50%);
-      transition: opacity var(--motion-fast) var(--ease);
+      content: none;
     }
 
     svg {
@@ -1654,10 +1702,6 @@
     &--active {
       color: var(--text-primary);
       font-weight: var(--weight-medium);
-
-      &::after {
-        opacity: 1;
-      }
 
       svg {
         color: var(--text-primary);
@@ -1776,7 +1820,7 @@
     display: grid;
     width: min(100%, 1180px);
     grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
+    gap: 14px;
     margin: 0 auto;
     padding: 4px 0 24px;
   }
@@ -1787,9 +1831,9 @@
     gap: 0;
     min-width: 0;
     overflow: hidden;
-    border: 0;
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    background: transparent;
+    background: var(--surface-tertiary);
   }
 
   &__top-game-stat-label,
@@ -1804,7 +1848,7 @@
     gap: 12px;
     min-height: 38px;
     padding: 0 12px;
-    border-bottom: 0;
+    border-bottom: 1px solid var(--border-subtle);
     background: transparent;
 
     h3 {
@@ -1981,10 +2025,33 @@
     scroll-behavior: auto;
   }
 
-  &__achievement-progress-card,
-  &__achievement-card {
+  &__achievement-progress-card {
     min-width: 0;
     min-height: 50px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-ui);
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color var(--motion-base) ease;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--sidebar-option-active-hover);
+      border-color: var(--border-hover);
+      outline: 0;
+    }
+  }
+
+  &__achievement-card {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    align-items: center;
+    min-width: 0;
+    min-height: 50px;
+    padding: 6px 0;
+    border: 0;
     border-radius: var(--radius-sm);
     background: var(--surface-ui);
     color: var(--text-primary);
@@ -1997,13 +2064,6 @@
       background: var(--sidebar-option-active-hover);
       outline: 0;
     }
-  }
-
-  &__achievement-card {
-    display: grid;
-    grid-template-columns: 46px minmax(0, 1fr);
-    align-items: center;
-    padding: 6px 0;
   }
 
   &__achievement-card-media {
@@ -2101,41 +2161,15 @@
     -webkit-line-clamp: 1;
   }
 
-  &__achievement-card-date {
-    overflow: hidden;
-    color: var(--text-secondary);
-    font-size: 10px;
-    font-weight: var(--weight-medium);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   &__achievement-card--locked {
     .profile-page__achievement-card-media img {
       filter: grayscale(1) brightness(0.55);
     }
   }
 
-  &__no-games {
-    display: flex;
-    width: 100%;
+  &__no-games.empty-state {
     min-height: 280px;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 8px;
-    color: var(--text-primary);
-  }
-
-  &__no-games-icon {
-    display: flex;
-    width: 60px;
-    height: 60px;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 16px;
-    border-radius: var(--radius-circle);
-    background-color: rgba(239, 243, 244, 0.06);
+    padding-block: 48px;
   }
 
   &__empty-text {
@@ -2144,12 +2178,12 @@
   }
 
   &__game-grid.game-grid--portrait {
-    grid-template-columns: repeat(5, 176px);
-    grid-auto-rows: 264px;
-    gap: 10px;
+    grid-template-columns: repeat(5, 158px);
+    grid-auto-rows: 237px;
+    gap: 14px 12px;
     width: max-content;
     overflow: visible;
-    padding: 0 0 4px;
+    padding: 8px 0 24px;
   }
 
   &__game-grid.game-grid--cover-format-in .game-card {
@@ -2163,17 +2197,17 @@
   }
 
   &__game-grid .game-card {
-    width: 176px;
-    min-width: 176px;
-    max-width: 176px;
-    height: 264px;
-    min-height: 264px;
-    max-height: 264px;
+    width: 158px;
+    min-width: 158px;
+    max-width: 158px;
+    height: 237px;
+    min-height: 237px;
+    max-height: 237px;
     aspect-ratio: auto;
     border: 1px solid var(--border);
     border-radius: 0;
     content-visibility: auto;
-    contain-intrinsic-size: 264px 176px;
+    contain-intrinsic-size: 237px 158px;
   }
 
   &__game-grid .game-card:hover,
@@ -2184,6 +2218,17 @@
   &__load-more-sentinel {
     width: 100%;
     height: 1px;
+  }
+}
+
+html.no-backdrop-blur .profile-page {
+  &__content-box::after,
+  &__hero-action,
+  &__steam-id-box,
+  &__discord-box,
+  &__hero-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 
@@ -2291,8 +2336,8 @@
     }
 
     &__achievement-showcase {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      justify-content: stretch;
+      grid-template-columns: repeat(auto-fill, minmax(48px, 48px));
+      justify-content: start;
     }
 
     &__top-game-stats {
@@ -2388,14 +2433,14 @@
     }
 
     &__achievement-showcase {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
-      padding: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(40px, 40px));
+      gap: 5px;
+      padding: 10px;
     }
 
     &__showcase-achievement {
-      width: 100%;
-      max-width: none;
+      width: 40px;
+      max-width: 40px;
     }
 
     &__recent-game {

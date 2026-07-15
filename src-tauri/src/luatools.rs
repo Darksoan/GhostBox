@@ -1,6 +1,6 @@
 use crate::catalogue::fetch_remote_game;
 use crate::ghostbox_library;
-use crate::ludusavi::game_title;
+use crate::ludusavi::resolved_game_title;
 use crate::util::{text_value, EmptyVecExt};
 use crate::{extract_app_id, resolve_steam_path, save_steam_path, steam_asset_url};
 
@@ -253,7 +253,7 @@ async fn library_game_from_luatools_add(
         return remote_game;
     }
 
-    let title = game_title(input, app_id);
+    let title = resolved_game_title(app, input, app_id);
     let cover_url = steam_asset_url(app_id, "header.jpg");
     let hero_url = steam_asset_url(app_id, "library_hero.jpg");
     serde_json::json!({
@@ -297,7 +297,7 @@ pub async fn luatools_add_game(
             "error": "AppID inválido para adicionar o jogo."
         }));
     }
-    let title = game_title(&game, &app_id);
+    let title = resolved_game_title(&app, &game, &app_id);
     if ghostbox_library::is_library_app_blocked(&app_id, &title) {
         return Ok(serde_json::json!({
             "success": false,

@@ -47,31 +47,17 @@ mod window_lifecycle;
 pub(crate) use catalogue::normalize_api_url;
 pub(crate) use settings::load_startup_settings;
 
-use ludusavi::game_title;
+use ludusavi::resolved_game_title;
 use settings::{read_json_file, write_json_file};
 use tauri::Manager;
-use util::{merge_object_defaults, object_or_empty, silent_command, text_value, EmptyStringExt};
-
-struct AchievementServerState {
-    url: String,
-    token: String,
-    _stop: std::sync::mpsc::Sender<()>,
-}
-
-static ACHIEVEMENT_SERVER: std::sync::OnceLock<std::sync::Mutex<Option<AchievementServerState>>> =
-    std::sync::OnceLock::new();
-
-fn achievement_server_state() -> &'static std::sync::Mutex<Option<AchievementServerState>> {
-    ACHIEVEMENT_SERVER.get_or_init(|| std::sync::Mutex::new(None))
-}
+use util::{merge_object_defaults, object_or_empty, text_value, EmptyStringExt};
 
 fn default_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
     serde_json::json!({
         "outputPath": default_backup_output_path(app),
         "automaticBackupsForLibrary": false,
         "automaticBackups": {},
-        "backupRecords": {},
-        "customExecutables": {}
+        "backupRecords": {}
     })
 }
 
@@ -125,8 +111,7 @@ fn normalize_backup_settings(
             .and_then(|value| value.as_bool())
             .unwrap_or(false),
         "automaticBackups": object_or_empty(value.get("automaticBackups")),
-        "backupRecords": object_or_empty(value.get("backupRecords")),
-        "customExecutables": object_or_empty(value.get("customExecutables"))
+        "backupRecords": object_or_empty(value.get("backupRecords"))
     })
 }
 
@@ -141,7 +126,7 @@ pub(crate) fn save_backup_settings(
     let current = load_backup_settings(app);
     let mut next = merge_object_defaults(current.clone(), patch.clone());
 
-    for key in ["automaticBackups", "backupRecords", "customExecutables"] {
+    for key in ["automaticBackups", "backupRecords"] {
         let mut merged = current
             .get(key)
             .and_then(|value| value.as_object())
@@ -405,17 +390,6 @@ pub(crate) fn extract_app_id(value: &serde_json::Value) -> String {
         .collect()
 }
 
-fn custom_executable_path(settings: &serde_json::Value, app_id: &str) -> String {
-    settings
-        .get("customExecutables")
-        .and_then(|value| value.get(app_id))
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or_default()
-        .to_string()
-}
-
 fn normalize_search_text(value: &str) -> String {
     value
         .chars()
@@ -495,7 +469,7 @@ pub(crate) fn enrich_game_with_local_achievement_stats(
         return game;
     }
 
-    let title = game_title(&game, &app_id);
+    let title = resolved_game_title(app, &game, &app_id);
     let persisted = read_persisted_achievement_stats(app, &app_id, &title);
     let achievements =
         steam_appcache::read_local_achievement_stats(steam_path, &app_id, &persisted);
@@ -644,7 +618,7 @@ pub(crate) fn merge_game_achievement_details(
         return game;
     }
 
-    let title = game_title(&game, &app_id);
+    let title = resolved_game_title(app, &game, &app_id);
     let achievement_list = game
         .get("achievementList")
         .and_then(|value| value.as_array())
@@ -901,307 +875,6 @@ fn write_ghostbox_achievements_backup_file(
     let contents = serde_json::to_string_pretty(file).map_err(|error| error.to_string())?;
     std::fs::write(&file_path, contents).map_err(|error| error.to_string())?;
     Ok(file_path.to_string_lossy().to_string())
-}
-
-fn resolve_ghostbox_achievement_total(
-    existing_total: usize,
-    provided_total: Option<&serde_json::Value>,
-) -> usize {
-    if let Some(total) = provided_total.and_then(|value| value.as_u64()) {
-        if total > 0 {
-            return existing_total.max(total as usize);
-        }
-    }
-    existing_total
-}
-
-fn record_ghostbox_steam_api_achievement_unlock(
-    app: &tauri::AppHandle,
-    payload: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let Some(payload) = payload.as_object() else {
-        return Err("Payload de conquista inválido.".to_string());
-    };
-    let app_id: String = text_value(payload.get("appId"))
-        .chars()
-        .filter(|ch| ch.is_ascii_digit())
-        .collect();
-    let name = [
-        payload.get("name"),
-        payload.get("achievementName"),
-        payload.get("achievementId"),
-        payload.get("apiName"),
-    ]
-    .iter()
-    .find_map(|value| value.and_then(|value| value.as_str()))
-    .map(str::trim)
-    .filter(|value| !value.is_empty())
-    .map(str::to_string)
-    .unwrap_or_default();
-    if app_id.is_empty() || name.is_empty() {
-        return Err("appId e name são obrigatórios.".to_string());
-    }
-
-    let settings = load_backup_settings(app);
-    let title = settings
-        .get("backupRecords")
-        .and_then(|records| records.get(&app_id))
-        .and_then(|record| record.get("title"))
-        .and_then(|value| value.as_str())
-        .map(str::to_string)
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| text_value(payload.get("gameTitle")).if_empty(app_id.clone()));
-    let achievement_title = text_value(payload.get("title")).if_empty(name.clone());
-    let unlocked_at = text_value(payload.get("unlockedAt"));
-    let unlocked_at = chrono::DateTime::parse_from_rfc3339(&unlocked_at)
-        .map(|value| value.to_rfc3339())
-        .unwrap_or_else(|_| current_timestamp_string());
-
-    let existing_file = read_ghostbox_achievements_backup_file(app, &app_id, &title, None);
-    let existing_unlocked = existing_file
-        .as_ref()
-        .and_then(|file| file.get("unlocked"))
-        .and_then(|value| value.as_array())
-        .cloned()
-        .unwrap_or_default();
-    let normalized_name = normalize_search_text(&name);
-    let normalized_title = normalize_search_text(&achievement_title);
-    let existing_match_index = existing_unlocked.iter().position(|achievement| {
-        let achievement_name = normalize_search_text(&text_value(achievement.get("name")));
-        let achievement_title = normalize_search_text(&text_value(achievement.get("title")));
-        achievement_name == normalized_name || achievement_title == normalized_title
-    });
-    let duplicate = existing_match_index.is_some();
-    let mut next_unlocked = if let Some(match_index) = existing_match_index {
-        existing_unlocked
-            .into_iter()
-            .enumerate()
-            .map(|(index, achievement)| {
-                if index == match_index {
-                    serde_json::json!({
-                        "name": text_value(achievement.get("name")).if_empty(name.clone()),
-                        "title": text_value(achievement.get("title")).if_empty(achievement_title.clone()),
-                        "unlockedAt": achievement
-                            .get("unlockedAt")
-                            .and_then(|value| value.as_str())
-                            .filter(|value| !value.is_empty())
-                            .unwrap_or(&unlocked_at)
-                    })
-                } else {
-                    achievement
-                }
-            })
-            .collect::<Vec<_>>()
-    } else {
-        let mut next = existing_unlocked;
-        next.push(serde_json::json!({
-            "name": name,
-            "title": achievement_title,
-            "unlockedAt": unlocked_at
-        }));
-        next
-    };
-    next_unlocked
-        .sort_by(|left, right| text_value(left.get("name")).cmp(&text_value(right.get("name"))));
-    let total = resolve_ghostbox_achievement_total(
-        existing_file
-            .as_ref()
-            .and_then(|file| file.get("total"))
-            .and_then(|value| value.as_u64())
-            .map(|value| value as usize)
-            .unwrap_or(next_unlocked.len()),
-        payload.get("total"),
-    )
-    .max(next_unlocked.len());
-    let next_file = serde_json::json!({
-        "version": 1,
-        "appId": app_id,
-        "title": title,
-        "updatedAt": current_timestamp_string(),
-        "source": "ghostbox-steam-api-shim",
-        "total": total,
-        "unlocked": next_unlocked
-    });
-    write_ghostbox_achievements_backup_file(app, &next_file, None)?;
-    let _ = persist_backup_settings(app, load_backup_settings(app));
-
-    Ok(serde_json::json!({
-        "appId": app_id,
-        "name": name,
-        "unlockedAt": unlocked_at,
-        "total": total,
-        "unlocked": next_file
-            .get("unlocked")
-            .and_then(|value| value.as_array())
-            .map(|items| items.len())
-            .unwrap_or(0),
-        "duplicate": duplicate
-    }))
-}
-
-fn write_json_http_response(stream: &mut std::net::TcpStream, status: &str, body: &str) {
-    use std::io::Write;
-
-    let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store, max-age=0\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.as_bytes().len()
-    );
-    let _ = stream.write_all(response.as_bytes());
-    let _ = stream.flush();
-}
-
-fn parse_http_request(
-    raw: &str,
-) -> Option<(
-    String,
-    String,
-    String,
-    std::collections::HashMap<String, String>,
-)> {
-    let (head, body) = raw
-        .split_once("\r\n\r\n")
-        .or_else(|| raw.split_once("\n\n"))?;
-    let mut lines = head.lines();
-    let request_line = lines.next()?;
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next()?.to_string();
-    let path = parts.next()?.to_string();
-    let mut headers = std::collections::HashMap::new();
-    for line in lines {
-        if let Some((key, value)) = line.split_once(':') {
-            headers.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
-        }
-    }
-    Some((method, path, body.to_string(), headers))
-}
-
-fn is_local_achievement_address(address: &std::net::SocketAddr) -> bool {
-    match address.ip() {
-        std::net::IpAddr::V4(value) => value.is_loopback(),
-        std::net::IpAddr::V6(value) => value.is_loopback(),
-    }
-}
-
-fn handle_achievement_connection(
-    app: &tauri::AppHandle,
-    stream: &mut std::net::TcpStream,
-    expected_token: &str,
-) -> Result<(), String> {
-    use std::io::Read;
-
-    let mut buffer = Vec::new();
-    let mut chunk = [0_u8; 4096];
-    loop {
-        let read = stream.read(&mut chunk).map_err(|error| error.to_string())?;
-        if read == 0 {
-            break;
-        }
-        buffer.extend_from_slice(&chunk[..read]);
-        if buffer.len() > 64 * 1024 {
-            write_json_http_response(
-                stream,
-                "400 Bad Request",
-                r#"{"ok":false,"error":"Payload muito grande."}"#,
-            );
-            return Ok(());
-        }
-        if buffer.windows(4).any(|window| window == b"\r\n\r\n") {
-            break;
-        }
-    }
-
-    let raw = String::from_utf8_lossy(&buffer);
-    let Some((method, path, body, headers)) = parse_http_request(&raw) else {
-        write_json_http_response(stream, "400 Bad Request", r#"{"error":"invalid_request"}"#);
-        return Ok(());
-    };
-    if method != "POST" || path != "/achievements/unlock" {
-        write_json_http_response(stream, "404 Not Found", r#"{"error":"not_found"}"#);
-        return Ok(());
-    }
-    let header_token = headers
-        .get("x-ghostbox-token")
-        .or_else(|| headers.get("x-eden-token"))
-        .or_else(|| headers.get("x-piratebox-token"))
-        .map(String::as_str)
-        .unwrap_or_default();
-    if header_token != expected_token {
-        write_json_http_response(stream, "401 Unauthorized", r#"{"error":"unauthorized"}"#);
-        return Ok(());
-    }
-
-    let payload =
-        serde_json::from_str::<serde_json::Value>(&body).unwrap_or_else(|_| serde_json::json!({}));
-    match record_ghostbox_steam_api_achievement_unlock(app, &payload) {
-        Ok(result) => {
-            let body = serde_json::json!({ "ok": true, "result": result });
-            write_json_http_response(stream, "200 OK", &body.to_string());
-        }
-        Err(error) => write_json_http_response(
-            stream,
-            "400 Bad Request",
-            &serde_json::json!({ "ok": false, "error": error }).to_string(),
-        ),
-    }
-    Ok(())
-}
-
-fn start_ghostbox_achievement_server(app: tauri::AppHandle) -> Result<(String, String), String> {
-    let mut guard = achievement_server_state()
-        .lock()
-        .map_err(|_| "achievement server lock poisoned".to_string())?;
-    if let Some(state) = guard.as_ref() {
-        return Ok((state.url.clone(), state.token.clone()));
-    }
-
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
-    let port = listener
-        .local_addr()
-        .map_err(|error| error.to_string())?
-        .port();
-    let token = uuid::Uuid::new_v4().to_string();
-    let url = format!("http://127.0.0.1:{port}");
-    let (stop_tx, stop_rx) = std::sync::mpsc::channel();
-    listener
-        .set_nonblocking(true)
-        .map_err(|error| error.to_string())?;
-
-    let app_handle = app.clone();
-    let expected_token = token.clone();
-    std::thread::spawn(move || loop {
-        if stop_rx.try_recv().is_ok() {
-            break;
-        }
-        match listener.accept() {
-            Ok((mut stream, address)) => {
-                if !is_local_achievement_address(&address) {
-                    write_json_http_response(
-                        &mut stream,
-                        "403 Forbidden",
-                        r#"{"error":"forbidden"}"#,
-                    );
-                    continue;
-                }
-                let app_handle = app_handle.clone();
-                let expected_token = expected_token.clone();
-                std::thread::spawn(move || {
-                    let _ =
-                        handle_achievement_connection(&app_handle, &mut stream, &expected_token);
-                });
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            Err(_) => break,
-        }
-    });
-
-    *guard = Some(AchievementServerState {
-        url: url.clone(),
-        token: token.clone(),
-        _stop: stop_tx,
-    });
-    Ok((url, token))
 }
 
 pub(crate) fn make_backup_entry(path: &str, size_bytes: u64) -> serde_json::Value {
@@ -1526,72 +1199,6 @@ pub(crate) fn save_cloud_backup_success_record(
     )
 }
 
-fn launch_custom_executable(
-    app: &tauri::AppHandle,
-    game: serde_json::Value,
-    app_id: &str,
-    executable_path: &str,
-) -> serde_json::Value {
-    let executable = std::path::PathBuf::from(executable_path);
-    if !executable.is_file() {
-        return serde_json::json!({
-            "success": false,
-            "appId": app_id,
-            "customExecutable": true,
-            "error": "O executável configurado não foi encontrado."
-        });
-    }
-
-    let achievement_env = start_ghostbox_achievement_server(app.clone()).ok();
-    let launched_title = game_title(&game, app_id);
-
-    let mut command = silent_command(&executable);
-    if let Some(parent) = executable.parent() {
-        command.current_dir(parent);
-    }
-    command.env("GHOSTBOX_APP_ID", app_id);
-    command.env("GHOSTBOX_GAME_TITLE", &launched_title);
-    command.env("EDEN_APP_ID", app_id);
-    command.env("EDEN_GAME_TITLE", &launched_title);
-    command.env("PIRATEBOX_APP_ID", app_id);
-    command.env("PIRATEBOX_GAME_TITLE", &launched_title);
-    if let Some((url, token)) = achievement_env {
-        command.env("GHOSTBOX_ACHIEVEMENTS_URL", &url);
-        command.env("GHOSTBOX_ACHIEVEMENTS_TOKEN", &token);
-        command.env("EDEN_ACHIEVEMENTS_URL", &url);
-        command.env("EDEN_ACHIEVEMENTS_TOKEN", &token);
-        command.env("PIRATEBOX_ACHIEVEMENTS_URL", url);
-        command.env("PIRATEBOX_ACHIEVEMENTS_TOKEN", token);
-    }
-
-    match command.spawn() {
-        Ok(mut child) => {
-            let app = app.clone();
-            let app_id = app_id.to_string();
-            let launched_app_id = app_id.clone();
-            playtime::open_game_playtime_session(&app, &game);
-            std::thread::spawn(move || {
-                let _ = child.wait();
-                let title = playtime::close_game_playtime_session(&app, &app_id)
-                    .unwrap_or_else(|| game_title(&game, &app_id));
-                playtime::run_automatic_backup_after_close(app, app_id, title, game);
-            });
-
-            serde_json::json!({
-                "success": true,
-                "appId": launched_app_id,
-                "customExecutable": true
-            })
-        }
-        Err(error) => serde_json::json!({
-            "success": false,
-            "appId": app_id,
-            "customExecutable": true,
-            "error": error.to_string()
-        }),
-    }
-}
-
 pub(crate) fn sanitize_folder_name(value: &str) -> String {
     let invalid = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
     let name = value
@@ -1629,6 +1236,20 @@ pub(crate) fn save_backup_record(
     let mut records = serde_json::Map::new();
     records.insert(app_id.to_string(), record);
     save_backup_settings(app, serde_json::json!({ "backupRecords": records }))
+}
+
+pub(crate) fn remove_backup_record(
+    app: &tauri::AppHandle,
+    app_id: &str,
+) -> Result<serde_json::Value, String> {
+    let mut settings = load_backup_settings(app);
+    if let Some(records) = settings
+        .get_mut("backupRecords")
+        .and_then(|value| value.as_object_mut())
+    {
+        records.remove(app_id);
+    }
+    persist_backup_settings(app, settings)
 }
 
 pub(crate) fn directory_has_content(path: &std::path::Path) -> bool {
@@ -1777,14 +1398,6 @@ pub(crate) fn backup_details_for_path(
     }))
 }
 
-pub(crate) fn stop_ghostbox_achievement_server() {
-    if let Ok(mut guard) = achievement_server_state().lock() {
-        if let Some(state) = guard.take() {
-            let _ = state._stop.send(());
-        }
-    }
-}
-
 pub(crate) fn launch_game_from_value(
     app: tauri::AppHandle,
     game: serde_json::Value,
@@ -1798,13 +1411,6 @@ pub(crate) fn launch_game_from_value(
             "appId": "",
             "error": "AppId inválido."
         }));
-    }
-
-    let settings = load_backup_settings(&app);
-    let executable_path = custom_executable_path(&settings, &app_id);
-    if !executable_path.is_empty() {
-        let result = launch_custom_executable(&app, game.clone(), &app_id, &executable_path);
-        return Ok(result);
     }
 
     let url = format!("steam://rungameid/{app_id}");
@@ -1840,14 +1446,12 @@ pub(crate) fn launch_game_from_value(
             }
             Ok(serde_json::json!({
                 "success": true,
-                "appId": app_id,
-                "customExecutable": false
+                "appId": app_id
             }))
         }
         Err(error) => Ok(serde_json::json!({
             "success": false,
             "appId": app_id,
-            "customExecutable": false,
             "error": error.to_string()
         })),
     }
@@ -1859,45 +1463,6 @@ fn game_launch(
     game: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     launch_game_from_value(app, game)
-}
-
-#[tauri::command]
-fn backup_select_game_executable(
-    app: tauri::AppHandle,
-    game: serde_json::Value,
-    executable_path: String,
-) -> Result<serde_json::Value, String> {
-    let app_id = extract_app_id(&game);
-    let settings = load_backup_settings(&app);
-    if app_id.is_empty() {
-        return Ok(serde_json::json!({
-            "status": "invalid",
-            "appId": "",
-            "settings": settings,
-            "message": "Jogo inválido."
-        }));
-    }
-
-    let path = executable_path.trim();
-    let executable = std::path::PathBuf::from(path);
-    if path.is_empty() || !executable.is_file() || !path.to_lowercase().ends_with(".exe") {
-        return Ok(serde_json::json!({
-            "status": "invalid",
-            "appId": app_id,
-            "settings": settings,
-            "message": "Selecione um arquivo .exe válido."
-        }));
-    }
-
-    let settings =
-        backup::backup_set_game_custom_executable(app, app_id.clone(), Some(path.to_string()))?;
-    Ok(serde_json::json!({
-        "status": "ok",
-        "appId": app_id,
-        "executablePath": path,
-        "settings": settings,
-        "libraryGame": game
-    }))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1964,31 +1529,20 @@ pub fn run() {
             cloud_save::cloud_list_saves,
             cloud_save::cloud_backup_game,
             cloud_save::cloud_restore_save,
+            cloud_save::cloud_delete_save,
+            cloud_save::cloud_set_save_pinned,
             cloud_save::cloud_get_profile_snapshot,
             cloud_save::cloud_put_profile_snapshot,
             cloud_save::cloud_upload_profile_image,
             cloud_save::cloud_delete_profile_banner,
             backup::backup_get_settings,
-            backup::backup_validate_root,
-            backup::backup_ensure_root,
-            backup::backup_set_output_path,
-            backup::backup_set_game_automatic,
-            backup::backup_set_library_automatic,
-            backup::backup_set_entry_pinned,
-            backup::backup_set_game_custom_executable,
-            backup::backup_open_folder,
-            backup::backup_delete_folder,
-            backup::backup_refresh_game_metadata,
+            backup::backup_remove_record,
+            backup::backup_get_details,
             steam::steam_select_path,
             steam::steam_scan_library,
             steam::steam_restart,
             game_launch,
             playtime::game_get_playtimes,
-            backup_select_game_executable,
-            ludusavi::ludusavi_get_backup_previews,
-            backup::backup_get_details,
-            backup::backup_run_game_local,
-            backup::backup_restore_game_local,
             ghostbox_library::ghostbox_library_register_steam_game,
             luatools::luatools_add_game,
             luatools::luatools_remove_game,

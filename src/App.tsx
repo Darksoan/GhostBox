@@ -82,7 +82,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     restorePendingScroll,
   } = useAppNavigation();
 
-  // Overlay close via back can be reopened with forward (like page history).
   const overlayForwardRef = useRef<OverlayForwardEntry | null>(null);
   const [canForwardOverlay, setCanForwardOverlay] = useState(false);
 
@@ -114,7 +113,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       return;
     }
 
-    // Instant hydrate from premium cache (lifetime / previous session).
     const cachedPremium = ghostboxApi.getCachedIsPremium(steamId);
     if (cachedPremium !== null) setIsPremium(cachedPremium);
 
@@ -130,7 +128,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         setSubscriptionPeriodEnd(active ? end : null);
       });
 
-    // Prefetch Discord link early so sidebar/profile paint without waiting on mount.
     void ghostboxApi.getDiscordLinkStatus(steamId);
 
     refreshSubscriptionStatus();
@@ -172,7 +169,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       saveScrollPosition();
       clearOverlayForward();
       closeContentOverlay();
-      // navigate() no-ops when already on newPage (uses live pageRef, not React state).
       navigate(newPage);
       shell.clearQuery();
       if (collectionId) {
@@ -192,10 +188,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     saveScrollPosition();
     shell.clearQuery();
 
-    // Overlay first: closing stores a forward entry so ">" can reopen it.
     if (achievementsView) {
       if (achievementsView.reopenModalOnBack) {
-        // closeAchievements reopens the game modal — still in overlay flow.
         clearOverlayForward();
         closeAchievements();
         return;
@@ -211,7 +205,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       return;
     }
 
-    // Page history back — clear overlay forward so ">" advances pages.
     clearOverlayForward();
     back();
   }, [
@@ -230,7 +223,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     saveScrollPosition();
     shell.clearQuery();
 
-    // Can't page-forward while an overlay is open.
     if (achievementsView || selectedGame) return;
 
     const overlayEntry = overlayForwardRef.current;
@@ -341,6 +333,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           libraryGameAppIds={appData.availableLibraryGameAppIds}
           removableGameAppIds={appData.addedLibraryGameAppIds}
           playableGameAppIds={appData.playableGameAppIds}
+          activeSessionAppIds={appData.activeSessionAppIds}
           addingGameId={appData.addingGameId}
           launchingGameId={appData.launchingGameId}
           onAddGame={appData.queueGame}

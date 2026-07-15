@@ -1,6 +1,6 @@
 import type { GhostBoxGame } from "../data";
 
-export type Page = "home" | "catalogue" | "library" | "favorites" | "settings" | "profile" | "notifications";
+export type Page = "home" | "catalogue" | "library" | "backup" | "favorites" | "settings" | "profile" | "notifications";
 
 export type StartupPage = Extract<Page, "home" | "catalogue" | "profile">;
 
@@ -16,7 +16,6 @@ export type BackupSettings = {
   automaticBackupsForLibrary: boolean;
   automaticBackups: Record<string, boolean>;
   backupRecords: Record<string, BackupRecord>;
-  customExecutables: Record<string, string>;
 };
 
 export type BackupRootStatus = {

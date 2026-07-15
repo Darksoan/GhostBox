@@ -187,15 +187,6 @@ export type BackupFolderDeletionResult = BackupPathActionResult & {
   settings?: BackupSettings;
 };
 
-export type GameExecutableSelectionResult = {
-  status: "ok" | "cancelled" | "invalid";
-  appId: string;
-  executablePath?: string;
-  settings: BackupSettings;
-  libraryGame?: GhostBoxGame;
-  message?: string;
-};
-
 export type LocalAchievementsUnlockedPayload = {
   appId: string;
   title: string;
@@ -209,28 +200,7 @@ export type CatalogueCacheUpdatedPayload = {
 export type LaunchGameResult = {
   success: boolean;
   appId: string;
-  customExecutable?: boolean;
   error?: string;
-};
-
-export type LocalBackupResult = {
-  success: boolean;
-  appId: string;
-  title: string;
-  skipped?: boolean;
-  outputPath?: string;
-  error?: string;
-  settings?: BackupSettings;
-};
-
-export type LocalRestoreResult = {
-  success: boolean;
-  appId: string;
-  title: string;
-  backupPath?: string;
-  backupSizeBytes?: number;
-  error?: string;
-  settings?: BackupSettings;
 };
 
 export type LudusaviBackupPreviewGame = {
@@ -283,6 +253,12 @@ export type DiscordLinkStatus = {
   } | null;
 };
 
+export type SubscriptionPaymentMethod = {
+  type: string | null;
+  brand: string | null;
+  last4: string | null;
+};
+
 export type SubscriptionStatusResult = {
   steamId: string;
   subscription: {
@@ -292,9 +268,11 @@ export type SubscriptionStatusResult = {
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
     lastPaymentId: string | null;
+    cancelAtPeriodEnd?: boolean;
     updatedAt: string | null;
   };
   latestPayment: unknown | null;
+  paymentMethod?: SubscriptionPaymentMethod | null;
   discordLink?: DiscordLinkStatus;
 };
 
@@ -352,8 +330,21 @@ export type CloudSave = {
   sha256: string;
   manifest: unknown | null;
   deviceName: string | null;
+  pinned?: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CloudSaveDeletionResult = {
+  success: boolean;
+  saveId: string;
+  appId?: string;
+  remainingSaves?: number;
+  error?: string;
+};
+
+export type CloudSavePinnedResult = {
+  save: CloudSave;
 };
 
 export type CloudSavesResult = {
