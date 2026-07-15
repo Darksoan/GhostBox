@@ -22,25 +22,42 @@ pub(crate) fn silent_steamcmd_output(
     steamcmd: &std::path::Path,
     app_id: &str,
 ) -> Option<std::process::Output> {
+    silent_steamcmd_output_many(steamcmd, std::slice::from_ref(&app_id))
+}
+
+/// Run steamcmd once for multiple app_info_print commands.
+/// This avoids the expensive login/update/quit cycle per app when resolving
+/// many Steam client icon hashes for visible game lists.
+pub(crate) fn silent_steamcmd_output_many(
+    steamcmd: &std::path::Path,
+    app_ids: &[&str],
+) -> Option<std::process::Output> {
+    if app_ids.is_empty() {
+        return None;
+    }
+
     let mut command = silent_command(steamcmd);
     if let Some(dir) = steamcmd.parent() {
         command.current_dir(dir);
     }
 
+    command.args([
+        "+@ShutdownOnFailedCommand",
+        "1",
+        "+@NoPromptForPassword",
+        "1",
+        "+login",
+        "anonymous",
+        "+app_info_update",
+        "1",
+    ]);
+
+    for app_id in app_ids {
+        command.args(["+app_info_print", app_id]);
+    }
+
     command
-        .args([
-            "+@ShutdownOnFailedCommand",
-            "1",
-            "+@NoPromptForPassword",
-            "1",
-            "+login",
-            "anonymous",
-            "+app_info_update",
-            "1",
-            "+app_info_print",
-            app_id,
-            "+quit",
-        ])
+        .arg("+quit")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

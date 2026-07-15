@@ -1,6 +1,6 @@
 use crate::catalogue_cache;
 use crate::image_cache;
-use crate::util::{silent_steamcmd_output, with_steamcmd_lock};
+use crate::util::{silent_steamcmd_output, silent_steamcmd_output_many, with_steamcmd_lock};
 use crate::{FACETS_VERSION, RANKING_VERSION};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -16,6 +16,7 @@ const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.h
 const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
 const LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV: &str = "EDEN_STEAM_DETAILS_PROXY_URL";
 const LEGACY_STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
+const STEAMCMD_ICON_BATCH_SIZE: usize = 25;
 
 fn text(value: Option<&Value>) -> String {
     value
@@ -1146,6 +1147,32 @@ fn extract_client_icon_hash(value: &str) -> Option<String> {
     }
 }
 
+fn extract_client_icon_hashes(value: &str, app_ids: &[String]) -> HashMap<String, String> {
+    let mut app_positions = app_ids
+        .iter()
+        .filter_map(|app_id| {
+            value
+                .find(&format!("\"{app_id}\""))
+                .map(|index| (app_id, index))
+        })
+        .collect::<Vec<_>>();
+
+    app_positions.sort_by_key(|(_, index)| *index);
+
+    app_positions
+        .iter()
+        .enumerate()
+        .filter_map(|(position, (app_id, start))| {
+            let end = app_positions
+                .get(position + 1)
+                .map(|(_, index)| *index)
+                .unwrap_or(value.len());
+            extract_client_icon_hash(&value[*start..end])
+                .map(|hash| ((*app_id).clone(), steam_community_icon_url(app_id, &hash)))
+        })
+        .collect()
+}
+
 fn read_client_icon_from_vdf(bytes: &[u8], app_id: &str) -> Option<String> {
     let app_id = app_id.parse::<u32>().ok()?;
     let app_id_bytes = app_id.to_le_bytes();
@@ -1296,6 +1323,33 @@ fn get_game_icon_from_steamcmd(app: &tauri::AppHandle, app_id: &str) -> Option<S
     let stdout = String::from_utf8_lossy(&output.stdout);
     let hash = extract_client_icon_hash(&stdout)?;
     Some(steam_community_icon_url(app_id, &hash))
+}
+
+fn get_game_icons_from_steamcmd(
+    app: &tauri::AppHandle,
+    app_ids: &[String],
+) -> HashMap<String, String> {
+    let Some(steamcmd) = steamcmd_candidates(app)
+        .into_iter()
+        .find(|candidate| candidate.exists())
+    else {
+        return HashMap::new();
+    };
+
+    let mut resolved = HashMap::new();
+    for chunk in app_ids.chunks(STEAMCMD_ICON_BATCH_SIZE) {
+        let app_id_refs = chunk.iter().map(String::as_str).collect::<Vec<_>>();
+        let Some(output) =
+            with_steamcmd_lock(|| silent_steamcmd_output_many(&steamcmd, &app_id_refs))
+        else {
+            continue;
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        resolved.extend(extract_client_icon_hashes(&stdout, chunk));
+    }
+
+    resolved
 }
 
 pub(crate) async fn fetch_remote_game(
@@ -1582,6 +1636,18 @@ pub async fn steam_get_game_icon_urls(
     for (app_id, icon_url) in get_game_icons_from_local_appinfo(&app, &missing) {
         cache.insert(app_id.clone(), icon_url.clone());
         resolved.insert(app_id, icon_url);
+    }
+
+    let steamcmd_missing = missing
+        .into_iter()
+        .filter(|app_id| !resolved.contains_key(app_id))
+        .collect::<Vec<_>>();
+
+    if !steamcmd_missing.is_empty() {
+        for (app_id, icon_url) in get_game_icons_from_steamcmd(&app, &steamcmd_missing) {
+            cache.insert(app_id.clone(), icon_url.clone());
+            resolved.insert(app_id, icon_url);
+        }
     }
 
     write_steam_icon_url_cache(&app, &cache);
