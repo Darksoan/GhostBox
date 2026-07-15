@@ -472,12 +472,9 @@ svg[stroke-width="1.8"] {
 .favorites-grid__cover::before {
   content: "";
   position: absolute;
-  top: 50%;
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  width: var(--pb-cover-rest-size);
-  height: var(--pb-cover-rest-size);
+  inset: calc((100% - var(--pb-cover-rest-size)) / 2);
+  width: auto;
+  height: auto;
   margin: 0;
   background-color: inherit;
   background-image: var(--pb-background-image);
@@ -488,11 +485,10 @@ svg[stroke-width="1.8"] {
   background-size: var(--pb-background-size-current, var(--pb-background-size, cover));
   image-rendering: auto;
   backface-visibility: hidden;
-  transform: translate3d(-50%, -50%, 0);
+  transform: none;
   transform-origin: center center;
   transition:
-    width var(--pb-cover-zoom-duration) ease-out,
-    height var(--pb-cover-zoom-duration) ease-out,
+    inset var(--pb-cover-zoom-duration) ease-out,
     opacity var(--motion-base) ease !important;
   pointer-events: none;
 }
@@ -864,8 +860,7 @@ p {
     .home-recent-banner__cover::before,
     .favorites-grid__cover::before {
       transition:
-        width var(--pb-cover-zoom-duration) ease-out,
-        height var(--pb-cover-zoom-duration) ease-out,
+        inset var(--pb-cover-zoom-duration) ease-out,
         opacity var(--motion-base) ease !important;
     }
 
@@ -2826,22 +2821,18 @@ p {
 
 .home-recommended-hero__cover img {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  right: auto;
-  bottom: auto;
+  inset: calc((100% - var(--pb-cover-rest-size, 100%)) / 2);
   display: block;
-  width: var(--pb-cover-rest-size, 100%);
-  height: var(--pb-cover-rest-size, 100%);
+  width: auto;
+  height: auto;
+  margin: 0;
   object-fit: cover;
   object-position: center top;
   image-rendering: auto;
-  transform: translate3d(-50%, -50%, 0);
+  transform: none;
   transform-origin: center center;
   backface-visibility: hidden;
-  transition:
-    width var(--pb-cover-zoom-duration, 0.14s) ease-out,
-    height var(--pb-cover-zoom-duration, 0.14s) ease-out;
+  transition: inset var(--pb-cover-zoom-duration, 0.14s) ease-out;
 }
 
 .home-recommended-hero__cover::before {
@@ -4185,14 +4176,12 @@ p {
 .catalogue-list__item:hover .catalogue-list__cover::before,
 .catalogue-list__item--hovered .catalogue-list__cover::before,
 .catalogue-list__item:focus-within .catalogue-list__cover::before {
-  width: var(--pb-cover-hover-size);
-  height: var(--pb-cover-hover-size);
+  inset: calc((100% - var(--pb-cover-hover-size)) / 2);
 }
 
 .home-recommended-hero:hover .home-recommended-hero__cover img,
 .home-recommended-hero:focus-visible .home-recommended-hero__cover img {
-  width: var(--pb-cover-hover-size);
-  height: var(--pb-cover-hover-size);
+  inset: calc((100% - var(--pb-cover-hover-size)) / 2);
 }
 
 .home-wishlist-card__text-skeleton {
@@ -10105,8 +10094,7 @@ input[type="search"]::-ms-reveal {
   .favorites-grid__item:focus-within .favorites-grid__cover::before,
   .home-recommended-hero:hover .home-recommended-hero__cover img,
   .home-recommended-hero:focus-visible .home-recommended-hero__cover img {
-    width: var(--pb-cover-rest-size) !important;
-    height: var(--pb-cover-rest-size) !important;
+    inset: calc((100% - var(--pb-cover-rest-size)) / 2) !important;
   }
 
   .game-card__cover::before,

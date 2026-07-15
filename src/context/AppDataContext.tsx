@@ -20,6 +20,7 @@ import type {
   BackupSettings,
   StartupPage,
   StartupSettings,
+  SteamAccountStats,
   SteamLibraryScanResult,
   SteamProfile,
   UserCollection,
@@ -41,6 +42,12 @@ import {
 import { isHiddenLibraryGame } from "../utils/filters";
 import { preloadGamePortraitSources } from "../utils/image";
 import { normalizeSteamGameTitles } from "../utils/steamTitles";
+import {
+  buildSteamOwnedGamesFromPlaytimes,
+  buildSteamOwnedGamesFromSnapshot,
+  mergeSteamOwnedLibraryGames,
+} from "../utils/steamLibraryMerge";
+import { mergeSteamAchievementsIntoGames } from "../utils/steamAchievementMerge";
 import {
   readStoredFavoriteGames,
   readStoredProfileHistoryGames,
@@ -235,6 +242,7 @@ interface AppDataContextValue {
   initialPage: StartupPage;
   steamPathInput: string;
   showSteamGames: boolean;
+  steamAccountStats: SteamAccountStats | null;
   profileHistoryGames: GhostBoxGame[];
   profileFavoriteGames: GhostBoxGame[];
   profileAddedLibraryGames: GhostBoxGame[];
@@ -283,6 +291,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [addedLibraryGames, setAddedLibraryGames] = useState<GhostBoxGame[]>(
     [],
   );
+  const [scannedLibraryGames, setScannedLibraryGames] = useState<GhostBoxGame[]>(
+    [],
+  );
+  const [steamOwnedLibraryGames, setSteamOwnedLibraryGames] = useState<
+    GhostBoxGame[]
+  >([]);
   const [userCollections, setUserCollections] = useState<UserCollection[]>(() =>
     readStoredUserCollections(),
   );
@@ -318,6 +332,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [showSteamGames, setShowSteamGames] = useState(() =>
     readStoredShowSteamGames(),
   );
+  const [steamAccountStats, setSteamAccountStats] =
+    useState<SteamAccountStats | null>(null);
+  const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
   const backupSettingsRef = useRef<BackupSettings | null>(
     defaultBackupSettings,
   );
@@ -382,6 +399,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return applyPlaytimeToGame(game, gamePlaytimesRef.current);
   }, []);
 
+  const refreshSteamOwnedLibraryGames = useCallback(
+    async (steamId?: string | null, snapshot: GamePlaytimeSnapshot = gamePlaytimesRef.current) => {
+      const id = steamId?.trim();
+      if (!id) {
+        setSteamOwnedLibraryGames([]);
+        return;
+      }
+
+      const fallbackGames = buildSteamOwnedGamesFromSnapshot(snapshot);
+      if (fallbackGames.length > 0) setSteamOwnedLibraryGames(fallbackGames);
+
+      const stats = await ghostboxApi.getSteamAccountStats(id).catch(() => null);
+      if (stats) setSteamAccountStats(stats);
+      if (!stats?.ownedPlaytimes?.length) return;
+
+      setSteamOwnedLibraryGames(
+        buildSteamOwnedGamesFromPlaytimes(stats.ownedPlaytimes, snapshot),
+      );
+    },
+    [],
+  );
+
   const refreshGamePlaytimes = useCallback(async () => {
     const snapshot = await ghostboxApi.getGamePlaytimes();
     gamePlaytimesRef.current = snapshot;
@@ -415,6 +454,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setProfileHistoryGames((current) =>
             applyPlaytimeSnapshotToGames(current, snapshot),
           );
+          void refreshSteamOwnedLibraryGames(id, snapshot);
           return;
         }
         await refreshGamePlaytimes();
@@ -422,7 +462,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         await refreshGamePlaytimes().catch(() => undefined);
       }
     },
-    [refreshGamePlaytimes],
+    [refreshGamePlaytimes, refreshSteamOwnedLibraryGames],
   );
 
   useEffect(() => {
@@ -447,7 +487,70 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     steamProfileRef.current = steamProfile;
+    if (!steamProfile?.steamId) {
+      setSteamOwnedLibraryGames([]);
+      setSteamAccountStats(null);
+      steamAccountStatsRef.current = null;
+    }
   }, [steamProfile]);
+
+  useEffect(() => {
+    steamAccountStatsRef.current = steamAccountStats;
+  }, [steamAccountStats]);
+
+  useEffect(() => {
+    const steamId = steamProfile?.steamId?.trim();
+    if (!steamId) return;
+
+    let cancelled = false;
+    const applyStats = (stats: SteamAccountStats) => {
+      if (cancelled) return;
+      steamAccountStatsRef.current = stats;
+      setSteamAccountStats(stats);
+      if (stats.ownedPlaytimes?.length) {
+        setSteamOwnedLibraryGames(
+          buildSteamOwnedGamesFromPlaytimes(
+            stats.ownedPlaytimes,
+            gamePlaytimesRef.current,
+          ),
+        );
+      }
+    };
+
+    const refreshStats = () =>
+      ghostboxApi
+        .getSteamAccountStats(steamId)
+        .then((stats) => {
+          if (stats) applyStats(stats);
+        })
+        .catch(() => undefined);
+
+    void refreshStats();
+
+    const unlisten = ghostboxApi.onSteamAccountStatsUpdated((stats) => {
+      if (stats.steamId === steamId) applyStats(stats);
+    });
+
+    // Proxy scan continues in the background; re-poll until complete so Profile
+    // metrics and remote achievements update without restarting the app.
+    const pollId = window.setInterval(() => {
+      if (cancelled) return;
+      const current = steamAccountStatsRef.current;
+      const needsPoll =
+        !current ||
+        current.scanInProgress ||
+        current.pendingGames > 0 ||
+        (current.gamesCount > 0 && current.unlockedAchievements === 0);
+      if (!needsPoll) return;
+      void refreshStats();
+    }, 12_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+      unlisten();
+    };
+  }, [steamProfile?.steamId]);
 
   useEffect(() => {
     userCollectionsRef.current = userCollections;
@@ -922,7 +1025,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [profileHistoryGames]);
 
   useEffect(() => {
-    void ghostboxApi.setTrayLibraryGames(addedLibraryGames);
+    void ghostboxApi.setTrayLibraryGames(
+      addedLibraryGames.filter((game) => game.librarySource !== "steam-owned"),
+    );
   }, [addedLibraryGames]);
 
   useEffect(() => {
@@ -1030,7 +1135,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const playableGameAppIds = useMemo(
-    () => new Set(addedLibraryGames.map((game) => game.appId)),
+    () =>
+      new Set(
+        addedLibraryGames
+          .filter((game) => game.librarySource !== "steam-owned")
+          .map((game) => game.appId),
+      ),
     [addedLibraryGames],
   );
 
@@ -1080,11 +1190,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         [...favoriteGamesRef.current, ...profileHistoryGamesRef.current],
       );
       setSteamPathInput(result.steamPath);
-      setAddedLibraryGames(games);
-      setAddedLibraryGameAppIds(new Set(games.map((game) => game.appId)));
+      setScannedLibraryGames(games);
     },
     [],
   );
+
+  useEffect(() => {
+    const games = mergeSteamAchievementsIntoGames(
+      mergeSteamOwnedLibraryGames(
+        scannedLibraryGames,
+        steamOwnedLibraryGames.filter((game) => !isHiddenLibraryGame(game)),
+        showSteamGames,
+      ),
+      steamAccountStats,
+    ).map(mergeGamePlaytime);
+    setAddedLibraryGames(games);
+    setAddedLibraryGameAppIds(
+      new Set(
+        games
+          .filter((game) => game.librarySource !== "steam-owned")
+          .map((game) => game.appId),
+      ),
+    );
+  }, [
+    mergeGamePlaytime,
+    scannedLibraryGames,
+    showSteamGames,
+    steamAccountStats,
+    steamOwnedLibraryGames,
+  ]);
 
   const toggleFavoriteGame = useCallback(
     (game: GhostBoxGame) => {
@@ -1654,6 +1788,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       initialPage,
       steamPathInput,
       showSteamGames,
+      steamAccountStats,
       profileHistoryGames: profileHistoryGamesWithPlaytime,
       profileFavoriteGames,
       profileAddedLibraryGames,
@@ -1704,6 +1839,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       initialPage,
       steamPathInput,
       showSteamGames,
+      steamAccountStats,
       profileHistoryGamesWithPlaytime,
       profileFavoriteGames,
       profileAddedLibraryGames,

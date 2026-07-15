@@ -109,6 +109,7 @@ const translations: Record<Language, TranslationTree> = {
       perfectGames: "Jogos perfeitos",
       averageAchievements: "Média de conquistas por jogo",
       overallProgress: "Progresso geral",
+      averageCompletion: "conclusão média",
       totalPlaytimeLabel: "Tempo total",
       topGames: "Jogos mais jogados",
       mostPlayed: "Mais jogados",
@@ -120,6 +121,14 @@ const translations: Record<Language, TranslationTree> = {
       of: "de",
       noAchievements: "Sem conquistas",
       recentAchievements: "Conquistas recentes",
+      recentActivity: "Atividade recente",
+      recentActivityHours: "{hours} nas 2 últimas semanas",
+      currentlyInGame: "Em jogo",
+      steamMetrics: "Métricas Steam",
+      steamMetricsLoading: "Sincronizando métricas da Steam...",
+      steamPrivateProfile:
+        "Perfil Steam privado. Métricas, conquistas recentes e biblioteca remota podem ficar indisponíveis.",
+      steamScanProgress: "Escaneando conquistas: {scanned} jogos lidos, {pending} pendentes.",
       achievementUnlocked: "Conquista desbloqueada",
       achievementLocked: "Conquista bloqueada",
       achievementUnlockedOn: "Desbloqueada em {date}",
@@ -398,6 +407,11 @@ const translations: Record<Language, TranslationTree> = {
           description:
             "Caminho usado para localizar jogos instalados pelo LuaTools.",
         },
+        showSteamGames: {
+          label: "Mostrar jogos da Steam",
+          description:
+            "Exibe jogos da conta Steam na biblioteca, incluindo jogos não instalados quando disponíveis.",
+        },
       },
       backups: {
         outputPath: {
@@ -609,6 +623,7 @@ const translations: Record<Language, TranslationTree> = {
       perfectGames: "Perfect games",
       averageAchievements: "Average achievements per game",
       overallProgress: "Overall progress",
+      averageCompletion: "average completion",
       totalPlaytimeLabel: "Total playtime",
       topGames: "Top games",
       mostPlayed: "Most played",
@@ -620,6 +635,14 @@ const translations: Record<Language, TranslationTree> = {
       of: "of",
       noAchievements: "No achievements",
       recentAchievements: "Recent achievements",
+      recentActivity: "Recent activity",
+      recentActivityHours: "{hours} in the last 2 weeks",
+      currentlyInGame: "Currently In-Game",
+      steamMetrics: "Steam metrics",
+      steamMetricsLoading: "Syncing Steam metrics...",
+      steamPrivateProfile:
+        "Steam profile is private. Metrics, recent achievements, and remote library may be unavailable.",
+      steamScanProgress: "Scanning achievements: {scanned} games read, {pending} pending.",
       achievementUnlocked: "Achievement unlocked",
       achievementLocked: "Achievement locked",
       achievementUnlockedOn: "Unlocked {date}",
@@ -893,6 +916,11 @@ const translations: Record<Language, TranslationTree> = {
         steamPath: {
           label: "Steam folder",
           description: "Path used to find games installed via LuaTools.",
+        },
+        showSteamGames: {
+          label: "Show Steam games",
+          description:
+            "Shows games from the Steam account in the library, including uninstalled games when available.",
         },
       },
       backups: {

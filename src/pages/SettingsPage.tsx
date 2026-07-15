@@ -231,6 +231,8 @@ interface SettingsPageProps {
   initialPage: StartupPage;
   onInitialPageChange: Dispatch<SetStateAction<StartupPage>>;
   steamPath: string;
+  showSteamGames: boolean;
+  onShowSteamGamesChange: (value: boolean) => void;
   onSelectSteamPath: () => void;
   startupSettings: StartupSettings;
   onStartupSettingsChange: (settings: Partial<StartupSettings>) => void;
@@ -247,6 +249,8 @@ export function SettingsPage({
   initialPage,
   onInitialPageChange,
   steamPath,
+  showSteamGames,
+  onShowSteamGamesChange,
   onSelectSteamPath,
   startupSettings,
   onStartupSettingsChange,
@@ -357,7 +361,7 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, () => {
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, showSteamGames, onShowSteamGamesChange, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, () => {
         onMorrenusApiKeySave();
         void refreshMorrenusStats();
       }),
@@ -371,8 +375,10 @@ export function SettingsPage({
       onMorrenusApiKeyChange,
       onMorrenusApiKeySave,
       onSelectSteamPath,
+      onShowSteamGamesChange,
       refreshMorrenusStats,
       steamPath,
+      showSteamGames,
       t,
       updateAppearance,
       updateNotifications,
@@ -449,6 +455,8 @@ function buildTabOptions(
   updateNotifications: ReturnType<typeof useSettings>["updateNotifications"],
   t: (key: string, params?: Record<string, string | number>) => string,
   steamPath: string,
+  showSteamGames: boolean,
+  onShowSteamGamesChange: (value: boolean) => void,
   onSelectSteamPath: () => void,
   morrenusApiKey: string,
   onMorrenusApiKeyChange: (value: string) => void,
@@ -640,18 +648,27 @@ function buildTabOptions(
   }
 
   if (activeTab.id === "library") {
-    return activeTab.options.map((option) => {
-      const label = t(option.labelKey);
-      const description = t(option.descriptionKey);
+    return [
+      ...activeTab.options.map((option) => {
+        const label = t(option.labelKey);
+        const description = t(option.descriptionKey);
 
-      return {
-        label,
-        description,
-        control: option.control,
-        value: steamPath,
-        onClick: onSelectSteamPath,
-      };
-    });
+        return {
+          label,
+          description,
+          control: option.control,
+          value: steamPath,
+          onClick: onSelectSteamPath,
+        };
+      }),
+      {
+        label: t("settings.library.showSteamGames.label"),
+        description: t("settings.library.showSteamGames.description"),
+        control: "toggle" as const,
+        checked: showSteamGames,
+        onToggle: onShowSteamGamesChange,
+      },
+    ];
   }
 
   return activeTab.options.map((option) => {

@@ -17,6 +17,7 @@ type AchievementEntry = {
   unlockedAchievements: number;
   totalAchievements: number;
   hasAchievements: boolean;
+  achievements?: GameAchievement[];
   recentAchievements: RecentAchievement[];
   lastFetchedAt: number;
   lastError?: string;
@@ -46,8 +47,19 @@ type RecentAchievement = {
   unlockedAt: number;
 };
 
+type GameAchievement = {
+  name: string;
+  title: string;
+  description: string;
+  icon: string;
+  iconGray: string;
+  unlocked: boolean;
+  unlockedAt: number;
+};
+
 type OwnedPlaytime = {
   appId: string;
+  name?: string;
   playtimeForever: number;
   rtimeLastPlayed: number;
 };
@@ -69,14 +81,23 @@ type AccountStats = {
   scanInProgress: boolean;
   recentAchievements: RecentAchievement[];
   ownedPlaytimes: OwnedPlaytime[];
+  achievements: GameAchievementSummary[];
+};
+
+type GameAchievementSummary = {
+  appId: string;
+  gameTitle: string;
+  achievements: GameAchievement[];
 };
 
 const accountCacheTtlSeconds = 6 * 60 * 60;
 const achievementCacheTtlSeconds = 7 * 24 * 60 * 60;
 const noStatsCacheTtlSeconds = 30 * 24 * 60 * 60;
-const scanLockTtlSeconds = 10 * 60;
-const scanConcurrency = 8;
-const maxScanBatchPerRequest = 80;
+const failedRetryTtlSeconds = 15 * 60;
+const scanLockTtlSeconds = 3 * 60;
+const scanConcurrency = 6;
+const maxScanBatchPerRequest = 40;
+const maxBatchesPerScan = 4;
 const defaultRateLimitPerMinute = 60;
 
 function nowSeconds() {
@@ -101,11 +122,11 @@ function validSteamId(value: string | null) {
 }
 
 function statsCacheKey(steamId: string) {
-  return `steam-stats:v7:${steamId}`;
+  return `steam-stats:v8:${steamId}`;
 }
 
 function scanLockKey(steamId: string) {
-  return `steam-stats-scan-lock:v7:${steamId}`;
+  return `steam-stats-scan-lock:v8:${steamId}`;
 }
 
 function compareOwnedGamesForAchievementScan(left: OwnedGame, right: OwnedGame) {
@@ -125,13 +146,16 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function extractShowcaseValue(showcase: string, label: string) {
-  const pattern = new RegExp(
-    `<div\\s+class="value">\\s*([^<]+?)\\s*</div>\\s*<div\\s+class="label">\\s*${escapeRegex(label)}\\s*</div>`,
-    "i"
-  );
-  const value = showcase.match(pattern)?.[1];
-  return value ? Math.round(parseLocalizedNumber(value.replace("%", ""))) : undefined;
+function extractShowcaseValue(showcase: string, labels: string | string[]) {
+  for (const label of Array.isArray(labels) ? labels : [labels]) {
+    const pattern = new RegExp(
+      `<div\\s+class="value">\\s*([^<]+?)\\s*</div>\\s*<div\\s+class="label">\\s*${escapeRegex(label)}\\s*</div>`,
+      "i"
+    );
+    const value = showcase.match(pattern)?.[1];
+    if (value) return Math.round(parseLocalizedNumber(value.replace("%", "")));
+  }
+  return undefined;
 }
 
 function rateLimitKey(request: Request) {
@@ -173,8 +197,9 @@ async function fetchOwnedGames(steamId: string, apiKey: string) {
 }
 
 async function fetchCommunityAchievementSummary(steamId: string): Promise<AchievementSummary | undefined> {
+  // Showcase totals live on the main profile page, not /stats/?tab=achievements.
   const response = await fetch(
-    `https://steamcommunity.com/profiles/${steamId}/stats/?tab=achievements&l=english`,
+    `https://steamcommunity.com/profiles/${steamId}/?l=english`,
     {
       headers: {
         accept: "text/html,application/xhtml+xml",
@@ -185,12 +210,19 @@ async function fetchCommunityAchievementSummary(steamId: string): Promise<Achiev
   if (!response.ok) return undefined;
 
   const html = await response.text();
-  const showcase = html.match(/Achievement Showcase[\s\S]*?(?:Recent Activity|View\s+All Recently Played|$)/i)?.[0];
-  if (!showcase) return undefined;
+  const showcase =
+    html.match(/showcase_stats_row[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/i)?.[0] ??
+    html.match(
+      /(?:Achievement Showcase|Vitrine de Conquistas)[\s\S]*?(?:Recent Activity|Atividade recente|View\s+All Recently Played|$)/i
+    )?.[0] ??
+    html;
 
-  const achievements = extractShowcaseValue(showcase, "Achievements");
-  const perfect = extractShowcaseValue(showcase, "Perfect Games");
-  const average = extractShowcaseValue(showcase, "Avg. Game Completion Rate");
+  const achievements = extractShowcaseValue(showcase, ["Achievements", "Conquistas"]);
+  const perfect = extractShowcaseValue(showcase, ["Perfect Games", "Jogos perfeitos"]);
+  const average = extractShowcaseValue(showcase, [
+    "Avg. Game Completion Rate",
+    "Média de conquistas por jogo",
+  ]);
   if (achievements === undefined && perfect === undefined && average === undefined) return undefined;
 
   return {
@@ -230,7 +262,10 @@ async function fetchGameAchievementSchema(appId: string, apiKey: string) {
 function shouldRefresh(entry: AchievementEntry | undefined, game: OwnedGame, now: number) {
   if (!entry) return true;
   if (entry.playtimeForever !== game.playtime_forever) return true;
-  const ttl = entry.lastError === "no_stats" ? noStatsCacheTtlSeconds : achievementCacheTtlSeconds;
+  if (entry.totalAchievements > 0 && !entry.achievements?.length) return true;
+  let ttl = achievementCacheTtlSeconds;
+  if (entry.lastError === "no_stats") ttl = noStatsCacheTtlSeconds;
+  else if (entry.lastError) ttl = failedRetryTtlSeconds;
   return now - entry.lastFetchedAt > ttl;
 }
 
@@ -275,13 +310,27 @@ async function fetchAchievementEntry(
     };
     const achievements = value.playerstats?.achievements ?? [];
     const unlocked = achievements.filter((achievement) => achievement.achieved === 1);
-    const schema = unlocked.length > 0 ? await fetchGameAchievementSchema(appId, apiKey) : undefined;
+    const schema = achievements.length > 0 ? await fetchGameAchievementSchema(appId, apiKey) : undefined;
     const schemaAchievements = new Map(
       (schema?.availableGameStats?.achievements ?? [])
         .filter((achievement) => achievement.name)
         .map((achievement) => [achievement.name!, achievement])
     );
     const gameTitle = schema?.gameName || game.name || `Steam ${appId}`;
+    const achievementList = achievements.map((achievement) => {
+      const id = achievement.apiname || achievement.name || "achievement";
+      const schemaAchievement = schemaAchievements.get(id);
+      const unlockedAt = achievement.unlocktime || 0;
+      return {
+        name: id,
+        title: schemaAchievement?.displayName || achievement.name || id,
+        description: schemaAchievement?.description || "",
+        icon: schemaAchievement?.icon || "",
+        iconGray: schemaAchievement?.icongray || schemaAchievement?.icon || "",
+        unlocked: achievement.achieved === 1,
+        unlockedAt,
+      };
+    });
     const recentAchievements = unlocked
       .map((achievement) => {
         const id = achievement.apiname || achievement.name || "achievement";
@@ -306,6 +355,7 @@ async function fetchAchievementEntry(
         unlockedAchievements: unlocked.length,
         totalAchievements: achievements.length,
         hasAchievements: achievements.length > 0,
+        achievements: achievementList,
         recentAchievements,
         lastFetchedAt: now,
       },
@@ -339,9 +389,17 @@ function buildStats(cache: StatsCache, privateProfile: boolean): AccountStats {
     .slice(0, 32);
   const ownedPlaytimes = cache.ownedGames.map((game) => ({
     appId: String(game.appid),
+    name: game.name,
     playtimeForever: game.playtime_forever,
     rtimeLastPlayed: game.rtime_last_played ?? 0,
   }));
+  const achievements = entries
+    .map(([appId, entry]) => ({
+      appId,
+      gameTitle: cache.ownedGames.find((game) => String(game.appid) === appId)?.name || `Steam ${appId}`,
+      achievements: entry.achievements ?? [],
+    }))
+    .filter((game) => game.achievements.length > 0);
 
   return {
     steamId: cache.steamId,
@@ -375,6 +433,7 @@ function buildStats(cache: StatsCache, privateProfile: boolean): AccountStats {
     scanInProgress: cache.scanInProgress,
     recentAchievements,
     ownedPlaytimes,
+    achievements,
   };
 }
 
@@ -390,27 +449,38 @@ async function scanAchievements(env: Env, cache: StatsCache, pending: OwnedGame[
   if (existingLock) return;
   await env.STATS_CACHE.put(lockKey, "1", { expirationTtl: scanLockTtlSeconds });
 
-  const nextCache: StatsCache = { ...cache, games: { ...cache.games }, scanInProgress: true };
-  pending.sort(compareOwnedGamesForAchievementScan);
-  const batch = pending.slice(0, maxScanBatchPerRequest);
-  const remainingAfterBatch = Math.max(0, pending.length - batch.length);
+  try {
+    const nextCache: StatsCache = { ...cache, games: { ...cache.games }, scanInProgress: true };
+    let remaining = pending.slice().sort(compareOwnedGamesForAchievementScan);
+    let batches = 0;
 
-  for (let index = 0; index < batch.length; index += scanConcurrency) {
-    const chunk = batch.slice(index, index + scanConcurrency);
-    const results = await Promise.all(
-      chunk.map((game) => fetchAchievementEntry(cache.steamId, env.STEAM_WEB_API_KEY, game))
-    );
-    for (const [appId, entry] of results) {
-      nextCache.games[appId] = entry;
+    // Keep scanning in this waitUntil so progress does not stall at the first
+    // batch (previously left scanInProgress=true and never resumed).
+    while (remaining.length > 0 && batches < maxBatchesPerScan) {
+      const batch = remaining.slice(0, maxScanBatchPerRequest);
+      remaining = remaining.slice(batch.length);
+      batches += 1;
+
+      for (let index = 0; index < batch.length; index += scanConcurrency) {
+        const chunk = batch.slice(index, index + scanConcurrency);
+        const results = await Promise.all(
+          chunk.map((game) => fetchAchievementEntry(cache.steamId, env.STEAM_WEB_API_KEY, game))
+        );
+        for (const [appId, entry] of results) {
+          nextCache.games[appId] = entry;
+        }
+        nextCache.fetchedAt = nowSeconds();
+        nextCache.scanInProgress = remaining.length > 0 || index + scanConcurrency < batch.length;
+        await saveCache(env, nextCache);
+      }
     }
+
+    nextCache.scanInProgress = remaining.length > 0;
     nextCache.fetchedAt = nowSeconds();
     await saveCache(env, nextCache);
+  } finally {
+    await env.STATS_CACHE.delete(lockKey);
   }
-
-  nextCache.scanInProgress = remainingAfterBatch > 0;
-  nextCache.fetchedAt = nowSeconds();
-  await saveCache(env, nextCache);
-  await env.STATS_CACHE.delete(lockKey);
 }
 
 async function handleAccountStats(request: Request, env: Env, context: ExecutionContext) {
@@ -429,8 +499,28 @@ async function handleAccountStats(request: Request, env: Env, context: Execution
 
   const cached = await env.STATS_CACHE.get<StatsCache>(statsCacheKey(steamId), "json");
   const now = nowSeconds();
-  if (cached && now - cached.fetchedAt < 10 * 60 && !cached.scanInProgress) {
-    return jsonResponse(buildStats(cached, false), env);
+  if (cached && now - cached.fetchedAt < 10 * 60) {
+    const pendingCached = cached.ownedGames.filter((game) =>
+      shouldRefresh(cached.games[String(game.appid)], game, now)
+    );
+    const needsCommunitySummary = !cached.communitySummary;
+
+    // Always try to resume unfinished work. The scan lock prevents overlaps;
+    // requiring !scanInProgress previously stuck scans after the first batch.
+    if (pendingCached.length > 0) {
+      const resumeCache: StatsCache = { ...cached, scanInProgress: true, fetchedAt: now };
+      await saveCache(env, resumeCache);
+      context.waitUntil(scanAchievements(env, resumeCache, pendingCached));
+      if (!needsCommunitySummary) {
+        return jsonResponse(buildStats(resumeCache, false), env);
+      }
+    } else if (!needsCommunitySummary) {
+      const idleCache: StatsCache = cached.scanInProgress
+        ? { ...cached, scanInProgress: false, fetchedAt: now }
+        : cached;
+      if (idleCache !== cached) await saveCache(env, idleCache);
+      return jsonResponse(buildStats(idleCache, false), env);
+    }
   }
 
   let ownedGames = cached?.ownedGames ?? [];

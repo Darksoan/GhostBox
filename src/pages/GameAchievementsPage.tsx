@@ -4,6 +4,7 @@ import { useSettings } from "../context/settings";
 import { AchievementsListLoadingState, EmptyState } from "../components/ui/LoadingStates";
 import { Cup } from "reicon-react";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
+import { mergeAchievementDetailsIntoGame } from "../utils/steamAchievementMerge";
 import { formatCompactPlaytime } from "../utils/time";
 import "./GameAchievementsPage.scss";
 
@@ -140,7 +141,7 @@ export function GameAchievementsPage({
   useEffect(() => {
     setDetailGame(game);
     highlightScrolledRef.current = false;
-  }, [game.id]);
+  }, [game]);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,9 +152,7 @@ export function GameAchievementsPage({
         if (cancelled || !details) return;
 
         setDetailGame((current) => ({
-          ...current,
-          achievements: details.achievements,
-          achievementList: details.achievementList,
+          ...mergeAchievementDetailsIntoGame(current, details),
           playTimeInMilliseconds:
             current.playTimeInMilliseconds ?? details.playTimeInMilliseconds,
         }));

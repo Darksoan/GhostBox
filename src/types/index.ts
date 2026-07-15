@@ -101,6 +101,7 @@ export type SteamProfile = {
 
 export type SteamOwnedPlaytime = {
   appId: string;
+  name?: string;
   playtimeForever: number;
   rtimeLastPlayed: number;
 };
@@ -122,6 +123,23 @@ export type SteamAccountStats = {
   scanInProgress: boolean;
   recentAchievements: SteamRecentAchievement[];
   ownedPlaytimes?: SteamOwnedPlaytime[];
+  achievements?: SteamGameAchievementSummary[];
+};
+
+export type SteamGameAchievementSummary = {
+  appId: string;
+  gameTitle: string;
+  achievements: SteamRemoteAchievement[];
+};
+
+export type SteamRemoteAchievement = {
+  name: string;
+  title: string;
+  description: string;
+  icon: string;
+  iconGray: string;
+  unlocked: boolean;
+  unlockedAt: number;
 };
 
 export type SteamRecentAchievement = {

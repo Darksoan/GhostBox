@@ -30,6 +30,7 @@ static STEAM_STATS_SCAN_ACTIVE: std::sync::OnceLock<std::sync::Mutex<HashSet<Str
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct SteamOwnedGameStats {
     appid: u64,
+    name: Option<String>,
     playtime_forever: u64,
     rtime_last_played: u64,
 }
@@ -69,8 +70,31 @@ pub(crate) struct SteamShowcaseAchievement {
 #[serde(default)]
 pub(crate) struct SteamOwnedPlaytime {
     app_id: String,
+    name: Option<String>,
     playtime_forever: u64,
     rtime_last_played: u64,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub(crate) struct SteamRemoteAchievement {
+    name: String,
+    title: String,
+    description: String,
+    icon: String,
+    icon_gray: String,
+    unlocked: bool,
+    unlocked_at: u64,
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+pub(crate) struct SteamGameAchievementSummary {
+    app_id: String,
+    game_title: String,
+    achievements: Vec<SteamRemoteAchievement>,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -94,6 +118,8 @@ pub(crate) struct SteamAccountStats {
     recent_achievements: Vec<SteamShowcaseAchievement>,
     /// Per-game Steam playtimes used to sync local playtime snapshot.
     owned_playtimes: Vec<SteamOwnedPlaytime>,
+    /// Per-game Steam achievement state forwarded by the stats proxy.
+    achievements: Vec<SteamGameAchievementSummary>,
 }
 
 fn is_image_data_url(value: &str) -> bool {
@@ -386,6 +412,7 @@ fn build_steam_account_stats(
         .iter()
         .map(|game| SteamOwnedPlaytime {
             app_id: game.appid.to_string(),
+            name: game.name.clone(),
             playtime_forever: game.playtime_forever,
             rtime_last_played: game.rtime_last_played,
         })
@@ -408,6 +435,7 @@ fn build_steam_account_stats(
         scan_in_progress,
         recent_achievements: Vec::new(),
         owned_playtimes,
+        achievements: Vec::new(),
     }
 }
 
@@ -432,6 +460,11 @@ fn parse_owned_game_entry(game: &serde_json::Value) -> Option<SteamOwnedGameStat
         .unwrap_or_default();
     Some(SteamOwnedGameStats {
         appid,
+        name: game
+            .get("name")
+            .and_then(|value| value.as_str())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
         playtime_forever,
         rtime_last_played,
     })
@@ -460,7 +493,7 @@ async fn fetch_steam_owned_games(
         .query(&[
             ("key", api_key),
             ("steamid", steam_id),
-            ("include_appinfo", "0"),
+            ("include_appinfo", "1"),
             ("include_played_free_games", "1"),
         ])
         .send()

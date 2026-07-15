@@ -620,6 +620,7 @@
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-template-areas:
+      "stats stats stats stats stats stats stats stats stats stats stats stats"
       "top top top top top top top top top top top top";
     align-items: start;
     gap: 16px 20px;
@@ -970,6 +971,337 @@
       font-size: 14px;
       line-height: 1.25;
     }
+  }
+
+  &__steam-stats-panel {
+    grid-area: stats;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+  }
+
+  &__showcase-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-tertiary) 78%, transparent);
+  }
+
+  &__showcase-stat {
+    display: flex;
+    min-width: 0;
+    min-height: 88px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 18px;
+
+    & + .profile-page__showcase-stat {
+      border-left: 1px solid var(--border-subtle);
+    }
+
+    strong {
+      overflow: hidden;
+      color: var(--text-primary);
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: var(--weight-medium);
+      line-height: 1;
+      letter-spacing: -0.04em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    span {
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__steam-stats-private,
+  &__steam-stats-scan {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-tertiary) 74%, transparent);
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  &__steam-stats-scan {
+    min-height: 0;
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  &__activity-console {
+    grid-area: top;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &__activity-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+    padding: 0 2px;
+  }
+
+  &__activity-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: var(--weight-semibold);
+    line-height: 1.2;
+  }
+
+  &__activity-summary {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.3;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  &__activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__activity-list--skeleton {
+    pointer-events: none;
+  }
+
+  &__activity-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-tertiary) 72%, transparent);
+  }
+
+  &__activity-card--skeleton {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 72px;
+    padding: 14px 16px;
+    opacity: 0.78;
+  }
+
+  &__activity-main {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    min-height: 72px;
+    padding: 14px 16px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--motion-base) ease;
+
+    &:hover,
+    &:focus-visible {
+      outline: 0;
+      background: var(--surface-hover);
+    }
+  }
+
+  &__activity-game-cover {
+    display: block;
+    width: 100%;
+    aspect-ratio: 460 / 215;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-solid);
+    background-size: cover;
+    background-position: center;
+    outline: 0;
+    box-shadow: none;
+  }
+
+  &__activity-meta {
+    display: grid;
+    min-width: 0;
+    align-content: center;
+    gap: 4px;
+
+    strong {
+      overflow: hidden;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: var(--weight-medium);
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__activity-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    text-align: right;
+  }
+
+  &__activity-hours,
+  &__activity-status {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  &__activity-status {
+    color: var(--text-tertiary, var(--text-secondary));
+  }
+
+  &__activity-achievements {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 16px;
+    min-width: 0;
+    padding: 0 16px 14px;
+  }
+
+  &__activity-progress {
+    display: grid;
+    grid-template-columns: auto auto minmax(72px, 160px);
+    align-items: center;
+    gap: 8px 10px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+
+    &:disabled {
+      cursor: default;
+    }
+
+    &:focus-visible {
+      outline: 0;
+    }
+
+    .profile-page__progress-track {
+      width: 100%;
+      min-width: 72px;
+    }
+  }
+
+  &__activity-progress-label,
+  &__activity-progress-count {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  &__activity-progress-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    svg {
+      flex: 0 0 auto;
+      color: var(--text-secondary);
+    }
+  }
+
+  &__activity-progress-count {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__activity-icons {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__activity-icon {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--surface-solid);
+    cursor: pointer;
+    overflow: hidden;
+    outline: 1px solid oklch(1 0 0 / 0.1);
+    outline-offset: -1px;
+    transition: transform var(--motion-base) cubic-bezier(0.2, 0, 0, 1);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      transform: scale(1.04);
+      outline-color: var(--border-hover);
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  &__activity-icon-more {
+    display: inline-grid;
+    min-width: 32px;
+    height: 32px;
+    place-items: center;
+    padding: 0 6px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: var(--weight-medium);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
 
   &__recent-panel {
@@ -2378,7 +2710,35 @@ html.no-backdrop-blur .profile-page {
     &__overview-console {
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
+        "stats"
         "top";
+    }
+
+    &__showcase-stats {
+      grid-template-columns: 1fr;
+    }
+
+    &__showcase-stat + .profile-page__showcase-stat {
+      border-left: 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    &__activity-main,
+    &__activity-card--skeleton {
+      grid-template-columns: 140px minmax(0, 1fr) auto;
+    }
+
+    &__activity-achievements {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    &__activity-progress {
+      grid-template-columns: auto auto minmax(0, 1fr);
+    }
+
+    &__activity-icons {
+      justify-content: flex-start;
     }
 
     &__achievement-showcase {
@@ -2494,6 +2854,30 @@ html.no-backdrop-blur .profile-page {
 
     &__recent-game {
       grid-template-columns: 1fr;
+    }
+
+    &__showcase-stats {
+      grid-template-columns: 1fr;
+    }
+
+    &__activity-main,
+    &__activity-card--skeleton {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    &__activity-game-cover {
+      width: min(160px, 100%);
+    }
+
+    &__activity-side {
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    &__activity-progress {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
     }
 
     &__recent-cover {

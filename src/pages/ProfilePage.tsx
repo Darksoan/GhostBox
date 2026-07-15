@@ -10,9 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import {
-  Calendar,
   Check,
   ChevronDown,
   Clock,
@@ -22,7 +20,6 @@ import {
   Camera,
   Folder,
   Heart,
-  History,
   Layers,
   LibraryBig,
   Lock,
@@ -33,7 +30,7 @@ import {
 } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
-import type { SteamProfile, UserCollection } from "../types";
+import type { SteamAccountStats, SteamProfile, UserCollection } from "../types";
 import { GameGrid } from "../components/ui/GameCard";
 import {
   ContextMenu,
@@ -47,9 +44,11 @@ import { EditProfileModal } from "../components/modals/EditProfileModal";
 import "./ProfilePage.scss";
 import {
   useCachedImageSources,
+  useLoadableImageCover,
   useLoadableImageSource,
 } from "../hooks/useCachedImageSources";
 import {
+  gameHeaderOnlySources,
   gamePortraitPreviewSources,
   layeredImageStyle,
   preloadGameListAssets,
@@ -69,20 +68,48 @@ import {
   getRicherProfileAchievementGame as getRicherAchievementGame,
   isProfileAchievementUnlocked as isAchievementUnlocked,
 } from "../utils/profileAchievements";
+import { mergeAchievementDetailsIntoGame } from "../utils/steamAchievementMerge";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
-function ProfileTopGameCover({ game }: { game: GhostBoxGame }) {
-  const coverSources = useCachedImageSources(gamePortraitPreviewSources(game));
-  const coverSource = useLoadableImageSource(coverSources);
+const emptyImageSources: string[] = [];
+
+function ProfileTopGameCover({
+  game,
+  variant = "portrait",
+}: {
+  game: GhostBoxGame;
+  variant?: "portrait" | "capsule";
+}) {
+  const isCapsule = variant === "capsule";
+  const coverSources = useCachedImageSources(
+    isCapsule ? gameHeaderOnlySources(game) : gamePortraitPreviewSources(game),
+  );
+  const portraitSource = useLoadableImageSource(
+    isCapsule ? emptyImageSources : coverSources,
+  );
+  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(
+    isCapsule ? coverSources : emptyImageSources,
+  );
+  const displaySources = isCapsule
+    ? headerLoaded && headerSource
+      ? [headerSource]
+      : emptyImageSources
+    : portraitSource
+      ? [portraitSource]
+      : emptyImageSources;
 
   return (
     <span
-      className="profile-page__top-game-cover"
-      style={layeredImageStyle(coverSource ? [coverSource] : [], "")}
+      className={
+        isCapsule
+          ? "profile-page__activity-game-cover"
+          : "profile-page__top-game-cover"
+      }
+      style={layeredImageStyle(displaySources, "")}
       aria-hidden="true"
     />
   );
@@ -271,6 +298,7 @@ function normalizeBannerPosition(
 
 interface ProfilePageProps {
   steamProfile: SteamProfile | null;
+  steamAccountStats?: SteamAccountStats | null;
   isCloudProfileRestoring?: boolean;
   favoriteGames: GhostBoxGame[];
   addedLibraryGames: GhostBoxGame[];
@@ -394,134 +422,9 @@ function achievementUnlockedTime(unlockedAt?: string) {
   return Number.isFinite(time) ? time : 0;
 }
 
-function ProfileAchievementShowcaseItem({
-  achievement,
-  isEditing = false,
-  isSelected = false,
-  onSelect,
-}: {
-  achievement: ProfileAchievementHighlight;
-  isEditing?: boolean;
-  isSelected?: boolean;
-  onSelect?: () => void;
-}) {
-  const { appearance } = useSettings();
-  const itemRef = useRef<HTMLSpanElement>(null);
-  const [tooltipPosition, setTooltipPosition] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
-
-  function showTooltip() {
-    const item = itemRef.current;
-    if (!item || typeof window === "undefined") return;
-
-    const rect = item.getBoundingClientRect();
-    const tooltipWidth = 240;
-    const horizontalPadding = 12;
-    const left = Math.min(
-      Math.max(
-        rect.left + rect.width / 2,
-        tooltipWidth / 2 + horizontalPadding
-      ),
-      window.innerWidth - tooltipWidth / 2 - horizontalPadding
-    );
-
-    setTooltipPosition({
-      left,
-      top: Math.max(horizontalPadding, rect.top - 18),
-    });
-  }
-
-  function hideTooltip() {
-    setTooltipPosition(null);
-  }
-
-  const fallbackGameLabel =
-    appearance.language === "en"
-      ? "Game unavailable"
-      : "Jogo indisponível";
-  const secondaryLabel = achievement.gameTitle || fallbackGameLabel;
-  const ariaLabel = `${achievement.title}, ${secondaryLabel}`;
-  const tooltip = (
-    <span
-      className="modal__achievement-tooltip modal__achievement-tooltip--portal"
-      role="tooltip"
-      style={
-        tooltipPosition
-          ? {
-              left: tooltipPosition.left,
-              top: tooltipPosition.top,
-            }
-          : undefined
-      }
-    >
-      <strong>{achievement.title}</strong>
-      <span>{secondaryLabel}</span>
-    </span>
-  );
-
-  return (
-    <span
-      ref={itemRef}
-      tabIndex={onSelect ? 0 : -1}
-      role={onSelect ? "button" : undefined}
-      aria-pressed={isEditing && onSelect ? isSelected : undefined}
-      aria-label={ariaLabel}
-      className={`profile-page__showcase-achievement${
-        achievement.unlocked
-          ? ""
-          : " profile-page__showcase-achievement--locked"
-      }${
-        achievement.unlocked &&
-        typeof achievement.globalPercent === "number" &&
-        Number.isFinite(achievement.globalPercent) &&
-        achievement.globalPercent <= 10
-          ? " profile-page__showcase-achievement--rare"
-          : ""
-      }${onSelect ? " profile-page__showcase-achievement--clickable" : ""}${
-        isEditing ? " profile-page__showcase-achievement--editing" : ""
-      }${isSelected ? " profile-page__showcase-achievement--selected" : ""}`}
-      onBlur={hideTooltip}
-      onFocus={showTooltip}
-      onMouseDown={(event) => event.preventDefault()}
-      onMouseEnter={showTooltip}
-      onMouseLeave={hideTooltip}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (!onSelect) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-    >
-      {achievement.icon && (
-        <img
-          src={achievement.icon}
-          alt=""
-          aria-hidden="true"
-          loading="lazy"
-          decoding="async"
-        />
-      )}
-      {!achievement.unlocked && (
-        <span className="profile-page__showcase-lock" aria-hidden="true">
-          <Lock size={18} strokeWidth={2.0} />
-        </span>
-      )}
-      {isEditing && isSelected && (
-        <span className="profile-page__showcase-selected" aria-hidden="true" />
-      )}
-      {tooltipPosition && typeof document !== "undefined"
-        ? createPortal(tooltip, document.body)
-        : null}
-    </span>
-  );
-}
-
 export function ProfilePage({
   steamProfile,
+  steamAccountStats = null,
   isCloudProfileRestoring = false,
   favoriteGames,
   addedLibraryGames,
@@ -754,25 +657,20 @@ export function ProfilePage({
         getRicherAchievementGame(games.get(game.appId), game)
       );
     }
-    // Freshly hydrated local achievement details reflect the current local
-    // unlock state read from the Steam appcache, so they are authoritative and
-    // must override any previously cached/persisted achievement counts. The
-    // "richer wins" heuristic keeps the higher unlocked count, which would
-    // otherwise pin the profile to a stale/over-counted value that can never be
-    // corrected downward.
+    // Freshly hydrated local achievement details are merged with remote Steam
+    // account unlocks so the local appcache monitor stays additive instead of
+    // wiping profile-level achievement data for uninstalled games.
     for (const game of localAchievementGamesByAppId.values()) {
       const base = games.get(game.appId);
       games.set(
         game.appId,
         base
           ? {
-              ...base,
+              ...mergeAchievementDetailsIntoGame(base, game),
               title:
                 !isSteamTitlePlaceholder(game.title, game.appId)
                   ? game.title
                   : base.title,
-              achievements: game.achievements,
-              achievementList: game.achievementList,
             }
           : game
       );
@@ -852,10 +750,8 @@ export function ProfilePage({
                 : game.title;
 
             return {
-              ...game,
+              ...mergeAchievementDetailsIntoGame(game, details),
               title,
-              achievements: details.achievements,
-              achievementList: details.achievementList,
             };
           })
         );
@@ -1082,12 +978,64 @@ export function ProfilePage({
       });
   }, [addedLibraryGameAppIds, profileAchievementGames]);
 
-  const topGames = useMemo(() => {
+  const formatProfileNumber = useCallback(
+    (value: number) =>
+      new Intl.NumberFormat(appearance.language === "en" ? "en-US" : "pt-BR").format(value),
+    [appearance.language],
+  );
+
+  const steamShowcaseStats = useMemo(() => {
+    if (!steamAccountStats || steamAccountStats.private) return [];
+
+    return [
+      {
+        key: "achievements",
+        label: t("profile.unlockedAchievements"),
+        value: formatProfileNumber(steamAccountStats.unlockedAchievements),
+      },
+      {
+        key: "perfect",
+        label: t("profile.perfectGames"),
+        value: formatProfileNumber(steamAccountStats.perfectGames),
+      },
+      {
+        key: "average",
+        label: t("profile.averageAchievements"),
+        value: `${steamAccountStats.averageProgress}%`,
+      },
+    ];
+  }, [formatProfileNumber, steamAccountStats, t]);
+
+  const recentActivityGames = useMemo(() => {
     return profileAchievementGames
-      .filter((game) => getGamePlaytime(game) > 0)
+      .filter(
+        (game) =>
+          getGamePlaytime(game) > 0 ||
+          Number.isFinite(parseLastPlayed(game.lastTimePlayed)),
+      )
       .slice()
-      .sort((left, right) => getGamePlaytime(right) - getGamePlaytime(left));
+      .sort((left, right) => {
+        const lastPlayedDelta =
+          parseLastPlayed(right.lastTimePlayed) -
+          parseLastPlayed(left.lastTimePlayed);
+        if (lastPlayedDelta !== 0) return lastPlayedDelta;
+        return getGamePlaytime(right) - getGamePlaytime(left);
+      })
+      .slice(0, 8);
   }, [profileAchievementGames]);
+
+  const recentTwoWeekPlaytimeMs = useMemo(() => {
+    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    return recentActivityGames.reduce((total, game) => {
+      const lastPlayed = parseLastPlayed(game.lastTimePlayed);
+      if (!Number.isFinite(lastPlayed) || lastPlayed < twoWeeksAgo) return total;
+      // Prefer explicit recent session length when available.
+      if ((game.lastSessionDurationInMilliseconds ?? 0) > 0) {
+        return total + (game.lastSessionDurationInMilliseconds ?? 0);
+      }
+      return total;
+    }, 0);
+  }, [recentActivityGames]);
 
   useEffect(() => {
     // Resolve real store titles for overview top games and the achievements
@@ -1531,11 +1479,59 @@ export function ProfilePage({
                 aria-label={t("profile.overview")}
               >
                 <section className="profile-page__overview-console">
-                  <div className="profile-page__top-games-console">
-                    <div className="profile-page__overview-panel profile-page__overview-panel--top-games">
-                    {topGames.length > 0 ? (
-                      <div className="profile-page__top-games-list">
-                        {topGames.map((game) => {
+                  <div
+                    className="profile-page__steam-stats-panel"
+                    aria-label={t("profile.steamMetrics")}
+                  >
+                    {steamAccountStats?.private ? (
+                      <div className="profile-page__steam-stats-private">
+                        <Lock size={16} strokeWidth={2.0} aria-hidden="true" />
+                        <span>{t("profile.steamPrivateProfile")}</span>
+                      </div>
+                    ) : steamShowcaseStats.length > 0 ? (
+                      <>
+                        <div className="profile-page__showcase-stats">
+                          {steamShowcaseStats.map((card) => (
+                            <div key={card.key} className="profile-page__showcase-stat">
+                              <strong>{card.value}</strong>
+                              <span>{card.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {steamAccountStats?.scanInProgress ? (
+                          <div className="profile-page__steam-stats-scan">
+                            {t("profile.steamScanProgress", {
+                              scanned: steamAccountStats.scannedGames,
+                              pending: steamAccountStats.pendingGames,
+                            })}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="profile-page__steam-stats-private">
+                        <Clock size={16} strokeWidth={2.0} aria-hidden="true" />
+                        <span>{t("profile.steamMetricsLoading")}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="profile-page__activity-console">
+                    <div className="profile-page__activity-header">
+                      <h3 className="profile-page__activity-title">
+                        {t("profile.recentActivity")}
+                      </h3>
+                      {recentTwoWeekPlaytimeMs > 0 ? (
+                        <span className="profile-page__activity-summary">
+                          {t("profile.recentActivityHours", {
+                            hours: formatCompactPlaytime(recentTwoWeekPlaytimeMs),
+                          })}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {recentActivityGames.length > 0 ? (
+                      <div className="profile-page__activity-list">
+                        {recentActivityGames.map((game) => {
                           const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
                           const displayGame = resolvedTitle
                             ? { ...game, title: resolvedTitle }
@@ -1555,94 +1551,118 @@ export function ProfilePage({
                                 achievementUnlockedTime(right.unlockedAt) -
                                 achievementUnlockedTime(left.unlockedAt);
                               if (unlockTimeDelta !== 0) return unlockTimeDelta;
-                              return (right.globalPercent ?? 100) -
-                                (left.globalPercent ?? 100);
+                              return (
+                                (right.globalPercent ?? 100) -
+                                (left.globalPercent ?? 100)
+                              );
                             })
                             .flatMap<ProfileAchievementHighlight>((achievement) => {
                               const icon = achievementShowcaseIcon(achievement, true);
                               if (!icon) return [];
-
-                              return [{
-                                key: achievementShowcaseKey(game, achievement),
-                                game: displayGame,
-                                achievementId: achievement.name || achievement.title,
-                                title: achievement.title,
-                                description: achievement.description,
-                                icon,
-                                unlocked: true,
-                                gameTitle: displayGame.title,
-                                globalPercent: achievement.globalPercent,
-                                unlockedAt: achievement.unlockedAt,
-                              }];
+                              return [
+                                {
+                                  key: achievementShowcaseKey(game, achievement),
+                                  game: displayGame,
+                                  achievementId:
+                                    achievement.name || achievement.title,
+                                  title: achievement.title,
+                                  description: achievement.description,
+                                  icon,
+                                  unlocked: true,
+                                  gameTitle: displayGame.title,
+                                  globalPercent: achievement.globalPercent,
+                                  unlockedAt: achievement.unlockedAt,
+                                },
+                              ];
                             })
                             .slice(0, 5);
+                          const overflowCount = Math.max(
+                            0,
+                            achievementUnlocked - latestAchievements.length,
+                          );
+                          const statusLabel = game.sessionActive
+                            ? t("profile.currentlyInGame")
+                            : Number.isFinite(parseLastPlayed(game.lastTimePlayed))
+                              ? `${t("profile.lastPlayed")} ${formatProfileLastSession(
+                                  game.lastTimePlayed,
+                                  appearance.language,
+                                )}`
+                              : null;
+
                           return (
-                            <button
+                            <article
                               key={game.id}
-                              type="button"
-                              className="profile-page__top-game-console-row"
-                              onClick={() => onOpenGame(displayGame)}
-                              onMouseEnter={() =>
-                                preloadGameListAssets([displayGame], {
-                                  variant: "portrait",
-                                  limit: 1,
-                                  idle: false,
-                                  nativeResolve: false,
-                                })
-                              }
-                              onFocus={() =>
-                                preloadGameListAssets([displayGame], {
-                                  variant: "portrait",
-                                  limit: 1,
-                                  idle: false,
-                                  nativeResolve: false,
-                                })
-                              }
+                              className="profile-page__activity-card"
                             >
-                              <ProfileTopGameCover game={displayGame} />
-                              <span className="profile-page__top-game-content">
-                                <strong>{getProfileGameTitle(game, appearance.language, resolvedTitle)}</strong>
-                                <span className="profile-page__top-game-stats">
-                                  <span className="profile-page__top-game-stat">
-                                    <span className="profile-page__top-game-stat-label">
-                                      <Clock size={14} strokeWidth={2.0} aria-hidden="true" />
-                                      {appearance.language === "en"
-                                        ? "Play time"
-                                        : "Tempo de jogo"}
-                                    </span>
-                                    <span className="profile-page__top-game-stat-value">
-                                      {formatCompactPlaytime(
-                                        getGamePlaytime(game)
-                                      )}
-                                    </span>
+                              <button
+                                type="button"
+                                className="profile-page__activity-main"
+                                onClick={() => onOpenGame(displayGame)}
+                                onMouseEnter={() =>
+                                  preloadGameListAssets([displayGame], {
+                                    variant: "header",
+                                    limit: 1,
+                                    idle: false,
+                                    nativeResolve: false,
+                                  })
+                                }
+                                onFocus={() =>
+                                  preloadGameListAssets([displayGame], {
+                                    variant: "header",
+                                    limit: 1,
+                                    idle: false,
+                                    nativeResolve: false,
+                                  })
+                                }
+                              >
+                                <ProfileTopGameCover
+                                  game={displayGame}
+                                  variant="capsule"
+                                />
+                                <span className="profile-page__activity-meta">
+                                  <strong>
+                                    {getProfileGameTitle(
+                                      game,
+                                      appearance.language,
+                                      resolvedTitle,
+                                    )}
+                                  </strong>
+                                </span>
+                                <span className="profile-page__activity-side">
+                                  <span className="profile-page__activity-hours">
+                                    {formatCompactPlaytime(getGamePlaytime(game))}{" "}
+                                    {t("profile.played")}
                                   </span>
-                                  <span className="profile-page__top-game-stat">
-                                    <span className="profile-page__top-game-stat-label">
-                                      <Calendar size={14} strokeWidth={2.0} aria-hidden="true" />
-                                      {appearance.language === "en"
-                                        ? "Last session"
-                                        : "Última sessão"}
+                                  {statusLabel ? (
+                                    <span className="profile-page__activity-status">
+                                      {statusLabel}
                                     </span>
-                                    <span className="profile-page__top-game-stat-value">
-                                      {formatProfileLastSession(
-                                        game.lastTimePlayed,
-                                        appearance.language
-                                      )}
+                                  ) : null}
+                                </span>
+                              </button>
+
+                              {achievementTotal > 0 ? (
+                                <div className="profile-page__activity-achievements">
+                                  <button
+                                    type="button"
+                                    className="profile-page__activity-progress"
+                                    onClick={() =>
+                                      onOpenGameAchievements?.(displayGame)
+                                    }
+                                    disabled={!onOpenGameAchievements}
+                                  >
+                                    <span className="profile-page__activity-progress-label">
+                                      <Cup
+                                        size={14}
+                                        weight="Filled"
+                                        strokeWidth={2.0}
+                                        aria-hidden="true"
+                                      />
+                                      {t("profile.unlockedAchievements")}
                                     </span>
-                                  </span>
-                                  <span className="profile-page__top-game-stat profile-page__top-game-stat--achievements">
-                                    <span className="profile-page__top-game-stat-heading">
-                                      <span className="profile-page__top-game-stat-label">
-                                        <Cup size={14} weight="Filled" strokeWidth={2.0} aria-hidden="true" />
-                                        {appearance.language === "en"
-                                          ? "Achievements"
-                                          : "Conquistas"}
-                                      </span>
-                                      <span className="profile-page__top-game-stat-value">
-                                        {achievementTotal > 0
-                                          ? `${achievementUnlocked}/${achievementTotal}`
-                                          : t("profile.noAchievements")}
-                                      </span>
+                                    <span className="profile-page__activity-progress-count">
+                                      {achievementUnlocked} {t("profile.of")}{" "}
+                                      {achievementTotal}
                                     </span>
                                     <span
                                       className="profile-page__progress-track profile-page__progress-track--compact"
@@ -1654,74 +1674,63 @@ export function ProfilePage({
                                         }}
                                       />
                                     </span>
-                                  </span>
+                                  </button>
                                   {latestAchievements.length > 0 ? (
-                                    <span
-                                      className="profile-page__top-game-stat profile-page__top-game-stat--last-achievements"
-                                      aria-label={
-                                        appearance.language === "en"
-                                          ? `Latest achievements for ${displayGame.title}`
-                                          : `Últimas conquistas de ${displayGame.title}`
-                                      }
-                                    >
-                                      <span className="profile-page__top-game-stat-label">
-                                        <History size={14} strokeWidth={2.0} aria-hidden="true" />
-                                        {appearance.language === "en"
-                                          ? "Last achievements"
-                                          : "Últimas conquistas"}
-                                      </span>
-                                      <span className="profile-page__top-game-last-achievements-list">
-                                        {latestAchievements.map((achievement) => (
-                                          <ProfileAchievementShowcaseItem
-                                            key={achievement.key}
-                                            achievement={achievement}
+                                    <div className="profile-page__activity-icons">
+                                      {latestAchievements.map((achievement) => (
+                                        <button
+                                          key={achievement.key}
+                                          type="button"
+                                          className="profile-page__activity-icon"
+                                          title={achievement.title}
+                                          onClick={() =>
+                                            onOpenGameAchievements?.(
+                                              displayGame,
+                                              achievement.achievementId,
+                                            )
+                                          }
+                                          disabled={!onOpenGameAchievements}
+                                        >
+                                          <img
+                                            src={achievement.icon}
+                                            alt=""
+                                            loading="lazy"
+                                            decoding="async"
                                           />
-                                        ))}
-                                      </span>
-                                    </span>
+                                        </button>
+                                      ))}
+                                      {overflowCount > 0 ? (
+                                        <span className="profile-page__activity-icon-more">
+                                          +{overflowCount}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   ) : null}
-                                </span>
-                              </span>
-                            </button>
+                                </div>
+                              ) : null}
+                            </article>
                           );
                         })}
                       </div>
                     ) : (
                       <div
-                        className="profile-page__top-games-list profile-page__top-games-list--skeleton"
+                        className="profile-page__activity-list profile-page__activity-list--skeleton"
                         aria-hidden="true"
                       >
                         {[0, 1, 2].map((index) => (
                           <div
                             key={index}
-                            className="profile-page__top-game-console-row profile-page__top-game-console-row--skeleton"
+                            className="profile-page__activity-card profile-page__activity-card--skeleton"
                           >
-                            <span className="profile-page__top-game-cover profile-page__skeleton-block" />
-                            <span className="profile-page__top-game-content profile-page__top-game-content--skeleton">
+                            <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
+                            <span className="profile-page__activity-meta">
                               <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
-                              <span className="profile-page__top-game-stats profile-page__top-game-stats--skeleton">
-                                <span className="profile-page__top-game-stat">
-                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
-                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                                </span>
-                                <span className="profile-page__top-game-stat">
-                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
-                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                                </span>
-                                <span className="profile-page__top-game-stat profile-page__top-game-stat--achievements">
-                                  <span className="profile-page__top-game-stat-heading">
-                                    <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
-                                    <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                                  </span>
-                                  <span className="profile-page__skeleton-line profile-page__skeleton-line--progress" />
-                                </span>
-                              </span>
+                              <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
                             </span>
                           </div>
                         ))}
                       </div>
                     )}
-                    </div>
                   </div>
                 </section>
               </div>

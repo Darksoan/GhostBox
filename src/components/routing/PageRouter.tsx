@@ -339,7 +339,9 @@ export function PageRouter({
     if (targetPage === "backup") {
       return (
         <LazyBackupPage
-          games={appData.addedLibraryGames}
+          games={appData.addedLibraryGames.filter(
+            (game) => game.librarySource !== "steam-owned",
+          )}
           backupSettings={appData.backupSettings}
         />
       );
@@ -354,6 +356,8 @@ export function PageRouter({
           initialPage={appData.initialPage}
           onInitialPageChange={appData.setInitialPage}
           steamPath={appData.steamPathInput}
+          showSteamGames={appData.showSteamGames}
+          onShowSteamGamesChange={appData.setShowSteamGames}
           onSelectSteamPath={appData.handleSelectSteamPath}
           startupSettings={
             appData.startupSettings ?? {
@@ -378,6 +382,7 @@ export function PageRouter({
       return (
         <LazyProfilePage
           steamProfile={appData.steamProfile}
+          steamAccountStats={appData.steamAccountStats}
           isCloudProfileRestoring={appData.isCloudProfileRestoring}
           favoriteGames={appData.profileFavoriteGames}
           addedLibraryGames={appData.profileAddedLibraryGames}
