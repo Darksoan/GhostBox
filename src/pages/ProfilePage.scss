@@ -620,7 +620,7 @@
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-template-areas:
-      "top top top top top top top top achievements achievements achievements achievements";
+      "top top top top top top top top top top top top";
     align-items: start;
     gap: 16px 20px;
     width: min(100%, 1180px);
@@ -1147,8 +1147,10 @@
   }
 
   &__top-game-stats {
+    --top-game-last-achievement-size: 30px;
+
     display: grid;
-    grid-template-columns: minmax(104px, 0.75fr) minmax(112px, 0.8fr) minmax(150px, 1.5fr);
+    grid-template-columns: minmax(104px, 0.75fr) minmax(112px, 0.8fr) minmax(170px, 1fr) max-content;
     align-items: start;
     gap: 16px;
     min-width: 0;
@@ -1162,47 +1164,71 @@
   }
 
   &__top-game-stat--achievements {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "heading"
-      "progress";
-    align-items: start;
-    justify-content: space-between;
+    display: flex;
+    flex-direction: column;
     gap: 3px;
 
     > .profile-page__progress-track {
-      grid-area: progress;
-      align-self: center;
-      margin-top: -1px;
+      flex: 0 0 auto;
+      width: 100%;
+      margin-top: calc((var(--top-game-last-achievement-size) - 5px) / 2);
+      margin-bottom: calc((var(--top-game-last-achievement-size) - 5px) / 2);
     }
   }
 
   &__top-game-stat-heading {
     display: flex;
-    grid-area: heading;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 10px;
     min-width: 0;
+    min-height: 16px;
+    height: 16px;
+
+    .profile-page__top-game-stat-label {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .profile-page__top-game-stat-value {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: flex-end;
+      min-height: 16px;
+      height: 16px;
+      line-height: 1;
+    }
   }
 
   &__top-game-stat-label {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    min-height: 16px;
+    height: 16px;
     overflow: hidden;
     color: var(--text-secondary);
     font-size: 12px;
     font-weight: var(--weight-semibold);
     letter-spacing: 0.06em;
-    line-height: 1.1;
+    line-height: 1;
     text-overflow: ellipsis;
     text-transform: uppercase;
     white-space: nowrap;
+
+    svg {
+      display: block;
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+    }
   }
 
   &__top-game-stat-value {
+    display: flex;
+    align-items: center;
+    min-height: var(--top-game-last-achievement-size);
     overflow: hidden;
     color: var(--text-primary);
     font-size: 12px;
@@ -1250,6 +1276,27 @@
       object-fit: cover;
       background: var(--surface-deep);
     }
+  }
+
+  &__top-game-stat--last-achievements {
+    align-self: start;
+  }
+
+  &__top-game-last-achievements-list {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--top-game-last-achievement-size);
+    margin-top: 3px;
+    gap: 5px;
+    min-width: 0;
+  }
+
+
+
+  &__top-game-last-achievements-list &__showcase-achievement {
+    width: var(--top-game-last-achievement-size);
+    max-width: var(--top-game-last-achievement-size);
+    border-radius: var(--radius-sm);
   }
 
   &__recent-list {
@@ -2331,7 +2378,6 @@ html.no-backdrop-blur .profile-page {
     &__overview-console {
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
-        "achievements"
         "top";
     }
 
@@ -2347,7 +2393,10 @@ html.no-backdrop-blur .profile-page {
 
     &__top-game-stat--achievements {
       grid-column: 1 / -1;
-      grid-template-columns: minmax(0, 1fr);
+    }
+
+    &__top-game-stat--last-achievements {
+      grid-column: 1 / -1;
     }
 
     &__top-games-list {
@@ -2529,11 +2578,6 @@ html.no-backdrop-blur .profile-page {
 
     &__top-game-stat--achievements {
       grid-column: 1 / -1;
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-areas:
-        "heading"
-        "progress"
-        "last-achievement";
     }
 
     &__top-game-achievements {

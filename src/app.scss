@@ -2028,26 +2028,46 @@ p {
 
   &__notification-badge {
     position: absolute;
-    top: 1px;
-    right: 0;
+    top: 2px;
+    right: 1px;
     z-index: 1;
     display: inline-flex;
-    min-width: 14px;
-    height: 14px;
+    min-width: 15px;
+    height: 15px;
     align-items: center;
     justify-content: center;
-    padding: 0 3px;
+    padding: 0 4px;
     border-radius: var(--radius-pill);
     background: var(--danger);
     color: var(--text-primary);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
     line-height: 1;
     letter-spacing: 0;
     pointer-events: none;
     user-select: none;
+    box-shadow:
+      0 0 0 2px var(--background),
+      0 1px 4px color-mix(in srgb, var(--danger) 45%, transparent);
+    animation: header-notification-badge-in var(--motion-base) var(--ease) both;
+  }
+}
+
+@keyframes header-notification-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.25);
   }
 
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.header {
   /* Colored PNG — keep original message.png colors (no dim / no invert) */
   &__icon-button#{&}__feedback-button {
     opacity: 0.8;

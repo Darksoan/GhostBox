@@ -12,14 +12,17 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  Calendar,
   Check,
   ChevronDown,
+  Clock,
   Copy,
   Eye,
   EyeOff,
   Camera,
   Folder,
   Heart,
+  History,
   Layers,
   LibraryBig,
   Lock,
@@ -321,9 +324,6 @@ type ProfileAchievementHighlight = {
   unlockedAt?: string;
 };
 
-const showcaseAchievementMinLimit = 15;
-const showcaseAchievementMaxLimit = 32;
-const showcaseAchievementEstimatedSlotWidth = 54;
 const localAchievementHydrationLimit = 80;
 const localAchievementHydrationBatchSize = 5;
 let hasPreparedProfileOverviewData = false;
@@ -464,7 +464,7 @@ function ProfileAchievementShowcaseItem({
   return (
     <span
       ref={itemRef}
-      tabIndex={0}
+      tabIndex={onSelect ? 0 : -1}
       role={onSelect ? "button" : undefined}
       aria-pressed={isEditing && onSelect ? isSelected : undefined}
       aria-label={ariaLabel}
@@ -561,14 +561,10 @@ export function ProfilePage({
     useState<Map<string, GhostBoxGame>>(() => new Map());
   const [resolvedGameTitlesByAppId, setResolvedGameTitlesByAppId] =
     useState<Map<string, string>>(() => new Map());
-  const [showcaseAchievementLimit, setShowcaseAchievementLimit] = useState(
-    showcaseAchievementMinLimit
-  );
   const [isOverviewDataReady, setIsOverviewDataReady] = useState(
     () => hasPreparedProfileOverviewData
   );
   const loadMoreGamesRef = useRef<HTMLDivElement | null>(null);
-  const achievementShowcaseRef = useRef<HTMLDivElement | null>(null);
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
   const [isTabIndicatorReady, setIsTabIndicatorReady] = useState(false);
@@ -910,38 +906,6 @@ export function ProfilePage({
     setActiveCollectionId("overview");
   }, [activeCollectionId, profileCollections, userCollectionById]);
 
-  useEffect(() => {
-    if (!isOverviewActive) return;
-
-    const showcase = achievementShowcaseRef.current;
-    if (!showcase || typeof ResizeObserver === "undefined") return;
-
-    const updateShowcaseLimit = (width: number) => {
-      if (width <= 0) return;
-
-      const nextLimit = Math.min(
-        showcaseAchievementMaxLimit,
-        Math.max(
-          showcaseAchievementMinLimit,
-          Math.floor(width / showcaseAchievementEstimatedSlotWidth)
-        )
-      );
-
-      setShowcaseAchievementLimit((current) =>
-        current === nextLimit ? current : nextLimit
-      );
-    };
-
-    updateShowcaseLimit(showcase.getBoundingClientRect().width);
-
-    const observer = new ResizeObserver(([entry]) => {
-      updateShowcaseLimit(entry.contentRect.width);
-    });
-    observer.observe(showcase);
-
-    return () => observer.disconnect();
-  }, [isOverviewActive]);
-
   const getGamesForCollection = useCallback(
     (collectionId: string): GhostBoxGame[] => {
       if (collectionId === "overview") return enrichedAddedLibraryGames.slice(0, 12);
@@ -1063,63 +1027,6 @@ export function ProfilePage({
     gamesById,
     userCollectionById,
   ]);
-
-  const unlockedAchievementHighlights = useMemo<ProfileAchievementHighlight[]>(() => {
-    const highlightKeys = new Set<string>();
-    const unlockedHighlights: ProfileAchievementHighlight[] = [];
-
-    for (const game of profileAchievementGames) {
-      const unlockedAchievements = (game.achievementList ?? [])
-        .filter(isAchievementUnlocked)
-        .sort(
-          (left, right) =>
-            achievementUnlockedTime(right.unlockedAt) -
-            achievementUnlockedTime(left.unlockedAt)
-        );
-
-      for (const achievement of unlockedAchievements) {
-        if (!isAchievementUnlocked(achievement)) continue;
-
-        const key = achievementShowcaseKey(game, achievement);
-        if (highlightKeys.has(key)) continue;
-
-        const icon = achievementShowcaseIcon(achievement, true);
-        if (!icon) continue;
-
-        highlightKeys.add(key);
-        unlockedHighlights.push({
-          key,
-          game,
-          achievementId: achievement.name || achievement.title,
-          title: achievement.title,
-          description: achievement.description,
-          icon,
-          unlocked: true,
-          gameTitle: game.title,
-          globalPercent: achievement.globalPercent,
-          unlockedAt: achievement.unlockedAt,
-        });
-      }
-    }
-
-    return unlockedHighlights.sort((left, right) => {
-      const byDate =
-        achievementUnlockedTime(right.unlockedAt) -
-        achievementUnlockedTime(left.unlockedAt);
-      if (byDate !== 0) return byDate;
-      return (right.globalPercent ?? 100) - (left.globalPercent ?? 100);
-    });
-  }, [profileAchievementGames]);
-
-  const achievementHighlights = useMemo<ProfileAchievementHighlight[]>(() => {
-    return unlockedAchievementHighlights.slice(0, showcaseAchievementLimit);
-  }, [showcaseAchievementLimit, unlockedAchievementHighlights]);
-
-  const visibleAchievementHighlights = achievementHighlights;
-  const showcaseSkeletonCount = Math.max(
-    0,
-    showcaseAchievementLimit - visibleAchievementHighlights.length
-  );
 
   useEffect(() => {
     return () => {
@@ -1624,39 +1531,6 @@ export function ProfilePage({
                 aria-label={t("profile.overview")}
               >
                 <section className="profile-page__overview-console">
-                  <div className="profile-page__achievement-rail">
-                    <div className="profile-page__overview-panel profile-page__overview-panel--showcase">
-                      <div
-                        ref={achievementShowcaseRef}
-                        className="profile-page__achievement-showcase"
-                      >
-                        {visibleAchievementHighlights.map((achievement) => (
-                          <ProfileAchievementShowcaseItem
-                            key={achievement.key}
-                            achievement={achievement}
-                            onSelect={
-                              onOpenGameAchievements && achievement.game
-                                ? () => {
-                                    onOpenGameAchievements(
-                                      achievement.game!,
-                                      achievement.achievementId
-                                    );
-                                  }
-                                : undefined
-                            }
-                          />
-                        ))}
-                        {Array.from({ length: showcaseSkeletonCount }, (_, index) => (
-                          <span
-                            key={`showcase-skeleton-${index}`}
-                            className="profile-page__showcase-achievement profile-page__showcase-achievement--empty"
-                            aria-hidden="true"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="profile-page__top-games-console">
                     <div className="profile-page__overview-panel profile-page__overview-panel--top-games">
                     {topGames.length > 0 ? (
@@ -1673,6 +1547,35 @@ export function ProfilePage({
                             achievementTotal > 0
                               ? (achievementUnlocked / achievementTotal) * 100
                               : 0;
+                          const latestAchievements = (game.achievementList ?? [])
+                            .filter(isAchievementUnlocked)
+                            .slice()
+                            .sort((left, right) => {
+                              const unlockTimeDelta =
+                                achievementUnlockedTime(right.unlockedAt) -
+                                achievementUnlockedTime(left.unlockedAt);
+                              if (unlockTimeDelta !== 0) return unlockTimeDelta;
+                              return (right.globalPercent ?? 100) -
+                                (left.globalPercent ?? 100);
+                            })
+                            .flatMap<ProfileAchievementHighlight>((achievement) => {
+                              const icon = achievementShowcaseIcon(achievement, true);
+                              if (!icon) return [];
+
+                              return [{
+                                key: achievementShowcaseKey(game, achievement),
+                                game: displayGame,
+                                achievementId: achievement.name || achievement.title,
+                                title: achievement.title,
+                                description: achievement.description,
+                                icon,
+                                unlocked: true,
+                                gameTitle: displayGame.title,
+                                globalPercent: achievement.globalPercent,
+                                unlockedAt: achievement.unlockedAt,
+                              }];
+                            })
+                            .slice(0, 5);
                           return (
                             <button
                               key={game.id}
@@ -1702,6 +1605,7 @@ export function ProfilePage({
                                 <span className="profile-page__top-game-stats">
                                   <span className="profile-page__top-game-stat">
                                     <span className="profile-page__top-game-stat-label">
+                                      <Clock size={14} strokeWidth={2.0} aria-hidden="true" />
                                       {appearance.language === "en"
                                         ? "Play time"
                                         : "Tempo de jogo"}
@@ -1714,6 +1618,7 @@ export function ProfilePage({
                                   </span>
                                   <span className="profile-page__top-game-stat">
                                     <span className="profile-page__top-game-stat-label">
+                                      <Calendar size={14} strokeWidth={2.0} aria-hidden="true" />
                                       {appearance.language === "en"
                                         ? "Last session"
                                         : "Última sessão"}
@@ -1750,6 +1655,31 @@ export function ProfilePage({
                                       />
                                     </span>
                                   </span>
+                                  {latestAchievements.length > 0 ? (
+                                    <span
+                                      className="profile-page__top-game-stat profile-page__top-game-stat--last-achievements"
+                                      aria-label={
+                                        appearance.language === "en"
+                                          ? `Latest achievements for ${displayGame.title}`
+                                          : `Últimas conquistas de ${displayGame.title}`
+                                      }
+                                    >
+                                      <span className="profile-page__top-game-stat-label">
+                                        <History size={14} strokeWidth={2.0} aria-hidden="true" />
+                                        {appearance.language === "en"
+                                          ? "Last achievements"
+                                          : "Últimas conquistas"}
+                                      </span>
+                                      <span className="profile-page__top-game-last-achievements-list">
+                                        {latestAchievements.map((achievement) => (
+                                          <ProfileAchievementShowcaseItem
+                                            key={achievement.key}
+                                            achievement={achievement}
+                                          />
+                                        ))}
+                                      </span>
+                                    </span>
+                                  ) : null}
                                 </span>
                               </span>
                             </button>
