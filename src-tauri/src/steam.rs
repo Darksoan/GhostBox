@@ -21,18 +21,13 @@ const STEAM_ACHIEVEMENT_SCAN_CONCURRENCY: usize = 8;
 const STEAM_ACHIEVEMENT_CACHE_MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
 const STEAM_NO_STATS_CACHE_MAX_AGE_SECONDS: u64 = 30 * 24 * 60 * 60;
 const STEAM_MORELIKE_CACHE_MAX_AGE_SECONDS: u64 = 14 * 24 * 60 * 60;
-const STEAM_MORELIKE_MIN_FETCH_INTERVAL_MS: u64 = 4_000;
 const STEAM_MORELIKE_MAX_RESULTS: usize = 12;
 const MAX_PROFILE_AVATAR_BYTES: usize = 512 * 1024;
 const STEAM_OPENID_ENDPOINT: &str = "https://steamcommunity.com/openid/login";
-const STEAM_WISHLIST_USER_AGENT: &str = "Mozilla/5.0 GhostBox/0.1";
 
 static STEAM_SIGN_IN_ACTIVE: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
 static STEAM_STATS_SCAN_ACTIVE: std::sync::OnceLock<std::sync::Mutex<HashSet<String>>> =
     std::sync::OnceLock::new();
-static STEAM_MORELIKE_FETCH_LOCK: std::sync::OnceLock<
-    std::sync::Mutex<std::time::Instant>,
-> = std::sync::OnceLock::new();
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct SteamOwnedGameStats {
@@ -122,6 +117,7 @@ pub(crate) struct SteamAccountStats {
     private: bool,
     has_api_key: bool,
     scan_in_progress: bool,
+    next_poll_after: u64,
     recent_achievements: Vec<SteamShowcaseAchievement>,
     /// Per-game Steam playtimes used to sync local playtime snapshot.
     owned_playtimes: Vec<SteamOwnedPlaytime>,
@@ -269,7 +265,96 @@ fn save_steam_profile(
     Ok(profile)
 }
 
+async fn fetch_steam_profile_from_proxy(
+    proxy_url: &str,
+    steam_id: &str,
+) -> Result<serde_json::Value, String> {
+    let value = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/player-summary"))
+        .query(&[("steamId", steam_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    if value.get("steamId").and_then(|value| value.as_str()) != Some(steam_id) {
+        return Err("Steam profile ID mismatch in proxy response".to_string());
+    }
+
+    let display_name = value
+        .get("displayName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let avatar_source = value
+        .get("avatarUrl")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let profile_url = value
+        .get("profileUrl")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if display_name.is_empty() && avatar_source.is_empty() {
+        return Err("Steam profile missing from proxy response".to_string());
+    }
+    let avatar_source = reqwest::Url::parse(&avatar_source)
+        .ok()
+        .filter(|url| {
+            url.scheme() == "https"
+                && url
+                    .host_str()
+                    .is_some_and(|host| host == "steamstatic.com" || host.ends_with(".steamstatic.com"))
+        })
+        .map(|url| url.to_string())
+        .unwrap_or_default();
+    let profile_url = reqwest::Url::parse(&profile_url)
+        .ok()
+        .filter(|url| {
+            url.scheme() == "https"
+                && url.host_str().is_some_and(|host| {
+                    host == "steamcommunity.com" || host.ends_with(".steamcommunity.com")
+                })
+        })
+        .map(|url| url.to_string())
+        .unwrap_or_default();
+    let avatar_url = resolve_steam_profile_avatar_url(&avatar_source).await;
+    Ok(serde_json::json!({
+        "steamId": steam_id,
+        "displayName": if display_name.is_empty() {
+            format!("Steam {steam_id}")
+        } else {
+            display_name
+        },
+        "avatarUrl": avatar_url,
+        "profileUrl": if profile_url.is_empty() {
+            format!("https://steamcommunity.com/profiles/{steam_id}")
+        } else {
+            profile_url
+        }
+    }))
+}
+
 async fn fetch_steam_profile(steam_id: &str) -> Result<serde_json::Value, String> {
+    let proxy_url = load_steam_stats_proxy_url();
+    if !proxy_url.is_empty() {
+        if let Ok(profile) = fetch_steam_profile_from_proxy(&proxy_url, steam_id).await {
+            return Ok(profile);
+        }
+    }
+
     let profile_url = format!("https://steamcommunity.com/profiles/{steam_id}");
     let xml = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
@@ -340,10 +425,10 @@ fn should_refresh_achievement_entry(
         return true;
     }
 
-    let max_age = if entry.last_error.as_deref() == Some("no_stats") {
-        STEAM_NO_STATS_CACHE_MAX_AGE_SECONDS
-    } else {
-        STEAM_ACHIEVEMENT_CACHE_MAX_AGE_SECONDS
+    let max_age = match entry.last_error.as_deref() {
+        Some("no_stats") => STEAM_NO_STATS_CACHE_MAX_AGE_SECONDS,
+        Some(_) => 15 * 60,
+        None => STEAM_ACHIEVEMENT_CACHE_MAX_AGE_SECONDS,
     };
     now.saturating_sub(entry.last_fetched_at) > max_age
 }
@@ -440,6 +525,13 @@ fn build_steam_account_stats(
         private,
         has_api_key,
         scan_in_progress,
+        next_poll_after: if scan_in_progress {
+            60
+        } else if failed_games > 0 {
+            15 * 60
+        } else {
+            0
+        },
         recent_achievements: Vec::new(),
         owned_playtimes,
         achievements: Vec::new(),
@@ -581,9 +673,17 @@ async fn fetch_steam_game_achievement_counts(
     steam_id: String,
     api_key: String,
     game: SteamOwnedGameStats,
+    previous: Option<SteamAchievementCacheEntry>,
 ) -> (String, SteamAchievementCacheEntry) {
     let app_id = game.appid.to_string();
     let now = steam_unix_timestamp();
+    let stale_entry = |last_error: &str| {
+        let mut entry = previous.clone().unwrap_or_default();
+        entry.playtime_forever = game.playtime_forever;
+        entry.last_fetched_at = now;
+        entry.last_error = Some(last_error.to_string());
+        entry
+    };
     let response = client
         .get("https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/")
         .query(&[
@@ -597,12 +697,7 @@ async fn fetch_steam_game_achievement_counts(
     let Ok(response) = response else {
         return (
             app_id,
-            SteamAchievementCacheEntry {
-                playtime_forever: game.playtime_forever,
-                last_fetched_at: now,
-                last_error: Some("request_failed".to_string()),
-                ..Default::default()
-            },
+            stale_entry("request_failed"),
         );
     };
 
@@ -612,16 +707,18 @@ async fn fetch_steam_game_achievement_counts(
         } else {
             "http_error"
         };
-        return (
-            app_id,
+        let entry = if last_error == "no_stats" {
             SteamAchievementCacheEntry {
                 playtime_forever: game.playtime_forever,
                 has_achievements: false,
                 last_fetched_at: now,
                 last_error: Some(last_error.to_string()),
                 ..Default::default()
-            },
-        );
+            }
+        } else {
+            stale_entry(last_error)
+        };
+        return (app_id, entry);
     }
 
     let value = match response.json::<serde_json::Value>().await {
@@ -629,12 +726,7 @@ async fn fetch_steam_game_achievement_counts(
         Err(_) => {
             return (
                 app_id,
-                SteamAchievementCacheEntry {
-                    playtime_forever: game.playtime_forever,
-                    last_fetched_at: now,
-                    last_error: Some("invalid_json".to_string()),
-                    ..Default::default()
-                },
+                stale_entry("invalid_json"),
             )
         }
     };
@@ -729,12 +821,14 @@ fn start_steam_achievement_stats_scan(
         for chunk in pending.chunks(STEAM_ACHIEVEMENT_SCAN_CONCURRENCY) {
             let mut handles = Vec::new();
             for game in chunk.iter().cloned() {
+                let previous = cache.games.get(&game.appid.to_string()).cloned();
                 handles.push(tauri::async_runtime::spawn(
                     fetch_steam_game_achievement_counts(
                         client.clone(),
                         steam_id.clone(),
                         api_key.clone(),
                         game,
+                        previous,
                     ),
                 ));
             }
@@ -1152,29 +1246,21 @@ pub async fn steam_get_player_level(
         return Err("Steam ID is required".to_string());
     }
 
+    let proxy_url = load_steam_stats_proxy_url();
+    if !proxy_url.is_empty() {
+        return fetch_steam_level_from_proxy(&proxy_url, &steam_id).await;
+    }
+
     let api_key = load_steam_web_api_key(&app);
+    if api_key.is_empty() {
+        return Err("Steam player level unavailable without Web API or stats proxy".to_string());
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|error| error.to_string())?;
-
-    if !api_key.is_empty() {
-        if let Ok(level) = fetch_steam_level(&client, &steam_id, &api_key).await {
-            return Ok(level);
-        }
-    }
-
-    let proxy_url = load_steam_stats_proxy_url();
-    if !proxy_url.is_empty() {
-        if let Ok(level) = fetch_steam_level_from_proxy(&proxy_url, &steam_id).await {
-            return Ok(level);
-        }
-    }
-
-    // Do not scrape steamcommunity profile HTML (rate-limits / IP blocks).
-    // Official Web API + stats proxy only.
-    let _ = client;
-    Err("Steam player level unavailable without Web API or stats proxy".to_string())
+    fetch_steam_level(&client, &steam_id, &api_key).await
 }
 
 #[tauri::command]
@@ -1187,15 +1273,30 @@ pub async fn steam_get_account_stats(
         return Err("Steam ID is required".to_string());
     }
 
-    // Always refresh playtimes from Steam owned-games (proxy or API key).
-    if let Ok(owned_games) = resolve_steam_owned_games_for_playtime(&app, &steam_id).await {
-        seed_playtimes_from_steam_owned_games(&app, &owned_games);
-    }
-
     let proxy_url = load_steam_stats_proxy_url();
+    // Prefer the shared Worker; never fan-out GetPlayerAchievements from the desktop
+    // when a proxy is configured (avoids N× Steam API rate-limit spikes on proxy blips).
     if !proxy_url.is_empty() {
-        if let Ok(stats) = fetch_steam_account_stats_from_proxy(&proxy_url, &steam_id).await {
-            return Ok(stats);
+        match fetch_steam_account_stats_from_proxy(&proxy_url, &steam_id).await {
+            Ok(stats) => {
+                let owned_games = stats
+                    .owned_playtimes
+                    .iter()
+                    .filter_map(|playtime| {
+                        Some(SteamOwnedGameStats {
+                            appid: playtime.app_id.parse().ok()?,
+                            name: playtime.name.clone(),
+                            playtime_forever: playtime.playtime_forever,
+                            rtime_last_played: playtime.rtime_last_played,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                seed_playtimes_from_steam_owned_games(&app, &owned_games);
+                return Ok(stats);
+            }
+            Err(error) => {
+                return Err(format!("Steam stats proxy is temporarily unavailable: {error}"));
+            }
         }
     }
 
@@ -1218,16 +1319,7 @@ pub async fn steam_get_account_stats(
         .map_err(|error| error.to_string())?;
     let owned_games = match fetch_steam_owned_games(&client, &steam_id, &api_key).await {
         Ok(games) => games,
-        Err(_) => {
-            return Ok(build_steam_account_stats(
-                &steam_id,
-                &[],
-                &cache,
-                true,
-                true,
-                false,
-            ));
-        }
+        Err(error) => return Err(error),
     };
 
     seed_playtimes_from_steam_owned_games(&app, &owned_games);
@@ -1259,59 +1351,32 @@ pub async fn steam_get_account_stats(
     ))
 }
 
-async fn fetch_steam_wishlist_titles(steam_id: &str) -> HashMap<String, String> {
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+async fn fetch_steam_wishlist_from_proxy(
+    proxy_url: &str,
+    steam_id: &str,
+) -> Result<Vec<serde_json::Value>, String> {
+    let value = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
         .build()
-    else {
-        return HashMap::new();
-    };
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/wishlist"))
+        .query(&[("steamId", steam_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
 
-    let mut titles = HashMap::new();
-    for page in 0..10 {
-        let url = format!(
-            "https://store.steampowered.com/wishlist/profiles/{steam_id}/wishlistdata/?p={page}"
-        );
-        let Ok(response) = client
-            .get(url)
-            .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
-            .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
-            .send()
-            .await
-        else {
-            break;
-        };
-        if !response.status().is_success() {
-            break;
-        }
-        let Ok(payload) = response.json::<serde_json::Value>().await else {
-            break;
-        };
-        let Some(items) = payload.as_object() else {
-            break;
-        };
-        if items.is_empty() {
-            break;
-        }
-
-        for (key, item) in items {
-            let app_id = item
-                .get("appid")
-                .and_then(|value| value.as_u64())
-                .map(|value| value.to_string())
-                .unwrap_or_else(|| key.to_string());
-            let title = text_value(item.get("name"));
-            if !app_id.is_empty() && !title.is_empty() {
-                titles.insert(app_id, title);
-            }
-        }
-
-        if items.len() < 100 {
-            break;
-        }
-    }
-
-    titles
+    let items = value
+        .get("items")
+        .and_then(|items| items.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(items)
 }
 
 #[tauri::command]
@@ -1321,96 +1386,42 @@ pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Valu
         return Ok(Vec::new());
     }
 
-    let url =
-        format!("https://api.steampowered.com/IWishlistService/GetWishlist/v1/?steamid={steam_id}");
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|error| error.to_string())?
-        .get(url)
-        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
-        .send()
-        .await;
-
-    let Ok(response) = response else {
-        return Ok(Vec::new());
-    };
-    if !response.status().is_success() {
+    let proxy_url = load_steam_stats_proxy_url();
+    if proxy_url.is_empty() {
         return Ok(Vec::new());
     }
+    match fetch_steam_wishlist_from_proxy(&proxy_url, steam_id).await {
+        Ok(items) => Ok(items),
+        Err(_) => Ok(Vec::new()),
+    }
+}
 
-    let Ok(payload) = response.json::<serde_json::Value>().await else {
-        return Ok(Vec::new());
-    };
-    let Some(items) = payload
-        .get("response")
-        .and_then(|response| response.get("items"))
-        .and_then(|items| items.as_array())
-    else {
-        return Ok(Vec::new());
-    };
+async fn fetch_steam_recommended_tags_from_proxy(
+    proxy_url: &str,
+    steam_id: &str,
+) -> Result<Vec<serde_json::Value>, String> {
+    let value = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/recommended-tags"))
+        .query(&[("steamId", steam_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
 
-    let wishlist_titles = fetch_steam_wishlist_titles(steam_id).await;
-
-    let mut wishlist = items
-        .iter()
-        .filter_map(|item| {
-            let app_id = item.get("appid")?.as_u64()?.to_string();
-            let priority = item
-                .get("priority")
-                .and_then(|value| value.as_i64())
-                .unwrap_or(0);
-            let date_added = item
-                .get("date_added")
-                .and_then(|value| value.as_i64())
-                .unwrap_or(0);
-
-            let mut wishlist_item = serde_json::json!({
-                "appId": app_id,
-                "priority": priority,
-                "dateAdded": date_added
-            });
-            if let Some(title) = wishlist_titles.get(
-                wishlist_item
-                    .get("appId")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default(),
-            ) {
-                wishlist_item["title"] = serde_json::Value::String(title.clone());
-            }
-
-            Some(wishlist_item)
-        })
-        .collect::<Vec<_>>();
-
-    wishlist.sort_by(|left, right| {
-        let left_priority = left
-            .get("priority")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0);
-        let right_priority = right
-            .get("priority")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0);
-        let left_date = left
-            .get("dateAdded")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0);
-        let right_date = right
-            .get("dateAdded")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0);
-
-        match (left_priority > 0, right_priority > 0) {
-            (true, true) => left_priority.cmp(&right_priority),
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            (false, false) => right_date.cmp(&left_date),
-        }
-    });
-
-    Ok(wishlist)
+    let tags = value
+        .get("tags")
+        .and_then(|tags| tags.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(tags)
 }
 
 #[tauri::command]
@@ -1422,68 +1433,14 @@ pub async fn steam_get_recommended_tags_for_user(
         return Ok(Vec::new());
     }
 
-    let url = format!(
-        "https://api.steampowered.com/IStoreService/GetRecommendedTagsForUser/v1/?steamid={steam_id}"
-    );
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|error| error.to_string())?
-        .get(url)
-        .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
-        .send()
-        .await;
-
-    let Ok(response) = response else {
-        return Ok(Vec::new());
-    };
-    if !response.status().is_success() {
+    let proxy_url = load_steam_stats_proxy_url();
+    if proxy_url.is_empty() {
         return Ok(Vec::new());
     }
-
-    let Ok(payload) = response.json::<serde_json::Value>().await else {
-        return Ok(Vec::new());
-    };
-    let tags = payload
-        .get("response")
-        .and_then(|response| response.get("tags"))
-        .or_else(|| payload.get("tags"))
-        .and_then(|tags| tags.as_array())
-        .map(|tags| tags.to_vec())
-        .unwrap_or_default();
-
-    Ok(tags)
-}
-
-fn parse_steam_similar_app_ids(html: &str, source_app_id: &str) -> Vec<String> {
-    let marker = "data-ds-appid=\"";
-    let mut rest = html;
-    let mut seen = HashSet::new();
-    let mut app_ids = Vec::new();
-
-    while let Some(marker_index) = rest.find(marker) {
-        let value_start = marker_index + marker.len();
-        let value = &rest[value_start..];
-        let Some(value_end) = value.find('"') else {
-            break;
-        };
-
-        let app_id = &value[..value_end];
-        if app_id != source_app_id
-            && app_id.chars().all(|ch| ch.is_ascii_digit())
-            && seen.insert(app_id.to_string())
-        {
-            app_ids.push(app_id.to_string());
-            if app_ids.len() >= STEAM_MORELIKE_MAX_RESULTS {
-                break;
-            }
-        }
-
-        rest = &value[value_end + 1..];
+    match fetch_steam_recommended_tags_from_proxy(&proxy_url, steam_id).await {
+        Ok(tags) => Ok(tags),
+        Err(_) => Ok(Vec::new()),
     }
-
-    app_ids
 }
 
 fn unix_timestamp_seconds() -> u64 {
@@ -1543,69 +1500,40 @@ fn store_morelike_app_ids(app: &tauri::AppHandle, app_id: &str, app_ids: &[Strin
     write_morelike_cache(app, &cache);
 }
 
-async fn throttle_morelike_fetch() {
-    let lock = STEAM_MORELIKE_FETCH_LOCK
-        .get_or_init(|| std::sync::Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(60)));
-    let wait_ms = {
-        let Ok(mut last_fetch) = lock.lock() else {
-            return;
-        };
-        let elapsed = last_fetch.elapsed();
-        let min_interval = std::time::Duration::from_millis(STEAM_MORELIKE_MIN_FETCH_INTERVAL_MS);
-        if elapsed < min_interval {
-            (min_interval - elapsed).as_millis() as u64
-        } else {
-            0
-        }
-    };
-
-    if wait_ms > 0 {
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            std::thread::sleep(std::time::Duration::from_millis(wait_ms));
-        })
-        .await;
-    }
-
-    if let Ok(mut last_fetch) = lock.lock() {
-        *last_fetch = std::time::Instant::now();
-    }
-}
-
-async fn fetch_steam_similar_app_ids_live(app_id: &str) -> Vec<String> {
-    throttle_morelike_fetch().await;
-
-    let url = format!(
-        "https://store.steampowered.com/recommended/morelike/app/{app_id}/?l=english&cc=br"
-    );
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(8))
+async fn fetch_steam_similar_app_ids_from_proxy(
+    proxy_url: &str,
+    app_id: &str,
+) -> Result<Vec<String>, String> {
+    let value = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
         .build()
-        .ok()
-        .map(|client| {
-            client
-                .get(url)
-                .header(reqwest::header::USER_AGENT, STEAM_WISHLIST_USER_AGENT)
-                .header(reqwest::header::ACCEPT, "text/html,*/*")
-                .header(
-                    reqwest::header::COOKIE,
-                    "birthtime=568022401; lastagecheckage=1-January-1988; wants_mature_content=1",
-                )
-        });
+        .map_err(|error| error.to_string())?
+        .get(format!("{proxy_url}/steam/similar"))
+        .query(&[("appId", app_id)])
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| error.to_string())?;
 
-    let Some(request) = response else {
-        return Vec::new();
-    };
-    let Ok(response) = request.send().await else {
-        return Vec::new();
-    };
-    if !response.status().is_success() {
-        return Vec::new();
-    }
-    let Ok(html) = response.text().await else {
-        return Vec::new();
-    };
-
-    parse_steam_similar_app_ids(&html, app_id)
+    let app_ids = value
+        .get("appIds")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .filter(|value| value.chars().all(|ch| ch.is_ascii_digit()))
+                .map(ToOwned::to_owned)
+                .take(STEAM_MORELIKE_MAX_RESULTS)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(app_ids)
 }
 
 #[tauri::command]
@@ -1622,10 +1550,20 @@ pub async fn steam_get_similar_app_ids(
         return Ok(cached);
     }
 
-    // Minimal scraping: one page, long-lived cache, global throttle between fetches.
-    let app_ids = fetch_steam_similar_app_ids_live(&app_id).await;
-    store_morelike_app_ids(&app, &app_id, &app_ids);
-    Ok(app_ids)
+    let proxy_url = load_steam_stats_proxy_url();
+    if proxy_url.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    match fetch_steam_similar_app_ids_from_proxy(&proxy_url, &app_id).await {
+        Ok(app_ids) => {
+            if !app_ids.is_empty() {
+                store_morelike_app_ids(&app, &app_id, &app_ids);
+            }
+            Ok(app_ids)
+        }
+        Err(_) => Ok(Vec::new()),
+    }
 }
 
 #[tauri::command]

@@ -121,6 +121,7 @@ export type SteamAccountStats = {
   private: boolean;
   hasApiKey: boolean;
   scanInProgress: boolean;
+  nextPollAfter?: number;
   recentAchievements: SteamRecentAchievement[];
   ownedPlaytimes?: SteamOwnedPlaytime[];
   achievements?: SteamGameAchievementSummary[];

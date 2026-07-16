@@ -6,3 +6,11 @@ compatibility_date = "2026-06-17"
 binding = "STATS_CACHE"
 id = "b5996f474a2a4196b375960235599e70"
 preview_id = "183f9da6fca2465a934a59a4c3a502bb"
+
+[[durable_objects.bindings]]
+name = "SCAN_COORDINATOR"
+class_name = "ScanCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ScanCoordinator"]

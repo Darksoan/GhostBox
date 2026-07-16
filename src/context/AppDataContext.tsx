@@ -503,6 +503,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (!steamId) return;
 
     let cancelled = false;
+    let pollTimer: number | undefined;
     const applyStats = (stats: SteamAccountStats) => {
       if (cancelled) return;
       steamAccountStatsRef.current = stats;
@@ -517,37 +518,53 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const schedulePoll = (
+      stats?: SteamAccountStats | null,
+      retryDelaySeconds?: number,
+    ) => {
+      if (cancelled) return;
+      const needsPoll =
+        retryDelaySeconds !== undefined ||
+        !stats ||
+        stats.scanInProgress ||
+        stats.pendingGames > 0 ||
+        (stats.nextPollAfter ?? 0) > 0;
+      if (!needsPoll) {
+        if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+        pollTimer = undefined;
+        return;
+      }
+      const requestedDelay =
+        ((retryDelaySeconds ?? stats?.nextPollAfter) || 60) * 1_000;
+      const delay = Math.max(30_000, Math.min(requestedDelay, 24 * 60 * 60_000));
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+      pollTimer = window.setTimeout(() => {
+        pollTimer = undefined;
+        void refreshStats();
+      }, delay);
+    };
+
     const refreshStats = () =>
       ghostboxApi
         .getSteamAccountStats(steamId)
         .then((stats) => {
           if (stats) applyStats(stats);
+          schedulePoll(stats);
         })
-        .catch(() => undefined);
+        .catch(() => schedulePoll(steamAccountStatsRef.current, 5 * 60));
 
     void refreshStats();
 
     const unlisten = ghostboxApi.onSteamAccountStatsUpdated((stats) => {
-      if (stats.steamId === steamId) applyStats(stats);
+      if (stats.steamId === steamId) {
+        applyStats(stats);
+        schedulePoll(stats);
+      }
     });
-
-    // Proxy scan continues in the background; re-poll until complete so Profile
-    // metrics and remote achievements update without restarting the app.
-    const pollId = window.setInterval(() => {
-      if (cancelled) return;
-      const current = steamAccountStatsRef.current;
-      const needsPoll =
-        !current ||
-        current.scanInProgress ||
-        current.pendingGames > 0 ||
-        (current.gamesCount > 0 && current.unlockedAchievements === 0);
-      if (!needsPoll) return;
-      void refreshStats();
-    }, 12_000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(pollId);
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer);
       unlisten();
     };
   }, [steamProfile?.steamId]);

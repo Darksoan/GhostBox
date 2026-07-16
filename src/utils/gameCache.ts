@@ -196,7 +196,9 @@ export function loadGameReviewsCached(
 
   const request = loadGameReviews(gameId, language, reviewType)
     .then((result) => {
-      gameReviewsCache.set(cacheKey, result);
+      if (result.success === 1) {
+        gameReviewsCache.set(cacheKey, result);
+      }
       return result;
     })
     .finally(() => {
