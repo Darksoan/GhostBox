@@ -724,14 +724,20 @@ async function storeJsonFetch(
       headers: {
         accept,
         "user-agent": storeUserAgent,
+        // Steam's Store endpoints are more reliable with the same mature-content
+        // cookie used by the similar-games route, especially from Cloudflare POPs.
+        cookie:
+          "birthtime=568022401; lastagecheckage=1-January-1988; wants_mature_content=1",
       },
     });
-  } catch {
+  } catch (error) {
+    console.warn("Steam store request failed", endpoint, error instanceof Error ? error.message : String(error));
     recordMetric("upstreamErrors");
     const retryAt = await recordCircuitFailure(env, endpoint);
     throw new SteamRequestError(`Steam store request failed: ${endpoint}`, undefined, retryAt);
   }
   if (!response.ok) {
+    console.warn("Steam store HTTP error", endpoint, response.status);
     if (response.status === 429) recordMetric("steam429");
     if (response.status >= 500) recordMetric("steam5xx");
     recordMetric("upstreamErrors");
@@ -745,7 +751,8 @@ async function storeJsonFetch(
     const value = await response.json<Record<string, unknown>>();
     await clearCircuit(env, endpoint);
     return value;
-  } catch {
+  } catch (error) {
+    console.warn("Steam store invalid JSON", endpoint, error instanceof Error ? error.message : String(error));
     recordMetric("upstreamErrors");
     const retryAt = await recordCircuitFailure(env, endpoint);
     throw new SteamRequestError(`Invalid Steam store response: ${endpoint}`, undefined, retryAt);
@@ -770,6 +777,15 @@ function reviewsResponseValid(value: Record<string, unknown> | null | undefined)
   return Number(value?.success) === 1 && Array.isArray(value?.reviews);
 }
 
+function logInvalidReviewsResponse(context: string, value: Record<string, unknown> | null | undefined) {
+  if (reviewsResponseValid(value)) return;
+  console.warn("Invalid Steam reviews response", context, {
+    success: value?.success,
+    keys: value ? Object.keys(value).slice(0, 12) : [],
+    error: value?.error,
+  });
+}
+
 async function fetchStoreReviews(
   appId: string,
   language: string,
@@ -785,7 +801,7 @@ async function fetchStoreReviews(
   url.searchParams.set("num_per_page", "60");
   url.searchParams.set("review_type", reviewType);
   url.searchParams.set("purchase_type", purchaseType);
-  return storeJsonFetch(url.toString(), env, "store-reviews");
+  return storeJsonFetch(url.toString(), env, "store-reviews-v2");
 }
 
 async function fetchGameReviewsWithFallbacks(
@@ -798,6 +814,7 @@ async function fetchGameReviewsWithFallbacks(
   let best: Record<string, unknown> | null = null;
   try {
     best = await fetchStoreReviews(appId, language, reviewType, primaryFilter, "steam", env);
+    logInvalidReviewsResponse(`${language}:${primaryFilter}:steam`, best);
     if (!reviewsResponseValid(best)) best = null;
     if (!reviewsEmpty(best) || reviewsHasSummary(best)) return best;
   } catch {
@@ -828,6 +845,7 @@ async function fetchGameReviewsWithFallbacks(
         fallbackPurchase,
         env
       );
+      logInvalidReviewsResponse(`${fallbackLanguage}:${fallbackFilter}:${fallbackPurchase}`, result);
       if (!reviewsResponseValid(result)) continue;
       if (!reviewsEmpty(result) || reviewsHasSummary(result)) return result;
       if (!best) best = result;
@@ -847,7 +865,7 @@ async function fetchReviewHistogram(appId: string, env: Env) {
   const url = new URL(`https://store.steampowered.com/appreviewhistogram/${appId}`);
   url.searchParams.set("json", "1");
   url.searchParams.set("l", "portuguese");
-  const histogram = await storeJsonFetch(url.toString(), env, "store-review-histogram");
+  const histogram = await storeJsonFetch(url.toString(), env, "store-review-histogram-v2");
   if (Number(histogram.success) !== 1) return undefined;
   return histogram.results;
 }

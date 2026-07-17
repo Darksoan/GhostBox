@@ -3,14 +3,24 @@ import { getGameAppId } from "../utils/image";
 import type { GhostBoxGame } from "../data";
 import { ghostboxApi } from "../lib/ghostboxApi";
 
-const gameIconUrlCacheKey = "ghostbox:game-icon-url-cache:v1";
+const gameIconUrlCacheKey = "ghostbox:game-icon-url-cache:v2";
 const legacyEdenGameIconUrlCacheKey = "eden:game-icon-url-cache:v1";
 const legacyGameIconUrlCacheKey = "piratebox:game-icon-url-cache:v1";
 const gameIconUrlCacheLimit = 300;
 const cache = new Map<string, string>();
 const requestCache = new Map<string, Promise<string | null>>();
 const listeners = new Set<() => void>();
+const queuedAppIds = new Set<string>();
 let storedCacheWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+let batchLoadTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function isSteamClientIconUrl(appId: string, url: string) {
+  return (
+    url.startsWith("https://") &&
+    url.includes(`steamcommunity/public/images/apps/${appId}/`) &&
+    /\.ico(?:[?#].*)?$/i.test(url)
+  );
+}
 
 function readStoredCache() {
   if (typeof window === "undefined") return;
@@ -24,7 +34,7 @@ function readStoredCache() {
     ) as Record<string, string>;
 
     Object.entries(parsed).forEach(([appId, url]) => {
-      if (/^\d+$/.test(appId) && typeof url === "string" && url) {
+      if (/^\d+$/.test(appId) && typeof url === "string" && isSteamClientIconUrl(appId, url)) {
         cache.set(appId, url);
       }
     });
@@ -60,25 +70,75 @@ function notifyListeners() {
   listeners.forEach((listener) => listener());
 }
 
+function storeResolvedIcons(result: Record<string, string>) {
+  let changed = false;
+  const validResult: Record<string, string> = {};
+
+  Object.entries(result).forEach(([appId, url]) => {
+    if (/^\d+$/.test(appId) && typeof url === "string" && isSteamClientIconUrl(appId, url)) {
+      cache.set(appId, url);
+      validResult[appId] = url;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    scheduleStoredCacheWrite();
+    notifyListeners();
+  }
+
+  return validResult;
+}
+
+function scheduleBatchLoad() {
+  if (batchLoadTimeout) return;
+
+  batchLoadTimeout = setTimeout(() => {
+    batchLoadTimeout = null;
+    const appIds = [...queuedAppIds].filter((appId) => !cache.has(appId));
+    queuedAppIds.clear();
+    if (!appIds.length) return;
+
+    const request = ghostboxApi
+      .getGameIconUrls(appIds)
+      .then(storeResolvedIcons)
+      .catch(() => ({} as Record<string, string>));
+
+    appIds.forEach((appId) => {
+      requestCache.set(
+        appId,
+        request
+          .then((result) => result[appId] ?? null)
+          .finally(() => {
+            requestCache.delete(appId);
+          })
+      );
+    });
+  }, 25);
+}
+
 function loadIconUrl(appId: string) {
+  if (cache.has(appId)) return Promise.resolve(cache.get(appId) ?? null);
+
   const pending = requestCache.get(appId);
   if (pending) return pending;
 
-  const request = ghostboxApi
-    .getGameIconUrl(appId)
-    .then((result) => {
-      if (result) {
-        cache.set(appId, result);
-        scheduleStoredCacheWrite();
-        notifyListeners();
-      }
+  const request = new Promise<string | null>((resolve) => {
+    queuedAppIds.add(appId);
+    scheduleBatchLoad();
 
-      return result ?? null;
-    })
-    .catch(() => null)
-    .finally(() => {
-      requestCache.delete(appId);
-    });
+    const waitForBatchRequest = () => {
+      const next = requestCache.get(appId);
+      if (next && next !== request) {
+        void next.then(resolve);
+        return;
+      }
+      window.setTimeout(waitForBatchRequest, 10);
+    };
+    waitForBatchRequest();
+  }).finally(() => {
+    if (requestCache.get(appId) === request) requestCache.delete(appId);
+  });
 
   requestCache.set(appId, request);
   return request;
@@ -98,37 +158,7 @@ export function preloadGameIconUrls(games: GhostBoxGame[]) {
 
   if (appIds.length === 0) return;
 
-  const batchRequest = ghostboxApi
-    .getGameIconUrls(appIds)
-    .then((result) => {
-      let changed = false;
-      Object.entries(result).forEach(([appId, url]) => {
-        if (/^\d+$/.test(appId) && typeof url === "string" && url) {
-          cache.set(appId, url);
-          changed = true;
-        }
-      });
-
-      if (changed) {
-        scheduleStoredCacheWrite();
-        notifyListeners();
-      }
-
-      return result;
-    })
-    .catch(() => {
-      // Individual hooks still resolve icons if the batch preload fails.
-      return {} as Record<string, string>;
-    });
-
-  appIds.forEach((appId) => {
-    const request = batchRequest
-      .then((result) => result[appId] ?? null)
-      .finally(() => {
-        requestCache.delete(appId);
-      });
-    requestCache.set(appId, request);
-  });
+  appIds.forEach((appId) => void loadIconUrl(appId));
 }
 
 readStoredCache();

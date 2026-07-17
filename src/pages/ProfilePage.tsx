@@ -46,7 +46,7 @@ import {
   useLoadableImageCover,
 } from "../hooks/useCachedImageSources";
 import {
-  gameHeaderOnlySources,
+  gameSteamHeaderFirstSources,
   getGameAppId,
   layeredImageStyle,
   preloadGameListAssets,
@@ -108,7 +108,7 @@ function ProfileActivityCard({
   onOpenGameAchievements?: (game: GhostBoxGame, achievementId?: string) => void;
 }) {
   const appId = getGameAppId(game);
-  const coverSources = useCachedImageSources(gameHeaderOnlySources(game));
+  const coverSources = useCachedImageSources(gameSteamHeaderFirstSources(game));
   const {
     source: headerSource,
     loaded: headerLoaded,
@@ -689,6 +689,58 @@ export function ProfilePage({
     };
   }, [isOverviewActive, isOverviewDataReady]);
 
+  const overviewPreloadGames = useMemo(() => {
+    const games = new Map<string, GhostBoxGame>();
+    for (const game of achievementHistoryGames) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
+    for (const game of addedLibraryGames) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
+    for (const game of favoriteGames) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
+
+    return [...games.values()]
+      .filter((game) => isRecognizedSteamProfileGame(game, getGamePlaytime(game)))
+      .sort((left, right) => {
+        const lastPlayedDelta =
+          parseLastPlayed(right.lastTimePlayed) -
+          parseLastPlayed(left.lastTimePlayed);
+        if (lastPlayedDelta !== 0) return lastPlayedDelta;
+        return getGamePlaytime(right) - getGamePlaytime(left);
+      });
+  }, [achievementHistoryGames, addedLibraryGames, favoriteGames]);
+
+  const overviewPreloadGamesKey = overviewPreloadGames
+    .slice(0, recentActivityPageSize)
+    .map((game) => game.id)
+    .join("|");
+
+  useEffect(() => {
+    if (!isOverviewActive || overviewPreloadGames.length === 0) return;
+
+    preloadGameListAssets(overviewPreloadGames, {
+      variant: "header",
+      limit: recentActivityPageSize,
+      sourceLimit: 4,
+      idle: false,
+      decode: true,
+      nativeResolve: false,
+      roundRobin: true,
+      steamHeaderFirst: true,
+    });
+  }, [isOverviewActive, overviewPreloadGames, overviewPreloadGamesKey]);
+
   const enrichedGameByAppId = useMemo(() => {
     const map = new Map<string, GhostBoxGame>();
     if (!shouldBuildCollectionGameData) return map;
@@ -961,6 +1013,8 @@ export function ProfilePage({
         limit: 12,
         idle: false,
         nativeResolve: false,
+        roundRobin: collectionId === "overview",
+        steamHeaderFirst: collectionId === "overview",
       });
     },
     [getGamesForCollection]
@@ -1114,6 +1168,13 @@ export function ProfilePage({
       startIndex + recentActivityPageSize,
     );
   }, [currentRecentActivityPage, recentActivityGames]);
+  const nextRecentActivityGames = useMemo(() => {
+    const startIndex = currentRecentActivityPage * recentActivityPageSize;
+    return recentActivityGames.slice(
+      startIndex,
+      startIndex + recentActivityPageSize,
+    );
+  }, [currentRecentActivityPage, recentActivityGames]);
 
   useEffect(() => {
     if (recentActivityPage > recentActivityTotalPages) {
@@ -1133,11 +1194,31 @@ export function ProfilePage({
     preloadGameListAssets(pagedRecentActivityGames, {
       variant: "header",
       limit: pagedRecentActivityGames.length,
-      sourceLimit: 2,
+      sourceLimit: 4,
       idle: false,
+      decode: true,
       nativeResolve: false,
+      roundRobin: true,
+      steamHeaderFirst: true,
     });
-  }, [isOverviewActive, isOverviewDataReady, pagedRecentActivityGames]);
+
+    if (nextRecentActivityGames.length > 0) {
+      preloadGameListAssets(nextRecentActivityGames, {
+        variant: "header",
+        limit: nextRecentActivityGames.length,
+        sourceLimit: 2,
+        idle: true,
+        nativeResolve: false,
+        roundRobin: true,
+        steamHeaderFirst: true,
+      });
+    }
+  }, [
+    isOverviewActive,
+    isOverviewDataReady,
+    nextRecentActivityGames,
+    pagedRecentActivityGames,
+  ]);
 
   useEffect(() => {
     // Resolve real store titles for overview top games and the achievements

@@ -48,8 +48,6 @@ pub(crate) fn silent_steamcmd_output_many(
         "1",
         "+login",
         "anonymous",
-        "+app_info_update",
-        "1",
     ]);
 
     for app_id in app_ids {

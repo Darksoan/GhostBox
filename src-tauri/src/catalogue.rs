@@ -5,6 +5,7 @@ use crate::{FACETS_VERSION, RANKING_VERSION};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::time::Duration;
 use tauri::Manager;
@@ -18,6 +19,8 @@ const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
 const LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV: &str = "EDEN_STEAM_DETAILS_PROXY_URL";
 const LEGACY_STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
 const STEAMCMD_ICON_BATCH_SIZE: usize = 25;
+const STEAM_APPINFO_ICON_SEARCH_WINDOW: usize = 65_536;
+const STEAMCMD_DOWNLOAD_URL: &str = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
 static STEAM_STORE_DETAILS_CACHE_WRITE_LOCK: std::sync::Mutex<()> =
     std::sync::Mutex::new(());
 
@@ -473,12 +476,14 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
         object.insert("movies".to_string(), Value::Array(movies));
     }
 
-    let about_the_game = text(details.get("aboutTheGame"));
+    let about_the_game = text(details.get("aboutTheGame"))
+        .if_empty_then(|| text(details.get("about_the_game")));
     if !about_the_game.is_empty() {
         object.insert("aboutTheGame".to_string(), Value::String(about_the_game));
     }
 
-    let short_description = text(details.get("shortDescription"));
+    let short_description = text(details.get("shortDescription"))
+        .if_empty_then(|| text(details.get("short_description")));
     if !short_description.is_empty() {
         object.insert(
             "shortDescription".to_string(),
@@ -750,11 +755,15 @@ async fn fetch_steam_store_details(app_id: &str) -> Option<Value> {
     app.get("data").cloned()
 }
 
-// Intentionally disabled: scraping the Steam store HTML page triggers blocks.
-// Titles come from JSON APIs / proxy / local catalogue only.
-#[allow(dead_code)]
-async fn fetch_steam_store_page_title(_app_id: &str) -> Option<String> {
-    None
+fn steam_details_have_about(details: &Value) -> bool {
+    !text(details.get("aboutTheGame"))
+        .if_empty_then(|| text(details.get("about_the_game")))
+        .is_empty()
+}
+
+fn steam_reviews_response_is_usable(value: &Value) -> bool {
+    value.get("success").and_then(Value::as_i64) == Some(1)
+        && value.get("reviews").and_then(Value::as_array).is_some()
 }
 
 fn steam_reviews_language(language: Option<String>) -> &'static str {
@@ -792,6 +801,39 @@ async fn fetch_steam_game_reviews_from_proxy(
             ("reviewType", review_type),
         ])
         .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()
+}
+
+async fn fetch_steam_game_reviews_direct(
+    app_id: &str,
+    language: &str,
+    review_type: &str,
+) -> Option<Value> {
+    let url = format!("https://store.steampowered.com/appreviews/{app_id}");
+    let filter = if review_type == "all" { "recent" } else { "all" };
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .ok()?;
+    client
+        .get(url)
+        .query(&[
+            ("json", "1"),
+            ("language", language),
+            ("filter", filter),
+            ("num_per_page", "60"),
+            ("review_type", review_type),
+            ("purchase_type", "all"),
+        ])
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json,text/plain,*/*")
         .send()
         .await
         .ok()?
@@ -1116,7 +1158,7 @@ fn read_client_icon_from_vdf(bytes: &[u8], app_id: &str) -> Option<String> {
             break;
         };
         let index = pos + relative_index;
-        let section_end = (index + 8192).min(bytes.len());
+        let section_end = (index + STEAM_APPINFO_ICON_SEARCH_WINDOW).min(bytes.len());
         let section = &bytes[index..section_end];
 
         if let Some(key_index) = section.windows(key.len()).position(|window| window == key) {
@@ -1244,10 +1286,72 @@ fn steamcmd_candidates(app: &tauri::AppHandle) -> Vec<PathBuf> {
     candidates
 }
 
-fn get_game_icon_from_steamcmd(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
-    let steamcmd = steamcmd_candidates(app)
+fn steamcmd_install_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    Some(app.path().app_data_dir().ok()?.join("steamcmd"))
+}
+
+fn installed_steamcmd_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    steamcmd_candidates(app)
         .into_iter()
-        .find(|candidate| candidate.exists())?;
+        .find(|candidate| candidate.exists())
+}
+
+async fn install_steamcmd(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) = installed_steamcmd_path(app) {
+        return Ok(path);
+    }
+
+    let install_dir = steamcmd_install_dir(app)
+        .ok_or_else(|| "Não foi possível localizar o AppData do GhostBox.".to_string())?;
+    fs::create_dir_all(&install_dir).map_err(|error| error.to_string())?;
+
+    let bytes = reqwest::Client::builder()
+        .timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(STEAMCMD_DOWNLOAD_URL)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .bytes()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let mut archive =
+        zip::ZipArchive::new(Cursor::new(bytes.to_vec())).map_err(|error| error.to_string())?;
+    let mut found = false;
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).map_err(|error| error.to_string())?;
+        let Some(name) = file.enclosed_name().map(|path| path.to_path_buf()) else {
+            continue;
+        };
+        if !name
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.eq_ignore_ascii_case("steamcmd.exe"))
+        {
+            continue;
+        }
+
+        let target = install_dir.join("steamcmd.exe");
+        let mut output = fs::File::create(&target).map_err(|error| error.to_string())?;
+        std::io::copy(&mut file, &mut output).map_err(|error| error.to_string())?;
+        found = true;
+        break;
+    }
+
+    if !found {
+        return Err("O pacote baixado não continha steamcmd.exe.".to_string());
+    }
+
+    Ok(install_dir.join("steamcmd.exe"))
+}
+
+fn get_game_icon_from_steamcmd(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
+    let steamcmd = installed_steamcmd_path(app)?;
     let output = with_steamcmd_lock(|| silent_steamcmd_output(&steamcmd, app_id))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let hash = extract_client_icon_hash(&stdout)?;
@@ -1258,10 +1362,7 @@ fn get_game_icons_from_steamcmd(
     app: &tauri::AppHandle,
     app_ids: &[String],
 ) -> HashMap<String, String> {
-    let Some(steamcmd) = steamcmd_candidates(app)
-        .into_iter()
-        .find(|candidate| candidate.exists())
-    else {
+    let Some(steamcmd) = installed_steamcmd_path(app) else {
         return HashMap::new();
     };
 
@@ -1279,6 +1380,29 @@ fn get_game_icons_from_steamcmd(
     }
 
     resolved
+}
+
+async fn get_game_icon_from_steamcmd_or_install(
+    app: &tauri::AppHandle,
+    app_id: &str,
+) -> Option<String> {
+    if installed_steamcmd_path(app).is_none() {
+        install_steamcmd(app).await.ok()?;
+    }
+    get_game_icon_from_steamcmd(app, app_id)
+}
+
+async fn get_game_icons_from_steamcmd_or_install(
+    app: &tauri::AppHandle,
+    app_ids: &[String],
+) -> HashMap<String, String> {
+    if app_ids.is_empty() {
+        return HashMap::new();
+    }
+    if installed_steamcmd_path(app).is_none() && install_steamcmd(app).await.is_err() {
+        return HashMap::new();
+    }
+    get_game_icons_from_steamcmd(app, app_ids)
 }
 
 pub(crate) async fn fetch_remote_game(
@@ -1383,7 +1507,9 @@ pub async fn database_get_game_store_details(
     let latest_cached_details = read_cached_steam_store_details(&app, &app_id);
     if let Some(cached_details) = latest_cached_details.as_ref() {
         merge_normalized_steam_details(&mut game, cached_details);
-        if cached_steam_store_details_is_fresh(&app, &app_id) {
+        if cached_steam_store_details_is_fresh(&app, &app_id)
+            && steam_details_have_about(cached_details)
+        {
             return Ok(Some(game));
         }
     }
@@ -1393,28 +1519,21 @@ pub async fn database_get_game_store_details(
             merge_cached_steam_store_details(latest_cached_details.as_ref(), &proxy_details);
         merge_normalized_steam_details(&mut game, &merged_details);
         write_cached_steam_store_details(&app, &app_id, &merged_details);
-        return Ok(Some(game));
-    }
-
-    // Prefer cache + details proxy only. Direct store appdetails multiplies Steam rate
-    // limits across every client; opt in only for local debugging.
-    let allow_direct_store = std::env::var("GHOSTBOX_STEAM_DETAILS_ALLOW_DIRECT")
-        .map(|value| {
-            let value = value.trim();
-            value == "1" || value.eq_ignore_ascii_case("true")
-        })
-        .unwrap_or(false);
-    if allow_direct_store {
-        if let Some(store_data) = fetch_steam_store_details(&app_id).await {
-            let store_details = steam_store_details_from_store_data(&store_data);
-            merge_steam_store_details(&mut game, &store_data);
-            let merged_details =
-                merge_cached_steam_store_details(latest_cached_details.as_ref(), &store_details);
-            write_cached_steam_store_details(&app, &app_id, &merged_details);
+        if steam_details_have_about(&merged_details) {
+            return Ok(Some(game));
         }
     }
 
-    // No HTML store-page scrape fallback: Steam blocks aggressive page fetches.
+    // The details proxy can be online while omitting the description fields. Only
+    // fall back to Steam's JSON endpoint when the data required by the UI is absent.
+    if let Some(store_data) = fetch_steam_store_details(&app_id).await {
+        let store_details = steam_store_details_from_store_data(&store_data);
+        merge_steam_store_details(&mut game, &store_data);
+        let merged_details =
+            merge_cached_steam_store_details(latest_cached_details.as_ref(), &store_details);
+        write_cached_steam_store_details(&app, &app_id, &merged_details);
+    }
+
     Ok(Some(game))
 }
 
@@ -1469,11 +1588,21 @@ pub async fn database_get_game_reviews(
         return Ok(serde_json::json!({ "success": 0, "reviews": [] }));
     }
 
-    Ok(
-        fetch_steam_game_reviews_from_proxy(&proxy_url, &app_id, language, review_type)
-            .await
-            .unwrap_or_else(|| serde_json::json!({ "success": 0, "reviews": [] })),
-    )
+    let proxy_result =
+        fetch_steam_game_reviews_from_proxy(&proxy_url, &app_id, language, review_type).await;
+    if let Some(result) = proxy_result.as_ref() {
+        if steam_reviews_response_is_usable(result) {
+            return Ok(result.clone());
+        }
+    }
+
+    if let Some(result) = fetch_steam_game_reviews_direct(&app_id, language, review_type).await {
+        if steam_reviews_response_is_usable(&result) {
+            return Ok(result);
+        }
+    }
+
+    Ok(proxy_result.unwrap_or_else(|| serde_json::json!({ "success": 0, "reviews": [] })))
 }
 
 #[tauri::command]
@@ -1505,7 +1634,7 @@ pub async fn steam_get_game_icon_url(app: tauri::AppHandle, app_id: String) -> O
         return Some(icon_url);
     }
 
-    let icon_url = get_game_icon_from_steamcmd(&app, &app_id)?;
+    let icon_url = get_game_icon_from_steamcmd_or_install(&app, &app_id).await?;
     cache_steam_icon_url(&app, &app_id, &icon_url);
     Some(icon_url)
 }
@@ -1560,7 +1689,7 @@ pub async fn steam_get_game_icon_urls(
         .collect::<Vec<_>>();
 
     if !steamcmd_missing.is_empty() {
-        for (app_id, icon_url) in get_game_icons_from_steamcmd(&app, &steamcmd_missing) {
+        for (app_id, icon_url) in get_game_icons_from_steamcmd_or_install(&app, &steamcmd_missing).await {
             cache.insert(app_id.clone(), icon_url.clone());
             resolved.insert(app_id, icon_url);
         }
@@ -1571,15 +1700,22 @@ pub async fn steam_get_game_icon_urls(
 }
 
 #[tauri::command]
-pub fn app_is_steamtools_installed() -> bool {
-    true
+pub fn app_is_steamtools_installed(app: tauri::AppHandle) -> bool {
+    installed_steamcmd_path(&app).is_some()
 }
 
 #[tauri::command]
-pub fn app_install_steamtools() -> serde_json::Value {
-    serde_json::json!({
-        "success": true
-    })
+pub async fn app_install_steamtools(app: tauri::AppHandle) -> serde_json::Value {
+    match install_steamcmd(&app).await {
+        Ok(path) => serde_json::json!({
+            "success": true,
+            "path": path.to_string_lossy()
+        }),
+        Err(error) => serde_json::json!({
+            "success": false,
+            "error": error
+        }),
+    }
 }
 
 #[tauri::command]
@@ -1598,7 +1734,10 @@ pub async fn cache_resolve_steam_library_asset(
 
 #[cfg(test)]
 mod tests {
-    use super::merge_cached_steam_store_details;
+    use super::{
+        merge_cached_steam_store_details, read_client_icon_from_vdf, steam_details_have_about,
+        steam_reviews_response_is_usable,
+    };
 
     #[test]
     fn store_details_merge_preserves_existing_media_and_nested_requirements() {
@@ -1620,5 +1759,45 @@ mod tests {
             merged["pcRequirements"]["recommended"],
             next["pcRequirements"]["recommended"]
         );
+    }
+
+    #[test]
+    fn incomplete_proxy_details_require_store_fallback() {
+        assert!(!steam_details_have_about(&serde_json::json!({
+            "name": "Counter-Strike 2",
+            "screenshots": []
+        })));
+        assert!(steam_details_have_about(&serde_json::json!({
+            "aboutTheGame": "A description"
+        })));
+        assert!(steam_details_have_about(&serde_json::json!({
+            "about_the_game": "A description"
+        })));
+    }
+
+    #[test]
+    fn unsuccessful_review_proxy_response_requires_fallback() {
+        assert!(!steam_reviews_response_is_usable(&serde_json::json!({
+            "success": 0,
+            "reviews": []
+        })));
+        assert!(steam_reviews_response_is_usable(&serde_json::json!({
+            "success": 1,
+            "reviews": []
+        })));
+    }
+
+    #[test]
+    fn appinfo_icon_reader_finds_clienticon_beyond_small_window() {
+        let app_id = 2_138_720u32;
+        let hash = "1234567890abcdef1234567890abcdef12345678";
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&app_id.to_le_bytes());
+        bytes.extend(std::iter::repeat(b'x').take(20_000));
+        bytes.extend_from_slice(b"clienticon\0");
+        bytes.extend_from_slice(hash.as_bytes());
+        bytes.push(0);
+
+        assert_eq!(read_client_icon_from_vdf(&bytes, "2138720"), Some(hash.to_string()));
     }
 }

@@ -72,7 +72,10 @@ details proxy). After merging desktop changes:
 4. Confirm GitHub Release publishes NSIS + `.sig` (needs `TAURI_SIGNING_PRIVATE_KEY`)
 
 Store appdetails stay on `piratebox-steam-details` / `GHOSTBOX_STEAM_DETAILS_PROXY_URL`.
-Direct Steam `appdetails` is disabled unless `GHOSTBOX_STEAM_DETAILS_ALLOW_DIRECT=1`.
+The desktop client falls back to Steam's public `appdetails` JSON endpoint only
+when the proxy response does not contain the description required by the UI.
+Reviews use the same proxy-first strategy and fall back to the public
+`appreviews` endpoint when the proxy returns an unsuccessful response.
 
 Build the desktop app with the proxy URL:
 

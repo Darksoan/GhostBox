@@ -1,7 +1,15 @@
 import { useMemo } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
-import { Download, Folder, Heart, Play, TextSearch, Trash } from "lucide-react";
+import {
+  Download,
+  Folder,
+  Heart,
+  HeartOff,
+  Play,
+  TextSearch,
+  Trash,
+} from "lucide-react";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
 
 interface UseCollectionContextMenuOptions {
@@ -94,7 +102,7 @@ export function useCollectionContextMenu({
     if (!onlyCollectionActions && showDirectFavoriteAction && onToggleFavorite) {
       items.push({
         label: isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos",
-        icon: Heart,
+        icon: isFavorite ? HeartOff : Heart,
         danger: isFavorite,
         onClick: () => onToggleFavorite(game),
       });

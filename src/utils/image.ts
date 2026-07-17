@@ -31,7 +31,9 @@ type GameListPreloadOptions = {
   idle?: boolean;
   limit?: number;
   nativeResolve?: boolean;
+  roundRobin?: boolean;
   sourceLimit?: number;
+  steamHeaderFirst?: boolean;
   variant?: "header" | "portrait" | "hero";
 };
 
@@ -141,6 +143,72 @@ export function gameHeaderOnlySources(game: GhostBoxGame) {
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
     screenshotFallback,
   ]);
+}
+
+export function gameSteamHeaderFirstSources(game: GhostBoxGame) {
+  const appId = getGameAppId(game);
+  const sources = gameHeaderOnlySources(game);
+  const steamHeaderSources = sources.filter((source) =>
+    isSteamHeaderImageSource(source, appId)
+  );
+
+  return uniqueSources([
+    ...steamHeaderSources,
+    ...sources,
+  ]);
+}
+
+function isSteamHeaderImageSource(source: string, appId: string) {
+  const normalizedSource = source.trim().toLowerCase();
+  if (!normalizedSource || !appId) return false;
+
+  let pathname = normalizedSource.split(/[?#]/)[0];
+
+  try {
+    pathname = new URL(normalizedSource).pathname.toLowerCase();
+  } catch {
+    // Non-URL sources cannot be predictable Steam CDN headers.
+  }
+
+  return pathname.replace(/\\/g, "/").endsWith(`/steam/apps/${appId}/header.jpg`);
+}
+
+function getGameListPreloadSources(
+  game: GhostBoxGame,
+  variant: NonNullable<GameListPreloadOptions["variant"]>,
+  sourceLimit: number,
+  options: Pick<GameListPreloadOptions, "steamHeaderFirst">
+) {
+  if (variant === "portrait") {
+    return gamePortraitPreviewSources(game).slice(0, sourceLimit);
+  }
+
+  if (variant === "hero") {
+    return uniqueSources([
+      ...gameHeroSources(game),
+      ...gameLogoSources(game),
+    ]).slice(0, sourceLimit);
+  }
+
+  const headerSources = options.steamHeaderFirst
+    ? gameSteamHeaderFirstSources(game)
+    : gameHeaderOnlySources(game);
+
+  return headerSources.slice(0, sourceLimit);
+}
+
+function roundRobinImageSources(sourcesByGame: string[][]) {
+  const sources: string[] = [];
+  const maxLength = Math.max(0, ...sourcesByGame.map((sources) => sources.length));
+
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const gameSources of sourcesByGame) {
+      const source = gameSources[index];
+      if (source) sources.push(source);
+    }
+  }
+
+  return uniqueSources(sources);
 }
 
 export function isHeaderImageSource(source: string) {
@@ -481,17 +549,12 @@ export function preloadGameListAssets(
     );
   }
 
-  const sources = games.slice(0, limit).flatMap((game) => {
-    if (variant === "portrait") return gamePortraitPreviewSources(game).slice(0, sourceLimit);
-    if (variant === "hero") {
-      return uniqueSources([
-        ...gameHeroSources(game),
-        ...gameLogoSources(game),
-      ]).slice(0, sourceLimit);
-    }
-
-    return gameHeaderOnlySources(game).slice(0, sourceLimit);
-  });
+  const sourcesByGame = games.slice(0, limit).map((game) =>
+    getGameListPreloadSources(game, variant, sourceLimit, options)
+  );
+  const sources = options.roundRobin
+    ? roundRobinImageSources(sourcesByGame)
+    : sourcesByGame.flat();
 
   preloadImageSources(sources, {
     decode: options.decode,

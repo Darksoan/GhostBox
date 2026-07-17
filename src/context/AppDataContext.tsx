@@ -68,6 +68,7 @@ import {
   loadGameAchievementDetailsCached,
   loadGameDetailsCached,
 } from "../utils/gameCache";
+import { preloadGameIconUrls } from "../hooks/useGameIconUrl";
 import {
   createProfileHistoryFallbackGame,
   getBackupRecordLatestKey,
@@ -1216,6 +1217,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         [...favoriteGamesRef.current, ...profileHistoryGamesRef.current],
       );
       setSteamPathInput(result.steamPath);
+      preloadGameIconUrls(games);
       setScannedLibraryGames(games);
     },
     [],

@@ -489,6 +489,7 @@ export function GameModal({
   const [loadedLogoSource, setLoadedLogoSource] = useState("");
   const [visibleScreenshotSource, setVisibleScreenshotSource] = useState("");
   const [isBackupOptionsOpen, setIsBackupOptionsOpen] = useState(false);
+  const [isPressing, setIsPressing] = useState(false);
   const [reviewSummaryContainer, setReviewSummaryContainer] =
     useState<HTMLDivElement | null>(null);
   const achievementsPanelId = useId();
@@ -501,6 +502,7 @@ export function GameModal({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const aboutContentShellRef = useRef<HTMLDivElement | null>(null);
   const aboutActionsRef = useRef<HTMLDivElement | null>(null);
+  const pressTimeoutRef = useRef<number | null>(null);
   const [aboutCollapsedMaxHeight, setAboutCollapsedMaxHeight] = useState<
     number | null
   >(null);
@@ -513,7 +515,16 @@ export function GameModal({
     setLoadedLogoSource("");
     setVisibleScreenshotSource("");
     setIsBackupOptionsOpen(false);
+    setIsPressing(false);
   }, [game?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (pressTimeoutRef.current !== null) {
+        window.clearTimeout(pressTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -604,6 +615,19 @@ export function GameModal({
   }, [game, onClose]);
 
   const displayGame = detailGame ?? game;
+
+  function triggerPressAnimation() {
+    if (pressTimeoutRef.current !== null) return;
+
+    requestAnimationFrame(() => {
+      setIsPressing(true);
+      pressTimeoutRef.current = window.setTimeout(() => {
+        setIsPressing(false);
+        pressTimeoutRef.current = null;
+      }, 180);
+    });
+  }
+
   const stableScreenshots = game?.screenshots.length ? game.screenshots : [];
   const displayScreenshots = displayGame?.screenshots ?? [];
   const rawScreenshots =
@@ -988,16 +1012,17 @@ export function GameModal({
                   className={`modal__actions ${isAdding ? "modal__actions--adding" : ""}`}
                 >
                   {isInstalled && (
-                    <button
-                      type="button"
-                      className="button button--primary modal__play-button"
-                      onClick={() => {
-                        if (isPlaying || isSessionActive) return;
-                        onPlayGame(displayGame);
-                      }}
-                      disabled={isPlaying || isSessionActive}
-                      aria-busy={isPlaying}
-                    >
+                      <button
+                        type="button"
+                        className={`button button--primary modal__play-button${isPressing ? " modal__play-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
+                        onClick={() => {
+                          if (isPlaying || isSessionActive) return;
+                          onPlayGame(displayGame);
+                        }}
+                        disabled={isPlaying || isSessionActive}
+                        aria-busy={isPlaying}
+                      >
                       {isPlaying ? (
                         <span className="modal__add-spinner modal__add-spinner--light" aria-hidden="true" />
                       ) : (
@@ -1033,7 +1058,8 @@ export function GameModal({
                     <>
                       <button
                         type="button"
-                        className="button button--primary modal__remove-button"
+                        className={`button button--primary modal__remove-button${isPressing ? " modal__remove-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
                         onClick={() => onRemoveGame(displayGame)}
                         disabled={isRemoving}
                       >
@@ -1062,7 +1088,8 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
+                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""} ${isPressing ? "modal__favorite-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
                         onClick={() => onToggleFavorite(displayGame)}
                         aria-pressed={isFavorite}
                         aria-label={
@@ -1083,7 +1110,8 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
+                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}${isPressing ? " modal__gear-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
                         onClick={() => setIsBackupOptionsOpen(true)}
                         aria-label={
                           appearance.language === "en"
@@ -1098,7 +1126,8 @@ export function GameModal({
                     <>
                       <button
                         type="button"
-                        className="button button--primary modal__add-button"
+                        className={`button button--primary modal__add-button${isPressing ? " modal__add-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
                         onClick={() => onQueueGame(displayGame)}
                       >
                         <Download size={20} />
@@ -1108,7 +1137,8 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
+                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""} ${isPressing ? "modal__favorite-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
                         onClick={() => onToggleFavorite(displayGame)}
                         aria-pressed={isFavorite}
                         aria-label={
@@ -1129,7 +1159,8 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
+                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}${isPressing ? " modal__gear-button--press" : ""}`}
+                        onPointerDown={triggerPressAnimation}
                         onClick={() => setIsBackupOptionsOpen(true)}
                         aria-label={
                           appearance.language === "en"
