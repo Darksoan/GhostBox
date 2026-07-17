@@ -14,7 +14,7 @@ const GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE: &str = "ghostbox-achievements.json";
 const LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE: &str = "eden-achievements.json";
 const LEGACY_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
 const GHOSTBOX_PLAYTIME_BACKUP_FILE: &str = "ghostbox-playtime.json";
-const BACKUP_ENTRY_RETENTION_LIMIT: usize = 3;
+
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ProfileProgressSnapshot {
@@ -159,45 +159,12 @@ fn emit_backup_settings_changed(app: &tauri::AppHandle, settings: &serde_json::V
     let _ = app.emit(BACKUP_SETTINGS_CHANGED_EVENT, settings.clone());
 }
 
-pub(crate) fn write_backup_root_marker(output_path: &str) -> Result<(), String> {
-    let output_path = std::path::PathBuf::from(output_path);
-    std::fs::create_dir_all(&output_path).map_err(|error| error.to_string())?;
-    let marker = serde_json::json!({
-        "version": 1,
-        "createdBy": "GhostBox",
-        "createdAt": current_timestamp_string()
-    });
-    let contents = serde_json::to_string_pretty(&marker).map_err(|error| error.to_string())?;
-    std::fs::write(output_path.join(BACKUP_ROOT_MARKER_FILE), contents)
-        .map_err(|error| error.to_string())
-}
 
-pub(crate) fn backup_root_marker_exists(output_path: &str) -> bool {
-    let output_path = std::path::PathBuf::from(output_path);
-    output_path.join(BACKUP_ROOT_MARKER_FILE).exists()
-        || output_path
-            .join(LEGACY_EDEN_BACKUP_ROOT_MARKER_FILE)
-            .exists()
-        || output_path.join(LEGACY_BACKUP_ROOT_MARKER_FILE).exists()
-}
 
 fn current_timestamp_string() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-pub(crate) fn backup_root_status(
-    status: &str,
-    output_path: &str,
-    settings: serde_json::Value,
-    message: &str,
-) -> serde_json::Value {
-    serde_json::json!({
-        "status": status,
-        "outputPath": output_path,
-        "settings": settings,
-        "message": message
-    })
-}
 
 pub(crate) fn is_path_inside_or_equal(
     parent_path: &std::path::Path,
@@ -877,14 +844,6 @@ fn write_ghostbox_achievements_backup_file(
     Ok(file_path.to_string_lossy().to_string())
 }
 
-pub(crate) fn make_backup_entry(path: &str, size_bytes: u64) -> serde_json::Value {
-    serde_json::json!({
-        "path": path,
-        "backupAt": current_timestamp_string(),
-        "sizeBytes": size_bytes,
-        "pinned": false
-    })
-}
 
 pub(crate) fn get_backup_record_entries(
     record: Option<&serde_json::Value>,
@@ -918,92 +877,6 @@ pub(crate) fn get_backup_record_entries(
     })]
 }
 
-fn unique_backup_entries(entries: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
-    let mut entries_by_path = std::collections::BTreeMap::new();
-    for entry in entries {
-        let path = text_value(entry.get("path"));
-        let backup_at = text_value(entry.get("backupAt"));
-        if path.is_empty() || backup_at.is_empty() {
-            continue;
-        }
-        entries_by_path.entry(path.clone()).or_insert_with(|| {
-            serde_json::json!({
-                "path": path,
-                "backupAt": backup_at,
-                "sizeBytes": entry.get("sizeBytes"),
-                "pinned": entry.get("pinned").and_then(|value| value.as_bool()).unwrap_or(false)
-            })
-        });
-    }
-    let mut unique = entries_by_path.into_values().collect::<Vec<_>>();
-    unique.sort_by(|left, right| {
-        text_value(right.get("backupAt")).cmp(&text_value(left.get("backupAt")))
-    });
-    unique
-}
-
-fn trim_backup_entries(
-    entries: Vec<serde_json::Value>,
-    limit: usize,
-) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
-    let mut kept = entries;
-    let mut removed = Vec::new();
-    while kept.len() > limit {
-        let remove_index = kept.iter().enumerate().rev().find_map(|(index, entry)| {
-            if entry.get("pinned").and_then(|value| value.as_bool()) != Some(true) {
-                Some(index)
-            } else {
-                None
-            }
-        });
-        let Some(remove_index) = remove_index else {
-            break;
-        };
-        removed.push(kept.remove(remove_index));
-    }
-    (kept, removed)
-}
-
-pub(crate) fn save_successful_backup_record(
-    app: &tauri::AppHandle,
-    app_id: &str,
-    title: &str,
-    entry: serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let settings = load_backup_settings(app);
-    let current_record = settings
-        .get("backupRecords")
-        .and_then(|records| records.get(app_id));
-    let all_entries =
-        unique_backup_entries([vec![entry], get_backup_record_entries(current_record)].concat());
-    let (kept_entries, removed_entries) =
-        trim_backup_entries(all_entries, BACKUP_ENTRY_RETENTION_LIMIT);
-    if kept_entries.is_empty() {
-        return Ok(settings);
-    }
-    for removed_entry in removed_entries {
-        let path = text_value(removed_entry.get("path"));
-        if !path.is_empty() {
-            let _ = std::fs::remove_dir_all(path);
-        }
-    }
-    let latest_entry = kept_entries
-        .first()
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
-    save_backup_record(
-        app,
-        app_id,
-        serde_json::json!({
-            "title": title,
-            "lastBackupAt": latest_entry.get("backupAt").cloned().unwrap_or_else(|| serde_json::json!("")),
-            "lastBackupSuccess": true,
-            "lastBackupPath": latest_entry.get("path").cloned().unwrap_or_else(|| serde_json::json!("")),
-            "lastBackupSizeBytes": latest_entry.get("sizeBytes").cloned(),
-            "entries": kept_entries
-        }),
-    )
-}
 
 pub(crate) fn save_failed_backup_record(
     app: &tauri::AppHandle,
@@ -1221,12 +1094,6 @@ pub(crate) fn sanitize_folder_name(value: &str) -> String {
         .if_empty("Game".to_string())
 }
 
-pub(crate) fn backup_timestamp() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis().to_string())
-        .unwrap_or_else(|_| "0".to_string())
-}
 
 pub(crate) fn save_backup_record(
     app: &tauri::AppHandle,
@@ -1266,26 +1133,6 @@ pub(crate) fn directory_has_content(path: &std::path::Path) -> bool {
     })
 }
 
-pub(crate) fn directory_size(path: &std::path::Path) -> Result<u64, String> {
-    let mut total = 0;
-    let entries = std::fs::read_dir(path).map_err(|error| error.to_string())?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let metadata = match entry.metadata() {
-            Ok(metadata) => metadata,
-            Err(_) => continue,
-        };
-
-        if metadata.is_dir() {
-            total += directory_size(&path).unwrap_or(0);
-        } else if metadata.is_file() {
-            total += metadata.len();
-        }
-    }
-
-    Ok(total)
-}
 
 pub(crate) fn selected_backup_entry_path(
     settings: &serde_json::Value,

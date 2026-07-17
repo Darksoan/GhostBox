@@ -10129,88 +10129,6 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    --pb-cover-hover-size: 100%;
-  }
-
-  @include pb-disable-cover-zoom;
-
-  .game-card__cover--loaded,
-  .catalogue-list__cover--loaded,
-  .favorites-grid__cover--loaded,
-  .home-carousel-card__cover,
-  .home-category-card__cover,
-  .home-recent-card__cover,
-  .home-recent-list__cover,
-  .home-recent-banner__cover,
-  .home-recent-banner__cover--skeleton,
-  .home-recent-banner__skeleton-line,
-  .home-wishlist-card__cover--skeleton,
-  .home-wishlist-card__text-skeleton,
-  .home-wishlist-card__tag-skeleton,
-  .home-wishlist-card__player-review-avatar--skeleton {
-    animation: none;
-  }
-
-  .content-section--library .game-grid {
-    &.game-grid--cover-format-out .game-card,
-    &.game-grid--cover-format-in .game-card {
-      animation: none;
-      pointer-events: auto;
-    }
-  }
-
-  .backdrop--collection,
-  .backdrop--steam-path,
-  .backdrop--profile,
-  .backup-restore-modal__backdrop,
-  .modal__collection-picker-backdrop,
-  .collection-modal,
-  .steam-path-modal,
-  .backup-restore-modal,
-  .modal__collection-picker {
-    animation: none;
-  }
-
-  .sidebar__mode-panel,
-  .sidebar__mode-panel .sidebar__menu-item,
-  .sidebar__mode-panel .sidebar__section-header,
-  .sidebar__mode-panel .sidebar__section-header + .sidebar__menu {
-    animation: none;
-  }
-
-  .subscription-account__header::before {
-    animation: none;
-  }
-
-  .settings-options .settings-option,
-  .settings-backups-list,
-  .settings-panel__animated-block,
-  .page-enter .home-page > *,
-  .page-enter .library-toolbar,
-  .page-enter .backup-page__sync-warning,
-  .page-enter .backup-page__empty,
-  .page-enter .backup-list > li,
-  .page-enter .profile-page > header,
-  .page-enter .profile-page > .profile-page__content-section,
-  .page-enter .profile-page__no-games,
-  .page-enter .catalogue-page__results,
-  .page-enter .catalogue-filters,
-  .page-enter .catalogue-list__item,
-  .page-enter .favorites-grid__item,
-  .page-enter .favorites-page--empty .empty-state,
-  .page-enter .game-grid .game-card,
-  .page-enter .notification-group,
-  .page-enter .notifications-page__loading,
-  .page-enter .modal--details > .modal__showcase,
-  .page-enter .modal--details > .modal__details,
-  .page-enter .game-achievements-page > *,
-  .page-enter .game-achievements-page__list > li {
-    animation: none;
-  }
-}
-
 html.no-animations {
   --pb-cover-hover-size: 100%;
 
@@ -10278,6 +10196,21 @@ html.no-animations {
   .page-enter .modal--details > .modal__details,
   .page-enter .game-achievements-page > *,
   .page-enter .game-achievements-page__list > li {
+    animation: none;
+  }
+
+  .profile-page__game-grid.game-grid--cover-format-in .game-card {
+    animation: none;
+  }
+
+  .profile-page__top-game-console-row:hover,
+  .profile-page__top-game-console-row:focus-visible,
+  .profile-page__tab:hover,
+  .profile-page__tab:focus-visible {
+    transform: none;
+  }
+
+  .modal__reviews-list {
     animation: none;
   }
 }
@@ -13607,11 +13540,6 @@ html.no-tab-animations {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .modal__reviews-list {
-    animation: none;
-  }
-}
 
 .modal__review-card {
   display: grid;

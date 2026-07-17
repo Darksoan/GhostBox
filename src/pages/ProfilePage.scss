@@ -2087,7 +2087,9 @@
     line-height: 1;
     position: relative;
     z-index: 2;
-    transition: color var(--motion-base) ease;
+    transition:
+      background-color var(--motion-base) ease,
+      color var(--motion-base) ease;
 
     &::after {
       content: none;
@@ -3027,29 +3029,4 @@ html.no-backdrop-blur .profile-page {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .profile-page__game-grid.game-grid--cover-format-in .game-card {
-    animation: none;
-  }
 
-  .profile-page__top-game-console-row {
-    transition: background-color var(--motion-base) ease;
-  }
-
-  .profile-page__tab {
-    transition:
-      background-color var(--motion-base) ease,
-      color var(--motion-base) ease;
-  }
-
-  .profile-page__tab-indicator--ready {
-    transition: opacity var(--motion-fast) ease;
-  }
-
-  .profile-page__top-game-console-row:hover,
-  .profile-page__top-game-console-row:focus-visible,
-  .profile-page__tab:hover,
-  .profile-page__tab:focus-visible {
-    transform: none;
-  }
-}
