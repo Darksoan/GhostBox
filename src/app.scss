@@ -455,18 +455,20 @@ svg[stroke-width="1.8"] {
 .home-recent-banner__cover,
 .favorites-grid__cover {
   /*
-   * Image paints only on ::before (parent bg cleared) to avoid ghost blur.
-   * Zoom grows the layer size (not transform:scale) so cover re-samples
-   * the source instead of upscaling a GPU bitmap.
+   * Two layers:
+   * 1) parent = native 100% paint (always sharp at rest)
+   * 2) ::before = 200% prerender, scaled 0.5→0.515 on hover (never upscales)
+   * Zoom layer stays opacity:0 at rest so downscale blur never shows idle.
    */
-  --pb-cover-rest-size: 100%;
-  --pb-cover-hover-size: 104%;
-  --pb-cover-zoom-duration: 0.14s;
+  --pb-cover-prerender-size: 200%;
+  --pb-cover-rest-scale: 0.5;
+  --pb-cover-hover-scale: 0.525;
+  --pb-cover-zoom-opacity: 0;
   position: relative;
   overflow: hidden;
   transform: none;
+  contain: paint;
   border-radius: var(--radius-sm);
-  background-image: none !important;
 }
 
 .game-card__cover::before,
@@ -482,29 +484,61 @@ svg[stroke-width="1.8"] {
 .favorites-grid__cover::before {
   content: "";
   position: absolute;
-  inset: calc((100% - var(--pb-cover-rest-size)) / 2);
-  width: auto;
-  height: auto;
+  top: 50%;
+  left: 50%;
+  width: var(--pb-cover-prerender-size);
+  height: var(--pb-cover-prerender-size);
   margin: 0;
   background-color: inherit;
-  background-image: var(--pb-background-image);
-  background-attachment: scroll;
-  background-blend-mode: normal;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: var(--pb-background-size-current, var(--pb-background-size, cover));
+  background-image: var(--pb-background-image, inherit);
+  background-attachment: inherit;
+  background-blend-mode: inherit;
+  background-position: inherit;
+  background-repeat: inherit;
+  background-size: inherit;
   image-rendering: auto;
   backface-visibility: hidden;
-  transform: none;
-  transform-origin: center center;
+  opacity: var(--pb-cover-zoom-opacity);
+  transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-rest-scale));
+  transform-origin: center;
   transition:
-    inset var(--pb-cover-zoom-duration) ease-out,
+    transform var(--motion-slow) cubic-bezier(0.22, 1, 0.36, 1),
     opacity var(--motion-base) ease !important;
   pointer-events: none;
 }
 
+/*
+ * Promote GPU layer only while hovered/focused — not on every cover at rest.
+ */
+.game-card:hover .game-card__cover::before,
+.game-card:focus-within .game-card__cover::before,
+.home-carousel-card:hover .home-carousel-card__cover::before,
+.home-carousel-card:focus-visible .home-carousel-card__cover::before,
+.home-category-card:hover .home-category-card__cover::before,
+.home-category-card:focus-visible .home-category-card__cover::before,
+.home-calendar-card:hover .home-calendar-card__cover::before,
+.home-calendar-card:focus-visible .home-calendar-card__cover::before,
+.home-wishlist-card:hover .home-wishlist-card__cover::before,
+.home-wishlist-card:focus-within .home-wishlist-card__cover::before,
+.home-recent-card:hover .home-recent-card__cover::before,
+.home-recent-card:focus-visible .home-recent-card__cover::before,
+.home-recent-list__item:hover .home-recent-list__cover::before,
+.home-recent-list__item:focus-visible .home-recent-list__cover::before,
+.home-recent-banner__card:hover .home-recent-banner__cover::before,
+.home-recent-banner__card:focus-visible .home-recent-banner__cover::before,
+.favorites-grid__item:hover .favorites-grid__cover::before,
+.favorites-grid__item:focus-within .favorites-grid__cover::before {
+  will-change: transform, opacity;
+}
+
 .game-card__cover.loading-wave::before {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+  transform: none;
 }
 
 @keyframes image-subtle-fade-in {
@@ -870,7 +904,7 @@ p {
     .home-recent-banner__cover::before,
     .favorites-grid__cover::before {
       transition:
-        inset var(--pb-cover-zoom-duration) ease-out,
+        transform var(--motion-base) ease,
         opacity var(--motion-base) ease !important;
     }
 
@@ -1164,7 +1198,7 @@ p {
   width: 280px;
   min-width: 280px;
   overflow: hidden;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--surface-secondary);
   background: transparent;
   color: var(--text-primary);
   --sidebar-option-hover: var(--sidebar-option-active-hover);
@@ -1859,7 +1893,7 @@ p {
   padding: calc(var(--spacing) * 0.75) 0 calc(var(--spacing) * 0.75) calc(var(--spacing) * 3);
   color: var(--text-primary);
   background-color: transparent;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--surface-secondary);
   user-select: none;
   cursor: default;
 
@@ -2852,6 +2886,7 @@ p {
 }
 
 .home-recommended-hero {
+  --pb-cover-hover-scale: var(--pb-cover-rest-scale);
   position: relative;
   display: block;
   width: 100%;
@@ -2883,18 +2918,15 @@ p {
 
 .home-recommended-hero__cover img {
   position: absolute;
-  inset: calc((100% - var(--pb-cover-rest-size, 100%)) / 2);
+  inset: 0;
   display: block;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   margin: 0;
   object-fit: cover;
   object-position: center top;
   image-rendering: auto;
   transform: none;
-  transform-origin: center center;
-  backface-visibility: hidden;
-  transition: inset var(--pb-cover-zoom-duration, 0.14s) ease-out;
 }
 
 .home-recommended-hero__cover::before {
@@ -3504,6 +3536,9 @@ p {
   }
 
   &--hero-capsule {
+    --pb-cover-prerender-size: 100%;
+    --pb-cover-rest-scale: 1;
+    --pb-cover-hover-scale: 1.045;
     max-width: 374px;
     aspect-ratio: 374 / 448;
   }
@@ -4200,26 +4235,21 @@ p {
 .game-card:focus-within .game-card__cover,
 .favorites-grid__item:hover .favorites-grid__cover,
 .favorites-grid__item:focus-within .favorites-grid__cover,
-.home-recommended-hero:hover .home-recommended-hero__cover,
-.home-recommended-hero:focus-visible .home-recommended-hero__cover,
 .home-carousel-card:hover .home-carousel-card__cover,
 .home-carousel-card:focus-visible .home-carousel-card__cover,
 .home-category-card:hover .home-category-card__cover,
 .home-category-card:focus-visible .home-category-card__cover,
-.home-wishlist-card__cover:hover,
-.home-wishlist-card__cover:focus-visible,
+.home-wishlist-card:hover .home-wishlist-card__cover,
+.home-wishlist-card:focus-within .home-wishlist-card__cover,
 .home-recent-card:hover .home-recent-card__cover,
 .home-recent-card:focus-visible .home-recent-card__cover,
 .home-recent-list__item:hover .home-recent-list__cover,
-.home-recent-list__item:focus-within .home-recent-list__cover,
+.home-recent-list__item:focus-visible .home-recent-list__cover,
 .home-recent-banner__card:hover .home-recent-banner__cover,
 .home-recent-banner__card:focus-visible .home-recent-banner__cover,
 .home-calendar-card:hover .home-calendar-card__cover,
-.home-calendar-card:focus-visible .home-calendar-card__cover,
-.catalogue-list__item:hover .catalogue-list__cover,
-.catalogue-list__item--hovered .catalogue-list__cover,
-.catalogue-list__item:focus-within .catalogue-list__cover {
-  transform: none;
+.home-calendar-card:focus-visible .home-calendar-card__cover {
+  --pb-cover-zoom-opacity: 1;
 }
 
 .game-card:hover .game-card__cover::before,
@@ -4231,26 +4261,16 @@ p {
 .home-category-card:hover .home-category-card__cover::before,
 .home-category-card:focus-visible .home-category-card__cover::before,
 .home-wishlist-card:hover .home-wishlist-card__cover::before,
-.home-wishlist-card:focus-visible .home-wishlist-card__cover::before,
-.home-wishlist-card__cover:hover::before,
-.home-wishlist-card__cover:focus-visible::before,
+.home-wishlist-card:focus-within .home-wishlist-card__cover::before,
 .home-recent-card:hover .home-recent-card__cover::before,
 .home-recent-card:focus-visible .home-recent-card__cover::before,
 .home-recent-list__item:hover .home-recent-list__cover::before,
-.home-recent-list__item:focus-within .home-recent-list__cover::before,
+.home-recent-list__item:focus-visible .home-recent-list__cover::before,
 .home-recent-banner__card:hover .home-recent-banner__cover::before,
 .home-recent-banner__card:focus-visible .home-recent-banner__cover::before,
 .home-calendar-card:hover .home-calendar-card__cover::before,
-.home-calendar-card:focus-visible .home-calendar-card__cover::before,
-.catalogue-list__item:hover .catalogue-list__cover::before,
-.catalogue-list__item--hovered .catalogue-list__cover::before,
-.catalogue-list__item:focus-within .catalogue-list__cover::before {
-  inset: calc((100% - var(--pb-cover-hover-size)) / 2);
-}
-
-.home-recommended-hero:hover .home-recommended-hero__cover img,
-.home-recommended-hero:focus-visible .home-recommended-hero__cover img {
-  inset: calc((100% - var(--pb-cover-hover-size)) / 2);
+.home-calendar-card:focus-visible .home-calendar-card__cover::before {
+  transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-hover-scale));
 }
 
 .home-wishlist-card__text-skeleton {
@@ -7913,7 +7933,7 @@ input[type="search"]::-ms-reveal {
 }
 
 .catalogue-list__cover {
-  --pb-cover-hover-size: var(--pb-cover-rest-size);
+  --pb-cover-zoom-opacity: 0;
   width: 100%;
   height: 100%;
   aspect-ratio: 460 / 215;
@@ -7922,9 +7942,7 @@ input[type="search"]::-ms-reveal {
   background-color: var(--surface-solid);
   opacity: 0;
   transition: opacity var(--motion-slow) ease;
-  image-rendering: high-quality;
-  image-rendering: -webkit-optimize-contrast;
-  backface-visibility: hidden;
+  image-rendering: auto;
   background-attachment: local;
   background-blend-mode: normal;
 
@@ -9702,7 +9720,12 @@ input[type="search"]::-ms-reveal {
 
   &:hover &__cover,
   &:focus-within &__cover {
-    transform: none;
+    --pb-cover-zoom-opacity: 1;
+  }
+
+  &:hover &__cover::before,
+  &:focus-within &__cover::before {
+    transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-hover-scale));
   }
 
   &:hover,
@@ -9977,8 +10000,20 @@ input[type="search"]::-ms-reveal {
   animation: none;
 }
 
+.content-section--library .game-grid:not(.game-grid--portrait) .game-card {
+  --pb-cover-prerender-size: 100%;
+  --pb-cover-rest-scale: 1;
+  --pb-cover-hover-scale: 1.045;
+}
+
 .content-section--library .game-grid--portrait .game-card {
+  --pb-cover-hover-scale: var(--pb-cover-rest-scale);
   border: 0;
+}
+
+.content-section--library .game-grid--portrait .game-card:hover .game-card__cover,
+.content-section--library .game-grid--portrait .game-card:focus-within .game-card__cover {
+  --pb-cover-zoom-opacity: 0;
 }
 
 .container:has(.page--library) {
@@ -10212,9 +10247,13 @@ input[type="search"]::-ms-reveal {
 }
 
 @mixin pb-disable-cover-zoom {
+  .content-section--library .game-grid:not(.game-grid--portrait) .game-card,
+  .home-category-card--hero-capsule {
+    --pb-cover-hover-scale: var(--pb-cover-rest-scale);
+  }
+
   .game-card__cover,
   .catalogue-list__cover,
-  .home-recommended-hero__cover,
   .home-carousel-card__cover,
   .home-category-card__cover,
   .home-calendar-card__cover,
@@ -10223,7 +10262,7 @@ input[type="search"]::-ms-reveal {
   .home-recent-list__cover,
   .home-recent-banner__cover,
   .favorites-grid__cover {
-    --pb-cover-hover-size: var(--pb-cover-rest-size);
+    --pb-cover-zoom-opacity: 0 !important;
   }
 
   .game-card:hover .game-card__cover::before,
@@ -10235,9 +10274,7 @@ input[type="search"]::-ms-reveal {
   .home-calendar-card:hover .home-calendar-card__cover::before,
   .home-calendar-card:focus-visible .home-calendar-card__cover::before,
   .home-wishlist-card:hover .home-wishlist-card__cover::before,
-  .home-wishlist-card:focus-visible .home-wishlist-card__cover::before,
-  .home-wishlist-card__cover:hover::before,
-  .home-wishlist-card__cover:focus-visible::before,
+  .home-wishlist-card:focus-within .home-wishlist-card__cover::before,
   .home-recent-banner__card:hover .home-recent-banner__cover::before,
   .home-recent-banner__card:focus-visible .home-recent-banner__cover::before,
   .home-recent-card:hover .home-recent-card__cover::before,
@@ -10248,10 +10285,9 @@ input[type="search"]::-ms-reveal {
   .catalogue-list__item--hovered .catalogue-list__cover::before,
   .catalogue-list__item:focus-within .catalogue-list__cover::before,
   .favorites-grid__item:hover .favorites-grid__cover::before,
-  .favorites-grid__item:focus-within .favorites-grid__cover::before,
-  .home-recommended-hero:hover .home-recommended-hero__cover img,
-  .home-recommended-hero:focus-visible .home-recommended-hero__cover img {
-    inset: calc((100% - var(--pb-cover-rest-size)) / 2) !important;
+  .favorites-grid__item:focus-within .favorites-grid__cover::before {
+    transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-rest-scale)) !important;
+    opacity: 0 !important;
   }
 
   .game-card__cover::before,
@@ -10273,14 +10309,15 @@ input[type="search"]::-ms-reveal {
   .container__content .home-recent-card__cover::before,
   .container__content .home-recent-list__cover::before,
   .container__content .home-recent-banner__cover::before,
-  .container__content .favorites-grid__cover::before,
-  .home-recommended-hero__cover img {
+  .container__content .favorites-grid__cover::before {
     transition: opacity var(--motion-base) ease !important;
+    will-change: auto;
   }
 }
 
 html.no-animations {
-  --pb-cover-hover-size: 100%;
+  --pb-cover-hover-scale: var(--pb-cover-rest-scale);
+  --pb-cover-zoom-opacity: 0;
 
   @include pb-disable-cover-zoom;
 
