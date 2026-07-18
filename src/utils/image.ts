@@ -296,10 +296,10 @@ export function gameHeroSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const screenshotSources = new Set(game.screenshots ?? []);
   const steamHeroSources = [
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
   ];

@@ -2062,7 +2062,7 @@ function HomeRecentBannerCard({
   const heroSources = [fallbackHeroSource];
   const cachedSources = useCachedImageSources(heroSources);
   const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
-  const iconUrl = useGameIconUrl(game);
+  const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
   const achievementTotal = game.achievements.total ?? 0;
   const achievementUnlocked = Math.min(
     game.achievements.unlocked ?? 0,
@@ -2103,7 +2103,11 @@ function HomeRecentBannerCard({
           <span className="home-recent-banner__title-row">
             <span
               className={`home-recent-banner__game-icon${
-                iconUrl ? "" : " home-recent-banner__game-icon--empty"
+                iconUrl
+                  ? ""
+                  : iconLoading
+                    ? " home-recent-banner__game-icon--skeleton"
+                    : " home-recent-banner__game-icon--empty"
               }`}
               aria-hidden="true"
             >

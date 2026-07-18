@@ -64,9 +64,9 @@ export function GameBackupOptionsModal({
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [selectedCloudSaveId, setSelectedCloudSaveId] = useState("");
   const [cloudLoading, setCloudLoading] = useState(false);
-  const [cloudBusyAction, setCloudBusyAction] = useState<
-    "backup" | "restore" | null
-  >(null);
+  const [cloudBusyAction, setCloudBusyAction] = useState<"restore" | null>(
+    null,
+  );
   const [cloudError, setCloudError] = useState("");
   const [cloudMessage, setCloudMessage] = useState("");
   const [hasCloudSession, setHasCloudSession] = useState(false);
@@ -156,81 +156,6 @@ export function GameBackupOptionsModal({
       cancelled = true;
     };
   }, [game?.appId, open, steamProfile?.steamId]);
-
-  const refreshCloudSaves = async () => {
-    if (!game?.appId) return;
-    try {
-      const saves = await ghostboxApi.listCloudSaves(game.appId);
-      setCloudSaves(saves);
-      setSelectedCloudSaveId((current) => {
-        if (current && saves.some((save) => save.id === current)) return current;
-        return saves[0]?.id ?? "";
-      });
-    } catch (error) {
-      setCloudError(
-        error instanceof Error
-          ? error.message
-          : copy(
-              "Não foi possível atualizar os backups em nuvem.",
-              "Could not refresh cloud saves.",
-            ),
-      );
-    }
-  };
-
-  const handleCloudBackup = async () => {
-    if (!game || cloudBusyAction) return;
-    if (!steamProfile?.steamId) {
-      setCloudError(
-        copy(
-          "Entre com a Steam antes de usar backup em nuvem.",
-          "Sign in with Steam before using cloud backup.",
-        ),
-      );
-      return;
-    }
-    if (!hasCloudSession) {
-      setCloudError(
-        copy(
-          "Reconecte a Steam para ativar o backup em nuvem neste dispositivo.",
-          "Reconnect Steam to enable cloud backup on this device.",
-        ),
-      );
-      return;
-    }
-    if (!isPremium) {
-      setSubscriptionModalOpen(true);
-      return;
-    }
-
-    setCloudError("");
-    setCloudMessage("");
-    setCloudBusyAction("backup");
-    try {
-      const result = await ghostboxApi.backupGameToCloud(game);
-      if (!result?.save) {
-        throw new Error(
-          copy("Falha ao fazer backup em nuvem.", "Cloud backup failed."),
-        );
-      }
-      await refreshCloudSaves();
-      setSelectedCloudSaveId(result.save.id);
-      setCloudMessage(
-        copy(
-          "Backup em nuvem concluído.",
-          "Cloud backup completed.",
-        ),
-      );
-    } catch (error) {
-      setCloudError(
-        error instanceof Error
-          ? error.message
-          : copy("Falha ao fazer backup em nuvem.", "Cloud backup failed."),
-      );
-    } finally {
-      setCloudBusyAction(null);
-    }
-  };
 
   const handleCloudRestore = async () => {
     if (!game || !selectedCloudSaveId || cloudBusyAction) return;
@@ -437,23 +362,6 @@ export function GameBackupOptionsModal({
               </div>
 
               <div className="modal__cloud-backup-actions">
-                <button
-                  type="button"
-                  className="button button--outline modal__backup-action-button"
-                  onClick={() => void handleCloudBackup()}
-                  disabled={
-                    !cloudStatusReady ||
-                    cloudLoading ||
-                    cloudBusyAction !== null ||
-                    !steamProfile?.steamId ||
-                    !hasCloudSession
-                  }
-                >
-                  {cloudBusyAction === "backup" && (
-                    <Loader2 size={14} strokeWidth={2.15} aria-hidden="true" />
-                  )}
-                  {copy("Fazer backup", "Back up now")}
-                </button>
                 <button
                   type="button"
                   className="button button--outline modal__backup-action-button"

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadGames, type GhostBoxGame } from "../data";
 import { useSettings } from "../context/settings";
 import { EmptyState, NotificationsFeedLoadingState } from "../components/ui/LoadingStates";
-import { Bell } from "lucide-react";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import { gameHeaderOnlySources, layeredImageStyle } from "../utils/image";
@@ -193,8 +192,6 @@ export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
         <EmptyState
           className="notifications-page__empty"
           title={appearance.language === "en" ? "Nothing new yet" : "Nada novo por enquanto"}
-          message={t("notifications.emptyMessage")}
-          icon={<Bell size={24} strokeWidth={1.75} />}
         />
       )}
     </section>

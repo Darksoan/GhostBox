@@ -22,6 +22,7 @@ export const steamWishlistRecommendationsStorageKey = "ghostbox:steam-wishlist-r
 export const steamWishlistReviewCacheStorageKey = "ghostbox:steam-wishlist-review-cache:v1";
 export const recentLibrarySessionLimit = 50;
 export const librarySortStorageKey = "ghostbox:library-sort-by:v1";
+export const overviewSortStorageKey = "ghostbox:overview-sort-by:v1";
 export const notificationsLastSeenStorageKey = "ghostbox:notifications-last-seen:v1";
 export const imageSourceCacheLimit = 800;
 

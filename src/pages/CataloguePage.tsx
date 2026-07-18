@@ -1,4 +1,4 @@
-import { ChevronRight, Check, LibraryBig, X } from "lucide-react";
+import { ChevronRight, Check, X } from "lucide-react";
 import {
   memo,
   useDeferredValue,
@@ -581,7 +581,6 @@ export function CataloguePage({
                 hasActiveFilters ? t("catalogue.filters.clearAll") : undefined
               }
               onAction={hasActiveFilters ? () => onFiltersChange(emptyCatalogueFilters) : undefined}
-              icon={<LibraryBig size={24} strokeWidth={1.75} />}
             />
           )}
 

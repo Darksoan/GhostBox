@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import { useSettings } from "../context/settings";
 import { AchievementsListLoadingState, EmptyState } from "../components/ui/LoadingStates";
-import { Cup } from "reicon-react";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import { mergeAchievementDetailsIntoGame } from "../utils/steamAchievementMerge";
 import { formatCompactPlaytime } from "../utils/time";
@@ -249,12 +248,6 @@ export function GameAchievementsPage({
           <EmptyState
             className="game-achievements-page__empty"
             title={t("achievements.empty")}
-            message={
-              appearance.language === "en"
-                ? "This game has no tracked achievements."
-                : "Este jogo não possui conquistas rastreadas."
-            }
-            icon={<Cup size={24} weight="Filled" strokeWidth={2.0} />}
           />
         ) : (
           <ul className="game-achievements-page__list">

@@ -1210,31 +1210,6 @@ async fn fetch_steam_level(
         .ok_or_else(|| "Steam player level missing from response".to_string())
 }
 
-#[allow(dead_code)]
-fn parse_steam_level_from_profile_html(html: &str) -> Option<u32> {
-    let class_index = html.find("friendPlayerLevelNum")?;
-    let after_class = &html[class_index..];
-    let content_start = after_class.find('>')? + 1;
-    let after_tag = after_class[content_start..].trim_start();
-    let digits: String = after_tag
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect();
-    if digits.is_empty() {
-        return None;
-    }
-    digits.parse::<u32>().ok()
-}
-
-// Intentionally disabled: scraping profile HTML triggers Steam blocks.
-#[allow(dead_code)]
-async fn fetch_steam_level_from_profile_page(
-    _client: &reqwest::Client,
-    _steam_id: &str,
-) -> Result<u32, String> {
-    Err("Steam profile HTML scraping is disabled".to_string())
-}
-
 /// Get Steam player level via official Web API first, then proxy/profile fallbacks.
 #[tauri::command]
 pub async fn steam_get_player_level(

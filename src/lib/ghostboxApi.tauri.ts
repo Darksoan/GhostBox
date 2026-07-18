@@ -1141,6 +1141,39 @@ export const ghostboxApi = {
     return invokeOr<Record<string, string>>("steam_get_game_icon_urls", { appIds }, {});
   },
 
+  getLocalGameIconUrls(appIds: string[]): Promise<Record<string, string>> {
+    return invokeOr<Record<string, string>>(
+      "steam_get_local_game_icon_urls",
+      { appIds },
+      {},
+    );
+  },
+
+  resolveGameIconUrls(appIds: string[]): Promise<Record<string, string>> {
+    return invokeOr<Record<string, string>>(
+      "steam_resolve_game_icon_urls",
+      { appIds },
+      {},
+    );
+  },
+
+  onGameIconUrlsResolved(
+    callback: (icons: Record<string, string>) => void,
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<Record<string, string>>("game-icon-urls-resolved", (event) => {
+      callback(event.payload);
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten();
+      else unlisten = nextUnlisten;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
   onSteamCmdReady(callback: () => void): () => void {
     void callback;
     return noopUnsubscribe;

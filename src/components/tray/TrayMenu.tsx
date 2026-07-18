@@ -14,7 +14,7 @@ type TrayGameItemProps = {
 };
 
 function TrayGameItem({ game, launching, disabled, onLaunch }: TrayGameItemProps) {
-  const iconUrl = useGameIconUrl(game);
+  const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
   const { appearance } = useSettings();
   const isEnglish = appearance.language === "en";
 
@@ -27,6 +27,8 @@ function TrayGameItem({ game, launching, disabled, onLaunch }: TrayGameItemProps
     >
       {iconUrl ? (
         <img src={iconUrl} alt="" className="tray-menu__game-icon" aria-hidden="true" />
+      ) : iconLoading ? (
+        <span className="tray-menu__game-icon tray-menu__game-icon--skeleton" aria-hidden="true" />
       ) : (
         <span className="tray-menu__game-icon tray-menu__game-icon--fallback" aria-hidden="true">
           <Play size={11} strokeWidth={2.25} />

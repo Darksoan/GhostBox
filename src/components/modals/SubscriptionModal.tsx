@@ -19,7 +19,7 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
       return;
     }
 
-    const closeTimer = window.setTimeout(() => setShouldRender(false), 180);
+    const closeTimer = window.setTimeout(() => setShouldRender(false), 100);
 
     return () => window.clearTimeout(closeTimer);
   }, [open]);

@@ -42,11 +42,7 @@ import {
 import { isHiddenLibraryGame } from "../utils/filters";
 import { preloadGamePortraitSources } from "../utils/image";
 import { normalizeSteamGameTitles } from "../utils/steamTitles";
-import {
-  buildSteamOwnedGamesFromPlaytimes,
-  buildSteamOwnedGamesFromSnapshot,
-  mergeSteamOwnedLibraryGames,
-} from "../utils/steamLibraryMerge";
+
 import { mergeSteamAchievementsIntoGames } from "../utils/steamAchievementMerge";
 import {
   readStoredFavoriteGames,
@@ -54,7 +50,6 @@ import {
   readStoredUserCollections,
   readStoredSteamProfile,
   readStoredStartupPage,
-  readStoredShowSteamGames,
   readStoredCloudProfileUpdatedAt,
   writeStoredFavoriteGames,
   writeStoredProfileHistoryGames,
@@ -68,7 +63,6 @@ import {
   loadGameAchievementDetailsCached,
   loadGameDetailsCached,
 } from "../utils/gameCache";
-import { preloadGameIconUrls } from "../hooks/useGameIconUrl";
 import {
   createProfileHistoryFallbackGame,
   getBackupRecordLatestKey,
@@ -137,11 +131,19 @@ async function resolveCloudGames(
   return { gamesById, games: Array.from(gamesById.values()) };
 }
 
+function resolvePlaytimeAppId(game: GhostBoxGame) {
+  const appId = (game.appId || "").trim();
+  if (/^\d+$/.test(appId)) return appId;
+  const fromId = game.id.replace(/^steam-/, "").trim();
+  return /^\d+$/.test(fromId) ? fromId : appId;
+}
+
 function applyPlaytimeToGame(
   game: GhostBoxGame,
   snapshot: GamePlaytimeSnapshot,
 ): GhostBoxGame {
-  const playtime = snapshot[game.appId];
+  const appId = resolvePlaytimeAppId(game);
+  const playtime = snapshot[appId] ?? snapshot[game.appId];
   if (!playtime) {
     return { ...game, sessionActive: false };
   }
@@ -165,7 +167,8 @@ function applyPlaytimeSnapshotToGames(
   const hasSteamData = Object.keys(snapshot).length > 0;
 
   const nextGames = games.map((game) => {
-    const playtime = snapshot[game.appId];
+    const appId = resolvePlaytimeAppId(game);
+    const playtime = snapshot[appId] ?? snapshot[game.appId];
 
     if (!playtime) {
       if (!hasSteamData) {
@@ -295,9 +298,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [scannedLibraryGames, setScannedLibraryGames] = useState<GhostBoxGame[]>(
     [],
   );
-  const [steamOwnedLibraryGames, setSteamOwnedLibraryGames] = useState<
-    GhostBoxGame[]
-  >([]);
   const [userCollections, setUserCollections] = useState<UserCollection[]>(() =>
     readStoredUserCollections(),
   );
@@ -330,9 +330,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [steamPathInput, setSteamPathInput] = useState(
     "C:\\Program Files (x86)\\Steam",
   );
-  const [showSteamGames, setShowSteamGames] = useState(() =>
-    readStoredShowSteamGames(),
-  );
+  // Steam account games are never auto-listed in the library.
+  const showSteamGames = false;
+  const setShowSteamGames = useCallback((_value: boolean) => {
+    writeStoredShowSteamGames(false);
+  }, []);
   const [steamAccountStats, setSteamAccountStats] =
     useState<SteamAccountStats | null>(null);
   const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
@@ -401,23 +403,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshSteamOwnedLibraryGames = useCallback(
-    async (steamId?: string | null, snapshot: GamePlaytimeSnapshot = gamePlaytimesRef.current) => {
+    async (steamId?: string | null) => {
       const id = steamId?.trim();
       if (!id) {
-        setSteamOwnedLibraryGames([]);
+        setSteamAccountStats(null);
         return;
       }
 
-      const fallbackGames = buildSteamOwnedGamesFromSnapshot(snapshot);
-      if (fallbackGames.length > 0) setSteamOwnedLibraryGames(fallbackGames);
-
       const stats = await ghostboxApi.getSteamAccountStats(id).catch(() => null);
       if (stats) setSteamAccountStats(stats);
-      if (!stats?.ownedPlaytimes?.length) return;
-
-      setSteamOwnedLibraryGames(
-        buildSteamOwnedGamesFromPlaytimes(stats.ownedPlaytimes, snapshot),
-      );
     },
     [],
   );
@@ -455,7 +449,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setProfileHistoryGames((current) =>
             applyPlaytimeSnapshotToGames(current, snapshot),
           );
-          void refreshSteamOwnedLibraryGames(id, snapshot);
+          void refreshSteamOwnedLibraryGames(id);
           return;
         }
         await refreshGamePlaytimes();
@@ -489,7 +483,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     steamProfileRef.current = steamProfile;
     if (!steamProfile?.steamId) {
-      setSteamOwnedLibraryGames([]);
       setSteamAccountStats(null);
       steamAccountStatsRef.current = null;
     }
@@ -509,14 +502,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       steamAccountStatsRef.current = stats;
       setSteamAccountStats(stats);
-      if (stats.ownedPlaytimes?.length) {
-        setSteamOwnedLibraryGames(
-          buildSteamOwnedGamesFromPlaytimes(
-            stats.ownedPlaytimes,
-            gamePlaytimesRef.current,
-          ),
-        );
-      }
     };
 
     const schedulePoll = (
@@ -1035,8 +1020,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [initialPage]);
 
   useEffect(() => {
-    writeStoredShowSteamGames(showSteamGames);
-  }, [showSteamGames]);
+    writeStoredShowSteamGames(false);
+  }, []);
 
   useEffect(() => {
     writeStoredProfileHistoryGames(profileHistoryGames);
@@ -1217,19 +1202,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         [...favoriteGamesRef.current, ...profileHistoryGamesRef.current],
       );
       setSteamPathInput(result.steamPath);
-      preloadGameIconUrls(games);
       setScannedLibraryGames(games);
     },
     [],
   );
 
   useEffect(() => {
+    // Never auto-list Steam account owned games in the library grid.
+    // Keep playtime/achievements via stats merge only for games already local
+    // (installed, registered, or LuaTools).
     const games = mergeSteamAchievementsIntoGames(
-      mergeSteamOwnedLibraryGames(
-        scannedLibraryGames,
-        steamOwnedLibraryGames.filter((game) => !isHiddenLibraryGame(game)),
-        showSteamGames,
-      ),
+      scannedLibraryGames,
       steamAccountStats,
     ).map(mergeGamePlaytime);
     setAddedLibraryGames(games);
@@ -1240,13 +1223,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .map((game) => game.appId),
       ),
     );
-  }, [
-    mergeGamePlaytime,
-    scannedLibraryGames,
-    showSteamGames,
-    steamAccountStats,
-    steamOwnedLibraryGames,
-  ]);
+  }, [mergeGamePlaytime, scannedLibraryGames, steamAccountStats]);
 
   const toggleFavoriteGame = useCallback(
     (game: GhostBoxGame) => {
@@ -1307,17 +1284,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
         if (isHiddenLibraryGame(result.libraryGame)) return;
 
+        const libraryGame = mergeGamePlaytime({
+          ...result.libraryGame,
+          // Registered Steam games must not look like auto-listed owned stubs.
+          librarySource: isSteamOwnedGame
+            ? "registered"
+            : result.libraryGame.librarySource === "steam-owned"
+              ? "registered"
+              : result.libraryGame.librarySource,
+        });
+
+        setScannedLibraryGames((current) =>
+          upsertLibraryGameByAppId(current, libraryGame),
+        );
         setAddedLibraryGames((current) =>
-          upsertLibraryGameByAppId(current, result.libraryGame),
+          upsertLibraryGameByAppId(current, libraryGame),
         );
         setAddedLibraryGameAppIds((current) =>
-          new Set(current).add(result.libraryGame.appId),
+          new Set(current).add(libraryGame.appId),
         );
         showToast(
           "Jogo adicionado",
           isSteamOwnedGame
-            ? `${result.libraryGame.title} foi reconhecido na Biblioteca.`
-            : `${result.libraryGame.title} foi adicionado à Biblioteca.`,
+            ? `${libraryGame.title} foi reconhecido na Biblioteca.`
+            : `${libraryGame.title} foi adicionado à Biblioteca.`,
         );
       } catch (error) {
         showToast(
@@ -1333,6 +1323,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [
       addingGameId,
       availableLibraryGameAppIds,
+      mergeGamePlaytime,
       removingGameId,
       showToast,
       steamProfile?.steamId,
@@ -1351,6 +1342,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        setScannedLibraryGames((current) =>
+          removeLibraryGameByAppId(current, result.appId),
+        );
         setAddedLibraryGames((current) =>
           removeLibraryGameByAppId(current, result.appId),
         );

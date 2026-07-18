@@ -108,6 +108,7 @@ const translations: Record<Language, TranslationTree> = {
       libraryGames: "Jogos",
       perfectGames: "Jogos perfeitos",
       averageAchievements: "Média de conquistas por jogo",
+      completionPerGame: "Conclusão por jogo",
       overallProgress: "Progresso geral",
       averageCompletion: "conclusão média",
       totalPlaytimeLabel: "Tempo total",
@@ -141,6 +142,13 @@ const translations: Record<Language, TranslationTree> = {
       steamIdCopied: "Steam ID copiado",
       showDiscordId: "Mostrar Discord ID",
       hideDiscordId: "Ocultar Discord ID",
+      sortAria: "Ordenar atividade",
+      sort: {
+        recent: "Jogados recentemente",
+        playtime: "Mais jogados",
+        title: "Título (A-Z)",
+        achievements: "Mais conquistas",
+      },
     },
     achievements: {
       title: "Conquistas",
@@ -622,6 +630,7 @@ const translations: Record<Language, TranslationTree> = {
       libraryGames: "Games",
       perfectGames: "Perfect games",
       averageAchievements: "Average achievements per game",
+      completionPerGame: "Completion per game",
       overallProgress: "Overall progress",
       averageCompletion: "average completion",
       totalPlaytimeLabel: "Total playtime",
@@ -655,6 +664,13 @@ const translations: Record<Language, TranslationTree> = {
       steamIdCopied: "Steam ID copied",
       showDiscordId: "Show Discord ID",
       hideDiscordId: "Hide Discord ID",
+      sortAria: "Sort activity",
+      sort: {
+        recent: "Recently played",
+        playtime: "Most played",
+        title: "Title (A-Z)",
+        achievements: "Most achievements",
+      },
     },
     achievements: {
       title: "Achievements",

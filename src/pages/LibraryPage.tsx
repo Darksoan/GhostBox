@@ -1,4 +1,4 @@
-import { ChevronLeft, Folder, Heart, LibraryBig } from "lucide-react";
+import { ChevronLeft, Folder, Heart } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
@@ -359,7 +359,7 @@ export function LibraryPage({
           libraryCoverFade
         />
       ) : (
-        <EmptyState query={query} icon={<LibraryBig size={24} strokeWidth={1.75} />} />
+        <EmptyState query={query} />
       )}
 
       {contextMenu && collectionContextMenuItems.length > 0 && (

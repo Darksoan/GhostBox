@@ -267,13 +267,15 @@ export function useLoadableImageState(
         };
 
         const tryHashedSteamLibraryCover = () => {
-          // Library capsule is portrait-only. Never substitute it for failed
-          // header/hero loads — that swaps a correct landscape art for a
-          // vertical cover after first paint.
-          if (
-            isHeaderImageSource(source) ||
-            isLandscapeImageSource(source)
-          ) {
+          // library_hero / landscape art: never block on SteamCMD header resolve.
+          // Just walk the next CDN candidate (fast). SteamCMD is for hashed
+          // portrait library capsules only.
+          if (isHeroImageSource(source) || isLandscapeImageSource(source)) {
+            tryNextSource();
+            return;
+          }
+
+          if (isHeaderImageSource(source)) {
             const appId = steamAppIdFromImageSource(source);
             if (!appId) {
               tryNextSource();
@@ -283,11 +285,6 @@ export function useLoadableImageState(
             void resolveSteamHeaderSource(appId)
               .then(loadFallbackImage)
               .catch(tryNextSource);
-            return;
-          }
-
-          if (isHeroImageSource(source)) {
-            tryNextSource();
             return;
           }
 

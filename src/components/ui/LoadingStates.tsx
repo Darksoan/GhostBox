@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { cataloguePageSize } from "../../constants/catalogue";
 import { useSettings } from "../../context/settings";
 import type { Page } from "../../types";
@@ -11,36 +10,25 @@ function placeholderClassName(blockClassName: string, animate = true, pulse = fa
 export function EmptyState({
   query = "",
   title,
-  message,
   actionLabel,
   onAction,
-  icon,
   className,
 }: {
   query?: string;
   title?: string;
-  message?: string;
   actionLabel?: string;
   onAction?: () => void;
-  icon?: ReactNode;
   className?: string;
 }) {
   const { t } = useSettings();
   const term = query.trim();
-  const resolvedTitle = title ?? t("loading.emptyTitle");
-  const resolvedMessage =
-    message ?? (term ? t("loading.emptyQuery", { term }) : t("loading.emptyMessage"));
+  const resolvedTitle =
+    title ?? (term ? t("loading.emptyQuery", { term }) : t("loading.emptyTitle"));
 
   return (
     <section className={["empty-state", className].filter(Boolean).join(" ")}>
-      {icon ? (
-        <div className="empty-state__icon" aria-hidden="true">
-          {icon}
-        </div>
-      ) : null}
       <div className="empty-state__body">
         <h3>{resolvedTitle}</h3>
-        {resolvedMessage ? <p>{resolvedMessage}</p> : null}
         {actionLabel && onAction ? (
           <button type="button" className="button button--outline" onClick={onAction}>
             {actionLabel}
@@ -264,22 +252,6 @@ export function NotificationsFeedLoadingState({ count = 3 }: { count?: number })
             </span>
             <span className="notification-group__count notification-group__count--skeleton loading-wave" />
           </div>
-          {index === 0 ? (
-            <div className="notifications-list notifications-list--games">
-              {Array.from({ length: 2 }, (_, itemIndex) => (
-                <div
-                  className="notification-game notification-game--skeleton"
-                  key={`notification-item-${index}-${itemIndex}`}
-                >
-                  <span className="notification-game__cover notification-game__cover--skeleton loading-wave" />
-                  <div className="notification-game__content">
-                    <span className="notifications-feed__skeleton-title loading-wave" />
-                    <span className="notifications-feed__skeleton-meta loading-wave" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </section>
       ))}
     </div>

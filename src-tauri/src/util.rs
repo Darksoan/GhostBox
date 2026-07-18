@@ -32,6 +32,9 @@ pub(crate) fn silent_steamcmd_output_many(
     steamcmd: &std::path::Path,
     app_ids: &[&str],
 ) -> Option<std::process::Output> {
+    use std::io::Read;
+    use wait_timeout::ChildExt;
+
     if app_ids.is_empty() {
         return None;
     }
@@ -54,13 +57,39 @@ pub(crate) fn silent_steamcmd_output_many(
         command.args(["+app_info_print", app_id]);
     }
 
-    command
+    let mut child = command
         .arg("+quit")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .output()
-        .ok()
+        .spawn()
+        .ok()?;
+    let mut stdout = child.stdout.take()?;
+    // Drain stdout while SteamCMD runs; app_info_print output can exceed the
+    // OS pipe buffer and deadlock if it is only read after process exit.
+    let output_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stdout.read_to_end(&mut bytes);
+        bytes
+    });
+    let status = match child
+        .wait_timeout(std::time::Duration::from_secs(30))
+        .ok()?
+    {
+        Some(status) => status,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = output_reader.join();
+            return None;
+        }
+    };
+    let stdout = output_reader.join().ok()?;
+    Some(std::process::Output {
+        status,
+        stdout,
+        stderr: Vec::new(),
+    })
 }
 
 pub(crate) fn with_steamcmd_lock<T>(operation: impl FnOnce() -> T) -> T {

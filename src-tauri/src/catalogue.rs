@@ -1,14 +1,15 @@
 use crate::catalogue_cache;
 use crate::image_cache;
-use crate::util::{silent_steamcmd_output, silent_steamcmd_output_many, with_steamcmd_lock};
+use crate::util::{silent_steamcmd_output_many, with_steamcmd_lock};
 use crate::{FACETS_VERSION, RANKING_VERSION};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Cursor;
-use std::path::PathBuf;
-use std::time::Duration;
-use tauri::Manager;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
+use tauri::{Emitter, Manager};
 
 const STEAM_STORE_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
@@ -19,10 +20,19 @@ const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
 const LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV: &str = "EDEN_STEAM_DETAILS_PROXY_URL";
 const LEGACY_STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
 const STEAMCMD_ICON_BATCH_SIZE: usize = 25;
+const GAME_ICON_URLS_RESOLVED_EVENT: &str = "game-icon-urls-resolved";
 const STEAM_APPINFO_ICON_SEARCH_WINDOW: usize = 65_536;
 const STEAMCMD_DOWNLOAD_URL: &str = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
-static STEAM_STORE_DETAILS_CACHE_WRITE_LOCK: std::sync::Mutex<()> =
-    std::sync::Mutex::new(());
+const STEAM_ICON_NEGATIVE_CACHE_TTL_SECS: u64 = 3_600;
+static STEAM_STORE_DETAILS_CACHE_WRITE_LOCK: Mutex<()> = Mutex::new(());
+static STEAM_ICON_URL_MEMORY: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+static STEAM_ICON_NEGATIVE_CACHE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+static STEAM_APPINFO_BYTES_CACHE: OnceLock<Mutex<Option<AppinfoBytesCache>>> = OnceLock::new();
+struct AppinfoBytesCache {
+    path: PathBuf,
+    modified: SystemTime,
+    bytes: Arc<Vec<u8>>,
+}
 
 fn text(value: Option<&Value>) -> String {
     value
@@ -367,27 +377,6 @@ fn merge_header_image(object: &mut serde_json::Map<String, Value>, header_image:
         }
     }
     object.insert("coverFallbacks".to_string(), Value::Array(fallbacks));
-}
-
-fn extract_between(value: &str, start: &str, end: &str) -> Option<String> {
-    let start_index = value.find(start)? + start.len();
-    let after_start = &value[start_index..];
-    let end_index = after_start.find(end)?;
-    Some(after_start[..end_index].to_string())
-}
-
-#[allow(dead_code)]
-fn extract_steam_store_page_title(html: &str) -> Option<String> {
-    let apphub_title = extract_between(html, "<div class=\"apphub_AppName\">", "</div>")
-        .or_else(|| extract_between(html, "<div class='apphub_AppName'>", "</div>"));
-    let raw_title = apphub_title.or_else(|| extract_between(html, "<title>", "</title>"))?;
-    let title = strip_html(&raw_title)
-        .replace(" on Steam", "")
-        .replace(" no Steam", "")
-        .trim()
-        .to_string();
-
-    (!title.is_empty()).then_some(title)
 }
 
 fn steam_app_fallback_game(app_id: &str) -> Value {
@@ -865,74 +854,6 @@ fn normalize_achievement(achievement: &Value) -> Option<Value> {
     }))
 }
 
-fn between(value: &str, start: &str, end: &str) -> String {
-    let Some(start_index) = value.find(start) else {
-        return String::new();
-    };
-    let content_start = start_index + start.len();
-    let Some(end_index) = value[content_start..].find(end) else {
-        return String::new();
-    };
-    html_decode(value[content_start..content_start + end_index].trim())
-}
-
-fn attribute_value(value: &str, attribute: &str) -> String {
-    for quote in ['"', '\''] {
-        let marker = format!("{attribute}={quote}");
-        let Some(start_index) = value.find(&marker) else {
-            continue;
-        };
-        let content_start = start_index + marker.len();
-        let Some(end_index) = value[content_start..].find(quote) else {
-            continue;
-        };
-        return html_decode(value[content_start..content_start + end_index].trim());
-    }
-    String::new()
-}
-
-#[allow(dead_code)]
-fn parse_community_achievements(html: &str) -> Vec<Value> {
-    html.split("achieveRow")
-        .skip(1)
-        .filter_map(|row| {
-            let img_start = row.find("<img")?;
-            let img_end = row[img_start..].find('>').map(|index| img_start + index)?;
-            let icon = attribute_value(&row[img_start..=img_end], "src");
-            let title = between(row, "<h3>", "</h3>");
-            let description = between(row, "<h5>", "</h5>");
-            let percent = between(row, "<div class=\"achievePercent\">", "</div>")
-                .trim_end_matches('%')
-                .trim()
-                .parse::<f64>()
-                .ok();
-
-            if title.is_empty() || icon.is_empty() {
-                return None;
-            }
-
-            let mut achievement = serde_json::json!({
-                "name": title,
-                "title": title,
-                "description": description,
-                "icon": icon,
-                "iconGray": icon
-            });
-            if let Some(percent) = percent {
-                achievement["globalPercent"] = serde_json::json!(percent);
-            }
-            Some(achievement)
-        })
-        .collect()
-}
-
-// Intentionally disabled: community stats HTML scraping triggers Steam blocks.
-// Prefer Web API schema, then local appcache definitions.
-#[allow(dead_code)]
-async fn fetch_steam_achievements_from_community(_app_id: &str) -> Vec<Value> {
-    Vec::new()
-}
-
 trait EmptyThen {
     fn if_empty_then(self, fallback: impl FnOnce() -> String) -> String;
 }
@@ -947,7 +868,11 @@ impl EmptyThen for String {
     }
 }
 
-async fn fetch_steam_achievements_from_proxy(proxy_url: &str, app_id: &str) -> Vec<Value> {
+async fn fetch_steam_achievements_from_proxy(
+    proxy_url: &str,
+    app_id: &str,
+    language: &str,
+) -> Vec<Value> {
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -956,7 +881,7 @@ async fn fetch_steam_achievements_from_proxy(proxy_url: &str, app_id: &str) -> V
     };
     let Ok(response) = client
         .get(format!("{proxy_url}/steam/game-schema"))
-        .query(&[("appId", app_id), ("language", "portuguese")])
+        .query(&[("appId", app_id), ("language", language)])
         .header(reqwest::header::ACCEPT, "application/json")
         .send()
         .await
@@ -989,14 +914,17 @@ async fn fetch_steam_achievements(
 ) -> Vec<Value> {
     let proxy_url = crate::settings::load_steam_stats_proxy_url();
     if !proxy_url.is_empty() {
-        let schema_achievements = fetch_steam_achievements_from_proxy(&proxy_url, app_id).await;
-        if !schema_achievements.is_empty() {
-            return schema_achievements;
+        // Prefer pt-BR, then European Portuguese, then English schema.
+        for language in ["brazilian", "portuguese", "english"] {
+            let schema_achievements =
+                fetch_steam_achievements_from_proxy(&proxy_url, app_id, language).await;
+            if !schema_achievements.is_empty() {
+                return schema_achievements;
+            }
         }
     }
 
-    // Offline / proxy miss: build a basic list from local Steam schema.
-    // Do not scrape steamcommunity.com HTML (rate-limits / IP blocks).
+    // Offline / proxy miss: local Steam schema only (no HTML community scrape).
     let _ = app;
     crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id)
 }
@@ -1053,6 +981,46 @@ fn steam_community_icon_url(app_id: &str, hash: &str) -> String {
     )
 }
 
+fn steam_community_image_url(app_id: &str, hash: &str, extension: &str) -> String {
+    format!(
+        "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{hash}.{extension}"
+    )
+}
+
+fn is_hex_icon_hash(hash: &str) -> bool {
+    hash.len() >= 20 && hash.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn is_steam_community_icon_url(app_id: &str, url: &str) -> bool {
+    let url = url.trim();
+    url.starts_with("https://")
+        && url.contains(&format!("steamcommunity/public/images/apps/{app_id}/"))
+        && (url.contains(".ico") || url.contains(".jpg") || url.contains(".png"))
+}
+
+fn is_local_icon_path(path: &str) -> bool {
+    let path = path.trim();
+    if path.is_empty() || path.starts_with("https://") || path.starts_with("http://") {
+        return false;
+    }
+    let candidate = Path::new(path);
+    candidate.is_absolute()
+        && candidate
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "ico" | "jpg" | "jpeg" | "png"
+                )
+            })
+        && candidate.is_file()
+}
+
+fn is_cached_icon_source(app_id: &str, value: &str) -> bool {
+    is_steam_community_icon_url(app_id, value) || is_local_icon_path(value)
+}
+
 fn steam_icon_url_cache_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     Some(
         app.path()
@@ -1062,18 +1030,83 @@ fn steam_icon_url_cache_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     )
 }
 
+fn steam_icon_url_memory() -> &'static Mutex<HashMap<String, String>> {
+    STEAM_ICON_URL_MEMORY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn steam_icon_negative_cache() -> &'static Mutex<HashMap<String, Instant>> {
+    STEAM_ICON_NEGATIVE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn steam_appinfo_bytes_cache() -> &'static Mutex<Option<AppinfoBytesCache>> {
+    STEAM_APPINFO_BYTES_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn remember_steam_icon_url(app_id: &str, icon_url: &str) {
+    if let Ok(mut memory) = steam_icon_url_memory().lock() {
+        memory.insert(app_id.to_string(), icon_url.to_string());
+    }
+    if let Ok(mut negative) = steam_icon_negative_cache().lock() {
+        negative.remove(app_id);
+    }
+}
+
+fn memory_steam_icon_url(app_id: &str) -> Option<String> {
+    steam_icon_url_memory()
+        .lock()
+        .ok()
+        .and_then(|memory| memory.get(app_id).cloned())
+        .filter(|url| is_cached_icon_source(app_id, url))
+}
+
+fn mark_steam_icon_negative(app_id: &str) {
+    if let Ok(mut negative) = steam_icon_negative_cache().lock() {
+        negative.insert(app_id.to_string(), Instant::now());
+    }
+}
+
+fn is_steam_icon_negative(app_id: &str) -> bool {
+    let Ok(mut negative) = steam_icon_negative_cache().lock() else {
+        return false;
+    };
+    let Some(stored_at) = negative.get(app_id).copied() else {
+        return false;
+    };
+    if stored_at.elapsed() > Duration::from_secs(STEAM_ICON_NEGATIVE_CACHE_TTL_SECS) {
+        negative.remove(app_id);
+        return false;
+    }
+    true
+}
+
 fn read_steam_icon_url_cache(app: &tauri::AppHandle) -> HashMap<String, String> {
+    if let Ok(memory) = steam_icon_url_memory().lock() {
+        if !memory.is_empty() {
+            return memory.clone();
+        }
+    }
+
     let Some(path) = steam_icon_url_cache_path(app) else {
         return HashMap::new();
     };
 
-    fs::read_to_string(path)
+    let disk = fs::read_to_string(path)
         .ok()
         .and_then(|value| serde_json::from_str::<HashMap<String, String>>(&value).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    if let Ok(mut memory) = steam_icon_url_memory().lock() {
+        *memory = disk.clone();
+    }
+
+    disk
 }
 
 fn write_steam_icon_url_cache(app: &tauri::AppHandle, cache: &HashMap<String, String>) {
+    if let Ok(mut memory) = steam_icon_url_memory().lock() {
+        *memory = cache.clone();
+    }
+
     let Some(path) = steam_icon_url_cache_path(app) else {
         return;
     };
@@ -1082,24 +1115,24 @@ fn write_steam_icon_url_cache(app: &tauri::AppHandle, cache: &HashMap<String, St
         let _ = fs::create_dir_all(parent);
     }
 
-    if let Ok(value) = serde_json::to_string(cache) {
+    let persistent = cache
+        .iter()
+        .filter(|(app_id, url)| is_cached_icon_source(app_id, url))
+        .map(|(app_id, url)| (app_id.clone(), url.clone()))
+        .collect::<HashMap<_, _>>();
+
+    if let Ok(value) = serde_json::to_string(&persistent) {
         let _ = fs::write(path, value);
     }
 }
 
 fn cached_steam_icon_url(cache: &HashMap<String, String>, app_id: &str) -> Option<String> {
     let url = cache.get(app_id)?.trim();
-    if url.starts_with("https://") && url.contains(&format!("/apps/{app_id}/")) {
+    if is_cached_icon_source(app_id, url) {
         Some(url.to_string())
     } else {
         None
     }
-}
-
-fn cache_steam_icon_url(app: &tauri::AppHandle, app_id: &str, icon_url: &str) {
-    let mut cache = read_steam_icon_url_cache(app);
-    cache.insert(app_id.to_string(), icon_url.to_string());
-    write_steam_icon_url_cache(app, &cache);
 }
 
 fn extract_client_icon_hash(value: &str) -> Option<String> {
@@ -1111,7 +1144,7 @@ fn extract_client_icon_hash(value: &str) -> Option<String> {
     let value_end = after_quote.find('"')?;
     let hash = after_quote[..value_end].trim();
 
-    if hash.len() >= 20 && hash.chars().all(|character| character.is_ascii_hexdigit()) {
+    if is_hex_icon_hash(hash) {
         Some(hash.to_ascii_lowercase())
     } else {
         None
@@ -1144,6 +1177,49 @@ fn extract_client_icon_hashes(value: &str, app_ids: &[String]) -> HashMap<String
         .collect()
 }
 
+fn extract_community_icon_url_from_text(value: &str, app_id: &str) -> Option<String> {
+    if let Some(hash) = extract_client_icon_hash(value) {
+        return Some(steam_community_icon_url(app_id, &hash));
+    }
+
+    let needle = format!("steamcommunity/public/images/apps/{app_id}/");
+    let mut search_from = 0usize;
+    let mut fallback: Option<String> = None;
+
+    while let Some(relative) = value[search_from..].find(&needle) {
+        let start = search_from + relative + needle.len();
+        let rest = &value[start..];
+        let hash_end = rest
+            .find(|character: char| !character.is_ascii_hexdigit())
+            .unwrap_or(rest.len());
+        let hash = &rest[..hash_end];
+        if is_hex_icon_hash(hash) {
+            let after_hash = &rest[hash_end..];
+            if after_hash.starts_with(".ico") {
+                return Some(steam_community_image_url(app_id, &hash.to_ascii_lowercase(), "ico"));
+            }
+            if fallback.is_none() {
+                if after_hash.starts_with(".jpg") {
+                    fallback = Some(steam_community_image_url(
+                        app_id,
+                        &hash.to_ascii_lowercase(),
+                        "jpg",
+                    ));
+                } else if after_hash.starts_with(".png") {
+                    fallback = Some(steam_community_image_url(
+                        app_id,
+                        &hash.to_ascii_lowercase(),
+                        "png",
+                    ));
+                }
+            }
+        }
+        search_from = start + hash_end.max(1);
+    }
+
+    fallback
+}
+
 fn read_client_icon_from_vdf(bytes: &[u8], app_id: &str) -> Option<String> {
     let app_id = app_id.parse::<u32>().ok()?;
     let app_id_bytes = app_id.to_le_bytes();
@@ -1166,7 +1242,40 @@ fn read_client_icon_from_vdf(bytes: &[u8], app_id: &str) -> Option<String> {
             if let Some(value_end) = section[value_start..].iter().position(|byte| *byte == 0) {
                 let hash = String::from_utf8_lossy(&section[value_start..value_start + value_end]);
                 let hash = hash.trim();
-                if hash.len() >= 20 && hash.chars().all(|character| character.is_ascii_hexdigit()) {
+                if is_hex_icon_hash(hash) {
+                    return Some(hash.to_ascii_lowercase());
+                }
+            }
+        }
+
+        pos = index + app_id_bytes.len();
+    }
+
+    None
+}
+
+fn read_icon_hash_from_vdf(bytes: &[u8], app_id: &str, key: &[u8]) -> Option<String> {
+    let app_id = app_id.parse::<u32>().ok()?;
+    let app_id_bytes = app_id.to_le_bytes();
+    let mut pos = 0usize;
+
+    while pos + app_id_bytes.len() < bytes.len() {
+        let Some(relative_index) = bytes[pos..]
+            .windows(app_id_bytes.len())
+            .position(|window| window == app_id_bytes)
+        else {
+            break;
+        };
+        let index = pos + relative_index;
+        let section_end = (index + STEAM_APPINFO_ICON_SEARCH_WINDOW).min(bytes.len());
+        let section = &bytes[index..section_end];
+
+        if let Some(key_index) = section.windows(key.len()).position(|window| window == key) {
+            let value_start = key_index + key.len();
+            if let Some(value_end) = section[value_start..].iter().position(|byte| *byte == 0) {
+                let hash = String::from_utf8_lossy(&section[value_start..value_start + value_end]);
+                let hash = hash.trim();
+                if is_hex_icon_hash(hash) {
                     return Some(hash.to_ascii_lowercase());
                 }
             }
@@ -1210,37 +1319,92 @@ pub(crate) fn read_local_steam_app_title(app: &tauri::AppHandle, app_id: &str) -
     None
 }
 
-fn get_game_icon_from_local_appinfo(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
+fn load_appinfo_bytes(app: &tauri::AppHandle) -> Option<Arc<Vec<u8>>> {
     let (steam_path, _) = crate::resolve_steam_path(app, None);
     let steam_path = steam_path?;
-    let vdf_path = std::path::Path::new(&steam_path)
-        .join("appcache")
-        .join("appinfo.vdf");
-    let bytes = fs::read(vdf_path).ok()?;
-    let hash = read_client_icon_from_vdf(&bytes, app_id)?;
-    Some(steam_community_icon_url(app_id, &hash))
+    let vdf_path = Path::new(&steam_path).join("appcache").join("appinfo.vdf");
+    let metadata = fs::metadata(&vdf_path).ok()?;
+    let modified = metadata.modified().ok()?;
+
+    if let Ok(mut cache) = steam_appinfo_bytes_cache().lock() {
+        if let Some(existing) = cache.as_ref() {
+            if existing.path == vdf_path && existing.modified == modified {
+                return Some(existing.bytes.clone());
+            }
+        }
+
+        let bytes = Arc::new(fs::read(&vdf_path).ok()?);
+        *cache = Some(AppinfoBytesCache {
+            path: vdf_path,
+            modified,
+            bytes: Arc::clone(&bytes),
+        });
+        return Some(bytes);
+    }
+
+    Some(Arc::new(fs::read(vdf_path).ok()?))
 }
 
 fn get_game_icons_from_local_appinfo(
     app: &tauri::AppHandle,
     app_ids: &[String],
 ) -> HashMap<String, String> {
-    let (steam_path, _) = crate::resolve_steam_path(app, None);
-    let Some(steam_path) = steam_path else {
-        return HashMap::new();
-    };
-    let vdf_path = std::path::Path::new(&steam_path)
-        .join("appcache")
-        .join("appinfo.vdf");
-    let Ok(bytes) = fs::read(vdf_path) else {
+    let Some(bytes) = load_appinfo_bytes(app) else {
         return HashMap::new();
     };
 
     app_ids
         .iter()
         .filter_map(|app_id| {
-            read_client_icon_from_vdf(&bytes, app_id)
-                .map(|hash| (app_id.clone(), steam_community_icon_url(app_id, &hash)))
+            if let Some(hash) = read_client_icon_from_vdf(&bytes, app_id) {
+                return Some((app_id.clone(), steam_community_icon_url(app_id, &hash)));
+            }
+            read_icon_hash_from_vdf(&bytes, app_id, b"icon\0")
+                .map(|hash| (app_id.clone(), steam_community_image_url(app_id, &hash, "jpg")))
+        })
+        .collect()
+}
+
+fn get_game_icon_from_local_files(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
+    let (steam_path, _) = crate::resolve_steam_path(app, None);
+    let steam_path = steam_path?;
+    let steam_root = Path::new(&steam_path);
+    let candidates = [
+        steam_root.join("steam").join("games").join(format!("{app_id}.ico")),
+        steam_root
+            .join("appcache")
+            .join("librarycache")
+            .join(app_id)
+            .join("icon.jpg"),
+        steam_root
+            .join("appcache")
+            .join("librarycache")
+            .join(app_id)
+            .join("icon.png"),
+        steam_root
+            .join("appcache")
+            .join("librarycache")
+            .join(format!("{app_id}_icon.jpg")),
+        steam_root
+            .join("appcache")
+            .join("librarycache")
+            .join(format!("{app_id}_icon.png")),
+    ];
+
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn get_game_icons_from_local_files(
+    app: &tauri::AppHandle,
+    app_ids: &[String],
+) -> HashMap<String, String> {
+    app_ids
+        .iter()
+        .filter_map(|app_id| {
+            get_game_icon_from_local_files(app, app_id).map(|path| (app_id.clone(), path))
         })
         .collect()
 }
@@ -1350,14 +1514,6 @@ async fn install_steamcmd(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(install_dir.join("steamcmd.exe"))
 }
 
-fn get_game_icon_from_steamcmd(app: &tauri::AppHandle, app_id: &str) -> Option<String> {
-    let steamcmd = installed_steamcmd_path(app)?;
-    let output = with_steamcmd_lock(|| silent_steamcmd_output(&steamcmd, app_id))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let hash = extract_client_icon_hash(&stdout)?;
-    Some(steam_community_icon_url(app_id, &hash))
-}
-
 fn get_game_icons_from_steamcmd(
     app: &tauri::AppHandle,
     app_ids: &[String],
@@ -1376,20 +1532,22 @@ fn get_game_icons_from_steamcmd(
         };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        resolved.extend(extract_client_icon_hashes(&stdout, chunk));
+        let mut chunk_resolved = extract_client_icon_hashes(&stdout, chunk);
+        for app_id in chunk {
+            if chunk_resolved.contains_key(app_id) {
+                continue;
+            }
+            if let Some(url) = extract_community_icon_url_from_text(&stdout, app_id) {
+                chunk_resolved.insert(app_id.clone(), url);
+            }
+        }
+        resolved.extend(chunk_resolved);
+        if !resolved.is_empty() {
+            let _ = app.emit(GAME_ICON_URLS_RESOLVED_EVENT, resolved.clone());
+        }
     }
 
     resolved
-}
-
-async fn get_game_icon_from_steamcmd_or_install(
-    app: &tauri::AppHandle,
-    app_id: &str,
-) -> Option<String> {
-    if installed_steamcmd_path(app).is_none() {
-        install_steamcmd(app).await.ok()?;
-    }
-    get_game_icon_from_steamcmd(app, app_id)
 }
 
 async fn get_game_icons_from_steamcmd_or_install(
@@ -1402,7 +1560,104 @@ async fn get_game_icons_from_steamcmd_or_install(
     if installed_steamcmd_path(app).is_none() && install_steamcmd(app).await.is_err() {
         return HashMap::new();
     }
-    get_game_icons_from_steamcmd(app, app_ids)
+    let app = app.clone();
+    let app_ids = app_ids.to_vec();
+    tauri::async_runtime::spawn_blocking(move || get_game_icons_from_steamcmd(&app, &app_ids))
+        .await
+        .unwrap_or_default()
+}
+
+async fn resolve_missing_game_icon_urls_with_steamcmd(
+    app: &tauri::AppHandle,
+    missing: &[String],
+) -> HashMap<String, String> {
+    if missing.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut resolved = HashMap::new();
+    let pending = missing
+        .iter()
+        .filter(|app_id| !is_steam_icon_negative(app_id))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if pending.is_empty() {
+        return resolved;
+    }
+
+    for (app_id, icon_url) in get_game_icons_from_steamcmd_or_install(app, &pending).await {
+        remember_steam_icon_url(&app_id, &icon_url);
+        resolved.insert(app_id, icon_url);
+    }
+
+    for app_id in pending {
+        if !resolved.contains_key(&app_id) {
+            mark_steam_icon_negative(&app_id);
+        }
+    }
+
+    resolved
+}
+
+fn normalize_game_icon_app_ids(app_ids: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    app_ids
+        .into_iter()
+        .map(|app_id| {
+            app_id
+                .chars()
+                .filter(char::is_ascii_digit)
+                .collect::<String>()
+        })
+        .filter(|app_id| !app_id.is_empty() && seen.insert(app_id.clone()))
+        .collect()
+}
+
+fn resolve_local_game_icon_urls(
+    app: &tauri::AppHandle,
+    app_ids: &[String],
+) -> HashMap<String, String> {
+    let mut resolved = HashMap::new();
+    let mut missing = Vec::new();
+
+    for app_id in app_ids {
+        if let Some(icon_url) = memory_steam_icon_url(app_id) {
+            resolved.insert(app_id.clone(), icon_url);
+        } else {
+            missing.push(app_id.clone());
+        }
+    }
+    if missing.is_empty() {
+        return resolved;
+    }
+
+    let mut cache = read_steam_icon_url_cache(app);
+    missing.retain(|app_id| {
+        if let Some(icon_url) = cached_steam_icon_url(&cache, app_id) {
+            remember_steam_icon_url(app_id, &icon_url);
+            resolved.insert(app_id.clone(), icon_url);
+            false
+        } else {
+            true
+        }
+    });
+
+    for (app_id, icon_url) in get_game_icons_from_local_appinfo(app, &missing) {
+        remember_steam_icon_url(&app_id, &icon_url);
+        cache.insert(app_id.clone(), icon_url.clone());
+        resolved.insert(app_id, icon_url);
+    }
+    missing.retain(|app_id| !resolved.contains_key(app_id));
+
+    for (app_id, icon_url) in get_game_icons_from_local_files(app, &missing) {
+        remember_steam_icon_url(&app_id, &icon_url);
+        cache.insert(app_id.clone(), icon_url.clone());
+        resolved.insert(app_id, icon_url);
+    }
+
+    write_steam_icon_url_cache(app, &cache);
+    resolved
 }
 
 pub(crate) async fn fetch_remote_game(
@@ -1624,19 +1879,10 @@ pub async fn steam_get_game_icon_url(app: tauri::AppHandle, app_id: String) -> O
         return None;
     }
 
-    let cache = read_steam_icon_url_cache(&app);
-    if let Some(icon_url) = cached_steam_icon_url(&cache, &app_id) {
-        return Some(icon_url);
-    }
-
-    if let Some(icon_url) = get_game_icon_from_local_appinfo(&app, &app_id) {
-        cache_steam_icon_url(&app, &app_id, &icon_url);
-        return Some(icon_url);
-    }
-
-    let icon_url = get_game_icon_from_steamcmd_or_install(&app, &app_id).await?;
-    cache_steam_icon_url(&app, &app_id, &icon_url);
-    Some(icon_url)
+    steam_get_game_icon_urls(app, vec![app_id])
+        .await
+        .into_values()
+        .next()
 }
 
 #[tauri::command]
@@ -1644,57 +1890,66 @@ pub async fn steam_get_game_icon_urls(
     app: tauri::AppHandle,
     app_ids: Vec<String>,
 ) -> HashMap<String, String> {
-    let app_ids: Vec<String> = app_ids
-        .into_iter()
-        .map(|app_id| {
-            app_id
-                .chars()
-                .filter(char::is_ascii_digit)
-                .collect::<String>()
-        })
-        .filter(|app_id| !app_id.is_empty())
-        .collect();
+    let app_ids = normalize_game_icon_app_ids(app_ids);
     if app_ids.is_empty() {
         return HashMap::new();
     }
 
+    let mut resolved = resolve_local_game_icon_urls(&app, &app_ids);
     let mut cache = read_steam_icon_url_cache(&app);
-    let mut resolved = HashMap::new();
-    let mut missing = Vec::new();
-
-    for app_id in app_ids {
-        if resolved.contains_key(&app_id) {
-            continue;
-        }
-
-        if let Some(icon_url) = cached_steam_icon_url(&cache, &app_id) {
-            resolved.insert(app_id, icon_url);
-        } else {
-            missing.push(app_id);
-        }
-    }
-
-    if missing.is_empty() {
+    let still_missing = app_ids
+        .iter()
+        .filter(|app_id| !resolved.contains_key(*app_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if still_missing.is_empty() {
         return resolved;
     }
 
-    for (app_id, icon_url) in get_game_icons_from_local_appinfo(&app, &missing) {
+    let fetched = resolve_missing_game_icon_urls_with_steamcmd(&app, &still_missing).await;
+    for (app_id, icon_url) in fetched {
         cache.insert(app_id.clone(), icon_url.clone());
         resolved.insert(app_id, icon_url);
     }
 
-    let steamcmd_missing = missing
+    write_steam_icon_url_cache(&app, &cache);
+    resolved
+}
+
+#[tauri::command]
+pub fn steam_get_local_game_icon_urls(
+    app: tauri::AppHandle,
+    app_ids: Vec<String>,
+) -> HashMap<String, String> {
+    let app_ids = normalize_game_icon_app_ids(app_ids);
+    resolve_local_game_icon_urls(&app, &app_ids)
+}
+
+#[tauri::command]
+pub async fn steam_resolve_game_icon_urls(
+    app: tauri::AppHandle,
+    app_ids: Vec<String>,
+) -> HashMap<String, String> {
+    let app_ids = normalize_game_icon_app_ids(app_ids);
+    let mut resolved = HashMap::new();
+    let missing = app_ids
         .into_iter()
-        .filter(|app_id| !resolved.contains_key(app_id))
+        .filter(|app_id| {
+            if let Some(icon_url) = memory_steam_icon_url(app_id) {
+                resolved.insert(app_id.clone(), icon_url);
+                false
+            } else {
+                true
+            }
+        })
         .collect::<Vec<_>>();
 
-    if !steamcmd_missing.is_empty() {
-        for (app_id, icon_url) in get_game_icons_from_steamcmd_or_install(&app, &steamcmd_missing).await {
-            cache.insert(app_id.clone(), icon_url.clone());
-            resolved.insert(app_id, icon_url);
-        }
+    let fetched = resolve_missing_game_icon_urls_with_steamcmd(&app, &missing).await;
+    let mut cache = read_steam_icon_url_cache(&app);
+    for (app_id, icon_url) in fetched {
+        cache.insert(app_id.clone(), icon_url.clone());
+        resolved.insert(app_id, icon_url);
     }
-
     write_steam_icon_url_cache(&app, &cache);
     resolved
 }
@@ -1735,8 +1990,8 @@ pub async fn cache_resolve_steam_library_asset(
 #[cfg(test)]
 mod tests {
     use super::{
-        merge_cached_steam_store_details, read_client_icon_from_vdf, steam_details_have_about,
-        steam_reviews_response_is_usable,
+        extract_community_icon_url_from_text, merge_cached_steam_store_details,
+        read_client_icon_from_vdf, steam_details_have_about, steam_reviews_response_is_usable,
     };
 
     #[test]
@@ -1799,5 +2054,37 @@ mod tests {
         bytes.push(0);
 
         assert_eq!(read_client_icon_from_vdf(&bytes, "2138720"), Some(hash.to_string()));
+    }
+
+    #[test]
+    fn community_icon_extractor_prefers_ico_over_jpg() {
+        let app_id = "730";
+        let ico_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let jpg_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let html = format!(
+            r#"<img src="https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{jpg_hash}.jpg">
+               <img src="https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{ico_hash}.ico">"#
+        );
+
+        assert_eq!(
+            extract_community_icon_url_from_text(&html, app_id),
+            Some(format!(
+                "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{ico_hash}.ico"
+            ))
+        );
+    }
+
+    #[test]
+    fn community_icon_extractor_reads_clienticon_field() {
+        let app_id = "570";
+        let hash = "cccccccccccccccccccccccccccccccccccccccc";
+        let body = format!(r#"{{"clienticon":"{hash}","name":"Dota 2"}}"#);
+
+        assert_eq!(
+            extract_community_icon_url_from_text(&body, app_id),
+            Some(format!(
+                "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{hash}.ico"
+            ))
+        );
     }
 }

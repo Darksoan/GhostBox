@@ -21,11 +21,13 @@ import {
   steamWishlistReviewCacheStorageKey,
   recentLibrarySessionLimit,
   librarySortStorageKey,
+  overviewSortStorageKey,
   notificationsLastSeenStorageKey,
 } from "../constants/catalogue";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
+export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements";
 
 export type StoredPersonalCalendar = {
   weekStart: string;
@@ -469,15 +471,16 @@ export function writeStoredProfileHistoryGames(games: GhostBoxGame[]) {
 }
 
 export function readStoredShowSteamGames(): boolean {
-  if (typeof window === "undefined") return true;
+  // Steam account games are never auto-listed in the library.
+  // Keep the storage helper for compatibility, but always return false.
+  if (typeof window === "undefined") return false;
 
   try {
-    const raw = window.localStorage.getItem(showSteamGamesStorageKey);
-    if (raw === null) return true;
-    return raw === "true";
+    window.localStorage.setItem(showSteamGamesStorageKey, "false");
   } catch {
-    return true;
+    // Ignore storage failures.
   }
+  return false;
 }
 
 export function writeStoredShowSteamGames(value: boolean) {
@@ -742,6 +745,32 @@ export function writeStoredLibrarySortBy(sortBy: LibrarySortBy) {
 
   try {
     window.localStorage.setItem(librarySortStorageKey, sortBy);
+  } catch {
+    // The setting still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredOverviewSortBy(): OverviewSortBy {
+  if (typeof window === "undefined") return "recent";
+
+  try {
+    const stored = window.localStorage.getItem(overviewSortStorageKey);
+    return stored === "recent" ||
+      stored === "playtime" ||
+      stored === "title" ||
+      stored === "achievements"
+      ? stored
+      : "recent";
+  } catch {
+    return "recent";
+  }
+}
+
+export function writeStoredOverviewSortBy(sortBy: OverviewSortBy) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(overviewSortStorageKey, sortBy);
   } catch {
     // The setting still works during the session if localStorage is unavailable.
   }

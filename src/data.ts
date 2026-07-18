@@ -46,7 +46,12 @@ export type SteamMovie = {
 export type GhostBoxGame = {
   appId: string;
   id: string;
-  librarySource?: "steam-installed" | "steam-owned" | "ghostbox" | "plugin";
+  librarySource?:
+    | "steam-installed"
+    | "steam-owned"
+    | "ghostbox"
+    | "plugin"
+    | "registered";
   title: string;
   subtitle: string;
   status: GameStatus;

@@ -28,7 +28,7 @@
     margin: 0;
     color: var(--text-secondary);
     font-size: 12px;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-muted);
     line-height: 1.45;
   }
 
@@ -73,6 +73,7 @@
     gap: 12px;
     padding: 48px 24px;
     color: var(--text-secondary);
+    font-weight: var(--weight-muted);
     font-size: 13px;
   }
 
@@ -228,7 +229,7 @@
       margin: 0;
       color: var(--text-secondary);
       font-size: 12px;
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-muted);
       line-height: 1.4;
     }
   }
@@ -238,7 +239,7 @@
     max-width: 220px;
     color: var(--text-secondary);
     font-size: 12px;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-muted);
     line-height: 1.35;
     text-align: right;
     white-space: nowrap;

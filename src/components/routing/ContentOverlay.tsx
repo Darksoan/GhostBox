@@ -2,8 +2,61 @@ import { lazy, Suspense } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
+import type { GhostBoxGame } from "../../data";
 import { PagePlaceholder } from "../ui/LoadingStates";
-import type { Page } from "../../types";
+import type { Page, SteamAccountStats } from "../../types";
+import { getGameAppId } from "../../utils/image";
+import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
+
+function matchesSelectedGame(candidate: GhostBoxGame, selected: GhostBoxGame) {
+  if (candidate.id === selected.id) return true;
+  const selectedAppId = getGameAppId(selected);
+  const candidateAppId = getGameAppId(candidate);
+  return Boolean(selectedAppId) && selectedAppId === candidateAppId;
+}
+
+function resolveOverlayGame(
+  selected: GhostBoxGame,
+  libraryGames: GhostBoxGame[],
+  favoriteGames: GhostBoxGame[],
+  historyGames: GhostBoxGame[],
+  steamAccountStats: SteamAccountStats | null,
+) {
+  const libraryGame = libraryGames.find((game) =>
+    matchesSelectedGame(game, selected),
+  );
+  const favoriteGame = favoriteGames.find((game) =>
+    matchesSelectedGame(game, selected),
+  );
+  const historyGame = historyGames.find((game) =>
+    matchesSelectedGame(game, selected),
+  );
+  const source = libraryGame ?? favoriteGame ?? historyGame ?? selected;
+  const playtimeSource = [libraryGame, favoriteGame, historyGame, selected]
+    .filter((game): game is GhostBoxGame => Boolean(game))
+    .sort(
+      (left, right) =>
+        (right.playTimeInMilliseconds ?? 0) -
+        (left.playTimeInMilliseconds ?? 0),
+    )[0];
+
+  return mergeSteamAchievementsIntoGame(
+    {
+      ...source,
+      playTimeInMilliseconds:
+        playtimeSource?.playTimeInMilliseconds ?? source.playTimeInMilliseconds,
+      lastTimePlayed: playtimeSource?.lastTimePlayed ?? source.lastTimePlayed,
+      lastSessionRecordedAt:
+        playtimeSource?.lastSessionRecordedAt ?? source.lastSessionRecordedAt,
+      lastSessionDurationInMilliseconds:
+        playtimeSource?.lastSessionDurationInMilliseconds ??
+        source.lastSessionDurationInMilliseconds,
+      sessionActive:
+        playtimeSource?.sessionActive === true || source.sessionActive === true,
+    },
+    steamAccountStats,
+  );
+}
 
 const LazyGameModal = lazy(() =>
   import("../modals/GameModal").then((module) => ({
@@ -27,22 +80,36 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
   const {
     selectedGame,
     achievementsView,
+    isGameModalExitPending,
     closeGame,
     openAchievements,
   } = useOverlay();
 
-  // Same entry motion as tab switches (`page-block-in` via `.page-enter`).
-  const enterClass = appearance.disableTabAnimations ? "" : " page-enter";
+  const animationsOff =
+    appearance.disableTabAnimations || appearance.reduceAllAnimations;
+  const motionClass = animationsOff
+    ? ""
+    : isGameModalExitPending
+      ? " page-exit"
+      : " page-enter";
 
   if (achievementsView) {
+    const achievementsGame = resolveOverlayGame(
+      achievementsView.game,
+      appData.addedLibraryGames,
+      appData.favoriteGames,
+      appData.profileHistoryGames,
+      appData.steamAccountStats,
+    );
     return (
       <div
-        className={`page page--game-achievements${enterClass}`}
+        className={`page page--game-achievements${motionClass}`}
         key={`achievements-${achievementsView.game.id}`}
+        aria-hidden={isGameModalExitPending}
       >
         <Suspense fallback={<PagePlaceholder page={page} />}>
           <LazyGameAchievementsPage
-            game={achievementsView.game}
+            game={achievementsGame}
             highlightAchievementId={achievementsView.highlightAchievementId}
             onDetailsLoaded={appData.handleGameDetailsLoaded}
           />
@@ -52,26 +119,48 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
   }
 
   if (selectedGame) {
-    const mergedGame =
-      appData.addedLibraryGames.find((game) => game.id === selectedGame.id) ??
-      appData.favoriteGames.find((game) => game.id === selectedGame.id) ??
-      selectedGame;
-    const isSessionActive = appData.activeSessionAppIds.has(selectedGame.appId);
+    const mergedGame = resolveOverlayGame(
+      selectedGame,
+      appData.addedLibraryGames,
+      appData.favoriteGames,
+      appData.profileHistoryGames,
+      appData.steamAccountStats,
+    );
+    const selectedAppId = getGameAppId(selectedGame);
+    const isSessionActive =
+      appData.activeSessionAppIds.has(selectedAppId) ||
+      appData.activeSessionAppIds.has(selectedGame.appId);
+    const isFavorite =
+      appData.favoriteGameIds.has(selectedGame.id) ||
+      appData.favoriteGameIds.has(mergedGame.id) ||
+      appData.favoriteGames.some((game) =>
+        matchesSelectedGame(game, selectedGame),
+      );
     return (
       <div
-        className={`page page--game-modal${enterClass}`}
+        className={`page page--game-modal${motionClass}`}
         key={`game-modal-${selectedGame.id}`}
+        aria-hidden={isGameModalExitPending}
       >
         <Suspense fallback={<PagePlaceholder page={page} />}>
           <LazyGameModal
             game={mergedGame}
-            isAdding={appData.addingGameId === selectedGame.id}
-            isAdded={appData.availableLibraryGameAppIds.has(selectedGame.appId)}
-            isInstalled={appData.addedLibraryGameAppIds.has(selectedGame.appId)}
-            isRemoving={appData.removingGameId === selectedGame.id}
-            isPlaying={appData.launchingGameId === selectedGame.id}
+            isAdding={
+              appData.addingGameId === selectedGame.id ||
+              appData.addingGameId === mergedGame.id
+            }
+            isAdded={appData.availableLibraryGameAppIds.has(selectedAppId)}
+            isInstalled={appData.addedLibraryGameAppIds.has(selectedAppId)}
+            isRemoving={
+              appData.removingGameId === selectedGame.id ||
+              appData.removingGameId === mergedGame.id
+            }
+            isPlaying={
+              appData.launchingGameId === selectedGame.id ||
+              appData.launchingGameId === mergedGame.id
+            }
             isSessionActive={isSessionActive}
-            isFavorite={appData.favoriteGameIds.has(selectedGame.id)}
+            isFavorite={isFavorite}
             userCollections={appData.userCollections}
             steamProfile={appData.steamProfile}
             onClose={closeGame}
@@ -99,6 +188,7 @@ export function useContentOverlayState() {
   return {
     isGameModalVisible: Boolean(selectedGame) || isGameModalExitPending,
     isAchievementsViewVisible: Boolean(achievementsView),
-    hasOverlay: Boolean(selectedGame) || isGameModalExitPending || achievementsView,
+    hasOverlay:
+      Boolean(selectedGame) || Boolean(achievementsView) || isGameModalExitPending,
   };
 }

@@ -136,7 +136,6 @@ export function PageRouter({
   const [pageEnterState, setPageEnterState] = useState({
     page,
     sequence: 0,
-    overlayLocked: false,
   });
 
   // Keep-alive mount + enter class must align with `page` before paint.
@@ -148,15 +147,12 @@ export function PageRouter({
     setMountedPages(nextMounted);
   }
 
-  if (hasOverlay) {
-    if (!pageEnterState.overlayLocked) {
-      setPageEnterState({ ...pageEnterState, overlayLocked: true });
-    }
-  } else if (pageEnterState.overlayLocked || pageEnterState.page !== page) {
+  // Only tab changes re-trigger enter motion. Overlay open/close keeps base
+  // pages mounted and uses overlay exit/enter instead.
+  if (pageEnterState.page !== page) {
     setPageEnterState({
       page,
       sequence: pageEnterState.sequence + 1,
-      overlayLocked: false,
     });
   }
 
@@ -356,8 +352,6 @@ export function PageRouter({
           initialPage={appData.initialPage}
           onInitialPageChange={appData.setInitialPage}
           steamPath={appData.steamPathInput}
-          showSteamGames={appData.showSteamGames}
-          onShowSteamGamesChange={appData.setShowSteamGames}
           onSelectSteamPath={appData.handleSelectSteamPath}
           startupSettings={
             appData.startupSettings ?? {
@@ -425,16 +419,20 @@ export function PageRouter({
 
   return (
     <>
-      {hasOverlay ? (
-        <ContentOverlay page={page} />
-      ) : (
-        <>
+      <div
+        className={`page-stack${hasOverlay ? " page-stack--overlay-open" : ""}`}
+      >
+        <div
+          className="page-stack__base"
+          aria-hidden={hasOverlay}
+        >
           {keepAlivePages.map((targetPage) => {
             const isActive = targetPage === page;
             const shouldAnimate =
               !appearance.disableTabAnimations &&
               !appearance.reduceAllAnimations &&
               isActive &&
+              !hasOverlay &&
               pageEnterState.page === targetPage;
             const enterVariant =
               pageEnterState.sequence % 2 === 0
@@ -449,7 +447,7 @@ export function PageRouter({
                 key={targetPage}
                 className={wrapperClass}
                 hidden={!isActive}
-                aria-hidden={!isActive}
+                aria-hidden={!isActive || hasOverlay}
               >
                 <Suspense
                   fallback={<PagePlaceholder page={targetPage} />}
@@ -459,8 +457,13 @@ export function PageRouter({
               </div>
             );
           })}
-        </>
-      )}
+        </div>
+        {hasOverlay ? (
+          <div className="page-stack__overlay">
+            <ContentOverlay page={page} />
+          </div>
+        ) : null}
+      </div>
 
       <CollectionModal
         open={collectionModalOpen}

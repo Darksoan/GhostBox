@@ -64,6 +64,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     closeContentOverlay,
     closeAchievements,
     modalReturnScrollTopRef,
+    restoreContentScrollAfterModalRef,
     setSubscriptionModalOpen,
     showToast,
   } = useOverlay();
@@ -292,17 +293,23 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     if (!content) return;
 
     if (selectedGame || achievementsView) {
-      if (!selectedGame && !achievementsView) return;
       if (!isGameModalExitPending) {
         modalReturnScrollTopRef.current = content.scrollTop;
+        content.scrollTop = 0;
       }
-      content.scrollTop = 0;
+      return;
+    }
+
+    if (restoreContentScrollAfterModalRef.current) {
+      content.scrollTop = modalReturnScrollTopRef.current;
+      restoreContentScrollAfterModalRef.current = false;
     }
   }, [
     achievementsView,
     contentRef,
     isGameModalExitPending,
     modalReturnScrollTopRef,
+    restoreContentScrollAfterModalRef,
     selectedGame,
   ]);
 
@@ -350,12 +357,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           <Header
             page={page}
             canGoBack={
-              Boolean(selectedGame) ||
+              isGameModalVisible ||
               isAchievementsViewVisible ||
               canGoBack
             }
             canGoForward={
-              !selectedGame &&
+              !isGameModalVisible &&
               !isAchievementsViewVisible &&
               (canGoForward || canForwardOverlay)
             }

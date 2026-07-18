@@ -1940,23 +1940,38 @@ async function handleGameSchema(request: Request, env: Env, context: ExecutionCo
   if (!env.STEAM_WEB_API_KEY) {
     return jsonResponse({ error: "Steam Web API key is not configured" }, env, 500);
   }
-  const requestedLanguage = (url.searchParams.get("language") || "portuguese")
+  const requestedLanguage = (url.searchParams.get("language") || "brazilian")
     .trim()
     .toLowerCase();
-  const language = ["portuguese", "brazilian", "english"].includes(requestedLanguage)
+  const primaryLanguage = ["portuguese", "brazilian", "english"].includes(
+    requestedLanguage
+  )
     ? requestedLanguage
-    : "portuguese";
-  const cacheKey = `${appId}:${language}`;
+    : "brazilian";
+  const languageFallback = [
+    primaryLanguage,
+    ...["brazilian", "portuguese", "english"].filter(
+      (language) => language !== primaryLanguage
+    ),
+  ];
+  const cacheKey = `${appId}:${primaryLanguage}`;
   const edgeHit = await matchEdgeCache("/steam/game-schema", cacheKey);
   if (edgeHit) return edgeHit;
 
-  const game = await fetchGameAchievementSchema(
-    env,
-    appId,
-    env.STEAM_WEB_API_KEY,
-    language
-  );
-  const achievements = normalizeSchemaAchievements(game);
+  let language = primaryLanguage;
+  let game: SchemaGame | undefined;
+  let achievements: ReturnType<typeof normalizeSchemaAchievements> = [];
+  for (const candidate of languageFallback) {
+    game = await fetchGameAchievementSchema(
+      env,
+      appId,
+      env.STEAM_WEB_API_KEY,
+      candidate
+    );
+    achievements = normalizeSchemaAchievements(game);
+    language = candidate;
+    if (achievements.length > 0) break;
+  }
   const response = jsonResponse(
     { appId, language, achievements },
     env,

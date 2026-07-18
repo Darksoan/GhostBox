@@ -142,6 +142,8 @@ pub fn ghostbox_library_register_steam_game(app: AppHandle, game: Value) -> Resu
     let mut library_game = game;
     if let Some(object) = library_game.as_object_mut() {
         object.insert("status".to_string(), json!("discover"));
+        // Keep registered Steam games distinct from auto-listed owned stubs.
+        object.insert("librarySource".to_string(), json!("registered"));
         object.remove("luaToolsManifests");
         object.remove("luaToolsManifestFiles");
     }

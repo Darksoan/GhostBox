@@ -592,8 +592,6 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
           <EmptyState
             className="backup-page__empty"
             title={t("backup.emptyTitle")}
-            message={t("backup.emptyMessage")}
-            icon={<Cloud size={24} strokeWidth={1.75} />}
           />
         )
       )}

@@ -32,6 +32,7 @@ import {
   loadGameAchievementDetailsCached,
   loadGameStoreDetailsCached,
 } from "../../utils/gameCache";
+import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
 import {
   imageSourceCache,
   preloadImageSources,
@@ -565,11 +566,17 @@ export function GameModal({
         (details.achievements?.total ?? 0) > 0;
       if (!hasIncoming) return;
 
-      setDetailGame((current) => ({
-        ...(current ?? game),
-        achievements: details.achievements,
-        achievementList: details.achievementList,
-      }));
+      setDetailGame((current) => {
+        const base = current ?? game;
+        const merged = mergeAchievementDetailsIntoGame(base, details);
+        return {
+          ...merged,
+          // Keep Steam-synced personal progress already attached to the game.
+          playTimeInMilliseconds:
+            base.playTimeInMilliseconds ?? game.playTimeInMilliseconds,
+          lastTimePlayed: base.lastTimePlayed ?? game.lastTimePlayed,
+        };
+      });
       onDetailsLoaded?.(details);
     };
     const detailsGameId = game.appId || game.id;
@@ -593,15 +600,26 @@ export function GameModal({
     if (!game) return;
 
     setDetailGame((current) => {
-      if (!current || current.id !== game.id) return current;
+      if (!current) return current;
+      const sameGame =
+        current.id === game.id ||
+        (Boolean(current.appId) && current.appId === game.appId);
+      if (!sameGame) return current;
 
       return {
         ...current,
         playTimeInMilliseconds: game.playTimeInMilliseconds,
         lastTimePlayed: game.lastTimePlayed,
+        sessionActive: game.sessionActive,
       };
     });
-  }, [game?.id, game?.lastTimePlayed, game?.playTimeInMilliseconds]);
+  }, [
+    game?.appId,
+    game?.id,
+    game?.lastTimePlayed,
+    game?.playTimeInMilliseconds,
+    game?.sessionActive,
+  ]);
 
   useEffect(() => {
     if (!game) return;
@@ -956,6 +974,10 @@ export function GameModal({
                             alt=""
                             aria-hidden="true"
                             decoding="async"
+                            referrerPolicy="no-referrer"
+                            fetchPriority={
+                              item.index === activeScreenshot ? "high" : "low"
+                            }
                             loading={item.index === activeScreenshot ? "eager" : "lazy"}
                             onLoad={async (event) => {
                               const image = event.currentTarget;

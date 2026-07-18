@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
-import { Clock, Heart } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { UserCollection } from "../types";
 import {
@@ -130,7 +130,6 @@ interface FavoritesPageProps {
   onOpenGame: (game: GhostBoxGame) => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   emptyTitle?: string;
-  emptyMessage?: string;
   favoriteGameIds?: Set<string>;
   libraryGameAppIds?: Set<string>;
   removableGameAppIds?: Set<string>;
@@ -150,7 +149,6 @@ export function FavoritesPage({
   onOpenGame,
   onToggleFavorite,
   emptyTitle = "Sem favoritos",
-  emptyMessage = "Adicione jogos no catálogo para vê-los aqui.",
   favoriteGameIds = new Set(),
   libraryGameAppIds = new Set(),
   removableGameAppIds = new Set(),
@@ -202,11 +200,7 @@ export function FavoritesPage({
   if (!games.length) {
     return (
       <section className="favorites-page content-section content-section--full favorites-page--empty">
-        <EmptyState
-          title={emptyTitle}
-          message={emptyMessage}
-          icon={<Heart size={24} strokeWidth={1.75} />}
-        />
+        <EmptyState title={emptyTitle} />
       </section>
     );
   }

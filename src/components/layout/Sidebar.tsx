@@ -267,7 +267,6 @@ export const Sidebar = memo(function Sidebar({
           isCloudProfileRestoring={isCloudProfileRestoring}
           isSigningIn={isSteamSigningIn}
           isActive={activePage === "profile"}
-          activeGame={activeSessionGame}
           onOpenProfile={onOpenProfile}
           onSignIn={onSteamSignIn}
         />
@@ -552,10 +551,14 @@ interface SidebarGameItemProps {
 }
 
 const SidebarGameItem = memo(function SidebarGameItem({ game }: SidebarGameItemProps) {
-  const iconUrl = useGameIconUrl(game);
+  const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
   return (
     <>
-      {iconUrl && <img src={iconUrl} alt="" className="sidebar__game-icon" aria-hidden="true" />}
+      {iconUrl ? (
+        <img src={iconUrl} alt="" className="sidebar__game-icon" aria-hidden="true" />
+      ) : iconLoading ? (
+        <span className="sidebar__game-icon sidebar__game-icon--skeleton" aria-hidden="true" />
+      ) : null}
       <span className="sidebar__collection-game-title" title={game.title}>
         {game.title}
       </span>
@@ -568,7 +571,6 @@ interface SidebarProfileProps {
   isCloudProfileRestoring: boolean;
   isSigningIn: boolean;
   isActive: boolean;
-  activeGame: GhostBoxGame | null;
   onOpenProfile: () => void;
   onSignIn: () => void;
 }
@@ -578,7 +580,6 @@ const SidebarProfile = memo(function SidebarProfile({
   isCloudProfileRestoring,
   isSigningIn,
   isActive,
-  activeGame,
   onOpenProfile,
   onSignIn,
 }: SidebarProfileProps) {
@@ -594,7 +595,6 @@ const SidebarProfile = memo(function SidebarProfile({
       !profile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
   );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
-  const [steamRunning, setSteamRunning] = useState(false);
 
   useEffect(() => {
     preloadProfileImages(profile);
@@ -629,60 +629,6 @@ const SidebarProfile = memo(function SidebarProfile({
     };
   }, [profile?.steamId]);
 
-  useEffect(() => {
-    if (!profile?.steamId) {
-      setSteamRunning(false);
-      return;
-    }
-
-    let cancelled = false;
-    let interval: number | undefined;
-    const poll = () => {
-      void ghostboxApi.isSteamRunning().then((running) => {
-        if (!cancelled) setSteamRunning(running === true);
-      });
-    };
-
-    const start = () => {
-      poll();
-      interval = window.setInterval(poll, 15000);
-    };
-
-    const stop = () => {
-      if (interval !== undefined) {
-        window.clearInterval(interval);
-        interval = undefined;
-      }
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        start();
-      } else {
-        stop();
-      }
-    };
-
-    const onFocus = () => {
-      if (document.visibilityState === "visible") poll();
-    };
-
-    if (document.visibilityState === "visible") {
-      start();
-    } else {
-      poll();
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onFocus);
-
-    return () => {
-      cancelled = true;
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [profile?.steamId]);
-
   const handleClick = () => {
     if (profile) {
       onOpenProfile();
@@ -700,8 +646,6 @@ const SidebarProfile = memo(function SidebarProfile({
       : appearance.language === "en"
         ? `Level ${steamLevel}`
         : `Nível ${steamLevel}`;
-
-  const presenceLabel = steamRunning ? "On-line" : "Off-line";
 
   return (
     <div className="sidebar-profile">
@@ -752,54 +696,9 @@ const SidebarProfile = memo(function SidebarProfile({
                 </span>
               ) : null}
             </span>
-            {profile ? (
-              <span
-                className={`sidebar-profile__presence${
-                  activeGame
-                    ? " sidebar-profile__presence--playing"
-                    : steamRunning
-                      ? " sidebar-profile__presence--online"
-                      : " sidebar-profile__presence--offline"
-                }`}
-              >
-                {activeGame ? (
-                  <SidebarPlayingPresence game={activeGame} />
-                ) : (
-                  presenceLabel
-                )}
-              </span>
-            ) : null}
           </span>
         </div>
       </button>
     </div>
   );
 });
-
-function SidebarPlayingPresence({ game }: { game: GhostBoxGame }) {
-  const { appearance } = useSettings();
-  const iconUrl = useGameIconUrl(game);
-  const label = appearance.language === "en" ? "Playing" : "Jogando";
-
-  return (
-    <>
-      <span className="sidebar-profile__presence-label">{label}</span>
-      {iconUrl ? (
-        <img
-          src={iconUrl}
-          alt=""
-          className="sidebar-profile__presence-game-icon"
-          aria-hidden="true"
-        />
-      ) : (
-        <span
-          className="sidebar-profile__presence-game-icon sidebar-profile__presence-game-icon--empty"
-          aria-hidden="true"
-        />
-      )}
-      <span className="sidebar-profile__presence-game-title" title={game.title}>
-        {game.title}
-      </span>
-    </>
-  );
-}

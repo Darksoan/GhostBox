@@ -1351,6 +1351,8 @@ pub fn run() {
             catalogue::catalogue_get_home,
             catalogue::steam_get_game_icon_url,
             catalogue::steam_get_game_icon_urls,
+            catalogue::steam_get_local_game_icon_urls,
+            catalogue::steam_resolve_game_icon_urls,
             catalogue::app_is_steamtools_installed,
             catalogue::app_install_steamtools,
             catalogue::cache_get_image,

@@ -13,6 +13,7 @@ import {
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
   Copy,
   Eye,
   EyeOff,
@@ -20,13 +21,12 @@ import {
   Folder,
   Heart,
   Layers,
-  LibraryBig,
   LogOut,
   Pencil,
   ShieldUser,
   User,
 } from "lucide-react";
-import { Cup } from "reicon-react";
+import { BadgePercent, Cup, CupStar, Gamepad, History2 } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamAccountStats, SteamProfile, UserCollection } from "../types";
 import { GameGrid } from "../components/ui/GameCard";
@@ -60,6 +60,7 @@ import {
   loadGameAchievementDetailsCached,
   loadGameStoreDetailsCached,
 } from "../utils/gameCache";
+import { sortOverviewGames } from "../utils/overviewSort";
 import {
   getProfileAchievementTotal as getAchievementTotal,
   getProfileUnlockedAchievementCount as getUnlockedAchievementCount,
@@ -68,9 +69,16 @@ import {
   isRecognizedSteamProfileGame,
 } from "../utils/profileAchievements";
 import {
+  readStoredOverviewSortBy,
+  writeStoredOverviewSortBy,
+  type OverviewSortBy,
+} from "../utils/storage";
+import {
   mergeAchievementDetailsIntoGame,
   mergeSteamAchievementsIntoGame,
+  mergeSteamAchievementsIntoGames,
 } from "../utils/steamAchievementMerge";
+import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
@@ -79,6 +87,13 @@ type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
 const emptyImageSources: string[] = [];
 const recentActivityPageSize = 8;
+
+const overviewSortOptions: OverviewSortBy[] = [
+  "recent",
+  "playtime",
+  "title",
+  "achievements",
+];
 
 function ProfileActivityCard({
   game,
@@ -117,28 +132,31 @@ function ProfileActivityCard({
     kind: "header",
   });
 
+  function preloadActivityCover() {
+    preloadGameListAssets([displayGame], {
+      variant: "header",
+      limit: 1,
+      idle: false,
+      nativeResolve: false,
+    });
+  }
+
+  const isPerfect =
+    achievementTotal > 0 && achievementUnlocked >= achievementTotal;
+
   return (
-    <article className="profile-page__activity-card">
+    <article
+      className={`profile-page__activity-card${
+        achievementTotal > 0 ? " profile-page__activity-card--with-achievements" : ""
+      }${isPerfect ? " profile-page__activity-card--perfect" : ""}`}
+    >
       <button
         type="button"
-        className="profile-page__activity-main"
+        className="profile-page__activity-cover-button"
         onClick={() => onOpenGame(displayGame)}
-        onMouseEnter={() =>
-          preloadGameListAssets([displayGame], {
-            variant: "header",
-            limit: 1,
-            idle: false,
-            nativeResolve: false,
-          })
-        }
-        onFocus={() =>
-          preloadGameListAssets([displayGame], {
-            variant: "header",
-            limit: 1,
-            idle: false,
-            nativeResolve: false,
-          })
-        }
+        onMouseEnter={preloadActivityCover}
+        onFocus={preloadActivityCover}
+        aria-label={displayTitle}
       >
         <span
           className={`profile-page__activity-game-cover${
@@ -152,6 +170,15 @@ function ProfileActivityCard({
           )}
           aria-hidden="true"
         />
+      </button>
+
+      <button
+        type="button"
+        className="profile-page__activity-main"
+        onClick={() => onOpenGame(displayGame)}
+        onMouseEnter={preloadActivityCover}
+        onFocus={preloadActivityCover}
+      >
         <span className="profile-page__activity-meta">
           <strong>{displayTitle}</strong>
         </span>
@@ -174,14 +201,25 @@ function ProfileActivityCard({
             disabled={!onOpenGameAchievements}
           >
             <span className="profile-page__activity-progress-label">
-              <Cup
-                className="profile-page__activity-cup-icon"
-                size={14}
-                weight="Filled"
-                strokeWidth={2.0}
-                color="var(--text-primary)"
-                aria-hidden="true"
-              />
+              {isPerfect ? (
+                <CupStar
+                  className="profile-page__activity-cup-icon profile-page__activity-cup-icon--perfect"
+                  size={18}
+                  weight="Filled"
+                  strokeWidth={2.0}
+                  color="var(--premium-gold)"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Cup
+                  className="profile-page__activity-cup-icon"
+                  size={18}
+                  weight="Filled"
+                  strokeWidth={2.0}
+                  color="var(--text-tertiary, var(--text-secondary))"
+                  aria-hidden="true"
+                />
+              )}
             </span>
             <span className="profile-page__activity-progress-count">
               {achievementUnlocked} {t("profile.of")} {achievementTotal}
@@ -230,13 +268,53 @@ function ProfileActivityCard({
   );
 }
 
-function ProfileAchievementGameIcon({ game }: { game: GhostBoxGame }) {
-  const iconUrl = useGameIconUrl(game);
+function LoadedProfileAchievementGameIcon({ game }: { game: GhostBoxGame }) {
+  const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
 
   return (
-    <span className="profile-page__achievement-game-icon" aria-hidden="true">
+    <span
+      className={`profile-page__achievement-game-icon${
+        !iconUrl && iconLoading ? " profile-page__achievement-game-icon--skeleton" : ""
+      }`}
+      aria-hidden="true"
+    >
       {iconUrl ? <img src={iconUrl} alt="" loading="lazy" decoding="async" /> : null}
     </span>
+  );
+}
+
+function ProfileAchievementGameIcon({ game }: { game: GhostBoxGame }) {
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: "500px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  if (shouldLoad) return <LoadedProfileAchievementGameIcon game={game} />;
+
+  return (
+    <span
+      ref={containerRef}
+      className="profile-page__achievement-game-icon profile-page__achievement-game-icon--skeleton"
+      aria-hidden="true"
+    />
   );
 }
 
@@ -583,6 +661,11 @@ export function ProfilePage({
     () => hasPreparedProfileOverviewData
   );
   const [recentActivityPage, setRecentActivityPage] = useState(1);
+  const [overviewSortBy, setOverviewSortBy] = useState<OverviewSortBy>(() =>
+    readStoredOverviewSortBy(),
+  );
+  const [overviewSortDropdownOpen, setOverviewSortDropdownOpen] = useState(false);
+  const overviewSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const loadMoreGamesRef = useRef<HTMLDivElement | null>(null);
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
@@ -689,6 +772,16 @@ export function ProfilePage({
     };
   }, [isOverviewActive, isOverviewDataReady]);
 
+  // Steam account games are not listed in the library, but profile recognition
+  // still needs playtime + achievements from the owned stats payload.
+  const steamOwnedProfileGames = useMemo(() => {
+    if (!steamAccountStats?.ownedPlaytimes?.length) return [];
+    return mergeSteamAchievementsIntoGames(
+      buildSteamOwnedGamesFromPlaytimes(steamAccountStats.ownedPlaytimes, {}),
+      steamAccountStats,
+    );
+  }, [steamAccountStats]);
+
   const overviewPreloadGames = useMemo(() => {
     const games = new Map<string, GhostBoxGame>();
     for (const game of achievementHistoryGames) {
@@ -709,6 +802,12 @@ export function ProfilePage({
         getRicherAchievementGame(games.get(game.appId), game)
       );
     }
+    for (const game of steamOwnedProfileGames) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
 
     return [...games.values()]
       .filter((game) => isRecognizedSteamProfileGame(game, getGamePlaytime(game)))
@@ -719,7 +818,12 @@ export function ProfilePage({
         if (lastPlayedDelta !== 0) return lastPlayedDelta;
         return getGamePlaytime(right) - getGamePlaytime(left);
       });
-  }, [achievementHistoryGames, addedLibraryGames, favoriteGames]);
+  }, [
+    achievementHistoryGames,
+    addedLibraryGames,
+    favoriteGames,
+    steamOwnedProfileGames,
+  ]);
 
   const overviewPreloadGamesKey = overviewPreloadGames
     .slice(0, recentActivityPageSize)
@@ -825,6 +929,14 @@ export function ProfilePage({
         getRicherAchievementGame(games.get(game.appId), game)
       );
     }
+    // Owned Steam account games (not auto-listed in library) still feed
+    // playtime + achievement recognition on the profile overview.
+    for (const game of steamOwnedProfileGames) {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game)
+      );
+    }
     // Freshly hydrated local achievement details are merged with remote Steam
     // account unlocks so the local appcache monitor stays additive instead of
     // wiping profile-level achievement data for uninstalled games.
@@ -860,6 +972,7 @@ export function ProfilePage({
     resolvedGameTitlesByAppId,
     shouldComputeOverviewData,
     steamAccountStats,
+    steamOwnedProfileGames,
   ]);
 
   useEffect(() => {
@@ -869,7 +982,11 @@ export function ProfilePage({
     const recentGameIndexes = new Map(
       achievementHistoryGames.map((game, index) => [game.appId, index])
     );
-    const candidates = [...achievementHistoryGames, ...addedLibraryGames]
+    const candidates = [
+      ...achievementHistoryGames,
+      ...addedLibraryGames,
+      ...steamOwnedProfileGames,
+    ]
       .filter((game) => game.appId && !localAchievementGamesByAppId.has(game.appId))
       .sort((left, right) => {
         const leftRecentIndex = recentGameIndexes.get(left.appId);
@@ -967,7 +1084,13 @@ export function ProfilePage({
     return () => {
       cancelled = true;
     };
-  }, [achievementHistoryGames, addedLibraryGames, localAchievementGamesByAppId, shouldComputeOverviewData]);
+  }, [
+    achievementHistoryGames,
+    addedLibraryGames,
+    localAchievementGamesByAppId,
+    shouldComputeOverviewData,
+    steamOwnedProfileGames,
+  ]);
 
   useEffect(() => {
     if (
@@ -1142,17 +1265,80 @@ export function ProfilePage({
       });
   }, [profileAchievementGames]);
 
-  const recentActivityGames = useMemo(() => {
-    return profileAchievementGames
-      .slice()
-      .sort((left, right) => {
-        const lastPlayedDelta =
-          parseLastPlayed(right.lastTimePlayed) -
-          parseLastPlayed(left.lastTimePlayed);
-        if (lastPlayedDelta !== 0) return lastPlayedDelta;
-        return getGamePlaytime(right) - getGamePlaytime(left);
-      });
-  }, [profileAchievementGames]);
+  const recentActivityGames = useMemo(
+    () => sortOverviewGames(profileAchievementGames, overviewSortBy, appearance.language),
+    [appearance.language, overviewSortBy, profileAchievementGames],
+  );
+
+  const steamOverviewMetrics = useMemo(() => {
+    if (steamAccountStats) {
+      return {
+        games: steamAccountStats.gamesCount,
+        achievements: steamAccountStats.unlockedAchievements,
+        completion: Math.round(steamAccountStats.averageProgress),
+        playtime: steamAccountStats.totalPlaytimeMinutes * 60_000,
+      };
+    }
+
+    let achievements = 0;
+    let completionTotal = 0;
+    let gamesWithAchievements = 0;
+    let playtime = 0;
+    for (const game of profileAchievementGames) {
+      const total = getAchievementTotal(game);
+      const unlocked = getUnlockedAchievementCount(game);
+      achievements += unlocked;
+      playtime += getGamePlaytime(game);
+      if (total <= 0) continue;
+      completionTotal += (unlocked / total) * 100;
+      gamesWithAchievements += 1;
+    }
+
+    return {
+      games: profileAchievementGames.length,
+      achievements,
+      completion: gamesWithAchievements > 0
+        ? Math.round(completionTotal / gamesWithAchievements)
+        : 0,
+      playtime,
+    };
+  }, [profileAchievementGames, steamAccountStats]);
+
+  const steamMetricNumberFormatter = useMemo(
+    () => new Intl.NumberFormat(appearance.language === "en" ? "en-US" : "pt-BR"),
+    [appearance.language],
+  );
+
+  useEffect(() => {
+    writeStoredOverviewSortBy(overviewSortBy);
+  }, [overviewSortBy]);
+
+  useEffect(() => {
+    setRecentActivityPage(1);
+  }, [overviewSortBy]);
+
+  useEffect(() => {
+    if (!overviewSortDropdownOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        overviewSortDropdownRef.current &&
+        !overviewSortDropdownRef.current.contains(event.target as Node)
+      ) {
+        setOverviewSortDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOverviewSortDropdownOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [overviewSortDropdownOpen]);
   const recentActivityTotalPages = Math.max(
     1,
     Math.ceil(recentActivityGames.length / recentActivityPageSize),
@@ -1665,6 +1851,99 @@ export function ProfilePage({
                   <div className="profile-page__activity-console">
                     {recentActivityGames.length > 0 ? (
                       <>
+                      <div
+                        className="profile-page__activity-toolbar"
+                        aria-label={t("profile.sortAria")}
+                      >
+                        <div
+                          className="profile-page__activity-metrics"
+                          aria-label={t("profile.steamMetrics")}
+                        >
+                          <span className="profile-page__activity-metric">
+                            <Gamepad
+                              className="profile-page__activity-metric-icon"
+                              size={22}
+                              color="var(--text-primary)"
+                              aria-hidden="true"
+                            />
+                            <strong>{steamMetricNumberFormatter.format(steamOverviewMetrics.games)}</strong>
+                            <span>{t("profile.libraryGames")}</span>
+                          </span>
+                          <span className="profile-page__activity-metric">
+                            <Cup
+                              className="profile-page__activity-metric-icon"
+                              size={22}
+                              weight="Filled"
+                              color="var(--text-primary)"
+                              aria-hidden="true"
+                            />
+                            <strong>{steamMetricNumberFormatter.format(steamOverviewMetrics.achievements)}</strong>
+                            <span>{t("profile.unlockedAchievements")}</span>
+                          </span>
+                          <span className="profile-page__activity-metric">
+                            <BadgePercent
+                              className="profile-page__activity-metric-icon"
+                              size={22}
+                              color="var(--text-primary)"
+                              aria-hidden="true"
+                            />
+                            <strong>{steamOverviewMetrics.completion}%</strong>
+                            <span>{t("profile.completionPerGame")}</span>
+                          </span>
+                          <span className="profile-page__activity-metric">
+                            <History2
+                              className="profile-page__activity-metric-icon"
+                              size={22}
+                              color="var(--text-primary)"
+                              aria-hidden="true"
+                            />
+                            <strong>{formatCompactPlaytime(steamOverviewMetrics.playtime)}</strong>
+                            <span>{t("profile.totalPlaytimeLabel")}</span>
+                          </span>
+                        </div>
+                        <div
+                          className={`settings-dropdown profile-page__activity-sort ${
+                            overviewSortDropdownOpen ? "settings-dropdown--open" : ""
+                          }`}
+                          ref={overviewSortDropdownRef}
+                        >
+                          <button
+                            type="button"
+                            className="settings-dropdown__trigger"
+                            aria-haspopup="listbox"
+                            aria-expanded={overviewSortDropdownOpen}
+                            onClick={() =>
+                              setOverviewSortDropdownOpen((current) => !current)
+                            }
+                          >
+                            <span>{t(`profile.sort.${overviewSortBy}`)}</span>
+                            <ChevronLeft size={14} />
+                          </button>
+                          {overviewSortDropdownOpen ? (
+                            <div
+                              className="settings-dropdown__menu"
+                              role="listbox"
+                              aria-label={t("profile.sortAria")}
+                            >
+                              {overviewSortOptions
+                                .filter((option) => option !== overviewSortBy)
+                                .map((option) => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    className="settings-dropdown__option"
+                                    onClick={() => {
+                                      setOverviewSortBy(option);
+                                      setOverviewSortDropdownOpen(false);
+                                    }}
+                                  >
+                                    <span>{t(`profile.sort.${option}`)}</span>
+                                  </button>
+                                ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                       <div className="profile-page__activity-list">
                         {pagedRecentActivityGames.map((game) => {
                           const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
@@ -1767,10 +2046,16 @@ export function ProfilePage({
                             key={index}
                             className="profile-page__activity-card profile-page__activity-card--skeleton"
                           >
-                            <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
-                            <span className="profile-page__activity-meta">
-                              <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
-                              <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+                            <span className="profile-page__activity-cover-button" aria-hidden="true">
+                              <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
+                            </span>
+                            <span className="profile-page__activity-main" aria-hidden="true">
+                              <span className="profile-page__activity-meta">
+                                <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
+                              </span>
+                              <span className="profile-page__activity-side">
+                                <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+                              </span>
                             </span>
                           </div>
                         ))}
@@ -1923,12 +2208,6 @@ export function ProfilePage({
                 <EmptyState
                   className="profile-page__no-games"
                   title={t("profile.noAchievements")}
-                  message={
-                    appearance.language === "en"
-                      ? "Unlocked and locked achievements will show up here."
-                      : "Conquistas desbloqueadas e bloqueadas aparecerão aqui."
-                  }
-                  icon={<Cup size={24} weight="Filled" strokeWidth={2.0} />}
                 />
               )
             ) : renderedGames.length > 0 ? (
@@ -1959,12 +2238,6 @@ export function ProfilePage({
                       ? `No games in ${activeCollection.name}`
                       : `Nenhum jogo em ${activeCollection.name}`
                   }
-                  message={
-                    appearance.language === "en"
-                      ? "This collection has no games yet."
-                      : "Esta coleção ainda não possui jogos."
-                  }
-                  icon={<LibraryBig size={24} strokeWidth={1.75} />}
                 />
               )}
             </div>

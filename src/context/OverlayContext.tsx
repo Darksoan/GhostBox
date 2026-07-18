@@ -58,7 +58,7 @@ const OverlayContext = createContext<OverlayContextValue | undefined>(
 );
 
 export function OverlayProvider({ children }: { children: ReactNode }) {
-  const { notifications } = useSettings();
+  const { notifications, appearance } = useSettings();
   const [selectedGame, setSelectedGame] = useState<GhostBoxGame | null>(null);
   const [achievementsView, setAchievementsView] =
     useState<AchievementsViewState>(null);
@@ -71,6 +71,10 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   const modalReturnScrollTopRef = useRef(0);
   const restoreContentScrollAfterModalRef = useRef(false);
   const gameModalExitTimeoutRef = useRef<number>();
+  const selectedGameRef = useRef<GhostBoxGame | null>(null);
+  const achievementsViewRef = useRef<AchievementsViewState>(null);
+  selectedGameRef.current = selectedGame;
+  achievementsViewRef.current = achievementsView;
 
   const showToast = useCallback(
     (title: string, message: string, variant?: ToastVariant) => {
@@ -104,46 +108,51 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const openGame = useCallback((game: GhostBoxGame) => {
+  const clearOverlayExitTimeout = useCallback(() => {
     if (gameModalExitTimeoutRef.current) {
       window.clearTimeout(gameModalExitTimeoutRef.current);
       gameModalExitTimeoutRef.current = undefined;
     }
+  }, []);
+
+  const getOverlayExitMs = useCallback(() => {
+    if (appearance.disableTabAnimations || appearance.reduceAllAnimations) {
+      return 0;
+    }
+    return 100;
+  }, [appearance.disableTabAnimations, appearance.reduceAllAnimations]);
+
+  const openGame = useCallback((game: GhostBoxGame) => {
+    clearOverlayExitTimeout();
     restoreContentScrollAfterModalRef.current = true;
     setIsGameModalExitPending(false);
     setAchievementsView(null);
     setSelectedGame(game);
-  }, []);
+  }, [clearOverlayExitTimeout]);
 
   const closeGame = useCallback(() => {
-    if (gameModalExitTimeoutRef.current) {
-      window.clearTimeout(gameModalExitTimeoutRef.current);
-    }
+    if (gameModalExitTimeoutRef.current !== undefined) return;
+    if (!selectedGameRef.current) return;
     setIsGameModalExitPending(true);
-    setSelectedGame(null);
     gameModalExitTimeoutRef.current = window.setTimeout(() => {
+      setSelectedGame(null);
       setIsGameModalExitPending(false);
       gameModalExitTimeoutRef.current = undefined;
-    }, 220);
-  }, []);
+    }, getOverlayExitMs());
+  }, [getOverlayExitMs]);
 
   const closeContentOverlay = useCallback(() => {
-    if (gameModalExitTimeoutRef.current) {
-      window.clearTimeout(gameModalExitTimeoutRef.current);
-      gameModalExitTimeoutRef.current = undefined;
-    }
+    clearOverlayExitTimeout();
     setSelectedGame(null);
     setAchievementsView(null);
     setIsGameModalExitPending(false);
-  }, []);
+  }, [clearOverlayExitTimeout]);
 
   useEffect(() => {
     return () => {
-      if (gameModalExitTimeoutRef.current) {
-        window.clearTimeout(gameModalExitTimeoutRef.current);
-      }
+      clearOverlayExitTimeout();
     };
-  }, []);
+  }, [clearOverlayExitTimeout]);
 
   const openAchievements = useCallback(
     (
@@ -153,6 +162,8 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         highlightAchievementId?: string;
       },
     ) => {
+      clearOverlayExitTimeout();
+      setIsGameModalExitPending(false);
       setSelectedGame(null);
       setAchievementsView({
         game,
@@ -160,16 +171,29 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         highlightAchievementId: options?.highlightAchievementId,
       });
     },
-    [],
+    [clearOverlayExitTimeout],
   );
 
   const closeAchievements = useCallback(() => {
-    if (achievementsView?.reopenModalOnBack) {
-      openGame(achievementsView.game);
-    }
-    setAchievementsView(null);
-  }, [achievementsView, openGame]);
+    if (gameModalExitTimeoutRef.current !== undefined) return;
+    const current = achievementsViewRef.current;
+    if (!current) return;
 
+    if (current.reopenModalOnBack) {
+      clearOverlayExitTimeout();
+      setIsGameModalExitPending(false);
+      openGame(current.game);
+      setAchievementsView(null);
+      return;
+    }
+
+    setIsGameModalExitPending(true);
+    gameModalExitTimeoutRef.current = window.setTimeout(() => {
+      setAchievementsView(null);
+      setIsGameModalExitPending(false);
+      gameModalExitTimeoutRef.current = undefined;
+    }, getOverlayExitMs());
+  }, [clearOverlayExitTimeout, getOverlayExitMs, openGame]);
   const value = useMemo<OverlayContextValue>(
     () => ({
       selectedGame,
