@@ -240,6 +240,9 @@ fn build_tray_menu_window(app: &tauri::AppHandle, x: f64, y: f64, visible: bool)
     .visible(visible)
     .shadow(false)
     .background_color(WINDOW_BACKGROUND)
+    .additional_browser_args(
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-smooth-scrolling",
+    )
     .inner_size(TRAY_MENU_WIDTH, TRAY_MENU_HEIGHT)
     .position(x, y)
     .build() else {

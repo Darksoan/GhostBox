@@ -394,7 +394,7 @@ export function HomePageLoadingState() {
       </section>
 
       <section className="home-recent-banner">
-        <span className="home-recent-banner__heading home-section-title-placeholder loading-wave" />
+        <span className="home-recent-banner__heading home-section-title-placeholder loading-plate" />
         <div className="home-recent-banner__card home-recent-banner__card--skeleton">
           <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
           <span className="home-recent-banner__content home-recent-banner__content--skeleton">

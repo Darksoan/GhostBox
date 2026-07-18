@@ -166,13 +166,13 @@ export const GameCard = memo(function GameCard({
             aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
           >
             <span className="game-card__summary-metric">
-              <Cup size={14} weight="Filled" strokeWidth={2.0} />
+              <Cup size={16} weight="Filled" strokeWidth={2.0} />
               <span>
                 {achievementUnlocked} / {achievementTotal}
               </span>
             </span>
             <span className="game-card__summary-metric">
-              <Clock size={14} strokeWidth={2.0} />
+              <Clock size={16} strokeWidth={2.0} />
               <span>{compactPlaytime}</span>
             </span>
           </div>

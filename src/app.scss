@@ -29,12 +29,15 @@
   --surface-active: rgba(255, 255, 255, 0.08);
   --surface-strong: rgba(255, 255, 255, 0.085);
 
-  /* Borders — notification card border is the app standard */
-  --border: #161616;
-  --border-subtle: rgba(255, 255, 255, 0.035);
-  --border-ui: var(--border);
-  --border-strong: rgba(255, 255, 255, 0.1);
-  --border-hover: #202020;
+  /*
+   * Borders — ONLY surface secondary / tertiary.
+   * tertiary = default edge; secondary = hover and emphasized edge.
+   */
+  --border: var(--surface-tertiary);
+  --border-subtle: var(--surface-tertiary);
+  --border-ui: var(--surface-tertiary);
+  --border-strong: var(--surface-secondary);
+  --border-hover: var(--surface-secondary);
 
   /*
    * Text — ONLY these three tokens may be used for text color in the app.
@@ -457,7 +460,7 @@ svg[stroke-width="1.8"] {
    * the source instead of upscaling a GPU bitmap.
    */
   --pb-cover-rest-size: 100%;
-  --pb-cover-hover-size: 106%;
+  --pb-cover-hover-size: 104%;
   --pb-cover-zoom-duration: 0.14s;
   position: relative;
   overflow: hidden;
@@ -2575,7 +2578,7 @@ p {
     width: 14px;
     height: 14px;
     flex: 0 0 auto;
-    border: 2px solid rgba(255, 255, 255, 0.18);
+    border: 2px solid var(--border);
     border-top-color: var(--text-strong);
     border-radius: var(--radius-pill);
     animation: spin 0.75s linear infinite;
@@ -2710,6 +2713,10 @@ p {
 
 .content-section,
 .settings-page {
+  --border: var(--surface-secondary);
+  --border-subtle: var(--surface-secondary);
+  --border-ui: var(--surface-secondary);
+
   display: flex;
   flex-direction: column;
   gap: calc(var(--spacing) * 1.5);
@@ -3343,7 +3350,7 @@ p {
       ) /
       4
   );
-  --home-carousel-control-border: rgba(255, 255, 255, 0.1);
+  --home-carousel-control-border: var(--border);
 
   position: relative;
   flex: 0 0 auto;
@@ -4371,11 +4378,20 @@ p {
 .home-recent-banner__card--skeleton {
   cursor: default;
   pointer-events: none;
+  box-shadow: none;
+  background: var(--surface-secondary);
 }
 
 .home-recent-banner__cover--skeleton {
   background-image: none !important;
-  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  background: var(--surface-secondary) !important;
+  box-shadow: none;
+
+  &::before,
+  &::after {
+    content: none !important;
+    display: none !important;
+  }
 }
 
 .home-recent-banner__content--skeleton {
@@ -4384,12 +4400,11 @@ p {
 
 .home-recent-banner__skeleton-line {
   display: block;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
-}
-
-.home-recent-banner__skeleton-line {
   height: 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface-primary);
+  box-shadow: none;
+  animation: none;
 }
 
 .home-recent-banner__skeleton-line--title {
@@ -4614,9 +4629,14 @@ p {
     -webkit-user-drag: none;
   }
 
-  &--empty,
+  &--empty {
+    background: var(--surface-secondary);
+  }
+
   &--skeleton {
-    background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+    background: var(--surface-primary);
+    box-shadow: none;
+    animation: none;
   }
 }
 
@@ -4779,7 +4799,7 @@ p {
 }
 
 .home-recent-list__item--empty {
-  border-color: var(--text-faint);
+  border-color: var(--border);
   background: var(--background);
   cursor: default;
 }
@@ -4901,7 +4921,7 @@ p {
   will-change: opacity;
   margin: 12px 18px 18px;
   padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.025);
 
@@ -6495,7 +6515,7 @@ p {
 
   .settings-option__copy span {
     color: var(--text-tertiary);
-  font-weight: var(--weight-muted);
+    font-weight: var(--weight-muted);
   }
 }
 
@@ -6759,7 +6779,7 @@ p {
     flex-direction: column;
     gap: 5px;
     padding: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.18);
   }
@@ -6988,7 +7008,7 @@ p {
   min-width: 180px;
   padding: 4px;
   background: var(--background-dark);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -7293,7 +7313,7 @@ p {
   &__spinner {
     width: 44px;
     height: 44px;
-    border: 3px solid rgba(255, 255, 255, 0.14);
+    border: 3px solid var(--border);
     border-top-color: var(--text-strong);
     border-radius: var(--radius-circle);
     animation: spin 0.8s linear infinite;
@@ -7331,7 +7351,7 @@ p {
 
   &:hover {
     background-color: var(--surface-secondary);
-    border-color: var(--border);
+    border-color: var(--border-hover);
   }
 
   &:hover svg {
@@ -7519,7 +7539,7 @@ p {
     &:hover span:last-child,
     &[aria-expanded="true"] span:last-child {
       color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+      font-weight: var(--weight-muted);
     }
 
     &:hover .catalogue-filter-section__chevron,
@@ -7606,8 +7626,6 @@ p {
 
       &:hover {
         background: var(--surface-secondary);
-        color: var(--text-secondary);
-      font-weight: var(--weight-muted);
       }
 
       &.is-active {
@@ -7675,9 +7693,10 @@ p {
 
     &::placeholder {
       color: var(--text-tertiary);
-    font-weight: var(--weight-muted);
+      font-weight: var(--weight-muted);
     }
 
+    &:hover,
     &:focus {
       border-color: var(--border-hover);
     }
@@ -7741,9 +7760,9 @@ p {
   gap: 10px;
   padding: 6px 10px;
   border: 0;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   cursor: pointer;
   font-size: 13px;
   font-weight: var(--weight-muted);
@@ -7778,10 +7797,10 @@ p {
     transition: background var(--motion-fast) var(--ease);
   }
 
-  /* Hover: lighten label text only */
+  /* Match order/sort option hover: light surface + secondary text */
   &:hover {
-    background: transparent;
-    color: var(--text-primary);
+    background: var(--surface-secondary);
+    color: var(--text-secondary);
   }
 
   input:checked + &__box {
@@ -7795,9 +7814,14 @@ p {
     white-space: nowrap;
   }
 
-  /* Checked: text primary, no row chrome */
+  /* Match order/sort active option */
   &:has(input:checked) {
-    background: transparent;
+    background: var(--surface-secondary);
+    color: var(--text-primary);
+  }
+
+  &:has(input:checked):hover {
+    background: var(--surface-secondary);
     color: var(--text-primary);
   }
 }
@@ -8701,7 +8725,7 @@ input[type="search"]::-ms-reveal {
   justify-content: space-between;
   min-height: 62px;
   padding: 0 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
 
   > div {
     display: flex;
@@ -8739,7 +8763,7 @@ input[type="search"]::-ms-reveal {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.025);
   padding: 12px;
@@ -8752,7 +8776,7 @@ input[type="search"]::-ms-reveal {
   gap: 8px;
   margin: -12px -12px 10px;
   padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
   background: rgba(11, 11, 11, 0.96);
   color: var(--text-primary);
 
@@ -8820,7 +8844,7 @@ input[type="search"]::-ms-reveal {
 .backup-restore-modal__file-more {
   margin: 10px 0 0;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border);
   color: var(--text-tertiary);
   font-weight: var(--weight-muted);
   font-size: 11px;
@@ -8907,7 +8931,7 @@ input[type="search"]::-ms-reveal {
 .modal__details-loading {
   flex-direction: column;
   min-height: 260px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.025);
 }
@@ -8926,7 +8950,7 @@ input[type="search"]::-ms-reveal {
     justify-content: space-between;
     gap: 16px;
     padding: 12px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--border);
   }
 
   dt {
@@ -8966,7 +8990,7 @@ input[type="search"]::-ms-reveal {
   align-items: stretch;
   gap: 6px;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--background);
   color: var(--text-secondary);
@@ -8982,7 +9006,7 @@ input[type="search"]::-ms-reveal {
   }
 
   &--selected {
-    border-color: var(--text-faint);
+    border-color: var(--border);
     color: var(--text-primary);
   }
 
@@ -9525,29 +9549,39 @@ input[type="search"]::-ms-reveal {
   &__achievement-badges {
     position: absolute;
     left: 50%;
-    bottom: 9px;
+    bottom: 10px;
     z-index: 2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: calc(var(--spacing) * 1);
+    gap: calc(var(--spacing) * 1.5);
     width: auto;
     max-width: calc(100% - calc(var(--spacing) * 2));
-    height: 22px;
-    padding: 0 8px;
-    border: 1px solid var(--border-strong);
+    height: 30px;
+    padding: 0 12px;
+    border: 0;
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--background-dark) 78%, var(--surface-primary) 22%);
+    background:
+      linear-gradient(
+        145deg,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0.05) 42%,
+        rgba(0, 0, 0, 0.12) 100%
+      ),
+      rgba(12, 14, 18, 0.28);
     color: var(--text-primary);
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: var(--weight-semibold);
     font-variant-numeric: tabular-nums;
-    line-height: 22px;
+    line-height: 30px;
     letter-spacing: 0.01em;
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
     transform: translate3d(-50%, 8px, 0);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(18px) saturate(1.35);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
     transition:
       opacity var(--motion-base) var(--ease),
       transform var(--motion-base) var(--ease);
@@ -9556,23 +9590,25 @@ input[type="search"]::-ms-reveal {
       display: block;
       flex: 0 0 auto;
       color: var(--text-primary);
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
     }
   }
 
   &__summary-metric {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    height: 15px;
+    gap: 5px;
+    height: 18px;
     min-width: 0;
     white-space: nowrap;
 
     > span {
       display: inline-flex;
       align-items: center;
-      height: 15px;
+      height: 18px;
       padding-top: 1px;
-      line-height: 15px;
+      line-height: 18px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
     }
   }
 
@@ -11478,7 +11514,7 @@ html.no-tab-animations {
     width: 42px;
     height: 42px;
     min-width: 42px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: rgba(0, 0, 0, 0.42);
     color: var(--text-primary);
@@ -13354,7 +13390,7 @@ html.no-tab-animations {
     animation: spin 0.8s linear infinite;
 
     &--light {
-      border-color: var(--text-faint);
+      border-color: var(--border);
       border-top-color: var(--text-strong);
     }
   }
@@ -14596,21 +14632,28 @@ button,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 11px;
+  gap: 12px;
+  height: 30px;
   max-width: calc(100% - 24px);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: rgba(12, 14, 18, 0.22);
   pointer-events: none;
   transform: translateX(-50%);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 
 .game-card__cover .game-card__placeholder-achievements span {
   display: block;
-  width: 48px;
-  height: 12px;
-  border-radius: 2px;
+  width: 56px;
+  height: 14px;
+  border-radius: var(--radius-sm);
 }
 
 .game-card__cover .game-card__placeholder-achievements span:last-child {
-  width: 36px;
+  width: 42px;
 }
 
 /* Catalogue list skeleton – genre chips as pills */

@@ -366,19 +366,19 @@ const translations: Record<Language, TranslationTree> = {
             "Desativa animações ao navegar entre páginas e seções do app.",
         },
         reduceAllAnimations: {
-          label: "Desativar todas as animações",
+          label: "Reduzir animações da interface",
           description:
-            "Remove animações, pulsos e transições visuais pesadas em todo o app.",
+            "Remove animações de navegação, pulsos e transições visuais pesadas.",
         },
         disableBackdropBlur: {
           label: "Desativar blur/glass",
           description:
-            "Troca efeitos de vidro por fundos sólidos para reduzir custo de renderização.",
+            "Remove o desfoque de fundo dos efeitos de vidro para reduzir o custo de renderização.",
         },
         disableExplorePan: {
           label: "Desativar pan do Explore",
           description:
-            "Pausa o movimento automático das capas nos cards de exploração da tela inicial.",
+            "Desativa o movimento das capas ao passar o mouse ou focar os cards do Explore.",
         },
         trailerQuality: {
           label: "Qualidade de trailer",
@@ -391,11 +391,6 @@ const translations: Record<Language, TranslationTree> = {
           label: "Autoplay de trailer",
           description:
             "Reproduz automaticamente o trailer selecionado na galeria do jogo.",
-        },
-        preferLowResCovers: {
-          label: "Capas em resolução menor",
-          description:
-            "Prioriza capas 1x da Steam antes das versões 2x para poupar memória e rede.",
         },
         imagePreloadConcurrency: {
           label: "Preload de imagens",
@@ -887,19 +882,19 @@ const translations: Record<Language, TranslationTree> = {
             "Disables animations when navigating between pages and sections.",
         },
         reduceAllAnimations: {
-          label: "Disable all animations",
+          label: "Reduce interface animations",
           description:
-            "Removes animations, pulses, and heavier visual transitions across the app.",
+            "Removes navigation animations, pulses, and heavier visual transitions.",
         },
         disableBackdropBlur: {
           label: "Disable blur/glass",
           description:
-            "Replaces glass effects with solid surfaces to reduce rendering cost.",
+            "Removes background blur from glass effects to reduce rendering cost.",
         },
         disableExplorePan: {
           label: "Disable Explore pan",
           description:
-            "Pauses automatic cover movement in the home Explore cards.",
+            "Disables cover movement when hovering or focusing Home Explore cards.",
         },
         trailerQuality: {
           label: "Trailer quality",
@@ -912,11 +907,6 @@ const translations: Record<Language, TranslationTree> = {
           label: "Trailer autoplay",
           description:
             "Automatically plays the selected trailer in the game gallery.",
-        },
-        preferLowResCovers: {
-          label: "Lower-resolution covers",
-          description:
-            "Prioritizes Steam 1x covers before 2x versions to save memory and network.",
         },
         imagePreloadConcurrency: {
           label: "Image preload",

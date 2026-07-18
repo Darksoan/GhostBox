@@ -20,7 +20,8 @@
         "maximizable": false,
         "decorations": false,
         "visible": false,
-        "backgroundColor": "#0b0b0b"
+        "backgroundColor": "#0b0b0b",
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --enable-smooth-scrolling"
       }
     ],
     "security": {

@@ -151,10 +151,12 @@ function applyPlaytimeToGame(
   return {
     ...game,
     playTimeInMilliseconds: playtime.playTimeInMilliseconds,
-    lastTimePlayed: playtime.lastTimePlayed,
-    lastSessionRecordedAt: playtime.lastSessionRecordedAt,
+    lastTimePlayed: playtime.lastTimePlayed ?? game.lastTimePlayed,
+    lastSessionRecordedAt:
+      playtime.lastSessionRecordedAt ?? game.lastSessionRecordedAt,
     lastSessionDurationInMilliseconds:
-      playtime.lastSessionDurationInMilliseconds,
+      playtime.lastSessionDurationInMilliseconds ??
+      game.lastSessionDurationInMilliseconds,
     sessionActive: playtime.sessionActive === true,
   };
 }
@@ -203,10 +205,12 @@ function applyPlaytimeSnapshotToGames(
     return {
       ...game,
       playTimeInMilliseconds: playtime.playTimeInMilliseconds,
-      lastTimePlayed: playtime.lastTimePlayed,
-      lastSessionRecordedAt: playtime.lastSessionRecordedAt,
+      lastTimePlayed: playtime.lastTimePlayed ?? game.lastTimePlayed,
+      lastSessionRecordedAt:
+        playtime.lastSessionRecordedAt ?? game.lastSessionRecordedAt,
       lastSessionDurationInMilliseconds:
-        playtime.lastSessionDurationInMilliseconds,
+        playtime.lastSessionDurationInMilliseconds ??
+        game.lastSessionDurationInMilliseconds,
       sessionActive: nextSessionActive,
     };
   });
@@ -1419,6 +1423,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           );
         }
         if (result?.success) {
+          setProfileHistoryGames((current) =>
+            upsertProfileHistoryGame(current, {
+              ...game,
+              lastTimePlayed: new Date().toISOString(),
+            }),
+          );
           await refreshGamePlaytimes();
         }
       } finally {

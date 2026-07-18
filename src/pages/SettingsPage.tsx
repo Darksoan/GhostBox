@@ -513,7 +513,8 @@ function buildTabOptions(
         label: t("settings.performance.disableTabAnimations.label"),
         description: t("settings.performance.disableTabAnimations.description"),
         control: "toggle" as const,
-        checked: appearance.disableTabAnimations,
+        checked: appearance.disableTabAnimations || appearance.reduceAllAnimations,
+        disabled: appearance.reduceAllAnimations,
         onToggle: (next: boolean) => updateAppearance({ disableTabAnimations: next }),
       },
       {
@@ -553,14 +554,7 @@ function buildTabOptions(
         description: t("settings.performance.trailerAutoplay.description"),
         control: "toggle" as const,
         checked: appearance.trailerAutoplay,
-        onToggle: (next: boolean) => updateAppearance({ trailerAutoplay: next, bannerAutoplay: next }),
-      },
-      {
-        label: t("settings.performance.preferLowResCovers.label"),
-        description: t("settings.performance.preferLowResCovers.description"),
-        control: "toggle" as const,
-        checked: appearance.preferLowResCovers,
-        onToggle: (next: boolean) => updateAppearance({ preferLowResCovers: next }),
+        onToggle: (next: boolean) => updateAppearance({ trailerAutoplay: next }),
       },
       {
         label: t("settings.performance.imagePreloadConcurrency.label"),

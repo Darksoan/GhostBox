@@ -30,8 +30,11 @@ import {
   withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
+import { useAppData } from "../context/AppDataContext";
+import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
+import { countUnlockedAchievements } from "../lib/profileHistoryGames";
 
 type HomeGameSeed = {
   appId: string;
@@ -243,6 +246,57 @@ function hasCompletedPlaySession(
 function getLastPlayedTime(game: GhostBoxGame) {
   const lastPlayedTime = parseLastPlayed(game.lastTimePlayed);
   return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
+}
+
+function pickRicherLastPlayedGame(left: GhostBoxGame, right: GhostBoxGame) {
+  const leftPlayed = getLastPlayedTime(left);
+  const rightPlayed = getLastPlayedTime(right);
+  const preferredByPlay =
+    rightPlayed !== leftPlayed
+      ? rightPlayed > leftPlayed
+        ? right
+        : left
+      : (right.playTimeInMilliseconds ?? 0) > (left.playTimeInMilliseconds ?? 0)
+        ? right
+        : left;
+  const other = preferredByPlay === left ? right : left;
+  const preferredTitle = !isSteamTitlePlaceholder(preferredByPlay.title, preferredByPlay.appId)
+    ? preferredByPlay.title
+    : other.title;
+  const preferredList =
+    (preferredByPlay.achievementList?.length ?? 0) >= (other.achievementList?.length ?? 0)
+      ? preferredByPlay.achievementList
+      : other.achievementList;
+  const unlocked = Math.max(
+    countUnlockedAchievements(preferredByPlay),
+    countUnlockedAchievements(other),
+  );
+  const total = Math.max(
+    preferredByPlay.achievements.total ?? 0,
+    other.achievements.total ?? 0,
+  );
+
+  return {
+    ...other,
+    ...preferredByPlay,
+    title: preferredTitle || preferredByPlay.title,
+    lastTimePlayed:
+      preferredByPlay.lastTimePlayed ?? other.lastTimePlayed,
+    playTimeInMilliseconds: Math.max(
+      preferredByPlay.playTimeInMilliseconds ?? 0,
+      other.playTimeInMilliseconds ?? 0,
+    ),
+    hero: preferredByPlay.hero || other.hero,
+    heroUrl: preferredByPlay.heroUrl || other.heroUrl,
+    cover: preferredByPlay.cover || other.cover,
+    coverUrl: preferredByPlay.coverUrl || other.coverUrl,
+    achievementList: preferredList ?? preferredByPlay.achievementList ?? [],
+    achievements: {
+      unlocked,
+      total,
+      progress: total > 0 ? Math.round((unlocked / total) * 100) : 0,
+    },
+  };
 }
 
 function homeGameKey(game: GhostBoxGame) {
@@ -1986,16 +2040,18 @@ function HomeRecentBanner({
   title,
   game,
   language,
+  loading = false,
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
   game: GhostBoxGame | undefined;
   language: "pt" | "en";
+  loading?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  if (!game) {
+  if (!game && loading) {
     return (
       <section className="home-recent-banner" aria-label={title}>
         <h3 className="home-recent-banner__heading">{title}</h3>
@@ -2030,6 +2086,19 @@ function HomeRecentBanner({
             </span>
           </span>
         </div>
+      </section>
+    );
+  }
+
+  if (!game) {
+    return (
+      <section className="home-recent-banner home-recent-banner--empty" aria-label={title}>
+        <h3 className="home-recent-banner__heading">{title}</h3>
+        <p className="home-recent-banner__empty">
+          {language === "en"
+            ? "Play a game to see it here."
+            : "Jogue um jogo para vê-lo aqui."}
+        </p>
       </section>
     );
   }
@@ -2231,6 +2300,12 @@ export function HomePage({
   steamProfile: SteamProfile | null;
 }) {
   const { appearance, t } = useSettings();
+  const {
+    addedLibraryGames,
+    favoriteGames,
+    steamAccountStats,
+    initialLoadingProgress,
+  } = useAppData();
   const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
     () =>
       topReviewedSteamGames.map((game, index) =>
@@ -2587,10 +2662,39 @@ export function HomePage({
     return getHomeExploreCategories([...homeTopReviewedGames, ...homeFeaturedGames]);
   }, [homeTopReviewedGames, homeFeaturedGames]);
   const homeRecentPlayedGame = useMemo(() => {
-    return [...profileHistoryGames]
+    const pool = new Map<string, GhostBoxGame>();
+    const push = (game: GhostBoxGame) => {
+      const existing = pool.get(game.appId);
+      pool.set(
+        game.appId,
+        existing ? pickRicherLastPlayedGame(existing, game) : game,
+      );
+    };
+
+    for (const game of profileHistoryGames) push(game);
+    for (const game of addedLibraryGames) push(game);
+    for (const game of favoriteGames) push(game);
+
+    if (steamAccountStats?.ownedPlaytimes?.length) {
+      for (const game of buildSteamOwnedGamesFromPlaytimes(
+        steamAccountStats.ownedPlaytimes,
+        {},
+      )) {
+        push(game);
+      }
+    }
+
+    return [...pool.values()]
       .filter(hasCompletedPlaySession)
       .sort((left, right) => getLastPlayedTime(right) - getLastPlayedTime(left))[0];
-  }, [profileHistoryGames]);
+  }, [
+    addedLibraryGames,
+    favoriteGames,
+    profileHistoryGames,
+    steamAccountStats,
+  ]);
+  const homeRecentPlayedLoading =
+    !homeRecentPlayedGame && initialLoadingProgress < 100;
 
   const homeContextMenuItems = useCollectionContextMenu({
     game: homeContextMenu?.game ?? null,
@@ -2658,6 +2762,7 @@ export function HomePage({
         title={t("home.recentSection")}
         game={homeRecentPlayedGame}
         language={appearance.language}
+        loading={homeRecentPlayedLoading}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
