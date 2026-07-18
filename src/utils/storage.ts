@@ -27,7 +27,7 @@ import {
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
-export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements";
+export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements" | "perfect";
 
 export type StoredPersonalCalendar = {
   weekStart: string;
@@ -758,7 +758,8 @@ export function readStoredOverviewSortBy(): OverviewSortBy {
     return stored === "recent" ||
       stored === "playtime" ||
       stored === "title" ||
-      stored === "achievements"
+      stored === "achievements" ||
+      stored === "perfect"
       ? stored
       : "recent";
   } catch {

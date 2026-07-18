@@ -148,7 +148,9 @@ const translations: Record<Language, TranslationTree> = {
         playtime: "Mais jogados",
         title: "Título (A-Z)",
         achievements: "Mais conquistas",
+        perfect: "Jogos 100%",
       },
+      noPerfectGames: "Nenhum jogo 100% encontrado",
     },
     achievements: {
       title: "Conquistas",
@@ -670,7 +672,9 @@ const translations: Record<Language, TranslationTree> = {
         playtime: "Most played",
         title: "Title (A-Z)",
         achievements: "Most achievements",
+        perfect: "100% games",
       },
+      noPerfectGames: "No 100% games found",
     },
     achievements: {
       title: "Achievements",

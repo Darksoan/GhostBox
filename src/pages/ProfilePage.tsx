@@ -26,7 +26,7 @@ import {
   ShieldUser,
   User,
 } from "lucide-react";
-import { BadgePercent, Cup, CupStar, Gamepad, History2 } from "reicon-react";
+import { Cup, CupStar } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamAccountStats, SteamProfile, UserCollection } from "../types";
 import { GameGrid } from "../components/ui/GameCard";
@@ -93,6 +93,7 @@ const overviewSortOptions: OverviewSortBy[] = [
   "playtime",
   "title",
   "achievements",
+  "perfect",
 ];
 
 function ProfileActivityCard({
@@ -1849,7 +1850,7 @@ export function ProfilePage({
               >
                 <section className="profile-page__overview-console">
                   <div className="profile-page__activity-console">
-                    {recentActivityGames.length > 0 ? (
+                    {profileAchievementGames.length > 0 ? (
                       <>
                       <div
                         className="profile-page__activity-toolbar"
@@ -1860,43 +1861,18 @@ export function ProfilePage({
                           aria-label={t("profile.steamMetrics")}
                         >
                           <span className="profile-page__activity-metric">
-                            <Gamepad
-                              className="profile-page__activity-metric-icon"
-                              size={22}
-                              color="var(--text-primary)"
-                              aria-hidden="true"
-                            />
                             <strong>{steamMetricNumberFormatter.format(steamOverviewMetrics.games)}</strong>
                             <span>{t("profile.libraryGames")}</span>
                           </span>
                           <span className="profile-page__activity-metric">
-                            <Cup
-                              className="profile-page__activity-metric-icon"
-                              size={22}
-                              weight="Filled"
-                              color="var(--text-primary)"
-                              aria-hidden="true"
-                            />
                             <strong>{steamMetricNumberFormatter.format(steamOverviewMetrics.achievements)}</strong>
                             <span>{t("profile.unlockedAchievements")}</span>
                           </span>
                           <span className="profile-page__activity-metric">
-                            <BadgePercent
-                              className="profile-page__activity-metric-icon"
-                              size={22}
-                              color="var(--text-primary)"
-                              aria-hidden="true"
-                            />
                             <strong>{steamOverviewMetrics.completion}%</strong>
                             <span>{t("profile.completionPerGame")}</span>
                           </span>
                           <span className="profile-page__activity-metric">
-                            <History2
-                              className="profile-page__activity-metric-icon"
-                              size={22}
-                              color="var(--text-primary)"
-                              aria-hidden="true"
-                            />
                             <strong>{formatCompactPlaytime(steamOverviewMetrics.playtime)}</strong>
                             <span>{t("profile.totalPlaytimeLabel")}</span>
                           </span>
@@ -1945,7 +1921,7 @@ export function ProfilePage({
                         </div>
                       </div>
                       <div className="profile-page__activity-list">
-                        {pagedRecentActivityGames.map((game) => {
+                        {recentActivityGames.length > 0 ? pagedRecentActivityGames.map((game) => {
                           const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
                           const displayGame = resolvedTitle
                             ? { ...game, title: resolvedTitle }
@@ -2024,7 +2000,12 @@ export function ProfilePage({
                               onOpenGameAchievements={onOpenGameAchievements}
                             />
                           );
-                        })}
+                        }) : (
+                          <EmptyState
+                            className="profile-page__no-games"
+                            title={t("profile.noPerfectGames")}
+                          />
+                        )}
                       </div>
                       {recentActivityTotalPages > 1 ? (
                         <div className="profile-page__activity-pagination">

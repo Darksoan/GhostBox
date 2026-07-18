@@ -1108,13 +1108,18 @@
   &__activity-metrics {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    flex: 1 1 auto;
     min-width: 0;
+    max-width: min(100%, 720px);
   }
 
   &__activity-metric {
     display: inline-flex;
-    align-items: center;
+    align-items: baseline;
     gap: 6px;
+    flex: 0 1 auto;
     min-width: 0;
     color: var(--text-tertiary, var(--text-secondary));
     font-size: 12px;
@@ -1123,33 +1128,21 @@
 
     strong {
       color: var(--text-primary);
-      font-size: 18px;
+      font-size: 22px;
       font-weight: var(--weight-medium);
       font-variant-numeric: tabular-nums;
       line-height: 1;
     }
 
-    .profile-page__activity-metric-icon {
-      display: block;
-      flex: 0 0 auto;
-      width: 22px;
-      height: 22px;
-      color: var(--text-primary) !important;
-      fill: none;
-
-      path,
-      circle,
-      rect,
-      polygon {
-        fill: var(--text-primary) !important;
-        stroke: none !important;
-      }
+    > span {
+      letter-spacing: 0.01em;
     }
 
     + .profile-page__activity-metric {
-      margin-left: 12px;
-      padding-left: 12px;
+      margin-left: 0;
+      padding-left: 0;
       border-left: 1px solid var(--border-subtle);
+      padding-left: 18px;
     }
   }
 
@@ -1205,32 +1198,6 @@
     background: transparent;
     transition: border-color var(--motion-fast) var(--ease);
 
-    &:hover:not(.profile-page__activity-card--perfect),
-    &:focus-within:not(.profile-page__activity-card--perfect) {
-      border-color: var(--border-hover);
-
-      .profile-page__activity-progress-label,
-      .profile-page__activity-progress-count {
-        color: var(--text-primary);
-      }
-
-      .profile-page__activity-cup-icon {
-        color: var(--text-primary) !important;
-
-        path {
-          fill: var(--text-primary) !important;
-        }
-      }
-
-      .profile-page__progress-track {
-        background: color-mix(in srgb, var(--text-primary) 28%, transparent);
-
-        span {
-          background: var(--text-primary);
-        }
-      }
-    }
-
     &:hover,
     &:focus-within {
       border-color: var(--border-hover);
@@ -1241,9 +1208,6 @@
     }
 
     &--perfect {
-      --perfect-border-angle: 0deg;
-      border-color: transparent;
-
       .profile-page__activity-progress-label,
       .profile-page__activity-progress-count {
         color: color-mix(in srgb, var(--premium-gold) 72%, var(--text-secondary));
@@ -1278,86 +1242,17 @@
             background: linear-gradient(
               100deg,
               transparent 0%,
-              transparent 38%,
-              color-mix(in srgb, #fff 42%, var(--premium-gold) 20%) 50%,
-              transparent 62%,
+              transparent 42%,
+              color-mix(in srgb, #fff 18%, var(--premium-gold) 12%) 50%,
+              transparent 58%,
               transparent 100%
             );
+            opacity: 0.55;
             transform: translateX(-120%);
-            animation: profile-perfect-progress-shine 2.8s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+            animation: profile-perfect-progress-shine 5.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
             pointer-events: none;
           }
         }
-      }
-
-      &:hover,
-      &:focus-within {
-        .profile-page__activity-progress-label,
-        .profile-page__activity-progress-count {
-          color: color-mix(in srgb, var(--premium-gold) 88%, #fff 12%);
-        }
-
-        .profile-page__activity-cup-icon--perfect {
-          color: color-mix(in srgb, var(--premium-gold) 88%, #fff 12%) !important;
-
-          path {
-            fill: color-mix(in srgb, var(--premium-gold) 88%, #fff 12%) !important;
-          }
-        }
-
-        .profile-page__activity-progress .profile-page__progress-track {
-          background: color-mix(in srgb, var(--premium-gold) 30%, transparent) !important;
-
-          > span {
-            background: linear-gradient(
-              90deg,
-              color-mix(in srgb, var(--premium-gold) 86%, transparent),
-              color-mix(in srgb, var(--premium-gold) 98%, #fff 16%),
-              color-mix(in srgb, var(--premium-gold) 90%, transparent)
-            ) !important;
-          }
-        }
-      }
-
-      &::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: 0;
-        border-radius: inherit;
-        padding: 1px;
-        background: conic-gradient(
-          from var(--perfect-border-angle),
-          color-mix(in srgb, var(--premium-gold) 14%, transparent) 0deg,
-          color-mix(in srgb, var(--premium-gold) 18%, transparent) 220deg,
-          color-mix(in srgb, var(--premium-gold) 36%, transparent) 280deg,
-          color-mix(in srgb, var(--premium-gold) 58%, #fff 10%) 310deg,
-          color-mix(in srgb, var(--premium-gold) 78%, #fff 16%) 328deg,
-          color-mix(in srgb, var(--premium-gold) 44%, transparent) 345deg,
-          color-mix(in srgb, var(--premium-gold) 18%, transparent) 355deg,
-          color-mix(in srgb, var(--premium-gold) 14%, transparent) 360deg
-        );
-        pointer-events: none;
-        opacity: 0.68;
-        -webkit-mask:
-          linear-gradient(#fff 0 0) content-box,
-          linear-gradient(#fff 0 0);
-        mask:
-          linear-gradient(#fff 0 0) content-box,
-          linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        animation: profile-perfect-border-shine 7.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-      }
-
-      > * {
-        position: relative;
-        z-index: 1;
-      }
-
-      &:hover,
-      &:focus-within {
-        border-color: transparent;
       }
     }
   }
@@ -1521,11 +1416,11 @@
     .profile-page__progress-track {
       width: 100%;
       min-width: 120px;
-      background: color-mix(in srgb, var(--text-tertiary, var(--text-secondary)) 22%, transparent);
+      background: color-mix(in srgb, var(--text-primary) 22%, transparent);
       transition: background-color var(--motion-fast) var(--ease);
 
       span {
-        background: var(--text-tertiary, var(--text-secondary));
+        background: var(--text-primary);
         transition: background-color var(--motion-fast) var(--ease);
       }
     }
@@ -1534,7 +1429,7 @@
 
   &__activity-progress-label,
   &__activity-progress-count {
-    color: var(--text-tertiary, var(--text-secondary));
+    color: var(--text-primary);
     font-weight: var(--weight-muted);
     font-size: 12px;
     line-height: 1.2;
@@ -1546,25 +1441,25 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    color: var(--text-tertiary, var(--text-secondary));
+    color: var(--text-primary);
   }
 
   &__activity-cup-icon {
     flex: 0 0 auto;
     width: 18px;
     height: 18px;
-    color: var(--text-tertiary, var(--text-secondary)) !important;
+    color: var(--text-primary) !important;
     fill: none;
     transition: color var(--motion-fast) var(--ease);
 
     path {
-      fill: var(--text-tertiary, var(--text-secondary)) !important;
+      fill: var(--text-primary) !important;
       transition: fill var(--motion-fast) var(--ease);
     }
   }
 
   &__activity-progress-count {
-    color: var(--text-tertiary, var(--text-secondary));
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
 
@@ -2945,38 +2840,18 @@ html.no-backdrop-blur .profile-page {
   }
 }
 
-@property --perfect-border-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes profile-perfect-border-shine {
-  0% {
-    --perfect-border-angle: 0deg;
-  }
-
-  40% {
-    --perfect-border-angle: 200deg;
-  }
-
-  70% {
-    --perfect-border-angle: 280deg;
-  }
-
-  100% {
-    --perfect-border-angle: 360deg;
-  }
-}
-
 @keyframes profile-perfect-progress-shine {
   0% {
-    transform: translateX(-120%);
+    transform: translateX(-130%);
   }
 
-  55%,
+  45% {
+    transform: translateX(130%);
+  }
+
+  45.01%,
   100% {
-    transform: translateX(120%);
+    transform: translateX(130%);
   }
 }
 

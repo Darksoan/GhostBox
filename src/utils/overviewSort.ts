@@ -34,7 +34,14 @@ export function sortOverviewGames(
   sortBy: OverviewSortBy,
   language: "pt" | "en",
 ) {
-  return [...games].sort((left, right) => {
+  const filteredGames = sortBy === "perfect"
+    ? games.filter((game) => {
+        const total = getProfileAchievementTotal(game);
+        return total > 0 && getProfileUnlockedAchievementCount(game) >= total;
+      })
+    : games;
+
+  return [...filteredGames].sort((left, right) => {
     if (sortBy === "recent") {
       const recentDiff =
         getOverviewLastPlayedTime(right) - getOverviewLastPlayedTime(left);
@@ -62,6 +69,13 @@ export function sortOverviewGames(
       const totalDiff =
         getProfileAchievementTotal(right) - getProfileAchievementTotal(left);
       if (totalDiff) return totalDiff;
+    }
+
+    if (sortBy === "perfect") {
+      const playtimeDiff =
+        getOverviewPlaytimeInMilliseconds(right) -
+        getOverviewPlaytimeInMilliseconds(left);
+      if (playtimeDiff) return playtimeDiff;
     }
 
     return compareOverviewTitles(left, right, language);
