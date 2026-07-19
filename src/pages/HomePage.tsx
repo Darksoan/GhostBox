@@ -6,6 +6,10 @@ import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem, UserCollection } from "../types";
 import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
+import {
+  HomeRecentBannerSkeleton,
+  HomeWishlistCardSkeleton,
+} from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
@@ -1973,43 +1977,7 @@ function HomeWishlistRecommendations({
       <div className="home-wishlist__list">
         {loading && recommendations.length === 0
           ? Array.from({ length: 3 }, (_, index) => (
-              <span
-                key={`wishlist-skeleton-${index}`}
-                className="home-wishlist-card home-wishlist-card--skeleton"
-                aria-hidden="true"
-              >
-                <span className="home-wishlist-card__content">
-                  <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--title" />
-                  <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--reason" />
-                </span>
-                <span className="home-wishlist-card__media home-wishlist-card__media--single">
-                  <span className="home-wishlist-card__cover home-wishlist-card__cover--skeleton" />
-                  <span className="home-wishlist-card__details">
-                    <span className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton">
-                      <span className="home-wishlist-card__player-review-quote-skeleton">
-                        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-                        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-                        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review-short" />
-                      </span>
-                      <span className="home-wishlist-card__player-review-author">
-                        <span className="home-wishlist-card__player-review-avatar home-wishlist-card__player-review-avatar--skeleton" />
-                        <span className="home-wishlist-card__player-review-author-skeleton">
-                          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-name" />
-                          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-meta" />
-                        </span>
-                      </span>
-                    </span>
-                    <span className="home-wishlist-card__tag-skeleton-row">
-                      {Array.from({ length: 4 }, (_, tagIndex) => (
-                        <span
-                          key={`wishlist-skeleton-tag-${index}-${tagIndex}`}
-                          className="home-wishlist-card__tag-skeleton"
-                        />
-                      ))}
-                    </span>
-                  </span>
-                </span>
-              </span>
+              <HomeWishlistCardSkeleton key={`wishlist-skeleton-${index}`} />
             ))
           : visibleRecommendations.map((recommendation) => (
               <HomeWishlistCard
@@ -2052,42 +2020,7 @@ function HomeRecentBanner({
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   if (!game && loading) {
-    return (
-      <section className="home-recent-banner" aria-label={title}>
-        <h3 className="home-recent-banner__heading">{title}</h3>
-        <div className="home-recent-banner__card home-recent-banner__card--skeleton" aria-hidden="true">
-          <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
-          <span className="home-recent-banner__content home-recent-banner__content--skeleton">
-            <span className="home-recent-banner__title-row home-recent-banner__title-row--skeleton">
-              <span className="home-recent-banner__game-icon home-recent-banner__game-icon--skeleton" />
-              <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
-              </strong>
-            </span>
-            <span className="home-recent-banner__meta" aria-hidden="true">
-              <small className="home-recent-banner__meta-item">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-              </small>
-              <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
-                <span className="home-recent-banner__meta-copy">
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-                </span>
-              </small>
-              <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
-                <span className="home-recent-banner__meta-copy">
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-                </span>
-              </small>
-            </span>
-          </span>
-        </div>
-      </section>
-    );
+    return <HomeRecentBannerSkeleton title={title} />;
   }
 
   if (!game) {

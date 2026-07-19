@@ -611,9 +611,9 @@ export const Header = memo(function Header({
               onFocus={handleFocus}
               placeholder={t("header.searchPlaceholder")}
             />
-            {isSearching && (
-              <span className="header__search-loader" aria-hidden="true" />
-            )}
+            <span className="header__search-trailing" aria-hidden="true">
+              {isSearching && <span className="header__search-loader" />}
+            </span>
           </label>
 
           {showDropdown && (
@@ -657,7 +657,7 @@ export const Header = memo(function Header({
                 </ul>
               ) : (
                 <div className="header__search-dropdown-loading" role="status">
-                  <SearchSuggestionsLoadingState count={3} />
+                  <SearchSuggestionsLoadingState count={6} />
                 </div>
               )}
             </div>

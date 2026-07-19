@@ -38,6 +38,7 @@ type FeedbackPayload = {
 
 const maxMessageLength = 1800;
 const envLatestVersionFallback = "0.1.3";
+const updateManifestCacheTtlSeconds = 15 * 60;
 
 function jsonResponse(
   body: Record<string, unknown>,
@@ -67,6 +68,16 @@ function corsHeaders(env: Env) {
     "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "content-type",
   };
+}
+
+function updateManifestCacheRequest(request: Request) {
+  return new Request(new URL("/updates/latest", request.url).toString());
+}
+
+function markCacheStatus(response: Response, status: "HIT" | "MISS") {
+  const headers = new Headers(response.headers);
+  headers.set("x-ghostbox-cache", status);
+  return new Response(response.body, { status: response.status, headers });
 }
 
 function getGitHubConfig(env: Env) {
@@ -203,9 +214,13 @@ async function handleFeedback(request: Request, env: Env) {
   return jsonResponse({ success: true }, { status: 200 }, env);
 }
 
-async function handleLatestUpdate(request: Request, env: Env) {
+async function buildLatestUpdateResponse(request: Request, env: Env) {
   const release = await fetchLatestRelease(env);
   const origin = new URL(request.url).origin;
+  const cacheHeaders = {
+    "cache-control": `public, max-age=${updateManifestCacheTtlSeconds}`,
+    "cloudflare-cdn-cache-control": `public, max-age=${updateManifestCacheTtlSeconds}, stale-while-revalidate=86400`,
+  };
 
   if (release) {
     const asset = findInstallerAsset(release, env);
@@ -236,7 +251,7 @@ async function handleLatestUpdate(request: Request, env: Env) {
         installerUrl,
         releaseNotesUrl: normalizeString(release.html_url),
       },
-      { status: 200 },
+      { status: 200, headers: cacheHeaders },
       env
     );
   }
@@ -260,9 +275,20 @@ async function handleLatestUpdate(request: Request, env: Env) {
       installerUrl,
       releaseNotesUrl: normalizeString(env.RELEASE_NOTES_URL),
     },
-    { status: 200 },
+    { status: 200, headers: cacheHeaders },
     env
   );
+}
+
+async function handleLatestUpdate(request: Request, env: Env, context: ExecutionContext) {
+  const cache = caches.default;
+  const cacheRequest = updateManifestCacheRequest(request);
+  const cached = await cache.match(cacheRequest);
+  if (cached) return markCacheStatus(cached, "HIT");
+
+  const response = markCacheStatus(await buildLatestUpdateResponse(request, env), "MISS");
+  context.waitUntil(cache.put(cacheRequest, response.clone()));
+  return response;
 }
 
 async function handleUpdateDownload(assetId: string, env: Env) {
@@ -296,7 +322,7 @@ async function handleUpdateDownload(assetId: string, env: Env) {
 }
 
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request: Request, env: Env, context: ExecutionContext) {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(env) });
     }
@@ -308,7 +334,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/updates/latest") {
-      return handleLatestUpdate(request, env);
+      return handleLatestUpdate(request, env, context);
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/updates/download/")) {

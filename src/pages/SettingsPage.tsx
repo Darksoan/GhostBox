@@ -867,8 +867,22 @@ function MorrenusAccountStatus({
       <div
         className="morrenus-status morrenus-status--loading settings-panel__animated-block"
         style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
+        aria-hidden="true"
       >
-        <span>{t("settings.download.accountStatus.loading")}</span>
+        <div className="morrenus-status__header">
+          <div>
+            <strong className="morrenus-status__line morrenus-status__line--title loading-wave" />
+            <span className="morrenus-status__line morrenus-status__line--meta loading-wave" />
+          </div>
+        </div>
+        <div className="morrenus-status__grid">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={`morrenus-loading-${index}`}>
+              <span className="morrenus-status__line morrenus-status__line--label loading-wave" />
+              <strong className="morrenus-status__line morrenus-status__line--value loading-wave" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

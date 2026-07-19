@@ -1,0 +1,7 @@
+name = "piratebox-steam-details"
+main = "src/index.ts"
+compatibility_date = "2026-07-19"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true

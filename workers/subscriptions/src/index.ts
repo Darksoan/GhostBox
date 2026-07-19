@@ -107,8 +107,6 @@ type CloudSaveRow = {
 
 const MAX_CLOUD_SAVES_PER_GAME = 3;
 
-let cloudSavesPinnedColumnReady: Promise<void> | null = null;
-
 type UserProfileCloudRow = {
   steam_id: string;
   display_name: string | null;
@@ -461,27 +459,6 @@ function publicCloudSave(row: CloudSaveRow) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-function ensureCloudSavesPinnedColumn(env: Env) {
-  if (!cloudSavesPinnedColumnReady) {
-    cloudSavesPinnedColumnReady = env.SUBSCRIPTION_DB.prepare(
-      `ALTER TABLE cloud_saves ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`
-    )
-      .run()
-      .then(() => undefined)
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        const normalized = message.toLowerCase();
-        if (normalized.includes("duplicate column") || normalized.includes("already exists")) {
-          return;
-        }
-        cloudSavesPinnedColumnReady = null;
-        throw error;
-      });
-  }
-
-  return cloudSavesPinnedColumnReady;
 }
 
 async function requirePremiumSession(request: Request, env: Env) {
@@ -1188,23 +1165,13 @@ async function handleStatus(request: Request, env: Env, context?: ExecutionConte
   const latestPayment = isActiveSubscription(subscription) && !subscription?.last_payment_id
     ? null
     : await reconcilePaymentWithSubscription(env, latestPaymentRow, subscription);
-  const paymentMethod = isActiveSubscription(subscription)
-    ? await resolveStripePaymentMethod(env, subscription)
-    : null;
-
-  if (discordLink && context) {
-    context.waitUntil(
-      syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription)).catch((error) => {
-        console.warn("Background Discord role sync failed", error);
-      })
-    );
-  }
+  void context;
 
   return jsonResponse({
     steamId,
     subscription: publicSubscription(subscription),
     latestPayment: latestPayment ? publicPayment(latestPayment, origin) : null,
-    paymentMethod,
+    paymentMethod: null,
     discordLink: publicDiscordLink(steamId, discordLink, null),
   }, env);
 }
@@ -1212,7 +1179,6 @@ async function handleStatus(request: Request, env: Env, context?: ExecutionConte
 async function handleCloudSavesList(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
-  await ensureCloudSavesPinnedColumn(env);
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId")?.trim();
   const query = appId
@@ -1237,7 +1203,6 @@ async function handleCloudSavesList(request: Request, env: Env) {
 async function handleCloudSaveUpload(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
-  await ensureCloudSavesPinnedColumn(env);
   const appId = request.headers.get("x-ghostbox-app-id")?.trim() || "";
   const gameTitle = request.headers.get("x-ghostbox-game-title")?.trim() || appId;
   const sha256 = request.headers.get("x-ghostbox-sha256")?.trim().toLowerCase() || "";
@@ -1304,7 +1269,6 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
 async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: string) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
-  await ensureCloudSavesPinnedColumn(env);
   const normalizedSaveId = saveId.trim();
   if (!normalizedSaveId) return jsonResponse({ error: "invalid_save_id" }, env, 400);
 

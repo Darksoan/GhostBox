@@ -682,7 +682,7 @@ fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
     }
 
     let base_path = url.path().trim_end_matches('/');
-    url.set_path(&format!("{base_path}/games/{app_id}/details"));
+    url.set_path(&format!("{base_path}/v2/games/{app_id}/details"));
     url.query_pairs_mut()
         .clear()
         .append_pair("lang", "portuguese");

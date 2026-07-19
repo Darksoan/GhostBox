@@ -67,7 +67,7 @@ export function GameGridLoadingState({
           className={`game-card game-card--placeholder ${portrait ? "game-card--placeholder-portrait" : ""} ${libraryCoverFade ? "game-card--library-cover-fade" : ""}`}
           key={`game-card-loading-${index}`}
         >
-          <div className="game-card__cover loading-wave">
+          <div className="game-card__cover game-card__cover--loaded loading-wave">
             {showBackupStatus && (
               <div className="game-card__placeholder-badge loading-wave" />
             )}
@@ -94,41 +94,85 @@ export function GameGridLoadingState({
 export function CatalogueListLoadingState({
   animateListText = true,
   pulseLoading = false,
-  showActions = false,
   count,
 }: {
   animateListText?: boolean;
   pulseLoading?: boolean;
-  showActions?: boolean;
   count?: number;
 }) {
   const loadingClassName = pulseLoading ? "loading-pulse-skeleton" : "loading-wave";
-  const placeholderCount = count ?? Math.min(cataloguePageSize, 10);
-  const listClassName = showActions
-    ? "catalogue-list catalogue-list--with-actions"
-    : "catalogue-list";
+  const placeholderCount = count ?? cataloguePageSize;
 
   return (
-    <div className={listClassName}>
+    <div className="catalogue-list">
       {Array.from({ length: placeholderCount }, (_, index) => (
-        <div className="catalogue-list__placeholder" key={`catalogue-loading-${index}`}>
-          <div className={`catalogue-list__placeholder-cover ${loadingClassName}`} />
-          <div className="catalogue-list__placeholder-content">
+        <article className="catalogue-list__item catalogue-list__item--skeleton" key={`catalogue-loading-${index}`}>
+          <div className={`catalogue-list__cover catalogue-list__cover--skeleton ${loadingClassName}`} />
+          <div className="catalogue-list__content">
             <div className={placeholderClassName("catalogue-list__placeholder-title", animateListText, pulseLoading)} />
-            <div className="catalogue-list__placeholder-genres">
+            <div className="catalogue-list__genres" aria-hidden="true">
               <span className={`catalogue-list__placeholder-chip ${loadingClassName}`} />
               <span className={`catalogue-list__placeholder-chip ${loadingClassName}`} />
               <span className={`catalogue-list__placeholder-chip catalogue-list__placeholder-chip--short ${loadingClassName}`} />
             </div>
           </div>
-          {showActions && (
-            <div className="catalogue-list__placeholder-actions">
-              <span className={`catalogue-list__placeholder-action-icon ${loadingClassName}`} />
-            </div>
-          )}
-        </div>
+          <div className="catalogue-list__actions" aria-hidden="true">
+            <span className="catalogue-list__placeholder-action-slot" />
+          </div>
+        </article>
       ))}
     </div>
+  );
+}
+
+export function CatalogueSortLoadingState({
+  pulseLoading = false,
+}: {
+  pulseLoading?: boolean;
+}) {
+  const loadingClassName = pulseLoading ? "loading-pulse-skeleton" : "loading-wave";
+
+  return (
+    <section className="catalogue-filter-section catalogue-filter-section--sort" aria-hidden="true">
+      <div className="catalogue-filter-section__sort-header">
+        <span className={`catalogue-filter-section__orb catalogue-filter-section__orb--sort ${loadingClassName}`} />
+        <span className={`catalogue-filter-section__sort-title-placeholder ${loadingClassName}`} />
+      </div>
+      <div className="catalogue-filter-section__sort-options catalogue-filter-section__sort-options--skeleton">
+        {Array.from({ length: 2 }, (_, index) => (
+          <button type="button" disabled key={`sort-loading-${index}`}>
+            <span className={`catalogue-filter-section__sort-icon-placeholder ${loadingClassName}`} />
+            <span className={`catalogue-filter-section__sort-label-placeholder ${loadingClassName}`} />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function CatalogueFilterSectionsLoadingState({
+  count = 5,
+  animateFilters = true,
+  pulseLoading = false,
+}: {
+  count?: number;
+  animateFilters?: boolean;
+  pulseLoading?: boolean;
+}) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, index) => (
+        <section className="catalogue-filter-section catalogue-filter-section--skeleton" key={`filter-loading-${index}`} aria-hidden="true">
+          <button type="button" className="catalogue-filter-section__header" disabled aria-expanded="false">
+            <span className={placeholderClassName("catalogue-filter-section__chevron-placeholder", animateFilters, pulseLoading)} />
+            <span className={placeholderClassName("catalogue-filter-section__orb", animateFilters, pulseLoading)} />
+            <span className={placeholderClassName("catalogue-filter-section__header-title-placeholder", animateFilters, pulseLoading)} />
+            <span className={placeholderClassName("catalogue-filter-section__header-count-placeholder", animateFilters, pulseLoading)} />
+          </button>
+          <div className="catalogue-filter-section__content" data-collapsed="true" style={{ height: 0 }} />
+        </section>
+      ))}
+    </>
   );
 }
 
@@ -147,49 +191,13 @@ export function CatalogueLoadingState({
     <section className="catalogue-page" aria-label={t("loading.catalogue")}>
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
-          <CatalogueListLoadingState animateListText={animateListText} pulseLoading={pulseLoading} showActions />
+          <CatalogueListLoadingState animateListText={animateListText} pulseLoading={pulseLoading} />
         </div>
 
         <aside className="catalogue-filters catalogue-filters--placeholder" aria-label={t("loading.filters")}>
           <div className="catalogue-filters__sections">
-            <div className="catalogue-filter-section catalogue-filter-section--sort catalogue-filter-section--placeholder">
-              <div className="catalogue-filter-section__sort-header catalogue-filter-section__sort-header--placeholder">
-                <span className="catalogue-filter-section__sort-orb-placeholder loading-wave" />
-                <span className="catalogue-filter-section__sort-title-placeholder loading-wave" />
-              </div>
-              <div className="catalogue-filter-section__sort-options catalogue-filter-section__sort-options--placeholder">
-                <span className="catalogue-filter-section__sort-chip-placeholder loading-wave" />
-                <span className="catalogue-filter-section__sort-chip-placeholder loading-wave" />
-              </div>
-            </div>
-
-            {Array.from({ length: 4 }, (_, index) => (
-              <div
-                className="catalogue-filter-section catalogue-filter-section--placeholder"
-                key={`filter-loading-${index}`}
-              >
-                <div className={placeholderClassName("catalogue-filter-section__header-placeholder", animateFilters, pulseLoading)}>
-                  <span className="catalogue-filter-section__chevron-placeholder loading-wave" />
-                  <span className="catalogue-filter-section__header-title-placeholder loading-wave" />
-                  <span className="catalogue-filter-section__header-count-placeholder loading-wave" />
-                </div>
-                <div className={placeholderClassName("catalogue-filter-section__search-placeholder", animateFilters, pulseLoading)} />
-                <div className="catalogue-filter-section__options-placeholder">
-                  <label className="catalogue-filter-option catalogue-filter-option--placeholder">
-                    <span className="catalogue-filter-option__box placeholder loading-wave" />
-                    <span className="catalogue-filter-option__text-placeholder loading-wave" />
-                  </label>
-                  <label className="catalogue-filter-option catalogue-filter-option--placeholder">
-                    <span className="catalogue-filter-option__box placeholder loading-wave" />
-                    <span className="catalogue-filter-option__text-placeholder loading-wave" />
-                  </label>
-                  <label className="catalogue-filter-option catalogue-filter-option--placeholder">
-                    <span className="catalogue-filter-option__box placeholder loading-wave" />
-                    <span className="catalogue-filter-option__text-placeholder catalogue-filter-option__text-placeholder--short loading-wave" />
-                  </label>
-                </div>
-              </div>
-            ))}
+            <CatalogueSortLoadingState pulseLoading={pulseLoading} />
+            <CatalogueFilterSectionsLoadingState animateFilters={animateFilters} pulseLoading={pulseLoading} />
           </div>
         </aside>
       </div>
@@ -199,20 +207,22 @@ export function CatalogueLoadingState({
 
 export function BackupListLoadingState({ count = 5 }: { count?: number }) {
   return (
-    <div className="backup-list">
+    <ul className="backup-list" aria-hidden="true">
       {Array.from({ length: count }, (_, index) => (
-        <div className="backup-list__placeholder" key={`backup-loading-${index}`}>
-          <div className="backup-list__placeholder-content">
+        <li className="backup-list__item backup-list__item--skeleton" key={`backup-loading-${index}`}>
+          <div className="backup-list__content">
             <div className="backup-list__placeholder-header loading-wave" />
-            <div className="backup-list__placeholder-copy">
+            <div className="backup-list__copy backup-list__placeholder-copy">
               <span className="backup-list__placeholder-title loading-wave" />
               <span className="backup-list__placeholder-meta loading-wave" />
             </div>
-            <div className="backup-list__placeholder-chevron loading-wave" />
+            <div className="backup-list__actions">
+              <span className="backup-list__placeholder-chevron loading-wave" />
+            </div>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -228,8 +238,8 @@ export function AchievementsListLoadingState({ count = 8 }: { count?: number }) 
             <span className="game-achievements-page__icon game-achievements-page__icon--skeleton loading-wave" />
           </span>
           <div className="game-achievements-page__item-content">
-            <span className="game-achievements-page__skeleton-title loading-wave" />
-            <span className="game-achievements-page__skeleton-desc loading-wave" />
+            <strong className="game-achievements-page__skeleton-title loading-wave" />
+            <p className="game-achievements-page__skeleton-desc loading-wave" />
           </div>
           <div className="game-achievements-page__item-meta">
             <span className="game-achievements-page__skeleton-status loading-wave" />
@@ -245,13 +255,16 @@ export function NotificationsFeedLoadingState({ count = 3 }: { count?: number })
     <div className="notifications-feed" role="status" aria-hidden="true">
       {Array.from({ length: count }, (_, index) => (
         <section className="notification-group notification-group--skeleton" key={`notification-group-${index}`}>
-          <div className="notification-group__trigger notification-group__trigger--skeleton">
+          <button type="button" className="notification-group__trigger notification-group__trigger--skeleton" disabled>
             <span className="notification-group__copy">
-              <span className="notifications-feed__skeleton-title loading-wave" />
-              <span className="notifications-feed__skeleton-meta loading-wave" />
+              <strong className="notifications-feed__skeleton-title loading-wave" />
+              <small>
+                <span className="notifications-feed__skeleton-meta notifications-feed__skeleton-meta--label loading-wave" />
+                <span className="notifications-feed__skeleton-meta notifications-feed__skeleton-meta--date loading-wave" />
+              </small>
             </span>
             <span className="notification-group__count notification-group__count--skeleton loading-wave" />
-          </div>
+          </button>
         </section>
       ))}
     </div>
@@ -263,17 +276,39 @@ export function SearchSuggestionsLoadingState({ count = 3 }: { count?: number })
     <ul className="header__search-dropdown-list" role="listbox">
       {Array.from({ length: count }, (_, index) => (
         <li key={`search-suggestion-${index}`}>
-          <div className="header__search-suggestion-skeleton">
+          <button type="button" className="header__search-dropdown-item header__search-dropdown-item--skeleton" disabled>
             <span className="header__search-skeleton-text loading-wave" />
-            <span className="header__search-skeleton-icon loading-wave" />
-          </div>
+            <div className="header__search-dropdown-item__icons" />
+          </button>
         </li>
       ))}
     </ul>
   );
 }
 
-function HomeWishlistCardSkeleton() {
+export function HomeCategoryCardSkeleton({
+  heroCapsule = false,
+}: {
+  heroCapsule?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`home-category-card ${heroCapsule ? "home-category-card--hero-capsule" : ""} home-category-card--placeholder`}
+      disabled
+      aria-hidden="true"
+    >
+      <span className="home-category-card__cover home-category-card__cover--skeleton" />
+      <span className="home-category-card__content" aria-hidden="true">
+        <strong>
+          <span className="home-category-card__title-skeleton loading-wave" />
+        </strong>
+      </span>
+    </button>
+  );
+}
+
+export function HomeWishlistCardSkeleton() {
   return (
     <div className="home-wishlist-card home-wishlist-card--skeleton">
       <span className="home-wishlist-card__content">
@@ -301,10 +336,54 @@ function HomeWishlistCardSkeleton() {
             <span className="home-wishlist-card__tag-skeleton" />
             <span className="home-wishlist-card__tag-skeleton" />
             <span className="home-wishlist-card__tag-skeleton" />
+            <span className="home-wishlist-card__tag-skeleton" />
           </span>
         </span>
       </span>
     </div>
+  );
+}
+
+export function HomeRecentBannerSkeleton({ title }: { title?: string }) {
+  return (
+    <section className="home-recent-banner" aria-label={title}>
+      {title ? (
+        <h3 className="home-recent-banner__heading">{title}</h3>
+      ) : (
+        <span className="home-recent-banner__heading home-section-title-placeholder loading-plate" />
+      )}
+      <div className="home-recent-banner__card home-recent-banner__card--skeleton" aria-hidden="true">
+        <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
+        <span className="home-recent-banner__content home-recent-banner__content--skeleton">
+          <span className="home-recent-banner__title-row home-recent-banner__title-row--skeleton">
+            <span className="home-recent-banner__game-icon home-recent-banner__game-icon--skeleton" />
+            <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
+            </strong>
+          </span>
+          <span className="home-recent-banner__meta" aria-hidden="true">
+            <small className="home-recent-banner__meta-item">
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
+            </small>
+            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
+              <span className="home-recent-banner__meta-copy">
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
+              </span>
+            </small>
+            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
+              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
+              <span className="home-recent-banner__meta-copy">
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
+                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
+              </span>
+            </small>
+          </span>
+        </span>
+      </div>
+    </section>
   );
 }
 
@@ -317,12 +396,9 @@ export function HomePageLoadingState() {
         </div>
         <div className="home-recommended__grid">
           {Array.from({ length: 4 }, (_, index) => (
-            <span
-              className="home-category-card home-category-card--hero-capsule home-category-card--placeholder loading-wave"
-              key={`home-recommended-${index}`}
-            />
-          ))}
-        </div>
+              <HomeCategoryCardSkeleton heroCapsule key={`home-recommended-${index}`} />
+            ))}
+          </div>
       </section>
 
       <div className="home-categories">
@@ -330,10 +406,7 @@ export function HomePageLoadingState() {
           <span className="home-section-title-placeholder loading-wave" />
           <div className="home-category__games">
             {Array.from({ length: 6 }, (_, index) => (
-              <span
-                className="home-category-card home-category-card--placeholder loading-wave"
-                key={`home-featured-${index}`}
-              />
+              <HomeCategoryCardSkeleton key={`home-featured-${index}`} />
             ))}
           </div>
         </div>
@@ -393,40 +466,7 @@ export function HomePageLoadingState() {
         </div>
       </section>
 
-      <section className="home-recent-banner">
-        <span className="home-recent-banner__heading home-section-title-placeholder loading-plate" />
-        <div className="home-recent-banner__card home-recent-banner__card--skeleton">
-          <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
-          <span className="home-recent-banner__content home-recent-banner__content--skeleton">
-            <span className="home-recent-banner__title-row home-recent-banner__title-row--skeleton">
-              <span className="home-recent-banner__game-icon home-recent-banner__game-icon--skeleton" />
-              <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
-              </strong>
-            </span>
-            <span className="home-recent-banner__meta">
-              <small className="home-recent-banner__meta-item">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-              </small>
-              <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
-                <span className="home-recent-banner__meta-copy">
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-                </span>
-              </small>
-              <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
-                <span className="home-recent-banner__meta-copy">
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                  <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-                </span>
-              </small>
-            </span>
-          </span>
-        </div>
-      </section>
+      <HomeRecentBannerSkeleton />
     </section>
   );
 }
@@ -435,15 +475,28 @@ export function ProfilePageLoadingState() {
   return (
     <section className="profile-page" aria-hidden="true">
       <header className="profile-page__content-box profile-page__content-box--placeholder">
+        <div className="profile-page__banner-viewport">
+          <span className="profile-page__banner-image profile-page__banner-image--placeholder" />
+        </div>
         <div className="profile-page__background-overlay">
+          <span className="profile-page__hero-action profile-page__hero-action--banner profile-page__hero-action--skeleton loading-wave" />
           <div className="profile-page__identity">
             <div className="profile-page__avatar-button">
               <span className="profile-page__avatar-skeleton" />
             </div>
             <div className="profile-page__identity-content">
-              <span className="profile-page__name-placeholder loading-wave" />
-              <span className="profile-page__meta-placeholder loading-wave" />
-              <span className="profile-page__meta-placeholder profile-page__meta-placeholder--wide loading-wave" />
+              <div className="profile-page__display-name-row">
+                <span className="profile-page__name-placeholder loading-wave" />
+                <span className="profile-page__level profile-page__level--skeleton loading-wave" />
+                <span className="profile-page__hero-action profile-page__hero-action--skeleton loading-wave" />
+              </div>
+              <div className="profile-page__steam-id-row">
+                <div className="profile-page__steam-id-box profile-page__steam-id-box--skeleton">
+                  <span className="profile-page__steam-id-icon profile-page__skeleton-block" />
+                  <span className="profile-page__meta-placeholder loading-wave" />
+                  <span className="profile-page__steam-id-toggle profile-page__steam-id-toggle--skeleton loading-wave" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -453,9 +506,10 @@ export function ProfilePageLoadingState() {
         <main className="profile-page__main">
           <div className="profile-page__tabs">
             <div className="profile-page__collection-tabs">
+              <span className="profile-page__tab-indicator profile-page__tab-indicator--skeleton" />
               {Array.from({ length: 4 }, (_, index) => (
                 <span
-                  className="profile-page__tab-skeleton loading-wave"
+                  className="profile-page__tab profile-page__tab-skeleton loading-wave"
                   key={`profile-tab-${index}`}
                 />
               ))}
@@ -463,53 +517,47 @@ export function ProfilePageLoadingState() {
             <span className="profile-page__sign-out-skeleton loading-wave" />
           </div>
 
-          <div className="profile-page__overview-console">
-            <div className="profile-page__achievement-rail">
-              <div className="profile-page__overview-panel profile-page__overview-panel--showcase">
-                <div className="profile-page__achievement-showcase">
-                  {Array.from({ length: 10 }, (_, index) => (
-                    <span
-                      className="profile-page__showcase-achievement profile-page__showcase-achievement--empty"
-                      key={`showcase-${index}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="profile-page__top-games-console">
-              <div className="profile-page__overview-panel profile-page__overview-panel--top-games">
-                <div className="profile-page__top-games-list profile-page__top-games-list--skeleton">
-                  {[0, 1, 2].map((index) => (
-                    <div
-                      key={index}
-                      className="profile-page__top-game-console-row profile-page__top-game-console-row--skeleton"
-                    >
-                      <span className="profile-page__top-game-cover profile-page__skeleton-block" />
-                      <span className="profile-page__top-game-content profile-page__top-game-content--skeleton">
-                        <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
-                        <span className="profile-page__top-game-stats profile-page__top-game-stats--skeleton">
-                          <span className="profile-page__top-game-stat">
-                            <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
-                            <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+          <div className="profile-page__collection-content">
+            <div className="profile-page__overview">
+              <section className="profile-page__overview-console">
+                <div className="profile-page__activity-console">
+                  <div className="profile-page__activity-toolbar profile-page__activity-toolbar--skeleton">
+                    <div className="profile-page__activity-metrics">
+                      {Array.from({ length: 4 }, (_, index) => (
+                        <span className="profile-page__activity-metric" key={`metric-${index}`}>
+                          <strong className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+                          <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                        </span>
+                      ))}
+                    </div>
+                    <div className="settings-dropdown profile-page__activity-sort">
+                      <button type="button" className="settings-dropdown__trigger" disabled>
+                        <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="profile-page__activity-list profile-page__activity-list--skeleton">
+                    {[0, 1, 2].map((index) => (
+                      <div
+                        key={index}
+                        className="profile-page__activity-card profile-page__activity-card--skeleton"
+                      >
+                        <span className="profile-page__activity-cover-button" aria-hidden="true">
+                          <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
+                        </span>
+                        <span className="profile-page__activity-main" aria-hidden="true">
+                          <span className="profile-page__activity-meta">
+                            <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
                           </span>
-                          <span className="profile-page__top-game-stat">
-                            <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
+                          <span className="profile-page__activity-side">
                             <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                          </span>
-                          <span className="profile-page__top-game-stat profile-page__top-game-stat--achievements">
-                            <span className="profile-page__top-game-stat-heading">
-                              <span className="profile-page__skeleton-line profile-page__skeleton-line--label" />
-                              <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                            </span>
-                            <span className="profile-page__skeleton-line profile-page__skeleton-line--progress" />
                           </span>
                         </span>
-                      </span>
-                    </div>
-                  ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </main>
@@ -521,26 +569,25 @@ export function ProfilePageLoadingState() {
 export function SettingsPageLoadingState() {
   return (
     <section className="settings-page settings-page--tabs" aria-hidden="true">
-      <div className="settings-page__tabs-skeleton">
-        {Array.from({ length: 5 }, (_, index) => (
-          <span className="settings-page__tab-placeholder loading-wave" key={`settings-tab-${index}`} />
-        ))}
-      </div>
-      <div className="settings-panel settings-panel--skeleton">
-        <div className="settings-page__content-skeleton">
-          {Array.from({ length: 2 }, (_, sectionIndex) => (
-            <div className="settings-page__section-skeleton" key={`settings-section-${sectionIndex}`}>
-              <span className="settings-page__section-title-placeholder loading-wave" />
-              {Array.from({ length: 3 }, (_, index) => (
-                <div className="settings-page__row-skeleton" key={`setting-row-${sectionIndex}-${index}`}>
-                  <span className="settings-page__row-label-placeholder loading-wave" />
+      <article className="settings-panel settings-panel--skeleton">
+        <div className="settings-panel__body">
+          <div className="settings-options">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div className="settings-option settings-option--skeleton" key={`setting-row-${index}`}>
+                <div className="settings-option__copy">
+                  <div className="settings-option__label">
+                    <strong className="settings-page__row-label-placeholder loading-wave" />
+                  </div>
+                  <span className="settings-page__row-description-placeholder loading-wave" />
+                </div>
+                <div className="settings-option__control">
                   <span className="settings-page__row-control-placeholder loading-wave" />
                 </div>
-              ))}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      </article>
     </section>
   );
 }
@@ -589,10 +636,7 @@ export function FavoritesPageLoadingState() {
 export function BackupPageLoadingState() {
   return (
     <section className="backup-page" aria-hidden="true">
-      <div className="backup-page__header-skeleton">
-        <span className="backup-page__title-placeholder loading-wave" />
-      </div>
-      <BackupListLoadingState count={5} />
+      <BackupListLoadingState count={4} />
     </section>
   );
 }

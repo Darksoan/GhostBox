@@ -9,7 +9,7 @@ import {
 import { emptyCatalogueFilters } from "../constants/catalogue";
 import type { CatalogueFilterKey, CatalogueFilters } from "../types";
 
-const catalogueFacetsCacheVersion = "facets-v11-primary-tags";
+const catalogueFacetsCacheVersion = "catalogue-response-v2";
 
 function normalizeFilterValues(
   filters: Partial<CatalogueFilters> | undefined,
@@ -82,16 +82,17 @@ export function useGamesQuery(
   request: GameDatabaseRequest,
   options: GamesQueryOptions = {}
 ) {
+  const normalizedRequest = normalizeGameRequest(request);
   const queryKey =
     options.refreshKey !== undefined
-      ? ([...gamesQueryKeys.list(request), options.refreshKey] as const)
-      : gamesQueryKeys.list(request);
+      ? ([...gamesQueryKeys.list(normalizedRequest), options.refreshKey] as const)
+      : gamesQueryKeys.list(normalizedRequest);
 
   return useQuery({
     queryKey,
-    queryFn: () => loadGames(request),
+    queryFn: () => loadGames(normalizedRequest),
     enabled: options.enabled ?? true,
-    retry: false,
+    retry: 1,
   });
 }
 

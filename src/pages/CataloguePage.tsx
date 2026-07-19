@@ -34,8 +34,10 @@ import {
 import { CatalogueList } from "../components/ui/CatalogueList";
 import { PaginationControls } from "../components/ui/PaginationControls";
 import {
+  CatalogueFilterSectionsLoadingState,
   CatalogueLoadingState,
   CatalogueListLoadingState,
+  CatalogueSortLoadingState,
   EmptyState,
 } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
@@ -460,11 +462,11 @@ export function CataloguePage({
     if (loading || !visibleGames.length) return;
 
     preloadGameListAssets(visibleGames, {
-      variant: "header",
+      variant: "catalogueHeader",
       limit: 6,
     });
     preloadGameListAssets(nextPageGames, {
-      variant: "header",
+      variant: "catalogueHeader",
       limit: 6,
       idle: true,
     });
@@ -597,58 +599,38 @@ export function CataloguePage({
 
         <aside className="catalogue-filters" aria-label={t("catalogue.filters.label")}>
           <div className="catalogue-filters__sections">
-            <section className="catalogue-filter-section catalogue-filter-section--sort">
-              <div className="catalogue-filter-section__sort-header">
-                <span className="catalogue-filter-section__orb catalogue-filter-section__orb--sort" />
-                <strong>{t("catalogue.sort.title")}</strong>
-              </div>
-              <div className="catalogue-filter-section__sort-options">
-                <button
-                  type="button"
-                  className={sort === "popular" ? "is-active" : undefined}
-                  onClick={() => onSortChange("popular")}
-                >
-                  <ThumbsUp size={15} strokeWidth={2.0} />
-                  <span>{t("catalogue.sort.featured")}</span>
-                </button>
-                <button
-                  type="button"
-                  className={sort === "recentlyAdded" ? "is-active" : undefined}
-                  onClick={() => onSortChange("recentlyAdded")}
-                >
-                  <Clock size={15} strokeWidth={2.0} />
-                  <span>{t("catalogue.sort.recentlyAdded")}</span>
-                </button>
-              </div>
-            </section>
-            {filtersLoading && (
+            {filtersLoading ? (
               <>
-                {Array.from({ length: 4 }, (_, index) => (
-                  <div
-                    className="catalogue-filter-section catalogue-filter-section--placeholder"
-                    key={`filter-loading-inline-${index}`}
-                  >
-                    <div className="catalogue-filter-section__header-placeholder loading-wave">
-                      <span className="catalogue-filter-section__chevron-placeholder loading-wave" />
-                      <span className="catalogue-filter-section__header-title-placeholder loading-wave" />
-                      <span className="catalogue-filter-section__header-count-placeholder loading-wave" />
-                    </div>
-                    <div className="catalogue-filter-section__search-placeholder loading-wave" />
-                    <div className="catalogue-filter-section__options-placeholder">
-                      <label className="catalogue-filter-option catalogue-filter-option--placeholder">
-                        <span className="catalogue-filter-option__box placeholder loading-wave" />
-                        <span className="catalogue-filter-option__text-placeholder loading-wave" />
-                      </label>
-                      <label className="catalogue-filter-option catalogue-filter-option--placeholder">
-                        <span className="catalogue-filter-option__box placeholder loading-wave" />
-                        <span className="catalogue-filter-option__text-placeholder loading-wave" />
-                      </label>
-                    </div>
-                  </div>
-                ))}
+                <CatalogueSortLoadingState />
+                <CatalogueFilterSectionsLoadingState />
               </>
+            ) : (
+              <section className="catalogue-filter-section catalogue-filter-section--sort">
+                <div className="catalogue-filter-section__sort-header">
+                  <span className="catalogue-filter-section__orb catalogue-filter-section__orb--sort" />
+                  <strong>{t("catalogue.sort.title")}</strong>
+                </div>
+                <div className="catalogue-filter-section__sort-options">
+                  <button
+                    type="button"
+                    className={sort === "popular" ? "is-active" : undefined}
+                    onClick={() => onSortChange("popular")}
+                  >
+                    <ThumbsUp size={15} strokeWidth={2.0} />
+                    <span>{t("catalogue.sort.featured")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={sort === "recentlyAdded" ? "is-active" : undefined}
+                    onClick={() => onSortChange("recentlyAdded")}
+                  >
+                    <Clock size={15} strokeWidth={2.0} />
+                    <span>{t("catalogue.sort.recentlyAdded")}</span>
+                  </button>
+                </div>
+              </section>
             )}
-            {filterSections.map((section) => (
+            {!filtersLoading && filterSections.map((section) => (
               <CatalogueFilterSection
                 key={section.key}
                 title={section.title}

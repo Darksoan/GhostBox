@@ -10,7 +10,7 @@ import type { SteamGameReviewsResult } from "../lib/ghostboxApi.types";
 import type { CatalogueFilters, CatalogueSort } from "../types";
 import { emptyCatalogueFilters } from "../constants/catalogue";
 
-const catalogueFacetsCacheVersion = "facets-v11-primary-tags";
+const catalogueFacetsCacheVersion = "catalogue-response-v2";
 const catalogueFacetKeys = Object.keys(
   emptyCatalogueFilters
 ) as (keyof CatalogueFilters)[];
@@ -55,9 +55,11 @@ export function clearCatalogueGamesCache() {
 export function getCatalogueFiltersCacheKey(
   filters: CatalogueFilters = emptyCatalogueFilters
 ) {
-  return catalogueFacetKeys
-    .map((key) => `${key}:${[...filters[key]].sort().join(",")}`)
-    .join("|");
+  return JSON.stringify(
+    Object.fromEntries(
+      catalogueFacetKeys.map((key) => [key, [...filters[key]].sort()])
+    )
+  );
 }
 
 export function getGamesCacheKey(

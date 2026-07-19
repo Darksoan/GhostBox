@@ -309,9 +309,26 @@ export function SubscriptionPlans({
         style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
         aria-label={copy("Carregando assinatura", "Loading subscription")}
       >
-        <div className="subscription-account__loading-indicator" role="status" aria-live="polite">
-          <span className="subscription-account__spinner" aria-hidden="true" />
-          <span className="sr-only">{copy("Carregando dados da assinatura", "Loading subscription data")}</span>
+        <span className="sr-only" role="status" aria-live="polite">{copy("Carregando dados da assinatura", "Loading subscription data")}</span>
+        <header className="subscription-account__header">
+          <div className="subscription-account__header-main">
+            <span className="subscription-account__brand-icon subscription-account__brand-icon--skeleton loading-wave" aria-hidden="true" />
+            <div>
+              <span className="subscription-account__line subscription-account__line--eyebrow loading-wave" />
+              <h3 className="subscription-account__line subscription-account__line--title loading-wave" />
+              <p className="subscription-account__line subscription-account__line--copy loading-wave" />
+            </div>
+          </div>
+          <span className="subscription-account__status-badge subscription-account__status-badge--skeleton loading-wave" />
+        </header>
+        <div className="subscription-account__summary-grid">
+          {Array.from({ length: 3 }, (_, index) => (
+            <article className="subscription-account__summary-card subscription-account__summary-card--skeleton" key={`subscription-summary-${index}`}>
+              <span className="subscription-account__summary-icon-skeleton loading-wave" />
+              <span className="subscription-account__line subscription-account__line--copy loading-wave" />
+              <strong className="subscription-account__line subscription-account__line--value loading-wave" />
+            </article>
+          ))}
         </div>
       </section>
     );

@@ -8,8 +8,11 @@ pub const CATALOGUE_CACHE_UPDATED_EVENT: &str = "catalogue-cache-updated";
 const CATALOGUE_META_FILE: &str = "meta.json";
 const SCHEDULER_POLL_MS: u64 = 30 * 60 * 1000;
 const STARTUP_REFRESH_DELAY_MS: u64 = 5_000;
+const CATALOGUE_ENTRY_FRESH_MS: u64 = 30 * 60 * 1000;
+const CATALOGUE_ENTRY_STALE_MAX_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 
 static SCHEDULER_STARTED: OnceLock<()> = OnceLock::new();
+static CATALOGUE_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 struct CatalogueCacheMeta {
@@ -39,7 +42,85 @@ fn hash_cache_key(value: &str) -> String {
 }
 
 pub fn cache_key_for_url(url: &str) -> String {
-    hash_cache_key(url)
+    hash_cache_key(&canonical_cache_url(url))
+}
+
+fn canonical_cache_url(url: &str) -> String {
+    let Ok(mut parsed) = reqwest::Url::parse(url) else {
+        return url.to_string();
+    };
+    let mut pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    pairs.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    parsed.set_query(None);
+    if !pairs.is_empty() {
+        let mut query = parsed.query_pairs_mut();
+        for (key, value) in pairs {
+            query.append_pair(&key, &value);
+        }
+    }
+    parsed.to_string()
+}
+
+fn is_fresh(entry: &CatalogueCacheEntry) -> bool {
+    current_millis().saturating_sub(entry.cached_at) <= CATALOGUE_ENTRY_FRESH_MS
+}
+
+fn is_usable_stale(entry: &CatalogueCacheEntry) -> bool {
+    current_millis().saturating_sub(entry.cached_at) <= CATALOGUE_ENTRY_STALE_MAX_MS
+}
+
+fn catalogue_http_client() -> &'static reqwest::Client {
+    CATALOGUE_HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(20))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    })
+}
+
+fn valid_count(value: Option<&serde_json::Value>) -> Option<u64> {
+    value.and_then(serde_json::Value::as_u64)
+}
+
+fn is_valid_catalogue_response(url: &reqwest::Url, body: &serde_json::Value) -> bool {
+    let Some(object) = body.as_object() else {
+        return false;
+    };
+
+    match url.path() {
+        "/catalogue/search" => {
+            let Some(games) = object.get("games").and_then(serde_json::Value::as_array) else {
+                return false;
+            };
+            let Some(total) = valid_count(object.get("total")) else {
+                return false;
+            };
+            let Some(matched) = valid_count(object.get("matched")) else {
+                return false;
+            };
+            if total != matched || object.get("limited").and_then(serde_json::Value::as_bool).is_none() {
+                return false;
+            }
+            if url.query_pairs().any(|(key, value)| key == "facetsOnly" && value == "1") {
+                return games.is_empty() && object.get("facets").and_then(serde_json::Value::as_object).is_some();
+            }
+            true
+        }
+        "/home" => {
+            object.get("popular").and_then(serde_json::Value::as_array).is_some()
+                && object.get("recentlyAdded").and_then(serde_json::Value::as_array).is_some()
+                && valid_count(object.get("total")).is_some()
+        }
+        path if path.starts_with("/games/") => {
+            object.get("game").and_then(serde_json::Value::as_object).is_some()
+                || object.get("appId").is_some()
+        }
+        _ => true,
+    }
 }
 
 fn catalogue_cache_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -132,8 +213,8 @@ pub fn update_interval_from_settings(settings: &serde_json::Value) -> u64 {
 async fn fetch_json_from_network(
     url: reqwest::Url,
 ) -> Result<(serde_json::Value, Option<String>), String> {
-    let response = reqwest::Client::new()
-        .get(url)
+    let response = catalogue_http_client()
+        .get(url.clone())
         .header(reqwest::header::ACCEPT, "application/json")
         .send()
         .await
@@ -151,6 +232,9 @@ async fn fetch_json_from_network(
         .json::<serde_json::Value>()
         .await
         .map_err(|error| error.to_string())?;
+    if !is_valid_catalogue_response(&url, &body) {
+        return Err("invalid catalogue response".to_string());
+    }
     Ok((body, updated_at))
 }
 
@@ -163,7 +247,9 @@ pub async fn fetch_json_with_cache(
 
     if !force_refresh {
         if let Some(entry) = read_cache_entry(app, &cache_key) {
-            return Ok((entry.body, entry.updated_at, true));
+            if is_fresh(&entry) && is_valid_catalogue_response(&url, &entry.body) {
+                return Ok((entry.body, entry.updated_at, true));
+            }
         }
     }
 
@@ -174,7 +260,9 @@ pub async fn fetch_json_with_cache(
         }
         Err(error) => {
             if let Some(entry) = read_cache_entry(app, &cache_key) {
-                return Ok((entry.body, entry.updated_at, true));
+                if is_usable_stale(&entry) && is_valid_catalogue_response(&url, &entry.body) {
+                    return Ok((entry.body, entry.updated_at, true));
+                }
             }
             Err(error)
         }
@@ -207,10 +295,12 @@ pub async fn refresh_warm_catalogue_endpoints(
 ) -> Option<String> {
     let base = crate::normalize_api_url(api_url);
     let mut latest_updated_at: Option<String> = None;
+    let mut refreshed = false;
 
     let home_url = format!("{base}/home");
     if let Ok(url) = reqwest::Url::parse(&home_url) {
         if let Ok((_, updated_at, _)) = fetch_json_with_cache(app, url, true).await {
+            refreshed = true;
             if updated_at.is_some() {
                 latest_updated_at = updated_at;
             }
@@ -218,12 +308,25 @@ pub async fn refresh_warm_catalogue_endpoints(
     }
 
     let search_url = format!(
-        "{base}/catalogue/search?limit=200&offset=0&sort=popular&includeFacets=1&facetsVersion={}&rankingVersion={}",
+        "{base}/catalogue/search?limit=200&offset=0&sort=popular&facetsVersion={}&rankingVersion={}",
         crate::FACETS_VERSION,
         crate::RANKING_VERSION
     );
     if let Ok(url) = reqwest::Url::parse(&search_url) {
         if let Ok((_, updated_at, _)) = fetch_json_with_cache(app, url, true).await {
+            refreshed = true;
+            latest_updated_at = updated_at.or(latest_updated_at);
+        }
+    }
+
+    let facets_url = format!(
+        "{base}/catalogue/search?limit=1&offset=0&sort=popular&includeFacets=1&facetsOnly=1&facetsVersion={}&rankingVersion={}",
+        crate::FACETS_VERSION,
+        crate::RANKING_VERSION
+    );
+    if let Ok(url) = reqwest::Url::parse(&facets_url) {
+        if let Ok((_, updated_at, _)) = fetch_json_with_cache(app, url, true).await {
+            refreshed = true;
             latest_updated_at = updated_at.or(latest_updated_at);
         }
     }
@@ -235,18 +338,24 @@ pub async fn refresh_warm_catalogue_endpoints(
     );
     if let Ok(url) = reqwest::Url::parse(&recently_added_url) {
         if let Ok((_, updated_at, _)) = fetch_json_with_cache(app, url, true).await {
+            refreshed = true;
             latest_updated_at = updated_at.or(latest_updated_at);
         }
     }
 
+    if !refreshed {
+        return None;
+    }
+
     let now = current_millis();
+    let previous = read_meta(app);
     let meta = CatalogueCacheMeta {
         last_refresh_at: now,
         last_updated_at: latest_updated_at.clone(),
     };
     let _ = write_meta(app, &meta);
 
-    if let Some(updated_at) = latest_updated_at.clone() {
+    if let Some(updated_at) = latest_updated_at.clone().filter(|value| previous.last_updated_at.as_ref() != Some(value)) {
         let _ = app.emit(
             CATALOGUE_CACHE_UPDATED_EVENT,
             serde_json::json!({ "updatedAt": updated_at }),
@@ -307,4 +416,53 @@ pub fn prepare_cached_response(
 ) {
     inject_updated_at(value, updated_at);
     apply_cached_source(value, from_cache);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cache_key_for_url, is_valid_catalogue_response};
+
+    #[test]
+    fn cache_key_ignores_query_parameter_order() {
+        let first = "https://example.com/catalogue/search?limit=200&offset=0&sort=popular&includeFacets=1";
+        let second = "https://example.com/catalogue/search?includeFacets=1&sort=popular&offset=0&limit=200";
+
+        assert_eq!(cache_key_for_url(first), cache_key_for_url(second));
+    }
+
+    #[test]
+    fn cache_key_ignores_repeated_filter_order() {
+        let first = "https://example.com/catalogue/search?tags=RPG&tags=Action&genres=Indie";
+        let second = "https://example.com/catalogue/search?genres=Indie&tags=Action&tags=RPG";
+
+        assert_eq!(cache_key_for_url(first), cache_key_for_url(second));
+    }
+
+    #[test]
+    fn rejects_incompatible_search_count_contract() {
+        let url = reqwest::Url::parse("https://example.com/catalogue/search?genres=Action")
+            .expect("valid URL");
+        let response = serde_json::json!({
+            "games": [],
+            "total": 100,
+            "matched": 3,
+            "limited": false
+        });
+
+        assert!(!is_valid_catalogue_response(&url, &response));
+    }
+
+    #[test]
+    fn accepts_matching_search_count_contract() {
+        let url = reqwest::Url::parse("https://example.com/catalogue/search?genres=Action")
+            .expect("valid URL");
+        let response = serde_json::json!({
+            "games": [],
+            "total": 3,
+            "matched": 3,
+            "limited": false
+        });
+
+        assert!(is_valid_catalogue_response(&url, &response));
+    }
 }

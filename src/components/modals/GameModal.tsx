@@ -4,7 +4,6 @@ import {
   Download,
   Heart,
   Image as ImageIcon,
-  Loader2,
   Play,
   Settings,
   Tags as TagsIcon,
@@ -412,15 +411,58 @@ function achievementImageSourceList(achievements: SteamAchievement[]) {
 }
 
 function GameDetailsLoadingSections() {
-  const { appearance } = useSettings();
   return (
-    <div className="modal__details-loading" role="status">
-      <Loader2 size={24} className="modal__details-spinner" aria-hidden="true" />
-      <span>
-        {appearance.language === "en"
-          ? "Loading game information"
-          : "Carregando informações do jogo"}
-      </span>
+    <div className="modal__details-loading" role="status" aria-hidden="true">
+      <section className="modal__achievements-section modal__details-loading-section">
+        <div className="modal__achievements-heading modal__sidebar-section-toggle modal__sidebar-section-toggle--skeleton">
+          <span className="modal__details-loading-icon loading-wave" />
+          <strong className="modal__details-loading-title loading-wave" />
+          <span className="modal__details-loading-chevron loading-wave" />
+        </div>
+        <div className="modal__sidebar-section-content modal__details-loading-content">
+          <ul className="modal__achievements-grid">
+            {Array.from({ length: 8 }, (_, index) => (
+              <li className="modal__achievement-item modal__achievement-item--skeleton loading-wave" key={`achievement-loading-${index}`} />
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="modal__requirements-section modal__details-loading-section">
+        <div className="modal__requirements-header modal__sidebar-section-toggle modal__sidebar-section-toggle--skeleton">
+          <span className="modal__details-loading-icon loading-wave" />
+          <strong className="modal__details-loading-title loading-wave" />
+          <span className="modal__details-loading-chevron loading-wave" />
+        </div>
+        <div className="modal__requirements-panel modal__sidebar-section-content modal__details-loading-content">
+          <div className="modal__requirements-tabs">
+            <span className="modal__requirements-tab modal__requirements-tab--skeleton loading-wave" />
+            <span className="modal__requirements-tab modal__requirements-tab--skeleton loading-wave" />
+          </div>
+          <div className="modal__requirements-content modal__requirements-content--skeleton">
+            <ul>
+              {Array.from({ length: 4 }, (_, index) => (
+                <li key={`requirement-loading-${index}`}>
+                  <span className="modal__details-loading-line loading-wave" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="modal__chips-section modal__details-loading-section">
+        <div className="modal__chips-heading modal__sidebar-section-toggle modal__sidebar-section-toggle--skeleton">
+          <span className="modal__details-loading-icon loading-wave" />
+          <strong className="modal__details-loading-title loading-wave" />
+          <span className="modal__details-loading-chevron loading-wave" />
+        </div>
+        <div className="modal__chips modal__sidebar-section-content modal__details-loading-content">
+          {Array.from({ length: 6 }, (_, index) => (
+            <span className="modal__chip modal__chip--skeleton loading-wave" key={`chip-loading-${index}`} />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

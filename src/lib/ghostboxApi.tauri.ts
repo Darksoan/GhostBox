@@ -113,6 +113,7 @@ function getUpdatesApiUrl() {
 
 const DISCORD_LINK_CACHE_KEY = "ghostbox:discord-link-status";
 const PREMIUM_CACHE_KEY = "ghostbox:premium-status";
+const PREMIUM_STATUS_TTL_MS = 5 * 60 * 1000;
 
 type DiscordLinkCacheEntry = {
   steamId: string;
@@ -123,6 +124,7 @@ type DiscordLinkCacheEntry = {
 type PremiumCacheEntry = {
   steamId: string;
   isPremium: boolean;
+  currentPeriodEnd?: string | null;
   cachedAt: number;
 };
 
@@ -162,21 +164,31 @@ function writeDiscordLinkCache(steamId: string, status: DiscordLinkStatus) {
 }
 
 function readPremiumLocalCache(steamId: string): boolean | null {
+  return readPremiumLocalCacheEntry(steamId)?.isPremium ?? null;
+}
+
+function readPremiumLocalCacheEntry(steamId: string): PremiumCacheEntry | null {
   try {
     const raw = localStorage.getItem(PREMIUM_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PremiumCacheEntry;
     if (!parsed?.steamId || parsed.steamId !== steamId) return null;
-    return parsed.isPremium === true;
+    return {
+      steamId,
+      isPremium: parsed.isPremium === true,
+      currentPeriodEnd: parsed.currentPeriodEnd ?? null,
+      cachedAt: Number.isFinite(parsed.cachedAt) ? parsed.cachedAt : 0,
+    };
   } catch {
     return null;
   }
 }
 
-function writePremiumCache(steamId: string, isPremium: boolean) {
+function writePremiumCache(steamId: string, isPremium: boolean, currentPeriodEnd?: string | null) {
   const entry: PremiumCacheEntry = {
     steamId,
     isPremium,
+    currentPeriodEnd: currentPeriodEnd ?? null,
     cachedAt: Date.now(),
   };
   memoryPremiumCache = entry;
@@ -281,6 +293,15 @@ export const ghostboxApi = {
     return local;
   },
 
+  getFreshCachedPremiumStatus(steamId: string): PremiumCacheEntry | null {
+    const id = steamId.trim();
+    if (!id) return null;
+    const cached = memoryPremiumCache?.steamId === id ? memoryPremiumCache : readPremiumLocalCacheEntry(id);
+    if (!cached || Date.now() - cached.cachedAt > PREMIUM_STATUS_TTL_MS) return null;
+    memoryPremiumCache = cached;
+    return cached;
+  },
+
   cacheIsPremium(steamId: string, isPremium: boolean) {
     const id = steamId.trim();
     if (!id) return;
@@ -340,7 +361,7 @@ export const ghostboxApi = {
       if (status.discordLink) {
         writeDiscordLinkCache(id, status.discordLink);
       }
-      writePremiumCache(id, resolveIsPremium(status));
+      writePremiumCache(id, resolveIsPremium(status), status.subscription?.currentPeriodEnd ?? null);
       return status;
     } catch {
       return null;
@@ -351,6 +372,9 @@ export const ghostboxApi = {
     const id = steamId.trim();
     if (!id) return false;
 
+    const cached = ghostboxApi.getFreshCachedPremiumStatus(id);
+    if (cached) return cached.isPremium;
+
     const inFlight = premiumInFlight.get(id);
     if (inFlight) return inFlight;
 
@@ -358,7 +382,7 @@ export const ghostboxApi = {
       try {
         const status = await ghostboxApi.getSubscriptionStatus(id);
         const premium = resolveIsPremium(status);
-        writePremiumCache(id, premium);
+        writePremiumCache(id, premium, status?.subscription?.currentPeriodEnd ?? null);
         return premium;
       } catch {
         return ghostboxApi.getCachedIsPremium(id) === true;

@@ -34,7 +34,7 @@ type GameListPreloadOptions = {
   roundRobin?: boolean;
   sourceLimit?: number;
   steamHeaderFirst?: boolean;
-  variant?: "header" | "portrait" | "hero";
+  variant?: "header" | "catalogueHeader" | "portrait" | "hero";
 };
 
 let preferLowResCovers = false;
@@ -188,6 +188,10 @@ function getGameListPreloadSources(
       ...gameHeroSources(game),
       ...gameLogoSources(game),
     ]).slice(0, sourceLimit);
+  }
+
+  if (variant === "catalogueHeader") {
+    return gameCatalogueHeaderSources(game).slice(0, sourceLimit);
   }
 
   const headerSources = options.steamHeaderFirst
@@ -574,6 +578,10 @@ export async function preloadGameListAssetsReady(
     if (variant === "portrait") return gamePortraitPreviewSources(game).slice(0, 1);
     if (variant === "hero") {
       return uniqueSources([...gameHeroSources(game), ...gameLogoSources(game)]).slice(0, 1);
+    }
+
+    if (variant === "catalogueHeader") {
+      return gameCatalogueHeaderSources(game).slice(0, 1);
     }
 
     return gameHeaderOnlySources(game).slice(0, 1);

@@ -1,0 +1,12 @@
+name = "piratebox-catalogue"
+main = "src/index.ts"
+compatibility_date = "2026-07-19"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "piratebox-games"
+database_id = "38bcabba-004a-4e75-bef0-4a1c0559f52c"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true

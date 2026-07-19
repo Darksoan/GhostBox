@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GameDatabaseResult } from "../data";
 import type { CatalogueFilters, CatalogueSort } from "../types";
 import {
@@ -14,6 +14,10 @@ import {
 } from "../utils/gameCache";
 import { useGamesQuery } from "../queries/games";
 
+function normalizeCatalogueQuery(query: string) {
+  return query.trim().toLowerCase();
+}
+
 export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const [cataloguePage, setCataloguePage] = useState(1);
   const [catalogueChunkOffset, setCatalogueChunkOffset] = useState(0);
@@ -23,12 +27,16 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const [hasLoadedCatalogueOnce, setHasLoadedCatalogueOnce] = useState(false);
   const [lastCatalogueFacets, setLastCatalogueFacets] =
     useState<GameDatabaseResult["facets"]>();
+  const normalizedQuery = normalizeCatalogueQuery(debouncedQuery);
+  const previousNormalizedQueryRef = useRef(normalizedQuery);
+  const isQueryResetPending = previousNormalizedQueryRef.current !== normalizedQuery;
+  const effectiveCataloguePage = isQueryResetPending ? 1 : cataloguePage;
 
   const catalogueFiltersCacheKey = getCatalogueFiltersCacheKey(catalogueFilters);
 
   const catalogueRequestMeta = useMemo(() => {
     const requestedChunkOffset =
-      Math.floor((cataloguePage - 1) / catalogueChunkPageCount) *
+      Math.floor((effectiveCataloguePage - 1) / catalogueChunkPageCount) *
       catalogueChunkSize;
     const requestedLimit = catalogueChunkSize;
 
@@ -36,40 +44,43 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
       requestedChunkOffset,
       requestedLimit,
       request: {
-        query: debouncedQuery,
+        query: normalizedQuery,
         limit: requestedLimit,
         offset: requestedChunkOffset,
         filters: catalogueFilters,
         sort: catalogueSort,
-        includeFacets: true,
+        includeFacets: false,
       },
     };
   }, [
     catalogueFilters,
-    cataloguePage,
+    effectiveCataloguePage,
     catalogueSort,
-    debouncedQuery,
+    normalizedQuery,
   ]);
 
   const catalogueQuery = useGamesQuery(catalogueRequestMeta.request, {
     enabled,
   });
 
-  const shouldLoadCatalogueFacetsFallback =
-    enabled && Boolean(catalogueQuery.data) && !catalogueQuery.data?.facets;
-
   const facetsQuery = useGamesQuery(
     {
-      query: debouncedQuery,
+      query: "",
       limit: 1,
       offset: 0,
-      filters: catalogueFilters,
-      sort: catalogueSort,
+      filters: emptyCatalogueFilters,
+      sort: "popular",
       includeFacets: true,
       facetsOnly: true,
     },
-    { enabled: shouldLoadCatalogueFacetsFallback }
+    { enabled }
   );
+
+  useEffect(() => {
+    previousNormalizedQueryRef.current = normalizedQuery;
+    setCataloguePage(1);
+    setCatalogueChunkOffset(0);
+  }, [normalizedQuery]);
 
   useEffect(() => {
     if (catalogueQuery.data && enabled) {
@@ -91,7 +102,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   }, [catalogueQuery.data?.facets, enabled, facetsQuery.data?.facets]);
 
   const requestedCatalogueCacheKey = getGamesCacheKey(
-    debouncedQuery,
+    normalizedQuery,
     catalogueRequestMeta.requestedLimit,
     catalogueRequestMeta.requestedChunkOffset,
     catalogueFilters,
@@ -99,9 +110,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   );
 
   const hasRequestedCatalogueData = Boolean(catalogueQuery.data);
-  const isPageChunkLoading =
-    catalogueQuery.isFetching &&
-    catalogueChunkOffset !== catalogueRequestMeta.requestedChunkOffset;
+  const isPageChunkLoading = catalogueQuery.isFetching;
   const shouldShowCatalogueLoading =
     !hasRequestedCatalogueData ||
     isPageChunkLoading ||
@@ -140,7 +149,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     shouldPulseCatalogueLoading:
       (isPageChunkLoading || !hasRequestedCatalogueData) &&
       hasSelectedCatalogueFilters(catalogueFilters),
-    cataloguePage,
+    cataloguePage: effectiveCataloguePage,
     catalogueChunkOffset,
     catalogueFilters,
     catalogueSort,

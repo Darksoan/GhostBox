@@ -21,6 +21,8 @@ import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/gho
 import type { GhostBoxGame } from "./data";
 import "./app.scss";
 
+const PREMIUM_STATUS_REFRESH_MS = 5 * 60 * 1000;
+
 type OverlayForwardEntry =
   | { kind: "game"; game: GhostBoxGame }
   | { kind: "achievements"; view: NonNullable<AchievementsViewState> };
@@ -116,6 +118,10 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
     const cachedPremium = ghostboxApi.getCachedIsPremium(steamId);
     if (cachedPremium !== null) setIsPremium(cachedPremium);
+    const freshPremium = ghostboxApi.getFreshCachedPremiumStatus(steamId);
+    if (freshPremium?.currentPeriodEnd) {
+      setSubscriptionPeriodEnd(freshPremium.isPremium ? freshPremium.currentPeriodEnd : null);
+    }
 
     const refreshSubscriptionStatus = () =>
       void ghostboxApi.getSubscriptionStatus(steamId).then((status: SubscriptionStatusResult | null) => {
@@ -129,15 +135,18 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         setSubscriptionPeriodEnd(active ? end : null);
       });
 
-    void ghostboxApi.getDiscordLinkStatus(steamId);
+    const refreshSubscriptionStatusIfStale = () => {
+      if (ghostboxApi.getFreshCachedPremiumStatus(steamId)) return;
+      refreshSubscriptionStatus();
+    };
 
-    refreshSubscriptionStatus();
-    window.addEventListener("focus", refreshSubscriptionStatus);
-    const refreshInterval = window.setInterval(refreshSubscriptionStatus, 60_000);
+    refreshSubscriptionStatusIfStale();
+    window.addEventListener("focus", refreshSubscriptionStatusIfStale);
+    const refreshInterval = window.setInterval(refreshSubscriptionStatus, PREMIUM_STATUS_REFRESH_MS);
 
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", refreshSubscriptionStatus);
+      window.removeEventListener("focus", refreshSubscriptionStatusIfStale);
       window.clearInterval(refreshInterval);
     };
   }, [appData.steamProfile?.steamId]);

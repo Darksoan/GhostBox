@@ -129,8 +129,25 @@ function ReviewRecommendationSidebar({
         style={{ height: isCollapsed ? 0 : reviewPanelHeight } as CSSProperties}
       >
         {isLoading && overallPercent === null ? (
-          <div className="modal__review-summary-loading">
-            {language === "en" ? "Loading reviews" : "Carregando análises"}
+          <div className="modal__review-summary-card modal__review-summary-card--skeleton" aria-hidden="true">
+            <div className="modal__review-summary-score">
+              <strong className="modal__review-summary-skeleton-score loading-wave" />
+              <span className="modal__review-summary-skeleton-label loading-wave" />
+            </div>
+            <span className="modal__review-summary-skeleton-sentiment loading-wave" />
+            <div className="modal__review-summary-meter modal__review-summary-meter--skeleton" aria-hidden="true">
+              <span />
+            </div>
+            <div className="modal__review-summary-breakdown">
+              <span className="modal__review-summary-breakdown-item">
+                <strong className="modal__review-summary-skeleton-label loading-wave" />
+                <span className="modal__review-summary-skeleton-label modal__review-summary-skeleton-label--short loading-wave" />
+              </span>
+              <span className="modal__review-summary-breakdown-item">
+                <strong className="modal__review-summary-skeleton-label loading-wave" />
+                <span className="modal__review-summary-skeleton-label modal__review-summary-skeleton-label--short loading-wave" />
+              </span>
+            </div>
           </div>
         ) : (
           <div className="modal__review-summary-card">
@@ -232,6 +249,25 @@ function SteamReviewCard({ review, language }: { review: SteamGameReview; langua
               : "Ver mais"}
         </button>
       )}
+    </article>
+  );
+}
+
+function SteamReviewCardSkeleton() {
+  return (
+    <article className="modal__review-card modal__review-card--skeleton" aria-hidden="true">
+      <div className="modal__review-author">
+        <div className="modal__review-avatar modal__review-avatar--skeleton loading-wave" />
+        <div className="modal__review-author-copy">
+          <strong className="modal__review-skeleton-line modal__review-skeleton-line--author loading-wave" />
+          <span className="modal__review-skeleton-line modal__review-skeleton-line--meta loading-wave" />
+        </div>
+      </div>
+      <p className="modal__review-text modal__review-text--skeleton">
+        <span className="modal__review-skeleton-line loading-wave" />
+        <span className="modal__review-skeleton-line loading-wave" />
+        <span className="modal__review-skeleton-line modal__review-skeleton-line--short loading-wave" />
+      </p>
     </article>
   );
 }
@@ -480,9 +516,10 @@ export function GameReviewsSection({
         </div>
 
         {isLoadingReviews ? (
-          <div className="modal__reviews-loading">
-            <span className="modal__add-spinner modal__add-spinner--light" aria-hidden="true" />
-            <span>{language === "en" ? "Loading reviews" : "Carregando reviews"}</span>
+          <div className="modal__reviews-list modal__reviews-list--skeleton">
+            {Array.from({ length: 3 }, (_, index) => (
+              <SteamReviewCardSkeleton key={`review-loading-${index}`} />
+            ))}
           </div>
         ) : gameReviews.length > 0 ? (
           <>
