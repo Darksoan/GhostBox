@@ -592,7 +592,7 @@ body {
 
 .app-splash--react .app-splash__spinner {
   position: relative;
-  border: 0;
+  border: 1px solid transparent;
   background: conic-gradient(
     var(--text-strong) var(--app-splash-progress, 0%),
     var(--border-subtle) 0
@@ -7505,15 +7505,10 @@ p {
 .catalogue-filter-section {
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--surface-secondary);
   border-radius: var(--radius-lg);
   background: var(--surface-tertiary);
   transition: border-color var(--motion-fast) var(--ease);
-
-  &:hover,
-  &:focus-within {
-    border-color: var(--border-hover);
-  }
 
   &--sort {
     background: var(--surface-tertiary);
@@ -7645,7 +7640,7 @@ p {
       }
 
       &:hover {
-        background: var(--surface-secondary);
+        color: var(--text-secondary);
       }
 
       &.is-active {
@@ -7789,7 +7784,8 @@ p {
   line-height: 1.5;
   transition:
     background var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease);
+    color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
 
   input {
     position: absolute;
@@ -7810,20 +7806,26 @@ p {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    border: 0;
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-secondary);
     color: var(--surface-tertiary);
-    transition: background var(--motion-fast) var(--ease);
+    transition:
+      background var(--motion-fast) var(--ease),
+      border-color var(--motion-fast) var(--ease);
   }
 
-  /* Match order/sort option hover: light surface + secondary text */
   &:hover {
     background: var(--surface-secondary);
-    color: var(--text-secondary);
+    color: var(--text-primary);
+  }
+
+  &:hover &__box {
+    border-color: var(--text-tertiary);
   }
 
   input:checked + &__box {
+    border-color: var(--text-primary);
     background: var(--text-primary);
     color: var(--surface-tertiary);
   }
@@ -7834,13 +7836,14 @@ p {
     white-space: nowrap;
   }
 
-  /* Match order/sort active option */
   &:has(input:checked) {
+    border-color: var(--border-hover);
     background: var(--surface-secondary);
     color: var(--text-primary);
   }
 
   &:has(input:checked):hover {
+    border-color: var(--border-hover);
     background: var(--surface-secondary);
     color: var(--text-primary);
   }
@@ -7884,19 +7887,21 @@ input[type="search"]::-ms-reveal {
   padding: 0;
   padding-right: calc(var(--spacing) * 1.5);
   position: relative;
-  border: 1px solid var(--border);
+  border: 1px solid var(--surface-secondary);
   border-radius: var(--radius-lg);
   background: transparent;
   overflow: hidden;
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
-  transition: border-color var(--motion-fast) var(--ease);
+  transition:
+    border-color var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease);
   isolation: isolate;
 
   &:hover,
   &--hovered {
-    border-color: var(--border-hover);
+    background: var(--surface-secondary);
   }
 
   &--adding::after {
