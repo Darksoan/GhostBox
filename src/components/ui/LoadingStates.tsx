@@ -205,24 +205,14 @@ export function CatalogueLoadingState({
   );
 }
 
-export function BackupListLoadingState({ count = 5 }: { count?: number }) {
+export function BackupListLoadingState({ count: _count = 5 }: { count?: number }) {
+  const { t } = useSettings();
+
   return (
-    <ul className="backup-list" aria-hidden="true">
-      {Array.from({ length: count }, (_, index) => (
-        <li className="backup-list__item backup-list__item--skeleton" key={`backup-loading-${index}`}>
-          <div className="backup-list__content">
-            <div className="backup-list__placeholder-header loading-wave" />
-            <div className="backup-list__copy backup-list__placeholder-copy">
-              <span className="backup-list__placeholder-title loading-wave" />
-              <span className="backup-list__placeholder-meta loading-wave" />
-            </div>
-            <div className="backup-list__actions">
-              <span className="backup-list__placeholder-chevron loading-wave" />
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="backup-page__spinner-state">
+      <span className="backup-page__spinner" aria-hidden="true" />
+      <span className="sr-only">{t("backup.loading")}</span>
+    </div>
   );
 }
 
@@ -271,18 +261,13 @@ export function NotificationsFeedLoadingState({ count = 3 }: { count?: number })
   );
 }
 
-export function SearchSuggestionsLoadingState({ count = 3 }: { count?: number }) {
+export function SearchSuggestionsLoadingState({ count: _count = 3 }: { count?: number }) {
+  const { t } = useSettings();
+
   return (
-    <ul className="header__search-dropdown-list" role="listbox">
-      {Array.from({ length: count }, (_, index) => (
-        <li key={`search-suggestion-${index}`}>
-          <button type="button" className="header__search-dropdown-item header__search-dropdown-item--skeleton" disabled>
-            <span className="header__search-skeleton-text loading-wave" />
-            <div className="header__search-dropdown-item__icons" />
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="header__search-spinner-state">
+      <span className="sr-only">{t("header.searching")}</span>
+    </div>
   );
 }
 

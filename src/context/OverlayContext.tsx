@@ -116,11 +116,9 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getOverlayExitMs = useCallback(() => {
-    if (appearance.disableTabAnimations || appearance.reduceAllAnimations) {
-      return 0;
-    }
+    if (appearance.reduceAllAnimations) return 0;
     return 100;
-  }, [appearance.disableTabAnimations, appearance.reduceAllAnimations]);
+  }, [appearance.reduceAllAnimations]);
 
   const openGame = useCallback((game: GhostBoxGame) => {
     clearOverlayExitTimeout();

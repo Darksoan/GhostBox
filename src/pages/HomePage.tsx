@@ -1,15 +1,11 @@
-import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
-import { Cup } from "reicon-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem, UserCollection } from "../types";
 import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
-import {
-  HomeRecentBannerSkeleton,
-  HomeWishlistCardSkeleton,
-} from "../components/ui/LoadingStates";
+import { HomeWishlistCardSkeleton } from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
@@ -17,7 +13,6 @@ import {
   useCachedImageSources,
   useLoadableImageCover,
 } from "../hooks/useCachedImageSources";
-import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import {
   readStoredPersonalCalendar,
   writeStoredPersonalCalendar,
@@ -34,11 +29,8 @@ import {
   withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
-import { useAppData } from "../context/AppDataContext";
-import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
-import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
-import { countUnlockedAchievements } from "../lib/profileHistoryGames";
+import { formatCompactPlaytime } from "../utils/time";
 
 type HomeGameSeed = {
   appId: string;
@@ -175,21 +167,6 @@ function homeGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
 }
 
-function formatLastSessionDate(
-  value: string | null | undefined,
-  language: "pt" | "en" = "pt"
-) {
-  const time = parseLastPlayed(value);
-  if (!Number.isFinite(time)) {
-    return language === "en" ? "Recently played" : "Jogado recentemente";
-  }
-
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
-    day: "numeric",
-    month: "short",
-  }).format(time);
-}
-
 function createHomeSeedFallbackGame(
   game: HomeGameSeed,
   index: number,
@@ -234,72 +211,6 @@ function createHomeSeedFallbackGame(
       progress: 0,
     },
     achievementList: [],
-  };
-}
-
-function hasCompletedPlaySession(
-  game: GhostBoxGame | undefined
-): game is GhostBoxGame {
-  return Boolean(
-    game &&
-      Number.isFinite(parseLastPlayed(game.lastTimePlayed)) &&
-      !isSteamTitlePlaceholder(game.title, game.appId)
-  );
-}
-
-function getLastPlayedTime(game: GhostBoxGame) {
-  const lastPlayedTime = parseLastPlayed(game.lastTimePlayed);
-  return Number.isFinite(lastPlayedTime) ? lastPlayedTime : 0;
-}
-
-function pickRicherLastPlayedGame(left: GhostBoxGame, right: GhostBoxGame) {
-  const leftPlayed = getLastPlayedTime(left);
-  const rightPlayed = getLastPlayedTime(right);
-  const preferredByPlay =
-    rightPlayed !== leftPlayed
-      ? rightPlayed > leftPlayed
-        ? right
-        : left
-      : (right.playTimeInMilliseconds ?? 0) > (left.playTimeInMilliseconds ?? 0)
-        ? right
-        : left;
-  const other = preferredByPlay === left ? right : left;
-  const preferredTitle = !isSteamTitlePlaceholder(preferredByPlay.title, preferredByPlay.appId)
-    ? preferredByPlay.title
-    : other.title;
-  const preferredList =
-    (preferredByPlay.achievementList?.length ?? 0) >= (other.achievementList?.length ?? 0)
-      ? preferredByPlay.achievementList
-      : other.achievementList;
-  const unlocked = Math.max(
-    countUnlockedAchievements(preferredByPlay),
-    countUnlockedAchievements(other),
-  );
-  const total = Math.max(
-    preferredByPlay.achievements.total ?? 0,
-    other.achievements.total ?? 0,
-  );
-
-  return {
-    ...other,
-    ...preferredByPlay,
-    title: preferredTitle || preferredByPlay.title,
-    lastTimePlayed:
-      preferredByPlay.lastTimePlayed ?? other.lastTimePlayed,
-    playTimeInMilliseconds: Math.max(
-      preferredByPlay.playTimeInMilliseconds ?? 0,
-      other.playTimeInMilliseconds ?? 0,
-    ),
-    hero: preferredByPlay.hero || other.hero,
-    heroUrl: preferredByPlay.heroUrl || other.heroUrl,
-    cover: preferredByPlay.cover || other.cover,
-    coverUrl: preferredByPlay.coverUrl || other.coverUrl,
-    achievementList: preferredList ?? preferredByPlay.achievementList ?? [],
-    achievements: {
-      unlocked,
-      total,
-      progress: total > 0 ? Math.round((unlocked / total) * 100) : 0,
-    },
   };
 }
 
@@ -2004,194 +1915,6 @@ function HomeWishlistRecommendations({
   );
 }
 
-function HomeRecentBanner({
-  title,
-  game,
-  language,
-  loading = false,
-  onOpenGame,
-  onGameContextMenu,
-}: {
-  title: string;
-  game: GhostBoxGame | undefined;
-  language: "pt" | "en";
-  loading?: boolean;
-  onOpenGame: (game: GhostBoxGame) => void;
-  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-}) {
-  if (!game && loading) {
-    return <HomeRecentBannerSkeleton title={title} />;
-  }
-
-  if (!game) {
-    return (
-      <section className="home-recent-banner home-recent-banner--empty" aria-label={title}>
-        <h3 className="home-recent-banner__heading">{title}</h3>
-        <p className="home-recent-banner__empty">
-          {language === "en"
-            ? "Play a game to see it here."
-            : "Jogue um jogo para vê-lo aqui."}
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <HomeRecentBannerCard
-      title={title}
-      game={game}
-      language={language}
-      onOpenGame={onOpenGame}
-      onGameContextMenu={onGameContextMenu}
-    />
-  );
-}
-
-function HomeRecentBannerCard({
-  title,
-  game,
-  language,
-  onOpenGame,
-  onGameContextMenu,
-}: {
-  title: string;
-  game: GhostBoxGame;
-  language: "pt" | "en";
-  onOpenGame: (game: GhostBoxGame) => void;
-  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-}) {
-  const fallbackHeroSource = homeSteamCdnUrl(homeGameAppId(game), "library_hero.jpg");
-  const heroSources = [fallbackHeroSource];
-  const cachedSources = useCachedImageSources(heroSources);
-  const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
-  const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
-  const achievementTotal = game.achievements.total ?? 0;
-  const achievementUnlocked = Math.min(
-    game.achievements.unlocked ?? 0,
-    achievementTotal
-  );
-  const achievementProgress =
-    achievementTotal > 0
-      ? Math.round((achievementUnlocked / achievementTotal) * 100)
-      : 0;
-
-  return (
-    <section className="home-recent-banner" aria-label={title}>
-      <h3 className="home-recent-banner__heading">{title}</h3>
-      <div
-        className="home-recent-banner__card"
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpenGame(game)}
-        onContextMenu={(event) => {
-          if (!onGameContextMenu) return;
-          event.preventDefault();
-          onGameContextMenu(game, event.clientX, event.clientY);
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          onOpenGame(game);
-        }}
-      >
-        <span
-          className={`home-recent-banner__cover${
-            loaded ? " home-recent-banner__cover--loaded" : ""
-          }`}
-          style={layeredImageStyle([heroSource, fallbackHeroSource], "")}
-          aria-hidden="true"
-        />
-        <span className="home-recent-banner__content">
-          <span className="home-recent-banner__title-row">
-            <span
-              className={`home-recent-banner__game-icon${
-                iconUrl
-                  ? ""
-                  : iconLoading
-                    ? " home-recent-banner__game-icon--skeleton"
-                    : " home-recent-banner__game-icon--empty"
-              }`}
-              aria-hidden="true"
-            >
-              {iconUrl ? (
-                <img
-                  src={iconUrl}
-                  alt=""
-                  width={32}
-                  height={32}
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : null}
-            </span>
-            <strong className="home-recent-banner__title">{game.title}</strong>
-          </span>
-          <span className="home-recent-banner__meta">
-            <small className="home-recent-banner__meta-item">
-              <span className="home-recent-banner__meta-label">
-                {language === "en" ? "Last session" : "Última sessão"}
-              </span>
-              <span className="home-recent-banner__meta-value">
-                {formatLastSessionDate(game.lastTimePlayed, language)}
-              </span>
-            </small>
-            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
-              <Clock
-                className="home-recent-banner__meta-icon"
-                size={26}
-                strokeWidth={2.0}
-                aria-hidden="true"
-              />
-              <span className="home-recent-banner__meta-copy">
-                <span className="home-recent-banner__meta-label">
-                  {language === "en" ? "Playtime" : "Tempo de jogo"}
-                </span>
-                <span className="home-recent-banner__meta-value">
-                  {game.playTimeInMilliseconds
-                    ? formatCompactPlaytime(game.playTimeInMilliseconds)
-                    : language === "en"
-                      ? "Recently played"
-                      : "Jogado recentemente"}
-                </span>
-              </span>
-            </small>
-            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
-              <Cup
-                className="home-recent-banner__meta-icon home-recent-banner__meta-icon--cup"
-                size={26}
-                weight="Filled"
-                strokeWidth={2.0}
-                color="var(--text-strong)"
-                aria-hidden="true"
-              />
-              <span className="home-recent-banner__meta-copy">
-                <span className="home-recent-banner__meta-label">
-                  {language === "en" ? "Achievements" : "Conquistas"}
-                </span>
-                <span className="home-recent-banner__meta-value home-recent-banner__meta-value--achievements">
-                  {achievementTotal > 0
-                    ? `${achievementUnlocked}/${achievementTotal} ${
-                        language === "en" ? "unlocked" : "alcançadas"
-                      } (${achievementProgress}%)`
-                    : language === "en"
-                      ? "No achievements"
-                      : "Sem conquistas"}
-                </span>
-                <span
-                  className="home-recent-banner__achievement-track"
-                  aria-hidden="true"
-                >
-                  <span style={{ width: `${achievementProgress}%` }} />
-                </span>
-              </span>
-            </small>
-          </span>
-        </span>
-      </div>
-    </section>
-  );
-}
-
 export function HomePage({
   onOpenGame,
   favoriteGameIds,
@@ -2208,7 +1931,6 @@ export function HomePage({
   onAddGameToCollection,
   onRemoveGameFromCollection,
   onOpenCatalogueCategory,
-  profileHistoryGames,
   steamProfile,
 }: {
   onOpenGame: (game: GhostBoxGame) => void;
@@ -2229,16 +1951,9 @@ export function HomePage({
     key: Extract<CatalogueFilterKey, "genres" | "tags">,
     value: string
   ) => void;
-  profileHistoryGames: GhostBoxGame[];
   steamProfile: SteamProfile | null;
 }) {
   const { appearance, t } = useSettings();
-  const {
-    addedLibraryGames,
-    favoriteGames,
-    steamAccountStats,
-    initialLoadingProgress,
-  } = useAppData();
   const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
     () =>
       topReviewedSteamGames.map((game, index) =>
@@ -2594,41 +2309,6 @@ export function HomePage({
   const exploreCategories = useMemo(() => {
     return getHomeExploreCategories([...homeTopReviewedGames, ...homeFeaturedGames]);
   }, [homeTopReviewedGames, homeFeaturedGames]);
-  const homeRecentPlayedGame = useMemo(() => {
-    const pool = new Map<string, GhostBoxGame>();
-    const push = (game: GhostBoxGame) => {
-      const existing = pool.get(game.appId);
-      pool.set(
-        game.appId,
-        existing ? pickRicherLastPlayedGame(existing, game) : game,
-      );
-    };
-
-    for (const game of profileHistoryGames) push(game);
-    for (const game of addedLibraryGames) push(game);
-    for (const game of favoriteGames) push(game);
-
-    if (steamAccountStats?.ownedPlaytimes?.length) {
-      for (const game of buildSteamOwnedGamesFromPlaytimes(
-        steamAccountStats.ownedPlaytimes,
-        {},
-      )) {
-        push(game);
-      }
-    }
-
-    return [...pool.values()]
-      .filter(hasCompletedPlaySession)
-      .sort((left, right) => getLastPlayedTime(right) - getLastPlayedTime(left))[0];
-  }, [
-    addedLibraryGames,
-    favoriteGames,
-    profileHistoryGames,
-    steamAccountStats,
-  ]);
-  const homeRecentPlayedLoading =
-    !homeRecentPlayedGame && initialLoadingProgress < 100;
-
   const homeContextMenuItems = useCollectionContextMenu({
     game: homeContextMenu?.game ?? null,
     favoriteGameIds,
@@ -2688,14 +2368,6 @@ export function HomePage({
         recommendations={wishlistRecommendations}
         loading={isLoadingWishlistRecommendations}
         language={appearance.language}
-        onOpenGame={onOpenGame}
-        onGameContextMenu={handleGameContextMenu}
-      />
-      <HomeRecentBanner
-        title={t("home.recentSection")}
-        game={homeRecentPlayedGame}
-        language={appearance.language}
-        loading={homeRecentPlayedLoading}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

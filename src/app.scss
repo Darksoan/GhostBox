@@ -96,7 +96,6 @@
   --motion-base: 0.18s;
   --motion-slow: 0.3s;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --motion-tab-duration: 0.1s;
   --motion-sidebar-duration: 0.1s;
   --motion-linear: linear;
 
@@ -106,30 +105,6 @@
   --card-bg-active: var(--surface-primary);
   --card-border: var(--border);
   --card-radius: var(--radius-lg);
-
-  /*
-   * Media elevation — contact → mid → ambient.
-   * Pure black only; sized to element scale on dark canvas.
-   */
-  --shadow-media-sm:
-    0 1px 2px rgba(0, 0, 0, 0.22),
-    0 6px 14px rgba(0, 0, 0, 0.28),
-    0 12px 28px rgba(0, 0, 0, 0.18);
-  --shadow-media-md:
-    0 1px 2px rgba(0, 0, 0, 0.24),
-    0 8px 18px rgba(0, 0, 0, 0.32),
-    0 16px 36px rgba(0, 0, 0, 0.22);
-  --shadow-media-lg:
-    0 2px 4px rgba(0, 0, 0, 0.2),
-    0 10px 24px rgba(0, 0, 0, 0.34),
-    0 20px 48px rgba(0, 0, 0, 0.24);
-
-  /* Text legibility on covers / hero media */
-  --text-shadow-on-media:
-    0 1px 1px rgba(0, 0, 0, 0.5),
-    0 4px 14px rgba(0, 0, 0, 0.42);
-  --text-shadow-on-media-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --text-shadow-hero: 0 2px 10px rgba(0, 0, 0, 0.55);
 
   /* Unified sidebar + app background gradient */
   --app-gradient: linear-gradient(
@@ -302,9 +277,8 @@
   }
 }
 
-/// Floor shadow under media cards. $size: sm | md | lg
+/// Media depth hook kept for existing includes. $size: sm | md | lg
 @mixin media-depth($size: md) {
-  box-shadow: var(--shadow-media-#{$size});
 }
 
 /// @deprecated Prefer media-depth($size)
@@ -888,8 +862,8 @@ p {
     flex-direction: column;
     align-items: stretch;
     overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
+    overflow-y: scroll;
+    scrollbar-gutter: stable both-edges;
     background: transparent;
     scroll-behavior: auto;
 
@@ -913,7 +887,7 @@ p {
     }
 
     &--catalogue {
-      overflow-y: hidden;
+      overflow-y: scroll;
     }
 
     &--catalogue .page--main-pages.page--active {
@@ -1024,43 +998,7 @@ p {
   min-height: 100%;
 }
 
-@keyframes page-block-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 4px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes page-block-in-alt {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 4px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes page-block-out {
-  from {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translate3d(0, 4px, 0);
-  }
-}
-
-@keyframes profile-page-block-in {
+@keyframes content-overlay-fade-in {
   from {
     opacity: 0;
   }
@@ -1070,105 +1008,26 @@ p {
   }
 }
 
-.page-enter {
-  --page-enter-animation: page-block-in;
-  will-change: opacity;
-
-  .home-page > *,
-  .library-toolbar,
-  .backup-page__sync-warning,
-  .backup-page__empty,
-  .profile-page > header,
-  .profile-page > .profile-page__content-section,
-  .profile-page__no-games,
-  .catalogue-page__results,
-  .catalogue-filters,
-  .notifications-page__loading,
-  .settings-panel,
-  .favorites-page--empty .empty-state,
-  .modal--details > .modal__showcase,
-  .modal--details > .modal__details,
-  .game-achievements-page > * {
-    animation: var(--page-enter-animation) var(--motion-tab-duration) var(--motion-linear) both;
+@keyframes content-overlay-fade-out {
+  from {
+    opacity: 1;
   }
 
-  .library-toolbar {
-    animation-delay: 0s;
-  }
-
-  .backup-page__sync-warning {
-    animation-delay: 0s;
-  }
-
-  .backup-page__empty {
-    animation-delay: 0s;
-  }
-
-  .profile-page > header,
-  .profile-page > .profile-page__content-section,
-  .profile-page__no-games {
-    animation-delay: 0s;
-    /* Opacity only — translate on the cover header leaks past overflow during enter */
-    animation-name: profile-page-block-in;
-  }
-
-  .catalogue-page__results {
-    animation-delay: 0s;
-  }
-
-  .catalogue-filters {
-    animation-delay: 0s;
-  }
-
-  .notifications-page__loading {
-    animation-delay: 0s;
-  }
-
-  .favorites-page--empty .empty-state {
-    animation-delay: 0s;
-  }
-
-  .backup-list > li,
-  .favorites-grid__item,
-  .notification-group,
-  .game-grid .game-card,
-  .catalogue-list__item,
-  .game-achievements-page__list > li {
-    animation: var(--page-enter-animation) var(--motion-tab-duration) var(--motion-linear) both;
+  to {
+    opacity: 0;
   }
 }
 
-.page-enter--b {
-  --page-enter-animation: page-block-in-alt;
+.content-overlay-enter {
+  animation: content-overlay-fade-in var(--motion-base) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.page-exit {
-  will-change: opacity;
+.content-overlay-exit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  animation: content-overlay-fade-out 100ms ease-in both;
   pointer-events: none;
-
-  .home-page > *,
-  .library-toolbar,
-  .backup-page__sync-warning,
-  .backup-page__empty,
-  .profile-page > header,
-  .profile-page > .profile-page__content-section,
-  .profile-page__no-games,
-  .catalogue-page__results,
-  .catalogue-filters,
-  .notifications-page__loading,
-  .settings-panel,
-  .favorites-page--empty .empty-state,
-  .modal--details > .modal__showcase,
-  .modal--details > .modal__details,
-  .game-achievements-page > *,
-  .backup-list > li,
-  .favorites-grid__item,
-  .notification-group,
-  .game-grid .game-card,
-  .catalogue-list__item,
-  .game-achievements-page__list > li {
-    animation: page-block-out var(--motion-tab-duration) var(--motion-linear) both;
-  }
 }
 
 .sidebar,
@@ -1233,16 +1092,6 @@ p {
 
   &__mode-panel {
     contain: paint;
-    animation: sidebar-mode-panel-in var(--motion-sidebar-duration) var(--ease) both;
-
-    .sidebar__menu-item,
-    .sidebar__section-header {
-      animation: sidebar-mode-option-in var(--motion-sidebar-duration) var(--ease) both;
-    }
-
-    .sidebar__section-header + .sidebar__menu {
-      animation: sidebar-mode-option-in var(--motion-sidebar-duration) var(--ease) both;
-    }
   }
 
   &__section-header {
@@ -1680,30 +1529,6 @@ p {
   }
 }
 
-@keyframes sidebar-mode-panel-in {
-  from {
-    opacity: 0;
-    transform: translate3d(-4px, 0, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes sidebar-mode-option-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 3px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
 /* ─── Sidebar profile ─────────────────────────────────────────────────────── */
 .sidebar-profile {
   position: relative;
@@ -2129,9 +1954,6 @@ p {
     letter-spacing: 0;
     pointer-events: none;
     user-select: none;
-    box-shadow:
-      0 0 0 2px var(--background),
-      0 1px 4px color-mix(in srgb, var(--danger) 45%, transparent);
     animation: header-notification-badge-in var(--motion-base) var(--ease) both;
   }
 }
@@ -2593,16 +2415,6 @@ p {
       min-height: 14px;
     }
 
-    &--skeleton,
-    &--skeleton:disabled {
-      cursor: default;
-      opacity: 1;
-    }
-
-    &--skeleton:hover,
-    &--skeleton:focus-visible {
-      background: transparent;
-    }
   }
 
   &__search-highlight {
@@ -2614,11 +2426,21 @@ p {
   }
 
   &__search-dropdown-loading {
-    display: contents;
+    display: flex;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
     color: var(--text-secondary);
     font-size: 14px;
     font-weight: var(--weight-muted);
     text-align: center;
+  }
+
+  &__search-spinner-state {
+    display: grid;
+    width: 100%;
+    min-height: 0;
+    place-items: center;
   }
 
   &__search-trailing {
@@ -3116,7 +2938,6 @@ p {
   font-size: clamp(16px, 1.8vw, 22px);
   font-weight: var(--weight-semibold);
   line-height: 1.2;
-  text-shadow: var(--text-shadow-hero);
 }
 
 .home-recommended-hero__publisher {
@@ -3494,7 +3315,6 @@ p {
     line-height: 1.18;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: var(--text-shadow-on-media);
   }
 }
 
@@ -3620,7 +3440,6 @@ p {
     line-height: 1.18;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: var(--text-shadow-on-media);
   }
 }
 
@@ -3826,7 +3645,6 @@ p {
     line-height: 1.18;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: var(--text-shadow-on-media);
   }
 }
 
@@ -4803,7 +4621,6 @@ p {
     font-size: 13px;
     font-weight: var(--weight-medium);
     line-height: 1.15;
-    text-shadow: var(--text-shadow-on-media);
   }
 
   small {
@@ -4813,7 +4630,6 @@ p {
     letter-spacing: 0.06em;
     line-height: 1.1;
     text-transform: uppercase;
-    text-shadow: var(--text-shadow-on-media-soft);
   }
 }
 
@@ -4907,7 +4723,9 @@ p {
   }
 
   &--tabs {
+    flex: 1 1 auto;
     gap: 0;
+    min-height: 100%;
     padding-top: calc(var(--spacing) * 1.5);
     padding-right: calc(var(--spacing) * 3);
     padding-bottom: calc(var(--spacing) * 4);
@@ -4917,8 +4735,10 @@ p {
 
 .settings-panel {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0;
+  min-height: 0;
   overflow: visible;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -4935,12 +4755,7 @@ p {
     width: 100%;
     flex: 1;
     flex-direction: column;
-  }
-
-  &__animated-block {
-    animation: profile-page-block-in var(--motion-tab-duration) var(--motion-linear) both;
-    animation-delay: var(--settings-enter-delay, 0s);
-    will-change: opacity;
+    min-height: 0;
   }
 }
 
@@ -4948,18 +4763,9 @@ p {
   display: flex;
   flex-direction: column;
   gap: 0;
-
-  .settings-option {
-    animation: profile-page-block-in var(--motion-tab-duration) var(--motion-linear) both;
-    animation-delay: var(--settings-enter-delay, 0s);
-    will-change: opacity;
-  }
 }
 
 .settings-backups-list {
-  animation: profile-page-block-in var(--motion-tab-duration) var(--motion-linear) both;
-  animation-delay: var(--settings-enter-delay, 0s);
-  will-change: opacity;
   margin: 12px 18px 18px;
   padding: 14px 16px;
   border: 1px solid var(--border);
@@ -9515,7 +9321,6 @@ input[type="search"]::-ms-reveal {
     font-weight: var(--weight-semibold);
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: var(--text-shadow-on-media);
   }
 }
 
@@ -9688,7 +9493,6 @@ input[type="search"]::-ms-reveal {
     pointer-events: none;
     opacity: 0;
     transform: translate3d(-50%, 8px, 0);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
     backdrop-filter: blur(18px) saturate(1.35);
     -webkit-backdrop-filter: blur(18px) saturate(1.35);
     transition:
@@ -9699,7 +9503,6 @@ input[type="search"]::-ms-reveal {
       display: block;
       flex: 0 0 auto;
       color: var(--text-primary);
-      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
     }
   }
 
@@ -9717,7 +9520,6 @@ input[type="search"]::-ms-reveal {
       height: 18px;
       padding-top: 1px;
       line-height: 18px;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
     }
   }
 
@@ -10451,49 +10253,11 @@ html.no-animations {
   .sidebar__mode-panel .sidebar__section-header,
   .sidebar__mode-panel .sidebar__section-header + .sidebar__menu,
   .subscription-account__header::before,
+  .content-overlay-enter,
+  .content-overlay-exit,
   .settings-options .settings-option,
   .settings-backups-list,
-  .settings-panel__animated-block,
-  .page-enter .home-page > *,
-  .page-enter .library-toolbar,
-  .page-enter .backup-page__sync-warning,
-  .page-enter .backup-page__empty,
-  .page-enter .backup-list > li,
-  .page-enter .profile-page > header,
-  .page-enter .profile-page > .profile-page__content-section,
-  .page-enter .profile-page__no-games,
-  .page-enter .catalogue-page__results,
-  .page-enter .catalogue-filters,
-  .page-enter .catalogue-list__item,
-  .page-enter .favorites-grid__item,
-  .page-enter .favorites-page--empty .empty-state,
-  .page-enter .game-grid .game-card,
-  .page-enter .notification-group,
-  .page-enter .notifications-page__loading,
-  .page-enter .modal--details > .modal__showcase,
-  .page-enter .modal--details > .modal__details,
-  .page-enter .game-achievements-page > *,
-  .page-enter .game-achievements-page__list > li,
-  .page-exit .home-page > *,
-  .page-exit .library-toolbar,
-  .page-exit .backup-page__sync-warning,
-  .page-exit .backup-page__empty,
-  .page-exit .backup-list > li,
-  .page-exit .profile-page > header,
-  .page-exit .profile-page > .profile-page__content-section,
-  .page-exit .profile-page__no-games,
-  .page-exit .catalogue-page__results,
-  .page-exit .catalogue-filters,
-  .page-exit .catalogue-list__item,
-  .page-exit .favorites-grid__item,
-  .page-exit .favorites-page--empty .empty-state,
-  .page-exit .game-grid .game-card,
-  .page-exit .notification-group,
-  .page-exit .notifications-page__loading,
-  .page-exit .modal--details > .modal__showcase,
-  .page-exit .modal--details > .modal__details,
-  .page-exit .game-achievements-page > *,
-  .page-exit .game-achievements-page__list > li {
+  .settings-panel__animated-block {
     animation: none;
   }
 
@@ -10525,61 +10289,6 @@ html.no-backdrop-blur {
   *::after {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-  }
-}
-
-html.no-tab-animations {
-  .sidebar__mode-panel,
-  .sidebar__mode-panel .sidebar__menu-item,
-  .sidebar__mode-panel .sidebar__section-header,
-  .sidebar__mode-panel .sidebar__section-header + .sidebar__menu {
-    animation: none;
-  }
-
-  .settings-options .settings-option,
-  .settings-backups-list,
-  .settings-panel__animated-block,
-  .page-enter .home-page > *,
-  .page-enter .library-toolbar,
-  .page-enter .backup-page__sync-warning,
-  .page-enter .backup-page__empty,
-  .page-enter .backup-list > li,
-  .page-enter .profile-page > header,
-  .page-enter .profile-page > .profile-page__content-section,
-  .page-enter .profile-page__no-games,
-  .page-enter .catalogue-page__results,
-  .page-enter .catalogue-filters,
-  .page-enter .catalogue-list__item,
-  .page-enter .favorites-grid__item,
-  .page-enter .favorites-page--empty .empty-state,
-  .page-enter .game-grid .game-card,
-  .page-enter .notification-group,
-  .page-enter .notifications-page__loading,
-  .page-enter .modal--details > .modal__showcase,
-  .page-enter .modal--details > .modal__details,
-  .page-enter .game-achievements-page > *,
-  .page-enter .game-achievements-page__list > li,
-  .page-exit .home-page > *,
-  .page-exit .library-toolbar,
-  .page-exit .backup-page__sync-warning,
-  .page-exit .backup-page__empty,
-  .page-exit .backup-list > li,
-  .page-exit .profile-page > header,
-  .page-exit .profile-page > .profile-page__content-section,
-  .page-exit .profile-page__no-games,
-  .page-exit .catalogue-page__results,
-  .page-exit .catalogue-filters,
-  .page-exit .catalogue-list__item,
-  .page-exit .favorites-grid__item,
-  .page-exit .favorites-page--empty .empty-state,
-  .page-exit .game-grid .game-card,
-  .page-exit .notification-group,
-  .page-exit .notifications-page__loading,
-  .page-exit .modal--details > .modal__showcase,
-  .page-exit .modal--details > .modal__details,
-  .page-exit .game-achievements-page > *,
-  .page-exit .game-achievements-page__list > li {
-    animation: none;
   }
 }
 
@@ -12302,7 +12011,7 @@ html.no-tab-animations {
     flex-direction: column;
     gap: 0;
     padding: calc(var(--spacing) * 2);
-    border: 1px solid var(--border-ui);
+    border: 1px solid var(--border-hover);
     border-radius: var(--radius-md);
     background: var(--surface-deep);
   }
@@ -12554,7 +12263,7 @@ html.no-tab-animations {
     gap: 0;
     min-width: 0;
     padding: calc(var(--spacing) * 2);
-    border: 1px solid var(--border-ui);
+    border: 1px solid var(--border-hover);
     border-radius: var(--radius-md);
     background: var(--surface-deep);
   }
@@ -12729,6 +12438,14 @@ html.no-tab-animations {
   &__about-toggle {
     min-width: 128px;
     min-height: 36px;
+    border-color: var(--border-hover);
+    background: var(--surface-deep);
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--border-hover);
+      background: var(--surface-hover);
+    }
   }
 
   &__achievements-section {
@@ -12737,7 +12454,7 @@ html.no-tab-animations {
     flex-direction: column;
     gap: 0;
     padding: calc(var(--spacing) * 2);
-    border: 1px solid var(--border-ui);
+    border: 1px solid var(--border-hover);
     border-radius: var(--radius-md);
     background: var(--surface-deep);
     content-visibility: auto;
@@ -13072,7 +12789,7 @@ html.no-tab-animations {
     gap: 0;
     min-width: 0;
     padding: calc(var(--spacing) * 2) 0;
-    border: 1px solid var(--border-ui);
+    border: 1px solid var(--border-hover);
     border-radius: var(--radius-md);
     background: var(--surface-deep);
     content-visibility: auto;
@@ -13613,6 +13330,8 @@ html.no-tab-animations {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .content-overlay-enter,
+  .content-overlay-exit,
   .modal__play-button--press,
   .modal__add-button--press,
   .modal__remove-button--press,
@@ -13730,30 +13449,6 @@ html.no-tab-animations {
     white-space: nowrap;
   }
 
-  &--skeleton,
-  &--skeleton:disabled {
-    cursor: default;
-    opacity: 1;
-  }
-
-  &--skeleton:hover {
-    background: var(--surface-deep);
-  }
-}
-
-.modal__cloud-save-line {
-  display: block;
-  border-radius: var(--radius-sm);
-}
-
-.modal__cloud-save-line--title {
-  width: 150px;
-  height: 14px;
-}
-
-.modal__cloud-save-line--meta {
-  width: 92px;
-  height: 12px;
 }
 
 .backdrop--collection,
@@ -13979,6 +13674,14 @@ html.no-tab-animations {
   min-height: 36px;
   justify-content: flex-start;
   padding: 6px 12px;
+  border-color: var(--border-hover);
+  background: var(--surface-deep);
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--border-hover);
+    background: var(--surface-hover);
+  }
 
   > span {
     flex: 1;
@@ -14494,8 +14197,8 @@ button,
 
   .modal--details {
     min-height: 100%;
-    height: auto;
-    overflow: visible;
+    height: 100%;
+    overflow: hidden;
   }
 
   .catalogue-page__content {
@@ -15031,45 +14734,6 @@ button,
   cursor: default;
 }
 
-/* Backup list skeleton */
-.backup-list__item--skeleton,
-.backup-list__item--skeleton .backup-list__content {
-  cursor: default;
-  pointer-events: none;
-}
-
-.backup-list__placeholder-header {
-  width: 100%;
-  aspect-ratio: 460 / 215;
-  border-radius: var(--radius-sm);
-}
-
-.backup-list__placeholder-copy {
-  gap: 4px;
-}
-
-.backup-list__placeholder-title {
-  display: block;
-  width: min(200px, 60%);
-  height: 14px;
-  border-radius: 3px;
-}
-
-.backup-list__placeholder-meta {
-  display: block;
-  width: min(120px, 40%);
-  height: 12px;
-  border-radius: 3px;
-}
-
-.backup-list__placeholder-chevron {
-  display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
 /* Achievements skeleton – match real list item geometry */
 .game-achievements-page__item--skeleton {
   pointer-events: none;
@@ -15156,13 +14820,6 @@ button,
 
 .notification-group__copy .notifications-feed__skeleton-meta--date {
   width: 128px;
-}
-
-.header__search-skeleton-text {
-  display: block;
-  width: min(200px, 60%);
-  height: 14px;
-  border-radius: 3px;
 }
 
 /* Home page skeletons */
@@ -15443,10 +15100,27 @@ button,
   margin-bottom: 16px;
 }
 
-.backup-page__loading-skeleton {
+.backup-page__loading-state {
   width: 100%;
   align-self: stretch;
   justify-self: stretch;
+}
+
+.backup-page__spinner-state {
+  display: grid;
+  width: 100%;
+  min-height: 280px;
+  place-items: center;
+}
+
+.backup-page__spinner {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-strong);
+  border-radius: var(--radius-pill);
+  animation: spin 0.75s linear infinite;
 }
 
 .backup-page__title-placeholder {

@@ -18,7 +18,6 @@ export interface AppearanceSettings {
   cardSize: "small" | "medium" | "large";
   bannerAutoplay: boolean;
   language: "pt" | "en";
-  disableTabAnimations: boolean;
   reduceAllAnimations: boolean;
   disableBackdropBlur: boolean;
   disableExplorePan: boolean;
@@ -55,7 +54,6 @@ const defaultAppearance: AppearanceSettings = {
   cardSize: "medium",
   bannerAutoplay: true,
   language: "pt",
-  disableTabAnimations: false,
   reduceAllAnimations: false,
   disableBackdropBlur: false,
   disableExplorePan: false,
@@ -84,7 +82,6 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
   }
 
   const appearance = value as Partial<AppearanceSettings> & Record<string, unknown>;
-  const legacyReduceAnimations = appearance.reduceAnimations === true;
   const imagePreloadConcurrency =
     appearance.imagePreloadConcurrency === 2 ||
     appearance.imagePreloadConcurrency === 6
@@ -97,7 +94,6 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     cardSize: appearance.cardSize === "small" || appearance.cardSize === "large" ? appearance.cardSize : "medium",
     bannerAutoplay: appearance.bannerAutoplay !== false,
     language: appearance.language === "en" ? "en" : "pt",
-    disableTabAnimations: appearance.disableTabAnimations === true || legacyReduceAnimations,
     reduceAllAnimations: appearance.reduceAllAnimations === true,
     disableBackdropBlur: appearance.disableBackdropBlur === true,
     disableExplorePan: appearance.disableExplorePan === true,
@@ -194,10 +190,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = appearance.language === "pt" ? "pt-BR" : "en";
   }, [appearance.language]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("no-tab-animations", appearance.disableTabAnimations);
-  }, [appearance.disableTabAnimations]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("no-animations", appearance.reduceAllAnimations);

@@ -133,27 +133,12 @@ export function PageRouter({
     () => new Set<Page>(["home", "catalogue", "library", "favorites"]),
   );
 
-  const [pageEnterState, setPageEnterState] = useState({
-    page,
-    sequence: 0,
-  });
-
-  // Keep-alive mount + enter class must align with `page` before paint.
-  // Adjusting during render (React-supported) avoids a blank/stale frame where
-  // the tab is active but not yet mounted or still missing `page-enter`.
+  // Keep-alive mounting must align with `page` before paint. Adjusting during
+  // render (React-supported) avoids a blank frame for a newly visited page.
   if (!appearance.disablePageKeepAlive && !mountedPages.has(page)) {
     const nextMounted = new Set(mountedPages);
     nextMounted.add(page);
     setMountedPages(nextMounted);
-  }
-
-  // Only tab changes re-trigger enter motion. Overlay open/close keeps base
-  // pages mounted and uses overlay exit/enter instead.
-  if (pageEnterState.page !== page) {
-    setPageEnterState({
-      page,
-      sequence: pageEnterState.sequence + 1,
-    });
   }
 
   useEffect(() => {
@@ -213,7 +198,6 @@ export function PageRouter({
           addingGameId={appData.addingGameId}
           launchingGameId={appData.launchingGameId}
           userCollections={appData.userCollections}
-          profileHistoryGames={appData.profileHistoryGames}
           steamProfile={steamProfile}
           onToggleFavorite={appData.toggleFavoriteGame}
           onAddGame={appData.queueGame}
@@ -428,19 +412,9 @@ export function PageRouter({
         >
           {keepAlivePages.map((targetPage) => {
             const isActive = targetPage === page;
-            const shouldAnimate =
-              !appearance.disableTabAnimations &&
-              !appearance.reduceAllAnimations &&
-              isActive &&
-              !hasOverlay &&
-              pageEnterState.page === targetPage;
-            const enterVariant =
-              pageEnterState.sequence % 2 === 0
-                ? "page-enter--a"
-                : "page-enter--b";
             const wrapperClass = `page page--${targetPage} ${
-              shouldAnimate ? `page-enter ${enterVariant}` : ""
-            } ${isMainPage && isActive ? "page--main-pages page--active" : ""}`;
+              isMainPage && isActive ? "page--main-pages page--active" : ""
+            }`;
 
             return (
               <div

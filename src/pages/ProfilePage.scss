@@ -315,7 +315,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     margin: 0;
-    text-shadow: var(--text-shadow-on-media-soft);
   }
 
   /* Steam level badge — same visual language as sidebar */
@@ -611,6 +610,10 @@
     width: 100%;
     padding: 0 32px;
     overflow: visible;
+  }
+
+  &__tab-panel {
+    width: 100%;
   }
 
   &__overview {
@@ -1150,16 +1153,40 @@
     flex: 0 0 auto;
     min-width: 0;
 
+    &.settings-dropdown--open .settings-dropdown__trigger {
+      border-color: var(--surface-secondary);
+      background: var(--surface-secondary);
+    }
+
     .settings-dropdown__trigger {
       min-height: 32px;
       padding: 0 12px;
+      border-color: var(--surface-secondary);
+      background: transparent;
       font-size: 13px;
+
+      &:hover,
+      &:focus-visible {
+        border-color: var(--surface-secondary);
+        background: var(--surface-secondary);
+      }
     }
 
     .settings-dropdown__menu {
       min-width: 100%;
       right: 0;
       left: auto;
+      border-color: var(--surface-secondary);
+      background: var(--surface-secondary);
+    }
+
+    .settings-dropdown__option {
+      background: transparent;
+
+      &:hover,
+      &:focus-visible {
+        background: var(--surface-primary);
+      }
     }
   }
 
@@ -1192,15 +1219,20 @@
     min-height: 92px;
     padding: 0;
     padding-right: calc(var(--spacing) * 1.5);
-    overflow: hidden;
-    border: 1px solid var(--border);
+    overflow: visible;
+    border: 1px solid var(--surface-secondary);
     border-radius: var(--radius-lg);
     background: transparent;
-    transition: border-color var(--motion-fast) var(--ease);
+    cursor: pointer;
+    outline: 0;
+    transition:
+      border-color var(--motion-fast) var(--ease),
+      background var(--motion-fast) var(--ease);
 
     &:hover,
-    &:focus-within {
-      border-color: var(--border-hover);
+    &:focus-visible {
+      border-color: var(--surface-secondary);
+      background: var(--surface-secondary);
     }
 
     &--with-achievements {
@@ -1274,18 +1306,8 @@
     width: var(--activity-cover-width);
     align-self: center;
     padding: 0;
-    border: 0;
     background: transparent;
-    cursor: pointer;
-
-    &:focus-visible {
-      outline: 0;
-    }
-
-    &:focus-visible .profile-page__activity-game-cover {
-      outline: 1px solid var(--border-hover);
-      outline-offset: -1px;
-    }
+    cursor: inherit;
   }
 
   &__activity-main {
@@ -1299,16 +1321,10 @@
     min-width: 0;
     min-height: 0;
     padding: 12px 0 0;
-    border: 0;
     background: transparent;
     color: inherit;
     text-align: left;
-    cursor: pointer;
-
-    &:hover,
-    &:focus-visible {
-      outline: 0;
-    }
+    cursor: inherit;
   }
 
   &__activity-game-cover {
@@ -1399,19 +1415,10 @@
     flex: 1 1 auto;
     max-width: 320px;
     padding: 0;
-    border: 0;
     background: transparent;
     color: inherit;
-    cursor: pointer;
+    cursor: inherit;
     text-align: left;
-
-    &:disabled {
-      cursor: default;
-    }
-
-    &:focus-visible {
-      outline: 0;
-    }
 
     .profile-page__progress-track {
       width: 100%;
@@ -1471,6 +1478,7 @@
   }
 
   &__activity-icon {
+    position: relative;
     display: grid;
     width: 28px;
     height: 28px;
@@ -1479,25 +1487,89 @@
     border: 0;
     border-radius: 5px;
     background: var(--surface-solid);
-    cursor: pointer;
-    overflow: hidden;
+    cursor: inherit;
+    overflow: visible;
     outline: 1px solid oklch(1 0 0 / 0.1);
     outline-offset: -1px;
     transition: outline-color var(--motion-fast) var(--ease);
 
-    &:hover:not(:disabled),
-    &:focus-visible:not(:disabled) {
+    &:hover {
       outline-color: var(--border-hover);
-    }
-
-    &:disabled {
-      cursor: default;
     }
 
     img {
       width: 100%;
       height: 100%;
+      border-radius: inherit;
       object-fit: cover;
+    }
+
+    &:hover .profile-page__activity-tooltip {
+      opacity: 1;
+      transform: translate(-50%, -4px);
+      visibility: visible;
+    }
+  }
+
+  &__activity-tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    z-index: 5;
+    display: grid;
+    width: max-content;
+    max-width: 240px;
+    gap: 4px;
+    padding: 9px 10px;
+    border: 1px solid var(--surface-secondary);
+    border-radius: var(--radius-lg);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    opacity: 0;
+    pointer-events: none;
+    text-align: left;
+    transform: translate(-50%, 0);
+    transition:
+      opacity var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease),
+      visibility var(--motion-fast) var(--ease);
+    visibility: hidden;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      width: 8px;
+      height: 8px;
+      border-right: 1px solid var(--surface-secondary);
+      border-bottom: 1px solid var(--surface-secondary);
+      background: var(--surface-primary);
+      transform: translate(-50%, -4px) rotate(45deg);
+    }
+
+    strong {
+      overflow: hidden;
+      font-size: 12px;
+      font-weight: var(--weight-semibold);
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span,
+    small {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: var(--weight-muted);
+      line-height: 1.3;
+    }
+
+    span {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
     }
   }
 
@@ -2230,19 +2302,11 @@
     left: 0;
     z-index: 1;
     display: block;
+    width: 28px;
     height: 2px;
     border-radius: var(--radius-pill);
     background: var(--color-text);
     pointer-events: none;
-    transform: translate3d(0, 0, 0);
-    transition:
-      left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-      width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-      opacity var(--motion-fast) var(--ease);
-
-    &--ready {
-      will-change: left, width;
-    }
   }
 
   &__tab {
@@ -2324,6 +2388,15 @@
     transform: none;
     -webkit-font-smoothing: subpixel-antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  &__collection-content {
+    min-height: 360px;
+    contain: layout style;
+  }
+
+  &__tab-panel {
+    min-height: inherit;
   }
 
   &__side-section {

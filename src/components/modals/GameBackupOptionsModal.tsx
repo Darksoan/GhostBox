@@ -386,18 +386,12 @@ export function GameBackupOptionsModal({
             {showCloudPanel && (
               <div className="modal__cloud-save-list" aria-live="polite">
                 {cloudLoading || !cloudStatusReady ? (
-                  Array.from({ length: 3 }, (_, index) => (
-                    <button
-                      key={`cloud-save-loading-${index}`}
-                      type="button"
-                      className="modal__cloud-save-version modal__cloud-save-version--skeleton"
-                      disabled
-                      aria-hidden="true"
-                    >
-                      <strong className="modal__cloud-save-line modal__cloud-save-line--title loading-wave" />
-                      <span className="modal__cloud-save-line modal__cloud-save-line--meta loading-wave" />
-                    </button>
-                  ))
+                  <div className="modal__cloud-save-loading" role="status">
+                    <Loader2 size={15} strokeWidth={2.15} aria-hidden="true" />
+                    <span className="sr-only">
+                      {copy("Carregando backups em nuvem", "Loading cloud backups")}
+                    </span>
+                  </div>
                 ) : cloudSaves.length > 0 ? (
                   cloudSaves.map((save) => (
                     <button

@@ -360,15 +360,10 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
-        disableTabAnimations: {
-          label: "Remover animações de troca de abas",
-          description:
-            "Desativa animações ao navegar entre páginas e seções do app.",
-        },
         reduceAllAnimations: {
           label: "Reduzir animações da interface",
           description:
-            "Remove animações de navegação, pulsos e transições visuais pesadas.",
+            "Remove pulsos e transições visuais pesadas da interface.",
         },
         disableBackdropBlur: {
           label: "Desativar blur/glass",
@@ -876,15 +871,10 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
-        disableTabAnimations: {
-          label: "Remove tab switch animations",
-          description:
-            "Disables animations when navigating between pages and sections.",
-        },
         reduceAllAnimations: {
           label: "Reduce interface animations",
           description:
-            "Removes navigation animations, pulses, and heavier visual transitions.",
+            "Removes pulses and heavier visual transitions from the interface.",
         },
         disableBackdropBlur: {
           label: "Disable blur/glass",

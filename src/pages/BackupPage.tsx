@@ -585,7 +585,7 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
         </ul>
       ) : (
         isCloudSavesLoading ? (
-          <div className="backup-page__empty backup-page__loading-skeleton" role="status">
+          <div className="backup-page__empty backup-page__loading-state" role="status">
             <BackupListLoadingState count={4} />
           </div>
         ) : (

@@ -394,7 +394,7 @@ export function SettingsPage({
   return (
     <section className="settings-page settings-page--tabs" aria-label={t("nav.settings")}>
       <article className={`settings-panel${activeTab.id === "subscription" ? " settings-panel--bare" : ""}`}>
-        <div key={activeTab.id} className="settings-panel__body">
+        <div className="settings-panel__body">
           {options.length > 0 && (
             <div className="settings-options">
               {options.map((option, index) => (
@@ -509,14 +509,6 @@ function buildTabOptions(
 
   if (activeTab.id === "performance") {
     return [
-      {
-        label: t("settings.performance.disableTabAnimations.label"),
-        description: t("settings.performance.disableTabAnimations.description"),
-        control: "toggle" as const,
-        checked: appearance.disableTabAnimations || appearance.reduceAllAnimations,
-        disabled: appearance.reduceAllAnimations,
-        onToggle: (next: boolean) => updateAppearance({ disableTabAnimations: next }),
-      },
       {
         label: t("settings.performance.reduceAllAnimations.label"),
         description: t("settings.performance.reduceAllAnimations.description"),

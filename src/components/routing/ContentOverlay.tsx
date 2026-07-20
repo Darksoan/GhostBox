@@ -85,13 +85,12 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
     openAchievements,
   } = useOverlay();
 
-  const animationsOff =
-    appearance.disableTabAnimations || appearance.reduceAllAnimations;
+  const animationsOff = appearance.reduceAllAnimations;
   const motionClass = animationsOff
     ? ""
     : isGameModalExitPending
-      ? " page-exit"
-      : " page-enter";
+      ? " content-overlay-exit"
+      : "";
 
   if (achievementsView) {
     const achievementsGame = resolveOverlayGame(

@@ -7,6 +7,7 @@ import {
   startTransition,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -108,7 +109,6 @@ function ProfileActivityCard({
   statusLabel,
   t,
   onOpenGame,
-  onOpenGameAchievements,
 }: {
   game: GhostBoxGame;
   displayGame: GhostBoxGame;
@@ -121,7 +121,6 @@ function ProfileActivityCard({
   statusLabel: string | null;
   t: (key: string) => string;
   onOpenGame: (game: GhostBoxGame) => void;
-  onOpenGameAchievements?: (game: GhostBoxGame, achievementId?: string) => void;
 }) {
   const appId = getGameAppId(game);
   const coverSources = useCachedImageSources(gameSteamHeaderFirstSources(game));
@@ -144,20 +143,29 @@ function ProfileActivityCard({
 
   const isPerfect =
     achievementTotal > 0 && achievementUnlocked >= achievementTotal;
+  const openGame = () => onOpenGame(displayGame);
+  const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openGame();
+  };
 
   return (
     <article
       className={`profile-page__activity-card${
         achievementTotal > 0 ? " profile-page__activity-card--with-achievements" : ""
       }${isPerfect ? " profile-page__activity-card--perfect" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-label={displayTitle}
+      onClick={openGame}
+      onKeyDown={handleCardKeyDown}
+      onMouseEnter={preloadActivityCover}
+      onFocus={preloadActivityCover}
     >
-      <button
-        type="button"
+      <span
         className="profile-page__activity-cover-button"
-        onClick={() => onOpenGame(displayGame)}
-        onMouseEnter={preloadActivityCover}
-        onFocus={preloadActivityCover}
-        aria-label={displayTitle}
+        aria-hidden="true"
       >
         <span
           className={`profile-page__activity-game-cover${
@@ -171,14 +179,10 @@ function ProfileActivityCard({
           )}
           aria-hidden="true"
         />
-      </button>
+      </span>
 
-      <button
-        type="button"
+      <span
         className="profile-page__activity-main"
-        onClick={() => onOpenGame(displayGame)}
-        onMouseEnter={preloadActivityCover}
-        onFocus={preloadActivityCover}
       >
         <span className="profile-page__activity-meta">
           <strong>{displayTitle}</strong>
@@ -191,15 +195,12 @@ function ProfileActivityCard({
             <span className="profile-page__activity-status">{statusLabel}</span>
           ) : null}
         </span>
-      </button>
+      </span>
 
       {achievementTotal > 0 ? (
         <div className="profile-page__activity-achievements">
-          <button
-            type="button"
+          <span
             className="profile-page__activity-progress"
-            onClick={() => onOpenGameAchievements?.(displayGame)}
-            disabled={!onOpenGameAchievements}
           >
             <span className="profile-page__activity-progress-label">
               {isPerfect ? (
@@ -231,22 +232,14 @@ function ProfileActivityCard({
             >
               <span style={{ width: `${achievementProgress}%` }} />
             </span>
-          </button>
+          </span>
           {latestAchievements.length > 0 ? (
             <div className="profile-page__activity-icons">
               {latestAchievements.map((achievement) => (
-                <button
+                <span
                   key={achievement.key}
-                  type="button"
                   className="profile-page__activity-icon"
-                  title={achievement.title}
-                  onClick={() =>
-                    onOpenGameAchievements?.(
-                      displayGame,
-                      achievement.achievementId,
-                    )
-                  }
-                  disabled={!onOpenGameAchievements}
+                  aria-label={achievement.title}
                 >
                   <img
                     src={achievement.icon}
@@ -254,7 +247,14 @@ function ProfileActivityCard({
                     loading="lazy"
                     decoding="async"
                   />
-                </button>
+                  <span className="profile-page__activity-tooltip" role="tooltip">
+                    <strong>{achievement.title}</strong>
+                    {achievement.description ? <span>{achievement.description}</span> : null}
+                    {typeof achievement.globalPercent === "number" ? (
+                      <small>{achievement.globalPercent.toFixed(1)}% global</small>
+                    ) : null}
+                  </span>
+                </span>
               ))}
               {overflowCount > 0 ? (
                 <span className="profile-page__activity-icon-more">
@@ -650,7 +650,6 @@ export function ProfilePage({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
   const [renderedGameCount, setRenderedGameCount] = useState(40);
-  const [pulsedTabId, setPulsedTabId] = useState<string | null>(null);
   const [expandedAchievementGameIds, setExpandedAchievementGameIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -1147,9 +1146,6 @@ export function ProfilePage({
   const handleTabClick = useCallback(
     (collectionId: string) => {
       setActiveCollectionId(collectionId);
-      setPulsedTabId(null);
-      requestAnimationFrame(() => setPulsedTabId(collectionId));
-      setTimeout(() => setPulsedTabId((current) => current === collectionId ? null : current), 310);
     },
     [setActiveCollectionId]
   );
@@ -1757,8 +1753,7 @@ export function ProfilePage({
                 <div
                   className={`profile-page__tab-indicator${isTabIndicatorReady ? " profile-page__tab-indicator--ready" : ""}`}
                     style={{
-                      left: tabIndicatorStyle.left,
-                      width: tabIndicatorStyle.width,
+                      transform: `translate3d(${tabIndicatorStyle.left}px, 0, 0)`,
                       opacity: tabIndicatorStyle.width > 0 ? 1 : 0,
                     }}
                 />
@@ -1789,10 +1784,6 @@ export function ProfilePage({
                       className={`profile-page__tab ${
                         activeTabId === collection.id
                           ? "profile-page__tab--active"
-                          : ""
-                      }${
-                        pulsedTabId === collection.id
-                          ? " profile-page__tab--pulse"
                           : ""
                       }`}
                       onClick={() => handleTabClick(collection.id)}
@@ -1843,6 +1834,9 @@ export function ProfilePage({
             </div>
 
           <div className="profile-page__collection-content">
+            <div
+              className="profile-page__tab-panel"
+            >
             {isOverviewActive ? (
               <div
                 className="profile-page__overview"
@@ -1997,7 +1991,6 @@ export function ProfilePage({
                               statusLabel={statusLabel}
                               t={t}
                               onOpenGame={onOpenGame}
-                              onOpenGameAchievements={onOpenGameAchievements}
                             />
                           );
                         }) : (
@@ -2221,6 +2214,7 @@ export function ProfilePage({
                   }
                 />
               )}
+            </div>
             </div>
           </>
 
