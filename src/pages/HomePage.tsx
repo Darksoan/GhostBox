@@ -1762,21 +1762,21 @@ function HomeWishlistCardComponent({
   };
 
   return (
-    <div className="home-wishlist-card">
+    <div
+      className="home-wishlist-card"
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
+    >
       <span className="home-wishlist-card__content">
-        <strong
-          className="home-wishlist-card__title"
-          role="button"
-          tabIndex={0}
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              handleClick();
-            }
-          }}
-        >
+        <strong className="home-wishlist-card__title">
           {recommendedTitle}
         </strong>
         {sourceTitle ? (
@@ -1793,18 +1793,8 @@ function HomeWishlistCardComponent({
         <span
           ref={coverRef}
           className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : ""}`}
-          role="button"
-          tabIndex={0}
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              handleClick();
-            }
-          }}
         >
           {imageSource && (
             <img

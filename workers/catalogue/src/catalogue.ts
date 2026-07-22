@@ -44,6 +44,23 @@ interface GameRow {
 let facetsInFlight: Promise<Facets> | undefined;
 let metaCache: { expiresAt: number; promise: Promise<CatalogueMeta> } | undefined;
 
+type SteamStoreItem = {
+  type?: string;
+  name?: string;
+  steam_appid?: number;
+  required_age?: number | string;
+  is_free?: boolean;
+  header_image?: string;
+  release_date?: { coming_soon?: boolean; date?: string };
+  developers?: string[];
+  publishers?: string[];
+  categories?: Array<{ id?: number; description?: string }>;
+  genres?: Array<{ id?: string; description?: string }>;
+  screenshots?: Array<{ id?: number; path_thumbnail?: string; path_full?: string }>;
+  metacritic?: { score?: number; url?: string };
+  recommendations?: { total?: number };
+};
+
 function stringArray(value: string): string[] {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -132,6 +149,154 @@ export function getCatalogueMeta(db: D1Database): Promise<CatalogueMeta> {
   });
   metaCache = { expiresAt: now + 60_000, promise };
   return promise;
+}
+
+export function invalidateCatalogueMetaCache() {
+  metaCache = undefined;
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function storeDescriptions(values: Array<{ description?: string }> | undefined, limit = Number.MAX_SAFE_INTEGER): string[] {
+  return [...new Set((values ?? [])
+    .map((value) => value.description?.trim() ?? "")
+    .filter(Boolean))]
+    .slice(0, limit);
+}
+
+function textArray(values: string[] | undefined): string[] {
+  return [...new Set((values ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean))];
+}
+
+function releaseYear(date: string): string {
+  const match = date.match(/\b(19|20)\d{2}\b/);
+  return match?.[0] ?? "";
+}
+
+function releaseSort(date: string): number {
+  const timestamp = Date.parse(date);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function listText(values: string[]): string {
+  return values.length ? `\n${values.join("\n")}\n` : "";
+}
+
+async function fetchSteamStoreItem(appId: string): Promise<SteamStoreItem | null> {
+  const url = new URL("https://store.steampowered.com/api/appdetails");
+  url.searchParams.set("appids", appId);
+  url.searchParams.set("cc", "us");
+  url.searchParams.set("l", "english");
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "GhostBox Catalogue Worker",
+    },
+  });
+  if (!response.ok) return null;
+  const payload = await response.json() as Record<string, { success?: boolean; data?: SteamStoreItem }>;
+  const result = payload[appId];
+  if (!result?.success || !result.data?.name?.trim()) return null;
+  return result.data;
+}
+
+export async function ingestSteamApp(db: D1Database, appId: string, origin: string) {
+  if (!/^\d{1,10}$/.test(appId)) return { ok: false, error: "invalid_appid" };
+  const data = await fetchSteamStoreItem(appId);
+  if (!data) return { ok: false, error: "steam_app_not_found" };
+
+  const now = Date.now();
+  const name = data.name!.trim();
+  const releaseDate = data.release_date?.date?.trim() ?? "";
+  const developers = textArray(data.developers);
+  const publishers = textArray(data.publishers);
+  const categories = storeDescriptions(data.categories, 16);
+  const genres = storeDescriptions(data.genres, 8);
+  const screenshots = [...new Set((data.screenshots ?? [])
+    .map((screenshot) => screenshot.path_full?.trim() ?? "")
+    .filter(Boolean))]
+    .slice(0, 8);
+  const tags = genres.length ? genres : categories.slice(0, 12);
+  const recommendations = Math.max(0, Math.trunc(data.recommendations?.total ?? 0));
+  const metacriticScore = Math.max(0, Math.min(100, Math.trunc(data.metacritic?.score ?? 0)));
+  const searchText = normalizeSearchText([
+    appId,
+    name,
+    ...developers,
+    ...publishers,
+    ...genres,
+    ...categories,
+  ].join(" "));
+
+  await db.prepare(`INSERT INTO games (
+      app_id, name, release_date, release_year, release_sort, header_image,
+      developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
+      genres_text, tags_text, updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
+      metacritic_score, recommendations, search_text
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?)
+    ON CONFLICT(app_id) DO UPDATE SET
+      name = excluded.name,
+      release_date = excluded.release_date,
+      release_year = excluded.release_year,
+      release_sort = excluded.release_sort,
+      header_image = excluded.header_image,
+      developers_json = excluded.developers_json,
+      publishers_json = excluded.publishers_json,
+      categories_json = excluded.categories_json,
+      genres_json = excluded.genres_json,
+      screenshots_json = excluded.screenshots_json,
+      tags_json = excluded.tags_json,
+      genres_text = excluded.genres_text,
+      tags_text = excluded.tags_text,
+      updated_at = excluded.updated_at,
+      metacritic_score = excluded.metacritic_score,
+      recommendations = excluded.recommendations,
+      search_text = excluded.search_text`)
+    .bind(
+      appId,
+      name,
+      releaseDate,
+      releaseYear(releaseDate),
+      releaseSort(releaseDate),
+      data.header_image?.trim() ?? "",
+      JSON.stringify(developers),
+      JSON.stringify(publishers),
+      JSON.stringify(categories),
+      JSON.stringify(genres),
+      JSON.stringify(screenshots),
+      JSON.stringify(tags),
+      listText(genres),
+      listText(tags),
+      now,
+      metacriticScore,
+      recommendations,
+      searchText,
+    )
+    .run();
+
+  const total = await db.prepare("SELECT COUNT(*) AS total FROM games").first<{ total: number }>();
+  const updatedAt = new Date(now).toISOString();
+  await db.batch([
+    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('totalGames', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(String(total?.total ?? 0)),
+    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('updatedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(updatedAt),
+  ]);
+  invalidateCatalogueMetaCache();
+
+  const game = await getGame(db, appId, origin);
+  return { ok: true, appId, updatedAt, game };
 }
 
 function validFacets(value: unknown): value is Facets {

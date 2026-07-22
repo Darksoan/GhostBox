@@ -1699,7 +1699,8 @@ pub async fn database_get_games(
     let limit = get_u64(&request, "limit").unwrap_or(20).clamp(1, 500);
     let offset = get_u64(&request, "offset").unwrap_or(0);
 
-    if let Some(query) = get_string(&request, "query") {
+    let query = get_string(&request, "query");
+    if let Some(query) = query.as_ref() {
         url.query_pairs_mut().append_pair("q", &query);
     }
     url.query_pairs_mut()
@@ -1725,7 +1726,9 @@ pub async fn database_get_games(
     append_filter_params(&mut url, &request, "publishers");
     append_filter_params(&mut url, &request, "years");
 
-    let force_refresh = sort.as_deref() == Some("recentlyAdded");
+    // Text searches must see games ingested during this session immediately.
+    // The disk cache remains available as an offline fallback if the request fails.
+    let force_refresh = query.is_some() || sort.as_deref() == Some("recentlyAdded");
     match catalogue_cache::fetch_json_with_cache(&app, url, force_refresh).await {
         Ok((mut value, updated_at, from_cache)) => {
             catalogue_cache::prepare_cached_response(&mut value, updated_at, from_cache);
@@ -1756,7 +1759,9 @@ pub async fn database_get_game_store_details(
     }
 
     let mut game = fetch_remote_game(&app, game_id, api_url)
-        .await?
+        .await
+        .ok()
+        .flatten()
         .unwrap_or_else(|| steam_app_fallback_game(&app_id));
 
     let latest_cached_details = read_cached_steam_store_details(&app, &app_id);
@@ -1804,7 +1809,9 @@ pub async fn database_get_game_achievement_details(
     }
 
     let mut game = fetch_remote_game(&app, game_id, api_url)
-        .await?
+        .await
+        .ok()
+        .flatten()
         .unwrap_or_else(|| steam_app_fallback_game(&app_id));
 
     let (steam_path, _) = crate::resolve_steam_path(&app, None);

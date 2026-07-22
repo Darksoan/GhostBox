@@ -18,7 +18,7 @@ import {
 import { clearCatalogueGamesCache } from "./utils/gameCache";
 import type { SettingsTabId } from "./features/settings/settingsTabsShared";
 import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
-import type { GhostBoxGame } from "./data";
+import { ingestRemoteGameByAppId, type GhostBoxGame } from "./data";
 import "./app.scss";
 
 const PREMIUM_STATUS_REFRESH_MS = 5 * 60 * 1000;
@@ -293,6 +293,19 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     }
   }, [appData.steamProfile?.steamId, appearance.language, showToast, subscriptionPortalFlow]);
 
+  const openGameAndIngestFallback = useCallback((game: GhostBoxGame) => {
+    openGame(game);
+    if (/^\d{1,10}$/.test(game.appId) && !game.databaseAddedAt) {
+      void ingestRemoteGameByAppId(game.appId)
+        .then(() => {
+          clearCatalogueGamesCache();
+          void queryClient.invalidateQueries({ queryKey: ["games"] });
+          void queryClient.invalidateQueries({ queryKey: ["home"] });
+        })
+        .catch(() => undefined);
+    }
+  }, [openGame, queryClient]);
+
   useLayoutEffect(() => {
     restorePendingScroll();
   }, [page, restorePendingScroll]);
@@ -378,13 +391,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             query={shell.query}
             isSearching={shell.isSearchLoading}
             suggestions={shell.headerSearchSuggestions}
+            hasNoSearchResults={shell.hasNoHeaderSearchResults}
+            showAppIdPrompt={shell.shouldShowHeaderAppIdPrompt}
             steamProfile={appData.steamProfile}
             isPremium={isPremium}
             subscriptionPeriodEnd={subscriptionPeriodEnd}
             onQueryChange={shell.handleQueryChange}
             onSelectSuggestion={(game) => {
               clearOverlayForward();
-              openGame(game);
+              openGameAndIngestFallback(game);
             }}
             onBack={handleBack}
             onForward={handleForward}

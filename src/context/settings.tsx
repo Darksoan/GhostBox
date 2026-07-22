@@ -20,7 +20,6 @@ export interface AppearanceSettings {
   language: "pt" | "en";
   reduceAllAnimations: boolean;
   disableBackdropBlur: boolean;
-  disableExplorePan: boolean;
   trailerQuality: "high" | "low";
   trailerAutoplay: boolean;
   preferLowResCovers: boolean;
@@ -56,7 +55,6 @@ const defaultAppearance: AppearanceSettings = {
   language: "pt",
   reduceAllAnimations: false,
   disableBackdropBlur: false,
-  disableExplorePan: false,
   trailerQuality: "high",
   trailerAutoplay: true,
   preferLowResCovers: false,
@@ -96,7 +94,6 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     language: appearance.language === "en" ? "en" : "pt",
     reduceAllAnimations: appearance.reduceAllAnimations === true,
     disableBackdropBlur: appearance.disableBackdropBlur === true,
-    disableExplorePan: appearance.disableExplorePan === true,
     trailerQuality: appearance.trailerQuality === "low" ? "low" : "high",
     trailerAutoplay: appearance.trailerAutoplay ?? appearance.bannerAutoplay ?? true,
     preferLowResCovers: appearance.preferLowResCovers === true,
@@ -198,10 +195,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.classList.toggle("no-backdrop-blur", appearance.disableBackdropBlur);
   }, [appearance.disableBackdropBlur]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("no-explore-pan", appearance.disableExplorePan);
-  }, [appearance.disableExplorePan]);
 
   useEffect(() => {
     setImagePreloadConcurrency(appearance.imagePreloadConcurrency);

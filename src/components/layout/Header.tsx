@@ -7,6 +7,7 @@ import {
   Crown,
   Download,
   Heart,
+  Info,
   LoaderCircle,
   MessageSquareShare,
   Minus,
@@ -49,6 +50,8 @@ interface HeaderProps {
   query: string;
   isSearching: boolean;
   suggestions: GhostBoxGame[];
+  hasNoSearchResults?: boolean;
+  showAppIdPrompt?: boolean;
   allowSearchDropdown?: boolean;
   favoriteGameIds?: Set<string>;
   addedGameAppIds?: Set<string>;
@@ -98,6 +101,8 @@ export const Header = memo(function Header({
   query,
   isSearching,
   suggestions,
+  hasNoSearchResults = false,
+  showAppIdPrompt = false,
   allowSearchDropdown = false,
   favoriteGameIds = new Set(),
   addedGameAppIds = new Set(),
@@ -138,7 +143,7 @@ export const Header = memo(function Header({
     (page !== "catalogue" || allowSearchDropdown) &&
     focused &&
     Boolean(query.trim()) &&
-    (suggestions.length > 0 || isSearching);
+    (suggestions.length > 0 || isSearching || hasNoSearchResults || showAppIdPrompt);
 
   const handleBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
@@ -163,6 +168,18 @@ export const Header = memo(function Header({
     (event: React.ChangeEvent<HTMLInputElement>) =>
       onQueryChange(event.target.value),
     [onQueryChange]
+  );
+
+  const handleSearchKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== "Enter" || isSearching) return;
+      const firstSuggestion = suggestions[0];
+      if (!firstSuggestion) return;
+      event.preventDefault();
+      setFocused(false);
+      onSelectSuggestion(firstSuggestion);
+    },
+    [isSearching, onSelectSuggestion, suggestions]
   );
 
   const refreshUnreadNotifications = useCallback(() => {
@@ -608,6 +625,7 @@ export const Header = memo(function Header({
             <input
               value={query}
               onChange={handleChange}
+              onKeyDown={handleSearchKeyDown}
               onFocus={handleFocus}
               placeholder={t("header.searchPlaceholder")}
             />
@@ -619,45 +637,72 @@ export const Header = memo(function Header({
           {showDropdown && (
             <div className="header__search-dropdown">
               {suggestions.length > 0 ? (
-                <ul className="header__search-dropdown-list">
-                  {suggestions.map((game) => {
-                    const isFavorite = favoriteGameIds.has(game.id);
-                    const isAdded = addedGameAppIds.has(game.appId);
-                    return (
-                      <li key={game.id}>
-                        <button
-                          type="button"
-                          className="header__search-dropdown-item"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onFocus={() => preloadGameModalAssetsThrottled(game)}
-                          onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
-                          onClick={() => {
-                            setFocused(false);
-                            onSelectSuggestion(game);
-                          }}
-                        >
-                          <span>
-                            <HighlightedSearchText
-                              text={game.title}
-                            />
-                          </span>
-                          <div className="header__search-dropdown-item__icons">
-                            {isAdded && (
-                              <Heart
-                                size={14}
-                                fill={isFavorite ? "#d3d3d3" : "none"}
-                                stroke={isFavorite ? "#d3d3d3" : "currentColor"}
+                <>
+                  <ul className="header__search-dropdown-list">
+                    {suggestions.map((game) => {
+                      const isFavorite = favoriteGameIds.has(game.id);
+                      const isAdded = addedGameAppIds.has(game.appId);
+                      return (
+                        <li key={game.id}>
+                          <button
+                            type="button"
+                            className="header__search-dropdown-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onFocus={() => preloadGameModalAssetsThrottled(game)}
+                            onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
+                            onClick={() => {
+                              setFocused(false);
+                              onSelectSuggestion(game);
+                            }}
+                          >
+                            <span>
+                              <HighlightedSearchText
+                                text={game.title}
                               />
-                            )}
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
+                            </span>
+                            <div className="header__search-dropdown-item__icons">
+                              {isAdded && (
+                                <Heart
+                                  size={14}
+                                  fill={isFavorite ? "#d3d3d3" : "none"}
+                                  stroke={isFavorite ? "#d3d3d3" : "currentColor"}
+                                />
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {showAppIdPrompt ? (
+                    <div className="header__search-empty header__search-empty--after-results">
+                      <Info className="header__search-empty-icon" size={16} aria-hidden="true" />
+                      <div className="header__search-empty-content">
+                        <p className="header__search-empty-title">
+                          {t("header.searchNoResultsTitle")}
+                        </p>
+                        <p className="header__search-empty-copy">
+                          {t("header.searchNoResultsAppIdHint")}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : isSearching ? (
                 <div className="header__search-dropdown-loading" role="status">
                   <SearchSuggestionsLoadingState count={6} />
+                </div>
+              ) : (
+                <div className="header__search-empty">
+                  <Info className="header__search-empty-icon" size={16} aria-hidden="true" />
+                  <div className="header__search-empty-content">
+                    <p className="header__search-empty-title">
+                      {t("header.searchNoResultsTitle")}
+                    </p>
+                    <p className="header__search-empty-copy">
+                      {t("header.searchNoResultsAppIdHint")}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

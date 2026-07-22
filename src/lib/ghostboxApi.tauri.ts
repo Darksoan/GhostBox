@@ -641,6 +641,18 @@ export const ghostboxApi = {
     );
   },
 
+  async ingestRemoteGameByAppId(appId: string): Promise<void> {
+    const normalizedAppId = appId.trim();
+    if (!/^\d{1,10}$/.test(normalizedAppId)) return;
+    const response = await fetch(`${getGamesApiUrl()}/games/${normalizedAppId}/ingest`, {
+      method: "POST",
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) {
+      throw new Error(`Remote catalogue ingest failed: ${response.status}`);
+    }
+  },
+
   getGameAchievementDetails(gameId: string): Promise<GhostBoxGame | null> {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_achievement_details",

@@ -1,5 +1,5 @@
 import { cacheControl, cacheKey, canonicalSearchKey, cloudflareCacheControl, searchTtl } from "./cache";
-import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, searchCatalogue } from "./catalogue";
+import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, searchCatalogue } from "./catalogue";
 import { FILTER_NAMES, type Env, type SearchRequest, type Sort } from "./types";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" };
@@ -142,9 +142,17 @@ async function imageProxy(request: Request, appId: string, asset: string, ctx: E
 }
 
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...JSON_HEADERS, "access-control-allow-methods": "GET, OPTIONS" } });
-  if (request.method !== "GET") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "GET, OPTIONS" });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...JSON_HEADERS, "access-control-allow-methods": "GET, POST, OPTIONS" } });
   const url = new URL(request.url);
+
+  const ingestMatch = url.pathname.match(/^\/games\/(\d+)\/ingest$/);
+  if (ingestMatch) {
+    if (request.method !== "POST") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "POST, OPTIONS" });
+    const result = await ingestSteamApp(env.DB, ingestMatch[1], url.origin);
+    return json(result, result.ok ? 200 : 404, { "cache-control": "private, no-store" });
+  }
+
+  if (request.method !== "GET") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "GET, POST, OPTIONS" });
   const image = url.pathname.match(/^\/images\/steam\/apps\/(\d+)\/([^/]+)$/);
   if (image) return imageProxy(request, image[1], image[2], ctx);
 

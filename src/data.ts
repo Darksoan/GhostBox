@@ -177,6 +177,10 @@ export async function loadGameStoreDetails(
   return ghostboxApi.getGameStoreDetails(gameId);
 }
 
+export async function ingestRemoteGameByAppId(appId: string): Promise<void> {
+  return ghostboxApi.ingestRemoteGameByAppId(appId);
+}
+
 export async function loadSteamWishlist(
   steamId: string
 ): Promise<SteamWishlistItem[]> {

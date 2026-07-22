@@ -481,30 +481,6 @@ svg[stroke-width="1.8"] {
   pointer-events: none;
 }
 
-/*
- * Promote GPU layer only while hovered/focused — not on every cover at rest.
- */
-.game-card:hover .game-card__cover::before,
-.game-card:focus-within .game-card__cover::before,
-.home-carousel-card:hover .home-carousel-card__cover::before,
-.home-carousel-card:focus-visible .home-carousel-card__cover::before,
-.home-category-card:hover .home-category-card__cover::before,
-.home-category-card:focus-visible .home-category-card__cover::before,
-.home-calendar-card:hover .home-calendar-card__cover::before,
-.home-calendar-card:focus-visible .home-calendar-card__cover::before,
-.home-wishlist-card:hover .home-wishlist-card__cover::before,
-.home-wishlist-card:focus-within .home-wishlist-card__cover::before,
-.home-recent-card:hover .home-recent-card__cover::before,
-.home-recent-card:focus-visible .home-recent-card__cover::before,
-.home-recent-list__item:hover .home-recent-list__cover::before,
-.home-recent-list__item:focus-visible .home-recent-list__cover::before,
-.home-recent-banner__card:hover .home-recent-banner__cover::before,
-.home-recent-banner__card:focus-visible .home-recent-banner__cover::before,
-.favorites-grid__item:hover .favorites-grid__cover::before,
-.favorites-grid__item:focus-within .favorites-grid__cover::before {
-  will-change: transform, opacity;
-}
-
 .game-card__cover.loading-wave::before {
   top: 0;
   left: 0;
@@ -862,8 +838,7 @@ p {
     flex-direction: column;
     align-items: stretch;
     overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-gutter: stable both-edges;
+    overflow-y: auto;
     background: transparent;
     scroll-behavior: auto;
 
@@ -887,7 +862,7 @@ p {
     }
 
     &--catalogue {
-      overflow-y: scroll;
+      overflow-y: hidden;
     }
 
     &--catalogue .page--main-pages.page--active {
@@ -2436,6 +2411,41 @@ p {
     text-align: center;
   }
 
+  &__search-empty {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
+
+    &--after-results {
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  &__search-empty-icon {
+    margin-top: 1px;
+    color: var(--text-secondary);
+  }
+
+  &__search-empty-content {
+    min-width: 0;
+  }
+
+  &__search-empty-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: var(--weight-semibold);
+  }
+
+  &__search-empty-copy {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: var(--weight-muted);
+    line-height: 1.4;
+  }
+
   &__search-spinner-state {
     display: grid;
     width: 100%;
@@ -3548,9 +3558,13 @@ p {
 .home-calendar-day {
   display: flex;
   flex: 0 0 calc((100% - var(--home-calendar-gap) * 2) / 3);
+  box-sizing: border-box;
   min-width: 0;
   flex-direction: column;
   gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  background: #111111;
   scroll-snap-align: start;
 }
 
@@ -3738,14 +3752,19 @@ p {
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--background);
+  background: #111111;
   /* Default body copy in the card */
   color: var(--text-secondary);
   font-weight: var(--weight-muted);
-  cursor: default;
+  cursor: pointer;
   padding: 8px 0 10px;
   text-align: left;
   isolation: isolate;
+
+  &:focus-visible {
+    outline: 2px solid var(--border-hover);
+    outline-offset: 2px;
+  }
 }
 
 .home-wishlist-card__content {
@@ -3763,7 +3782,7 @@ p {
 .home-wishlist-card__title {
   overflow: hidden;
   color: var(--text-primary);
-  cursor: pointer;
+  cursor: inherit;
   font-size: clamp(15px, 1.35vw, 20px);
   font-weight: var(--weight-semibold);
   letter-spacing: -0.01em;
@@ -4007,11 +4026,12 @@ p {
 
 .home-wishlist-card__tag {
   @include tag-chip;
+  border-color: var(--border-strong);
   color: var(--text-secondary);
   font-weight: var(--weight-muted);
 
   &:hover {
-    color: var(--text-primary);
+    border-color: var(--border-hover);
   }
 }
 
@@ -4068,48 +4088,6 @@ p {
 .home-wishlist-card__screenshot:hover,
 .home-wishlist-card__screenshot:focus-visible {
   z-index: 1;
-}
-
-.game-card:hover .game-card__cover,
-.game-card:focus-within .game-card__cover,
-.favorites-grid__item:hover .favorites-grid__cover,
-.favorites-grid__item:focus-within .favorites-grid__cover,
-.home-carousel-card:hover .home-carousel-card__cover,
-.home-carousel-card:focus-visible .home-carousel-card__cover,
-.home-category-card:hover .home-category-card__cover,
-.home-category-card:focus-visible .home-category-card__cover,
-.home-wishlist-card:hover .home-wishlist-card__cover,
-.home-wishlist-card:focus-within .home-wishlist-card__cover,
-.home-recent-card:hover .home-recent-card__cover,
-.home-recent-card:focus-visible .home-recent-card__cover,
-.home-recent-list__item:hover .home-recent-list__cover,
-.home-recent-list__item:focus-visible .home-recent-list__cover,
-.home-recent-banner__card:hover .home-recent-banner__cover,
-.home-recent-banner__card:focus-visible .home-recent-banner__cover,
-.home-calendar-card:hover .home-calendar-card__cover,
-.home-calendar-card:focus-visible .home-calendar-card__cover {
-  --pb-cover-zoom-opacity: 1;
-}
-
-.game-card:hover .game-card__cover::before,
-.game-card:focus-within .game-card__cover::before,
-.favorites-grid__item:hover .favorites-grid__cover::before,
-.favorites-grid__item:focus-within .favorites-grid__cover::before,
-.home-carousel-card:hover .home-carousel-card__cover::before,
-.home-carousel-card:focus-visible .home-carousel-card__cover::before,
-.home-category-card:hover .home-category-card__cover::before,
-.home-category-card:focus-visible .home-category-card__cover::before,
-.home-wishlist-card:hover .home-wishlist-card__cover::before,
-.home-wishlist-card:focus-within .home-wishlist-card__cover::before,
-.home-recent-card:hover .home-recent-card__cover::before,
-.home-recent-card:focus-visible .home-recent-card__cover::before,
-.home-recent-list__item:hover .home-recent-list__cover::before,
-.home-recent-list__item:focus-visible .home-recent-list__cover::before,
-.home-recent-banner__card:hover .home-recent-banner__cover::before,
-.home-recent-banner__card:focus-visible .home-recent-banner__cover::before,
-.home-calendar-card:hover .home-calendar-card__cover::before,
-.home-calendar-card:focus-visible .home-calendar-card__cover::before {
-  transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-hover-scale));
 }
 
 .home-wishlist-card__text-skeleton {
@@ -7897,6 +7875,7 @@ input[type="search"]::-ms-reveal {
 .catalogue-list__genre-chip {
   flex: 0 0 auto;
   @include tag-chip;
+  border-color: var(--border-strong);
   // Chips sit inside the clickable card row; keep the card's cursor so it
   // doesn't flip to the default arrow when hovering a pill.
   cursor: inherit;
@@ -7905,7 +7884,7 @@ input[type="search"]::-ms-reveal {
 .catalogue-list__item:hover .catalogue-list__genre-chip,
 .catalogue-list__item:focus-within .catalogue-list__genre-chip,
 .catalogue-list__item--hovered .catalogue-list__genre-chip {
-  border-color: var(--border);
+  border-color: var(--border-hover);
 }
 
 .catalogue-list__actions {
@@ -9611,16 +9590,6 @@ input[type="search"]::-ms-reveal {
     }
   }
 
-  &:hover &__cover,
-  &:focus-within &__cover {
-    --pb-cover-zoom-opacity: 1;
-  }
-
-  &:hover &__cover::before,
-  &:focus-within &__cover::before {
-    transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-hover-scale));
-  }
-
   &:hover,
   &:focus-within {
     .game-card__achievement-progress-track {
@@ -10208,6 +10177,8 @@ input[type="search"]::-ms-reveal {
   }
 }
 
+@include pb-disable-cover-zoom;
+
 html.no-animations {
   --pb-cover-hover-scale: var(--pb-cover-rest-scale);
   --pb-cover-zoom-opacity: 0;
@@ -10273,12 +10244,6 @@ html.no-animations {
   }
 
   .modal__reviews-list {
-    animation: none;
-  }
-}
-
-html.no-explore-pan {
-  .home-explore-card__image-row {
     animation: none;
   }
 }

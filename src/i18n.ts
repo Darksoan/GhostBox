@@ -22,6 +22,11 @@ const translations: Record<Language, TranslationTree> = {
       forward: "Avançar",
       searchPlaceholder: "Buscar jogos",
       searching: "Buscando...",
+      searchNoResultsTitle: "Não achou o que queria?",
+      searchNoResultsAppIdHint: "Tente adicionar pelo APPID da Steam",
+      searchAddAppId: "Adicionar APPID {appId}",
+      searchAddingAppId: "Adicionando...",
+      searchInvalidAppId: "APPID inválido.",
       home: "Início",
       catalogue: "Catálogo",
       library: "Biblioteca",
@@ -370,11 +375,6 @@ const translations: Record<Language, TranslationTree> = {
           description:
             "Remove o desfoque de fundo dos efeitos de vidro para reduzir o custo de renderização.",
         },
-        disableExplorePan: {
-          label: "Desativar pan do Explore",
-          description:
-            "Desativa o movimento das capas ao passar o mouse ou focar os cards do Explore.",
-        },
         trailerQuality: {
           label: "Qualidade de trailer",
           description:
@@ -536,6 +536,11 @@ const translations: Record<Language, TranslationTree> = {
       forward: "Forward",
       searchPlaceholder: "Search games",
       searching: "Searching...",
+      searchNoResultsTitle: "Didn't find what you were looking for?",
+      searchNoResultsAppIdHint: "Try adding by Steam APPID",
+      searchAddAppId: "Add APPID {appId}",
+      searchAddingAppId: "Adding...",
+      searchInvalidAppId: "Invalid APPID.",
       home: "Home",
       catalogue: "Catalogue",
       library: "Library",
@@ -880,11 +885,6 @@ const translations: Record<Language, TranslationTree> = {
           label: "Disable blur/glass",
           description:
             "Removes background blur from glass effects to reduce rendering cost.",
-        },
-        disableExplorePan: {
-          label: "Disable Explore pan",
-          description:
-            "Disables cover movement when hovering or focusing Home Explore cards.",
         },
         trailerQuality: {
           label: "Trailer quality",

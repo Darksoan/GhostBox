@@ -524,13 +524,6 @@ function buildTabOptions(
         onToggle: (next: boolean) => updateAppearance({ disableBackdropBlur: next }),
       },
       {
-        label: t("settings.performance.disableExplorePan.label"),
-        description: t("settings.performance.disableExplorePan.description"),
-        control: "toggle" as const,
-        checked: appearance.disableExplorePan,
-        onToggle: (next: boolean) => updateAppearance({ disableExplorePan: next }),
-      },
-      {
         label: t("settings.performance.trailerQuality.label"),
         description: t("settings.performance.trailerQuality.description"),
         control: "select" as const,
