@@ -981,7 +981,7 @@ export function GameModal({
     <>
       {displayGame && (
         <div
-          className="backdrop backdrop--details"
+          className={`backdrop backdrop--details${appearance.reduceAllAnimations ? "" : " content-overlay-enter"}`}
           key={displayGame.id}
           onClick={onClose}
         >

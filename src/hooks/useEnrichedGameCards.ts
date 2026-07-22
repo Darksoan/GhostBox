@@ -3,18 +3,26 @@ import type { GhostBoxGame } from "../data";
 import {
   loadGameAchievementDetailsCached,
   loadGameStoreDetailsCached,
+  normalizeGameCacheId,
 } from "../utils/gameCache";
 import { mergeGameCardData } from "../utils/gameCardData";
 
-export function useEnrichedGameCards(games: GhostBoxGame[], limit = 80) {
+export function useEnrichedGameCards(
+  games: GhostBoxGame[],
+  limit = 80,
+  enabled = true,
+) {
   const requestedKeysRef = useRef(new Set<string>());
   const [detailsByAppId, setDetailsByAppId] = useState(
     () => new Map<string, GhostBoxGame>()
   );
-  const gamesKey = games.map((game) => game.id).join("|");
+  const gamesKey = games.map((game) => normalizeGameCacheId(game)).join("|");
 
   useEffect(() => {
+    if (!enabled) return;
+
     let cancelled = false;
+    const outstandingKeys = new Set<string>();
     // Buffer incoming detail resolutions and flush them into state once per
     // animation frame, so a burst of resolved promises produces a single
     // re-render instead of one per resolution.
@@ -45,30 +53,40 @@ export function useEnrichedGameCards(games: GhostBoxGame[], limit = 80) {
     };
 
     games.slice(0, limit).forEach((game) => {
-      const storeKey = `${game.id}:store`;
+      const gameKey = normalizeGameCacheId(game);
+      if (!gameKey) return;
+
+      const storeKey = `${gameKey}:store`;
       if (!requestedKeysRef.current.has(storeKey)) {
         requestedKeysRef.current.add(storeKey);
-        loadGameStoreDetailsCached(game.id)
+        outstandingKeys.add(storeKey);
+        loadGameStoreDetailsCached(gameKey)
           .then((details) => mergeDetails(game, details))
-          .catch(() => undefined);
+          .catch(() => undefined)
+          .finally(() => outstandingKeys.delete(storeKey));
       }
 
-      const achievementKey = `${game.id}:achievements`;
+      const achievementKey = `${gameKey}:achievements`;
       if (!requestedKeysRef.current.has(achievementKey)) {
         requestedKeysRef.current.add(achievementKey);
-        loadGameAchievementDetailsCached(game.id)
+        outstandingKeys.add(achievementKey);
+        loadGameAchievementDetailsCached(gameKey)
           .then((details) => mergeDetails(game, details))
-          .catch(() => undefined);
+          .catch(() => undefined)
+          .finally(() => outstandingKeys.delete(achievementKey));
       }
     });
 
     return () => {
       cancelled = true;
+      for (const key of outstandingKeys) {
+        requestedKeysRef.current.delete(key);
+      }
       if (frame !== null) {
         cancelAnimationFrame(frame);
       }
     };
-  }, [gamesKey, games, limit]);
+  }, [enabled, gamesKey, games, limit]);
 
   return useMemo(
     () =>

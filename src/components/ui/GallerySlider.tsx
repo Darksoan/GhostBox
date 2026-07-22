@@ -157,34 +157,49 @@ export function GallerySlider({
     <div className="gallery-slider__container">
       <div className="gallery-slider__viewport" ref={viewportRef}>
         <div className="gallery-slider__container-inner">
-          {mediaItems.map((item, index) => (
-            <div
-              key={item.id}
-              className={`gallery-slider__slide ${index === selectedIndex ? "gallery-slider__slide--active" : ""}`}
-            >
-              {item.type === "video" ? (
-                <VideoPlayer
-                  videoSrc={item.videoSrc!}
-                  videoType={item.videoType}
-                  poster={item.poster}
-                  autoplay={index === selectedIndex && appearance.trailerAutoplay}
-                  loop
-                  muted
-                  controls
-                  className="gallery-slider__media"
-                  tabIndex={-1}
-                />
-              ) : (
-                <img
-                  className="gallery-slider__media"
-                  src={item.src}
-                  alt={item.alt}
-                  loading={index === selectedIndex ? "eager" : "lazy"}
-                  decoding="async"
-                />
-              )}
-            </div>
-          ))}
+          {mediaItems.map((item, index) => {
+            const isSelected = index === selectedIndex;
+            const shouldRenderImage = Math.abs(index - selectedIndex) <= 1;
+
+            return (
+              <div
+                key={item.id}
+                className={`gallery-slider__slide ${isSelected ? "gallery-slider__slide--active" : ""}`}
+              >
+                {item.type === "video" ? (
+                  isSelected ? (
+                    <VideoPlayer
+                      videoSrc={item.videoSrc!}
+                      videoType={item.videoType}
+                      poster={item.poster}
+                      autoplay={appearance.trailerAutoplay}
+                      loop
+                      muted
+                      controls
+                      className="gallery-slider__media"
+                      tabIndex={-1}
+                    />
+                  ) : (
+                    <img
+                      className="gallery-slider__media"
+                      src={item.poster}
+                      alt={item.alt}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )
+                ) : shouldRenderImage ? (
+                  <img
+                    className="gallery-slider__media"
+                    src={item.src}
+                    alt={item.alt}
+                    loading={isSelected ? "eager" : "lazy"}
+                    decoding="async"
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
 
         {mediaItems.length > 1 && (

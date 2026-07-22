@@ -1,11 +1,13 @@
-use crate::catalogue::fetch_remote_game;
 use crate::ghostbox_library;
 use crate::ludusavi::resolved_game_title;
 use crate::util::{text_value, EmptyVecExt};
 use crate::{extract_app_id, resolve_steam_path, save_steam_path, steam_asset_url};
+use std::time::Duration;
 
 const LUA_TOOLS_USER_AGENT: &str = "discord(dot)gg/luatools";
 const MAX_LUA_TOOLS_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
+const LUA_TOOLS_CONNECT_TIMEOUT_SECS: u64 = 5;
+const LUA_TOOLS_REQUEST_TIMEOUT_SECS: u64 = 12;
 
 struct LuaToolsApi {
     name: &'static str,
@@ -16,8 +18,8 @@ struct LuaToolsApi {
 
 const DEFAULT_LUA_TOOLS_APIS: &[LuaToolsApi] = &[
     LuaToolsApi {
-        name: "TwentyTwo Cloud",
-        url: "https://api.twentytwocloud.com/download?appid=<appid>",
+        name: "Ryuu",
+        url: "http://167.235.229.108/<appid>",
         success_code: 200,
         unavailable_code: 404,
     },
@@ -43,7 +45,11 @@ fn validate_lua_tools_url(url: &str) -> bool {
 }
 
 async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(LUA_TOOLS_CONNECT_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(LUA_TOOLS_REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| error.to_string())?;
     let mut errors = Vec::new();
 
     for api in DEFAULT_LUA_TOOLS_APIS {
@@ -62,10 +68,15 @@ async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), S
             Ok(response) => {
                 let status = response.status().as_u16();
                 if status == api.unavailable_code {
+                    errors.push(format!("{}: jogo indisponível", api.name));
                     continue;
                 }
                 if status != api.success_code {
-                    errors.push(format!("{}: HTTP {status}", api.name));
+                    if matches!(status, 522 | 523 | 524) {
+                        errors.push(format!("{}: serviço indisponível (HTTP {status})", api.name));
+                    } else {
+                        errors.push(format!("{}: HTTP {status}", api.name));
+                    }
                     continue;
                 }
 
@@ -81,7 +92,13 @@ async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), S
 
                 return Ok((api.name.to_string(), bytes.to_vec()));
             }
-            Err(error) => errors.push(format!("{}: {error}", api.name)),
+            Err(error) => {
+                if error.is_timeout() {
+                    errors.push(format!("{}: tempo limite excedido", api.name));
+                } else {
+                    errors.push(format!("{}: {error}", api.name));
+                }
+            }
         }
     }
 
@@ -244,19 +261,14 @@ fn remove_lua_tools_manifest_files(steam_path: &str, manifest_files: &[String]) 
     removed
 }
 
-async fn library_game_from_luatools_add(
-    app: &tauri::AppHandle,
+fn library_game_from_luatools_add(
     app_id: &str,
     input: &serde_json::Value,
+    title: &str,
 ) -> serde_json::Value {
-    if let Ok(Some(remote_game)) = fetch_remote_game(app, app_id.to_string(), None).await {
-        return remote_game;
-    }
-
-    let title = resolved_game_title(app, input, app_id);
     let cover_url = steam_asset_url(app_id, "header.jpg");
     let hero_url = steam_asset_url(app_id, "library_hero.jpg");
-    serde_json::json!({
+    let mut library_game = serde_json::json!({
         "appId": app_id,
         "id": format!("steam-{app_id}"),
         "title": title,
@@ -282,7 +294,25 @@ async fn library_game_from_luatools_add(
         "screenshots": [hero_url],
         "achievements": { "unlocked": 0, "total": 0, "progress": 0 },
         "achievementList": []
-    })
+    });
+
+    if let Some(input_object) = input.as_object() {
+        for (key, value) in input_object {
+            if !value.is_null() {
+                library_game[key] = value.clone();
+            }
+        }
+    }
+
+    library_game["appId"] = serde_json::json!(app_id);
+    if text_value(library_game.get("id")).is_empty() {
+        library_game["id"] = serde_json::json!(format!("steam-{app_id}"));
+    }
+    if text_value(library_game.get("title")).is_empty() {
+        library_game["title"] = serde_json::json!(title);
+    }
+
+    library_game
 }
 
 #[tauri::command]
@@ -316,7 +346,6 @@ pub async fn luatools_add_game(
         }));
     };
 
-    let mut library_game = library_game_from_luatools_add(&app, &app_id, &game).await;
     let (api_name, zip_bytes) = match download_lua_tools_package(&app_id).await {
         Ok(result) => result,
         Err(error) => {
@@ -326,6 +355,7 @@ pub async fn luatools_add_game(
             }));
         }
     };
+    let mut library_game = library_game_from_luatools_add(&app_id, &game, &title);
 
     match install_lua_tools_package(&app_id, &zip_bytes, &steam_path) {
         Ok((installed_path, manifest_count, manifest_files)) => {

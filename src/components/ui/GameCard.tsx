@@ -118,7 +118,7 @@ export const GameCard = memo(function GameCard({
     playtimeInMilliseconds > 0
       ? formatCompactPlaytime(playtimeInMilliseconds)
       : "0h";
-  const showAchievementBadges = showAchievements && achievementTotal > 0;
+  const showAchievementBadges = showAchievements;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     if (onContextMenu) {

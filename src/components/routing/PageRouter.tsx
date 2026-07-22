@@ -12,6 +12,7 @@ import { CollectionModal } from "../modals/CollectionModal";
 import { SteamPathModal } from "../modals/SteamPathModal";
 import { SubscriptionModal } from "../modals/SubscriptionModal";
 import { markPageLoaded } from "../../utils/loadedPages";
+import { preloadGameModalModule } from "../../utils/gameModalLoader";
 
 const LazyHomePage = lazy(() =>
   import("../../pages/HomePage").then((m) => {
@@ -76,14 +77,25 @@ const KEEP_ALIVE_PAGES: Page[] = [
 ];
 
 const PREFETCH_DELAYS_MS: Record<Page, number> = {
-  home: 0,
-  catalogue: 0,
-  library: 200,
-  backup: 300,
-  favorites: 200,
-  settings: 400,
-  profile: 300,
-  notifications: 400,
+  home: 1_800,
+  catalogue: 1_800,
+  library: 2_200,
+  backup: 3_200,
+  favorites: 2_200,
+  settings: 3_200,
+  profile: 3_600,
+  notifications: 3_200,
+};
+
+const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
+  home: () => import("../../pages/HomePage"),
+  catalogue: () => import("../../pages/CataloguePage"),
+  library: () => import("../../pages/LibraryPage"),
+  backup: () => import("../../pages/BackupPage"),
+  favorites: () => import("../../pages/FavoritesPage"),
+  settings: () => import("../../pages/SettingsPage"),
+  profile: loadProfilePage,
+  notifications: () => import("../../pages/NotificationsPage"),
 };
 
 interface PageRouterProps {
@@ -130,7 +142,7 @@ export function PageRouter({
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
 
   const [mountedPages, setMountedPages] = useState<Set<Page>>(
-    () => new Set<Page>(["home", "catalogue", "library", "favorites"]),
+    () => new Set<Page>([page]),
   );
 
   // Keep-alive mounting must align with `page` before paint. Adjusting during
@@ -142,6 +154,8 @@ export function PageRouter({
   }
 
   useEffect(() => {
+    const timeoutHandles: number[] = [];
+    const idleHandles: number[] = [];
     const schedule = (delay: number, loader: () => Promise<unknown>) => {
       const run = () => {
         const exec = () => void loader();
@@ -149,42 +163,36 @@ export function PageRouter({
           exec();
           return;
         }
-        window.setTimeout(exec, delay);
+        timeoutHandles.push(window.setTimeout(exec, delay));
       };
 
-      const ric =
-        (
-          window as unknown as {
-            requestIdleCallback?: (cb: () => void) => number;
-          }
-        ).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1));
-      ric(run);
+      const ric = (window as unknown as {
+        requestIdleCallback?: (cb: () => void) => number;
+      }).requestIdleCallback;
+      if (!ric) {
+        timeoutHandles.push(window.setTimeout(run, 1));
+        return;
+      }
+
+      const idleHandle = ric(run);
+      idleHandles.push(idleHandle);
     };
 
-    schedule(PREFETCH_DELAYS_MS.home, () => import("../../pages/HomePage"));
-    schedule(
-      PREFETCH_DELAYS_MS.catalogue,
-      () => import("../../pages/CataloguePage"),
-    );
-    schedule(
-      PREFETCH_DELAYS_MS.library,
-      () => import("../../pages/LibraryPage"),
-    );
-    schedule(PREFETCH_DELAYS_MS.backup, () => import("../../pages/BackupPage"));
-    schedule(
-      PREFETCH_DELAYS_MS.favorites,
-      () => import("../../pages/FavoritesPage"),
-    );
-    schedule(
-      PREFETCH_DELAYS_MS.settings,
-      () => import("../../pages/SettingsPage"),
-    );
-    schedule(PREFETCH_DELAYS_MS.profile, loadProfilePage);
-    schedule(
-      PREFETCH_DELAYS_MS.notifications,
-      () => import("../../pages/NotificationsPage"),
-    );
-  }, []);
+    schedule(1_200, async () => preloadGameModalModule());
+
+    KEEP_ALIVE_PAGES.forEach((targetPage) => {
+      if (targetPage === page) return;
+      schedule(PREFETCH_DELAYS_MS[targetPage], PAGE_LOADERS[targetPage]);
+    });
+
+    return () => {
+      timeoutHandles.forEach((handle) => window.clearTimeout(handle));
+      const cancelIdleCallback = (window as unknown as {
+        cancelIdleCallback?: (handle: number) => void;
+      }).cancelIdleCallback;
+      idleHandles.forEach((handle) => cancelIdleCallback?.(handle));
+    };
+  }, [page]);
 
   function renderPage(targetPage: Page): ReactNode {
     if (targetPage === "home") {
@@ -290,6 +298,7 @@ export function PageRouter({
           onAddGameToCollection={appData.addGameToUserCollection}
           backupSettings={appData.backupSettings}
           activeSessionAppIds={appData.activeSessionAppIds}
+          isActive={targetPage === page}
         />
       );
     }
@@ -312,6 +321,7 @@ export function PageRouter({
           onRemoveGame={appData.removeQueuedGame}
           onAddGameToCollection={appData.addGameToUserCollection}
           onRemoveGameFromCollection={appData.removeGameFromCollection}
+          isActive={targetPage === page}
         />
       );
     }

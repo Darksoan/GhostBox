@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import { Clock } from "lucide-react";
 import { Cup } from "reicon-react";
@@ -142,6 +142,7 @@ interface FavoritesPageProps {
   onRemoveGame?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
+  isActive?: boolean;
 }
 
 export function FavoritesPage({
@@ -161,6 +162,7 @@ export function FavoritesPage({
   onRemoveGame,
   onAddGameToCollection,
   onRemoveGameFromCollection,
+  isActive = true,
 }: FavoritesPageProps) {
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
@@ -187,7 +189,14 @@ export function FavoritesPage({
     onRemoveGameFromCollection,
   });
 
+  const handleGameContextMenu = useCallback(
+    (game: GhostBoxGame, x: number, y: number) => setContextMenu({ game, x, y }),
+    [],
+  );
+
   useEffect(() => {
+    if (!isActive) return;
+
     preloadGameListAssets(games, {
       variant: "portrait",
       limit: 12,
@@ -195,7 +204,7 @@ export function FavoritesPage({
       details: true,
       detailsLimit: 8,
     });
-  }, [games]);
+  }, [games, isActive]);
 
   if (!games.length) {
     return (
@@ -213,7 +222,7 @@ export function FavoritesPage({
             key={game.id}
             game={game}
             onOpenGame={onOpenGame}
-            onContextMenu={(game, x, y) => setContextMenu({ game, x, y })}
+            onContextMenu={handleGameContextMenu}
           />
         ))}
       </div>

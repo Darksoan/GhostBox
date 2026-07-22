@@ -1,22 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export function useCollapsiblePanelHeight() {
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelHeight, setPanelHeight] = useState(0);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const panel = panelRef.current;
-      if (!panel) return;
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
 
-      const nextHeight = panel.scrollHeight;
-      setPanelHeight((currentHeight) =>
-        currentHeight === nextHeight ? currentHeight : nextHeight
-      );
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  });
+    const nextHeight = panel.scrollHeight;
+    setPanelHeight((currentHeight) =>
+      currentHeight === nextHeight ? currentHeight : nextHeight
+    );
+  }, []);
 
   useEffect(() => {
     const panel = panelRef.current;

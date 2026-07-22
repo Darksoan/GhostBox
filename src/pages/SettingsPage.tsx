@@ -64,7 +64,6 @@ type DraftsState = Partial<Record<SettingsTabId, Record<string, DraftValue>>>;
 
 const downloadApiSources = [
   { name: "Ryuu", typeKey: "settings.download.sources.auto", url: "https://discord.com/invite/manifests" },
-  { name: "TwentyTwo Cloud", typeKey: "settings.download.sources.auto", url: "https://discord.com/invite/twentytwocloud" },
   { name: "Sushi", typeKey: "settings.download.sources.auto", url: "https://discord.com/invite/J5JMUBYyZK" },
 ];
 

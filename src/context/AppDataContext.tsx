@@ -1264,20 +1264,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const steamPlaytimeEntry = gamePlaytimesRef.current[game.appId] as
           (GamePlaytimeSnapshot[string] & { source?: string }) | undefined;
         const isKnownSteamOwnedGame = steamPlaytimeEntry?.source === "steam";
+        const steamOwnedPlaytimes =
+          steamAccountStatsRef.current?.ownedPlaytimes ?? [];
         const isSteamOwnedGame =
           isKnownSteamOwnedGame ||
-          Boolean(
-            steamProfile?.steamId &&
-            (await ghostboxApi
-              .getSteamAccountStats(steamProfile.steamId)
-              .then(
-                (stats) =>
-                  stats?.ownedPlaytimes?.some(
-                    (playtime) => playtime.appId === game.appId,
-                  ) ?? false,
-              )
-              .catch(() => false)),
-          );
+          steamOwnedPlaytimes.some((playtime) => playtime.appId === game.appId);
 
         const result = isSteamOwnedGame
           ? await registerSteamLibraryGame(game)
@@ -1330,7 +1321,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       mergeGamePlaytime,
       removingGameId,
       showToast,
-      steamProfile?.steamId,
     ],
   );
 

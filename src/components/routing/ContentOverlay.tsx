@@ -7,6 +7,7 @@ import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
+import { loadGameModalModule } from "../../utils/gameModalLoader";
 
 function matchesSelectedGame(candidate: GhostBoxGame, selected: GhostBoxGame) {
   if (candidate.id === selected.id) return true;
@@ -59,7 +60,7 @@ function resolveOverlayGame(
 }
 
 const LazyGameModal = lazy(() =>
-  import("../modals/GameModal").then((module) => ({
+  loadGameModalModule().then((module) => ({
     default: module.GameModal,
   }))
 );
@@ -141,7 +142,9 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
         key={`game-modal-${selectedGame.id}`}
         aria-hidden={isGameModalExitPending}
       >
-        <Suspense fallback={<PagePlaceholder page={page} />}>
+        <Suspense
+          fallback={<div className="game-modal-loading-shell" aria-hidden="true" />}
+        >
           <LazyGameModal
             game={mergedGame}
             isAdding={

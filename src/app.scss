@@ -983,6 +983,14 @@ p {
   }
 }
 
+.game-modal-loading-shell {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+  background: var(--background-dark);
+  contain: strict;
+}
+
 @keyframes content-overlay-fade-out {
   from {
     opacity: 1;

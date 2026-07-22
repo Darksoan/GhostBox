@@ -43,6 +43,22 @@ export const gameReviewsRequestCache = new Map<
 const queuedGameDetailsPreloadIds = new Set<string>();
 export let hasLoadedCatalogueGlobally = false;
 
+export function normalizeGameCacheId(
+  gameOrId: string | Pick<GhostBoxGame, "id" | "appId"> | null | undefined,
+) {
+  const appId =
+    typeof gameOrId === "string" ? "" : gameOrId?.appId?.trim() ?? "";
+  if (/^\d+$/.test(appId)) return appId;
+
+  const rawId =
+    (typeof gameOrId === "string" ? gameOrId : gameOrId?.id ?? "").trim();
+  const steamId = rawId.match(/^steam-(\d+)$/i)?.[1];
+  if (steamId) return steamId;
+  if (/^\d+$/.test(rawId)) return rawId;
+
+  return rawId;
+}
+
 export function setHasLoadedCatalogueGlobally(value: boolean) {
   hasLoadedCatalogueGlobally = value;
 }
@@ -121,19 +137,21 @@ function loadCachedGameRequest(
   loader: (gameId: string) => Promise<GhostBoxGame | null>,
   options?: { cacheEmpty?: boolean }
 ) {
-  if (cache.has(gameId)) {
-    return Promise.resolve(cache.get(gameId) ?? null);
+  const cacheKey = normalizeGameCacheId(gameId);
+
+  if (cache.has(cacheKey)) {
+    return Promise.resolve(cache.get(cacheKey) ?? null);
   }
 
-  const pending = requestCache.get(gameId);
+  const pending = requestCache.get(cacheKey);
   if (pending) return pending;
 
   const cacheEmpty = options?.cacheEmpty !== false;
 
-  const request = loader(gameId)
+  const request = loader(cacheKey)
     .then((game) => {
       if (cacheEmpty) {
-        cache.set(gameId, game);
+        cache.set(cacheKey, game);
       } else {
         // Achievement loads: only pin successful non-empty lists so a failed
         // first attempt does not stick for the whole session.
@@ -141,16 +159,16 @@ function loadCachedGameRequest(
           (game?.achievementList?.length ?? 0) > 0 ||
           (game?.achievements?.total ?? 0) > 0;
         if (game && hasAchievements) {
-          cache.set(gameId, game);
+          cache.set(cacheKey, game);
         }
       }
       return game;
     })
     .finally(() => {
-      requestCache.delete(gameId);
+      requestCache.delete(cacheKey);
     });
 
-  requestCache.set(gameId, request);
+  requestCache.set(cacheKey, request);
 
   return request;
 }
@@ -188,7 +206,8 @@ export function loadGameReviewsCached(
   language: "all" | "brazilian" | "english",
   reviewType: "all" | "positive" | "negative" = "all"
 ) {
-  const cacheKey = `${gameId}:${language}:${reviewType}`;
+  const normalizedGameId = normalizeGameCacheId(gameId);
+  const cacheKey = `${normalizedGameId}:${language}:${reviewType}`;
   if (gameReviewsCache.has(cacheKey)) {
     return Promise.resolve(gameReviewsCache.get(cacheKey) ?? { success: 0, reviews: [] });
   }
@@ -196,7 +215,7 @@ export function loadGameReviewsCached(
   const pending = gameReviewsRequestCache.get(cacheKey);
   if (pending) return pending;
 
-  const request = loadGameReviews(gameId, language, reviewType)
+  const request = loadGameReviews(normalizedGameId, language, reviewType)
     .then((result) => {
       if (result.success === 1) {
         gameReviewsCache.set(cacheKey, result);
@@ -212,25 +231,27 @@ export function loadGameReviewsCached(
 }
 
 export function preloadGameDetailsCached(gameId: string) {
-  if (!gameId) return;
+  const normalizedGameId = normalizeGameCacheId(gameId);
+  if (!normalizedGameId) return;
 
-  void loadGameStoreDetailsCached(gameId).catch(() => undefined);
+  void loadGameStoreDetailsCached(normalizedGameId).catch(() => undefined);
 }
 
 export function preloadGameDetailsListCached(
-  games: Array<Pick<GhostBoxGame, "id">>,
+  games: Array<Pick<GhostBoxGame, "id" | "appId">>,
   limit = 4,
   staggerMs = 250
 ) {
   games.slice(0, limit).forEach((game, index) => {
-    if (!game.id || queuedGameDetailsPreloadIds.has(game.id)) return;
-    if (gameStoreDetailsCache.has(game.id)) return;
+    const cacheKey = normalizeGameCacheId(game);
+    if (!cacheKey || queuedGameDetailsPreloadIds.has(cacheKey)) return;
+    if (gameStoreDetailsCache.has(cacheKey)) return;
 
-    queuedGameDetailsPreloadIds.add(game.id);
+    queuedGameDetailsPreloadIds.add(cacheKey);
 
     const preload = () => {
-      queuedGameDetailsPreloadIds.delete(game.id);
-      preloadGameDetailsCached(game.id);
+      queuedGameDetailsPreloadIds.delete(cacheKey);
+      preloadGameDetailsCached(cacheKey);
     };
 
     if (typeof window === "undefined") {

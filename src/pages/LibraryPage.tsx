@@ -1,5 +1,5 @@
 import { ChevronLeft, Folder, Heart } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
 import type { BackupSettings } from "../types";
@@ -73,6 +73,7 @@ interface LibraryPageProps {
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   backupSettings?: BackupSettings | null;
   activeSessionAppIds?: Set<string>;
+  isActive?: boolean;
 }
 
 export function LibraryPage({
@@ -94,6 +95,7 @@ export function LibraryPage({
   onAddGameToCollection,
   backupSettings = null,
   activeSessionAppIds = new Set(),
+  isActive = true,
 }: LibraryPageProps) {
   const { appearance } = useSettings();
   const [sortBy, setSortBy] = useState<LibrarySortBy>(() =>
@@ -191,7 +193,7 @@ export function LibraryPage({
     userCollections,
     visibleGames,
   ]);
-  const libraryGames = useEnrichedGameCards(baseLibraryGames);
+  const libraryGames = useEnrichedGameCards(baseLibraryGames, 80, isActive);
   const sortLabel = useMemo(() => {
     const option = sortOptions.find((o) => o.value === sortBy);
     return option ? option[language] : option!.en;
@@ -221,9 +223,9 @@ export function LibraryPage({
     };
   }, [sortDropdownOpen]);
 
-  const handleGameContextMenu = (game: GhostBoxGame, x: number, y: number) => {
+  const handleGameContextMenu = useCallback((game: GhostBoxGame, x: number, y: number) => {
     setContextMenu({ game, x, y });
-  };
+  }, []);
 
   const collectionContextMenuItems = useCollectionContextMenu({
     game: contextMenu?.game ?? null,
@@ -245,14 +247,14 @@ export function LibraryPage({
   }, [sortBy]);
 
   useEffect(() => {
-    if (!loading)
+    if (isActive && !loading)
       preloadGameListAssets(libraryGames, {
         variant: "portrait",
         limit: 12,
         details: true,
         detailsLimit: 8,
       });
-  }, [libraryGames, loading]);
+  }, [isActive, libraryGames, loading]);
 
   return (
     <section className="content-section content-section--full content-section--library">

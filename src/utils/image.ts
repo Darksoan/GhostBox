@@ -3,6 +3,7 @@ import type { GhostBoxGame } from "../data";
 import {
   preloadGameDetailsCached,
   preloadGameDetailsListCached,
+  normalizeGameCacheId,
 } from "./gameCache";
 import {
   imageSourceCache,
@@ -12,6 +13,7 @@ import {
   preloadBrowserImage,
   resolveCachedImageSource,
 } from "./imageCache";
+import { preloadGameModalModule } from "./gameModalLoader";
 
 export const profileBannerPlaceholderSource = new URL(
   "../../Icons/ghost-solid.png",
@@ -488,7 +490,8 @@ export function preloadGameModalAssets(
   activeScreenshot = 0,
   options: { nativeResolve?: boolean } = {}
 ) {
-  preloadGameDetailsCached(game.id);
+  preloadGameModalModule();
+  preloadGameDetailsCached(normalizeGameCacheId(game));
   preloadImageSources(gameModalAssetSources(game, activeScreenshot), {
     limit: 8,
     decode: true,
@@ -506,7 +509,8 @@ const preloadHoverTimeoutRef = { current: undefined as number | undefined };
 const preloadedGameIds = new Set<string>();
 
 export function preloadGameModalAssetsThrottled(game: GhostBoxGame) {
-  if (preloadedGameIds.has(game.id)) return;
+  const cacheKey = normalizeGameCacheId(game);
+  if (preloadedGameIds.has(cacheKey)) return;
 
   const now = Date.now();
   const elapsed = now - preloadHoverLastRunRef.current;
@@ -535,7 +539,7 @@ function flushPreloadHover() {
 
   preloadHoverQueuedRef.current = null;
   preloadHoverLastRunRef.current = Date.now();
-  preloadedGameIds.add(game.id);
+  preloadedGameIds.add(normalizeGameCacheId(game));
   preloadGameModalAssets(game, 0, { nativeResolve: false });
 }
 
