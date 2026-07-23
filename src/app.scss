@@ -1,7 +1,3 @@
-@import "@fontsource/open-sans/400.css";
-@import "@fontsource/open-sans/500.css";
-@import "@fontsource/open-sans/600.css";
-
 :root {
   /* Canvas — matches notification page / card base */
   --background: #0b0b0b;
@@ -11,21 +7,23 @@
    * Surface hierarchy (from notification cards):
    * primary = more white, secondary = less white, tertiary = darkest
    */
-  --surface-primary: #141414;
-  --surface-secondary: #111111;
+  --surface-interactive: #0f0f0f;
+  --surface-primary: var(--surface-interactive);
+  --surface-secondary: var(--surface-interactive);
   --surface-tertiary: #0b0b0b;
 
   /* Legacy surface aliases → hierarchy */
   --surface-solid: var(--surface-primary);
   --surface-ui: var(--surface-primary);
   --surface-deep: var(--surface-tertiary);
-  --sidebar-option-active: var(--surface-primary);
-  --sidebar-option-active-hover: var(--surface-secondary);
+  --sidebar-selector: #151515;
+  --sidebar-option-active: var(--sidebar-selector);
+  --sidebar-option-active-hover: var(--sidebar-selector);
 
   /* Alpha overlays (subtle lifts on tertiary) */
   --surface: rgba(255, 255, 255, 0.04);
   --surface-subtle: rgba(255, 255, 255, 0.025);
-  --surface-hover: var(--surface-secondary);
+  --surface-hover: var(--surface-interactive);
   --surface-active: rgba(255, 255, 255, 0.08);
   --surface-strong: rgba(255, 255, 255, 0.085);
 
@@ -33,17 +31,18 @@
    * Borders — ONLY surface secondary / tertiary.
    * tertiary = default edge; secondary = hover and emphasized edge.
    */
-  --border: var(--surface-tertiary);
-  --border-subtle: var(--surface-tertiary);
-  --border-ui: var(--surface-tertiary);
-  --border-strong: var(--surface-secondary);
-  --border-hover: var(--surface-secondary);
+  --border-dark: var(--surface-interactive);
+  --border: var(--border-dark);
+  --border-subtle: var(--border-dark);
+  --border-ui: var(--border-dark);
+  --border-strong: var(--border-dark);
+  --border-hover: var(--border-dark);
 
   /*
    * Text — ONLY these three tokens may be used for text color in the app.
    * primary = more white, secondary = less white, tertiary = darker
    */
-  --text-primary: #f2f2f2;
+  --text-primary: #f0f0f0;
   --text-secondary: #757575;
   --text-tertiary: #4a4a4a;
   /* Legacy aliases → always resolve to the three above */
@@ -91,7 +90,7 @@
   --font-display: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --font-sidebar: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --hydra-button-dark: var(--surface-tertiary);
-  --hydra-button-dark-hover: var(--surface-secondary);
+  --hydra-button-dark-hover: var(--surface-interactive);
   --motion-fast: 0.12s;
   --motion-base: 0.18s;
   --motion-slow: 0.3s;
@@ -101,8 +100,8 @@
 
   /* Shared card recipe (notification-group baseline) */
   --card-bg: var(--surface-tertiary);
-  --card-bg-hover: var(--surface-secondary);
-  --card-bg-active: var(--surface-primary);
+  --card-bg-hover: var(--surface-interactive);
+  --card-bg-active: var(--surface-interactive);
   --card-border: var(--border);
   --card-radius: var(--radius-lg);
 
@@ -648,7 +647,7 @@ body {
 
 .update-splash__dismiss:hover {
   background: var(--surface-hover);
-  color: #fff;
+  color: var(--text-primary);
 }
 
 button,
@@ -1045,8 +1044,8 @@ p {
   width: 280px;
   min-width: 280px;
   overflow: hidden;
-  border-right: 1px solid var(--surface-secondary);
-  background: transparent;
+  border-right: 0;
+  background: var(--surface-interactive);
   color: var(--text-primary);
   --sidebar-option-hover: var(--sidebar-option-active-hover);
 
@@ -1228,14 +1227,14 @@ p {
       content: none;
     }
 
-    // Non-active hover: #111111 (`--surface-secondary` / `--sidebar-option-hover`)
+    // Hover and active share the same selector color.
     &:hover:not(.sidebar__menu-item--active) {
       color: var(--text-primary);
       border-color: transparent;
       background: var(--sidebar-option-hover);
     }
 
-    // Active: #141414 (`--surface-primary` / `--sidebar-option-active`)
+    // Active uses the shared interactive surface token.
     &--active {
       color: var(--text-primary);
       border-color: transparent;
@@ -1547,7 +1546,7 @@ p {
     /* Hover (not selected): border only */
     &:hover:not(:disabled) {
       border-color: transparent;
-      background-color: var(--surface-secondary);
+      background-color: var(--sidebar-selector);
       color: var(--text-primary);
     }
 
@@ -1555,16 +1554,16 @@ p {
       cursor: default;
     }
 
-    /* Selected: border + #111111 */
+    /* Selected: border + shared interactive surface */
     &--active {
       border-color: transparent;
-      background-color: var(--surface-secondary);
+      background-color: var(--sidebar-selector);
       color: var(--text-primary);
     }
 
     &--active:hover:not(:disabled) {
       border-color: transparent;
-      background-color: var(--surface-secondary);
+      background-color: var(--sidebar-selector);
     }
   }
 
@@ -1704,8 +1703,8 @@ p {
   min-height: 52px;
   padding: calc(var(--spacing) * 0.75) 0 calc(var(--spacing) * 0.75) calc(var(--spacing) * 3);
   color: var(--text-primary);
-  background-color: transparent;
-  border-bottom: 1px solid var(--surface-secondary);
+  background-color: var(--background-dark);
+  border-bottom: 0;
   user-select: none;
   cursor: default;
 
@@ -2171,12 +2170,21 @@ p {
     width: 280px;
     height: 40px;
     align-items: center;
+    justify-content: flex-start;
     gap: var(--spacing);
     padding: 0 calc(var(--spacing) * 1.5);
     border-radius: var(--radius-md);
     background: var(--surface-primary);
     color: var(--text-secondary);
     font-weight: var(--weight-muted);
+    overflow: hidden;
+    cursor: text;
+    transition:
+      width var(--motion-base) var(--ease),
+      padding var(--motion-base) var(--ease),
+      background-color var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease),
+      opacity var(--motion-fast) var(--ease);
 
     > svg {
       width: 16px;
@@ -2199,11 +2207,57 @@ p {
         font-weight: var(--weight-medium);
       }
     }
+
+    &--collapsed {
+      width: 36px;
+      height: 36px;
+      justify-content: center;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+      opacity: 0.8;
+
+      &:hover {
+        background: transparent;
+        color: var(--text-primary);
+        opacity: 1;
+      }
+
+      input,
+      .header__search-trailing {
+        width: 0;
+        min-width: 0;
+        flex-basis: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &--open {
+      width: 280px;
+      padding: 0 calc(var(--spacing) * 1.5);
+      background: var(--surface-primary);
+      opacity: 1;
+
+      input,
+      .header__search-trailing {
+        opacity: 1;
+      }
+    }
   }
 
   &__search-shell {
     position: relative;
     z-index: 301;
+
+    &--collapsed:hover,
+    &--collapsed:focus-within {
+      .header__tooltip--search {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
   }
 
   &__window-controls-update {
@@ -2607,9 +2661,9 @@ p {
 
 .content-section,
 .settings-page {
-  --border: var(--surface-secondary);
-  --border-subtle: var(--surface-secondary);
-  --border-ui: var(--surface-secondary);
+  --border: var(--border-dark);
+  --border-subtle: var(--border-dark);
+  --border-ui: var(--border-dark);
 
   display: flex;
   flex-direction: column;
@@ -3571,7 +3625,7 @@ p {
   gap: 10px;
   padding: 10px;
   border-radius: var(--radius-lg);
-  background: #111111;
+  background: var(--surface-interactive);
   scroll-snap-align: start;
 }
 
@@ -3758,7 +3812,7 @@ p {
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-lg);
-  background: #111111;
+  background: var(--surface-interactive);
   /* Default body copy in the card */
   color: var(--text-secondary);
   font-weight: var(--weight-muted);
@@ -6042,7 +6096,6 @@ p {
 
       svg {
         color: var(--text-secondary);
-      font-weight: var(--weight-muted);
       }
     }
   }
@@ -13956,6 +14009,14 @@ button,
 
   .header__search {
     width: 190px;
+
+    &--collapsed {
+      width: 36px;
+    }
+
+    &--open {
+      width: 190px;
+    }
   }
 
   .game-grid,

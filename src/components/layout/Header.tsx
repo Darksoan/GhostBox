@@ -119,6 +119,7 @@ export const Header = memo(function Header({
 }: HeaderProps) {
   const { t, appearance } = useSettings();
   const [focused, setFocused] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -129,6 +130,7 @@ export const Header = memo(function Header({
   const [isSubscriptionMenuOpen, setIsSubscriptionMenuOpen] = useState(false);
   const lastSeenRef = useRef<number>(readNotificationsLastSeenAt());
   const subscriptionMenuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const titlebarDragRef = useRef<{
     pointerId: number;
     startScreenX: number;
@@ -148,13 +150,22 @@ export const Header = memo(function Header({
   const handleBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
       const nextTarget = event.relatedTarget as Node | null;
-      if (!nextTarget || !event.currentTarget.contains(nextTarget))
+      if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
         setFocused(false);
+        if (!query.trim()) setSearchOpen(false);
+      }
     },
-    []
+    [query]
   );
 
-  const handleFocus = useCallback(() => setFocused(true), []);
+  const handleFocus = useCallback(() => {
+    setFocused(true);
+    setSearchOpen(true);
+  }, []);
+
+  const handleSearchClick = useCallback(() => {
+    setSearchOpen(true);
+  }, []);
 
   const handleFeedbackClick = useCallback(() => {
     setFeedbackModalOpen(true);
@@ -213,6 +224,11 @@ export const Header = memo(function Header({
     writeNotificationsLastSeenAt(now);
     setUnreadNotificationCount(0);
   }, [page]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   useEffect(() => {
     if (!isSubscriptionMenuOpen) return;
@@ -615,24 +631,30 @@ export const Header = memo(function Header({
           </span>
         </button>
         <div
-          className="header__search-shell"
+          className={`header__search-shell ${searchOpen ? "header__search-shell--open" : "header__search-shell--collapsed"}`}
           onBlur={handleBlur}
         >
           <label
-            className={`header__search ${focused ? "header__search--focused" : ""} ${isSearching ? "header__search--loading" : ""}`}
+            className={`header__search ${searchOpen ? "header__search--open" : "header__search--collapsed"} ${focused ? "header__search--focused" : ""} ${isSearching ? "header__search--loading" : ""}`}
+            onClick={handleSearchClick}
           >
             <Search size={16} />
             <input
+              ref={searchInputRef}
               value={query}
               onChange={handleChange}
               onKeyDown={handleSearchKeyDown}
               onFocus={handleFocus}
+              tabIndex={searchOpen ? 0 : -1}
               placeholder={t("header.searchPlaceholder")}
             />
             <span className="header__search-trailing" aria-hidden="true">
               {isSearching && <span className="header__search-loader" />}
             </span>
           </label>
+          <span className="header__tooltip header__tooltip--search">
+            Pesquisar
+          </span>
 
           {showDropdown && (
             <div className="header__search-dropdown">
@@ -664,8 +686,8 @@ export const Header = memo(function Header({
                               {isAdded && (
                                 <Heart
                                   size={14}
-                                  fill={isFavorite ? "#d3d3d3" : "none"}
-                                  stroke={isFavorite ? "#d3d3d3" : "currentColor"}
+                                  fill={isFavorite ? "var(--text-primary)" : "none"}
+                                  stroke={isFavorite ? "var(--text-primary)" : "currentColor"}
                                 />
                               )}
                             </div>
@@ -736,7 +758,7 @@ export const Header = memo(function Header({
           aria-label={appearance.language === "en" ? "Minimize" : "Minimizar"}
           onClick={handleMinimize}
         >
-          <Minus size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+          <Minus size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -744,7 +766,7 @@ export const Header = memo(function Header({
           aria-label={appearance.language === "en" ? "Close" : "Fechar"}
           onClick={handleClose}
         >
-          <X size={14} strokeWidth={1.5} absoluteStrokeWidth aria-hidden="true" />
+          <X size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
         </button>
       </div>
 
