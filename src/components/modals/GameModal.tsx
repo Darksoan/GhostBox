@@ -76,6 +76,15 @@ function GameRequirementsSection({
     "minimum" | "recommended"
   >(minimum.length ? "minimum" : "recommended");
 
+  useEffect(() => {
+    if (activeRequirement === "minimum" && !minimum.length && recommended.length) {
+      setActiveRequirement("recommended");
+    }
+    if (activeRequirement === "recommended" && !recommended.length && minimum.length) {
+      setActiveRequirement("minimum");
+    }
+  }, [activeRequirement, minimum.length, recommended.length]);
+
   if (!minimum.length && !recommended.length) return null;
 
   const activeItems = activeRequirement === "minimum" ? minimum : recommended;
@@ -128,6 +137,7 @@ function GameRequirementsSection({
             type="button"
             className={`modal__requirements-tab ${activeRequirement === "minimum" ? "modal__requirements-tab--active" : ""}`}
             onClick={() => setActiveRequirement("minimum")}
+            disabled={!minimum.length}
             role="tab"
             id={`${requirementsId}-minimum-tab`}
             aria-selected={activeRequirement === "minimum"}
@@ -139,6 +149,7 @@ function GameRequirementsSection({
             type="button"
             className={`modal__requirements-tab ${activeRequirement === "recommended" ? "modal__requirements-tab--active" : ""}`}
             onClick={() => setActiveRequirement("recommended")}
+            disabled={!recommended.length}
             role="tab"
             id={`${requirementsId}-recommended-tab`}
             aria-selected={activeRequirement === "recommended"}
@@ -538,6 +549,9 @@ export function GameModal({
   const achievementsPanelId = useId();
   const chipsPanelId = useId();
   const [isAchievementsCollapsed, setIsAchievementsCollapsed] = useState(false);
+  const [achievementLoadState, setAchievementLoadState] = useState<
+    "idle" | "loading" | "ready" | "empty" | "unavailable"
+  >("idle");
   const [isChipsCollapsed, setIsChipsCollapsed] = useState(false);
   const [achievementsPanelRef, achievementsPanelHeight] =
     useCollapsiblePanelHeight();
@@ -572,6 +586,7 @@ export function GameModal({
   useEffect(() => {
     let cancelled = false;
     setDetailGame(game);
+    setAchievementLoadState("loading");
 
     if (!game)
       return () => {
@@ -601,12 +616,24 @@ export function GameModal({
       onDetailsLoaded?.(details);
     };
     const mergeAchievementDetails = (details: GhostBoxGame | null) => {
-      if (cancelled || !details) return;
+      if (cancelled) return;
+      if (!details) {
+        setAchievementLoadState("empty");
+        return;
+      }
 
       const hasIncoming =
         (details.achievementList?.length ?? 0) > 0 ||
         (details.achievements?.total ?? 0) > 0;
-      if (!hasIncoming) return;
+      if (!hasIncoming) {
+        setAchievementLoadState(
+          details.achievementMetadata?.status === "unavailable" ||
+          details.achievementMetadata?.status === "rate-limited"
+            ? "unavailable"
+            : "empty"
+        );
+        return;
+      }
 
       setDetailGame((current) => {
         const base = current ?? game;
@@ -619,6 +646,7 @@ export function GameModal({
           lastTimePlayed: base.lastTimePlayed ?? game.lastTimePlayed,
         };
       });
+      setAchievementLoadState("ready");
       onDetailsLoaded?.(details);
     };
     const detailsGameId = game.appId || game.id;
@@ -630,7 +658,9 @@ export function GameModal({
 
     loadGameAchievementDetailsCached(detailsGameId)
       .then(mergeAchievementDetails)
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setAchievementLoadState("unavailable");
+      })
       .finally(finishRequest);
 
     return () => {
@@ -731,6 +761,10 @@ export function GameModal({
   );
   const visibleAchievements = achievements.slice(0, 12);
   const hasMoreAchievements = achievements.length > 12;
+  const shouldShowAchievementsSection =
+    achievements.length > 0 ||
+    achievementLoadState === "empty" ||
+    achievementLoadState === "unavailable";
   const screenshotsKey = showcaseSources.join("\n");
   const modalHeroSourcesKey = modalHeroSources.join("\n");
   const cachedScreenshotsKey = cachedScreenshotSources.join("\n");
@@ -1306,7 +1340,7 @@ export function GameModal({
                   <GameDetailsLoadingSections />
                 ) : (
                   <>
-                    {achievements.length > 0 && (
+                    {shouldShowAchievementsSection && (
                       <section
                         className="modal__achievements-section"
                         aria-label={
@@ -1351,19 +1385,31 @@ export function GameModal({
                               : achievementsPanelHeight,
                           } as CSSProperties}
                         >
-                          <ul className="modal__achievements-grid">
-                            {visibleAchievements.map((achievement) => (
-                              <AchievementIcon
-                                achievement={achievement}
-                                key={achievement.name}
-                                onSelect={
-                                  onViewAchievements
-                                    ? handleViewAchievements
-                                    : undefined
-                                }
-                              />
-                            ))}
-                          </ul>
+                          {achievements.length > 0 ? (
+                            <ul className="modal__achievements-grid">
+                              {visibleAchievements.map((achievement) => (
+                                <AchievementIcon
+                                  achievement={achievement}
+                                  key={achievement.name}
+                                  onSelect={
+                                    onViewAchievements
+                                      ? handleViewAchievements
+                                      : undefined
+                                  }
+                                />
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="modal__achievements-state">
+                              {achievementLoadState === "unavailable"
+                                ? appearance.language === "en"
+                                  ? "Steam achievements are temporarily unavailable. We'll keep the last cached data when available."
+                                  : "Conquistas da Steam temporariamente indisponíveis. Dados em cache serão mantidos quando existirem."
+                                : appearance.language === "en"
+                                  ? "No Steam achievements were found for this game yet."
+                                  : "Nenhuma conquista da Steam foi encontrada para este jogo por enquanto."}
+                            </p>
+                          )}
 
                           {hasMoreAchievements && onViewAchievements && (
                             <button

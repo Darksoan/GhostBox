@@ -21,6 +21,22 @@ export type SteamAchievement = {
   unlockedAt?: string;
 };
 
+export type GameAchievementLoadState =
+  | "ready"
+  | "no-achievements"
+  | "pending"
+  | "rate-limited"
+  | "private"
+  | "unavailable";
+
+export type GameAchievementMetadata = {
+  status?: GameAchievementLoadState;
+  source?: "catalogue" | "steam-schema" | "steam-account" | "local" | "stale";
+  stale?: boolean;
+  retryAfter?: number;
+  fetchedAt?: number;
+};
+
 export type GameRequirements = {
   minimum: string[];
   recommended: string[];
@@ -83,6 +99,7 @@ export type GhostBoxGame = {
   aboutTheGame?: string;
   achievements: AchievementStats;
   achievementList: SteamAchievement[];
+  achievementMetadata?: GameAchievementMetadata;
   pcRequirements?: GameRequirements;
   databaseAddedAt?: number;
   popularityScore?: number;

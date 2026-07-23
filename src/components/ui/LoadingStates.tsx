@@ -1,3 +1,4 @@
+import { Info } from "lucide-react";
 import { cataloguePageSize } from "../../constants/catalogue";
 import { useSettings } from "../../context/settings";
 import type { Page } from "../../types";
@@ -10,12 +11,14 @@ function placeholderClassName(blockClassName: string, animate = true, pulse = fa
 export function EmptyState({
   query = "",
   title,
+  description,
   actionLabel,
   onAction,
   className,
 }: {
   query?: string;
   title?: string;
+  description?: string;
   actionLabel?: string;
   onAction?: () => void;
   className?: string;
@@ -28,7 +31,9 @@ export function EmptyState({
   return (
     <section className={["empty-state", className].filter(Boolean).join(" ")}>
       <div className="empty-state__body">
+        {description ? <Info className="empty-state__icon" size={20} aria-hidden="true" /> : null}
         <h3>{resolvedTitle}</h3>
+        {description ? <p>{description}</p> : null}
         {actionLabel && onAction ? (
           <button type="button" className="button button--outline" onClick={onAction}>
             {actionLabel}
@@ -205,15 +210,25 @@ export function CatalogueLoadingState({
   );
 }
 
+export function PageSpinnerLoadingState({
+  label,
+  className,
+}: {
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div className={["page-spinner-loading", className].filter(Boolean).join(" ")} role="status">
+      <span className="page-spinner-loading__spinner" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
 export function BackupListLoadingState({ count: _count = 5 }: { count?: number }) {
   const { t } = useSettings();
 
-  return (
-    <div className="backup-page__spinner-state">
-      <span className="backup-page__spinner" aria-hidden="true" />
-      <span className="sr-only">{t("backup.loading")}</span>
-    </div>
-  );
+  return <PageSpinnerLoadingState label={t("backup.loading")} />;
 }
 
 export function AchievementsListLoadingState({ count = 8 }: { count?: number }) {
@@ -240,25 +255,10 @@ export function AchievementsListLoadingState({ count = 8 }: { count?: number }) 
   );
 }
 
-export function NotificationsFeedLoadingState({ count = 3 }: { count?: number }) {
-  return (
-    <div className="notifications-feed" role="status" aria-hidden="true">
-      {Array.from({ length: count }, (_, index) => (
-        <section className="notification-group notification-group--skeleton" key={`notification-group-${index}`}>
-          <button type="button" className="notification-group__trigger notification-group__trigger--skeleton" disabled>
-            <span className="notification-group__copy">
-              <strong className="notifications-feed__skeleton-title loading-wave" />
-              <small>
-                <span className="notifications-feed__skeleton-meta notifications-feed__skeleton-meta--label loading-wave" />
-                <span className="notifications-feed__skeleton-meta notifications-feed__skeleton-meta--date loading-wave" />
-              </small>
-            </span>
-            <span className="notification-group__count notification-group__count--skeleton loading-wave" />
-          </button>
-        </section>
-      ))}
-    </div>
-  );
+export function NotificationsFeedLoadingState({ count: _count = 3 }: { count?: number }) {
+  const { t } = useSettings();
+
+  return <PageSpinnerLoadingState label={t("notifications.loading")} />;
 }
 
 export function SearchSuggestionsLoadingState({ count: _count = 3 }: { count?: number }) {

@@ -155,6 +155,7 @@ const accountFreshTtlSeconds = 60 * 60;
 const achievementCacheTtlSeconds = 7 * 24 * 60 * 60;
 const noStatsCacheTtlSeconds = 30 * 24 * 60 * 60;
 const failedRetryTtlSeconds = 15 * 60;
+const emptySchemaCacheTtlSeconds = 24 * 60 * 60;
 const scanConcurrency = 6;
 const maxScanBatchPerRequest = 40;
 const maxBatchesPerScan = 4;
@@ -664,6 +665,11 @@ type SchemaGame = {
   };
 };
 
+type SchemaCacheEntry = SchemaGame & {
+  fetchedAt?: number;
+  empty?: boolean;
+};
+
 async function fetchGameAchievementSchema(
   env: Env,
   appId: string,
@@ -691,10 +697,20 @@ async function fetchGameAchievementSchema(
     );
 
     if (value.game) {
+      const achievements = normalizeSchemaAchievements(value.game);
+      const schemaCacheEntry: SchemaCacheEntry = {
+        ...value.game,
+        fetchedAt: nowSeconds(),
+        empty: achievements.length === 0,
+      };
       await env.STATS_CACHE.put(
         schemaCacheKey(lang, appId),
-        JSON.stringify(value.game),
-        { expirationTtl: 365 * 24 * 60 * 60 }
+        JSON.stringify(schemaCacheEntry),
+        {
+          expirationTtl: achievements.length > 0
+            ? 365 * 24 * 60 * 60
+            : emptySchemaCacheTtlSeconds,
+        }
       ).catch(() => undefined);
     }
     return value.game;
@@ -1393,10 +1409,6 @@ async function handleAccountStats(
   env: Env,
   context: ExecutionContext
 ) {
-  if (await rateLimitExceeded(request, env)) {
-    return jsonResponse({ error: "Rate limit exceeded" }, env, 429);
-  }
-
   const url = new URL(request.url);
   const steamId = url.searchParams.get("steamId");
   if (!validSteamId(steamId)) {
@@ -1408,6 +1420,15 @@ async function handleAccountStats(
 
   const edgeHit = await matchEdgeCache("/steam/account-stats", steamId);
   if (edgeHit) return edgeHit;
+
+  if (await rateLimitExceeded(request, env)) {
+    return jsonResponse(
+      { error: "Rate limit exceeded", retryAfter: 60 },
+      env,
+      429,
+      { extraHeaders: { "retry-after": "60" } }
+    );
+  }
 
   const cached = await readStatsCache(env, steamId);
   const now = nowSeconds();
@@ -1928,10 +1949,6 @@ async function handleGameReviews(request: Request, env: Env, context: ExecutionC
 }
 
 async function handleGameSchema(request: Request, env: Env, context: ExecutionContext) {
-  if (await rateLimitExceeded(request, env)) {
-    return jsonResponse({ error: "Rate limit exceeded" }, env, 429);
-  }
-
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId");
   if (!validAppId(appId)) {
@@ -1958,6 +1975,15 @@ async function handleGameSchema(request: Request, env: Env, context: ExecutionCo
   const edgeHit = await matchEdgeCache("/steam/game-schema", cacheKey);
   if (edgeHit) return edgeHit;
 
+  if (await rateLimitExceeded(request, env)) {
+    return jsonResponse(
+      { appId, language: primaryLanguage, achievements: [], status: "rate-limited", retryAfter: 60 },
+      env,
+      429,
+      { extraHeaders: { "retry-after": "60" } }
+    );
+  }
+
   let language = primaryLanguage;
   let game: SchemaGame | undefined;
   let achievements: ReturnType<typeof normalizeSchemaAchievements> = [];
@@ -1973,15 +1999,21 @@ async function handleGameSchema(request: Request, env: Env, context: ExecutionCo
     if (achievements.length > 0) break;
   }
   const response = jsonResponse(
-    { appId, language, achievements },
+    {
+      appId,
+      language,
+      achievements,
+      status: achievements.length > 0 ? "ready" : game ? "no-achievements" : "unavailable",
+      retryAfter: game ? undefined : failedRetryTtlSeconds,
+    },
     env,
     200,
     {
       cacheStatus: game ? "KV" : "MISS",
-      maxAge: 300,
+      maxAge: achievements.length > 0 ? 300 : 60,
     }
   );
-  if (achievements.length > 0) {
+  if (game) {
     await putEdgeCache("/steam/game-schema", cacheKey, response, context);
   }
   return response;

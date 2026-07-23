@@ -56,7 +56,21 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   const maxGenreLabels = (game.tags.length ? game.tags : game.genres).slice(0, 3);
   const genreLabelsKey = maxGenreLabels.join("\u0000");
   const genresRef = useRef<HTMLDivElement | null>(null);
-  const [visibleGenreCount, setVisibleGenreCount] = useState(maxGenreLabels.length);
+  const lastGenresWidthRef = useRef<number | null>(null);
+  const [genreDisplay, setGenreDisplay] = useState(() => ({
+    count: maxGenreLabels.length,
+    key: genreLabelsKey,
+    measured: maxGenreLabels.length < 3,
+  }));
+  const genresMeasured =
+    genreDisplay.key === genreLabelsKey && genreDisplay.measured;
+  const visibleGenreCount =
+    genreDisplay.key === genreLabelsKey
+      ? genreDisplay.count
+      : maxGenreLabels.length;
+  const renderedGenreLabels = genresMeasured
+    ? maxGenreLabels.slice(0, visibleGenreCount)
+    : maxGenreLabels;
 
   useEffect(() => {
     if (shouldLoadCover) return;
@@ -83,12 +97,20 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   }, [shouldLoadCover]);
 
   useLayoutEffect(() => {
-    setVisibleGenreCount(maxGenreLabels.length);
-  }, [game.id, genreLabelsKey, maxGenreLabels.length]);
-
-  useLayoutEffect(() => {
     const container = genresRef.current;
-    if (!container || maxGenreLabels.length < 3) return;
+    if (!container) return;
+
+    if (maxGenreLabels.length < 3) {
+      lastGenresWidthRef.current = null;
+      if (!genresMeasured || visibleGenreCount !== maxGenreLabels.length) {
+        setGenreDisplay({
+          count: maxGenreLabels.length,
+          key: genreLabelsKey,
+          measured: true,
+        });
+      }
+      return;
+    }
 
     const measureGenres = () => {
       const firstChip = container.children.item(0) as HTMLElement | null;
@@ -97,23 +119,38 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
       const containerRect = container.getBoundingClientRect();
       const thirdRect = thirdChip.getBoundingClientRect();
+      lastGenresWidthRef.current = containerRect.width;
       const overflowsLine =
         thirdChip.offsetTop > firstChip.offsetTop ||
         thirdRect.right > containerRect.right + 0.5;
 
-      setVisibleGenreCount(overflowsLine ? 2 : maxGenreLabels.length);
+      setGenreDisplay({
+        count: overflowsLine ? 2 : maxGenreLabels.length,
+        key: genreLabelsKey,
+        measured: true,
+      });
     };
 
-    measureGenres();
+    if (!genresMeasured) measureGenres();
 
-    const resizeObserver = new ResizeObserver(() => {
-      setVisibleGenreCount(maxGenreLabels.length);
-      window.requestAnimationFrame(measureGenres);
+    const resizeObserver = new ResizeObserver((entries) => {
+      const nextWidth = entries[0]?.contentRect.width ?? container.getBoundingClientRect().width;
+      const previousWidth = lastGenresWidthRef.current;
+      if (previousWidth !== null && Math.abs(nextWidth - previousWidth) <= 0.5) {
+        return;
+      }
+
+      lastGenresWidthRef.current = nextWidth;
+      setGenreDisplay({
+        count: maxGenreLabels.length,
+        key: genreLabelsKey,
+        measured: false,
+      });
     });
     resizeObserver.observe(container);
 
     return () => resizeObserver.disconnect();
-  }, [genreLabelsKey, maxGenreLabels.length]);
+  }, [genreLabelsKey, genresMeasured, maxGenreLabels.length, visibleGenreCount]);
 
   useEffect(() => {
     if (coverLoaded && coverSource) {
@@ -148,8 +185,12 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       />
       <div className="catalogue-list__content">
         <strong>{game.title}</strong>
-        <div className="catalogue-list__genres" ref={genresRef}>
-          {maxGenreLabels.slice(0, visibleGenreCount).map((tag) => (
+        <div
+          className="catalogue-list__genres"
+          ref={genresRef}
+          style={{ visibility: genresMeasured ? "visible" : "hidden" }}
+        >
+          {renderedGenreLabels.map((tag) => (
             <span className="catalogue-list__genre-chip" key={tag}>{tag}</span>
           ))}
         </div>

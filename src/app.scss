@@ -106,12 +106,8 @@
   --card-border: var(--border);
   --card-radius: var(--radius-lg);
 
-  /* Unified sidebar + app background gradient */
-  --app-gradient: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-secondary) 85%, #000),
-    color-mix(in srgb, var(--surface-tertiary) 85%, #000)
-  );
+  /* Unified solid app background */
+  --app-gradient: var(--surface-tertiary);
 }
 
 .tray-menu-shell {
@@ -482,13 +478,8 @@ svg[stroke-width="1.8"] {
 }
 
 .game-card__cover.loading-wave::before {
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.06);
-  opacity: 1;
-  transform: none;
+  content: none;
+  display: none;
 }
 
 @keyframes image-subtle-fade-in {
@@ -540,8 +531,28 @@ body {
   font-synthesis: none;
 }
 
+.app-splash,
+.app-splash--react {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  place-items: center;
+  background: var(--background-dark);
+}
+
+.app-splash__spinner,
 .app-splash--react .app-splash__spinner {
+  box-sizing: border-box;
   position: relative;
+  width: 34px;
+  height: 34px;
+}
+
+.app-splash--react .app-splash__spinner {
   border: 1px solid transparent;
   background: conic-gradient(
     var(--text-strong) var(--app-splash-progress, 0%),
@@ -549,12 +560,6 @@ body {
   );
   animation: none;
   transition: background var(--motion-base) var(--ease);
-}
-
-.app-splash--react {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
 }
 
 .app-splash--react .app-splash__spinner::after {
@@ -1595,7 +1600,6 @@ p {
     width: 100%;
     height: 100%;
     background: var(--surface-hover);
-    animation: pulse-skeleton 1.6s ease-in-out infinite;
   }
 
   &__button-information {
@@ -2164,7 +2168,7 @@ p {
 
   &__search {
     display: inline-flex;
-    width: 210px;
+    width: 280px;
     height: 40px;
     align-items: center;
     gap: var(--spacing);
@@ -2173,11 +2177,6 @@ p {
     background: var(--surface-primary);
     color: var(--text-secondary);
     font-weight: var(--weight-muted);
-    transition: width var(--motion-base) ease;
-
-    &--focused {
-      width: 280px;
-    }
 
     > svg {
       width: 16px;
@@ -3683,7 +3682,6 @@ p {
 
 .home-calendar-card--skeleton {
   background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
-  animation: pulse-skeleton 1.6s ease-in-out infinite;
 }
 
 @media (max-width: 720px) {
@@ -4084,7 +4082,6 @@ p {
   &--skeleton {
     background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
     opacity: 1;
-    animation: pulse-skeleton 1.6s ease-in-out infinite;
   }
 }
 
@@ -4712,10 +4709,8 @@ p {
     flex: 1 1 auto;
     gap: 0;
     min-height: 100%;
-    padding-top: calc(var(--spacing) * 1.5);
-    padding-right: calc(var(--spacing) * 3);
-    padding-bottom: calc(var(--spacing) * 4);
-    padding-left: calc((var(--spacing) * 3) + 28px);
+    padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3)
+      calc(var(--spacing) * 4);
   }
 }
 
@@ -4726,9 +4721,9 @@ p {
   gap: 0;
   min-height: 0;
   overflow: visible;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface-tertiary);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 
   &--bare {
@@ -6279,15 +6274,15 @@ p {
   }
 
   &:first-child {
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    border-radius: 0;
   }
 
   &:last-child {
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    border-radius: 0;
   }
 
   &:only-child {
-    border-radius: var(--radius-sm);
+    border-radius: 0;
   }
 
   &__copy {
@@ -7228,6 +7223,23 @@ p {
   }
 }
 
+.page-spinner-loading {
+  display: grid;
+  width: 100%;
+  min-height: 280px;
+  place-items: center;
+}
+
+.page-spinner-loading__spinner {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-strong);
+  border-radius: var(--radius-pill);
+  animation: spin 0.75s linear infinite;
+}
+
 .catalogue-filter-chip {
   --filter-color: var(--text-secondary);
 
@@ -8089,12 +8101,23 @@ input[type="search"]::-ms-reveal {
     text-align: center;
   }
 
+  &__icon {
+    color: var(--text-secondary);
+  }
+
   h3 {
     margin: 0;
     color: var(--text-primary);
     font-size: 22px;
     font-weight: var(--weight-semibold);
     line-height: 1.25;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.45;
   }
 
   .button {
@@ -9362,6 +9385,27 @@ input[type="search"]::-ms-reveal {
 
 .loading-pulse-skeleton {
   background: var(--surface-hover);
+}
+
+.loading-wave,
+.loading-plate,
+.loading-pulse-skeleton,
+[class*="skeleton"] {
+  animation: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.loading-wave::before,
+.loading-wave::after,
+.loading-plate::before,
+.loading-plate::after,
+.loading-pulse-skeleton::before,
+.loading-pulse-skeleton::after,
+[class*="skeleton"]::before,
+[class*="skeleton"]::after {
+  content: none !important;
+  display: none !important;
 }
 
 .game-grid {
@@ -14142,6 +14186,7 @@ p.modal__review-text--skeleton {
 
 .modal__details p,
 .modal__requirements-content,
+.modal__achievements-state,
 .backup-restore-modal__file-row,
 .backup-restore-modal__achievements,
 .profile-page p,
@@ -14288,11 +14333,7 @@ button,
   }
 
   .header__search {
-    width: 160px;
-
-    &--focused {
-      width: 190px;
-    }
+    width: 190px;
   }
 
   .game-grid,
@@ -14743,58 +14784,6 @@ button,
   border-radius: 3px;
 }
 
-/* Notifications skeleton – reuse real group/game layout */
-.notification-group__trigger--skeleton {
-  cursor: default;
-  pointer-events: none;
-  opacity: 1;
-}
-
-.notification-group__count--skeleton {
-  width: 30px;
-  min-width: 30px;
-  border: 0;
-  background: var(--surface-hover);
-}
-
-.notification-game--skeleton {
-  cursor: default;
-  pointer-events: none;
-}
-
-.notification-game__cover--skeleton {
-  opacity: 1;
-  background: var(--surface-hover);
-}
-
-.notifications-feed__skeleton-title {
-  display: block;
-  width: min(180px, 55%);
-  height: 14px;
-  border-radius: 3px;
-}
-
-.notifications-feed__skeleton-meta {
-  display: block;
-  width: min(120px, 35%);
-  height: 11px;
-  border-radius: 3px;
-}
-
-.notification-group__copy .notifications-feed__skeleton-title {
-  width: min(160px, 40%);
-  height: 15px;
-}
-
-.notification-group__copy .notifications-feed__skeleton-meta {
-  width: 92px;
-  height: 11px;
-}
-
-.notification-group__copy .notifications-feed__skeleton-meta--date {
-  width: 128px;
-}
-
 /* Home page skeletons */
 .home-section-title-placeholder {
   display: block;
@@ -15077,23 +15066,6 @@ button,
   width: 100%;
   align-self: stretch;
   justify-self: stretch;
-}
-
-.backup-page__spinner-state {
-  display: grid;
-  width: 100%;
-  min-height: 280px;
-  place-items: center;
-}
-
-.backup-page__spinner {
-  display: block;
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--border);
-  border-top-color: var(--text-strong);
-  border-radius: var(--radius-pill);
-  animation: spin 0.75s linear infinite;
 }
 
 .backup-page__title-placeholder {

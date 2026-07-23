@@ -291,9 +291,9 @@ const translations: Record<Language, TranslationTree> = {
         performance: {
           label: "Desempenho",
           eyebrow: "Fluidez",
-          title: "Otimização visual",
+          title: "Desempenho e mídia",
           description:
-            "Ajuste animações e efeitos para melhorar a responsividade do app.",
+            "Ajuste efeitos visuais, reprodução de mídia, pré-carregamento e uso de memória.",
         },
         library: {
           label: "Biblioteca",
@@ -366,39 +366,39 @@ const translations: Record<Language, TranslationTree> = {
       },
       performance: {
         reduceAllAnimations: {
-          label: "Reduzir animações da interface",
+          label: "Animações da interface",
           description:
-            "Remove pulsos e transições visuais pesadas da interface.",
+            "Exibe animações em cards, carregamentos, telas e janelas. Desative para reduzir movimento e efeitos visuais.",
         },
         disableBackdropBlur: {
-          label: "Desativar blur/glass",
+          label: "Desfoque de fundo",
           description:
-            "Remove o desfoque de fundo dos efeitos de vidro para reduzir o custo de renderização.",
+            "Aplica desfoque aos painéis translúcidos. Desative para reduzir o custo de renderização; cores e transparências permanecem.",
         },
         trailerQuality: {
-          label: "Qualidade de trailer",
+          label: "Exibir trailers",
           description:
-            "Escolhe a fonte de vídeo preferida para trailers dentro dos detalhes do jogo.",
-          high: "Alta qualidade",
-          low: "Economia de dados",
+            "Mostra trailers na galeria dos detalhes do jogo. Desative para exibir apenas imagens.",
+          high: "Ativado",
+          low: "Desativado",
         },
         trailerAutoplay: {
-          label: "Autoplay de trailer",
+          label: "Reproduzir trailers automaticamente",
           description:
-            "Reproduz automaticamente o trailer selecionado na galeria do jogo.",
+            "Inicia o trailer sem som e em loop ao abrir os detalhes ou selecioná-lo na galeria.",
         },
         imagePreloadConcurrency: {
-          label: "Preload de imagens",
+          label: "Pré-carregamento de imagens",
           description:
-            "Define quantas imagens podem ser pré-carregadas ao mesmo tempo.",
-          low: "Leve (2)",
-          medium: "Equilibrado (4)",
-          high: "Rápido (6)",
+            "Define quantas imagens o app antecipa ao mesmo tempo. Valores maiores podem carregar imagens mais cedo, mas usam mais rede e memória.",
+          low: "Baixo (2)",
+          medium: "Padrão (4)",
+          high: "Alto (6)",
         },
         disablePageKeepAlive: {
-          label: "Desativar keep-alive de páginas",
+          label: "Manter páginas em memória",
           description:
-            "Mantém apenas a página atual montada para reduzir uso de memória.",
+            "Preserva o estado das páginas visitadas para voltar mais rápido. Desative para desmontar páginas inativas e reduzir parte do uso de memória.",
         },
       },
       library: {
@@ -803,9 +803,9 @@ const translations: Record<Language, TranslationTree> = {
         performance: {
           label: "Performance",
           eyebrow: "Smoothness",
-          title: "Visual optimization",
+          title: "Performance and media",
           description:
-            "Tune animations and effects to improve app responsiveness.",
+            "Tune visual effects, media playback, preloading, and memory usage.",
         },
         library: {
           label: "Library",
@@ -877,39 +877,39 @@ const translations: Record<Language, TranslationTree> = {
       },
       performance: {
         reduceAllAnimations: {
-          label: "Reduce interface animations",
+          label: "Interface animations",
           description:
-            "Removes pulses and heavier visual transitions from the interface.",
+            "Shows animations in cards, loading states, screens, and dialogs. Turn off to reduce motion and visual effects.",
         },
         disableBackdropBlur: {
-          label: "Disable blur/glass",
+          label: "Background blur",
           description:
-            "Removes background blur from glass effects to reduce rendering cost.",
+            "Applies blur to translucent panels. Turn off to reduce rendering cost; colors and transparency remain.",
         },
         trailerQuality: {
-          label: "Trailer quality",
+          label: "Show trailers",
           description:
-            "Chooses the preferred video source for trailers in game details.",
-          high: "High quality",
-          low: "Data saver",
+            "Shows trailers in the game details gallery. Turn off to show images only.",
+          high: "On",
+          low: "Off",
         },
         trailerAutoplay: {
-          label: "Trailer autoplay",
+          label: "Play trailers automatically",
           description:
-            "Automatically plays the selected trailer in the game gallery.",
+            "Starts the trailer muted and looping when opening details or selecting it in the gallery.",
         },
         imagePreloadConcurrency: {
-          label: "Image preload",
+          label: "Image preloading",
           description:
-            "Sets how many images can be preloaded at the same time.",
-          low: "Light (2)",
-          medium: "Balanced (4)",
-          high: "Fast (6)",
+            "Sets how many images the app anticipates at the same time. Higher values can show images earlier, but use more network and memory.",
+          low: "Low (2)",
+          medium: "Default (4)",
+          high: "High (6)",
         },
         disablePageKeepAlive: {
-          label: "Disable page keep-alive",
+          label: "Keep pages in memory",
           description:
-            "Keeps only the current page mounted to reduce memory usage.",
+            "Preserves visited page state so returning is faster. Turn off to unmount inactive pages and reduce part of memory usage.",
         },
       },
       library: {

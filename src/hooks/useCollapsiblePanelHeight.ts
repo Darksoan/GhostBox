@@ -1,21 +1,22 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
 export function useCollapsiblePanelHeight() {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [panel, setPanel] = useState<HTMLDivElement | null>(null);
   const [panelHeight, setPanelHeight] = useState(0);
+  const panelRef = useCallback((node: HTMLDivElement | null) => {
+    setPanel(node);
+  }, []);
 
   useLayoutEffect(() => {
-    const panel = panelRef.current;
     if (!panel) return;
 
     const nextHeight = panel.scrollHeight;
     setPanelHeight((currentHeight) =>
       currentHeight === nextHeight ? currentHeight : nextHeight
     );
-  }, []);
+  }, [panel]);
 
   useEffect(() => {
-    const panel = panelRef.current;
     if (!panel) return;
 
     const updateHeight = () => {
@@ -33,12 +34,26 @@ export function useCollapsiblePanelHeight() {
         ? new ResizeObserver(updateHeight)
         : null;
     resizeObserver?.observe(panel);
+    for (const child of panel.children) {
+      resizeObserver?.observe(child);
+    }
+
+    const mutationObserver =
+      typeof MutationObserver !== "undefined"
+        ? new MutationObserver(updateHeight)
+        : null;
+    mutationObserver?.observe(panel, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
 
     return () => {
       window.removeEventListener("resize", updateHeight);
       resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
     };
-  }, []);
+  }, [panel]);
 
   return [panelRef, panelHeight] as const;
 }

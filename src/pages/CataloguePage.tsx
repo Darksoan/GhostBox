@@ -366,6 +366,7 @@ export function CataloguePage({
   } | null>(null);
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
+  const hasSearchQuery = Boolean(query.trim());
 
   const filterSections = useMemo(() => {
     if (filtersLoading && !facets) return [];
@@ -578,6 +579,10 @@ export function CataloguePage({
                       count: selectedFilterCount,
                     })
                   : "")
+              }
+              title={hasSearchQuery ? t("header.searchNoResultsTitle") : undefined}
+              description={
+                hasSearchQuery ? t("header.searchNoResultsAppIdHint") : undefined
               }
               actionLabel={
                 hasActiveFilters ? t("catalogue.filters.clearAll") : undefined

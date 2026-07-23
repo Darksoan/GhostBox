@@ -85,6 +85,9 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     appearance.imagePreloadConcurrency === 6
       ? appearance.imagePreloadConcurrency
       : 4;
+  const trailerAutoplay = typeof appearance.trailerAutoplay === "boolean"
+    ? appearance.trailerAutoplay
+    : appearance.bannerAutoplay !== false;
 
   return {
     theme: appearance.theme === "light" ? "light" : "dark",
@@ -95,7 +98,7 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     reduceAllAnimations: appearance.reduceAllAnimations === true,
     disableBackdropBlur: appearance.disableBackdropBlur === true,
     trailerQuality: appearance.trailerQuality === "low" ? "low" : "high",
-    trailerAutoplay: appearance.trailerAutoplay ?? appearance.bannerAutoplay ?? true,
+    trailerAutoplay,
     preferLowResCovers: appearance.preferLowResCovers === true,
     imagePreloadConcurrency,
     disablePageKeepAlive: appearance.disablePageKeepAlive === true,

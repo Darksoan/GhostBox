@@ -34,6 +34,13 @@ struct AppinfoBytesCache {
     bytes: Arc<Vec<u8>>,
 }
 
+#[derive(Default)]
+struct AchievementFetchResult {
+    achievements: Vec<Value>,
+    status: String,
+    retry_after: Option<u64>,
+}
+
 fn text(value: Option<&Value>) -> String {
     value
         .and_then(|value| value.as_str())
@@ -872,12 +879,15 @@ async fn fetch_steam_achievements_from_proxy(
     proxy_url: &str,
     app_id: &str,
     language: &str,
-) -> Vec<Value> {
+) -> AchievementFetchResult {
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
     else {
-        return Vec::new();
+        return AchievementFetchResult {
+            status: "unavailable".to_string(),
+            ..Default::default()
+        };
     };
     let Ok(response) = client
         .get(format!("{proxy_url}/steam/game-schema"))
@@ -886,16 +896,37 @@ async fn fetch_steam_achievements_from_proxy(
         .send()
         .await
     else {
-        return Vec::new();
+        return AchievementFetchResult {
+            status: "unavailable".to_string(),
+            ..Default::default()
+        };
     };
+    let retry_after = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+    let status_code = response.status();
     let Ok(response) = response.error_for_status() else {
-        return Vec::new();
+        return AchievementFetchResult {
+            status: if status_code.as_u16() == 429 {
+                "rate-limited".to_string()
+            } else {
+                "unavailable".to_string()
+            },
+            retry_after,
+            ..Default::default()
+        };
     };
     let Ok(value) = response.json::<Value>().await else {
-        return Vec::new();
+        return AchievementFetchResult {
+            status: "unavailable".to_string(),
+            retry_after,
+            ..Default::default()
+        };
     };
 
-    value
+    let achievements: Vec<Value> = value
         .get("achievements")
         .and_then(|achievements| achievements.as_array())
         .map(|achievements| {
@@ -904,29 +935,62 @@ async fn fetch_steam_achievements_from_proxy(
                 .filter_map(normalize_achievement)
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    AchievementFetchResult {
+        status: value
+            .get("status")
+            .and_then(|value| value.as_str())
+            .unwrap_or(if achievements.is_empty() {
+                "no-achievements"
+            } else {
+                "ready"
+            })
+            .to_string(),
+        retry_after: value
+            .get("retryAfter")
+            .and_then(|value| value.as_u64())
+            .or(retry_after),
+        achievements,
+    }
 }
 
 async fn fetch_steam_achievements(
     app: &tauri::AppHandle,
     app_id: &str,
     steam_path: &str,
-) -> Vec<Value> {
+) -> AchievementFetchResult {
     let proxy_url = crate::settings::load_steam_stats_proxy_url();
     if !proxy_url.is_empty() {
         // Prefer pt-BR, then European Portuguese, then English schema.
+        let mut last_result = AchievementFetchResult::default();
         for language in ["brazilian", "portuguese", "english"] {
-            let schema_achievements =
+            let result =
                 fetch_steam_achievements_from_proxy(&proxy_url, app_id, language).await;
-            if !schema_achievements.is_empty() {
-                return schema_achievements;
+            if !result.achievements.is_empty() {
+                return result;
             }
+            last_result = result;
+            if matches!(last_result.status.as_str(), "rate-limited" | "unavailable") {
+                break;
+            }
+        }
+        if !last_result.status.is_empty() {
+            return last_result;
         }
     }
 
     // Offline / proxy miss: local Steam schema only (no HTML community scrape).
     let _ = app;
-    crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id)
+    let achievements = crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id);
+    AchievementFetchResult {
+        status: if achievements.is_empty() {
+            "no-achievements".to_string()
+        } else {
+            "ready".to_string()
+        },
+        achievements,
+        ..Default::default()
+    }
 }
 
 fn merge_achievement_list(game: &mut Value, achievements: Vec<Value>) {
@@ -1823,8 +1887,22 @@ pub async fn database_get_game_achievement_details(
         .map(|achievements| achievements.is_empty())
         .unwrap_or(true)
     {
-        let achievements = fetch_steam_achievements(&app, &app_id, steam_path).await;
-        merge_achievement_list(&mut game, achievements);
+        let achievement_result = fetch_steam_achievements(&app, &app_id, steam_path).await;
+        if let Some(object) = game.as_object_mut() {
+            object.insert(
+                "achievementMetadata".to_string(),
+                serde_json::json!({
+                    "status": achievement_result.status,
+                    "retryAfter": achievement_result.retry_after,
+                    "source": "steam-schema",
+                    "fetchedAt": SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .map(|duration| duration.as_secs())
+                        .unwrap_or_default(),
+                }),
+            );
+        }
+        merge_achievement_list(&mut game, achievement_result.achievements);
     }
 
     Ok(Some(crate::merge_game_achievement_details(

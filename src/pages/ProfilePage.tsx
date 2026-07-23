@@ -20,7 +20,6 @@ import {
   EyeOff,
   Camera,
   Folder,
-  Heart,
   Layers,
   LogOut,
   Pencil,
@@ -88,6 +87,7 @@ type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
 const emptyImageSources: string[] = [];
 const recentActivityPageSize = 8;
+const profileAchievementPageSize = 5;
 
 const overviewSortOptions: OverviewSortBy[] = [
   "recent",
@@ -655,12 +655,14 @@ export function ProfilePage({
   );
   const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
     useState<Map<string, GhostBoxGame>>(() => new Map());
+  const localAchievementHydrationFailedUntilRef = useRef(new Map<string, number>());
   const [resolvedGameTitlesByAppId, setResolvedGameTitlesByAppId] =
     useState<Map<string, string>>(() => new Map());
   const [isOverviewDataReady, setIsOverviewDataReady] = useState(
     () => hasPreparedProfileOverviewData
   );
   const [recentActivityPage, setRecentActivityPage] = useState(1);
+  const [achievementTabPage, setAchievementTabPage] = useState(1);
   const [overviewSortBy, setOverviewSortBy] = useState<OverviewSortBy>(() =>
     readStoredOverviewSortBy(),
   );
@@ -715,17 +717,12 @@ export function ProfilePage({
         count: addedLibraryGames.length,
       },
       {
-        id: "favorites",
-        name: t("profile.favorites"),
-        count: favoriteGames.length,
-      },
-      {
         id: "achievements",
         name: t("achievements.title"),
         count: 0,
       },
     ];
-  }, [addedLibraryGames.length, favoriteGames.length, t]);
+  }, [addedLibraryGames.length, t]);
 
   const userCollectionById = useMemo(
     () =>
@@ -982,12 +979,23 @@ export function ProfilePage({
     const recentGameIndexes = new Map(
       achievementHistoryGames.map((game, index) => [game.appId, index])
     );
+    const remoteAchievementAppIds = new Set(
+      (steamAccountStats?.achievements ?? [])
+        .filter((entry) => entry.achievements.length > 0)
+        .map((entry) => entry.appId)
+    );
+    const now = Date.now();
+    const failedUntil = localAchievementHydrationFailedUntilRef.current;
     const candidates = [
       ...achievementHistoryGames,
       ...addedLibraryGames,
       ...steamOwnedProfileGames,
     ]
-      .filter((game) => game.appId && !localAchievementGamesByAppId.has(game.appId))
+      .filter((game) => {
+        if (!game.appId || localAchievementGamesByAppId.has(game.appId)) return false;
+        if (remoteAchievementAppIds.has(game.appId)) return false;
+        return (failedUntil.get(game.appId) ?? 0) <= now;
+      })
       .sort((left, right) => {
         const leftRecentIndex = recentGameIndexes.get(left.appId);
         const rightRecentIndex = recentGameIndexes.get(right.appId);
@@ -1028,7 +1036,14 @@ export function ProfilePage({
               loadGameAchievementDetailsCached(gameId).catch(() => null),
               loadGameStoreDetailsCached(gameId).catch(() => null),
             ]);
-            if (!details?.achievementList?.length && !storeDetails) return null;
+            if (!details?.achievementList?.length && !storeDetails) {
+              const retryAfter = details?.achievementMetadata?.retryAfter ?? 0;
+              localAchievementHydrationFailedUntilRef.current.set(
+                game.appId,
+                Date.now() + (retryAfter > 0 ? retryAfter * 1000 : 30 * 60 * 1000),
+              );
+              return null;
+            }
 
             const resolvedTitle = storeDetails?.title?.trim();
             const title =
@@ -1090,6 +1105,7 @@ export function ProfilePage({
     localAchievementGamesByAppId,
     shouldComputeOverviewData,
     steamOwnedProfileGames,
+    steamAccountStats,
   ]);
 
   useEffect(() => {
@@ -1261,6 +1277,32 @@ export function ProfilePage({
         return left.title.localeCompare(right.title);
       });
   }, [profileAchievementGames]);
+
+  const achievementTabTotalPages = Math.max(
+    1,
+    Math.ceil(achievementTabGames.length / profileAchievementPageSize),
+  );
+  const currentAchievementTabPage = Math.min(
+    achievementTabPage,
+    achievementTabTotalPages,
+  );
+  const pagedAchievementTabGames = useMemo(() => {
+    const startIndex = (currentAchievementTabPage - 1) * profileAchievementPageSize;
+    return achievementTabGames.slice(
+      startIndex,
+      startIndex + profileAchievementPageSize,
+    );
+  }, [achievementTabGames, currentAchievementTabPage]);
+
+  useEffect(() => {
+    setAchievementTabPage(1);
+  }, [achievementTabGames]);
+
+  useEffect(() => {
+    if (achievementTabPage > achievementTabTotalPages) {
+      setAchievementTabPage(achievementTabTotalPages);
+    }
+  }, [achievementTabPage, achievementTabTotalPages]);
 
   const recentActivityGames = useMemo(
     () => sortOverviewGames(profileAchievementGames, overviewSortBy, appearance.language),
@@ -1761,7 +1803,6 @@ export function ProfilePage({
                   const isIconOnlyTab = [
                     "overview",
                     "library",
-                    "favorites",
                     "achievements",
                   ].includes(collection.id);
                   const TabIcon =
@@ -1769,11 +1810,9 @@ export function ProfilePage({
                       ? User
                       : collection.id === "library"
                         ? Layers
-                        : collection.id === "favorites"
-                          ? Heart
-                          : collection.id === "achievements"
-                            ? Cup
-                            : Folder;
+                        : collection.id === "achievements"
+                          ? Cup
+                          : Folder;
 
                   return (
                     <button
@@ -2044,7 +2083,7 @@ export function ProfilePage({
                   className="profile-page__achievement-games"
                   aria-label={t("achievements.title")}
                 >
-                  {achievementTabGames.map((game) => {
+                  {pagedAchievementTabGames.map((game) => {
                     const achievementTotal = getAchievementTotal(game);
                     const achievementUnlocked = getUnlockedAchievementCount(game);
                     const achievementProgress = achievementTotal > 0
@@ -2177,6 +2216,15 @@ export function ProfilePage({
                       </section>
                     );
                   })}
+                  {achievementTabTotalPages > 1 ? (
+                    <div className="profile-page__achievement-pagination">
+                      <PaginationControls
+                        page={currentAchievementTabPage}
+                        totalPages={achievementTabTotalPages}
+                        onPageChange={setAchievementTabPage}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <EmptyState

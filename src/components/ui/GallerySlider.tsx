@@ -15,22 +15,17 @@ interface MediaItem {
 }
 
 function getMovieSource(movie: SteamMovie, quality: "high" | "low") {
-  const sourceOptions = quality === "low"
-    ? [
-        { src: movie.mp4?.["480"], type: "video/mp4" },
-        { src: movie.webm?.["480"], type: "video/webm" },
-        { src: movie.webm?.max, type: "video/webm" },
-        { src: movie.mp4?.max, type: "video/mp4" },
-      ]
-    : [
-        { src: movie.hls_h264, type: "application/x-mpegURL" },
-        { src: movie.mp4?.max, type: "video/mp4" },
-        { src: movie.mp4?.["480"], type: "video/mp4" },
-        { src: movie.webm?.max, type: "video/webm" },
-        { src: movie.webm?.["480"], type: "video/webm" },
-        { src: movie.dash_h264, type: "application/dash+xml" },
-        { src: movie.dash_av1, type: "application/dash+xml" },
-      ];
+  if (quality === "low") return null;
+
+  const sourceOptions = [
+    { src: movie.hls_h264, type: "application/x-mpegURL" },
+    { src: movie.mp4?.max, type: "video/mp4" },
+    { src: movie.mp4?.["480"], type: "video/mp4" },
+    { src: movie.webm?.max, type: "video/webm" },
+    { src: movie.webm?.["480"], type: "video/webm" },
+    { src: movie.dash_h264, type: "application/dash+xml" },
+    { src: movie.dash_av1, type: "application/dash+xml" },
+  ];
 
   const source = sourceOptions.find((option) => option.src?.trim());
   if (!source?.src) return null;

@@ -35,6 +35,7 @@ export const gameAchievementDetailsRequestCache = new Map<
   string,
   Promise<GhostBoxGame | null>
 >();
+const gameAchievementNegativeCache = new Map<string, number>();
 export const gameReviewsCache = new Map<string, SteamGameReviewsResult>();
 export const gameReviewsRequestCache = new Map<
   string,
@@ -192,11 +193,41 @@ export function loadGameStoreDetailsCached(gameId: string) {
 }
 
 export function loadGameAchievementDetailsCached(gameId: string) {
+  const cacheKey = normalizeGameCacheId(gameId);
+  const negativeExpiresAt = gameAchievementNegativeCache.get(cacheKey) ?? 0;
+  if (negativeExpiresAt > Date.now()) {
+    return Promise.resolve(null);
+  }
+  gameAchievementNegativeCache.delete(cacheKey);
+
   return loadCachedGameRequest(
-    gameId,
+    cacheKey,
     gameAchievementDetailsCache,
     gameAchievementDetailsRequestCache,
-    loadGameAchievementDetails,
+    async (normalizedGameId) => {
+      try {
+        const game = await loadGameAchievementDetails(normalizedGameId);
+        const hasAchievements =
+          (game?.achievementList?.length ?? 0) > 0 ||
+          (game?.achievements?.total ?? 0) > 0;
+        if (!hasAchievements) {
+          const retryAfter = game?.achievementMetadata?.retryAfter ?? 0;
+          const ttlMs = retryAfter > 0
+            ? retryAfter * 1000
+            : game?.achievementMetadata?.status === "no-achievements"
+              ? 24 * 60 * 60 * 1000
+              : 5 * 60 * 1000;
+          gameAchievementNegativeCache.set(
+            normalizedGameId,
+            Date.now() + ttlMs,
+          );
+        }
+        return game;
+      } catch (error) {
+        gameAchievementNegativeCache.set(normalizedGameId, Date.now() + 5 * 60 * 1000);
+        throw error;
+      }
+    },
     { cacheEmpty: false }
   );
 }

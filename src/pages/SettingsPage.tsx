@@ -10,7 +10,7 @@ import {
   SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import type { GhostBoxGame } from "../data";
@@ -512,32 +512,29 @@ function buildTabOptions(
         label: t("settings.performance.reduceAllAnimations.label"),
         description: t("settings.performance.reduceAllAnimations.description"),
         control: "toggle" as const,
-        checked: appearance.reduceAllAnimations,
-        onToggle: (next: boolean) => updateAppearance({ reduceAllAnimations: next }),
+        checked: !appearance.reduceAllAnimations,
+        onToggle: (next: boolean) => updateAppearance({ reduceAllAnimations: !next }),
       },
       {
         label: t("settings.performance.disableBackdropBlur.label"),
         description: t("settings.performance.disableBackdropBlur.description"),
         control: "toggle" as const,
-        checked: appearance.disableBackdropBlur,
-        onToggle: (next: boolean) => updateAppearance({ disableBackdropBlur: next }),
+        checked: !appearance.disableBackdropBlur,
+        onToggle: (next: boolean) => updateAppearance({ disableBackdropBlur: !next }),
       },
       {
         label: t("settings.performance.trailerQuality.label"),
         description: t("settings.performance.trailerQuality.description"),
-        control: "select" as const,
-        value: appearance.trailerQuality,
-        choices: [
-          { label: t("settings.performance.trailerQuality.high"), value: "high" },
-          { label: t("settings.performance.trailerQuality.low"), value: "low" },
-        ],
-        onChange: (value: string) => updateAppearance({ trailerQuality: value === "low" ? "low" : "high" }),
+        control: "toggle" as const,
+        checked: appearance.trailerQuality !== "low",
+        onToggle: (next: boolean) => updateAppearance({ trailerQuality: next ? "high" : "low" }),
       },
       {
         label: t("settings.performance.trailerAutoplay.label"),
         description: t("settings.performance.trailerAutoplay.description"),
         control: "toggle" as const,
-        checked: appearance.trailerAutoplay,
+        checked: appearance.trailerQuality !== "low" && appearance.trailerAutoplay,
+        disabled: appearance.trailerQuality === "low",
         onToggle: (next: boolean) => updateAppearance({ trailerAutoplay: next }),
       },
       {
@@ -556,8 +553,8 @@ function buildTabOptions(
         label: t("settings.performance.disablePageKeepAlive.label"),
         description: t("settings.performance.disablePageKeepAlive.description"),
         control: "toggle" as const,
-        checked: appearance.disablePageKeepAlive,
-        onToggle: (next: boolean) => updateAppearance({ disablePageKeepAlive: next }),
+        checked: !appearance.disablePageKeepAlive,
+        onToggle: (next: boolean) => updateAppearance({ disablePageKeepAlive: !next }),
       },
     ];
   }
@@ -727,6 +724,9 @@ function DownloadApiSourcesInfo({
 }
 
 function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?: string }) {
+  const id = useId();
+  const labelId = `${id}-label`;
+  const descriptionId = `${id}-description`;
   const isControlledToggle = typeof option.checked === "boolean";
   const [enabled, setEnabled] = useState(Boolean(option.enabled));
   const toggleValue = isControlledToggle ? Boolean(option.checked) : enabled;
@@ -737,18 +737,21 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
       style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
     >
       <div className="settings-option__copy">
-        <div className="settings-option__label">
+        <div className="settings-option__label" id={labelId}>
           <strong>{option.label}</strong>
           {option.labelAction}
         </div>
-        <span>{option.description}</span>
+        <span id={descriptionId}>{option.description}</span>
       </div>
       <div className="settings-option__control">
         {option.control === "toggle" && (
           <button
             type="button"
             className={`settings-switch ${toggleValue ? "settings-switch--on" : ""}`}
-            aria-pressed={toggleValue}
+            role="switch"
+            aria-checked={toggleValue}
+            aria-labelledby={labelId}
+            aria-describedby={descriptionId}
             disabled={option.disabled}
             onClick={() => {
               if (option.disabled) return;
