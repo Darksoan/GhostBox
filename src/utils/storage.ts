@@ -30,10 +30,12 @@ export type LibrarySortBy = "title" | "recent" | "playtime";
 export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements" | "perfect";
 
 export type StoredPersonalCalendar = {
+  algorithmVersion: string;
   weekStart: string;
+  cycleStart: string;
   expiresAt: string;
   gameIds: string[];
-  recentGameIds: string[];
+  monthGameIds: Record<string, string[]>;
 };
 
 export type StoredSteamWishlistRecommendations = {
@@ -94,28 +96,49 @@ function storedStringArray(value: unknown) {
     : [];
 }
 
+function storedStringArrayRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string[]>>(
+    (record, [key, item]) => {
+      const values = storedStringArray(item);
+      if (key && values.length) record[key] = values;
+      return record;
+    },
+    {}
+  );
+}
+
 function normalizeStoredPersonalCalendar(
   value: unknown
 ): StoredPersonalCalendar | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
   const calendar = value as Record<string, unknown>;
-  const weekStart = storedString(calendar.weekStart);
+  const algorithmVersion = storedString(calendar.algorithmVersion);
+  const cycleStart = storedString(calendar.cycleStart);
+  const weekStart = storedString(calendar.weekStart) || cycleStart;
   const expiresAt = storedString(calendar.expiresAt);
   const gameIds = storedStringArray(calendar.gameIds);
-  const recentGameIds = storedStringArray(calendar.recentGameIds);
+  const monthGameIds = storedStringArrayRecord(calendar.monthGameIds);
 
   if (
+    !algorithmVersion ||
+    !cycleStart ||
     !weekStart ||
     !expiresAt ||
+    !Number.isFinite(Date.parse(cycleStart)) ||
     !Number.isFinite(Date.parse(weekStart)) ||
     !Number.isFinite(Date.parse(expiresAt)) ||
-    gameIds.length === 0
+    gameIds.length === 0 ||
+    Object.keys(monthGameIds).length === 0
   ) {
     return null;
   }
 
-  return { weekStart, expiresAt, gameIds, recentGameIds };
+  return { algorithmVersion, weekStart, cycleStart, expiresAt, gameIds, monthGameIds };
 }
 
 function normalizeStoredSteamWishlistRecommendations(

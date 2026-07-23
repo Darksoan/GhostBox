@@ -82,6 +82,7 @@ import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
+import { runViewTransition } from "../utils/viewTransition";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
@@ -1161,9 +1162,15 @@ export function ProfilePage({
 
   const handleTabClick = useCallback(
     (collectionId: string) => {
-      setActiveCollectionId(collectionId);
+      const currentIndex = profileCollections.findIndex(({ id }) => id === activeTabId);
+      const nextIndex = profileCollections.findIndex(({ id }) => id === collectionId);
+      runViewTransition(
+        () => setActiveCollectionId(collectionId),
+        collectionId !== activeTabId && !appearance.reduceAllAnimations,
+        ["motion-tab-transition", nextIndex < currentIndex ? "motion-tab-backward" : "motion-tab-forward"],
+      );
     },
-    [setActiveCollectionId]
+    [activeTabId, appearance.reduceAllAnimations, profileCollections, setActiveCollectionId]
   );
 
   useLayoutEffect(() => {
@@ -2239,6 +2246,7 @@ export function ProfilePage({
                     className="profile-page__game-grid"
                     dense
                     portrait
+                    animateLayout
                     onOpenGame={onOpenGame}
                     onGameContextMenu={handleGameContextMenu}
                     showAchievements

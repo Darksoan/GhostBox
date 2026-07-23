@@ -119,7 +119,6 @@ export const Header = memo(function Header({
 }: HeaderProps) {
   const { t, appearance } = useSettings();
   const [focused, setFocused] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -152,19 +151,13 @@ export const Header = memo(function Header({
       const nextTarget = event.relatedTarget as Node | null;
       if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
         setFocused(false);
-        if (!query.trim()) setSearchOpen(false);
       }
     },
-    [query]
+    []
   );
 
   const handleFocus = useCallback(() => {
     setFocused(true);
-    setSearchOpen(true);
-  }, []);
-
-  const handleSearchClick = useCallback(() => {
-    setSearchOpen(true);
   }, []);
 
   const handleFeedbackClick = useCallback(() => {
@@ -224,11 +217,6 @@ export const Header = memo(function Header({
     writeNotificationsLastSeenAt(now);
     setUnreadNotificationCount(0);
   }, [page]);
-
-  useEffect(() => {
-    if (!searchOpen) return;
-    searchInputRef.current?.focus();
-  }, [searchOpen]);
 
   useEffect(() => {
     if (!isSubscriptionMenuOpen) return;
@@ -631,12 +619,11 @@ export const Header = memo(function Header({
           </span>
         </button>
         <div
-          className={`header__search-shell ${searchOpen ? "header__search-shell--open" : "header__search-shell--collapsed"}`}
+          className="header__search-shell"
           onBlur={handleBlur}
         >
           <label
-            className={`header__search ${searchOpen ? "header__search--open" : "header__search--collapsed"} ${focused ? "header__search--focused" : ""} ${isSearching ? "header__search--loading" : ""}`}
-            onClick={handleSearchClick}
+            className={`header__search ${focused ? "header__search--focused" : ""} ${isSearching ? "header__search--loading" : ""}`}
           >
             <Search size={16} />
             <input
@@ -645,7 +632,6 @@ export const Header = memo(function Header({
               onChange={handleChange}
               onKeyDown={handleSearchKeyDown}
               onFocus={handleFocus}
-              tabIndex={searchOpen ? 0 : -1}
               placeholder={t("header.searchPlaceholder")}
             />
             <span className="header__search-trailing" aria-hidden="true">

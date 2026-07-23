@@ -17,6 +17,7 @@ import {
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useFlipLayout } from "../hooks/useFlipLayout";
 
 interface FavoriteCardProps {
   game: GhostBoxGame;
@@ -73,6 +74,7 @@ export const FavoriteCard = memo(function FavoriteCard({
   return (
     <article
       ref={cardRef}
+      data-layout-id={game.id}
       className="favorites-grid__item"
       role="button"
       onClick={() => onOpenGame(game)}
@@ -169,6 +171,8 @@ export function FavoritesPage({
     x: number;
     y: number;
   } | null>(null);
+  const layoutKey = games.map((game) => game.id).join("|");
+  const gridRef = useFlipLayout<HTMLDivElement>(layoutKey, isActive);
 
   const contextMenuItems = useCollectionContextMenu({
     game: contextMenu?.game ?? null,
@@ -216,7 +220,7 @@ export function FavoritesPage({
 
   return (
     <section className="favorites-page content-section content-section--full">
-      <div className="favorites-grid">
+      <div className="favorites-grid" ref={gridRef}>
         {games.map((game) => (
           <FavoriteCard
             key={game.id}

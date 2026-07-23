@@ -958,6 +958,99 @@ p {
   min-height: 100%;
 }
 
+html.motion-page-transition .page-stack__base {
+  view-transition-name: ghostbox-page-content;
+}
+
+html.motion-tab-transition .settings-panel,
+html.motion-tab-transition .profile-page__tab-panel {
+  view-transition-name: ghostbox-tab-content;
+}
+
+html.motion-page-transition::view-transition-old(root),
+html.motion-page-transition::view-transition-new(root),
+html.motion-tab-transition::view-transition-old(root),
+html.motion-tab-transition::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html.motion-page-transition::view-transition-old(ghostbox-page-content) {
+  animation: ghostbox-page-out var(--motion-base) var(--ease) both;
+  mix-blend-mode: normal;
+}
+
+html.motion-page-transition::view-transition-new(ghostbox-page-content) {
+  animation: ghostbox-page-in var(--motion-base) var(--ease) both;
+  mix-blend-mode: normal;
+}
+
+html.motion-tab-transition::view-transition-old(ghostbox-tab-content),
+html.motion-tab-transition::view-transition-new(ghostbox-tab-content) {
+  animation-duration: var(--motion-base);
+  animation-timing-function: var(--ease);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+}
+
+html.motion-tab-forward::view-transition-old(ghostbox-tab-content) {
+  animation-name: ghostbox-tab-out-forward;
+}
+
+html.motion-tab-forward::view-transition-new(ghostbox-tab-content) {
+  animation-name: ghostbox-tab-in-forward;
+}
+
+html.motion-tab-backward::view-transition-old(ghostbox-tab-content) {
+  animation-name: ghostbox-tab-out-backward;
+}
+
+html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
+  animation-name: ghostbox-tab-in-backward;
+}
+
+@keyframes ghostbox-page-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+@keyframes ghostbox-page-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+}
+
+@keyframes ghostbox-tab-out-forward {
+  to {
+    opacity: 0;
+    transform: translate3d(-6px, 0, 0);
+  }
+}
+
+@keyframes ghostbox-tab-in-forward {
+  from {
+    opacity: 0;
+    transform: translate3d(6px, 0, 0);
+  }
+}
+
+@keyframes ghostbox-tab-out-backward {
+  to {
+    opacity: 0;
+    transform: translate3d(6px, 0, 0);
+  }
+}
+
+@keyframes ghostbox-tab-in-backward {
+  from {
+    opacity: 0;
+    transform: translate3d(-6px, 0, 0);
+  }
+}
+
 .page-stack--overlay-open .page-stack__base {
   position: absolute;
   inset: 0;
@@ -2167,7 +2260,7 @@ p {
 
   &__search {
     display: inline-flex;
-    width: 280px;
+    width: 200px;
     height: 40px;
     align-items: center;
     justify-content: flex-start;
@@ -2208,56 +2301,16 @@ p {
       }
     }
 
-    &--collapsed {
-      width: 36px;
-      height: 36px;
-      justify-content: center;
-      padding: 0;
-      background: transparent;
-      cursor: pointer;
-      opacity: 0.8;
-
-      &:hover {
-        background: transparent;
-        color: var(--text-primary);
-        opacity: 1;
-      }
-
-      input,
-      .header__search-trailing {
-        width: 0;
-        min-width: 0;
-        flex-basis: 0;
-        opacity: 0;
-        pointer-events: none;
-      }
-    }
-
-    &--open {
+    &--focused {
       width: 280px;
-      padding: 0 calc(var(--spacing) * 1.5);
-      background: var(--surface-primary);
+      color: var(--text-primary);
       opacity: 1;
-
-      input,
-      .header__search-trailing {
-        opacity: 1;
-      }
     }
   }
 
   &__search-shell {
     position: relative;
     z-index: 301;
-
-    &--collapsed:hover,
-    &--collapsed:focus-within {
-      .header__tooltip--search {
-        opacity: 1;
-        visibility: visible;
-        transform: translateX(-50%) translateY(0);
-      }
-    }
   }
 
   &__window-controls-update {
@@ -3736,6 +3789,17 @@ p {
 
 .home-calendar-card--skeleton {
   background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+}
+
+.home-calendar-card--fallback {
+  background:
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 42%),
+    linear-gradient(135deg, var(--surface-solid), var(--surface-subtle));
+
+  .home-calendar-card__content {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -10289,6 +10353,10 @@ html.no-animations {
   --pb-cover-zoom-opacity: 0;
 
   @include pb-disable-cover-zoom;
+
+  .profile-page__tab-indicator {
+    transition: none;
+  }
 
   .game-card__cover--loaded,
   .catalogue-list__cover--loaded,

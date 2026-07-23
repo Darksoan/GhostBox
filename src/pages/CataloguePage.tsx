@@ -45,6 +45,7 @@ import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useSettings } from "../context/settings";
 import { useCollapsiblePanelHeight } from "../hooks/useCollapsiblePanelHeight";
 import { preloadGameListAssets } from "../utils/image";
+import { useFlipLayout } from "../hooks/useFlipLayout";
 
 const maxVisibleFilterOptions = 160;
 
@@ -98,14 +99,16 @@ const CatalogueActiveFilters = memo(function CatalogueActiveFilters({
   const activeFilters = (
     Object.entries(filters) as [CatalogueFilterKey, string[]][]
   ).flatMap(([key, values]) => values.map((value) => ({ key, value })));
+  const layoutKey = activeFilters.map(({ key, value }) => `${key}:${value}`).join("|");
+  const filtersRef = useFlipLayout<HTMLUListElement>(layoutKey);
 
   if (!activeFilters.length) return null;
 
   return (
     <div className="catalogue-page__active-filters">
-      <ul>
+      <ul ref={filtersRef}>
         {activeFilters.map(({ key, value }) => (
-          <li key={`${key}-${value}`}>
+          <li key={`${key}-${value}`} data-layout-id={`${key}:${value}`}>
             <button
               type="button"
               className="catalogue-filter-chip"

@@ -16,6 +16,7 @@ import {
 } from "../../utils/image";
 import { formatCompactPlaytime } from "../../utils/time";
 import { GameGridLoadingState } from "./LoadingStates";
+import { useFlipLayout } from "../../hooks/useFlipLayout";
 
 interface GameCardProps {
   game: GhostBoxGame;
@@ -130,6 +131,7 @@ export const GameCard = memo(function GameCard({
   return (
     <article
       ref={cardRef}
+      data-layout-id={game.id}
       className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}`}
       style={gameStyle(game)}
       onClick={() => onOpenGame(game)}
@@ -201,6 +203,7 @@ interface GameGridProps {
   hasBackupByAppId?: Set<string>;
   activeSessionAppIds?: Set<string>;
   libraryCoverFade?: boolean;
+  animateLayout?: boolean;
 }
 
 export function GameGrid({
@@ -215,9 +218,14 @@ export function GameGrid({
   hasBackupByAppId = new Set(),
   activeSessionAppIds = new Set(),
   libraryCoverFade = false,
+  animateLayout = false,
 }: GameGridProps) {
+  const layoutKey = visibleGames.map((game) => game.id).join("|");
+  const gridRef = useFlipLayout<HTMLDivElement>(layoutKey, animateLayout);
+
   return (
     <div
+      ref={gridRef}
       className={`game-grid ${dense ? "game-grid--dense" : ""} ${portrait ? "game-grid--portrait" : ""} ${className}`.trim()}
     >
       {visibleGames.map((game) => (

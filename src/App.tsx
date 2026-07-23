@@ -16,7 +16,8 @@ import {
   showTrayHiddenDesktopNotification,
 } from "./lib/trayNotifications";
 import { clearCatalogueGamesCache } from "./utils/gameCache";
-import type { SettingsTabId } from "./features/settings/settingsTabsShared";
+import { settingsNavigationTabs, type SettingsTabId } from "./features/settings/settingsTabsShared";
+import { runViewTransition } from "./utils/viewTransition";
 import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
 import { ingestRemoteGameByAppId, type GhostBoxGame } from "./data";
 import "./app.scss";
@@ -177,15 +178,17 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
       saveScrollPosition();
-      clearOverlayForward();
-      closeContentOverlay();
-      navigate(newPage);
-      shell.clearQuery();
-      if (collectionId) {
-        shell.setActiveProfileCollectionId(collectionId);
-      }
+      runViewTransition(() => {
+        clearOverlayForward();
+        closeContentOverlay();
+        navigate(newPage);
+        shell.clearQuery();
+        if (collectionId) {
+          shell.setActiveProfileCollectionId(collectionId);
+        }
+      }, newPage !== page && !appearance.reduceAllAnimations, ["motion-page-transition"]);
     },
-    [clearOverlayForward, closeContentOverlay, navigate, saveScrollPosition, shell]
+    [appearance.reduceAllAnimations, clearOverlayForward, closeContentOverlay, navigate, page, saveScrollPosition, shell]
   );
 
   useEffect(() => {
@@ -216,9 +219,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     }
 
     clearOverlayForward();
-    back();
+    runViewTransition(() => {
+      back();
+    }, !appearance.reduceAllAnimations, ["motion-page-transition"]);
   }, [
     achievementsView,
+    appearance.reduceAllAnimations,
     back,
     clearOverlayForward,
     closeAchievements,
@@ -249,9 +255,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       return;
     }
 
-    forward();
+    runViewTransition(() => {
+      forward();
+    }, !appearance.reduceAllAnimations, ["motion-page-transition"]);
   }, [
     achievementsView,
+    appearance.reduceAllAnimations,
     clearOverlayForward,
     forward,
     openAchievements,
@@ -263,9 +272,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   const handleSidebarSettingsTabChange = useCallback(
     (tabId: SettingsTabId) => {
-      shell.setActiveSettingsTabId(tabId);
+      const currentIndex = settingsNavigationTabs.findIndex(({ id }) => id === shell.activeSettingsTabId);
+      const nextIndex = settingsNavigationTabs.findIndex(({ id }) => id === tabId);
+      runViewTransition(
+        () => shell.setActiveSettingsTabId(tabId),
+        page === "settings" && tabId !== shell.activeSettingsTabId && !appearance.reduceAllAnimations,
+        ["motion-tab-transition", nextIndex < currentIndex ? "motion-tab-backward" : "motion-tab-forward"],
+      );
     },
-    [shell]
+    [appearance.reduceAllAnimations, page, shell]
   );
 
   const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {

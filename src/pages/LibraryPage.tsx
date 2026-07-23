@@ -359,6 +359,7 @@ export function LibraryPage({
           hasBackupByAppId={gamesWithBackup}
           activeSessionAppIds={activeSessionAppIds}
           libraryCoverFade
+          animateLayout
         />
       ) : (
         <EmptyState query={query} />

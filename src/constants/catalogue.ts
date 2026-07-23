@@ -17,7 +17,7 @@ export const imageSourceCacheKey = "ghostbox:image-source-cache:v1";
 export const recentPlayedGamesStorageKey = "ghostbox:recent-played-games:v3";
 export const profileHistoryGamesStorageKey = "ghostbox:profile-history-games:v1";
 export const showSteamGamesStorageKey = "ghostbox:show-steam-games:v1";
-export const personalCalendarStorageKey = "ghostbox:personal-calendar:v1";
+export const personalCalendarStorageKey = "ghostbox:personal-calendar:v2";
 export const steamWishlistRecommendationsStorageKey = "ghostbox:steam-wishlist-recommendations:v1";
 export const steamWishlistReviewCacheStorageKey = "ghostbox:steam-wishlist-review-cache:v1";
 export const recentLibrarySessionLimit = 50;
@@ -39,7 +39,7 @@ const legacyStorageKeys: Record<string, string[]> = {
   [recentPlayedGamesStorageKey]: ["eden:recent-played-games:v3", "piratebox:recent-played-games:v3"],
   [profileHistoryGamesStorageKey]: ["eden:profile-history-games:v1", "piratebox:profile-history-games:v1"],
   [showSteamGamesStorageKey]: ["eden:show-steam-games:v1", "piratebox:show-steam-games:v1"],
-  [personalCalendarStorageKey]: ["eden:personal-calendar:v1", "piratebox:personal-calendar:v1"],
+  [personalCalendarStorageKey]: ["eden:personal-calendar:v2", "piratebox:personal-calendar:v2"],
   [steamWishlistRecommendationsStorageKey]: ["eden:steam-wishlist-recommendations:v1", "piratebox:steam-wishlist-recommendations:v1"],
   [steamWishlistReviewCacheStorageKey]: ["eden:steam-wishlist-review-cache:v1", "piratebox:steam-wishlist-review-cache:v1"],
   [librarySortStorageKey]: ["eden:library-sort-by:v1", "piratebox:library-sort-by:v1"],
