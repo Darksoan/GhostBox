@@ -52,9 +52,6 @@ import { useCollapsiblePanelHeight } from "../../hooks/useCollapsiblePanelHeight
 const LazyGallerySlider = lazy(() =>
   import("../ui/GallerySlider").then((m) => ({ default: m.GallerySlider }))
 );
-const LazyGameReviewsSection = lazy(() =>
-  import("./GameReviewsSection").then((m) => ({ default: m.GameReviewsSection }))
-);
 const LazyGameBackupOptionsModal = lazy(() =>
   import("./GameBackupOptionsModal").then((m) => ({ default: m.GameBackupOptionsModal }))
 );
@@ -544,8 +541,6 @@ export function GameModal({
   const [visibleScreenshotSource, setVisibleScreenshotSource] = useState("");
   const [isBackupOptionsOpen, setIsBackupOptionsOpen] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
-  const [reviewSummaryContainer, setReviewSummaryContainer] =
-    useState<HTMLDivElement | null>(null);
   const achievementsPanelId = useId();
   const chipsPanelId = useId();
   const [isAchievementsCollapsed, setIsAchievementsCollapsed] = useState(false);
@@ -563,6 +558,7 @@ export function GameModal({
   const [aboutCollapsedMaxHeight, setAboutCollapsedMaxHeight] = useState<
     number | null
   >(null);
+  const [isAboutOverflowing, setIsAboutOverflowing] = useState(false);
 
   useEffect(() => {
     setActiveScreenshot(0);
@@ -958,6 +954,7 @@ export function GameModal({
   useEffect(() => {
     if (!aboutTheGameHtml || isAboutExpanded) {
       setAboutCollapsedMaxHeight(null);
+      setIsAboutOverflowing(false);
       return;
     }
 
@@ -968,21 +965,26 @@ export function GameModal({
         const sidebar = sidebarRef.current;
         const shell = aboutContentShellRef.current;
         const actions = aboutActionsRef.current;
-        if (!sidebar || !shell || !actions) return;
+        if (!sidebar || !shell) return;
 
         const sidebarBottom = sidebar.getBoundingClientRect().bottom;
         const shellTop = shell.getBoundingClientRect().top;
-        const actionsHeight = actions.getBoundingClientRect().height;
+        const actionsHeight = actions?.getBoundingClientRect().height ?? 36;
         const nextHeight = Math.max(
           160,
           Math.floor(sidebarBottom - shellTop - actionsHeight - 10)
         );
+        const content = shell.firstElementChild;
+        const contentHeight =
+          content instanceof HTMLElement ? content.scrollHeight : shell.scrollHeight;
+        const nextIsOverflowing = contentHeight > nextHeight + 1;
 
         setAboutCollapsedMaxHeight((current) =>
           current !== null && Math.abs(current - nextHeight) <= 1
             ? current
             : nextHeight
         );
+        setIsAboutOverflowing(nextIsOverflowing);
       });
     };
 
@@ -1298,9 +1300,9 @@ export function GameModal({
                   >
                     <div
                       ref={aboutContentShellRef}
-                      className={`modal__about-content-shell ${isAboutExpanded ? "modal__about-content-shell--expanded" : ""}`}
+                      className={`modal__about-content-shell ${isAboutExpanded ? "modal__about-content-shell--expanded" : ""} ${!isAboutExpanded && isAboutOverflowing ? "modal__about-content-shell--clamped" : ""}`}
                       style={
-                        !isAboutExpanded && aboutCollapsedMaxHeight !== null
+                        !isAboutExpanded && isAboutOverflowing && aboutCollapsedMaxHeight !== null
                           ? {
                               height: aboutCollapsedMaxHeight,
                               maxHeight: aboutCollapsedMaxHeight,
@@ -1312,25 +1314,27 @@ export function GameModal({
                         className="modal__about-content"
                         dangerouslySetInnerHTML={{ __html: aboutTheGameHtml }}
                       />
-                      {!isAboutExpanded && (
+                      {!isAboutExpanded && isAboutOverflowing && (
                         <div className="modal__about-fade" aria-hidden="true" />
                       )}
                     </div>
-                    <div className="modal__about-actions" ref={aboutActionsRef}>
-                      <button
-                        type="button"
-                        className="button button--outline modal__about-toggle"
-                        onClick={() => setIsAboutExpanded((value) => !value)}
-                      >
-                        {isAboutExpanded
-                          ? appearance.language === "en"
-                            ? "Show less"
-                            : "Ver menos"
-                          : appearance.language === "en"
-                            ? "Show more"
-                            : "Ver mais"}
-                      </button>
-                    </div>
+                    {(isAboutOverflowing || isAboutExpanded) && (
+                      <div className="modal__about-actions" ref={aboutActionsRef}>
+                        <button
+                          type="button"
+                          className="button button--outline modal__about-toggle"
+                          onClick={() => setIsAboutExpanded((value) => !value)}
+                        >
+                          {isAboutExpanded
+                            ? appearance.language === "en"
+                              ? "Show less"
+                              : "Ver menos"
+                            : appearance.language === "en"
+                              ? "Show more"
+                              : "Ver mais"}
+                        </button>
+                      </div>
+                    )}
                   </section>
                 )}
               </div>
@@ -1476,23 +1480,10 @@ export function GameModal({
                       </section>
                     )}
 
-                    <div
-                      className="modal__review-summary-slot"
-                      ref={setReviewSummaryContainer}
-                    />
                   </>
                 )}
               </aside>
 
-              <Suspense fallback={null}>
-                <LazyGameReviewsSection
-                  gameId={displayGame.appId || displayGame.id}
-                  fallbackPositiveRatio={displayGame.steamPositiveRatio}
-                  fallbackReviewCount={displayGame.steamReviewCount}
-                  language={appearance.language}
-                  summaryContainer={reviewSummaryContainer}
-                />
-              </Suspense>
             </section>
           </article>
         </div>
