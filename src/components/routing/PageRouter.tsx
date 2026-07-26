@@ -395,6 +395,7 @@ export function PageRouter({
           onAddGameToCollection={appData.addGameToUserCollection}
           onOpenGameAchievements={(game) => openAchievements(game)}
           onSignOut={() => void appData.handleSteamSignOut()}
+          scrollElementRef={contentRef}
         />
       );
     }

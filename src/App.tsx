@@ -420,8 +420,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             onForward={handleForward}
             onNavigateToNotifications={() => handleNavigate("notifications")}
             onClickPremium={() => {
-              handleNavigate("settings");
-              handleSidebarSettingsTabChange("subscription");
+              setSubscriptionModalOpen(true);
             }}
             onOpenSubscriptionPortal={handleOpenSubscriptionPortal}
           />

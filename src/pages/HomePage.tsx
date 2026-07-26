@@ -135,7 +135,7 @@ const homeRecommendedGroupPreloadTimeoutMs = 1800;
 const homeRecommendedAppIdGroups = [
   ["1693980", "208650", "413150", "1714320"],
 ];
-const homePersonalCalendarDays = 7;
+const homePersonalCalendarDays = 3;
 const homePersonalCalendarGamesPerDay = 2;
 const homePersonalCalendarGameCount =
   homePersonalCalendarDays * homePersonalCalendarGamesPerDay;
@@ -1185,6 +1185,7 @@ function HomePersonalCalendar({
   const [isAtStart, setIsAtStart] = useState(true);
   const [isAtEnd, setIsAtEnd] = useState(false);
   const gamesPerDay = homePersonalCalendarGamesPerDay;
+  const canScrollCalendar = weekdays.length > 3;
 
   const updateCalendarScrollState = () => {
     const carousel = carouselRef.current;
@@ -1227,15 +1228,17 @@ function HomePersonalCalendar({
         {subtitle && <span className="home-calendar__subtitle">{subtitle}</span>}
       </div>
       <div className="home-calendar__rail">
-        <button
-          type="button"
-          className="home-calendar__arrow home-calendar__arrow--prev"
-          aria-label={language === "en" ? "Previous calendar days" : "Dias anteriores"}
-          onClick={() => scrollCalendar(-1)}
-          style={{ visibility: isAtStart ? "hidden" : "visible" }}
-        >
-          <ChevronLeft size={30} strokeWidth={2.0} aria-hidden="true" />
-        </button>
+        {canScrollCalendar ? (
+          <button
+            type="button"
+            className="home-calendar__arrow home-calendar__arrow--prev"
+            aria-label={language === "en" ? "Previous calendar days" : "Dias anteriores"}
+            onClick={() => scrollCalendar(-1)}
+            style={{ visibility: isAtStart ? "hidden" : "visible" }}
+          >
+            <ChevronLeft size={30} strokeWidth={2.0} aria-hidden="true" />
+          </button>
+        ) : null}
         <div className="home-calendar__carousel" ref={carouselRef} onScroll={handleScroll}>
           <div className="home-calendar__track">
             {weekdays.map((date, dayIndex) => {
@@ -1272,15 +1275,17 @@ function HomePersonalCalendar({
             })}
           </div>
         </div>
-        <button
-          type="button"
-          className="home-calendar__arrow home-calendar__arrow--next"
-          aria-label={language === "en" ? "Next calendar days" : "Próximos dias"}
-          onClick={() => scrollCalendar(1)}
-          style={{ visibility: isAtEnd ? "hidden" : "visible" }}
-        >
-          <ChevronRight size={30} strokeWidth={2.0} aria-hidden="true" />
-        </button>
+        {canScrollCalendar ? (
+          <button
+            type="button"
+            className="home-calendar__arrow home-calendar__arrow--next"
+            aria-label={language === "en" ? "Next calendar days" : "Próximos dias"}
+            onClick={() => scrollCalendar(1)}
+            style={{ visibility: isAtEnd ? "hidden" : "visible" }}
+          >
+            <ChevronRight size={30} strokeWidth={2.0} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </section>
   );

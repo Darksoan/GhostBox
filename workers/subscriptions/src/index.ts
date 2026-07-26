@@ -105,7 +105,7 @@ type CloudSaveRow = {
   updated_at: string;
 };
 
-const MAX_CLOUD_SAVES_PER_GAME = 3;
+const MAX_CLOUD_SAVES_PER_GAME = 1;
 
 type UserProfileCloudRow = {
   steam_id: string;
@@ -1181,17 +1181,44 @@ async function handleCloudSavesList(request: Request, env: Env) {
   if (auth.response) return auth.response;
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId")?.trim();
+  const legacyRows = await (appId
+    ? env.SUBSCRIPTION_DB.prepare(
+        `SELECT id, app_id FROM (
+           SELECT id, app_id,
+             ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank,
+             COUNT(*) OVER (PARTITION BY app_id) AS save_count
+           FROM cloud_saves
+           WHERE steam_id = ? AND app_id = ?
+         ) WHERE save_rank = 1 AND save_count > ?`
+      ).bind(auth.session!.steamId, appId, MAX_CLOUD_SAVES_PER_GAME)
+    : env.SUBSCRIPTION_DB.prepare(
+        `SELECT id, app_id FROM (
+           SELECT id, app_id,
+             ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank,
+             COUNT(*) OVER (PARTITION BY app_id) AS save_count
+           FROM cloud_saves
+           WHERE steam_id = ?
+         ) WHERE save_rank = 1 AND save_count > ? LIMIT 100`
+      ).bind(auth.session!.steamId, MAX_CLOUD_SAVES_PER_GAME)
+  ).all<Pick<CloudSaveRow, "id" | "app_id">>();
+
+  await Promise.all(
+    (legacyRows.results || []).map((row) =>
+      pruneCloudSavesForGame(env, auth.session!.steamId, row.app_id, row.id)
+    )
+  );
+
   const query = appId
     ? env.SUBSCRIPTION_DB.prepare(
-        `SELECT * FROM (
-           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
+         `SELECT * FROM (
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank
            FROM cloud_saves
            WHERE steam_id = ? AND app_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 20`
       ).bind(auth.session!.steamId, appId, MAX_CLOUD_SAVES_PER_GAME)
     : env.SUBSCRIPTION_DB.prepare(
-        `SELECT * FROM (
-           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
+         `SELECT * FROM (
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank
            FROM cloud_saves
            WHERE steam_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 100`

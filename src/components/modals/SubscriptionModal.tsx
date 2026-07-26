@@ -38,7 +38,13 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
         aria-label={t("subscription.title")}
         onClick={(event) => event.stopPropagation()}
       >
-        <SubscriptionPlans surface="modal" />
+        <section className="settings-page settings-page--tabs subscription-modal__settings-page" aria-label={t("nav.settings")}>
+          <article className="settings-panel settings-panel--bare">
+            <div className="settings-panel__body">
+              <SubscriptionPlans surface="settings" enterDelay="0.04s" />
+            </div>
+          </article>
+        </section>
       </section>
 
       <button

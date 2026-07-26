@@ -178,11 +178,6 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
     () => visibleValues.slice(0, maxVisibleFilterOptions),
     [visibleValues]
   );
-  const hiddenOptionCount = Math.max(
-    0,
-    visibleValues.length - renderedValues.length
-  );
-
   useEffect(() => {
     if (selectedValues.length > 0) setIsOpen(true);
   }, [selectedValues.length]);
@@ -262,14 +257,6 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
                     </label>
                   );
                 })}
-                {hiddenOptionCount > 0 && (
-                  <span className="catalogue-filter-section__hint">
-                    {t("catalogue.filters.showing", {
-                      visible: renderedValues.length,
-                      total: visibleValues.length,
-                    })}
-                  </span>
-                )}
               </>
             ) : (
               <span className="catalogue-filter-section__empty">

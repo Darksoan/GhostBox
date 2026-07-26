@@ -33,6 +33,10 @@ import {
   buildCloudProfileSnapshot,
   isCloudSnapshotNewer,
 } from "../lib/cloudProfile";
+import {
+  haveCollectionGamesChanged,
+  rehydrateUserCollectionGames,
+} from "../lib/collectionGames";
 import { formatSteamLoginError, mergeSteamProfile } from "../lib/steamProfile";
 import {
   createBackupToastFromRecord,
@@ -599,21 +603,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       collections: UserCollection[],
       extraGames: GhostBoxGame[] = [],
     ): UserCollection[] => {
-      const gameById = new Map<string, GhostBoxGame>();
-      for (const game of favoriteGamesRef.current) gameById.set(game.id, game);
-      for (const game of addedLibraryGamesRef.current)
-        gameById.set(game.id, game);
-      for (const game of profileHistoryGamesRef.current)
-        gameById.set(game.id, game);
-      for (const game of extraGames) gameById.set(game.id, game);
-
-      return collections.map((collection) => ({
-        ...collection,
-        games: collection.gameIds.flatMap((gameId) => {
-          const game = gameById.get(gameId);
-          return game ? [game] : [];
-        }),
-      }));
+      return rehydrateUserCollectionGames(collections, [
+        ...favoriteGamesRef.current,
+        ...addedLibraryGamesRef.current,
+        ...profileHistoryGamesRef.current,
+        ...extraGames,
+      ]);
     },
     [],
   );
@@ -1015,13 +1010,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setUserCollections((current) => {
       if (current.length === 0) return current;
       const next = rehydrateCollectionGames(current);
-      const changed = next.some((collection, index) => {
-        const previous = current[index];
-        return (
-          (previous?.games?.length ?? 0) !== (collection.games?.length ?? 0)
-        );
-      });
-      return changed ? next : current;
+      return haveCollectionGamesChanged(current, next) ? next : current;
     });
   }, [
     addedLibraryGames,

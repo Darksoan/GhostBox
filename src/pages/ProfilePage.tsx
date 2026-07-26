@@ -10,6 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   Check,
@@ -542,6 +543,7 @@ interface ProfilePageProps {
     achievementId?: string
   ) => void;
   onSignOut?: () => void;
+  scrollElementRef?: RefObject<HTMLElement | null>;
 }
 
 type ProfileCollection = {
@@ -660,6 +662,7 @@ export function ProfilePage({
   onAddGameToCollection,
   onOpenGameAchievements,
   onSignOut,
+  scrollElementRef,
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
@@ -699,6 +702,13 @@ export function ProfilePage({
     propActiveCollectionId ?? internalActiveCollectionId;
   const setActiveCollectionId =
     onSelectCollection ?? setInternalActiveCollectionId;
+  const previousActiveCollectionIdRef = useRef(activeCollectionId);
+
+  useEffect(() => {
+    if (previousActiveCollectionIdRef.current === activeCollectionId) return;
+    previousActiveCollectionIdRef.current = activeCollectionId;
+    scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeCollectionId, scrollElementRef]);
 
   const [gameContextMenu, setGameContextMenu] = useState<{
     game: GhostBoxGame;

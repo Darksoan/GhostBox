@@ -1,15 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
-import type { KeyboardEvent } from "react";
 import {
-  ChevronLeft,
-  Cloud,
-  CloudAlert,
   CloudCheck,
-  Pin,
-  PinOff,
   RotateCcw,
-  Trash,
 } from "lucide-react";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings } from "../types";
@@ -30,10 +22,8 @@ type BackupListItem = {
   appId: string;
   title: string;
   game?: GhostBoxGame;
-  cloudSaves: CloudSave[];
+  cloudSave: CloudSave;
 };
-
-type BackupVersionItem = { date: string; save: CloudSave };
 
 function formatBackupDate(value: string | undefined, language: "pt" | "en") {
   if (!value) return "";
@@ -91,12 +81,10 @@ function BackupGameIcon({
   appId,
   game,
   title,
-  fallback,
 }: {
   appId: string;
   game?: GhostBoxGame;
   title: string;
-  fallback: "success" | "missing";
 }) {
   const iconGame = game ?? createBackupRestoreGame(appId, title);
   const rawHeaderSources = useMemo(
@@ -118,11 +106,7 @@ function BackupGameIcon({
     );
   }
 
-  return fallback === "success" ? (
-    <CloudCheck className="backup-list__icon" size={28} aria-hidden="true" />
-  ) : (
-    <CloudAlert className="backup-list__icon" size={28} aria-hidden="true" />
-  );
+  return <CloudCheck className="backup-list__icon" size={28} aria-hidden="true" />;
 }
 
 export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
@@ -134,9 +118,6 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
   );
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [isCloudSavesLoading, setIsCloudSavesLoading] = useState(false);
-  const [expandedBackupAppIds, setExpandedBackupAppIds] = useState<Set<string>>(
-    () => new Set(),
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -199,7 +180,7 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
           appId,
           title: game?.title ?? cloudTitle ?? appId,
           game,
-          cloudSaves: saves,
+          cloudSave: saves[0],
         };
       })
       .sort((a, b) => a.title.localeCompare(b.title));
@@ -256,121 +237,6 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
     }
   };
 
-  const handleDeleteCloudBackup = async (title: string, save: CloudSave) => {
-    const busyKey = `cloud:${save.id}`;
-    if (restoringBackupPath) return;
-
-    const confirmed = window.confirm(
-      language === "en"
-        ? `Delete this cloud backup for ${title}? This cannot be undone.`
-        : `Excluir este backup em nuvem de ${title}? Isso não pode ser desfeito.`,
-    );
-    if (!confirmed) return;
-
-    setRestoringBackupPath(busyKey);
-    try {
-      const result = await ghostboxApi.deleteCloudSave(save.id);
-      if (!result?.success) {
-        throw new Error(
-          result?.error ||
-            (language === "en"
-              ? "Failed to delete cloud backup."
-              : "Falha ao excluir backup em nuvem."),
-        );
-      }
-      setCloudSaves((current) => current.filter((item) => item.id !== save.id));
-      showToast(
-        language === "en" ? "Cloud backup deleted" : "Backup em nuvem excluído",
-        language === "en"
-          ? `${title} cloud backup was removed.`
-          : `O backup em nuvem de ${title} foi removido.`,
-        "success",
-      );
-    } catch (error) {
-      showToast(
-        language === "en"
-          ? "Failed to delete cloud backup"
-          : "Falha ao excluir backup em nuvem",
-        error instanceof Error ? error.message : "",
-        "error",
-      );
-    } finally {
-      setRestoringBackupPath(null);
-    }
-  };
-
-  const handleToggleCloudBackupPinned = async (
-    title: string,
-    save: CloudSave,
-  ) => {
-    const pinned = !Boolean(save.pinned);
-    const busyKey = `cloud-pin:${save.id}`;
-    if (restoringBackupPath) return;
-
-    setRestoringBackupPath(busyKey);
-    try {
-      const result = await ghostboxApi.setCloudSavePinned(save.id, pinned);
-      if (!result?.save) {
-        throw new Error(
-          language === "en"
-            ? "Failed to update cloud backup."
-            : "Falha ao atualizar backup em nuvem.",
-        );
-      }
-      setCloudSaves((current) =>
-        current.map((item) => (item.id === save.id ? result.save : item)),
-      );
-      showToast(
-        pinned
-          ? language === "en"
-            ? "Cloud backup pinned"
-            : "Backup em nuvem fixado"
-          : language === "en"
-            ? "Cloud backup unpinned"
-            : "Backup em nuvem desafixado",
-        pinned
-          ? language === "en"
-            ? `${title} cloud backup will not be replaced by automatic rotation.`
-            : `O backup em nuvem de ${title} não será substituído pela rotação automática.`
-          : language === "en"
-            ? `${title} cloud backup can be replaced by future automatic backups.`
-            : `O backup em nuvem de ${title} poderá ser substituído por backups automáticos futuros.`,
-        "success",
-      );
-    } catch (error) {
-      showToast(
-        language === "en"
-          ? "Failed to update cloud backup"
-          : "Falha ao atualizar backup em nuvem",
-        error instanceof Error ? error.message : "",
-        "error",
-      );
-    } finally {
-      setRestoringBackupPath(null);
-    }
-  };
-
-  const toggleBackupVersions = (appId: string) => {
-    setExpandedBackupAppIds((current) => {
-      const next = new Set(current);
-      if (next.has(appId)) {
-        next.delete(appId);
-      } else {
-        next.add(appId);
-      }
-      return next;
-    });
-  };
-
-  const handleCardKeyDown = (
-    event: KeyboardEvent<HTMLDivElement>,
-    appId: string,
-  ) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    toggleBackupVersions(appId);
-  };
-
   return (
     <section className="backup-page content-section content-section--full">
       {backupGames.length > 0 ? (
@@ -383,43 +249,22 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
           }
         >
           {backupGames.map(
-            ({ appId, title, game, cloudSaves: gameCloudSaves }) => {
-              const versionItems: BackupVersionItem[] = gameCloudSaves
-                .map((save) => ({
-                  date: cloudSaveDate(save),
-                  save,
-                }))
-                .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+            ({ appId, title, game, cloudSave }) => {
               const latestBackupDate = formatBackupDate(
-                versionItems[0]?.date,
+                cloudSaveDate(cloudSave),
                 language,
               );
-              const hasSuccessfulBackup = versionItems.length > 0;
-              const isExpanded = expandedBackupAppIds.has(appId);
-              const versionsListId = `backup-versions-${appId}`;
+              const isBusy = Boolean(restoringBackupPath);
               return (
                 <li
                   key={appId}
-                  className={`backup-list__item ${
-                    hasSuccessfulBackup
-                      ? "backup-list__item--success"
-                      : "backup-list__item--missing"
-                  } ${isExpanded ? "backup-list__item--expanded" : ""}`}
+                  className="backup-list__item backup-list__item--success"
                 >
-                  <div
-                    className="backup-list__content"
-                    role="button"
-                    tabIndex={0}
-                    aria-expanded={isExpanded}
-                    aria-controls={versionsListId}
-                    onClick={() => toggleBackupVersions(appId)}
-                    onKeyDown={(event) => handleCardKeyDown(event, appId)}
-                  >
+                  <div className="backup-list__content">
                     <BackupGameIcon
                       appId={appId}
                       game={game}
                       title={title}
-                      fallback={hasSuccessfulBackup ? "success" : "missing"}
                     />
                     <div className="backup-list__copy">
                       <strong>{title}</strong>
@@ -427,157 +272,23 @@ export function BackupPage({ games, backupSettings = null }: BackupPageProps) {
                     </div>
 
                     <div className="backup-list__actions">
-                      {versionItems.length > 0 && (
-                        <ChevronLeft
-                          className="backup-list__chevron"
-                          size={18}
-                          aria-hidden="true"
-                        />
-                      )}
-                    </div>
-                  </div>
-                  {versionItems.length > 0 && (
-                    <div
-                      className={`backup-list__versions-wrapper ${isExpanded ? "backup-list__versions-wrapper--expanded" : ""}`}
-                      aria-hidden={!isExpanded}
-                      style={
-                        {
-                          "--backup-versions-height": `${versionItems.length * 58 + 16}px`,
-                        } as CSSProperties
-                      }
-                    >
-                      <ul
-                        id={versionsListId}
-                        className="backup-list__versions"
+                      <button
+                        type="button"
+                        className="backup-list__action-button"
+                        disabled={isBusy}
                         aria-label={
                           language === "en"
-                            ? `${title} backup versions`
-                            : `Versões de backup de ${title}`
+                            ? `Restore ${title}`
+                            : `Restaurar ${title}`
                         }
+                        onClick={() => {
+                          void handleRestoreCloudBackup(appId, title, cloudSave);
+                        }}
                       >
-                        {versionItems.map((version, index) => {
-                          const entryDate = formatBackupDate(
-                            version.date,
-                            language,
-                          );
-                          const entryLabel =
-                            entryDate ||
-                            (language === "en"
-                              ? `Version ${index + 1}`
-                              : `Versão ${index + 1}`);
-                          const isLatest = index === 0;
-                          const busyKey = `cloud:${version.save.id}`;
-                          const isBusy = Boolean(restoringBackupPath);
-                          const isPinned = Boolean(version.save.pinned);
-
-                          return (
-                            <li className="backup-list__version" key={busyKey}>
-                              <Cloud
-                                className="backup-list__version-icon"
-                                size={16}
-                                strokeWidth={2}
-                                aria-hidden="true"
-                              />
-                              <div className="backup-list__version-copy">
-                                <strong>{entryLabel}</strong>
-                                <span>
-                                  {isLatest
-                                    ? language === "en"
-                                      ? "Most recent"
-                                      : "Mais recente"
-                                    : language === "en"
-                                      ? "Older backup"
-                                      : "Backup antigo"}
-                                  {isPinned
-                                    ? language === "en"
-                                      ? " - pinned"
-                                      : " - fixado"
-                                    : ""}
-                                </span>
-                              </div>
-                              <div className="backup-list__version-actions">
-                                <button
-                                  type="button"
-                                  className={`backup-list__action-button ${isPinned ? "backup-list__action-button--pinned" : ""}`}
-                                  disabled={isBusy}
-                                  aria-label={
-                                    isPinned
-                                      ? language === "en"
-                                        ? `Unpin ${entryLabel}`
-                                        : `Desafixar ${entryLabel}`
-                                      : language === "en"
-                                        ? `Pin ${entryLabel}`
-                                        : `Fixar ${entryLabel}`
-                                  }
-                                  title={
-                                    isPinned
-                                      ? language === "en"
-                                        ? "Allow automatic replacement"
-                                        : "Permitir substituição automática"
-                                      : language === "en"
-                                        ? "Keep this backup"
-                                        : "Manter este backup"
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleToggleCloudBackupPinned(
-                                      title,
-                                      version.save,
-                                    );
-                                  }}
-                                >
-                                  {isPinned ? (
-                                    <PinOff size={16} aria-hidden="true" />
-                                  ) : (
-                                    <Pin size={16} aria-hidden="true" />
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="backup-list__action-button"
-                                  disabled={isBusy}
-                                  aria-label={
-                                    language === "en"
-                                      ? `Restore ${entryLabel}`
-                                      : `Restaurar ${entryLabel}`
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleRestoreCloudBackup(
-                                      appId,
-                                      title,
-                                      version.save,
-                                    );
-                                  }}
-                                >
-                                  <RotateCcw size={16} aria-hidden="true" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="backup-list__action-button backup-list__action-button--danger"
-                                  disabled={isBusy}
-                                  aria-label={
-                                    language === "en"
-                                      ? `Delete ${entryLabel}`
-                                      : `Excluir ${entryLabel}`
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    void handleDeleteCloudBackup(
-                                      title,
-                                      version.save,
-                                    );
-                                  }}
-                                >
-                                  <Trash size={16} aria-hidden="true" />
-                                </button>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                        <RotateCcw size={16} aria-hidden="true" />
+                      </button>
                     </div>
-                  )}
+                  </div>
                 </li>
               );
             },

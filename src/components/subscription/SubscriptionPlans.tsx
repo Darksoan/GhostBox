@@ -181,6 +181,7 @@ export function SubscriptionPlans({
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings" && Boolean(steamProfile?.steamId));
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<PaidSubscriptionPlanId>("monthly");
   const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
   const [portalFlow, setPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
   const subscriptionRequestIdRef = useRef(0);
@@ -507,6 +508,33 @@ export function SubscriptionPlans({
     );
   }
 
+  const paidPlans: Record<PaidSubscriptionPlanId, {
+    price: string;
+    cadence: string;
+    description: string;
+    savings?: {
+      label: string;
+      value: string;
+    };
+  }> = {
+    monthly: {
+      price: "R$ 6,99",
+      cadence: t("subscription.plans.monthly.cadence"),
+      description: copy("Ideal para testar a sincronização premium sem compromisso longo.", "Ideal for trying premium sync without a long commitment."),
+    },
+    quarterly: {
+      price: "R$ 14,99",
+      cadence: t("subscription.plans.quarterly.cadence"),
+      description: copy("Mais economia para manter seus saves protegidos por mais tempo.", "Better value to keep your saves protected for longer."),
+      savings: {
+        label: t("subscription.plans.quarterly.savingsLabel"),
+        value: t("subscription.plans.quarterly.savingsValue"),
+      },
+    },
+  };
+
+  const selectedPaidPlan = paidPlans[selectedPlanId];
+
   const plans: Array<{
     id: SubscriptionPlanId;
     title: string;
@@ -531,23 +559,12 @@ export function SubscriptionPlans({
       disabled: true,
     },
     {
-      id: "monthly",
-      title: t("subscription.plans.monthly.title"),
-      price: "R$ 6,99",
-      cadence: t("subscription.plans.monthly.cadence"),
-      description: copy("Ideal para testar a sincronização premium sem compromisso longo.", "Ideal for trying premium sync without a long commitment."),
-      action: t("subscription.actions.subscribe"),
-    },
-    {
-      id: "quarterly",
-      title: t("subscription.plans.quarterly.title"),
-      price: "R$ 14,99",
-      cadence: t("subscription.plans.quarterly.cadence"),
-      description: copy("Mais economia para manter seus saves protegidos por mais tempo.", "Better value to keep your saves protected for longer."),
-      savings: {
-        label: t("subscription.plans.quarterly.savingsLabel"),
-        value: t("subscription.plans.quarterly.savingsValue"),
-      },
+      id: selectedPlanId,
+      title: "Premium",
+      price: selectedPaidPlan.price,
+      cadence: selectedPaidPlan.cadence,
+      description: selectedPaidPlan.description,
+      savings: selectedPaidPlan.savings,
       action: t("subscription.actions.subscribe"),
     },
   ];
@@ -644,20 +661,44 @@ export function SubscriptionPlans({
         )}
       </header>
 
-      <div className="subscription-plans__grid">
+      <div className="subscription-plans__grid subscription-plans__grid--billing-toggle">
         {plans.map((plan) => (
           <article
-            key={plan.id}
+            key={plan.id === "free" ? plan.id : "premium"}
             className={[
               "subscription-plan-card",
               plan.disabled ? "subscription-plan-card--disabled" : "",
-              plan.id === "quarterly" ? "subscription-plan-card--featured" : "",
+              plan.id !== "free" ? "subscription-plan-card--featured" : "",
             ].filter(Boolean).join(" ")}
           >
             {plan.badge && <div className="subscription-plan-card__badge">{plan.badge}</div>}
 
             <div className="subscription-plan-card__top">
               <h4>{plan.title}</h4>
+              {plan.id !== "free" && (
+                <div className="subscription-plan-card__billing-toggle" role="group" aria-label={copy("Escolha o período da assinatura", "Choose billing period")}>
+                  <span
+                    className={`subscription-plan-card__billing-toggle-thumb subscription-plan-card__billing-toggle-thumb--${selectedPlanId}`}
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    className={selectedPlanId === "monthly" ? "is-active" : undefined}
+                    aria-pressed={selectedPlanId === "monthly"}
+                    onClick={() => setSelectedPlanId("monthly")}
+                  >
+                    {t("subscription.plans.monthly.title")}
+                  </button>
+                  <button
+                    type="button"
+                    className={selectedPlanId === "quarterly" ? "is-active" : undefined}
+                    aria-pressed={selectedPlanId === "quarterly"}
+                    onClick={() => setSelectedPlanId("quarterly")}
+                  >
+                    {t("subscription.plans.quarterly.title")}
+                  </button>
+                </div>
+              )}
               <div className="subscription-plan-card__price">{plan.price}</div>
               <span>{plan.cadence}</span>
               <p>{plan.description}</p>

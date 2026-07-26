@@ -148,7 +148,7 @@ export const Header = memo(function Header({
     (page !== "catalogue" || allowSearchDropdown) &&
     focused &&
     Boolean(query.trim()) &&
-    (suggestions.length > 0 || isSearching || hasNoSearchResults || showAppIdPrompt);
+    (suggestions.length > 0 || hasNoSearchResults || showAppIdPrompt);
 
   const handleBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
