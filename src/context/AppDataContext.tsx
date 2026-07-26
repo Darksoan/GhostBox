@@ -1197,6 +1197,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (changed) setProfileHistoryGames(normalizedGames);
   }, [addedLibraryGames, favoriteGames, profileHistoryGames]);
 
+  const ensureLuaToolsDependencies = useCallback(() => {
+    void ghostboxApi.ensureLuaToolsDependencies().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    return ghostboxApi.onLuaToolsDependenciesFinished((event) => {
+      showToast(
+        event.title,
+        event.error ? `${event.message} ${event.error}` : event.message,
+        event.success ? "success" : "error",
+      );
+    });
+  }, [showToast]);
+
   const applySteamLibraryScanResult = useCallback(
     (result: SteamLibraryScanResult) => {
       if (result.status !== "ok") return;
@@ -1207,8 +1221,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       );
       setSteamPathInput(result.steamPath);
       setScannedLibraryGames(games);
+      if (
+        games.some(
+          (game) => "luaToolsManifests" in game || "luaToolsManifestFiles" in game,
+        )
+      ) {
+        ensureLuaToolsDependencies();
+      }
     },
-    [],
+    [ensureLuaToolsDependencies],
   );
 
   useEffect(() => {
@@ -1278,6 +1299,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (isHiddenLibraryGame(result.libraryGame)) return;
+        if (!isSteamOwnedGame) {
+          ensureLuaToolsDependencies();
+        }
 
         const libraryGame = mergeGamePlaytime({
           ...result.libraryGame,
@@ -1321,6 +1345,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       mergeGamePlaytime,
       removingGameId,
       showToast,
+      ensureLuaToolsDependencies,
     ],
   );
 

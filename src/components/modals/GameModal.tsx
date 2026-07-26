@@ -540,7 +540,6 @@ export function GameModal({
   const [loadedLogoSource, setLoadedLogoSource] = useState("");
   const [visibleScreenshotSource, setVisibleScreenshotSource] = useState("");
   const [isBackupOptionsOpen, setIsBackupOptionsOpen] = useState(false);
-  const [isPressing, setIsPressing] = useState(false);
   const achievementsPanelId = useId();
   const chipsPanelId = useId();
   const [isAchievementsCollapsed, setIsAchievementsCollapsed] = useState(false);
@@ -554,7 +553,6 @@ export function GameModal({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const aboutContentShellRef = useRef<HTMLDivElement | null>(null);
   const aboutActionsRef = useRef<HTMLDivElement | null>(null);
-  const pressTimeoutRef = useRef<number | null>(null);
   const [aboutCollapsedMaxHeight, setAboutCollapsedMaxHeight] = useState<
     number | null
   >(null);
@@ -568,16 +566,7 @@ export function GameModal({
     setLoadedLogoSource("");
     setVisibleScreenshotSource("");
     setIsBackupOptionsOpen(false);
-    setIsPressing(false);
   }, [game?.id]);
-
-  useEffect(() => {
-    return () => {
-      if (pressTimeoutRef.current !== null) {
-        window.clearTimeout(pressTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -701,18 +690,6 @@ export function GameModal({
   }, [game, onClose]);
 
   const displayGame = detailGame ?? game;
-
-  function triggerPressAnimation() {
-    if (pressTimeoutRef.current !== null) return;
-
-    requestAnimationFrame(() => {
-      setIsPressing(true);
-      pressTimeoutRef.current = window.setTimeout(() => {
-        setIsPressing(false);
-        pressTimeoutRef.current = null;
-      }, 180);
-    });
-  }
 
   const stableScreenshots = game?.screenshots.length ? game.screenshots : [];
   const displayScreenshots = displayGame?.screenshots ?? [];
@@ -1114,8 +1091,7 @@ export function GameModal({
                   {isInstalled && (
                       <button
                         type="button"
-                        className={`button button--primary modal__play-button${isPressing ? " modal__play-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className="button button--primary modal__play-button"
                         onClick={() => {
                           if (isPlaying || isSessionActive) return;
                           onPlayGame(displayGame);
@@ -1158,8 +1134,7 @@ export function GameModal({
                     <>
                       <button
                         type="button"
-                        className={`button button--primary modal__remove-button${isPressing ? " modal__remove-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className="button button--primary modal__remove-button"
                         onClick={() => onRemoveGame(displayGame)}
                         disabled={isRemoving}
                       >
@@ -1188,8 +1163,7 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""} ${isPressing ? "modal__favorite-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
                         onClick={() => onToggleFavorite(displayGame)}
                         aria-pressed={isFavorite}
                         aria-label={
@@ -1210,8 +1184,7 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}${isPressing ? " modal__gear-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
                         onClick={() => setIsBackupOptionsOpen(true)}
                         aria-label={
                           appearance.language === "en"
@@ -1226,8 +1199,7 @@ export function GameModal({
                     <>
                       <button
                         type="button"
-                        className={`button button--primary modal__add-button${isPressing ? " modal__add-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className="button button--primary modal__add-button"
                         onClick={() => onQueueGame(displayGame)}
                       >
                         <Download size={20} />
@@ -1237,8 +1209,7 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""} ${isPressing ? "modal__favorite-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
                         onClick={() => onToggleFavorite(displayGame)}
                         aria-pressed={isFavorite}
                         aria-label={
@@ -1259,8 +1230,7 @@ export function GameModal({
                       </button>
                       <button
                         type="button"
-                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}${isPressing ? " modal__gear-button--press" : ""}`}
-                        onPointerDown={triggerPressAnimation}
+                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
                         onClick={() => setIsBackupOptionsOpen(true)}
                         aria-label={
                           appearance.language === "en"

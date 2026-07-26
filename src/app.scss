@@ -2050,7 +2050,6 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
 }
 
 .header {
-  /* Colored PNG — keep original message.png colors (no dim / no invert) */
   &__icon-button#{&}__feedback-button {
     opacity: 0.8;
 
@@ -13302,13 +13301,6 @@ html.no-backdrop-blur {
       }
     }
 
-    &:active {
-      transform: scale(0.92);
-    }
-
-    &--press {
-      animation: modal-button-press 160ms cubic-bezier(0.2, 0, 0, 1);
-    }
   }
 
   &__gear-button {
@@ -13450,32 +13442,9 @@ html.no-backdrop-blur {
   }
 }
 
-@keyframes modal-button-press {
-  0% {
-    transform: scale(1);
-  }
-
-  35% {
-    transform: scale(0.88);
-  }
-
-  72% {
-    transform: scale(1.04);
-  }
-
-  100% {
-    transform: scale(1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .content-overlay-enter,
-  .content-overlay-exit,
-  .modal__play-button--press,
-  .modal__add-button--press,
-  .modal__remove-button--press,
-  .modal__favorite-button--press,
-  .modal__gear-button--press {
+  .content-overlay-exit {
     animation: none;
   }
 }

@@ -18,6 +18,9 @@ import type {
   LocalAchievementsUnlockedPayload,
   LudusaviBackupPreviewGame,
   MorrenusStatsResult,
+  LuaToolsDependenciesEnsureResult,
+  LuaToolsDependenciesFinishedEvent,
+  LuaToolsDependenciesStatus,
   NotificationSettings,
   GhostBoxGame,
   RemoveGameResult,
@@ -755,6 +758,57 @@ export const ghostboxApi = {
       {},
       { success: true },
     );
+  },
+
+  getLuaToolsDependenciesStatus(): Promise<LuaToolsDependenciesStatus> {
+    return invokeOr<LuaToolsDependenciesStatus>(
+      "luatools_dependencies_status",
+      {},
+      {
+        steamFound: false,
+        steamPath: "",
+        luaToolsInstalled: false,
+        luaToolsPath: "",
+        stPluginFolderFound: false,
+        betterSteamToolsInstalled: false,
+        openSteamToolFiles: [],
+        openSteamToolConfigured: false,
+        ready: false,
+        checkedPaths: [],
+      },
+    );
+  },
+
+  ensureLuaToolsDependencies(): Promise<LuaToolsDependenciesEnsureResult> {
+    return invokeOr<LuaToolsDependenciesEnsureResult>(
+      "luatools_dependencies_ensure",
+      {},
+      { status: "failed", started: false, ready: false },
+    );
+  },
+
+  onLuaToolsDependenciesFinished(
+    callback: (event: LuaToolsDependenciesFinishedEvent) => void,
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<LuaToolsDependenciesFinishedEvent>(
+      "luatools-dependencies-finished",
+      (event) => {
+        callback(event.payload);
+      },
+    ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   },
 
   getSteamProfile(): Promise<SteamProfile | null> {

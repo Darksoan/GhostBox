@@ -215,6 +215,36 @@ export type MorrenusStatsResult = {
   error?: string;
 };
 
+export type LuaToolsDependenciesStatus = {
+  steamFound: boolean;
+  steamPath: string;
+  luaToolsInstalled: boolean;
+  luaToolsPath: string;
+  stPluginFolderFound: boolean;
+  betterSteamToolsInstalled: boolean;
+  openSteamToolFiles: string[];
+  openSteamToolConfigured: boolean;
+  ready: boolean;
+  checkedPaths: string[];
+  lastStatus?: string | null;
+  lastError?: string | null;
+};
+
+export type LuaToolsDependenciesEnsureResult = {
+  status: "ready" | "running" | "started" | "failed";
+  started: boolean;
+  ready: boolean;
+  error?: string;
+};
+
+export type LuaToolsDependenciesFinishedEvent = {
+  success: boolean;
+  status: "ready" | "failed" | "unsupported" | string;
+  title: string;
+  message: string;
+  error?: string | null;
+};
+
 export type SteamRestartResult = {
   success: boolean;
   status: "opened" | "opened-url" | "failed" | "missing";

@@ -37,6 +37,7 @@ mod ghostbox_library;
 mod image_cache;
 mod luatools;
 mod ludusavi;
+mod luatools_bootstrap;
 mod playtime;
 mod settings;
 mod steam;
@@ -1396,6 +1397,8 @@ pub fn run() {
             ghostbox_library::ghostbox_library_register_steam_game,
             luatools::luatools_add_game,
             luatools::luatools_remove_game,
+            luatools_bootstrap::luatools_dependencies_status,
+            luatools_bootstrap::luatools_dependencies_ensure,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
             window_lifecycle::tray_set_library_games,
