@@ -400,7 +400,7 @@ export function PageRouter({
     }
 
     if (targetPage === "notifications") {
-      return <LazyNotificationsPage onOpenGame={openGame} />;
+      return <LazyNotificationsPage />;
     }
 
     return null;

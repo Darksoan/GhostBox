@@ -52,9 +52,13 @@ const translations: Record<Language, TranslationTree> = {
       errorMessage: "Não foi possível enviar o feedback agora.",
     },
     notifications: {
-      groupTitle: "Jogos adicionados",
-      loading: "Carregando jogos adicionados recentemente...",
-      emptyMessage: "Nenhum jogo recente foi encontrado no banco de dados.",
+      title: "Notificações",
+      description: "Acompanhe eventos importantes do GhostBox sem sair do app.",
+      loading: "Carregando notificações...",
+      filters: "Filtros de notificações",
+      clear: "Limpar histórico",
+      emptyTitle: "Nenhuma notificação por enquanto",
+      emptyMessage: "Backups, conquistas, conta, downloads e alertas do sistema aparecerão aqui.",
     },
     backup: {
       eyebrow: "Backup em nuvem",
@@ -566,9 +570,13 @@ const translations: Record<Language, TranslationTree> = {
       errorMessage: "Feedback could not be sent right now.",
     },
     notifications: {
-      groupTitle: "Games added",
-      loading: "Loading recently added games...",
-      emptyMessage: "No recently added games were found in the database.",
+      title: "Notifications",
+      description: "Track important GhostBox events without leaving the app.",
+      loading: "Loading notifications...",
+      filters: "Notification filters",
+      clear: "Clear history",
+      emptyTitle: "No notifications yet",
+      emptyMessage: "Backups, achievements, account, downloads, and system alerts will appear here.",
     },
     backup: {
       eyebrow: "Cloud backup",

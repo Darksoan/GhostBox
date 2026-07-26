@@ -349,6 +349,24 @@ export const ghostboxApi = {
     steamId: string,
   ): Promise<SubscriptionStatusResult | null> {
     const id = steamId.trim();
+    if (!id) return null;
+
+    if ("__TAURI_INTERNALS__" in window) {
+      try {
+        const status = await invoke<SubscriptionStatusResult>(
+          "subscription_get_status",
+          { steamId: id },
+        );
+        if (status.discordLink) {
+          writeDiscordLinkCache(id, status.discordLink);
+        }
+        writePremiumCache(id, resolveIsPremium(status), status.subscription?.currentPeriodEnd ?? null);
+        return status;
+      } catch {
+        return null;
+      }
+    }
+
     const url = new URL(`${getSubscriptionsApiUrl()}/subscription/status`);
     url.searchParams.set("steamId", id);
 

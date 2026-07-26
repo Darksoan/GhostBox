@@ -150,7 +150,9 @@ export function EditProfileModal({
   const avatarSources = useCachedImageSources(avatarUrl ? [avatarUrl] : []);
   const bannerSources = useCachedImageSources(bannerUrl ? [bannerUrl] : [profileBannerPlaceholderSource]);
   const avatarPreviewSource = avatarUrl.startsWith("data:") ? avatarUrl : avatarSources[0] ?? avatarUrl;
-  const bannerPreviewSource = bannerUrl.startsWith("data:") ? bannerUrl : bannerSources[0] ?? profileBannerPlaceholderSource;
+  const bannerPreviewSource = bannerUrl.startsWith("data:")
+    ? bannerUrl
+    : bannerSources[0] ?? (bannerUrl || profileBannerPlaceholderSource);
   const isCoverMode = mode === "cover";
   const isBannerPlaceholder = !bannerUrl;
 

@@ -7,7 +7,10 @@ import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
-import { loadGameModalModule } from "../../utils/gameModalLoader";
+import {
+  getLoadedGameModalModule,
+  loadGameModalModule,
+} from "../../utils/gameModalLoader";
 
 function matchesSelectedGame(candidate: GhostBoxGame, selected: GhostBoxGame) {
   if (candidate.id === selected.id) return true;
@@ -119,6 +122,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
   }
 
   if (selectedGame) {
+    const GameModal = getLoadedGameModalModule()?.GameModal ?? LazyGameModal;
     const mergedGame = resolveOverlayGame(
       selectedGame,
       appData.addedLibraryGames,
@@ -145,7 +149,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
         <Suspense
           fallback={<div className="game-modal-loading-shell" aria-hidden="true" />}
         >
-          <LazyGameModal
+          <GameModal
             game={mergedGame}
             isAdding={
               appData.addingGameId === selectedGame.id ||

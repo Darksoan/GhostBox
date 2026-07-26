@@ -26,6 +26,7 @@ import type {
   UserCollection,
 } from "../types";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import { pushAppNotification } from "../lib/appNotifications";
 import type { GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
 import {
   applyCloudProfileToLocal,
@@ -822,6 +823,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!shouldNotify) return;
 
       const pendingToast = createBackupToastFromRecord(record);
+      const createdAt = Date.parse(record.lastBackupAt);
+
+      pushAppNotification({
+        id: `backup:${record.title}:${record.lastBackupAt}:${record.lastBackupSuccess !== false ? "success" : "error"}`,
+        type: "backup",
+        severity: record.lastBackupSuccess !== false ? "success" : "error",
+        title: pendingToast.title,
+        message: pendingToast.message,
+        createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+      });
 
       if (isAppFocused()) {
         showToast(
@@ -1046,8 +1057,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return ghostboxApi.onLocalAchievementsUnlocked((payload) => {
       if (!notifications.achievementsEnabled) return;
 
-      for (const achievementName of payload.achievements) {
+      for (const [index, achievementName] of payload.achievements.entries()) {
         const message = `${payload.title}: ${achievementName}`;
+
+        pushAppNotification({
+          id: `achievement:${payload.title}:${achievementName}:${Date.now()}:${index}`,
+          type: "achievement",
+          severity: "success",
+          title: achievementUnlockedTitle,
+          message,
+          createdAt: Date.now(),
+        });
 
         showAchievementDesktopNotification(
           achievementUnlockedTitle,
@@ -1295,7 +1315,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? await registerSteamLibraryGame(game)
           : await addGameViaLuaTools(game);
         if (!result.success) {
-          showToast("Falha ao adicionar", result.error);
+          const errorMessage = result.error || "Não foi possível adicionar o jogo à Biblioteca.";
+          showToast("Falha ao adicionar", errorMessage);
+          pushAppNotification({
+            id: `library:add:error:${game.appId}:${Date.now()}`,
+            type: "library",
+            severity: "error",
+            title: appearance.language === "en" ? "Could not add game" : "Falha ao adicionar jogo",
+            message: appearance.language === "en"
+              ? `${game.title} could not be added to the Library. ${errorMessage}`
+              : `${game.title} não pôde ser adicionado à Biblioteca. ${errorMessage}`,
+            createdAt: Date.now(),
+          });
           return;
         }
         if (isHiddenLibraryGame(result.libraryGame)) return;
@@ -1328,19 +1359,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? `${libraryGame.title} foi reconhecido na Biblioteca.`
             : `${libraryGame.title} foi adicionado à Biblioteca.`,
         );
+        pushAppNotification({
+          id: `library:add:success:${libraryGame.appId}:${Date.now()}`,
+          type: "library",
+          severity: "success",
+          title: appearance.language === "en" ? "Game added" : "Jogo adicionado",
+          message: appearance.language === "en"
+            ? `${libraryGame.title} was added to the Library.`
+            : `${libraryGame.title} foi adicionado à Biblioteca.`,
+          createdAt: Date.now(),
+        });
       } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : "Não foi possível concluir o fluxo LuaTools.";
         showToast(
           "Falha ao adicionar",
-          error instanceof Error
-            ? error.message
-            : "Não foi possível concluir o fluxo LuaTools.",
+          errorMessage,
         );
+        pushAppNotification({
+          id: `library:add:error:${game.appId}:${Date.now()}`,
+          type: "library",
+          severity: "error",
+          title: appearance.language === "en" ? "Could not add game" : "Falha ao adicionar jogo",
+          message: appearance.language === "en"
+            ? `${game.title} could not be added to the Library. ${errorMessage}`
+            : `${game.title} não pôde ser adicionado à Biblioteca. ${errorMessage}`,
+          createdAt: Date.now(),
+        });
       } finally {
         setAddingGameId(null);
       }
     },
     [
       addingGameId,
+      appearance.language,
       availableLibraryGameAppIds,
       mergeGamePlaytime,
       removingGameId,
@@ -1357,7 +1410,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const result = await removeGameViaLuaTools(game);
         if (!result.success) {
-          showToast("Falha ao remover", result.error);
+          const errorMessage = result.error || "Não foi possível remover o jogo.";
+          showToast("Falha ao remover", errorMessage);
+          pushAppNotification({
+            id: `library:remove:error:${game.appId}:${Date.now()}`,
+            type: "library",
+            severity: "error",
+            title: appearance.language === "en" ? "Could not remove game" : "Falha ao remover jogo",
+            message: appearance.language === "en"
+              ? `${game.title} could not be removed from the Library. ${errorMessage}`
+              : `${game.title} não pôde ser removido da Biblioteca. ${errorMessage}`,
+            createdAt: Date.now(),
+          });
           return;
         }
 
@@ -1394,19 +1458,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .catch(() => undefined);
 
         showToast("Jogo removido", `${game.title} foi removido da Biblioteca.`);
+        pushAppNotification({
+          id: `library:remove:success:${game.appId}:${Date.now()}`,
+          type: "library",
+          severity: "info",
+          title: appearance.language === "en" ? "Game removed" : "Jogo removido",
+          message: appearance.language === "en"
+            ? `${game.title} was removed from the Library.`
+            : `${game.title} foi removido da Biblioteca.`,
+          createdAt: Date.now(),
+        });
       } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : "Não foi possível remover o jogo.";
         showToast(
           "Falha ao remover",
-          error instanceof Error
-            ? error.message
-            : "Não foi possível remover o jogo.",
+          errorMessage,
         );
+        pushAppNotification({
+          id: `library:remove:error:${game.appId}:${Date.now()}`,
+          type: "library",
+          severity: "error",
+          title: appearance.language === "en" ? "Could not remove game" : "Falha ao remover jogo",
+          message: appearance.language === "en"
+            ? `${game.title} could not be removed from the Library. ${errorMessage}`
+            : `${game.title} não pôde ser removido da Biblioteca. ${errorMessage}`,
+          createdAt: Date.now(),
+        });
       } finally {
         setRemovingGameId(null);
       }
     },
     [
       addingGameId,
+      appearance.language,
       applyBackupAchievementsToProfileHistory,
       mergeGamePlaytime,
       removingGameId,

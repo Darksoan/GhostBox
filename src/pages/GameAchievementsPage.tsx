@@ -211,6 +211,7 @@ export function GameAchievementsPage({
       aria-label={t("achievements.pageAria", { title: detailGame.title })}
     >
       <div className="game-achievements-page__summary-section">
+        <h1 className="game-achievements-page__title">{detailGame.title}</h1>
         <div className="game-achievements-page__summary-row">
           <p className="game-achievements-page__summary-playtime">
             {appearance.language === "en" ? "Play time: " : "Tempo de jogo: "}

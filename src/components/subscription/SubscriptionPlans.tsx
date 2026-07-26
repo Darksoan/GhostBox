@@ -1,4 +1,4 @@
-import { CalendarClock, Check, Cloud, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
+import { CalendarClock, Check, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
 import { CupStar, ServerUpdate, UserEdit } from "reicon-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
@@ -457,34 +457,12 @@ export function SubscriptionPlans({
             </h4>
             {recentBackups.length > 0 ? (
               <ul className="subscription-account__backup-list">
-                {recentBackups.map((game) => {
-                  const backupOk = game.lastBackupSuccess !== false;
-                  return (
-                    <li key={game.appId}>
-                      <strong>{game.title}</strong>
-                      {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
-                      <em
-                        className={
-                          backupOk
-                            ? "subscription-account__backup-status"
-                            : "subscription-account__backup-status subscription-account__backup-status--error"
-                        }
-                        title={
-                          backupOk
-                            ? copy("Backup em nuvem ativo", "Cloud backup active")
-                            : copy("Último backup com falha", "Last backup failed")
-                        }
-                        aria-label={
-                          backupOk
-                            ? copy("Backup em nuvem ativo", "Cloud backup active")
-                            : copy("Último backup com falha", "Last backup failed")
-                        }
-                      >
-                        <Cloud size={16} strokeWidth={2.15} aria-hidden="true" />
-                      </em>
-                    </li>
-                  );
-                })}
+                {recentBackups.map((game) => (
+                  <li key={game.appId}>
+                    <strong>{game.title}</strong>
+                    {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
+                  </li>
+                ))}
               </ul>
             ) : (
               <div className="subscription-account__empty">

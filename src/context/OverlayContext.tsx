@@ -12,6 +12,7 @@ import {
 import type { GhostBoxGame } from "../data";
 import type { ToastVariant } from "../components/ui/Toast";
 import { getToastVariant } from "../lib/toastUtils";
+import { loadGameModalModule } from "../utils/gameModalLoader";
 import { useSettings } from "./settings";
 
 export type AchievementsViewState = {
@@ -71,6 +72,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   const modalReturnScrollTopRef = useRef(0);
   const restoreContentScrollAfterModalRef = useRef(false);
   const gameModalExitTimeoutRef = useRef<number>();
+  const openGameRequestRef = useRef(0);
   const selectedGameRef = useRef<GhostBoxGame | null>(null);
   const achievementsViewRef = useRef<AchievementsViewState>(null);
   selectedGameRef.current = selectedGame;
@@ -120,7 +122,13 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     return 100;
   }, [appearance.reduceAllAnimations]);
 
-  const openGame = useCallback((game: GhostBoxGame) => {
+  const openGame = useCallback(async (game: GhostBoxGame) => {
+    const requestId = openGameRequestRef.current + 1;
+    openGameRequestRef.current = requestId;
+
+    await loadGameModalModule().catch(() => undefined);
+    if (openGameRequestRef.current !== requestId) return;
+
     clearOverlayExitTimeout();
     restoreContentScrollAfterModalRef.current = true;
     setIsGameModalExitPending(false);

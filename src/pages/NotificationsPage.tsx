@@ -1,199 +1,216 @@
+import {
+  AlertTriangle,
+  Bell,
+  CheckCircle2,
+  CloudUpload,
+  Download,
+  Layers,
+  Settings,
+  Trophy,
+  UserRound,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadGames, type GhostBoxGame } from "../data";
+import { EmptyState } from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
-import { EmptyState, NotificationsFeedLoadingState } from "../components/ui/LoadingStates";
 import { ghostboxApi } from "../lib/ghostboxApi";
-import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
-import { gameHeaderOnlySources, layeredImageStyle } from "../utils/image";
-import { writeNotificationsLastSeenAt } from "../utils/storage";
+import {
+  appNotificationsChangedEvent,
+  clearAppNotifications,
+  markAppNotificationsSeen,
+  readAppNotifications,
+  type AppNotificationItem,
+  type AppNotificationSeverity,
+  type AppNotificationType,
+} from "../lib/appNotifications";
 
-const recentlyAddedLimit = 200;
+type NotificationFilter = "all" | "important" | AppNotificationType;
 
-function startOfDay(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
+const notificationFilters: NotificationFilter[] = [
+  "all",
+  "important",
+  "backup",
+  "achievement",
+  "account",
+  "library",
+  "download",
+  "system",
+];
 
-function formatDateGroup(timestamp: number | undefined, locale: string, language: "pt" | "en") {
-  const date = timestamp ? new Date(timestamp) : new Date(0);
-  const today = startOfDay(new Date());
-  const groupDay = startOfDay(date);
-  const dayDifference = Math.round((today.getTime() - groupDay.getTime()) / 86_400_000);
-  const dateText = date.toLocaleDateString(locale, {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-
-  if (dayDifference === 0) {
-    return { key: dateText, label: language === "en" ? "Today" : "Hoje", dateText };
-  }
-
-  if (dayDifference === 1) {
-    return { key: dateText, label: language === "en" ? "Yesterday" : "Ontem", dateText };
-  }
-
-  if (dayDifference > 1 && dayDifference < 7) {
-    return { key: dateText, label: language === "en" ? "This week" : "Esta semana", dateText };
-  }
-
-  return { key: dateText, label: dateText, dateText };
-}
-
-type NotificationsPageProps = {
-  onOpenGame: (game: GhostBoxGame) => void;
+const notificationTypeIcons: Record<AppNotificationType, LucideIcon> = {
+  system: Settings,
+  library: Layers,
+  backup: CloudUpload,
+  achievement: Trophy,
+  account: UserRound,
+  download: Download,
 };
 
-function NotificationGameItem({
-  game,
-  onOpenGame,
-}: {
-  game: GhostBoxGame;
-  onOpenGame: (game: GhostBoxGame) => void;
-}) {
-  const rawHeaderSources = useMemo(() => gameHeaderOnlySources(game), [game]);
-  const headerSources = useCachedImageSources(rawHeaderSources);
-  const { source: coverSource, loaded } = useLoadableImageCover(headerSources);
-  const displayedCoverSources = loaded && coverSource ? [coverSource] : [];
+const severityIcons: Record<AppNotificationSeverity, LucideIcon> = {
+  info: Bell,
+  success: CheckCircle2,
+  warning: AlertTriangle,
+  error: XCircle,
+};
 
-  function getGameDeveloperLabel(game: GhostBoxGame) {
-    return game.developers?.[0] || "";
+function formatRelativeTime(timestamp: number, language: "pt" | "en") {
+  const elapsedMs = Date.now() - timestamp;
+  const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60_000));
+
+  if (elapsedMinutes < 1) return language === "en" ? "now" : "agora";
+  if (elapsedMinutes < 60) {
+    return language === "en" ? `${elapsedMinutes}m ago` : `há ${elapsedMinutes}min`;
   }
 
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return language === "en" ? `${elapsedHours}h ago` : `há ${elapsedHours}h`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return language === "en" ? `${elapsedDays}d ago` : `há ${elapsedDays}d`;
+}
+
+function filterLabel(filter: NotificationFilter, language: "pt" | "en") {
+  const labels: Record<NotificationFilter, { pt: string; en: string }> = {
+    all: { pt: "Tudo", en: "All" },
+    important: { pt: "Importantes", en: "Important" },
+    backup: { pt: "Backups", en: "Backups" },
+    achievement: { pt: "Conquistas", en: "Achievements" },
+    account: { pt: "Conta", en: "Account" },
+    library: { pt: "Biblioteca", en: "Library" },
+    download: { pt: "Downloads", en: "Downloads" },
+    system: { pt: "Sistema", en: "System" },
+  };
+
+  return labels[filter][language];
+}
+
+function severityLabel(severity: AppNotificationSeverity, language: "pt" | "en") {
+  const labels: Record<AppNotificationSeverity, { pt: string; en: string }> = {
+    info: { pt: "Info", en: "Info" },
+    success: { pt: "Sucesso", en: "Success" },
+    warning: { pt: "Atenção", en: "Warning" },
+    error: { pt: "Erro", en: "Error" },
+  };
+
+  return labels[severity][language];
+}
+
+function NotificationRow({
+  item,
+  language,
+}: {
+  item: AppNotificationItem;
+  language: "pt" | "en";
+}) {
+  const TypeIcon = notificationTypeIcons[item.type];
+  const SeverityIcon = severityIcons[item.severity];
+
   return (
-    <button
-      type="button"
-      className="notification-game"
-      onClick={() => onOpenGame(game)}
-    >
-      <span
-        className={`notification-game__cover${loaded ? " notification-game__cover--loaded" : ""}`}
-        style={layeredImageStyle(displayedCoverSources, "")}
-        aria-hidden="true"
-      />
-      <div className="notification-game__content">
-        <strong>{game.title}</strong>
-        {getGameDeveloperLabel(game) ? <span>{getGameDeveloperLabel(game)}</span> : null}
+    <article className={`app-notification app-notification--${item.severity}`}>
+      <span className="app-notification__icon" aria-hidden="true">
+        <TypeIcon size={18} aria-hidden />
+      </span>
+      <div className="app-notification__content">
+        <div className="app-notification__header">
+          <strong>{item.title}</strong>
+          <span>{formatRelativeTime(item.createdAt, language)}</span>
+        </div>
+        <p>{item.message}</p>
+        {item.action?.url ? (
+          <button
+            type="button"
+            className="app-notification__action"
+            onClick={() => void ghostboxApi.openExternalUrl(item.action?.url ?? "")}
+          >
+            {item.action.label}
+          </button>
+        ) : null}
       </div>
-    </button>
+      <span className="app-notification__severity">
+        <SeverityIcon size={13} aria-hidden />
+        {severityLabel(item.severity, language)}
+      </span>
+    </article>
   );
 }
 
-export function NotificationsPage({ onOpenGame }: NotificationsPageProps) {
+export function NotificationsPage() {
   const { appearance, t } = useSettings();
-  const locale = appearance.language === "en" ? "en-US" : "pt-BR";
-  const [recentGames, setRecentGames] = useState<GhostBoxGame[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
+  const [items, setItems] = useState<AppNotificationItem[]>(() => readAppNotifications());
+  const [activeFilter, setActiveFilter] = useState<NotificationFilter>("all");
 
-  const loadRecentGames = useCallback((showLoading = true) => {
-    let cancelled = false;
-
-    if (showLoading) setIsLoading(true);
-    const request = loadGames({ limit: recentlyAddedLimit, sort: "recentlyAdded" })
-      .then((database) => {
-        if (!cancelled) setRecentGames(database.games);
-      })
-      .catch(() => {
-        if (!cancelled) setRecentGames([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      void request;
-    };
+  const refreshItems = useCallback(() => {
+    setItems(readAppNotifications());
   }, []);
 
-  const groupedGames = useMemo(() => {
-    const groups = new Map<string, { label: string; dateText: string; games: GhostBoxGame[] }>();
-
-    for (const game of recentGames) {
-      const date = formatDateGroup(game.databaseAddedAt, locale, appearance.language);
-      const currentGroup = groups.get(date.key);
-      groups.set(date.key, {
-        label: currentGroup?.label ?? date.label,
-        dateText: currentGroup?.dateText ?? date.dateText,
-        games: [...(currentGroup?.games ?? []), game],
-      });
+  const filteredItems = useMemo(() => {
+    if (activeFilter === "all") return items;
+    if (activeFilter === "important") {
+      return items.filter((item) => item.severity === "warning" || item.severity === "error");
     }
-
-    return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
-  }, [appearance.language, locale, recentGames]);
-
-  useEffect(() => {
-    return loadRecentGames();
-  }, [loadRecentGames]);
+    return items.filter((item) => item.type === activeFilter);
+  }, [activeFilter, items]);
 
   useEffect(() => {
-    // Visiting the page clears the titlebar badge.
-    writeNotificationsLastSeenAt(Date.now());
-  }, []);
+    markAppNotificationsSeen();
+    refreshItems();
+  }, [refreshItems]);
 
   useEffect(() => {
-    return ghostboxApi.onCatalogueCacheUpdated(() => {
-      loadRecentGames(false);
-    });
-  }, [loadRecentGames]);
+    window.addEventListener(appNotificationsChangedEvent, refreshItems);
+    return () => window.removeEventListener(appNotificationsChangedEvent, refreshItems);
+  }, [refreshItems]);
 
   return (
-    <section className="notifications-page content-section content-section--full">
-      {isLoading ? (
-        <NotificationsFeedLoadingState count={3} />
-      ) : groupedGames.length ? (
-        <div className="notifications-feed">
-          {groupedGames.map((group) => {
-            const isOpen = openGroups.has(group.key);
+    <section className="notifications-page notifications-hub content-section content-section--full">
+      <header className="notifications-hub__header">
+        <div>
+          <h2>{t("notifications.title")}</h2>
+          <p>{t("notifications.description")}</p>
+        </div>
+        <button
+          type="button"
+          className="notifications-hub__clear"
+          onClick={() => {
+            clearAppNotifications();
+            setItems([]);
+          }}
+          disabled={items.length === 0}
+        >
+          {t("notifications.clear")}
+        </button>
+      </header>
 
-            return (
-              <section className="notification-group" key={group.key}>
-                <button
-                  type="button"
-                  className={`notification-group__trigger ${isOpen ? "notification-group__trigger--open" : ""}`}
-                  aria-expanded={isOpen}
-                  onClick={() => {
-                    setOpenGroups((current) => {
-                      const next = new Set(current);
-                      if (next.has(group.key)) next.delete(group.key);
-                      else next.add(group.key);
-                      return next;
-                    });
-                  }}
-                >
-                  <span className="notification-group__copy">
-                    <strong>{t("notifications.groupTitle")}</strong>
-                    <small>
-                      <span>{group.label}</span>
-                      <span>{group.dateText}</span>
-                    </small>
-                  </span>
-                  <span className="notification-group__count">
-                    {group.games.length}
-                  </span>
-                </button>
+      <div className="notifications-hub__filters" aria-label={t("notifications.filters")}>
+        {notificationFilters.map((filter) => (
+          <button
+            type="button"
+            key={filter}
+            className={activeFilter === filter ? "is-active" : undefined}
+            onClick={() => setActiveFilter(filter)}
+          >
+            {filterLabel(filter, appearance.language)}
+          </button>
+        ))}
+      </div>
 
-                {isOpen && (
-                  <div className="notifications-list notifications-list--games">
-                    {group.games.map((game) => (
-                      <NotificationGameItem
-                        key={game.id}
-                        game={game}
-                        onOpenGame={onOpenGame}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            );
-          })}
+      {filteredItems.length > 0 ? (
+        <div className="notifications-hub__list">
+          {filteredItems.map((item) => (
+            <NotificationRow key={item.id} item={item} language={appearance.language} />
+          ))}
         </div>
       ) : (
         <EmptyState
           className="notifications-page__empty"
-          title={appearance.language === "en" ? "Nothing new yet" : "Nada novo por enquanto"}
+          title={t("notifications.emptyTitle")}
+          description={t("notifications.emptyMessage")}
         />
       )}
+
     </section>
   );
 }

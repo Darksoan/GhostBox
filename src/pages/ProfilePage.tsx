@@ -89,6 +89,22 @@ type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 const emptyImageSources: string[] = [];
 const recentActivityPageSize = 8;
 const profileAchievementPageSize = 5;
+const profileTabsCursorLockMs = 700;
+
+let profileTabsCursorLockTimeout: number | undefined;
+
+function lockProfileTabsPointerCursor() {
+  document.documentElement.classList.add("profile-tabs-cursor-lock");
+
+  if (profileTabsCursorLockTimeout) {
+    window.clearTimeout(profileTabsCursorLockTimeout);
+  }
+
+  profileTabsCursorLockTimeout = window.setTimeout(() => {
+    document.documentElement.classList.remove("profile-tabs-cursor-lock");
+    profileTabsCursorLockTimeout = undefined;
+  }, profileTabsCursorLockMs);
+}
 
 const overviewSortOptions: OverviewSortBy[] = [
   "recent",
@@ -670,9 +686,6 @@ export function ProfilePage({
   const [overviewSortDropdownOpen, setOverviewSortDropdownOpen] = useState(false);
   const overviewSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const loadMoreGamesRef = useRef<HTMLDivElement | null>(null);
-  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
-  const [tabIndicatorStyle, setTabIndicatorStyle] = useState({ left: 0, width: 0 });
-  const [isTabIndicatorReady, setIsTabIndicatorReady] = useState(false);
   const [isSteamIdVisible, setIsSteamIdVisible] = useState(false);
   const [isSteamIdCopied, setIsSteamIdCopied] = useState(false);
   const steamIdCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1172,32 +1185,6 @@ export function ProfilePage({
     },
     [activeTabId, appearance.reduceAllAnimations, profileCollections, setActiveCollectionId]
   );
-
-  useLayoutEffect(() => {
-    const container = tabsContainerRef.current;
-    if (!container) return;
-    const activeTab = container.querySelector<HTMLElement>(
-      `[data-tab-id="${activeTabId}"]`
-    );
-    if (!activeTab) return;
-
-    const update = () => {
-      const indicatorWidth = 28;
-      setTabIndicatorStyle({
-        left: Math.round(
-          activeTab.offsetLeft -
-          container.scrollLeft +
-          (activeTab.offsetWidth - indicatorWidth) / 2
-        ),
-        width: indicatorWidth,
-      });
-      setIsTabIndicatorReady(true);
-    };
-
-    update();
-    container.addEventListener("scroll", update, { passive: true });
-    return () => container.removeEventListener("scroll", update);
-  }, [activeTabId, profileCollections]);
 
   const visibleGames = useMemo(() => {
     const seen = new Set<string>();
@@ -1797,21 +1784,10 @@ export function ProfilePage({
             <div
               className="profile-page__tabs"
               aria-label={t("sidebar.collections")}
+              onPointerDown={lockProfileTabsPointerCursor}
             >
-              <div className="profile-page__collection-tabs" ref={tabsContainerRef}>
-                <div
-                  className={`profile-page__tab-indicator${isTabIndicatorReady ? " profile-page__tab-indicator--ready" : ""}`}
-                    style={{
-                      transform: `translate3d(${tabIndicatorStyle.left}px, 0, 0)`,
-                      opacity: tabIndicatorStyle.width > 0 ? 1 : 0,
-                    }}
-                />
+              <div className="profile-page__collection-tabs">
                 {profileCollections.map((collection) => {
-                  const isIconOnlyTab = [
-                    "overview",
-                    "library",
-                    "achievements",
-                  ].includes(collection.id);
                   const TabIcon =
                     collection.id === "overview"
                       ? User
@@ -1852,11 +1828,13 @@ export function ProfilePage({
                           aria-hidden="true"
                         />
                       )}
-                      {!isIconOnlyTab && (
-                        <span className="profile-page__tab-label">
-                          {collection.name}
-                        </span>
-                      )}
+                      <span
+                        className="profile-page__tab-selector"
+                        aria-hidden="true"
+                      />
+                      <span className="profile-page__tab-label">
+                        {collection.name}
+                      </span>
 
                     </button>
                   );

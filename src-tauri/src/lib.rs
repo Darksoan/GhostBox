@@ -42,6 +42,7 @@ mod playtime;
 mod settings;
 mod steam;
 mod steam_appcache;
+mod subscription;
 mod util;
 mod window_lifecycle;
 
@@ -1386,6 +1387,9 @@ pub fn run() {
             cloud_save::cloud_put_profile_snapshot,
             cloud_save::cloud_upload_profile_image,
             cloud_save::cloud_delete_profile_banner,
+            subscription::subscription_get_status,
+            subscription::subscription_create_checkout,
+            subscription::subscription_refresh_status,
             backup::backup_get_settings,
             backup::backup_remove_record,
             backup::backup_get_details,

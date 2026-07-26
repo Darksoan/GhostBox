@@ -20,10 +20,14 @@ import { memo, useState, useCallback, useEffect, useRef, type CSSProperties, typ
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GhostBoxGame } from "../../data";
-import { loadGames } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import {
+  appNotificationsChangedEvent,
+  getUnreadAppNotificationCount,
+  markAppNotificationsSeen,
+} from "../../lib/appNotifications";
 import type { SubscriptionPortalFlow, UpdateCheckResult } from "../../lib/ghostboxApi.types";
 import { preloadGameModalAssetsThrottled } from "../../utils/image";
 import {
@@ -187,34 +191,30 @@ export const Header = memo(function Header({
   );
 
   const refreshUnreadNotifications = useCallback(() => {
-    const seenAt = lastSeenRef.current;
-    void loadGames({ limit: 200, sort: "recentlyAdded" })
-      .then((database) => {
-        const count = database.games.reduce((total, game) => {
-          const addedAt = game.databaseAddedAt ?? 0;
-          return addedAt > seenAt ? total + 1 : total;
-        }, 0);
-        setUnreadNotificationCount(count);
-      })
-      .catch(() => setUnreadNotificationCount(0));
-  }, []);
+    if (page === "notifications") {
+      const now = Date.now();
+      lastSeenRef.current = now;
+      writeNotificationsLastSeenAt(now);
+      setUnreadNotificationCount(0);
+      return;
+    }
+    setUnreadNotificationCount(getUnreadAppNotificationCount());
+  }, [page]);
 
-  // Badge count is independent of the active page: refresh on mount, on
-  // catalogue cache updates, and when the notifications page is left.
   useEffect(() => {
     refreshUnreadNotifications();
-    return ghostboxApi.onCatalogueCacheUpdated(() => {
-      refreshUnreadNotifications();
-    });
+    window.addEventListener(appNotificationsChangedEvent, refreshUnreadNotifications);
+    return () => {
+      window.removeEventListener(appNotificationsChangedEvent, refreshUnreadNotifications);
+    };
   }, [refreshUnreadNotifications]);
 
-  // Mark as seen when entering the notifications page; update the seen
-  // watermark and clear the badge without re-running loadGames.
+  // Entering the page clears the unread watermark.
   useEffect(() => {
     if (page !== "notifications") return;
     const now = Date.now();
     lastSeenRef.current = now;
-    writeNotificationsLastSeenAt(now);
+    markAppNotificationsSeen(now);
     setUnreadNotificationCount(0);
   }, [page]);
 
@@ -603,7 +603,7 @@ export const Header = memo(function Header({
           onClick={() => {
             const now = Date.now();
             lastSeenRef.current = now;
-            writeNotificationsLastSeenAt(now);
+            markAppNotificationsSeen(now);
             setUnreadNotificationCount(0);
             onNavigateToNotifications?.();
           }}

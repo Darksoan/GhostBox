@@ -1153,20 +1153,20 @@
     min-width: 0;
 
     &.settings-dropdown--open .settings-dropdown__trigger {
-      border-color: var(--surface-secondary);
+      border-color: var(--border);
       background: var(--surface-secondary);
     }
 
     .settings-dropdown__trigger {
       min-height: 32px;
       padding: 0 12px;
-      border-color: var(--surface-secondary);
+      border-color: var(--border);
       background: transparent;
       font-size: 13px;
 
       &:hover,
       &:focus-visible {
-        border-color: var(--surface-secondary);
+        border-color: var(--border);
         background: var(--surface-secondary);
       }
     }
@@ -1175,7 +1175,7 @@
       min-width: 100%;
       right: 0;
       left: auto;
-      border-color: var(--surface-secondary);
+      border-color: var(--border);
       background: var(--surface-secondary);
     }
 
@@ -1219,7 +1219,7 @@
     padding: 0;
     padding-right: calc(var(--spacing) * 1.5);
     overflow: visible;
-    border: 1px solid var(--surface-secondary);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: transparent;
     cursor: pointer;
@@ -1537,8 +1537,8 @@
       left: 50%;
       width: 8px;
       height: 8px;
-      border-right: 1px solid var(--surface-secondary);
-      border-bottom: 1px solid var(--surface-secondary);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
       background: var(--surface-primary);
       transform: translate(-50%, -4px) rotate(45deg);
     }
@@ -2313,8 +2313,8 @@
   &__tab {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
+    justify-content: flex-start;
+    gap: 0;
     flex: 0 0 auto;
     height: 100%;
     min-height: 100%;
@@ -2332,6 +2332,7 @@
     position: relative;
     z-index: 2;
     transition:
+      gap var(--motion-base) var(--ease),
       background-color var(--motion-base) ease,
       color var(--motion-base) ease;
 
@@ -2366,6 +2367,7 @@
     }
 
     &--active {
+      gap: 8px;
       color: var(--text-primary);
       font-weight: var(--weight-medium);
 
@@ -2381,14 +2383,44 @@
   }
 
   &__tab-label {
-    max-width: 180px;
+    max-width: 0;
     overflow: hidden;
-    opacity: 1;
+    opacity: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transform: none;
+    transform: translateX(-4px);
+    transition:
+      max-width var(--motion-base) var(--ease),
+      opacity var(--motion-fast) var(--ease),
+      transform var(--motion-base) var(--ease);
     -webkit-font-smoothing: subpixel-antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  &__tab-selector {
+    position: absolute;
+    bottom: 0;
+    left: 9px;
+    width: 28px;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--color-text);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      width var(--motion-base) var(--ease),
+      opacity var(--motion-fast) var(--ease);
+  }
+
+  &__tab--active &__tab-selector {
+    width: calc(100% - 18px);
+    opacity: 1;
+  }
+
+  &__tab--active &__tab-label {
+    max-width: 180px;
+    opacity: 1;
+    transform: translateX(0);
   }
 
   &__collection-content {
@@ -2512,7 +2544,7 @@
     gap: 0;
     min-width: 0;
     overflow: hidden;
-    border: 1px solid var(--surface-secondary);
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background: var(--surface-tertiary);
   }
@@ -2529,7 +2561,7 @@
     gap: 12px;
     min-height: 38px;
     padding: 0 12px;
-    border-bottom: 1px solid var(--surface-secondary);
+    border-bottom: 1px solid var(--border);
     background: transparent;
 
     h3 {
@@ -2566,7 +2598,7 @@
     display: inline-flex;
     align-items: center;
     min-height: 26px;
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: var(--radius-sm);
     background: var(--background);
     color: var(--text-secondary);
@@ -2580,7 +2612,6 @@
 
     &:hover,
     &:focus-visible {
-      border-color: var(--border-hover);
       color: var(--text-primary);
       outline: 0;
     }
@@ -2620,7 +2651,7 @@
     width: 100%;
     min-height: 28px;
     place-items: center;
-    border: 1px solid var(--border-subtle);
+    border: 0;
     background: transparent;
     color: var(--text-tertiary);
     font-weight: var(--weight-muted);
@@ -2713,7 +2744,7 @@
   &__achievement-progress-card {
     min-width: 0;
     min-height: 50px;
-    border: 1px solid var(--surface-secondary);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-ui);
     color: var(--text-primary);
@@ -2735,7 +2766,7 @@
     min-width: 0;
     min-height: 50px;
     padding: 6px 0;
-    border: 1px solid var(--surface-secondary);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-ui);
     color: var(--text-primary);
