@@ -1817,6 +1817,8 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
   z-index: 300;
   display: grid;
   grid-template-columns: 1fr auto auto;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
   align-items: center;
   gap: calc(var(--spacing) * 2);
   width: 100%;
