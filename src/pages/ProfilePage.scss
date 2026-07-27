@@ -2543,9 +2543,14 @@
     gap: 0;
     min-width: 0;
     overflow: hidden;
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-md);
-    background: var(--surface-tertiary);
+    background: var(--surface-secondary);
+
+    &:hover .profile-page__achievement-game-toggle,
+    &:focus-within .profile-page__achievement-game-toggle {
+      opacity: 1;
+    }
   }
 
   &__top-game-stat-label,
@@ -2560,7 +2565,6 @@
     gap: 12px;
     min-height: 38px;
     padding: 0 12px;
-    border-bottom: 1px solid var(--border);
     background: transparent;
 
     h3 {
@@ -2655,7 +2659,10 @@
     color: var(--text-tertiary);
     font-weight: var(--weight-muted);
     cursor: pointer;
-    transition: color var(--motion-base) ease;
+    opacity: 0;
+    transition:
+      opacity var(--motion-base) ease,
+      color var(--motion-base) ease;
 
     svg {
       transition: transform var(--motion-base) ease;
@@ -2765,9 +2772,9 @@
     min-width: 0;
     min-height: 50px;
     padding: 6px 0;
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-sm);
-    background: var(--surface-ui);
+    background: var(--sidebar-selector);
     color: var(--text-primary);
     cursor: pointer;
     text-align: left;

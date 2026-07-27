@@ -189,9 +189,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       }, newPage !== page && !appearance.reduceAllAnimations, ["motion-page-transition"]);
     },
     [appearance.reduceAllAnimations, clearOverlayForward, closeContentOverlay, navigate, page, saveScrollPosition, shell]
-  );
-
-  useEffect(() => {
+  );  useEffect(() => {
     return ghostboxApi.onTrayNavigate(({ page }) => {
       handleNavigate(page);
     });

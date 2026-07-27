@@ -414,25 +414,27 @@ export const Header = memo(function Header({
       onPointerCancel={handleTitlebarPointerUp}
       onLostPointerCapture={handleTitlebarPointerUp}
     >
-      <div className="header__section header__section--left header__navigation-controls">
-        <button
-          type="button"
-          className="header__nav-btn"
-          onClick={onBack}
-          disabled={!canGoBack}
-          aria-label={t("header.back")}
-        >
-          <ChevronLeft size={17} strokeWidth={2.0} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="header__nav-btn"
-          onClick={onForward}
-          disabled={!canGoForward}
-          aria-label={t("header.forward")}
-        >
-          <ChevronRight size={17} strokeWidth={2.0} aria-hidden="true" />
-        </button>
+      <div className="header__section header__section--left">
+        <div className="header__navigation-controls">
+          <button
+            type="button"
+            className="header__nav-btn"
+            onClick={onBack}
+            disabled={!canGoBack}
+            aria-label={t("header.back")}
+          >
+            <ChevronLeft size={17} strokeWidth={2.0} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="header__nav-btn"
+            onClick={onForward}
+            disabled={!canGoForward}
+            aria-label={t("header.forward")}
+          >
+            <ChevronRight size={17} strokeWidth={2.0} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div className="header__section header__section--actions">

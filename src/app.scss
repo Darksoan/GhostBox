@@ -858,6 +858,7 @@ p {
     align-items: stretch;
     overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-gutter: stable;
     background: transparent;
     scroll-behavior: auto;
 
@@ -937,8 +938,7 @@ p {
   min-height: 100%;
   height: auto;
   overflow: visible;
-  padding: var(--content-edge-padding) var(--content-edge-padding)
-    var(--content-edge-padding) 0;
+  padding: 0 var(--content-edge-padding) var(--content-edge-padding) 0;
 }
 
 // Keep-alive tab wrappers use the HTML hidden attribute to stay mounted but
@@ -980,19 +980,44 @@ p {
 
 html.motion-page-transition .page-stack__base {
   view-transition-name: ghostbox-page-content;
+  contain: layout paint;
 }
 
 html.motion-page-transition .page-stack--overlay-open .page-stack__base {
   view-transition-name: none;
+  contain: none;
 }
 
 html.motion-page-transition .page-stack__overlay {
   view-transition-name: ghostbox-page-content;
+  contain: layout paint;
+}
+
+html.motion-page-transition::view-transition-group(ghostbox-page-content) {
+  overflow: hidden;
+  transform-origin: center center;
+}
+
+html.motion-page-transition::view-transition-old(ghostbox-page-content),
+html.motion-page-transition::view-transition-new(ghostbox-page-content) {
+  object-fit: none;
+  backface-visibility: hidden;
+  transform-origin: center center;
 }
 
 html.motion-tab-transition .settings-panel,
 html.motion-tab-transition .profile-page__tab-panel {
   view-transition-name: ghostbox-tab-content;
+}
+
+html.motion-tab-transition::view-transition-group(ghostbox-tab-content) {
+  overflow: hidden;
+}
+
+html.motion-tab-transition::view-transition-old(ghostbox-tab-content),
+html.motion-tab-transition::view-transition-new(ghostbox-tab-content) {
+  object-fit: none;
+  transform-origin: center center;
 }
 
 html.motion-page-transition::view-transition-old(root),
@@ -1004,21 +1029,26 @@ html.motion-tab-transition::view-transition-new(root) {
 }
 
 html.motion-page-transition::view-transition-old(ghostbox-page-content) {
-  animation: ghostbox-page-out var(--motion-base) var(--ease) both;
+  animation: ghostbox-page-out var(--motion-base) cubic-bezier(0.4, 0, 0.2, 1) both;
   mix-blend-mode: normal;
+  will-change: opacity, transform;
 }
 
 html.motion-page-transition::view-transition-new(ghostbox-page-content) {
-  animation: ghostbox-page-in var(--motion-base) var(--ease) both;
+  animation: ghostbox-page-in var(--motion-base) cubic-bezier(0.4, 0, 0.2, 1) both;
   mix-blend-mode: normal;
+  will-change: opacity, transform;
 }
 
 html.motion-tab-transition::view-transition-old(ghostbox-tab-content),
 html.motion-tab-transition::view-transition-new(ghostbox-tab-content) {
   animation-duration: var(--motion-base);
-  animation-timing-function: var(--ease);
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   animation-fill-mode: both;
   mix-blend-mode: normal;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
 }
 
 html.motion-tab-forward::view-transition-old(ghostbox-tab-content) {
@@ -1038,44 +1068,68 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
 }
 
 @keyframes ghostbox-page-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
   to {
     opacity: 0;
-    transform: translate3d(0, -6px, 0);
+    transform: scale(0.96);
   }
 }
 
 @keyframes ghostbox-page-in {
   from {
     opacity: 0;
-    transform: translate3d(0, 8px, 0);
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
 @keyframes ghostbox-tab-out-forward {
+  from {
+    opacity: 1;
+    transform: none;
+  }
   to {
     opacity: 0;
-    transform: translate3d(-6px, 0, 0);
+    transform: scale(0.94);
   }
 }
 
 @keyframes ghostbox-tab-in-forward {
   from {
     opacity: 0;
-    transform: translate3d(6px, 0, 0);
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
 @keyframes ghostbox-tab-out-backward {
+  from {
+    opacity: 1;
+    transform: none;
+  }
   to {
     opacity: 0;
-    transform: translate3d(6px, 0, 0);
+    transform: scale(1.04);
   }
 }
 
 @keyframes ghostbox-tab-in-backward {
   from {
     opacity: 0;
-    transform: translate3d(-6px, 0, 0);
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -1813,64 +1867,96 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
 
 
 .header {
+  /* Single source of truth for titlebar geometry */
+  --header-height: 44px;
+  --header-control: 32px;
+  --header-icon: 18px;
+  --header-gap: 8px;
+
   position: relative;
   z-index: 300;
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  grid-auto-columns: auto;
-  grid-auto-flow: column;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: calc(var(--spacing) * 2);
+  justify-content: flex-start;
+  gap: var(--header-gap);
   width: 100%;
-  height: 44px;
-  min-height: 44px;
-  padding: 6px var(--content-edge-padding) 6px calc(var(--spacing) * 3);
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
+  /* No vertical padding — items center via align-items on the full bar height */
+  padding: 0 var(--content-edge-padding) 0 calc(var(--spacing) * 3);
   box-sizing: border-box;
   color: var(--text-primary);
   background-color: var(--background-dark);
   border-bottom: 0;
+  overflow: visible;
   user-select: none;
   cursor: default;
+  line-height: 1;
 
   input,
   textarea {
     user-select: text;
   }
 
+  /* Left cluster (back/forward) + right cluster (actions) + window controls */
   &__section {
     display: flex;
+    flex-direction: row;
     align-items: center;
-    gap: calc(var(--spacing) * 2);
+    justify-content: flex-start;
+    gap: var(--header-gap);
+    height: 100%;
     min-width: 0;
+    min-height: 0;
 
     &--left {
       position: relative;
-      flex: 1;
+      flex: 1 1 auto;
     }
 
     &--actions {
-      padding-right: 0;
+      flex: 0 0 auto;
+      gap: 6px;
+      margin-left: 0;
+      padding: 0;
     }
+  }
+
+  &__navigation-controls {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    height: 100%;
+    min-width: 0;
   }
 
   &__window-controls {
     display: inline-flex;
+    flex-direction: row;
     align-items: center;
-    align-self: center;
+    justify-content: center;
     flex: 0 0 auto;
-    height: 32px;
-    margin-left: 0;
+    height: 100%;
+    margin: 0;
+    padding: 0;
   }
 
   &__window-button {
-    display: grid;
-    place-items: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 40px;
-    height: 32px;
-    min-height: 32px;
+    height: var(--header-control);
+    min-width: 40px;
+    min-height: var(--header-control);
     margin: 0;
     padding: 0;
     border: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
     font-weight: var(--weight-muted);
@@ -1880,6 +1966,13 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     transition:
       color var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
+
+    svg {
+      display: block;
+      flex-shrink: 0;
+      width: var(--header-icon);
+      height: var(--header-icon);
+    }
 
     &:hover {
       color: var(--text-primary);
@@ -1946,20 +2039,14 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     }
   }
 
-  &__navigation-controls {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    min-width: 0;
-    height: 32px;
-  }
-
   &__nav-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: var(--header-control);
+    height: var(--header-control);
+    min-width: var(--header-control);
+    min-height: var(--header-control);
     margin: 0;
     padding: 0;
     flex: 0 0 auto;
@@ -1979,7 +2066,9 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     svg {
       display: block;
       flex-shrink: 0;
-      /* Optical center with text — Lucide chevron is slightly left-heavy */
+      width: 17px;
+      height: 17px;
+      /* Optical center — Lucide chevron is slightly left-heavy */
       margin-inline-end: -1px;
       shape-rendering: geometricPrecision;
     }
@@ -2005,11 +2094,16 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
   &__icon-button,
   &__notification-button {
     position: relative;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: var(--header-control);
+    height: var(--header-control);
+    min-width: var(--header-control);
+    min-height: var(--header-control);
+    margin: 0;
+    padding: 0;
+    flex: 0 0 auto;
     color: var(--text-secondary);
     font-weight: var(--weight-muted);
     opacity: 0.8;
@@ -2017,6 +2111,7 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     background: transparent;
     border: none;
     border-radius: var(--radius-md);
+    line-height: 0;
     transition:
       color var(--motion-base) ease,
       opacity var(--motion-base) ease;
@@ -2038,8 +2133,9 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
 
     img,
     svg {
-      width: 18px;
-      height: 18px;
+      display: block;
+      width: var(--header-icon);
+      height: var(--header-icon);
       flex: 0 0 auto;
     }
   }
@@ -2095,8 +2191,8 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     img,
     .header__feedback-icon {
       display: block;
-      width: 18px;
-      height: 18px;
+      width: var(--header-icon);
+      height: var(--header-icon);
       flex: 0 0 auto;
       object-fit: contain;
       object-position: center;
@@ -2115,7 +2211,11 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     justify-content: center;
     gap: 5px;
     height: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    margin: 0;
     padding: 0 10px;
+    flex: 0 0 auto;
     border: 1px solid transparent;
     border-radius: var(--radius-pill);
     background: var(--surface-secondary);
@@ -2149,8 +2249,10 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     &-main {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 5px;
       height: 100%;
+      margin: 0;
       padding: 0 4px 0 10px;
       border: none;
       border-radius: var(--radius-pill) 0 0 var(--radius-pill);
@@ -2159,7 +2261,7 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
       cursor: pointer;
       font-size: inherit;
       font-weight: inherit;
-      line-height: inherit;
+      line-height: 1;
     }
 
     &-arrow {
@@ -2168,11 +2270,14 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
       justify-content: center;
       width: 26px;
       height: 100%;
+      margin: 0;
+      padding: 0;
       border: none;
       border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
       background: transparent;
       color: inherit;
       cursor: pointer;
+      line-height: 0;
       transition: color var(--motion-fast) var(--ease);
 
       &:hover {
@@ -2183,6 +2288,10 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
 
   &__subscription-menu {
     position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    flex: 0 0 auto;
 
     &--open {
       .header__premium-indicator-arrow {
@@ -2201,6 +2310,7 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
   }
 
   &__premium-chevron {
+    display: block;
     flex: 0 0 auto;
     transform: rotate(90deg);
     transition: transform var(--motion-fast) var(--ease);
@@ -2263,6 +2373,7 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
   }
 
   &__premium-crown {
+    display: block;
     flex: 0 0 auto;
     color: var(--premium-gold);
     opacity: 0.8;
@@ -2273,27 +2384,41 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
 
   &__premium-label {
     color: currentColor;
+    line-height: 1;
     white-space: nowrap;
   }
 
   &__tooltip--premium {
     color: var(--text-secondary);
-  font-weight: var(--weight-muted);
+    font-weight: var(--weight-muted);
   }
 
+  &__search-shell {
+    position: relative;
+    z-index: 301;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    flex: 0 0 auto;
+  }
 
   &__search {
     display: inline-flex;
     width: 200px;
-    height: 32px;
+    height: var(--header-control);
+    min-height: var(--header-control);
+    max-height: var(--header-control);
     align-items: center;
     justify-content: flex-start;
     gap: var(--spacing);
+    margin: 0;
     padding: 0 calc(var(--spacing) * 1.5);
+    box-sizing: border-box;
     border-radius: var(--radius-md);
     background: var(--sidebar-selector);
     color: var(--text-secondary);
     font-weight: var(--weight-muted);
+    line-height: 1;
     overflow: hidden;
     cursor: text;
     transition:
@@ -2304,6 +2429,7 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
       opacity var(--motion-fast) var(--ease);
 
     > svg {
+      display: block;
       width: 16px;
       min-width: 16px;
       height: 16px;
@@ -2314,11 +2440,15 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
       width: 100%;
       min-width: 0;
       height: 100%;
+      margin: 0;
+      padding: 0;
       border: none;
       outline: none;
       background: transparent;
       color: var(--text-primary);
       font-weight: var(--weight-medium);
+      font-size: 13px;
+      line-height: 1;
 
       &::placeholder {
         font-weight: var(--weight-medium);
@@ -2332,19 +2462,21 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
     }
   }
 
-  &__search-shell {
-    position: relative;
-    z-index: 301;
-  }
-
   &__window-controls-update {
     position: relative;
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--header-control);
+    height: var(--header-control);
+    min-width: var(--header-control);
+    min-height: var(--header-control);
+    margin: 0;
+    padding: 0;
+    flex: 0 0 auto;
     color: var(--text-secondary);
     font-weight: var(--weight-muted);
+    line-height: 0;
     opacity: 0.8;
     border: 0;
     background: transparent;
@@ -3543,6 +3675,10 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
   }
 }
 
+.home-category--featured .home-category__games {
+  row-gap: calc(var(--home-section-gap) - 10px);
+}
+
 .home-category--featured .home-category-card__cover {
   filter: saturate(0.96) brightness(0.9);
   transition: filter var(--motion-base) ease;
@@ -4139,7 +4275,7 @@ html.motion-tab-backward::view-transition-new(ghostbox-tab-content) {
   }
 
   small {
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     font-size: 11px;
     font-weight: var(--weight-semibold);
   }
