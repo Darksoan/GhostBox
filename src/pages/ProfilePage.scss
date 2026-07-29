@@ -1200,11 +1200,11 @@
     color: var(--text-primary);
     cursor: pointer;
     outline: 0;
-    transition: background var(--motion-fast) var(--ease);
+    transition: background var(--motion-base) var(--ease);
 
     &:hover,
     &:focus-visible {
-      background: var(--sidebar-selector);
+      background: var(--surface-option-hover);
     }
 
     &--with-achievements {

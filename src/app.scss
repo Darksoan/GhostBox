@@ -1093,7 +1093,8 @@ p {
     text-wrap: nowrap;
     transition:
       background var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease);
+      border-color var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
 
     &::before {
       content: none;
@@ -2111,7 +2112,7 @@ p {
     padding: 0 var(--space-6);
     box-sizing: border-box;
     border-radius: var(--radius-md);
-    background: var(--sidebar-selector);
+    background: #151515;
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     line-height: 1;
@@ -2123,6 +2124,10 @@ p {
       background-color var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
+
+    &:hover {
+      background: #202020;
+    }
 
     > svg {
       display: block;
@@ -2929,6 +2934,7 @@ p {
 
 .home-recommended-hero__tag {
   @include tag-chip;
+  background: var(--pill-bg);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3232,6 +3238,7 @@ p {
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
+  transition: background var(--motion-base) var(--ease);
   @include media-depth(md);
 
   &:hover,
@@ -3341,6 +3348,7 @@ p {
   border-radius: var(--radius-sm);
   background: var(--surface-secondary);
   cursor: pointer;
+  transition: background var(--motion-base) var(--ease);
   @include media-depth(sm);
 
   &:hover,
@@ -3576,6 +3584,7 @@ p {
   contain: layout style;
   cursor: pointer;
   isolation: isolate;
+  transition: background var(--motion-base) var(--ease);
   @include media-depth(sm);
 
   &:hover,
@@ -3749,6 +3758,7 @@ p {
   padding: var(--space-4) 0 var(--space-5);
   text-align: left;
   isolation: isolate;
+  transition: background var(--motion-base) var(--ease);
 
   &:focus-visible {
     outline: 2px solid var(--icon-default);
@@ -3756,7 +3766,7 @@ p {
   }
 
   &:hover {
-    background: var(--sidebar-selector);
+    background: var(--surface-option-hover);
   }
 }
 
@@ -4019,6 +4029,7 @@ p {
 
 .home-wishlist-card__tag {
   @include tag-chip;
+  background: var(--pill-bg);
   border-color: var(--border-strong);
   color: var(--text-secondary);
   font-weight: var(--weight-semibold);
@@ -4397,6 +4408,7 @@ p {
   text-align: left;
   outline: none;
   isolation: isolate;
+  transition: background var(--motion-base) var(--ease);
   @include media-depth(lg);
 
   &:hover,
@@ -4547,6 +4559,7 @@ p {
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
+  transition: background var(--motion-base) var(--ease);
   @include media-depth(sm);
 
   &:hover,
@@ -4623,6 +4636,7 @@ p {
   font-weight: var(--weight-semibold);
   cursor: pointer;
   text-align: left;
+  transition: background var(--motion-base) var(--ease);
 
   &:hover,
   &:focus-visible {
@@ -7230,6 +7244,7 @@ p {
     opacity: 0.72;
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
+    transition: color var(--motion-fast) var(--ease);
   }
 
   &:hover {
@@ -7549,6 +7564,7 @@ p {
   &__clear {
     width: fit-content;
     cursor: pointer;
+    transition: color var(--motion-fast) var(--ease);
 
     &:hover {
       color: var(--text-primary);
@@ -7762,12 +7778,12 @@ input[type="search"]::-ms-reveal {
   text-align: left;
   transition:
     border-color var(--motion-fast) var(--ease),
-    background var(--motion-fast) var(--ease);
+    background var(--motion-base) var(--ease);
   isolation: isolate;
 
   &:hover,
   &--hovered {
-    background: var(--sidebar-selector);
+    background: var(--surface-option-hover);
   }
 
   &--adding::after {
@@ -7861,6 +7877,7 @@ input[type="search"]::-ms-reveal {
 .catalogue-list__genre-chip {
   flex: 0 0 auto;
   @include tag-chip;
+  background: var(--pill-bg);
   border-color: var(--border-strong);
   // Chips sit inside the clickable card row; keep the card's cursor so it
   // doesn't flip to the default arrow when hovering a pill.
@@ -8005,6 +8022,9 @@ input[type="search"]::-ms-reveal {
     font-weight: var(--weight-semibold);
     cursor: pointer;
     font-size: var(--fs-300);
+    transition:
+      background var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
 
     &:hover:not(:disabled) {
       background: var(--sidebar-selector);
@@ -9459,7 +9479,7 @@ input[type="search"]::-ms-reveal {
   transition:
     transform var(--motion-base) ease,
     border-color var(--motion-base) ease,
-    background var(--motion-fast) var(--ease);
+    background var(--motion-base) var(--ease);
   isolation: isolate;
 
   .game-grid--portrait & {
@@ -9676,7 +9696,7 @@ input[type="search"]::-ms-reveal {
 
   &:hover,
   &:focus-within {
-    background: var(--sidebar-selector);
+    background: var(--surface-option-hover);
 
     .game-card__achievement-progress-track {
       background: color-mix(in srgb, var(--surface-active) 64%, var(--text-primary) 18%);
@@ -11610,6 +11630,10 @@ html.no-backdrop-blur {
     border-color: var(--border-ui);
     font-size: var(--fs-300);
     font-weight: var(--weight-medium);
+    transition:
+      background var(--motion-fast) var(--ease),
+      border-color var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
 
     &:hover,
     &:focus-visible {
@@ -12511,6 +12535,9 @@ html.no-backdrop-blur {
     min-height: 36px;
     border-color: var(--border-hover);
     background: var(--surface-deep);
+    transition:
+      background var(--motion-fast) var(--ease),
+      border-color var(--motion-fast) var(--ease);
 
     &:hover,
     &:focus-visible {
@@ -13118,6 +13145,7 @@ html.no-backdrop-blur {
     background: color-mix(in srgb, var(--surface-deep) 72%, transparent);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    transition: border-color var(--motion-fast) var(--ease);
 
     svg {
       transition: transform var(--motion-base) var(--ease);
