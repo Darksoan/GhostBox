@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Cup } from "reicon-react";
 import {
+  memo,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -58,7 +60,7 @@ const LazyGameBackupOptionsModal = lazy(() =>
   import("./GameBackupOptionsModal").then((m) => ({ default: m.GameBackupOptionsModal }))
 );
 
-function GameRequirementsSection({
+const GameRequirementsSection = memo(function GameRequirementsSection({
   requirements,
 }: {
   requirements?: GameRequirements;
@@ -181,9 +183,9 @@ function GameRequirementsSection({
       </div>
     </section>
   );
-}
+});
 
-function RequirementItem({ item }: { item: string }) {
+const RequirementItem = memo(function RequirementItem({ item }: { item: string }) {
   const separatorIndex = item.indexOf(":");
   if (separatorIndex <= 0) return <li>{item}</li>;
 
@@ -193,7 +195,7 @@ function RequirementItem({ item }: { item: string }) {
       {item.slice(separatorIndex + 1).trim()}
     </li>
   );
-}
+});
 
 function normalizeSteamHtml(value: string) {
   return value
@@ -216,6 +218,9 @@ function safeMediaSource(value: string) {
   }
 }
 
+// Steam ships untrusted HTML. Parse into an inert document (never the live one,
+// so nothing fetches or fires handlers mid-sanitize) and strip every attribute
+// we do not explicitly allow.
 function getSanitizedSteamAboutHtml(value?: string) {
   if (!value || typeof window === "undefined") return "";
 
@@ -224,7 +229,7 @@ function getSanitizedSteamAboutHtml(value?: string) {
     "text/html"
   );
   const blockedElements = document.querySelectorAll(
-    "script, style, iframe, object, embed, link, meta"
+    "script, style, iframe, frame, object, embed, link, meta, base"
   );
   blockedElements.forEach((element) => element.remove());
 
@@ -258,9 +263,15 @@ function getSanitizedSteamAboutHtml(value?: string) {
     });
   });
 
+  document.body.querySelectorAll("a").forEach((anchor) => {
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noopener noreferrer");
+  });
+
   document.body.querySelectorAll("img").forEach((image) => {
     image.loading = "lazy";
     image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
     image.removeAttribute("width");
     image.removeAttribute("height");
   });
@@ -278,7 +289,10 @@ function getSanitizedSteamAboutHtml(value?: string) {
   return document.body.innerHTML;
 }
 
-function formatAchievementPercent(value?: number, language?: string) {
+function formatAchievementPercent(
+  value: number | undefined,
+  language: string
+) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "--";
 
   const locale = language === "en" ? "en-US" : "pt-BR";
@@ -288,7 +302,7 @@ function formatAchievementPercent(value?: number, language?: string) {
   })}%`;
 }
 
-function AchievementIcon({
+const AchievementIcon = memo(function AchievementIcon({
   achievement,
   onSelect,
   interactive = true,
@@ -413,7 +427,7 @@ function AchievementIcon({
         : null}
     </li>
   );
-}
+});
 
 function achievementImageSourceList(achievements: SteamAchievement[]) {
   return uniqueSources(
@@ -424,7 +438,7 @@ function achievementImageSourceList(achievements: SteamAchievement[]) {
   );
 }
 
-function GameDetailsLoadingSections() {
+const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
   return (
     <div className="modal__details-loading" role="status" aria-hidden="true">
       <section className="modal__achievements-section modal__details-loading-section">
@@ -479,7 +493,195 @@ function GameDetailsLoadingSections() {
       </section>
     </div>
   );
+});
+
+interface ModalActionsProps {
+  isAdding: boolean;
+  isInstalled: boolean;
+  isAdded: boolean;
+  isRemoving: boolean;
+  isPlaying: boolean;
+  isSessionActive: boolean;
+  isFavorite: boolean;
+  isBackupOptionsOpen: boolean;
+  language: string;
+  game: GhostBoxGame;
+  onPlay: (game: GhostBoxGame) => void;
+  onRemove: (game: GhostBoxGame) => void;
+  onQueue: (game: GhostBoxGame) => void;
+  onToggleFavorite: (game: GhostBoxGame) => void;
+  onOpenBackupOptions: () => void;
 }
+
+const ModalActions = memo(function ModalActions({
+  isAdding,
+  isInstalled,
+  isAdded,
+  isRemoving,
+  isPlaying,
+  isSessionActive,
+  isFavorite,
+  isBackupOptionsOpen,
+  language,
+  game,
+  onPlay,
+  onRemove,
+  onQueue,
+  onToggleFavorite,
+  onOpenBackupOptions,
+}: ModalActionsProps) {
+  return (
+    <div className={`modal__actions ${isAdding ? "modal__actions--adding" : ""}`}>
+      {isInstalled && (
+        <button
+          type="button"
+          className="button button--primary modal__play-button"
+          onClick={() => {
+            if (isPlaying || isSessionActive) return;
+            onPlay(game);
+          }}
+          disabled={isPlaying || isSessionActive}
+          aria-busy={isPlaying}
+        >
+          {isPlaying ? (
+            <span
+              className="modal__add-spinner modal__add-spinner--light"
+              aria-hidden="true"
+            />
+          ) : (
+            <Play size={20} strokeWidth={2.0} />
+          )}
+          <span className="button__label modal__action-label">
+            {isSessionActive
+              ? language === "en"
+                ? "Playing"
+                : "Jogando"
+              : isPlaying
+                ? language === "en"
+                  ? "Launching"
+                  : "Iniciando"
+                : language === "en"
+                  ? "Play"
+                  : "Jogar"}
+          </span>
+        </button>
+      )}
+      {isAdding ? (
+        <div
+          className="modal__adding-state"
+          aria-label={
+            language === "en" ? "Adding game" : "Adicionando jogo"
+          }
+        >
+          <span className="modal__add-progress" />
+        </div>
+      ) : isAdded ? (
+        <>
+          <button
+            type="button"
+            className="button button--primary modal__remove-button"
+            onClick={() => onRemove(game)}
+            disabled={isRemoving}
+          >
+            {isRemoving ? (
+              <>
+                <span
+                  className="modal__add-spinner modal__add-spinner--light"
+                  aria-hidden="true"
+                />
+                <span className="button__label modal__action-label">
+                  {language === "en" ? "Removing" : "Removendo"}
+                </span>
+              </>
+            ) : (
+              <>
+                <Trash2 size={18} aria-hidden="true" />
+                <span className="button__label modal__action-label">
+                  {language === "en" ? "Remove" : "Remover"}
+                </span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
+            onClick={() => onToggleFavorite(game)}
+            aria-pressed={isFavorite}
+            aria-label={
+              isFavorite
+                ? language === "en"
+                  ? `Remove ${game.title} from favorites`
+                  : `Remover ${game.title} dos favoritos`
+                : language === "en"
+                  ? `Add ${game.title} to favorites`
+                  : `Adicionar ${game.title} aos favoritos`
+            }
+          >
+            <Heart
+              size={20}
+              fill={isFavorite ? "currentColor" : "none"}
+              aria-hidden="true"
+            />
+          </button>
+          <button
+            type="button"
+            className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
+            onClick={onOpenBackupOptions}
+            aria-label={
+              language === "en" ? "Backup settings" : "Ajustes de backup"
+            }
+          >
+            <Settings size={20} aria-hidden="true" />
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="button button--primary modal__add-button"
+            onClick={() => onQueue(game)}
+          >
+            <Download size={20} />
+            <span className="button__label modal__action-label">
+              {language === "en" ? "Add" : "Adicionar"}
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
+            onClick={() => onToggleFavorite(game)}
+            aria-pressed={isFavorite}
+            aria-label={
+              isFavorite
+                ? language === "en"
+                  ? `Remove ${game.title} from favorites`
+                  : `Remover ${game.title} dos favoritos`
+                : language === "en"
+                  ? `Add ${game.title} to favorites`
+                  : `Adicionar ${game.title} aos favoritos`
+            }
+          >
+            <Heart
+              size={20}
+              fill={isFavorite ? "currentColor" : "none"}
+              aria-hidden="true"
+            />
+          </button>
+          <button
+            type="button"
+            className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
+            onClick={onOpenBackupOptions}
+            aria-label={
+              language === "en" ? "Backup settings" : "Ajustes de backup"
+            }
+          >
+            <Settings size={20} aria-hidden="true" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+});
 
 interface GameModalProps {
   game: GhostBoxGame | null;
@@ -535,12 +737,9 @@ export function GameModal({
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [detailGame, setDetailGame] = useState<GhostBoxGame | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [loadedScreenshotSources, setLoadedScreenshotSources] = useState<
-    Set<string>
-  >(() => new Set());
-  const [failedScreenshotSources, setFailedScreenshotSources] = useState<
-    Set<string>
-  >(() => new Set());
+  const loadedScreenshotSourcesRef = useRef<Set<string>>(new Set());
+  const failedScreenshotSourcesRef = useRef<Set<string>>(new Set());
+  const [screenshotSourcesVersion, setScreenshotSourcesVersion] = useState(0);
   const [failedLogoSources, setFailedLogoSources] = useState<Set<string>>(
     () => new Set()
   );
@@ -567,8 +766,9 @@ export function GameModal({
 
   useEffect(() => {
     setActiveScreenshot(0);
-    setLoadedScreenshotSources(new Set());
-    setFailedScreenshotSources(new Set());
+    loadedScreenshotSourcesRef.current = new Set();
+    failedScreenshotSourcesRef.current = new Set();
+    setScreenshotSourcesVersion(0);
     setFailedLogoSources(new Set());
     setLoadedLogoSource("");
     setVisibleScreenshotSource("");
@@ -698,40 +898,58 @@ export function GameModal({
 
   const displayGame = detailGame ?? game;
 
-  const stableScreenshots = game?.screenshots.length ? game.screenshots : [];
-  const displayScreenshots = displayGame?.screenshots ?? [];
-  const rawScreenshots =
-    isLoadingDetails && stableScreenshots.length
-      ? stableScreenshots
+  const imageDerivatives = useMemo(() => {
+    const stableScreenshots = game?.screenshots.length ? game.screenshots : [];
+    const displayScreenshots = displayGame?.screenshots ?? [];
+    const rawScreenshots =
+      isLoadingDetails && stableScreenshots.length
+        ? stableScreenshots
         : displayScreenshots.length
           ? displayScreenshots
           : stableScreenshots;
-  const screenshots = withoutHeroImageSources(rawScreenshots);
-  const heroSources = displayGame ? gameHeroSources(displayGame) : [];
-  const modalHeroSources = heroSources.filter(
-    (source) => !screenshots.includes(source)
-  );
-  const heroScreenshotFallback =
-    screenshots.find((source) => modalHeroSources.includes(source)) ??
-    screenshots[0] ??
-    "";
-  const showcaseScreenshots = heroScreenshotFallback
-    ? screenshots.filter((source) => source !== heroScreenshotFallback)
-    : screenshots;
-  const showcaseSources = displayGame
-    ? uniqueSources([modalHeroSources[0], ...showcaseScreenshots])
-    : showcaseScreenshots;
-  const preloadShowcaseSources = uniqueSources([
-    ...showcaseSources,
-    ...modalHeroSources,
+    const screenshots = withoutHeroImageSources(rawScreenshots);
+    const heroSources = displayGame ? gameHeroSources(displayGame) : [];
+    const modalHeroSources = heroSources.filter(
+      (source) => !screenshots.includes(source)
+    );
+    const heroScreenshotFallback =
+      screenshots.find((source) => modalHeroSources.includes(source)) ??
+      screenshots[0] ??
+      "";
+    const showcaseScreenshots = heroScreenshotFallback
+      ? screenshots.filter((source) => source !== heroScreenshotFallback)
+      : screenshots;
+    const showcaseSources = displayGame
+      ? uniqueSources([modalHeroSources[0], ...showcaseScreenshots])
+      : showcaseScreenshots;
+    const preloadShowcaseSources = uniqueSources([
+      ...showcaseSources,
+      ...modalHeroSources,
+      heroScreenshotFallback,
+    ]);
+    const logoSources = displayGame ? gameLogoSources(displayGame) : [];
+    return {
+      screenshots,
+      modalHeroSources,
+      heroScreenshotFallback,
+      showcaseSources,
+      preloadShowcaseSources,
+      logoSources,
+    };
+  }, [displayGame, game, isLoadingDetails]);
+
+  const {
+    screenshots,
+    modalHeroSources,
     heroScreenshotFallback,
-  ]);
+    showcaseSources,
+    preloadShowcaseSources,
+    logoSources,
+  } = imageDerivatives;
+
   const cachedScreenshotSources = useCachedImageSources(showcaseSources);
-  const logoSources = displayGame ? gameLogoSources(displayGame) : [];
   const cachedLogoSources = useCachedImageSources(logoSources);
-  const logoCandidates = uniqueSources([...cachedLogoSources, ...logoSources]);
-  const currentLogoSource =
-    logoCandidates.find((source) => !failedLogoSources.has(source)) ?? "";
+
   const achievements = useMemo(
     () =>
       [...(displayGame?.achievementList ?? [])].sort(
@@ -739,18 +957,54 @@ export function GameModal({
       ),
     [displayGame?.achievementList]
   );
-  const visibleAchievements = achievements.slice(0, 12);
+  // Stable identity: this array feeds `keyDerivatives`, whose memo would never
+  // hit if the slice were recreated on every render.
+  const visibleAchievements = useMemo(
+    () => achievements.slice(0, 12),
+    [achievements]
+  );
   const hasMoreAchievements = achievements.length > 12;
   const shouldShowAchievementsSection =
     achievements.length > 0 ||
     achievementLoadState === "empty" ||
     achievementLoadState === "unavailable";
-  const screenshotsKey = showcaseSources.join("\n");
-  const modalHeroSourcesKey = modalHeroSources.join("\n");
-  const cachedScreenshotsKey = cachedScreenshotSources.join("\n");
-  const achievementImageSources =
-    achievementImageSourceList(visibleAchievements);
-  const achievementImageSourcesKey = achievementImageSources.join("\n");
+
+  const keyDerivatives = useMemo(() => {
+    const logoCandidates = uniqueSources([...cachedLogoSources, ...logoSources]);
+    const currentLogoSource =
+      logoCandidates.find((source) => !failedLogoSources.has(source)) ?? "";
+    const screenshotsKey = showcaseSources.join("\n");
+    const modalHeroSourcesKey = modalHeroSources.join("\n");
+    const cachedScreenshotsKey = cachedScreenshotSources.join("\n");
+    const achievementImageSources =
+      achievementImageSourceList(visibleAchievements);
+    const achievementImageSourcesKey = achievementImageSources.join("\n");
+    return {
+      currentLogoSource,
+      screenshotsKey,
+      modalHeroSourcesKey,
+      cachedScreenshotsKey,
+      achievementImageSources,
+      achievementImageSourcesKey,
+    };
+  }, [
+    cachedLogoSources,
+    logoSources,
+    failedLogoSources,
+    showcaseSources,
+    modalHeroSources,
+    cachedScreenshotSources,
+    visibleAchievements,
+  ]);
+
+  const {
+    currentLogoSource,
+    screenshotsKey,
+    modalHeroSourcesKey,
+    cachedScreenshotsKey,
+    achievementImageSources,
+    achievementImageSourcesKey,
+  } = keyDerivatives;
 
   const screenshotItems = useMemo(
     () =>
@@ -771,13 +1025,13 @@ export function GameModal({
         );
         const loadedSource = candidates.find(
           (candidate) =>
-            loadedScreenshotSources.has(candidate) &&
-            !failedScreenshotSources.has(candidate)
+            loadedScreenshotSourcesRef.current.has(candidate) &&
+            !failedScreenshotSourcesRef.current.has(candidate)
         );
         const displaySource =
           loadedSource ??
           candidates.find(
-            (candidate) => !failedScreenshotSources.has(candidate)
+            (candidate) => !failedScreenshotSourcesRef.current.has(candidate)
           ) ??
           "";
         const isHeroDisplay = isHeroItem
@@ -794,8 +1048,7 @@ export function GameModal({
       modalHeroSourcesKey,
       heroScreenshotFallback,
       cachedScreenshotsKey,
-      loadedScreenshotSources,
-      failedScreenshotSources,
+      screenshotSourcesVersion,
     ]
   );
 
@@ -891,11 +1144,11 @@ export function GameModal({
   useEffect(() => {
     if (
       currentScreenshotSource &&
-      loadedScreenshotSources.has(currentScreenshotSource)
+      loadedScreenshotSourcesRef.current.has(currentScreenshotSource)
     ) {
       setVisibleScreenshotSource(currentScreenshotSource);
     }
-  }, [currentScreenshotSource, loadedScreenshotSources]);
+  }, [currentScreenshotSource, screenshotSourcesVersion]);
 
   useEffect(() => {
     setIsAboutExpanded(false);
@@ -992,10 +1245,14 @@ export function GameModal({
     };
   }, [aboutTheGameHtml, isAboutExpanded, displayGame?.id, shouldShowDetailLoading]);
 
-  function handleViewAchievements() {
+  const handleViewAchievements = useCallback(() => {
     if (!displayGame || !onViewAchievements) return;
     onViewAchievements(displayGame);
-  }
+  }, [displayGame, onViewAchievements]);
+
+  const handleOpenBackupOptions = useCallback(() => {
+    setIsBackupOptionsOpen(true);
+  }, []);
 
   return (
     <>
@@ -1046,15 +1303,10 @@ export function GameModal({
                               if (typeof image.decode === "function") {
                                 await image.decode().catch(() => undefined);
                               }
-                              setLoadedScreenshotSources((loadedSources) => {
-                                if (loadedSources.has(item.displaySource))
-                                  return loadedSources;
-                                const nextLoadedSources = new Set(
-                                  loadedSources
-                                );
-                                nextLoadedSources.add(item.displaySource);
-                                return nextLoadedSources;
-                              });
+                              if (!loadedScreenshotSourcesRef.current.has(item.displaySource)) {
+                                loadedScreenshotSourcesRef.current.add(item.displaySource);
+                                setScreenshotSourcesVersion((v) => v + 1);
+                              }
                               if (
                                 item.displaySource === currentScreenshotSource
                               ) {
@@ -1062,9 +1314,10 @@ export function GameModal({
                               }
                             }}
                             onError={() => {
-                              setFailedScreenshotSources((failedSources) =>
-                                new Set(failedSources).add(item.displaySource)
-                              );
+                              if (!failedScreenshotSourcesRef.current.has(item.displaySource)) {
+                                failedScreenshotSourcesRef.current.add(item.displaySource);
+                                setScreenshotSourcesVersion((v) => v + 1);
+                              }
                             }}
                           />
                         )
@@ -1092,164 +1345,23 @@ export function GameModal({
                   </div>
                 )}
 
-                <div
-                  className={`modal__actions ${isAdding ? "modal__actions--adding" : ""}`}
-                >
-                  {isInstalled && (
-                      <button
-                        type="button"
-                        className="button button--primary modal__play-button"
-                        onClick={() => {
-                          if (isPlaying || isSessionActive) return;
-                          onPlayGame(displayGame);
-                        }}
-                        disabled={isPlaying || isSessionActive}
-                        aria-busy={isPlaying}
-                      >
-                      {isPlaying ? (
-                        <span className="modal__add-spinner modal__add-spinner--light" aria-hidden="true" />
-                      ) : (
-                        <Play size={20} strokeWidth={2.0} />
-                      )}
-                      <span className="button__label modal__action-label">
-                        {isSessionActive
-                          ? appearance.language === "en"
-                            ? "Playing"
-                            : "Jogando"
-                          : isPlaying
-                            ? appearance.language === "en"
-                              ? "Launching"
-                              : "Iniciando"
-                            : appearance.language === "en"
-                              ? "Play"
-                              : "Jogar"}
-                      </span>
-                    </button>
-                  )}
-                  {isAdding ? (
-                    <div
-                      className="modal__adding-state"
-                      aria-label={
-                        appearance.language === "en"
-                          ? "Adding game"
-                          : "Adicionando jogo"
-                      }
-                    >
-                      <span className="modal__add-progress" />
-                    </div>
-                  ) : isAdded ? (
-                    <>
-                      <button
-                        type="button"
-                        className="button button--primary modal__remove-button"
-                        onClick={() => onRemoveGame(displayGame)}
-                        disabled={isRemoving}
-                      >
-                        {isRemoving ? (
-                          <>
-                            <span
-                              className="modal__add-spinner modal__add-spinner--light"
-                              aria-hidden="true"
-                            />
-                            <span className="button__label modal__action-label">
-                              {appearance.language === "en"
-                                ? "Removing"
-                                : "Removendo"}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 size={18} aria-hidden="true" />
-                            <span className="button__label modal__action-label">
-                              {appearance.language === "en"
-                                ? "Remove"
-                                : "Remover"}
-                            </span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
-                        onClick={() => onToggleFavorite(displayGame)}
-                        aria-pressed={isFavorite}
-                        aria-label={
-                          isFavorite
-                            ? appearance.language === "en"
-                              ? `Remove ${displayGame.title} from favorites`
-                              : `Remover ${displayGame.title} dos favoritos`
-                            : appearance.language === "en"
-                              ? `Add ${displayGame.title} to favorites`
-                              : `Adicionar ${displayGame.title} aos favoritos`
-                        }
-                      >
-                        <Heart
-                          size={20}
-                          fill={isFavorite ? "currentColor" : "none"}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
-                        onClick={() => setIsBackupOptionsOpen(true)}
-                        aria-label={
-                          appearance.language === "en"
-                            ? "Backup settings"
-                            : "Ajustes de backup"
-                        }
-                      >
-                        <Settings size={20} aria-hidden="true" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="button button--primary modal__add-button"
-                        onClick={() => onQueueGame(displayGame)}
-                      >
-                        <Download size={20} />
-                        <span className="button__label modal__action-label">
-                          {appearance.language === "en" ? "Add" : "Adicionar"}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className={`modal__favorite-button ${isFavorite ? "modal__favorite-button--active" : ""}`}
-                        onClick={() => onToggleFavorite(displayGame)}
-                        aria-pressed={isFavorite}
-                        aria-label={
-                          isFavorite
-                            ? appearance.language === "en"
-                              ? `Remove ${displayGame.title} from favorites`
-                              : `Remover ${displayGame.title} dos favoritos`
-                            : appearance.language === "en"
-                              ? `Add ${displayGame.title} to favorites`
-                              : `Adicionar ${displayGame.title} aos favoritos`
-                        }
-                      >
-                        <Heart
-                          size={20}
-                          fill={isFavorite ? "currentColor" : "none"}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      <button
-                        type="button"
-                        className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
-                        onClick={() => setIsBackupOptionsOpen(true)}
-                        aria-label={
-                          appearance.language === "en"
-                            ? "Backup settings"
-                            : "Ajustes de backup"
-                        }
-                      >
-                        <Settings size={20} aria-hidden="true" />
-                      </button>
-                    </>
-                  )}
-                </div>
+                <ModalActions
+                  isAdding={isAdding}
+                  isInstalled={isInstalled}
+                  isAdded={isAdded}
+                  isRemoving={isRemoving}
+                  isPlaying={isPlaying}
+                  isSessionActive={isSessionActive}
+                  isFavorite={isFavorite}
+                  isBackupOptionsOpen={isBackupOptionsOpen}
+                  language={appearance.language}
+                  game={displayGame}
+                  onPlay={onPlayGame}
+                  onRemove={onRemoveGame}
+                  onQueue={onQueueGame}
+                  onToggleFavorite={onToggleFavorite}
+                  onOpenBackupOptions={handleOpenBackupOptions}
+                />
               </div>
             </section>
 

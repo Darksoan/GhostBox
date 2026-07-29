@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
@@ -96,14 +96,48 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
       ? " content-overlay-exit"
       : "";
 
-  if (achievementsView) {
-    const achievementsGame = resolveOverlayGame(
-      achievementsView.game,
+  const resolvedAchievementsGame = useMemo(
+    () =>
+      achievementsView
+        ? resolveOverlayGame(
+            achievementsView.game,
+            appData.addedLibraryGames,
+            appData.favoriteGames,
+            appData.profileHistoryGames,
+            appData.steamAccountStats,
+          )
+        : null,
+    [
+      achievementsView?.game,
       appData.addedLibraryGames,
       appData.favoriteGames,
       appData.profileHistoryGames,
       appData.steamAccountStats,
-    );
+    ],
+  );
+
+  const resolvedSelectedGame = useMemo(
+    () =>
+      selectedGame
+        ? resolveOverlayGame(
+            selectedGame,
+            appData.addedLibraryGames,
+            appData.favoriteGames,
+            appData.profileHistoryGames,
+            appData.steamAccountStats,
+          )
+        : null,
+    [
+      selectedGame,
+      appData.addedLibraryGames,
+      appData.favoriteGames,
+      appData.profileHistoryGames,
+      appData.steamAccountStats,
+    ],
+  );
+
+  if (achievementsView && resolvedAchievementsGame) {
+    const achievementsGame = resolvedAchievementsGame;
     return (
       <div
         className={`page page--game-achievements${motionClass}`}
@@ -121,15 +155,9 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
     );
   }
 
-  if (selectedGame) {
+  if (selectedGame && resolvedSelectedGame) {
     const GameModal = getLoadedGameModalModule()?.GameModal ?? LazyGameModal;
-    const mergedGame = resolveOverlayGame(
-      selectedGame,
-      appData.addedLibraryGames,
-      appData.favoriteGames,
-      appData.profileHistoryGames,
-      appData.steamAccountStats,
-    );
+    const mergedGame = resolvedSelectedGame;
     const selectedAppId = getGameAppId(selectedGame);
     const isSessionActive =
       appData.activeSessionAppIds.has(selectedAppId) ||

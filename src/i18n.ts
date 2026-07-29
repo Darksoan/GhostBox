@@ -79,11 +79,6 @@ const translations: Record<Language, TranslationTree> = {
       emptyQuery: 'Não há resultados para "{term}".',
     },
     catalogue: {
-      sort: {
-        title: "Ordenar",
-        featured: "Bem avaliados",
-        recentlyAdded: "Recentemente adicionados",
-      },
       filters: {
         genres: "Gêneros",
         tags: "Tags",
@@ -608,11 +603,6 @@ const translations: Record<Language, TranslationTree> = {
       emptyQuery: 'No results for "{term}".',
     },
     catalogue: {
-      sort: {
-        title: "Sort",
-        featured: "Top rated",
-        recentlyAdded: "Recently added",
-      },
       filters: {
         genres: "Genres",
         tags: "Tags",

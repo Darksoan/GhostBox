@@ -24,7 +24,11 @@
   --surface-deep: var(--surface-tertiary);
   --surface-option: #151515;
   --surface-option-hover: #202020;
-  --pill-bg: #0f0f0f;
+  // Card de explorar da home: um degrau acima do canvas, sem virar --surface-card.
+  --surface-explore-card: color-mix(in srgb, var(--surface-solid) 86%, var(--white) 4%);
+  // Fundo atrás de capa/arte com proporção fixa — preto puro evita halo na borda.
+  --surface-media-letterbox: var(--black);
+  --pill-bg: var(--surface-muted);
   --surface-modal: #0f0f0f;
   --sidebar-selector: var(--n-4);
   --sidebar-option-active: var(--sidebar-selector);
@@ -32,6 +36,7 @@
 
   --surface: var(--a-hover);
   --surface-subtle: rgba(255, 255, 255, 0.025);
+  --surface-muted: rgba(255, 255, 255, 0.06);
   --surface-hover: var(--a-hover);
   --surface-active: var(--a-active);
   --surface-selected: var(--a-selected);
@@ -70,14 +75,24 @@
   --overlay-subtle: var(--a-scrim-1);
   --overlay-medium: var(--a-scrim-2);
   --overlay-strong: var(--a-scrim-3);
+  // Backdrops que precisam escurecer mais que --overlay-strong: confirmação
+  // (diálogo curto) e imersivo (a assinatura ocupa a tela inteira).
+  --overlay-confirm: color-mix(in srgb, var(--overlay-strong) 94%, var(--black));
+  --overlay-immersive: color-mix(in srgb, var(--overlay-strong) 96%, var(--black));
 
   // --- Status ---
   --danger: var(--red-500);
   --danger-hover: var(--red-400);
+  // Anel do badge de nível Steam — vermelho próprio da Steam, não é estado de erro.
+  --steam-level-ring: var(--red-600);
   --danger-soft: rgba(239, 68, 68, 0.12);
   --success: var(--green-500);
   --success-hover: var(--green-400);
   --success-soft: rgba(53, 208, 127, 0.12);
+
+  // Spinner desenhado sobre botão claro (o par --light usa --border/--text-strong).
+  --spinner-track-on-light: color-mix(in srgb, var(--n-000) 25%, transparent);
+  --spinner-indicator-on-light: var(--n-000);
 
   // --- Dourado (assinatura + conquista rara — nada mais usa isto) ---
   --premium-gold: var(--gold-500);

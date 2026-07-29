@@ -16,6 +16,12 @@
   --n-11: #d6d6d6;
   --n-12: #f2f2f2;
 
+  // Fora da rampa: extremos absolutos. --n-000 fica abaixo de --n-0 e serve a
+  // indicadores desenhados sobre superfícies claras (ex.: trilho de spinner).
+  --n-000: #070707;
+  --black: #000000;
+  --white: #ffffff;
+
   // --- Camadas de estado (alpha, independentes da rampa) ---
   --a-hover: rgba(255, 255, 255, 0.045);
   --a-active: rgba(255, 255, 255, 0.08);
@@ -32,6 +38,7 @@
   // --- Status ---
   --red-500: #ef4444;
   --red-400: #f87171;
+  --red-600: #c43c3c;
   --green-500: #35d07f;
   --green-400: #5cff8a;
 

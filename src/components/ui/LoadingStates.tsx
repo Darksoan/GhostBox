@@ -130,31 +130,6 @@ export function CatalogueListLoadingState({
   );
 }
 
-export function CatalogueSortLoadingState({
-  pulseLoading = false,
-}: {
-  pulseLoading?: boolean;
-}) {
-  const loadingClassName = pulseLoading ? "loading-pulse-skeleton" : "loading-wave";
-
-  return (
-    <section className="catalogue-filter-section catalogue-filter-section--sort" aria-hidden="true">
-      <div className="catalogue-filter-section__sort-header">
-        <span className={`catalogue-filter-section__orb catalogue-filter-section__orb--sort ${loadingClassName}`} />
-        <span className={`catalogue-filter-section__sort-title-placeholder ${loadingClassName}`} />
-      </div>
-      <div className="catalogue-filter-section__sort-options catalogue-filter-section__sort-options--skeleton">
-        {Array.from({ length: 2 }, (_, index) => (
-          <button type="button" disabled key={`sort-loading-${index}`}>
-            <span className={`catalogue-filter-section__sort-icon-placeholder ${loadingClassName}`} />
-            <span className={`catalogue-filter-section__sort-label-placeholder ${loadingClassName}`} />
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export function CatalogueFilterSectionsLoadingState({
   count = 5,
   animateFilters = true,
@@ -201,7 +176,6 @@ export function CatalogueLoadingState({
 
         <aside className="catalogue-filters catalogue-filters--placeholder" aria-label={t("loading.filters")}>
           <div className="catalogue-filters__sections">
-            <CatalogueSortLoadingState pulseLoading={pulseLoading} />
             <CatalogueFilterSectionsLoadingState animateFilters={animateFilters} pulseLoading={pulseLoading} />
           </div>
         </aside>

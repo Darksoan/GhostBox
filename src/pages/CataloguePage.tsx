@@ -10,11 +10,9 @@ import {
   type RefObject,
 } from "react";
 import type { GhostBoxGame } from "../data";
-import { Clock, ThumbsUp } from "lucide-react";
 import type {
   CatalogueFilters,
   CatalogueFilterKey,
-  CatalogueSort,
   UserCollection,
 } from "../types";
 import {
@@ -35,7 +33,6 @@ import {
   CatalogueFilterSectionsLoadingState,
   CatalogueLoadingState,
   CatalogueListLoadingState,
-  CatalogueSortLoadingState,
   EmptyState,
 } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
@@ -284,10 +281,8 @@ interface CataloguePageProps {
   chunkOffset: number;
   matched: number;
   filters: CatalogueFilters;
-  sort: CatalogueSort;
   animateFilterPlaceholders: boolean;
   onFiltersChange: (filters: CatalogueFilters) => void;
-  onSortChange: (sort: CatalogueSort) => void;
   onPageChange: (page: number) => void;
   onOpenGame: (game: GhostBoxGame) => void;
   favoriteGameIds: Set<string>;
@@ -319,10 +314,8 @@ export function CataloguePage({
   chunkOffset,
   matched,
   filters,
-  sort,
   animateFilterPlaceholders,
   onFiltersChange,
-  onSortChange,
   onPageChange,
   onOpenGame,
   favoriteGameIds,
@@ -560,37 +553,7 @@ export function CataloguePage({
 
         <aside className="catalogue-filters" aria-label={t("catalogue.filters.label")}>
           <div className="catalogue-filters__sections">
-            {filtersLoading ? (
-              <>
-                <CatalogueSortLoadingState />
-                <CatalogueFilterSectionsLoadingState />
-              </>
-            ) : (
-              <section className="catalogue-filter-section catalogue-filter-section--sort">
-                <div className="catalogue-filter-section__sort-header">
-                  <span className="catalogue-filter-section__orb catalogue-filter-section__orb--sort" />
-                  <strong>{t("catalogue.sort.title")}</strong>
-                </div>
-                <div className="catalogue-filter-section__sort-options">
-                  <button
-                    type="button"
-                    className={sort === "popular" ? "is-active" : undefined}
-                    onClick={() => onSortChange("popular")}
-                  >
-                    <ThumbsUp size={15} strokeWidth={2.0} />
-                    <span>{t("catalogue.sort.featured")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={sort === "recentlyAdded" ? "is-active" : undefined}
-                    onClick={() => onSortChange("recentlyAdded")}
-                  >
-                    <Clock size={15} strokeWidth={2.0} />
-                    <span>{t("catalogue.sort.recentlyAdded")}</span>
-                  </button>
-                </div>
-              </section>
-            )}
+            {filtersLoading && <CatalogueFilterSectionsLoadingState />}
             {!filtersLoading && filterSections.map((section) => (
               <CatalogueFilterSection
                 key={section.key}

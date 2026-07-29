@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GameDatabaseResult } from "../data";
-import type { CatalogueFilters, CatalogueSort } from "../types";
+import type { CatalogueFilters } from "../types";
 import {
   catalogueChunkPageCount,
   catalogueChunkSize,
@@ -23,7 +23,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const [catalogueChunkOffset, setCatalogueChunkOffset] = useState(0);
   const [catalogueFilters, setCatalogueFilters] =
     useState<CatalogueFilters>(emptyCatalogueFilters);
-  const [catalogueSort, setCatalogueSort] = useState<CatalogueSort>("popular");
+  const catalogueSort = "popular" as const;
   const [hasLoadedCatalogueOnce, setHasLoadedCatalogueOnce] = useState(false);
   const [lastCatalogueFacets, setLastCatalogueFacets] =
     useState<GameDatabaseResult["facets"]>();
@@ -52,12 +52,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
         includeFacets: false,
       },
     };
-  }, [
-    catalogueFilters,
-    effectiveCataloguePage,
-    catalogueSort,
-    normalizedQuery,
-  ]);
+  }, [catalogueFilters, effectiveCataloguePage, normalizedQuery]);
 
   const catalogueQuery = useGamesQuery(catalogueRequestMeta.request, {
     enabled,
@@ -124,11 +119,6 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     []
   );
 
-  const handleCatalogueSortChange = useCallback((sort: CatalogueSort) => {
-    setCatalogueSort(sort);
-    setCataloguePage(1);
-  }, []);
-
   const handleCataloguePageChange = useCallback((page: number) => {
     setCataloguePage(page);
   }, []);
@@ -156,7 +146,6 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     catalogueFiltersCacheKey,
     requestedCatalogueCacheKey,
     handleCatalogueFiltersChange,
-    handleCatalogueSortChange,
     handleCataloguePageChange,
   };
 }

@@ -249,10 +249,8 @@ export function PageRouter({
           chunkOffset={catalogue.catalogueChunkOffset}
           matched={catalogue.catalogueDatabase.matched}
           filters={catalogue.catalogueFilters}
-          sort={catalogue.catalogueSort}
           animateFilterPlaceholders={animateCatalogueFilterPlaceholders}
           onFiltersChange={catalogue.handleCatalogueFiltersChange}
-          onSortChange={catalogue.handleCatalogueSortChange}
           onPageChange={catalogue.handleCataloguePageChange}
           onOpenGame={openGame}
           favoriteGameIds={appData.favoriteGameIds}
