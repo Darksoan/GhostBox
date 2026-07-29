@@ -1,5 +1,7 @@
 import {
   normalizeSchemaAchievements,
+  normalizeGlobalPercentages,
+  mergeGlobalPercentages,
   parseRetryAfter,
   parseSimilarAppIds,
   sortWishlistItems,
@@ -156,6 +158,10 @@ const achievementCacheTtlSeconds = 7 * 24 * 60 * 60;
 const noStatsCacheTtlSeconds = 30 * 24 * 60 * 60;
 const failedRetryTtlSeconds = 15 * 60;
 const emptySchemaCacheTtlSeconds = 24 * 60 * 60;
+// Global unlock percentages drift slowly, but not as slowly as the schema, so
+// they get their own shorter TTL instead of riding the 365d schema entry.
+const globalPercentCacheTtlSeconds = 24 * 60 * 60;
+const emptyGlobalPercentCacheTtlSeconds = 6 * 60 * 60;
 const scanConcurrency = 6;
 const maxScanBatchPerRequest = 40;
 const maxBatchesPerScan = 4;
@@ -349,6 +355,10 @@ function ownedGamesFetchedAt(cache: StatsCache) {
 
 function schemaCacheKey(language: string, appId: string) {
   return `steam:v9:schema:${language}:${appId}`;
+}
+
+function globalPercentCacheKey(appId: string) {
+  return `steam:v9:globalpct:${appId}`;
 }
 
 function wishlistCacheKey(steamId: string) {
@@ -717,6 +727,63 @@ async function fetchGameAchievementSchema(
   } catch {
     return undefined;
   }
+}
+
+type GlobalPercentCacheEntry = {
+  percentages?: Array<[string, number]>;
+  cachedAt?: number;
+};
+
+type GlobalPercentagesPayload = {
+  achievementpercentages?: {
+    achievements?: Array<{ name?: string; percent?: number }>;
+  };
+};
+
+async function fetchGlobalAchievementPercentages(
+  env: Env,
+  appId: string
+): Promise<Map<string, number>> {
+  const cacheKey = globalPercentCacheKey(appId);
+  const cached = await env.STATS_CACHE
+    .get<GlobalPercentCacheEntry>(cacheKey, "json")
+    .catch(() => null);
+  if (cached && Array.isArray(cached.percentages)) {
+    return new Map(cached.percentages);
+  }
+
+  // A Steam failure must not be cached as "this game has no percentages":
+  // only a successful response (even an empty one) is written to KV.
+  let percentages: Map<string, number>;
+  try {
+    const value = await steamJson<GlobalPercentagesPayload>(
+      "ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/",
+      { gameid: appId },
+      env,
+      "global-percentages"
+    );
+    percentages = normalizeGlobalPercentages(value);
+  } catch (error) {
+    console.warn(
+      "Global achievement percentages unavailable",
+      appId,
+      error instanceof Error ? error.message : String(error)
+    );
+    return new Map();
+  }
+
+  const entry: GlobalPercentCacheEntry = {
+    percentages: [...percentages],
+    cachedAt: nowSeconds(),
+  };
+  await env.STATS_CACHE.put(cacheKey, JSON.stringify(entry), {
+    expirationTtl:
+      percentages.size > 0
+        ? globalPercentCacheTtlSeconds
+        : emptyGlobalPercentCacheTtlSeconds,
+  }).catch(() => undefined);
+
+  return percentages;
 }
 
 async function storeJsonFetch(
@@ -1998,6 +2065,16 @@ async function handleGameSchema(request: Request, env: Env, context: ExecutionCo
     language = candidate;
     if (achievements.length > 0) break;
   }
+
+  // Best-effort: a missing percentage only costs the client a fallback label,
+  // so it must never turn a working schema response into a failure.
+  if (achievements.length > 0) {
+    const percentages = await fetchGlobalAchievementPercentages(env, appId);
+    if (percentages.size > 0) {
+      achievements = mergeGlobalPercentages(achievements, percentages);
+    }
+  }
+
   const response = jsonResponse(
     {
       appId,

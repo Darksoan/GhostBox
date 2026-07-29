@@ -45,6 +45,7 @@ export function useAppNavigation(initialPage: Page = "home") {
     pendingPageScrollRestoreRef.current = null;
     contentRef.current?.scrollTo({
       top: pageScrollPositionsRef.current[pendingPage] ?? 0,
+      behavior: "instant",
     });
   }, []);
 

@@ -4,6 +4,7 @@ import {
   Download,
   Heart,
   Image as ImageIcon,
+  Lock,
   Play,
   Settings,
   Tags as TagsIcon,
@@ -47,6 +48,7 @@ import {
 } from "../../utils/image";
 import { lazy, Suspense } from "react";
 import { useSettings } from "../../context/settings";
+import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
 import { useCollapsiblePanelHeight } from "../../hooks/useCollapsiblePanelHeight";
 
 const LazyGallerySlider = lazy(() =>
@@ -276,10 +278,11 @@ function getSanitizedSteamAboutHtml(value?: string) {
   return document.body.innerHTML;
 }
 
-function formatAchievementPercent(value?: number) {
+function formatAchievementPercent(value?: number, language?: string) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "--";
 
-  return `${value.toLocaleString("pt-BR", {
+  const locale = language === "en" ? "en-US" : "pt-BR";
+  return `${value.toLocaleString(locale, {
     minimumFractionDigits: value < 10 ? 1 : 0,
     maximumFractionDigits: 1,
   })}%`;
@@ -288,9 +291,11 @@ function formatAchievementPercent(value?: number) {
 function AchievementIcon({
   achievement,
   onSelect,
+  interactive = true,
 }: {
   achievement: SteamAchievement;
   onSelect?: () => void;
+  interactive?: boolean;
 }) {
   const { appearance } = useSettings();
   const itemRef = useRef<HTMLLIElement>(null);
@@ -308,7 +313,7 @@ function AchievementIcon({
     left: number;
     top: number;
   } | null>(null);
-  const globalPercent = formatAchievementPercent(achievement.globalPercent);
+  const globalPercent = formatAchievementPercent(achievement.globalPercent, appearance.language);
   const globalPercentLabel =
     appearance.language === "en" ? "of players" : "dos jogadores";
   const fallbackPercentLabel =
@@ -373,17 +378,18 @@ function AchievementIcon({
 
   return (
     <li
-      className={`modal__achievement-item ${isUnlocked ? "modal__achievement-item--unlocked" : "modal__achievement-item--locked"}${isRare ? " modal__achievement-item--rare" : ""}${onSelect ? " modal__achievement-item--clickable" : ""}`}
-      tabIndex={0}
-      aria-label={ariaLabel}
+      className={`modal__achievement-item ${isUnlocked ? "modal__achievement-item--unlocked" : "modal__achievement-item--locked"}${isRare ? " modal__achievement-item--rare" : ""}${onSelect && interactive ? " modal__achievement-item--clickable" : ""}`}
+      tabIndex={interactive ? 0 : -1}
+      aria-hidden={!interactive}
+      aria-label={interactive ? ariaLabel : undefined}
       ref={itemRef}
-      onBlur={hideTooltip}
-      onFocus={showTooltip}
-      onMouseEnter={showTooltip}
-      onMouseLeave={hideTooltip}
-      onClick={onSelect}
+      onBlur={interactive ? hideTooltip : undefined}
+      onFocus={interactive ? showTooltip : undefined}
+      onMouseEnter={interactive ? showTooltip : undefined}
+      onMouseLeave={interactive ? hideTooltip : undefined}
+      onClick={interactive ? onSelect : undefined}
       onKeyDown={(event) => {
-        if (!onSelect) return;
+        if (!interactive || !onSelect) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
@@ -525,6 +531,7 @@ export function GameModal({
   onViewAchievements,
 }: GameModalProps) {
   const { appearance, t } = useSettings();
+  const areMetricsUnlocked = useMetricsUnlocked();
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [detailGame, setDetailGame] = useState<GhostBoxGame | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -1360,19 +1367,34 @@ export function GameModal({
                           } as CSSProperties}
                         >
                           {achievements.length > 0 ? (
-                            <ul className="modal__achievements-grid">
-                              {visibleAchievements.map((achievement) => (
-                                <AchievementIcon
-                                  achievement={achievement}
-                                  key={achievement.name}
-                                  onSelect={
-                                    onViewAchievements
-                                      ? handleViewAchievements
-                                      : undefined
-                                  }
-                                />
-                              ))}
-                            </ul>
+                            <div className="modal__achievements-locked-wrapper">
+                              <ul
+                                className={`modal__achievements-grid ${!areMetricsUnlocked ? "modal__achievements-grid--locked" : ""}`}
+                                aria-hidden={!areMetricsUnlocked}
+                              >
+                                {visibleAchievements.map((achievement) => (
+                                  <AchievementIcon
+                                    achievement={achievement}
+                                    key={achievement.name}
+                                    interactive={areMetricsUnlocked}
+                                    onSelect={
+                                      areMetricsUnlocked && onViewAchievements
+                                        ? handleViewAchievements
+                                        : undefined
+                                    }
+                                  />
+                                ))}
+                              </ul>
+                              {!areMetricsUnlocked && (
+                                <div
+                                  className="modal__achievements-locked-overlay"
+                                  role="status"
+                                >
+                                  <Lock size={18} strokeWidth={2.0} aria-hidden="true" />
+                                  <span>{t("metrics.lockedAchievements")}</span>
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <p className="modal__achievements-state">
                               {achievementLoadState === "unavailable"
@@ -1385,7 +1407,7 @@ export function GameModal({
                             </p>
                           )}
 
-                          {hasMoreAchievements && onViewAchievements && (
+                          {areMetricsUnlocked && hasMoreAchievements && onViewAchievements && (
                             <button
                               type="button"
                               className="modal__achievements-toggle"

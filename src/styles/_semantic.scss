@@ -1,0 +1,115 @@
+// Tokens que a UI consome. Nenhuma regra deve usar --n-*/--a-*/--gold-* direto
+// fora daqui e de _mixins.scss — sempre pelo nome semântico.
+@use "primitives";
+
+:root {
+  // --- Canvas ---
+  --background: var(--n-1);
+  --background-dark: var(--n-1);
+
+  // --- Superfície (canvas → painel → card → elemento elevado) ---
+  --surface-canvas: var(--n-1);
+  --surface-panel: var(--n-2);
+  --surface-card: var(--n-3);
+  --surface-raised: var(--n-4);
+  --surface-sunken: var(--n-0);
+
+  --surface-interactive: var(--surface-canvas);
+  --surface-primary: var(--surface-canvas);
+  --surface-secondary: var(--surface-panel);
+  --surface-tertiary: var(--surface-canvas);
+
+  --surface-solid: var(--surface-primary);
+  --surface-ui: var(--surface-primary);
+  --surface-deep: var(--surface-tertiary);
+  --surface-option: #151515;
+  --surface-option-hover: #202020;
+  --sidebar-selector: var(--n-4);
+  --sidebar-option-active: var(--sidebar-selector);
+  --sidebar-option-active-hover: var(--n-5);
+
+  --surface: var(--a-hover);
+  --surface-subtle: rgba(255, 255, 255, 0.025);
+  --surface-hover: var(--a-hover);
+  --surface-active: var(--a-active);
+  --surface-selected: var(--a-selected);
+  --surface-strong: rgba(255, 255, 255, 0.085);
+
+  // --- Borda (quatro pesos com diferença perceptível) ---
+  --border-subtle: #1f1f1f;
+  --border-default: var(--n-5);
+  --border-strong: var(--n-6);
+  --border-interactive: var(--n-7);
+
+  --border-dark: var(--border-default);
+  --border: var(--border-default);
+  --border-ui: var(--border-default);
+  --border-hover: var(--border-interactive);
+
+  // --- Texto (quatro papéis) ---
+  --text-primary: var(--n-11);
+  --text-secondary: var(--n-9);
+  --text-tertiary: var(--n-8);
+  --text-inverse: var(--n-1);
+  --icon-default: var(--n-10);
+  --icon-muted: var(--n-9);
+
+  --text: var(--text-primary);
+  --text-strong: var(--text-primary);
+  --color-text: var(--text-primary);
+  --text-muted: var(--text-secondary);
+  --color-subtext: var(--text-secondary);
+  --text-soft: var(--text-secondary);
+  --text-dim: var(--text-secondary);
+  --text-faint: var(--text-tertiary);
+  --hydra-button-text: var(--text-primary);
+
+  // --- Overlay / scrim ---
+  --overlay-subtle: var(--a-scrim-1);
+  --overlay-medium: var(--a-scrim-2);
+  --overlay-strong: var(--a-scrim-3);
+
+  // --- Status ---
+  --danger: var(--red-500);
+  --danger-hover: var(--red-400);
+  --danger-soft: rgba(239, 68, 68, 0.12);
+  --success: var(--green-500);
+  --success-hover: var(--green-400);
+  --success-soft: rgba(53, 208, 127, 0.12);
+
+  // --- Dourado (assinatura + conquista rara — nada mais usa isto) ---
+  --premium-gold: var(--gold-500);
+  --gold-border: color-mix(in srgb, var(--gold-500) 32%, var(--border-default));
+  --gold-wash: color-mix(in srgb, var(--gold-500) 10%, transparent);
+  --gold-text: var(--gold-500);
+  --premium-surface-soft: rgba(255, 255, 255, 0.045);
+  --premium-surface-faint: rgba(255, 255, 255, 0.025);
+  --premium-border-glow: rgba(242, 242, 242, 0.48);
+  // Ângulo animado da borda do card de assinatura (ver @property em app.scss).
+  --premium-border-angle: 0deg;
+  --profile-banner-placeholder-bg: var(--n-0);
+
+  // --- Peso de fonte ---
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  // --- Família ---
+  --font-sans: "Open Sans", "Segoe UI", system-ui, sans-serif;
+
+  --hydra-button-dark: var(--surface-tertiary);
+  --hydra-button-dark-hover: var(--surface-interactive);
+
+  // --- Foco ---
+  --focus-ring: 0 0 0 2px var(--surface-canvas), 0 0 0 3px var(--n-10);
+  --focus-ring-inset: inset 0 0 0 1px var(--n-10);
+
+  // --- Card padrão ---
+  --card-bg: var(--surface-secondary);
+  --card-bg-hover: var(--surface-secondary);
+  --card-bg-active: var(--surface-secondary);
+  --card-border: var(--border);
+  --card-radius: var(--radius-lg);
+
+  --app-gradient: var(--surface-tertiary);
+}

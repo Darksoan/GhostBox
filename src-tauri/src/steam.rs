@@ -4,6 +4,7 @@ use crate::settings::{
     load_steam_stats_proxy_url, load_steam_web_api_key, read_json_file, remove_data_file,
     write_json_file,
 };
+use crate::steam_localconfig;
 use crate::util::{escape_html, silent_command, text_value, xml_text, EmptyStringExt};
 use crate::{
     enrich_game_with_local_achievement_stats, extract_app_id, load_saved_steam_path,
@@ -88,6 +89,8 @@ pub(crate) struct SteamRemoteAchievement {
     icon_gray: String,
     unlocked: bool,
     unlocked_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    global_percent: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -635,16 +638,43 @@ async fn fetch_steam_owned_games_from_proxy(
     Ok(games)
 }
 
-/// Resolve owned games for playtime only via Cloudflare proxy (Steam Web API key on worker).
+/// Resolve owned games for playtime: prefer the Cloudflare proxy (shared Web API key),
+/// falling back to the user's own local Steam Web API key when the proxy is not
+/// configured, unreachable, slow/cold-starting, or returns an error. This mirrors the
+/// fallback already used by `steam_get_account_stats` / `steam_get_player_level` — without
+/// it, playtime sync had no recovery path and silently left every game at 0.
 async fn resolve_steam_owned_games_for_playtime(
-    _app: &tauri::AppHandle,
+    app: &tauri::AppHandle,
     steam_id: &str,
 ) -> Result<Vec<SteamOwnedGameStats>, String> {
     let proxy_url = load_steam_stats_proxy_url();
-    if proxy_url.is_empty() {
-        return Err("Steam stats proxy URL is not configured".to_string());
+    let proxy_error = if proxy_url.is_empty() {
+        "Steam stats proxy URL is not configured".to_string()
+    } else {
+        match fetch_steam_owned_games_from_proxy(&proxy_url, steam_id).await {
+            Ok(games) => return Ok(games),
+            Err(error) => error,
+        }
+    };
+
+    let api_key = load_steam_web_api_key(app);
+    if api_key.is_empty() {
+        return Err(format!(
+            "Steam stats proxy failed ({proxy_error}) and no local Steam Web API key is configured"
+        ));
     }
-    fetch_steam_owned_games_from_proxy(&proxy_url, steam_id).await
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| error.to_string())?;
+    fetch_steam_owned_games(&client, steam_id, &api_key)
+        .await
+        .map_err(|error| {
+            format!(
+                "Steam stats proxy failed ({proxy_error}); direct Steam API also failed ({error})"
+            )
+        })
 }
 
 async fn fetch_steam_account_stats_from_proxy(
@@ -1104,8 +1134,12 @@ pub fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
 }
 
-/// Rebuild playtime snapshot exclusively from Steam GetOwnedGames data.
-/// Drops legacy local accumulators (e.g. 56s session fakes).
+/// Layer Steam GetOwnedGames totals into the playtime snapshot. This is
+/// authoritative for any appid it covers — a real Steam license — so it
+/// always overwrites that appid's entry, but it never touches entries for
+/// appids Steam doesn't own (e.g. OpenSteamTools titles), which are seeded
+/// separately by [`seed_playtimes_from_steam_local_config`] or accumulated
+/// locally by GhostBox itself.
 fn seed_playtimes_from_steam_owned_games(
     app: &tauri::AppHandle,
     owned_games: &[SteamOwnedGameStats],
@@ -1114,7 +1148,10 @@ fn seed_playtimes_from_steam_owned_games(
         return;
     }
 
-    let mut snapshot = serde_json::Map::new();
+    let mut snapshot = playtime::load_game_playtimes(app)
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
 
     for game in owned_games {
         let steam_playtime_ms = game.playtime_forever.saturating_mul(60_000);
@@ -1136,11 +1173,100 @@ fn seed_playtimes_from_steam_owned_games(
     }
 
     let value = serde_json::Value::Object(snapshot);
-    let _ = playtime::replace_playtimes_from_steam(app, &value);
+    let _ = playtime::persist_playtime_snapshot(app, &value);
+}
+
+/// Layer the Steam client's own local playtime tracking (`localconfig.vdf`)
+/// into the snapshot, for appids the Web API doesn't own — this is how
+/// OpenSteamTools/stplug-in titles get real playtime instead of being stuck
+/// at 0s, since Steam's own overlay tracks them locally even though they're
+/// not real licenses on the account.
+fn seed_playtimes_from_steam_local_config(
+    app: &tauri::AppHandle,
+    local_playtimes: &HashMap<String, steam_localconfig::LocalAppPlaytime>,
+    owned_app_ids: &HashSet<String>,
+) {
+    if local_playtimes.is_empty() {
+        return;
+    }
+
+    let mut snapshot = playtime::load_game_playtimes(app)
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let mut changed = false;
+
+    for (app_id, local) in local_playtimes {
+        // A real Steam license always wins over the client's local tracking.
+        if owned_app_ids.contains(app_id) {
+            continue;
+        }
+
+        let existing_source = snapshot
+            .get(app_id)
+            .and_then(|entry| entry.get("source"))
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string();
+        // GhostBox's own accumulator already owns this total once it starts
+        // tracking a game locally — never clobber it with a (possibly stale)
+        // localconfig.vdf read.
+        if existing_source == "ghostbox" {
+            continue;
+        }
+
+        let playtime_ms = local.minutes.saturating_mul(60_000);
+        if playtime_ms == 0 && local.last_played == 0 {
+            continue;
+        }
+
+        let mut entry = serde_json::json!({
+            "appId": app_id,
+            "playTimeInMilliseconds": playtime_ms,
+            "source": "steam_local",
+        });
+        if local.last_played > 0 {
+            entry["lastTimePlayed"] =
+                serde_json::json!(playtime::unix_seconds_to_iso(local.last_played));
+        }
+        snapshot.insert(app_id.clone(), entry);
+        changed = true;
+    }
+
+    if changed {
+        let value = serde_json::Value::Object(snapshot);
+        let _ = playtime::persist_playtime_snapshot(app, &value);
+    }
+}
+
+/// Read the Steam client's local playtime cache for every appid not covered
+/// by `owned_app_ids` and layer it into the snapshot. Best-effort: silently
+/// does nothing if Steam isn't installed where expected.
+fn apply_local_steam_playtimes(
+    app: &tauri::AppHandle,
+    steam_id: &str,
+    owned_app_ids: &HashSet<String>,
+) {
+    let (steam_path, _) = resolve_steam_path(app, None);
+    let Some(steam_path) = steam_path else {
+        return;
+    };
+    let account_id = steam_localconfig::account_id_from_steam_id64(steam_id);
+    let local_playtimes =
+        steam_localconfig::read_steam_local_playtimes(&steam_path, account_id.as_deref());
+    seed_playtimes_from_steam_local_config(app, &local_playtimes, owned_app_ids);
+}
+
+fn owned_app_ids_from_stats(owned_games: &[SteamOwnedGameStats]) -> HashSet<String> {
+    owned_games
+        .iter()
+        .map(|game| game.appid.to_string())
+        .collect()
 }
 
 /// Sync playtime totals from Steam (proxy Web API key or local Web API key).
-/// Always rebuilds `steam-owned-playtimes.json` from GetOwnedGames data.
+/// Layers GetOwnedGames totals, then the local Steam client's own tracking
+/// for anything outside the account's licenses (e.g. OpenSteamTools titles).
 #[tauri::command]
 pub async fn steam_sync_playtimes(
     app: tauri::AppHandle,
@@ -1153,6 +1279,7 @@ pub async fn steam_sync_playtimes(
 
     let owned_games = resolve_steam_owned_games_for_playtime(&app, &steam_id).await?;
     seed_playtimes_from_steam_owned_games(&app, &owned_games);
+    apply_local_steam_playtimes(&app, &steam_id, &owned_app_ids_from_stats(&owned_games));
     Ok(playtime::load_game_playtimes(&app))
 }
 
@@ -1267,6 +1394,7 @@ pub async fn steam_get_account_stats(
                     })
                     .collect::<Vec<_>>();
                 seed_playtimes_from_steam_owned_games(&app, &owned_games);
+                apply_local_steam_playtimes(&app, &steam_id, &owned_app_ids_from_stats(&owned_games));
                 return Ok(stats);
             }
             Err(error) => {
@@ -1298,6 +1426,7 @@ pub async fn steam_get_account_stats(
     };
 
     seed_playtimes_from_steam_owned_games(&app, &owned_games);
+    apply_local_steam_playtimes(&app, &steam_id, &owned_app_ids_from_stats(&owned_games));
 
     let now = steam_unix_timestamp();
     let scan_needed = owned_games.iter().any(|game| {

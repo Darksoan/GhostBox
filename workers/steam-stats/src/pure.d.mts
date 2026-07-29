@@ -15,4 +15,9 @@ export function normalizeSchemaAchievements(game: unknown): Array<{
   icon: string;
   iconGray: string;
 }>;
+export function normalizeGlobalPercentages(payload: unknown): Map<string, number>;
+export function mergeGlobalPercentages(
+  achievements: Array<{ name: string; title: string; description: string; icon: string; iconGray: string }>,
+  percentageMap: Map<string, number>
+): Array<{ name: string; title: string; description: string; icon: string; iconGray: string; globalPercent?: number }>;
 export function parseSimilarAppIds(html: string, sourceAppId: string): string[];

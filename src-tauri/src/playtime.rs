@@ -3,9 +3,14 @@ use crate::ludusavi::resolved_game_title;
 use crate::settings::read_json_file;
 use crate::util::{silent_command, text_value, EmptyStringExt};
 
-/// Steam-only playtime totals (playtime_forever). Local session accumulators are gone.
+/// Merged playtime snapshot: Steam Web totals (`source: "steam"`), Steam local
+/// client totals for apps outside the account's licenses (`source:
+/// "steam_local"`, read from `localconfig.vdf`), and GhostBox's own session
+/// accumulator for anything neither of those covers (`source: "ghostbox"`,
+/// e.g. OpenSteamTools titles the Steam client itself has never launched).
 const STEAM_PLAYTIME_FILE: &str = "steam-owned-playtimes.json";
-/// Legacy local accumulator — deleted on Steam sync; no longer used for totals.
+/// Legacy local accumulator format (pre-`source` tagging) — deleted on every
+/// sync; no longer used for totals.
 const LEGACY_GAME_PLAYTIME_FILE: &str = "game-playtime.json";
 const GAME_PLAYTIMES_CHANGED_EVENT: &str = "game-playtimes-changed";
 const STEAM_RUNNING_APP_MONITOR_INTERVAL_MS: u64 = 3000;
@@ -76,8 +81,10 @@ pub(crate) fn clear_legacy_local_playtime_cache(app: &tauri::AppHandle) {
     let _ = crate::settings::remove_data_file(app, LEGACY_GAME_PLAYTIME_FILE);
 }
 
-/// Replace the entire playtime snapshot with Steam-owned totals only.
-pub(crate) fn replace_playtimes_from_steam(
+/// Persist an already-merged playtime snapshot (Steam Web totals, Steam local
+/// client totals, and/or GhostBox-tracked totals layered together by the
+/// caller) and notify the UI.
+pub(crate) fn persist_playtime_snapshot(
     app: &tauri::AppHandle,
     snapshot: &serde_json::Value,
 ) -> Result<(), String> {
@@ -737,23 +744,36 @@ fn record_game_launch_playtime_impl(
         .get("playTimeInMilliseconds")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
+    let source = current.get("source").cloned();
 
-    snapshot[app_id] = serde_json::json!({
+    let mut next = serde_json::json!({
         "appId": app_id,
         "playTimeInMilliseconds": play_time,
         "lastTimePlayed": now
     });
+    if let Some(source) = source {
+        next["source"] = source;
+    }
+
+    snapshot[app_id] = next;
     save_game_playtimes(app, &snapshot)?;
     emit_game_playtimes_changed(app, &snapshot);
     Ok(snapshot)
 }
+
+/// Sessions shorter than this are treated as noise (alt-tabs, instant crashes)
+/// and never accumulated into the GhostBox-tracked total.
+const MIN_TRACKED_SESSION_MS: u64 = 60_000;
+/// Sessions longer than this are almost certainly a sleep/hibernate span the
+/// process monitor failed to detect, not real playtime, so they're clamped.
+const MAX_PLAUSIBLE_SESSION_MS: u64 = 24 * 60 * 60 * 1000;
 
 fn record_game_session_playtime(
     app: &tauri::AppHandle,
     app_id: &str,
     started_at: std::time::SystemTime,
 ) -> Result<serde_json::Value, String> {
-    let duration = started_at
+    let duration: u64 = started_at
         .elapsed()
         .map_err(|error| error.to_string())?
         .as_millis()
@@ -763,25 +783,46 @@ fn record_game_session_playtime(
         return Ok(load_game_playtimes(app));
     }
 
-    // Do not accumulate local session time into totals — Steam is the only source.
-    // Only refresh last-played / session metadata for UI.
     let mut snapshot = load_game_playtimes(app);
     let now = current_timestamp_string();
     let current = snapshot
         .get(app_id)
         .cloned()
         .unwrap_or_else(|| serde_json::json!({ "appId": app_id }));
+    let source = current
+        .get("source")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_string();
     let play_time = current
         .get("playTimeInMilliseconds")
         .and_then(|value| value.as_u64())
         .unwrap_or(0);
 
+    // Steam already owns the total for this app (a real license, or one the
+    // local Steam client itself has tracked before) — never accumulate on top
+    // of it here, only refresh last-played / session metadata for the UI.
+    let steam_owns_total = source == "steam" || source == "steam_local";
+    let next_play_time = if steam_owns_total {
+        play_time
+    } else if duration >= MIN_TRACKED_SESSION_MS {
+        // No Steam-owned total exists for this app (e.g. an OpenSteamTools
+        // game the Steam client has never launched itself, so it's absent
+        // from both GetOwnedGames and localconfig.vdf) — GhostBox is the
+        // only playtime source, so accumulate the session directly.
+        play_time.saturating_add(duration.min(MAX_PLAUSIBLE_SESSION_MS))
+    } else {
+        play_time
+    };
+    let next_source = if steam_owns_total { source.as_str() } else { "ghostbox" };
+
     snapshot[app_id] = serde_json::json!({
         "appId": app_id,
-        "playTimeInMilliseconds": play_time,
+        "playTimeInMilliseconds": next_play_time,
         "lastTimePlayed": now,
         "lastSessionRecordedAt": now,
-        "lastSessionDurationInMilliseconds": duration
+        "lastSessionDurationInMilliseconds": duration,
+        "source": next_source
     });
     save_game_playtimes(app, &snapshot)?;
     emit_game_playtimes_changed(app, &snapshot);
@@ -828,6 +869,10 @@ pub(crate) fn apply_playtime_from_backup(
     let backup_last_session_duration = payload
         .get("lastSessionDurationInMilliseconds")
         .and_then(|value| value.as_u64());
+    let backup_source = payload
+        .get("source")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
 
     let mut snapshot = load_game_playtimes(app);
     let current = snapshot
@@ -860,11 +905,34 @@ pub(crate) fn apply_playtime_from_backup(
         (None, None) => current_timestamp_string(),
     };
 
+    // A Steam-verified total (local or on-account) always wins the "source"
+    // tag over a plain GhostBox accumulator, regardless of which side it came
+    // from — it must never be lost across a restore, or the next session
+    // would wrongly re-accumulate on top of a Steam-owned total (see
+    // record_game_session_playtime).
+    let current_source = current
+        .get("source")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    let is_steam_owned = |source: &Option<String>| {
+        matches!(source.as_deref(), Some("steam") | Some("steam_local"))
+    };
+    let source = if is_steam_owned(&current_source) {
+        current_source
+    } else if is_steam_owned(&backup_source) {
+        backup_source
+    } else {
+        current_source.or(backup_source)
+    };
+
     let mut next = serde_json::json!({
         "appId": app_id,
         "playTimeInMilliseconds": play_time,
         "lastTimePlayed": last_time_played,
     });
+    if let Some(source) = source {
+        next["source"] = serde_json::json!(source);
+    }
     if let Some(value) = backup_last_session_at.or_else(|| {
         current
             .get("lastSessionRecordedAt")

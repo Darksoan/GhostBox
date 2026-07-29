@@ -171,6 +171,12 @@ const translations: Record<Language, TranslationTree> = {
       globalPercent: "{percent} dos jogadores",
       empty: "Este jogo não possui conquistas.",
     },
+    metrics: {
+      locked: "Faça login para visualizar",
+      lockedAchievements: "Faça login para ver as conquistas",
+      lockedAria:
+        "Conquistas e tempo de jogo bloqueados. Faça login para visualizar.",
+    },
     home: {
       pageAria: "Jogos recomendados e categorias da página inicial",
       categoriesAria: "Categorias da página inicial",
@@ -336,6 +342,10 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       general: {
+        groups: {
+          locale: "Idioma e início",
+          window: "Janela e inicialização",
+        },
         language: {
           label: "Idioma",
           description: "Escolha o idioma da interface do GhostBox.",
@@ -369,40 +379,38 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
+        groups: {
+          rendering: "Renderização",
+          media: "Mídia e pré-carregamento",
+        },
         reduceAllAnimations: {
           label: "Animações da interface",
-          description:
-            "Exibe animações em cards, carregamentos, telas e janelas. Desative para reduzir movimento e efeitos visuais.",
+          description: "Anima cards, telas e transições da interface.",
         },
         disableBackdropBlur: {
           label: "Desfoque de fundo",
-          description:
-            "Aplica desfoque aos painéis translúcidos. Desative para reduzir o custo de renderização; cores e transparências permanecem.",
+          description: "Desfoca painéis translúcidos da interface.",
         },
         trailerQuality: {
           label: "Exibir trailers",
-          description:
-            "Mostra trailers na galeria dos detalhes do jogo. Desative para exibir apenas imagens.",
+          description: "Mostra trailers na galeria de detalhes do jogo.",
           high: "Ativado",
           low: "Desativado",
         },
         trailerAutoplay: {
           label: "Reproduzir trailers automaticamente",
-          description:
-            "Inicia o trailer sem som e em loop ao abrir os detalhes ou selecioná-lo na galeria.",
+          description: "Reproduz o trailer sem som e em loop.",
         },
         imagePreloadConcurrency: {
           label: "Pré-carregamento de imagens",
-          description:
-            "Define quantas imagens o app antecipa ao mesmo tempo. Valores maiores podem carregar imagens mais cedo, mas usam mais rede e memória.",
+          description: "Quantidade de imagens carregadas com antecedência.",
           low: "Baixo (2)",
           medium: "Padrão (4)",
           high: "Alto (6)",
         },
         disablePageKeepAlive: {
           label: "Manter páginas em memória",
-          description:
-            "Preserva o estado das páginas visitadas para voltar mais rápido. Desative para desmontar páginas inativas e reduzir parte do uso de memória.",
+          description: "Mantém páginas visitadas na memória para voltar mais rápido.",
         },
       },
       library: {
@@ -429,6 +437,9 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       notifications: {
+        groups: {
+          inApp: "Avisos dentro do app",
+        },
         test: {
           label: "Teste de notificação",
           description:
@@ -688,6 +699,12 @@ const translations: Record<Language, TranslationTree> = {
       globalPercent: "{percent} of players",
       empty: "This game has no achievements.",
     },
+    metrics: {
+      locked: "Sign in to view",
+      lockedAchievements: "Sign in to view achievements",
+      lockedAria:
+        "Achievements and playtime locked. Sign in to view.",
+    },
     home: {
       pageAria: "Recommended games and home categories",
       categoriesAria: "Home categories",
@@ -851,6 +868,10 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       general: {
+        groups: {
+          locale: "Language and startup screen",
+          window: "Window and startup",
+        },
         language: {
           label: "Language",
           description: "Choose the GhostBox interface language.",
@@ -884,40 +905,38 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
+        groups: {
+          rendering: "Rendering",
+          media: "Media and preloading",
+        },
         reduceAllAnimations: {
           label: "Interface animations",
-          description:
-            "Shows animations in cards, loading states, screens, and dialogs. Turn off to reduce motion and visual effects.",
+          description: "Animates cards, screens, and interface transitions.",
         },
         disableBackdropBlur: {
           label: "Background blur",
-          description:
-            "Applies blur to translucent panels. Turn off to reduce rendering cost; colors and transparency remain.",
+          description: "Blurs translucent panels in the interface.",
         },
         trailerQuality: {
           label: "Show trailers",
-          description:
-            "Shows trailers in the game details gallery. Turn off to show images only.",
+          description: "Shows trailers in the game details gallery.",
           high: "On",
           low: "Off",
         },
         trailerAutoplay: {
           label: "Play trailers automatically",
-          description:
-            "Starts the trailer muted and looping when opening details or selecting it in the gallery.",
+          description: "Plays the trailer muted and looping.",
         },
         imagePreloadConcurrency: {
           label: "Image preloading",
-          description:
-            "Sets how many images the app anticipates at the same time. Higher values can show images earlier, but use more network and memory.",
+          description: "How many images load ahead of time at once.",
           low: "Low (2)",
           medium: "Default (4)",
           high: "High (6)",
         },
         disablePageKeepAlive: {
           label: "Keep pages in memory",
-          description:
-            "Preserves visited page state so returning is faster. Turn off to unmount inactive pages and reduce part of memory usage.",
+          description: "Keeps visited pages in memory so returning is faster.",
         },
       },
       library: {
@@ -943,6 +962,9 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       notifications: {
+        groups: {
+          inApp: "In-app alerts",
+        },
         test: {
           label: "Notification test",
           description: "Shows a sample notification over other programs.",

@@ -83,29 +83,13 @@ import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
-import { runViewTransition } from "../utils/viewTransition";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 
 const emptyImageSources: string[] = [];
 const recentActivityPageSize = 8;
 const profileAchievementPageSize = 5;
-const profileTabsCursorLockMs = 700;
 
-let profileTabsCursorLockTimeout: number | undefined;
-
-function lockProfileTabsPointerCursor() {
-  document.documentElement.classList.add("profile-tabs-cursor-lock");
-
-  if (profileTabsCursorLockTimeout) {
-    window.clearTimeout(profileTabsCursorLockTimeout);
-  }
-
-  profileTabsCursorLockTimeout = window.setTimeout(() => {
-    document.documentElement.classList.remove("profile-tabs-cursor-lock");
-    profileTabsCursorLockTimeout = undefined;
-  }, profileTabsCursorLockMs);
-}
 
 const overviewSortOptions: OverviewSortBy[] = [
   "recent",
@@ -1185,15 +1169,9 @@ export function ProfilePage({
 
   const handleTabClick = useCallback(
     (collectionId: string) => {
-      const currentIndex = profileCollections.findIndex(({ id }) => id === activeTabId);
-      const nextIndex = profileCollections.findIndex(({ id }) => id === collectionId);
-      runViewTransition(
-        () => setActiveCollectionId(collectionId),
-        collectionId !== activeTabId && !appearance.reduceAllAnimations,
-        ["motion-tab-transition", nextIndex < currentIndex ? "motion-tab-backward" : "motion-tab-forward"],
-      );
+      setActiveCollectionId(collectionId);
     },
-    [activeTabId, appearance.reduceAllAnimations, profileCollections, setActiveCollectionId]
+    [setActiveCollectionId]
   );
 
   const visibleGames = useMemo(() => {
@@ -1794,7 +1772,6 @@ export function ProfilePage({
             <div
               className="profile-page__tabs"
               aria-label={t("sidebar.collections")}
-              onPointerDown={lockProfileTabsPointerCursor}
             >
               <div className="profile-page__collection-tabs">
                 {profileCollections.map((collection) => {
@@ -1868,9 +1845,7 @@ export function ProfilePage({
             </div>
 
           <div className="profile-page__collection-content">
-            <div
-              className="profile-page__tab-panel"
-            >
+            <div className="profile-page__tab-panel">
             {isOverviewActive ? (
               <div
                 className="profile-page__overview"

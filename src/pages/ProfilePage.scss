@@ -1,3 +1,5 @@
+@use "../styles/mixins" as mixins;
+
 .profile-page {
   /* Match edit-profile-cover-modal glass exactly */
   --profile-glass-blur: 4px;
@@ -21,12 +23,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: var(--space-6);
     min-height: 280px;
     border: 0;
     background: color-mix(in srgb, var(--surface-deep) 82%, transparent);
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     text-align: center;
   }
 
@@ -128,7 +130,7 @@
     z-index: 1;
     width: 100%;
     min-height: 280px;
-    padding: 24px 24px 12px;
+    padding: var(--space-10) var(--space-10) var(--space-6);
     box-sizing: border-box;
     /* Soft fade only — frosted glass strip is solely on __tabs (matches cover modal) */
     background: linear-gradient(
@@ -166,7 +168,7 @@
     -webkit-backdrop-filter: blur(4px);
     box-shadow: none;
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     opacity: 0;
     visibility: hidden;
@@ -202,7 +204,7 @@
       position: absolute;
       top: 16px;
       right: 24px;
-      z-index: 10;
+      z-index: var(--z-raised);
       flex: none;
     }
   }
@@ -221,7 +223,7 @@
     min-height: 0;
     padding: 0;
     align-items: center;
-    gap: 16px;
+    gap: var(--space-8);
     min-width: 0;
   }
 
@@ -236,7 +238,7 @@
     border-radius: var(--radius-circle);
     background-color: var(--background);
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     transition:
       border-color var(--motion-base) var(--ease),
@@ -271,11 +273,11 @@
   &__identity-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
     align-items: flex-start;
     min-width: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     z-index: 1;
     overflow: visible;
   }
@@ -283,17 +285,17 @@
   &__display-name-container {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     max-width: 100%;
   }
 
   &__display-name-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     max-width: 100%;
     min-height: 40px;
-    padding: 4px 0;
+    padding: var(--space-2) 0;
     overflow: visible;
 
     .profile-page__hero-action {
@@ -308,7 +310,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: 28px;
+    font-size: var(--fs-700);
     font-weight: var(--weight-medium);
     line-height: 34px;
     text-overflow: ellipsis;
@@ -333,7 +335,7 @@
     box-sizing: border-box;
     color: var(--text-primary);
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: var(--fs-300);
     font-weight: var(--weight-semibold);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
@@ -352,7 +354,7 @@
   &__steam-id-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
 
@@ -374,8 +376,8 @@
   &__steam-id-box {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 4px 4px 8px;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
     min-height: 34px;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
@@ -386,8 +388,8 @@
 
   &__steam-id {
     color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-300);
+    font-weight: var(--weight-semibold);
     letter-spacing: 0.04em;
     user-select: none;
     transition: opacity var(--motion-base) var(--ease);
@@ -413,7 +415,7 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     transition: color var(--motion-fast) ease;
 
@@ -469,8 +471,8 @@
   &__discord-box {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 4px 4px 10px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
     min-height: 34px;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
@@ -489,8 +491,8 @@
 
   &__discord-id {
     color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-300);
+    font-weight: var(--weight-semibold);
     letter-spacing: 0.04em;
     user-select: none;
   }
@@ -499,10 +501,10 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--space-4);
     max-width: 140px;
     min-height: 30px;
-    padding: 6px 8px;
+    padding: var(--space-3) var(--space-4);
     overflow: hidden;
     border-radius: var(--radius-md);
     background-color: rgba(0, 0, 0, 0.3);
@@ -519,7 +521,7 @@
     span {
       overflow: hidden;
       font-family: var(--font-sans);
-      font-size: 12px;
+      font-size: var(--fs-200);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -528,13 +530,13 @@
   &__current-game-wrapper {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
 
     small {
       max-width: 520px;
       overflow: hidden;
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
+      font-weight: var(--weight-semibold);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -544,7 +546,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     color: var(--text-primary);
   }
 
@@ -552,7 +554,7 @@
     display: flex;
     width: 100%;
     min-height: 72px;
-    padding: 16px 24px;
+    padding: var(--space-8) var(--space-10);
     border-top: 1px solid var(--border);
     background-color: rgba(0, 0, 0, 0.42);
     backdrop-filter: blur(6px);
@@ -563,14 +565,14 @@
     display: flex;
     flex: 1;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--space-4);
     flex-wrap: wrap;
   }
 
   &__stat {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     min-width: 150px;
     color: var(--text-primary);
 
@@ -579,23 +581,23 @@
       max-width: 180px;
       overflow: hidden;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--fs-400);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     span {
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
-      font-size: 12px;
+      font-weight: var(--weight-semibold);
+      font-size: var(--fs-200);
     }
   }
 
   &__content-section {
     position: relative;
     display: flex;
-    gap: 28px;
-    padding: 0 0 24px;
+    gap: var(--space-10);
+    padding: 0 0 var(--space-10);
     align-items: flex-start;
     overflow: visible;
   }
@@ -607,7 +609,7 @@
 
   &__collection-content {
     width: 100%;
-    padding: 0 32px;
+    padding: 0 var(--space-12);
     overflow: visible;
   }
 
@@ -632,7 +634,7 @@
       "stats stats stats stats stats stats stats stats stats stats stats stats"
       "top top top top top top top top top top top top";
     align-items: start;
-    gap: 16px 20px;
+    gap: var(--space-8) var(--space-9);
     width: min(100%, 1180px);
     margin: 0 auto;
   }
@@ -715,7 +717,7 @@
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     transition:
       color var(--motion-base) ease;
@@ -732,9 +734,9 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(48px, 48px));
     justify-content: start;
-    gap: 6px;
+    gap: var(--space-3);
     margin: 0;
-    padding: 12px;
+    padding: var(--space-6);
     overflow: visible;
   }
 
@@ -753,7 +755,7 @@
     border-radius: var(--radius-md);
     background: var(--surface-tertiary);
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     box-shadow: none;
     transition:
       filter var(--motion-base) ease,
@@ -825,35 +827,7 @@
     border-color: transparent;
 
     &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      border-radius: inherit;
-      padding: 1.5px;
-      background: conic-gradient(
-        from var(--premium-border-angle),
-        transparent 0deg,
-        transparent 180deg,
-        color-mix(in srgb, var(--premium-gold) 18%, transparent) 230deg,
-        color-mix(in srgb, var(--premium-gold) 45%, transparent) 275deg,
-        color-mix(in srgb, var(--premium-gold) 72%, #fff 8%) 305deg,
-        color-mix(in srgb, var(--premium-gold) 90%, #fff 18%) 328deg,
-        color-mix(in srgb, var(--premium-gold) 55%, transparent) 345deg,
-        color-mix(in srgb, var(--premium-gold) 22%, transparent) 355deg,
-        transparent 360deg
-      );
-      pointer-events: none;
-      opacity: 1;
-      -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-      mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      animation: subscription-premium-border-shine 7s linear infinite;
+      @include mixins.gold-flashlight-border-rare;
     }
 
     &:hover,
@@ -869,7 +843,7 @@
     place-items: center;
     background: var(--overlay-subtle);
     color: var(--text-secondary);
-  font-weight: var(--weight-muted);
+  font-weight: var(--weight-semibold);
   }
 
   &__showcase-modal {
@@ -877,13 +851,13 @@
   }
 
   &__showcase-modal-content {
-    gap: 16px;
+    gap: var(--space-8);
   }
 
   &__showcase-modal-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(48px, 48px));
-    gap: 10px;
+    gap: var(--space-5);
     max-height: min(420px, calc(100vh - 260px));
     overflow: auto;
     padding-right: 4px;
@@ -930,8 +904,8 @@
   &__showcase-modal-empty {
     margin: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 12px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-200);
   }
 
   &__showcase-modal-actions {
@@ -953,8 +927,8 @@
     min-height: 96px;
     flex-direction: column;
     justify-content: center;
-    gap: 6px;
-    padding: 14px 18px;
+    gap: var(--space-3);
+    padding: var(--space-7) var(--space-9);
 
     & + .profile-page__overview-stat {
       &::before {
@@ -982,8 +956,8 @@
 
     span {
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
-      font-size: 14px;
+      font-weight: var(--weight-semibold);
+      font-size: var(--fs-400);
       line-height: 1.25;
     }
   }
@@ -993,7 +967,7 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-5);
     padding: 0;
   }
 
@@ -1013,8 +987,8 @@
     min-height: 88px;
     flex-direction: column;
     justify-content: center;
-    gap: 8px;
-    padding: 16px 18px;
+    gap: var(--space-4);
+    padding: var(--space-8) var(--space-9);
 
     & + .profile-page__showcase-stat {
       border-left: 1px solid var(--border-subtle);
@@ -1035,8 +1009,8 @@
     span {
       overflow: hidden;
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
-      font-size: 13px;
+      font-weight: var(--weight-semibold);
+      font-size: var(--fs-300);
       line-height: 1.25;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1047,21 +1021,21 @@
   &__steam-stats-scan {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     min-height: 48px;
-    padding: 12px 14px;
+    padding: var(--space-6) var(--space-7);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-tertiary) 74%, transparent);
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 13px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-300);
   }
 
   &__steam-stats-scan {
     min-height: 0;
-    padding: 9px 12px;
-    font-size: 12px;
+    padding: var(--space-5) var(--space-6);
+    font-size: var(--fs-200);
   }
 
   &__activity-console {
@@ -1069,30 +1043,30 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-6);
   }
 
   &__activity-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--space-8);
     min-width: 0;
-    padding: 0 2px;
+    padding: 0 var(--space-1);
   }
 
   &__activity-title {
     margin: 0;
     color: var(--text-primary);
-    font-size: 15px;
+    font-size: var(--fs-400);
     font-weight: var(--weight-semibold);
     line-height: 1.2;
   }
 
   &__activity-summary {
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 12px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-200);
     line-height: 1.3;
     text-align: right;
     white-space: nowrap;
@@ -1102,7 +1076,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: var(--space-8);
     min-width: 0;
     margin-bottom: 2px;
   }
@@ -1111,7 +1085,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 18px;
+    gap: var(--space-9);
     flex: 1 1 auto;
     min-width: 0;
     max-width: min(100%, 720px);
@@ -1120,24 +1094,24 @@
   &__activity-metric {
     display: inline-flex;
     align-items: baseline;
-    gap: 6px;
+    gap: var(--space-3);
     flex: 0 1 auto;
     min-width: 0;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: var(--fs-300);
     line-height: 1;
     white-space: nowrap;
 
     strong {
       color: var(--text-primary);
-      font-size: 24px;
+      font-size: var(--fs-700);
       font-weight: var(--weight-medium);
       font-variant-numeric: tabular-nums;
       line-height: 1;
     }
 
     > span {
-      letter-spacing: 0.01em;
+      letter-spacing: var(--ls-200);
     }
 
     + .profile-page__activity-metric {
@@ -1158,11 +1132,11 @@
 
     .settings-dropdown__trigger {
       min-height: 32px;
-      padding: 0 12px;
+      padding: 0 var(--space-6);
       border-radius: var(--radius-lg);
       border-color: transparent;
       background: var(--surface-secondary);
-      font-size: 13px;
+      font-size: var(--fs-300);
 
       &:hover,
       &:focus-visible {
@@ -1177,7 +1151,7 @@
       left: auto;
       border-color: transparent;
       background: var(--surface-secondary);
-      padding: 4px 6px;
+      padding: var(--space-2) var(--space-3);
     }
 
     .settings-dropdown__option {
@@ -1193,13 +1167,13 @@
   &__activity-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-5);
   }
 
   &__activity-pagination {
     display: flex;
     justify-content: center;
-    padding: 4px 0 2px;
+    padding: var(--space-2) 0 var(--space-1);
   }
 
   &__activity-list--skeleton {
@@ -1212,13 +1186,13 @@
     display: grid;
     grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
     grid-template-rows: auto;
-    column-gap: calc(var(--spacing) * 2);
-    row-gap: 10px;
+    column-gap: var(--space-8);
+    row-gap: var(--space-5);
     align-items: center;
     min-width: 0;
     min-height: 92px;
     padding: 0;
-    padding-right: calc(var(--spacing) * 1.5);
+    padding-right: var(--space-6);
     overflow: hidden;
     border: 0;
     border-radius: var(--radius-lg);
@@ -1290,19 +1264,27 @@
   &__activity-card--skeleton {
     grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
     align-items: center;
-    gap: 14px;
+    gap: var(--space-7);
     min-height: 92px;
     padding: 0;
-    padding-right: calc(var(--spacing) * 1.5);
+    padding-right: var(--space-6);
     opacity: 0.78;
   }
 
+  /*
+   * A capa ocupa a ALTURA INTEIRA do card. Antes ela era centralizada com uma
+   * `aspect-ratio` fixa (196px → 91.6px de altura): num card com a linha de
+   * conquistas o card passa de 120px e sobrava uma faixa do fundo em cima e
+   * embaixo da arte — a header do jogo não encostava nas bordas do card.
+   * Agora a célula estica e o recorte fica por conta do `background-size: cover`.
+   */
   &__activity-cover-button {
     grid-column: 1;
     grid-row: 1 / -1;
     display: block;
     width: var(--activity-cover-width);
-    align-self: center;
+    align-self: stretch;
+    min-height: 92px;
     padding: 0;
     background: transparent;
     cursor: inherit;
@@ -1314,11 +1296,11 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-6);
     width: 100%;
     min-width: 0;
     min-height: 0;
-    padding: 12px 0 0;
+    padding: var(--space-6) 0 0;
     background: transparent;
     color: inherit;
     text-align: left;
@@ -1328,10 +1310,11 @@
   &__activity-game-cover {
     display: block;
     width: 100%;
-    aspect-ratio: 460 / 215;
+    height: 100%;
+    min-height: 92px;
     flex: 0 0 auto;
     border: 0;
-    border-radius: 4px 0 0 4px;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     background-color: var(--surface-solid);
     background-size: cover;
     background-position: center;
@@ -1351,7 +1334,7 @@
     display: grid;
     min-width: 0;
     align-content: center;
-    gap: 2px;
+    gap: var(--space-1);
     transform: translateY(3px);
 
     strong {
@@ -1370,7 +1353,7 @@
     flex-direction: column;
     align-items: flex-end;
     justify-content: center;
-    gap: 3px;
+    gap: var(--space-2);
     min-width: 0;
     text-align: right;
   }
@@ -1378,8 +1361,8 @@
   &__activity-hours,
   &__activity-status {
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 12px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-200);
     line-height: 1.3;
   }
 
@@ -1397,9 +1380,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px 14px;
+    gap: var(--space-6) var(--space-7);
     min-width: 0;
-    padding: 0 0 10px;
+    padding: 0 0 var(--space-5);
     background: transparent;
   }
 
@@ -1407,7 +1390,7 @@
     display: grid;
     grid-template-columns: auto auto minmax(120px, 1fr);
     align-items: center;
-    gap: 8px 10px;
+    gap: var(--space-4) var(--space-5);
     min-width: 0;
     flex: 1 1 auto;
     max-width: 320px;
@@ -1434,8 +1417,8 @@
   &__activity-progress-label,
   &__activity-progress-count {
     color: var(--text-primary);
-    font-weight: var(--weight-muted);
-    font-size: 12px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-200);
     line-height: 1.2;
     white-space: nowrap;
     transition: color var(--motion-fast) var(--ease);
@@ -1444,7 +1427,7 @@
   &__activity-progress-label {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: var(--space-4);
     color: var(--text-primary);
   }
 
@@ -1471,7 +1454,7 @@
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   &__activity-icon {
@@ -1482,7 +1465,7 @@
     place-items: center;
     padding: 0;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-panel);
     background: var(--surface-solid);
     cursor: inherit;
     overflow: visible;
@@ -1516,8 +1499,8 @@
     display: grid;
     width: max-content;
     max-width: 240px;
-    gap: 4px;
-    padding: 9px 10px;
+    gap: var(--space-2);
+    padding: var(--space-5) var(--space-5);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: var(--surface-primary);
@@ -1547,7 +1530,7 @@
 
     strong {
       overflow: hidden;
-      font-size: 12px;
+      font-size: var(--fs-200);
       font-weight: var(--weight-semibold);
       line-height: 1.25;
       text-overflow: ellipsis;
@@ -1557,8 +1540,8 @@
     span,
     small {
       color: var(--text-secondary);
-      font-size: 11px;
-      font-weight: var(--weight-muted);
+      font-size: var(--fs-100);
+      font-weight: var(--weight-semibold);
       line-height: 1.3;
     }
 
@@ -1575,12 +1558,12 @@
     min-width: 28px;
     height: 28px;
     place-items: center;
-    padding: 0 6px;
-    border-radius: 5px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-panel);
     background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
     color: var(--text-secondary);
-    font-size: 11px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-100);
+    font-weight: var(--weight-semibold);
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -1596,15 +1579,15 @@
   &__recent-title-row {
     min-height: 40px;
     margin: 0;
-    padding: 0 16px;
+    padding: 0 var(--space-8);
     border-bottom: 0;
   }
 
   &__top-games-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 10px 16px 16px 4px;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-8) var(--space-8) var(--space-2);
   }
 
   &__top-games-list--skeleton {
@@ -1615,11 +1598,11 @@
     display: grid;
     grid-template-columns: 82px minmax(0, 1fr);
     align-items: center;
-    gap: 16px;
+    gap: var(--space-8);
     width: 100%;
     min-width: 0;
     min-height: 143px;
-    padding: 10px 12px;
+    padding: var(--space-5) var(--space-6);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -1696,10 +1679,10 @@
     display: grid;
     grid-template-columns: 32px 58px minmax(0, 1fr);
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     width: 100%;
     min-width: 0;
-    padding: 10px;
+    padding: var(--space-5);
     border: 0;
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
@@ -1736,7 +1719,7 @@
     width: 100%;
     min-width: 0;
     max-width: none;
-    gap: 12px;
+    gap: var(--space-6);
 
     strong,
     > span:not(.profile-page__top-game-stats) {
@@ -1748,15 +1731,15 @@
     strong {
       min-width: 0;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--fs-400);
       font-weight: var(--weight-semibold);
       line-height: 1.25;
     }
 
     > span:not(.profile-page__top-game-stats) {
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
-      font-size: 12px;
+      font-weight: var(--weight-semibold);
+      font-size: var(--fs-200);
     }
   }
 
@@ -1766,7 +1749,7 @@
     display: grid;
     grid-template-columns: minmax(104px, 0.75fr) minmax(112px, 0.8fr) minmax(170px, 1fr) max-content;
     align-items: start;
-    gap: 16px;
+    gap: var(--space-8);
     min-width: 0;
   }
 
@@ -1774,13 +1757,13 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--space-2);
   }
 
   &__top-game-stat--achievements {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: var(--space-2);
 
     > .profile-page__progress-track {
       flex: 0 0 auto;
@@ -1794,7 +1777,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--space-5);
     min-width: 0;
     min-height: 16px;
     height: 16px;
@@ -1818,14 +1801,14 @@
   &__top-game-stat-label {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     min-height: 16px;
     height: 16px;
     overflow: hidden;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
-    letter-spacing: 0.06em;
+    letter-spacing: var(--ls-100);
     line-height: 1;
     text-overflow: ellipsis;
     text-transform: uppercase;
@@ -1845,7 +1828,7 @@
     min-height: var(--top-game-last-achievement-size);
     overflow: hidden;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
     line-height: 1.2;
     text-overflow: ellipsis;
@@ -1858,17 +1841,17 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   &__top-game-achievement-summary {
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--space-3);
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
     white-space: nowrap;
 
     svg {
@@ -1879,7 +1862,7 @@
   &__top-game-icons {
     display: flex;
     justify-content: flex-end;
-    gap: 5px;
+    gap: var(--space-3);
     min-width: 0;
 
     img {
@@ -1901,7 +1884,7 @@
     align-items: center;
     min-height: var(--top-game-last-achievement-size);
     margin-top: 3px;
-    gap: 5px;
+    gap: var(--space-3);
     min-width: 0;
   }
 
@@ -1916,15 +1899,15 @@
   &__recent-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px;
+    gap: var(--space-5);
+    padding: var(--space-7);
   }
 
   &__achievement-timeline {
     display: flex;
     flex-direction: column;
     gap: 0;
-    padding: 14px;
+    padding: var(--space-7);
   }
 
   &__achievement-timeline-item {
@@ -1954,9 +1937,9 @@
   }
 
   &__achievement-timeline-date {
-    padding: 18px 10px 0 0;
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    padding: var(--space-9) var(--space-5) 0 0;
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
     color: var(--text-secondary);
     text-align: right;
     white-space: nowrap;
@@ -2006,10 +1989,10 @@
   &__achievement-timeline-card {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--space-6);
     width: 100%;
     min-width: 0;
-    padding: 10px;
+    padding: var(--space-5);
     border-radius: var(--radius-sm);
     background: var(--overlay-subtle);
     transition: background-color var(--motion-base) ease;
@@ -2030,7 +2013,7 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
 
     strong,
     span {
@@ -2041,14 +2024,14 @@
 
     strong {
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--fs-400);
       font-weight: var(--weight-medium);
     }
 
     span {
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
-      font-size: 12px;
+      font-weight: var(--weight-semibold);
+      font-size: var(--fs-200);
     }
   }
 
@@ -2057,12 +2040,12 @@
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
     white-space: nowrap;
-    padding: 3px 8px;
+    padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-sm);
     background: var(--surface-subtle);
 
@@ -2074,7 +2057,7 @@
   &__achievement-timeline-item--first {
     .profile-page__achievement-timeline-date {
       color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     }
 
     .profile-page__achievement-timeline-dot {
@@ -2083,7 +2066,7 @@
 
     .profile-page__achievement-timeline-percent {
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
+      font-weight: var(--weight-semibold);
       background: var(--surface);
     }
   }
@@ -2091,9 +2074,9 @@
   &__recent-game {
     display: grid;
     grid-template-columns: 184px minmax(0, 1fr);
-    gap: 12px;
+    gap: var(--space-6);
     width: 100%;
-    padding: 10px;
+    padding: var(--space-5);
     border: 0;
     border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.34);
@@ -2122,7 +2105,7 @@
   &__recent-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: var(--space-8);
     align-items: center;
     min-width: 0;
   }
@@ -2131,7 +2114,7 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 5px;
+    gap: var(--space-3);
 
     strong,
     span,
@@ -2143,15 +2126,15 @@
 
     strong {
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--fs-400);
       font-weight: var(--weight-medium);
     }
 
     span,
     small {
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
-      font-size: 12px;
+      font-weight: var(--weight-semibold);
+      font-size: var(--fs-200);
     }
   }
 
@@ -2159,16 +2142,16 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   &__recent-achievement-summary {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
   }
 
   &__recent-progress {
@@ -2190,7 +2173,7 @@
   &__recent-icons {
     display: flex;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--space-3);
     min-width: 0;
 
     img {
@@ -2207,11 +2190,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--space-4);
     min-height: 130px;
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 14px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-400);
   }
 
   &__game-grid .game-card,
@@ -2233,12 +2216,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--space-6);
     position: relative;
     z-index: 3;
     height: 40px;
-    padding: 0 24px;
-    margin: -40px 0 4px;
+    padding: 0 var(--space-10);
+    /* Sobe a barra para DENTRO da faixa fosca de 40px da capa
+       (`__content-box::after`), como as ações do modal de capa ficam sobre o
+       `::after` do preview. `-var(...)` é sintaxe inválida: o parser descartava
+       a declaração de `margin` inteira e a barra caía abaixo da capa. */
+    margin: calc(var(--space-14) * -1) 0 var(--space-2);
     overflow: hidden;
     border-top: 0;
     /* Transparent — glass strip lives on content-box::after (same as cover modal actions over ::after) */
@@ -2251,7 +2238,10 @@
     display: flex;
     align-items: center;
     height: 100%;
-    gap: 8px;
+    /* Desconta o padding interno da própria aba para o primeiro ícone nascer
+       na mesma coluna do avatar/nome (`__background-overlay`, var(--space-10)). */
+    margin-left: calc(var(--space-7) * -1);
+    gap: var(--space-4);
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
@@ -2278,7 +2268,7 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     transition: color var(--motion-fast) var(--ease);
 
@@ -2321,15 +2311,15 @@
     height: 100%;
     min-height: 100%;
     min-width: 0;
-    padding: 0 14px;
+    padding: 0 var(--space-7);
     overflow: hidden;
     border: 0;
     border-radius: 0;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 14px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-400);
+    font-weight: var(--weight-semibold);
     line-height: 1;
     position: relative;
     z-index: 2;
@@ -2344,10 +2334,10 @@
 
     svg {
       flex: 0 0 auto;
-      position: relative;
-      top: -0.5px;
+      /* Sem nudge de meio pixel: 18px centrados numa barra de 40px caem em
+         pixel inteiro, e o `-0.5px` só borrava/desalinhava os ícones. */
       color: var(--text-secondary);
-      font-weight: var(--weight-muted);
+      font-weight: var(--weight-semibold);
       opacity: 0.6;
       transition:
         color var(--motion-base) var(--ease),
@@ -2432,7 +2422,7 @@
   }
 
   &__side-section {
-    padding: 16px;
+    padding: var(--space-8);
     border: 0;
     background-color: transparent;
   }
@@ -2440,49 +2430,49 @@
   &__section-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     margin-bottom: 16px;
 
     h2 {
       color: var(--text-primary);
-      font-size: 16px;
+      font-size: var(--fs-500);
     }
   }
 
   &__section-title-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     flex: 1;
   }
 
   &__section-badge {
     min-width: 24px;
-    padding: 4px 8px;
+    padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-md);
     background-color: rgba(239, 243, 244, 0.1);
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
     text-align: center;
   }
 
   &__details-list {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--space-7);
     margin: 0;
 
     div {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: var(--space-2);
     }
 
     dt {
       color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: var(--weight-muted);
+      font-size: var(--fs-200);
+      font-weight: var(--weight-semibold);
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
@@ -2491,7 +2481,7 @@
       margin: 0;
       overflow: hidden;
       color: var(--text-primary);
-      font-size: 13px;
+      font-size: var(--fs-300);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -2500,14 +2490,14 @@
   &__compact-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
     margin: 0;
     padding: 0;
     list-style: none;
 
     button {
       width: 100%;
-      padding: 8px;
+      padding: var(--space-4);
       overflow: hidden;
       color: var(--text-primary);
       cursor: pointer;
@@ -2526,15 +2516,15 @@
     display: grid;
     width: min(100%, 1180px);
     grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
+    gap: var(--space-7);
     margin: 0 auto;
-    padding: 4px 0 24px;
+    padding: var(--space-2) 0 var(--space-10);
   }
 
   &__achievement-pagination {
     display: flex;
     justify-content: center;
-    padding: 4px 0 2px;
+    padding: var(--space-2) 0 var(--space-1);
   }
 
   &__achievement-game {
@@ -2562,20 +2552,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--space-6);
     min-height: 38px;
-    padding: 0 12px;
+    padding: 0 var(--space-6);
     background: transparent;
 
     h3 {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--space-4);
       min-width: 0;
       margin: 0;
       overflow: hidden;
       color: var(--text-primary);
-      font-size: 15px;
+      font-size: var(--fs-400);
       font-weight: var(--weight-semibold);
       letter-spacing: 0.02em;
       text-overflow: ellipsis;
@@ -2593,7 +2583,7 @@
   &__achievement-game-actions {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     flex: 0 0 auto;
   }
 
@@ -2605,7 +2595,7 @@
     border-radius: var(--radius-sm);
     background: var(--background);
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
     line-height: 1;
     cursor: pointer;
@@ -2621,8 +2611,8 @@
   }
 
   &__achievement-game-progress {
-    gap: 10px;
-    padding: 0 10px;
+    gap: var(--space-5);
+    padding: 0 var(--space-5);
     min-width: 68px;
 
     strong {
@@ -2657,7 +2647,7 @@
     border: 0;
     background: transparent;
     color: var(--text-tertiary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     opacity: 0;
     transition:
@@ -2738,9 +2728,9 @@
     width: 100%;
     min-width: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--space-4);
     overflow: visible;
-    padding: 10px;
+    padding: var(--space-5);
   }
 
   &__achievement-card-shell--scrolling &__achievement-card-row {
@@ -2771,7 +2761,7 @@
     align-items: center;
     min-width: 0;
     min-height: 50px;
-    padding: 6px 0;
+    padding: var(--space-3) 0;
     border: 0;
     border-radius: var(--radius-sm);
     background: var(--sidebar-selector);
@@ -2791,7 +2781,7 @@
     display: grid;
     min-height: 0;
     place-items: center;
-    padding: 0 0 0 10px;
+    padding: 0 0 0 var(--space-5);
 
     img {
       width: 36px;
@@ -2804,8 +2794,8 @@
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
-    padding: 6px 10px 6px 4px;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-5) var(--space-3) var(--space-2);
   }
 
   &__achievement-progress-card {
@@ -2813,8 +2803,8 @@
     align-items: center;
     justify-content: center;
     flex-direction: row;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
   }
 
   &__achievement-progress-ring {
@@ -2831,7 +2821,7 @@
 
     strong {
       color: var(--text-primary);
-      font-size: 12px;
+      font-size: var(--fs-200);
       font-weight: var(--weight-semibold);
       line-height: 1;
     }
@@ -2843,13 +2833,13 @@
     justify-content: center;
     gap: 0;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
     line-height: 1.25;
 
     svg {
       color: var(--text-secondary);
-    font-weight: var(--weight-muted);
+    font-weight: var(--weight-semibold);
     }
   }
 
@@ -2857,13 +2847,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: var(--space-5);
 
     strong {
       display: -webkit-box;
       overflow: hidden;
       color: var(--text-primary);
-      font-size: 12px;
+      font-size: var(--fs-200);
       font-weight: var(--weight-semibold);
       line-height: 1.25;
       -webkit-box-orient: vertical;
@@ -2876,7 +2866,7 @@
     min-height: 0;
     overflow: hidden;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: var(--fs-100);
     font-weight: var(--weight-semibold);
     line-height: 1.25;
     -webkit-box-orient: vertical;
@@ -2896,17 +2886,17 @@
 
   &__empty-text {
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 14px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-400);
   }
 
   &__game-grid.game-grid--portrait {
     grid-template-columns: repeat(5, 158px);
     grid-auto-rows: 237px;
-    gap: 14px 12px;
+    gap: var(--space-7) var(--space-6);
     width: max-content;
     overflow: visible;
-    padding: 8px 0 24px;
+    padding: var(--space-4) 0 var(--space-10);
   }
 
   &__game-grid.game-grid--cover-format-in .game-card {
@@ -3062,7 +3052,7 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__achievement-timeline-date {
-      font-size: 11px;
+      font-size: var(--fs-100);
       padding-right: 6px;
     }
 
@@ -3109,7 +3099,7 @@ html.no-backdrop-blur .profile-page {
 
     &__top-game-stats {
       grid-template-columns: minmax(86px, 1fr) minmax(120px, 1fr);
-      gap: 16px 24px;
+      gap: var(--space-8) var(--space-10);
     }
 
     &__top-game-stat--achievements {
@@ -3164,14 +3154,14 @@ html.no-backdrop-blur .profile-page {
   &__overview-empty,
   &__achievement-timeline-percent {
     color: var(--text-secondary);
-  font-weight: var(--weight-muted);
+  font-weight: var(--weight-semibold);
   }
 
   &__top-game-achievement-summary,
   &__recent-achievement-summary,
   &__achievement-timeline-content span {
     color: var(--text-secondary);
-  font-weight: var(--weight-muted);
+  font-weight: var(--weight-semibold);
   }
 
   &__top-game-stat-value {
@@ -3195,7 +3185,7 @@ html.no-backdrop-blur .profile-page {
 
   &__details-list dt {
     color: var(--text-secondary);
-  font-weight: var(--weight-muted);
+  font-weight: var(--weight-semibold);
   }
 }
 
@@ -3207,7 +3197,7 @@ html.no-backdrop-blur .profile-page {
 
     &__activity-toolbar {
       flex-wrap: wrap;
-      gap: 10px;
+      gap: var(--space-5);
     }
 
     &__activity-metrics {
@@ -3226,8 +3216,8 @@ html.no-backdrop-blur .profile-page {
 
     &__achievement-showcase {
       grid-template-columns: repeat(auto-fill, minmax(40px, 40px));
-      gap: 5px;
-      padding: 10px;
+      gap: var(--space-3);
+      padding: var(--space-5);
     }
 
     &__showcase-achievement {
@@ -3249,9 +3239,18 @@ html.no-backdrop-blur .profile-page {
       grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
     }
 
+    /* Empilhado: a capa vira faixa do topo e volta a ter altura própria
+       (não há linha para esticar contra). */
     &__activity-cover-button {
       grid-row: 1;
       align-self: start;
+      min-height: 0;
+    }
+
+    &__activity-game-cover {
+      height: auto;
+      min-height: 0;
+      aspect-ratio: 460 / 215;
     }
 
     &__activity-card--with-achievements {
@@ -3264,7 +3263,7 @@ html.no-backdrop-blur .profile-page {
 
     &__activity-main {
       grid-template-columns: minmax(0, 1fr);
-      gap: 4px;
+      gap: var(--space-2);
     }
 
     &__activity-side {
@@ -3275,13 +3274,13 @@ html.no-backdrop-blur .profile-page {
     &__activity-achievements {
       grid-column: 1 / -1;
       flex-wrap: wrap;
-      padding: 0 0 12px 12px;
+      padding: 0 0 var(--space-6) var(--space-6);
     }
 
     &__activity-progress {
       max-width: none;
       grid-template-columns: auto auto minmax(0, 1fr);
-      gap: 6px;
+      gap: var(--space-3);
     }
 
     &__recent-cover {
@@ -3321,7 +3320,7 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__achievement-timeline-date {
-      font-size: 10px;
+      font-size: var(--fs-100);
       padding-right: 4px;
     }
 
@@ -3331,8 +3330,8 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__achievement-timeline-card {
-      gap: 8px;
-      padding: 8px;
+      gap: var(--space-4);
+      padding: var(--space-4);
     }
 
     &__achievement-timeline-percent {
@@ -3343,9 +3342,9 @@ html.no-backdrop-blur .profile-page {
 
     &__top-game-console-row {
       grid-template-columns: 64px minmax(0, 1fr);
-      gap: 12px;
+      gap: var(--space-6);
       min-height: 116px;
-      padding: 10px 12px;
+      padding: var(--space-5) var(--space-6);
     }
 
     &__top-game-cover {
@@ -3361,7 +3360,7 @@ html.no-backdrop-blur .profile-page {
 
     &__top-game-stats {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: var(--space-6);
     }
 
     &__top-game-stat--achievements {
@@ -3376,7 +3375,7 @@ html.no-backdrop-blur .profile-page {
     &__game-grid.game-grid--portrait {
       grid-template-columns: repeat(5, 176px);
       grid-auto-rows: 264px;
-      gap: 10px;
+      gap: var(--space-5);
     }
   }
 }

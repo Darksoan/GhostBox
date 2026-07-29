@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
-import { Clock } from "lucide-react";
+import { Clock, Lock } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { UserCollection } from "../types";
 import {
@@ -18,6 +18,8 @@ import { ContextMenu } from "../components/ui/ContextMenu";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useFlipLayout } from "../hooks/useFlipLayout";
+import { useMetricsUnlocked } from "../context/MetricsVisibilityContext";
+import { useSettings } from "../context/settings";
 
 interface FavoriteCardProps {
   game: GhostBoxGame;
@@ -30,6 +32,8 @@ export const FavoriteCard = memo(function FavoriteCard({
   onOpenGame,
   onContextMenu,
 }: FavoriteCardProps) {
+  const { t } = useSettings();
+  const areMetricsUnlocked = useMetricsUnlocked();
   const cardRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const rawCoverSources = useMemo(() => gamePortraitPreviewSources(game), [game]);
@@ -92,30 +96,42 @@ export const FavoriteCard = memo(function FavoriteCard({
         key={coverSource ?? game.id}
         style={layeredImageStyle(coverSource ? [coverSource] : [], "")}
       >
-        {achievementTotal > 0 && (
+        {!areMetricsUnlocked ? (
           <div
-            className="game-card__achievement-progress"
-            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${formatCompactPlaytime(playtimeInMilliseconds)} jogadas`}
+            className="game-card__achievement-progress game-card__achievement-progress--locked"
+            aria-label={t("metrics.lockedAria")}
           >
             <div className="game-card__achievement-progress-count">
-              <>
-                <Cup size={16} weight="Filled" strokeWidth={2.0} />
-                <span>
-                  {achievementUnlocked} / {achievementTotal}
-                </span>
-              </>
-              <span className="game-card__summary-metric">
-                <Clock size={16} strokeWidth={2.0} />
-                <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
-              </span>
-            </div>
-            <div
-              className="game-card__achievement-progress-track"
-              aria-hidden="true"
-            >
-              <span style={{ width: `${achievementProgress}%` }} />
+              <Lock size={14} strokeWidth={2.0} aria-hidden="true" />
+              <span>{t("metrics.locked")}</span>
             </div>
           </div>
+        ) : (
+          achievementTotal > 0 && (
+            <div
+              className="game-card__achievement-progress"
+              aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${formatCompactPlaytime(playtimeInMilliseconds)} jogadas`}
+            >
+              <div className="game-card__achievement-progress-count">
+                <>
+                  <Cup size={16} weight="Filled" strokeWidth={2.0} />
+                  <span>
+                    {achievementUnlocked} / {achievementTotal}
+                  </span>
+                </>
+                <span className="game-card__summary-metric">
+                  <Clock size={16} strokeWidth={2.0} />
+                  <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
+                </span>
+              </div>
+              <div
+                className="game-card__achievement-progress-track"
+                aria-hidden="true"
+              >
+                <span style={{ width: `${achievementProgress}%` }} />
+              </div>
+            </div>
+          )
         )}
       </div>
       <div className="favorites-grid__backdrop">

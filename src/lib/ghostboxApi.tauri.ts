@@ -741,8 +741,13 @@ export const ghostboxApi = {
     );
   },
 
+  /**
+   * Intentionally NOT wrapped in invokeOr: when the Rust command fails we want the
+   * Promise to reject so callers (refreshGamePlaytimes) can log the real reason
+   * instead of silently rendering every game at 0 playtime.
+   */
   getGamePlaytimes(): Promise<GamePlaytimeSnapshot> {
-    return invokeOr<GamePlaytimeSnapshot>("game_get_playtimes", {}, {});
+    return invoke<GamePlaytimeSnapshot>("game_get_playtimes", {});
   },
 
   onGamePlaytimesChanged(
@@ -841,13 +846,14 @@ export const ghostboxApi = {
     );
   },
 
-  /** Fetch GetOwnedGames via Steam Web API (proxy key or local) and rebuild playtimes. */
+  /**
+   * Fetch GetOwnedGames via Steam Web API (proxy key or local) and rebuild playtimes.
+   * Intentionally NOT wrapped in invokeOr: callers need to distinguish "sync failed"
+   * from "sync succeeded with an empty snapshot" so failures can be logged/surfaced
+   * instead of silently rendering every game as 0 playtime.
+   */
   syncSteamPlaytimes(steamId: string): Promise<GamePlaytimeSnapshot> {
-    return invokeOr<GamePlaytimeSnapshot>(
-      "steam_sync_playtimes",
-      { steamId },
-      {},
-    );
+    return invoke<GamePlaytimeSnapshot>("steam_sync_playtimes", { steamId });
   },
 
   getSteamPlayerLevel(steamId: string): Promise<number | null> {

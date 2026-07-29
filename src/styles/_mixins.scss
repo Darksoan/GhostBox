@@ -1,0 +1,147 @@
+// Mixins que dependem dos tokens semânticos.
+@use "sass:math";
+
+// Anel de foco por teclado — a única definição no app. Sempre usar junto de
+// `outline: none` (o outline nativo é removido, este substitui).
+@mixin focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--n-10);
+    outline-offset: 2px;
+  }
+}
+
+@mixin focus-ring-inset {
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring-inset);
+  }
+}
+
+// Borda "lanterna" dourada: um conic-gradient que varre a borda com um flash
+// de luz. Usada em exatamente dois contextos — card de assinatura e
+// conquista rara — nunca fora deles.
+//
+// $intensity: multiplica a opacidade de cada parada de cor (0–1).
+// $opacity:   opacidade final da camada inteira.
+// $duration:  duração de uma volta completa da animação.
+@mixin gold-flashlight-border($intensity: 1, $opacity: 0.72, $duration: 9s) {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  opacity: $opacity;
+  background: conic-gradient(
+    from var(--premium-border-angle),
+    transparent 0deg,
+    transparent 210deg,
+    color-mix(in srgb, var(--gold-500) #{8 * $intensity}%, transparent) 250deg,
+    color-mix(in srgb, var(--gold-500) #{22 * $intensity}%, transparent) 288deg,
+    color-mix(in srgb, var(--gold-500) #{42 * $intensity}%, transparent) 312deg,
+    color-mix(in srgb, var(--gold-500) #{55 * $intensity}%, #fff 6%) 328deg,
+    color-mix(in srgb, var(--gold-500) #{28 * $intensity}%, transparent) 342deg,
+    color-mix(in srgb, var(--gold-500) #{10 * $intensity}%, transparent) 352deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: subscription-premium-border-shine #{$duration} linear infinite;
+}
+
+// Variante mais intensa da borda dourada, usada apenas em conquista rara
+// (≤10% de desbloqueio global). Padding e ângulos diferem do card de
+// assinatura de propósito — precisa ler como "mais raro", não como o mesmo elemento.
+@mixin gold-flashlight-border-rare($duration: 7s) {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  opacity: 1;
+  background: conic-gradient(
+    from var(--premium-border-angle),
+    transparent 0deg,
+    transparent 180deg,
+    color-mix(in srgb, var(--gold-500) 18%, transparent) 230deg,
+    color-mix(in srgb, var(--gold-500) 45%, transparent) 275deg,
+    color-mix(in srgb, var(--gold-500) 72%, #fff 8%) 305deg,
+    color-mix(in srgb, var(--gold-500) 90%, #fff 18%) 328deg,
+    color-mix(in srgb, var(--gold-500) 55%, transparent) 345deg,
+    color-mix(in srgb, var(--gold-500) 22%, transparent) 355deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: subscription-premium-border-shine #{$duration} linear infinite;
+}
+
+@mixin type-label {
+  font-size: var(--fs-100);
+  line-height: var(--lh-100);
+  letter-spacing: var(--ls-100);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+}
+
+@mixin type-meta {
+  font-size: var(--fs-200);
+  line-height: var(--lh-200);
+  letter-spacing: var(--ls-200);
+}
+
+@mixin type-body {
+  font-size: var(--fs-300);
+  line-height: var(--lh-300);
+  letter-spacing: var(--ls-300);
+}
+
+@mixin type-body-strong {
+  font-size: var(--fs-400);
+  line-height: var(--lh-400);
+  letter-spacing: var(--ls-400);
+  font-weight: var(--weight-medium);
+}
+
+@mixin type-title {
+  font-size: var(--fs-500);
+  line-height: var(--lh-500);
+  letter-spacing: var(--ls-500);
+  font-weight: var(--weight-semibold);
+}
+
+@mixin type-section {
+  font-size: var(--fs-600);
+  line-height: var(--lh-600);
+  letter-spacing: var(--ls-600);
+  font-weight: var(--weight-semibold);
+}
+
+@mixin type-page {
+  font-size: var(--fs-700);
+  line-height: var(--lh-700);
+  letter-spacing: var(--ls-700);
+  font-weight: var(--weight-semibold);
+}
+
+@mixin type-hero {
+  font-size: var(--fs-800);
+  line-height: var(--lh-800);
+  letter-spacing: var(--ls-800);
+  font-weight: var(--weight-semibold);
+}

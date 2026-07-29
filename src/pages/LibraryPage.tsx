@@ -314,7 +314,9 @@ export function LibraryPage({
               }
               aria-pressed={favoritesOnly}
               onClick={() => {
-                changeActiveCollection(favoritesOnly ? null : "favorites");
+                changeActiveCollection(
+                  selectedCollectionId === "favorites" ? null : "favorites"
+                );
               }}
             >
               <Heart size={15} strokeWidth={2.0} fill="none" />
@@ -333,7 +335,9 @@ export function LibraryPage({
                 aria-pressed={activeCollectionId === collection.id}
                 onClick={() => {
                   changeActiveCollection(
-                    activeCollectionId === collection.id ? null : collection.id,
+                    selectedCollectionId === collection.id
+                      ? null
+                      : collection.id,
                   );
                 }}
               >

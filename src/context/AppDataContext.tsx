@@ -426,7 +426,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshGamePlaytimes = useCallback(async () => {
-    const snapshot = await ghostboxApi.getGamePlaytimes();
+    let snapshot: GamePlaytimeSnapshot;
+    try {
+      snapshot = await ghostboxApi.getGamePlaytimes();
+    } catch (error) {
+      console.warn(
+        "[GhostBox] Failed to load cached playtimes; keeping existing snapshot.",
+        error,
+      );
+      snapshot = gamePlaytimesRef.current;
+    }
     gamePlaytimesRef.current = snapshot;
     setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
     setFavoriteGames((current) =>
@@ -462,7 +471,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return;
         }
         await refreshGamePlaytimes();
-      } catch {
+      } catch (error) {
+        console.warn(
+          "[GhostBox] Steam playtime sync failed; showing last cached playtimes instead.",
+          error,
+        );
         await refreshGamePlaytimes().catch(() => undefined);
       }
     },
@@ -1868,7 +1881,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             window.setTimeout(resolve, PLAYTIME_BOOT_TIMEOUT_MS);
           }),
         ]);
-      } catch {
+      } catch (error) {
+        console.warn(
+          "[GhostBox] Initial playtime sync failed; showing last cached playtimes instead.",
+          error,
+        );
         await refreshGamePlaytimes().catch(() => undefined);
       } finally {
         if (!cancelled) markInitialLoadStepComplete("playtimes");

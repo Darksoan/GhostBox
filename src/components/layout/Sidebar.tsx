@@ -79,23 +79,7 @@ interface SidebarProps {
 }
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
-const SIDEBAR_CURSOR_LOCK_MS = 700;
 const SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT = 10;
-
-let sidebarCursorLockTimeout: number | undefined;
-
-function lockSidebarPointerCursor() {
-  document.documentElement.classList.add("sidebar-cursor-lock");
-
-  if (sidebarCursorLockTimeout) {
-    window.clearTimeout(sidebarCursorLockTimeout);
-  }
-
-  sidebarCursorLockTimeout = window.setTimeout(() => {
-    document.documentElement.classList.remove("sidebar-cursor-lock");
-    sidebarCursorLockTimeout = undefined;
-  }, SIDEBAR_CURSOR_LOCK_MS);
-}
 
 type SidebarCollection = {
   id: string;
@@ -260,7 +244,7 @@ export const Sidebar = memo(function Sidebar({
   );
 
   return (
-    <aside className="sidebar" onPointerDown={lockSidebarPointerCursor}>
+    <aside className="sidebar">
       <div className="sidebar__content">
         <SidebarProfile
           profile={steamProfile}
@@ -272,7 +256,7 @@ export const Sidebar = memo(function Sidebar({
         />
 
         {!isSettingsPage && (
-          <nav className="sidebar__section sidebar__mode-panel">
+          <nav className="sidebar__section sidebar__mode-panel" >
             <ul className="sidebar__menu">
               {navigation.map(({ id, labelKey, icon: Icon }) => (
                 <li
@@ -321,7 +305,7 @@ export const Sidebar = memo(function Sidebar({
         )}
 
         {isSettingsPage && (
-          <nav className="sidebar__section sidebar__mode-panel" aria-label="Tópicos de ajustes">
+          <nav className="sidebar__section sidebar__mode-panel" aria-label="Tópicos de ajustes" >
             <ul className="sidebar__menu">
               {settingsNavigationTabs.map(({ id, icon: Icon }) => (
                 <li
@@ -369,7 +353,7 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             {!isCollectionsCollapsed && (
-              <ul className="sidebar__menu">
+              <ul className="sidebar__menu" >
                 {sidebarCollections.map((collection) => {
                   const isFavoritesCollection = collection.id === FAVORITES_COLLECTION_ID;
                   const isExpanded = expandedCollectionIds.has(collection.id);

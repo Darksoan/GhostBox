@@ -1,0 +1,116 @@
+// Rampa neutra + primitivos crus. Sem semântica — nada aqui sabe para que serve.
+// Ver plans/design-tokens-launcher.md para a tabela de contraste de cada degrau.
+:root {
+  // --- Rampa neutra (13 degraus, canvas → ênfase máxima) ---
+  --n-0: #0a0a0a;
+  --n-1: #101010;
+  --n-2: #161616;
+  --n-3: #1c1c1c;
+  --n-4: #242424;
+  --n-5: #2e2e2e;
+  --n-6: #3d3d3d;
+  --n-7: #4f4f4f;
+  --n-8: #6b6b6b;
+  --n-9: #8f8f8f;
+  --n-10: #b4b4b4;
+  --n-11: #d6d6d6;
+  --n-12: #f2f2f2;
+
+  // --- Camadas de estado (alpha, independentes da rampa) ---
+  --a-hover: rgba(255, 255, 255, 0.045);
+  --a-active: rgba(255, 255, 255, 0.08);
+  --a-selected: rgba(255, 255, 255, 0.1);
+  --a-scrim-1: rgba(0, 0, 0, 0.28);
+  --a-scrim-2: rgba(0, 0, 0, 0.48);
+  --a-scrim-3: rgba(0, 0, 0, 0.72);
+
+  // --- Dourado (assinatura + conquista rara — únicos usos permitidos) ---
+  --gold-500: #f5b342;
+  --gold-400: color-mix(in srgb, var(--gold-500) 78%, #fff);
+  --gold-600: color-mix(in srgb, var(--gold-500) 82%, #000);
+
+  // --- Status ---
+  --red-500: #ef4444;
+  --red-400: #f87171;
+  --green-500: #35d07f;
+  --green-400: #5cff8a;
+
+  // --- Espaçamento (passo de 2px) ---
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 20px;
+  --space-10: 24px;
+  --space-12: 32px;
+  --space-14: 40px;
+  --space-16: 48px;
+
+  // --- Tipografia ---
+  --fs-100: 11px;
+  --fs-200: 12px;
+  --fs-300: 13px;
+  --fs-400: 14px;
+  --fs-500: 16px;
+  --fs-600: 20px;
+  --fs-700: 26px;
+  --fs-800: 34px;
+  --lh-100: 16px;
+  --lh-200: 16px;
+  --lh-300: 18px;
+  --lh-400: 20px;
+  --lh-500: 22px;
+  --lh-600: 26px;
+  --lh-700: 32px;
+  --lh-800: 40px;
+  --ls-100: 0.06em;
+  --ls-200: 0.01em;
+  --ls-300: 0;
+  --ls-400: 0;
+  --ls-500: -0.01em;
+  --ls-600: -0.02em;
+  --ls-700: -0.02em;
+  --ls-800: -0.03em;
+
+  // --- Raio (inalterado por decisão de design) ---
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-panel: 6px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+
+  // --- Elevação ---
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.32);
+  --shadow-2: 0 4px 12px rgb(0 0 0 / 0.4);
+  --shadow-3: 0 12px 32px rgb(0 0 0 / 0.52);
+  --shadow-inset-hairline: inset 0 1px 0 rgb(255 255 255 / 0.04);
+
+  // --- Motion ---
+  --motion-fast: 0.12s;
+  --motion-base: 0.18s;
+  --motion-slow: 0.3s;
+  --motion-emphasis: 0.42s;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-sidebar-duration: 0.1s;
+  --motion-linear: linear;
+
+  // --- Z-index nomeado ---
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 100;
+  --z-header: 200;
+  --z-drawer: 300;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-popover: 1100;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
+}

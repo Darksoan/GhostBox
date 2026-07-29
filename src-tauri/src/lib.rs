@@ -42,6 +42,7 @@ mod playtime;
 mod settings;
 mod steam;
 mod steam_appcache;
+mod steam_localconfig;
 mod subscription;
 mod util;
 mod window_lifecycle;
