@@ -47,7 +47,7 @@ routes.
 | `GET /steam/wishlist?steamId=` | GetWishlist + store titles | KV 6h / fresh 30m |
 | `GET /steam/recommended-tags?steamId=` | GetRecommendedTagsForUser | KV 24h / fresh 12h |
 | `GET /steam/game-reviews?appId=&language=&reviewType=` | Store appreviews + histogram | KV 6h / fresh 20m |
-| `GET /steam/game-schema?appId=&language=` | GetSchemaForGame | KV 365d global |
+| `GET /steam/game-schema?appId=&language=` | GetSchemaForGame + GetGlobalAchievementPercentagesForApp | KV 365d schema / 24h percentages |
 | `GET /steam/similar?appId=` | Store morelike HTML | KV 30d / fresh 14d |
 | `GET /steam/player-summary?steamId=` | GetPlayerSummaries | KV 24h / fresh 6h |
 | `GET /steam/metrics` | Aggregate counters (Bearer token) | no-store |

@@ -5,6 +5,7 @@ import { AchievementsListLoadingState, EmptyState } from "../components/ui/Loadi
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import { mergeAchievementDetailsIntoGame } from "../utils/steamAchievementMerge";
 import { formatCompactPlaytime } from "../utils/time";
+import { useMetricsUnlocked } from "../context/MetricsVisibilityContext";
 import "./GameAchievementsPage.scss";
 
 function isAchievementUnlocked(achievement: SteamAchievement) {
@@ -20,8 +21,9 @@ function achievementIconSource(
     : achievement.iconGray || achievement.icon;
 }
 
-function formatAchievementPercent(value: number) {
-  return `${value.toLocaleString(undefined, {
+function formatAchievementPercent(value: number, language: string = "pt-BR") {
+  const locale = language === "en" ? "en-US" : "pt-BR";
+  return `${value.toLocaleString(locale, {
     minimumFractionDigits: value < 10 ? 1 : 0,
     maximumFractionDigits: 1,
   })}%`;
@@ -63,7 +65,7 @@ function AchievementListItem({
   const globalPercent =
     typeof achievement.globalPercent === "number" &&
     Number.isFinite(achievement.globalPercent)
-      ? formatAchievementPercent(achievement.globalPercent)
+      ? formatAchievementPercent(achievement.globalPercent, language)
       : null;
 
   useEffect(() => {
@@ -133,6 +135,7 @@ export function GameAchievementsPage({
   onDetailsLoaded,
 }: GameAchievementsPageProps) {
   const { appearance, t } = useSettings();
+  const areMetricsUnlocked = useMetricsUnlocked();
   const [detailGame, setDetailGame] = useState<GhostBoxGame>(game);
   const [isLoading, setIsLoading] = useState(true);
   const highlightScrolledRef = useRef(false);
@@ -204,6 +207,20 @@ export function GameAchievementsPage({
 
   const unlockedLabel = (date: string) =>
     t("profile.achievementUnlockedOn", { date });
+
+  if (!areMetricsUnlocked) {
+    return (
+      <section
+        className="game-achievements-page"
+        aria-label={t("achievements.pageAria", { title: detailGame.title })}
+      >
+        <EmptyState
+          className="game-achievements-page__locked-state"
+          title={t("metrics.lockedAchievements")}
+        />
+      </section>
+    );
+  }
 
   return (
     <section

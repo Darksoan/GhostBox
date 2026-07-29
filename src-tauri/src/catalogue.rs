@@ -852,13 +852,24 @@ fn normalize_achievement(achievement: &Value) -> Option<Value> {
     if name.is_empty() || title.is_empty() {
         return None;
     }
-    Some(serde_json::json!({
+
+    let mut obj = serde_json::json!({
         "name": name,
         "title": title,
         "description": text(achievement.get("description")),
         "icon": icon,
         "iconGray": icon_gray
-    }))
+    });
+
+    if let Some(percent) = achievement.get("globalPercent").and_then(|v| v.as_f64()) {
+        if percent >= 0.0 && percent <= 100.0 && percent.is_finite() {
+            if let Some(obj) = obj.as_object_mut() {
+                obj.insert("globalPercent".to_string(), serde_json::json!(percent));
+            }
+        }
+    }
+
+    Some(obj)
 }
 
 trait EmptyThen {
@@ -1881,12 +1892,27 @@ pub async fn database_get_game_achievement_details(
     let (steam_path, _) = crate::resolve_steam_path(&app, None);
     let steam_path = steam_path.as_deref().unwrap_or_default();
 
-    if game
+    let achievement_list = game
         .get("achievementList")
         .and_then(|value| value.as_array())
-        .map(|achievements| achievements.is_empty())
-        .unwrap_or(true)
-    {
+        .cloned()
+        .unwrap_or_default();
+
+    let has_percentages = achievement_list.iter().any(|ach| ach.get("globalPercent").is_some());
+    let previous_fetch_time = game
+        .get("achievementMetadata")
+        .and_then(|meta| meta.get("fetchedAt"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    let should_refetch_for_percentages = !has_percentages
+        && !achievement_list.is_empty()
+        && now.saturating_sub(previous_fetch_time) > 24 * 60 * 60;
+
+    if achievement_list.is_empty() || should_refetch_for_percentages {
         let achievement_result = fetch_steam_achievements(&app, &app_id, steam_path).await;
         if let Some(object) = game.as_object_mut() {
             object.insert(
@@ -1895,10 +1921,7 @@ pub async fn database_get_game_achievement_details(
                     "status": achievement_result.status,
                     "retryAfter": achievement_result.retry_after,
                     "source": "steam-schema",
-                    "fetchedAt": SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .map(|duration| duration.as_secs())
-                        .unwrap_or_default(),
+                    "fetchedAt": now,
                 }),
             );
         }

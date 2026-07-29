@@ -1,3 +1,5 @@
+@use "../styles/mixins";
+
 .game-achievements-page {
   display: flex;
   width: 100%;
@@ -11,15 +13,15 @@
   &__summary-section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 26px 24px 0;
+    gap: var(--space-5);
+    padding: 0 var(--space-10);
   }
 
   &__title {
     margin: 0;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: 18px;
+    font-size: var(--fs-500);
     font-weight: var(--weight-semibold);
     line-height: 1.2;
     text-overflow: ellipsis;
@@ -31,15 +33,15 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 12px 24px;
+    gap: var(--space-6) var(--space-10);
   }
 
   &__summary-playtime,
   &__summary-progress-text {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
     line-height: 1.45;
   }
 
@@ -73,7 +75,7 @@
     display: flex;
     flex-direction: column;
     flex: 1;
-    padding: 22px 24px 28px;
+    padding: var(--space-10) var(--space-10) var(--space-12);
   }
 
   &__loading {
@@ -81,11 +83,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 48px 24px;
+    gap: var(--space-6);
+    padding: var(--space-16) var(--space-10);
     color: var(--text-secondary);
-    font-weight: var(--weight-muted);
-    font-size: 13px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--fs-300);
   }
 
   &__loading-spinner {
@@ -104,7 +106,7 @@
     display: block;
     width: min(200px, 55%);
     height: 14px;
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     background: var(--surface-hover);
   }
 
@@ -112,7 +114,7 @@
     display: block;
     width: min(280px, 75%);
     height: 12px;
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     background: var(--surface-hover);
   }
 
@@ -121,7 +123,7 @@
     width: min(120px, 100%);
     height: 12px;
     margin-left: auto;
-    border-radius: 3px;
+    border-radius: var(--radius-md);
     background: var(--surface-hover);
   }
 
@@ -137,11 +139,11 @@
   &__item {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: var(--space-8);
     width: 100%;
     box-sizing: border-box;
     min-height: 86px;
-    padding: 14px 10px;
+    padding: var(--space-7) var(--space-5);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -178,35 +180,7 @@
       }
 
       &::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: 1;
-        border-radius: inherit;
-        padding: 1.5px;
-        background: conic-gradient(
-          from var(--premium-border-angle),
-          transparent 0deg,
-          transparent 180deg,
-          color-mix(in srgb, var(--premium-gold) 18%, transparent) 230deg,
-          color-mix(in srgb, var(--premium-gold) 45%, transparent) 275deg,
-          color-mix(in srgb, var(--premium-gold) 72%, #fff 8%) 305deg,
-          color-mix(in srgb, var(--premium-gold) 90%, #fff 18%) 328deg,
-          color-mix(in srgb, var(--premium-gold) 55%, transparent) 345deg,
-          color-mix(in srgb, var(--premium-gold) 22%, transparent) 355deg,
-          transparent 360deg
-        );
-        pointer-events: none;
-        opacity: 1;
-        -webkit-mask:
-          linear-gradient(#fff 0 0) content-box,
-          linear-gradient(#fff 0 0);
-        mask:
-          linear-gradient(#fff 0 0) content-box,
-          linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        animation: subscription-premium-border-shine 7s linear infinite;
+        @include mixins.gold-flashlight-border-rare;
       }
     }
   }
@@ -226,12 +200,12 @@
     flex: 1;
     flex-direction: column;
     justify-content: center;
-    gap: 3px;
+    gap: var(--space-2);
     min-width: 0;
 
     strong {
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--fs-400);
       font-weight: var(--weight-medium);
       line-height: 1.25;
     }
@@ -239,8 +213,8 @@
     p {
       margin: 0;
       color: var(--text-secondary);
-      font-size: 12px;
-      font-weight: var(--weight-muted);
+      font-size: var(--fs-200);
+      font-weight: var(--weight-semibold);
       line-height: 1.4;
     }
   }
@@ -249,8 +223,8 @@
     flex: 0 0 auto;
     max-width: 220px;
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: var(--weight-muted);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
     line-height: 1.35;
     text-align: right;
     white-space: nowrap;
@@ -263,7 +237,7 @@
 
   &__empty.empty-state {
     min-height: 280px;
-    padding: 48px 24px;
+    padding: var(--space-16) var(--space-10);
   }
 }
 
@@ -277,7 +251,7 @@
 
     &__item {
       align-items: flex-start;
-      gap: 12px;
+      gap: var(--space-6);
       padding-right: 0;
       padding-left: 0;
     }

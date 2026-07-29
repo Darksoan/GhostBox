@@ -49,6 +49,28 @@ export function normalizeSchemaAchievements(game) {
     .filter((item) => item != null);
 }
 
+export function normalizeGlobalPercentages(payload) {
+  const achievements = payload?.achievementpercentages?.achievements ?? [];
+  const percentages = new Map();
+  for (const entry of achievements) {
+    const name = (entry.name || "").trim();
+    const percent = Number(entry.percent);
+    if (name && Number.isFinite(percent) && percent >= 0 && percent <= 100) {
+      percentages.set(name, percent);
+    }
+  }
+  return percentages;
+}
+
+export function mergeGlobalPercentages(achievements, percentageMap) {
+  return achievements.map((achievement) => ({
+    ...achievement,
+    ...(percentageMap.has(achievement.name) && {
+      globalPercent: percentageMap.get(achievement.name),
+    }),
+  }));
+}
+
 export function parseSimilarAppIds(html, sourceAppId) {
   const marker = 'data-ds-appid="';
   const appIds = [];

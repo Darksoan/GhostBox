@@ -32,6 +32,10 @@ export function buildSteamAchievementList(
     iconGray: achievement.iconGray || achievement.icon || "",
     unlocked: achievement.unlocked,
     unlockedAt: isoFromUnixSeconds(achievement.unlockedAt),
+    globalPercent:
+      typeof achievement.globalPercent === "number" && Number.isFinite(achievement.globalPercent)
+        ? achievement.globalPercent
+        : undefined,
   }));
 }
 

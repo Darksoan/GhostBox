@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Cloud } from "lucide-react";
+import { Clock, Cloud, Lock } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
@@ -17,6 +17,8 @@ import {
 import { formatCompactPlaytime } from "../../utils/time";
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
+import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
+import { useSettings } from "../../context/settings";
 
 interface GameCardProps {
   game: GhostBoxGame;
@@ -40,6 +42,8 @@ export const GameCard = memo(function GameCard({
   hasBackup = false,
   libraryCoverFade = false,
 }: GameCardProps) {
+  const { t } = useSettings();
+  const areMetricsUnlocked = useMetricsUnlocked();
   const cardRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const rawHeaderSources = useMemo(
@@ -120,6 +124,7 @@ export const GameCard = memo(function GameCard({
       ? formatCompactPlaytime(playtimeInMilliseconds)
       : "0h";
   const showAchievementBadges = showAchievements;
+  const showLockedBadge = showAchievements && !areMetricsUnlocked;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     if (onContextMenu) {
@@ -162,22 +167,32 @@ export const GameCard = memo(function GameCard({
             <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
           </div>
         )}
-        {showAchievementBadges && (
+        {showLockedBadge ? (
           <div
-            className="game-card__achievement-badges"
-            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
+            className="game-card__achievement-badges game-card__achievement-badges--locked"
+            aria-label={t("metrics.lockedAria")}
           >
-            <span className="game-card__summary-metric">
-              <Cup size={16} weight="Filled" strokeWidth={2.0} />
-              <span>
-                {achievementUnlocked} / {achievementTotal}
-              </span>
-            </span>
-            <span className="game-card__summary-metric">
-              <Clock size={16} strokeWidth={2.0} />
-              <span>{compactPlaytime}</span>
-            </span>
+            <Lock size={14} strokeWidth={2.0} aria-hidden="true" />
+            <span>{t("metrics.locked")}</span>
           </div>
+        ) : (
+          showAchievementBadges && (
+            <div
+              className="game-card__achievement-badges"
+              aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
+            >
+              <span className="game-card__summary-metric">
+                <Cup size={16} weight="Filled" strokeWidth={2.0} />
+                <span>
+                  {achievementUnlocked} / {achievementTotal}
+                </span>
+              </span>
+              <span className="game-card__summary-metric">
+                <Clock size={16} strokeWidth={2.0} />
+                <span>{compactPlaytime}</span>
+              </span>
+            </div>
+          )
         )}
       </div>
       <div className="game-card__backdrop">

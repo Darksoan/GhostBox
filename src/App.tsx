@@ -8,6 +8,7 @@ import { useContentOverlayState } from "./components/routing/ContentOverlay";
 import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellState } from "./hooks/useAppShellState";
 import { useAppData } from "./context/AppDataContext";
+import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
 import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
@@ -16,8 +17,7 @@ import {
   showTrayHiddenDesktopNotification,
 } from "./lib/trayNotifications";
 import { clearCatalogueGamesCache } from "./utils/gameCache";
-import { settingsNavigationTabs, type SettingsTabId } from "./features/settings/settingsTabsShared";
-import { runViewTransition } from "./utils/viewTransition";
+import { type SettingsTabId } from "./features/settings/settingsTabsShared";
 import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
 import { ingestRemoteGameByAppId, type GhostBoxGame } from "./data";
 import "./app.scss";
@@ -83,7 +83,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     canGoForward,
     contentRef,
     saveScrollPosition,
-    restorePendingScroll,
   } = useAppNavigation();
 
   const overlayForwardRef = useRef<OverlayForwardEntry | null>(null);
@@ -178,17 +177,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
       saveScrollPosition();
-      runViewTransition(() => {
-        clearOverlayForward();
-        closeContentOverlay();
-        navigate(newPage);
-        shell.clearQuery();
-        if (collectionId) {
-          shell.setActiveProfileCollectionId(collectionId);
-        }
-      }, newPage !== page && !appearance.reduceAllAnimations, ["motion-page-transition"]);
+      clearOverlayForward();
+      closeContentOverlay();
+      navigate(newPage);
+      shell.clearQuery();
+      if (collectionId) {
+        shell.setActiveProfileCollectionId(collectionId);
+      }
     },
-    [appearance.reduceAllAnimations, clearOverlayForward, closeContentOverlay, navigate, page, saveScrollPosition, shell]
+    [clearOverlayForward, closeContentOverlay, navigate, saveScrollPosition, shell]
   );  useEffect(() => {
     return ghostboxApi.onTrayNavigate(({ page }) => {
       handleNavigate(page);
@@ -217,12 +214,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     }
 
     clearOverlayForward();
-    runViewTransition(() => {
-      back();
-    }, !appearance.reduceAllAnimations, ["motion-page-transition"]);
+    back();
   }, [
     achievementsView,
-    appearance.reduceAllAnimations,
     back,
     clearOverlayForward,
     closeAchievements,
@@ -253,12 +247,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       return;
     }
 
-    runViewTransition(() => {
-      forward();
-    }, !appearance.reduceAllAnimations, ["motion-page-transition"]);
+    forward();
   }, [
     achievementsView,
-    appearance.reduceAllAnimations,
     clearOverlayForward,
     forward,
     openAchievements,
@@ -270,15 +261,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   const handleSidebarSettingsTabChange = useCallback(
     (tabId: SettingsTabId) => {
-      const currentIndex = settingsNavigationTabs.findIndex(({ id }) => id === shell.activeSettingsTabId);
-      const nextIndex = settingsNavigationTabs.findIndex(({ id }) => id === tabId);
-      runViewTransition(
-        () => shell.setActiveSettingsTabId(tabId),
-        page === "settings" && tabId !== shell.activeSettingsTabId && !appearance.reduceAllAnimations,
-        ["motion-tab-transition", nextIndex < currentIndex ? "motion-tab-backward" : "motion-tab-forward"],
-      );
+      shell.setActiveSettingsTabId(tabId);
     },
-    [appearance.reduceAllAnimations, page, shell]
+    [shell]
   );
 
   const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {
@@ -318,10 +303,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         .catch(() => undefined);
     }
   }, [openGame, queryClient]);
-
-  useLayoutEffect(() => {
-    restorePendingScroll();
-  }, [page, restorePendingScroll]);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
@@ -453,12 +434,12 @@ function AppShell() {
   const appData = useAppData();
 
   return (
-    <>
+    <MetricsVisibilityProvider steamProfile={appData.steamProfile}>
       <AppContent appData={appData} />
       {appData.isInitialLoading ? (
         <AppSplash progress={appData.initialLoadingProgress} />
       ) : null}
-    </>
+    </MetricsVisibilityProvider>
   );
 }
 

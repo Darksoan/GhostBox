@@ -1,0 +1,1 @@
+# GhostBox - Instruções do Projeto

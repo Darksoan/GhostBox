@@ -141,6 +141,7 @@ export type SteamRemoteAchievement = {
   iconGray: string;
   unlocked: boolean;
   unlockedAt: number;
+  globalPercent?: number;
 };
 
 export type SteamRecentAchievement = {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeSchemaAchievements,
+  normalizeGlobalPercentages,
+  mergeGlobalPercentages,
   parseRetryAfter,
   parseSimilarAppIds,
   sortWishlistItems,
@@ -76,4 +78,46 @@ test("sortWishlistItems prioritizes ranked items then recency", () => {
     sorted.map((item) => item.appId),
     ["3", "2", "4", "1"]
   );
+});
+
+test("normalizeGlobalPercentages parses steam api response", () => {
+  const result = normalizeGlobalPercentages({
+    achievementpercentages: {
+      achievements: [
+        { name: "ACH_WIN", percent: 45.3 },
+        { name: "ACH_PERFECT", percent: 2.1 },
+        { name: "ACH_INVALID", percent: 150.5 },
+        { name: "", percent: 10 },
+        { name: "ACH_NAN", percent: "text" },
+      ],
+    },
+  });
+  assert.equal(result.size, 2);
+  assert.equal(result.get("ACH_WIN"), 45.3);
+  assert.equal(result.get("ACH_PERFECT"), 2.1);
+  assert.equal(result.get("ACH_INVALID"), undefined);
+  assert.equal(result.get(""), undefined);
+  assert.equal(result.get("ACH_NAN"), undefined);
+});
+
+test("normalizeGlobalPercentages handles empty payload", () => {
+  const result1 = normalizeGlobalPercentages(null);
+  assert.equal(result1.size, 0);
+  const result2 = normalizeGlobalPercentages({});
+  assert.equal(result2.size, 0);
+  const result3 = normalizeGlobalPercentages({ achievementpercentages: { achievements: [] } });
+  assert.equal(result3.size, 0);
+});
+
+test("mergeGlobalPercentages adds globalPercent to achievements", () => {
+  const achievements = [
+    { name: "ACH_WIN", title: "Win", description: "Win once", icon: "a.png", iconGray: "b.png" },
+    { name: "ACH_LOSE", title: "Lose", description: "Lose once", icon: "c.png", iconGray: "d.png" },
+  ];
+  const percentages = new Map([["ACH_WIN", 42.5]]);
+  const result = mergeGlobalPercentages(achievements, percentages);
+  assert.deepEqual(result, [
+    { name: "ACH_WIN", title: "Win", description: "Win once", icon: "a.png", iconGray: "b.png", globalPercent: 42.5 },
+    { name: "ACH_LOSE", title: "Lose", description: "Lose once", icon: "c.png", iconGray: "d.png" },
+  ]);
 });
