@@ -688,11 +688,32 @@ export function ProfilePage({
     onSelectCollection ?? setInternalActiveCollectionId;
   const previousActiveCollectionIdRef = useRef(activeCollectionId);
 
+  const scrollContentToTop = useCallback(() => {
+    scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [scrollElementRef]);
+
   useEffect(() => {
     if (previousActiveCollectionIdRef.current === activeCollectionId) return;
     previousActiveCollectionIdRef.current = activeCollectionId;
-    scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeCollectionId, scrollElementRef]);
+    scrollContentToTop();
+  }, [activeCollectionId, scrollContentToTop]);
+
+  // Paginação também volta ao topo: sem isso a página 2 abre no meio da lista.
+  const handleRecentActivityPageChange = useCallback(
+    (page: number) => {
+      setRecentActivityPage(page);
+      scrollContentToTop();
+    },
+    [scrollContentToTop]
+  );
+
+  const handleAchievementTabPageChange = useCallback(
+    (page: number) => {
+      setAchievementTabPage(page);
+      scrollContentToTop();
+    },
+    [scrollContentToTop]
+  );
 
   const [gameContextMenu, setGameContextMenu] = useState<{
     game: GhostBoxGame;
@@ -1652,7 +1673,10 @@ export function ProfilePage({
             onClick={() => setIsCoverModalOpen(true)}
             aria-label={t("profile.changeBanner")}
           >
-            <Camera size={14} strokeWidth={2.25} aria-hidden="true" />
+            <Camera size={16} strokeWidth={2.25} aria-hidden="true" />
+            <span className="profile-page__hero-action-label">
+              {t("profile.changeBanner")}
+            </span>
           </button>
           <div className="profile-page__identity">
             <div className="profile-page__avatar-button">
@@ -2014,7 +2038,7 @@ export function ProfilePage({
                           <PaginationControls
                             page={currentRecentActivityPage}
                             totalPages={recentActivityTotalPages}
-                            onPageChange={setRecentActivityPage}
+                            onPageChange={handleRecentActivityPageChange}
                           />
                         </div>
                       ) : null}
@@ -2191,7 +2215,7 @@ export function ProfilePage({
                       <PaginationControls
                         page={currentAchievementTabPage}
                         totalPages={achievementTabTotalPages}
-                        onPageChange={setAchievementTabPage}
+                        onPageChange={handleAchievementTabPageChange}
                       />
                     </div>
                   ) : null}

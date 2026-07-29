@@ -4,9 +4,7 @@ import {
   useDeferredValue,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
   type RefObject,
@@ -345,9 +343,6 @@ export function CataloguePage({
   scrollElementRef,
 }: CataloguePageProps) {
   const { t } = useSettings();
-  const contentRef = useRef<HTMLDivElement>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
-  const [virtualListHeight, setVirtualListHeight] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
     x: number;
@@ -418,8 +413,7 @@ export function CataloguePage({
   const currentPage = Math.min(page, totalPages);
 
   useEffect(() => {
-    const el = resultsRef.current ?? scrollElementRef?.current;
-    el?.scrollTo({ top: 0, behavior: "smooth" });
+    scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentPage, scrollElementRef]);
 
   const startIndex = Math.max(
@@ -444,12 +438,6 @@ export function CataloguePage({
   );
 
   useEffect(() => {
-    if (visibleGames.length <= 30) {
-      setVirtualListHeight(null);
-    }
-  }, [visibleGames.length]);
-
-  useEffect(() => {
     if (loading || !visibleGames.length) return;
 
     preloadGameListAssets(visibleGames, {
@@ -462,27 +450,6 @@ export function CataloguePage({
       idle: true,
     });
   }, [loading, nextPageGames, visibleGames, visibleGamesCacheKey]);
-
-  useLayoutEffect(() => {
-    const content = contentRef.current;
-    const results = resultsRef.current;
-    if (!content || !results) return;
-
-    const updateFilterHeight = () => {
-      const height = virtualListHeight ?? results.scrollHeight;
-      content.style.setProperty(
-        "--catalogue-results-height",
-        `${height}px`
-      );
-    };
-
-    updateFilterHeight();
-
-    const resizeObserver = new ResizeObserver(updateFilterHeight);
-    resizeObserver.observe(results);
-
-    return () => resizeObserver.disconnect();
-  }, [loading, visibleGamesCacheKey, selectedFilterCount, totalPages, virtualListHeight]);
 
   function updateFilter(key: CatalogueFilterKey, value: string) {
     const currentValues = filters[key];
@@ -537,8 +504,8 @@ export function CataloguePage({
         onRemove={clearFilter}
       />
 
-      <div className="catalogue-page__content" ref={contentRef}>
-        <div className="catalogue-page__results" ref={resultsRef}>
+      <div className="catalogue-page__content">
+        <div className="catalogue-page__results">
           {loading ? (
             <CatalogueListLoadingState
               animateListText={pulseLoading}
@@ -553,8 +520,7 @@ export function CataloguePage({
                 addingGameId={addingGameId}
                 removingGameId={removingGameId}
                 onRemoveGame={onRemoveGame}
-                scrollElementRef={resultsRef}
-                onVirtualHeightChange={setVirtualListHeight}
+                scrollElementRef={scrollElementRef}
                 onGameContextMenu={(game, x, y) =>
                   setContextMenu({ game, x, y, mode: "game" })
                 }

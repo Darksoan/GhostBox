@@ -406,7 +406,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
           <section
             ref={contentRef}
-            className={`container__content ${page === "settings" ? "container__content--settings" : ""} ${page === "catalogue" ? "container__content--catalogue" : ""} ${isGameModalVisible || isAchievementsViewVisible ? "container__content--modal-open" : ""}`}
+            className={`container__content ${page === "settings" ? "container__content--settings" : ""} ${isGameModalVisible || isAchievementsViewVisible ? "container__content--modal-open" : ""}`}
           >
             <PageRouter
               page={page}

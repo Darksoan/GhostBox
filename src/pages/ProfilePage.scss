@@ -162,11 +162,15 @@
     padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
-    /* Glass ready immediately — same as steam-id / discord boxes */
-    background: var(--overlay-subtle);
+    /*
+     * Vidro fumê sobre a arte. O scrim fraco (--overlay-subtle) sumia em capas
+     * claras: usamos o médio + um fio de luz na borda, que é o que faz o vidro
+     * ler como vidro em cima de qualquer imagem.
+     */
+    background: var(--overlay-medium);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    box-shadow: none;
+    box-shadow: var(--glass-ring);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     cursor: pointer;
@@ -175,8 +179,11 @@
     pointer-events: none;
     outline: none;
     -webkit-tap-highlight-color: transparent;
-    /* Color only — never fade blur/backdrop (causes lag) */
-    transition: color var(--motion-fast) var(--ease);
+    /* Só cor/superfície — nunca animar blur/backdrop (causa lag) */
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease),
+      box-shadow var(--motion-fast) var(--ease);
 
     svg {
       display: block;
@@ -184,29 +191,70 @@
       shape-rendering: geometricPrecision;
     }
 
-    /* Icon only lightens on the action itself */
     &:hover,
     &:focus-visible {
+      background: var(--overlay-strong);
+      box-shadow: var(--glass-ring-strong);
       color: var(--text-primary);
       outline: none;
-      box-shadow: none;
       border: 0;
     }
 
     &:focus,
     &:active {
       outline: none;
-      box-shadow: none;
       border: 0;
     }
 
+    /* Anel de foco de teclado — o outline é removido acima, isto o repõe. */
+    &:focus-visible {
+      box-shadow: var(--glass-ring-strong), var(--focus-ring-inset);
+    }
+
+    /*
+     * Ação da capa: mesma altura (34px) das caixas steam-id/discord logo abaixo,
+     * então o hero inteiro fala uma língua só. Quadrada em repouso, abre para a
+     * esquerda no hover revelando o próprio rótulo — um ícone de câmera sozinho
+     * sobre a arte não diz o que faz.
+     */
     &--banner {
       position: absolute;
       top: 16px;
       right: 24px;
       z-index: var(--z-raised);
       flex: none;
+      width: auto;
+      height: 34px;
+      min-width: 34px;
+      min-height: 34px;
+      padding: 0 9px;
+      overflow: hidden;
+      white-space: nowrap;
     }
+  }
+
+  &__hero-action-label {
+    display: block;
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    color: inherit;
+    font-size: var(--fs-300);
+    font-weight: var(--weight-semibold);
+    line-height: 1;
+    opacity: 0;
+    user-select: none;
+    transition:
+      max-width var(--motion-base) var(--ease),
+      margin-left var(--motion-base) var(--ease),
+      opacity var(--motion-fast) var(--ease);
+  }
+
+  &__hero-action--banner:hover &__hero-action-label,
+  &__hero-action--banner:focus-visible &__hero-action-label {
+    max-width: 12rem;
+    margin-left: var(--space-3);
+    opacity: 1;
   }
 
   /* Cover hover: show boxes instantly (no transition delay) */
@@ -2931,6 +2979,13 @@
   &__load-more-sentinel {
     width: 100%;
     height: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-page__hero-action,
+  .profile-page__hero-action-label {
+    transition: none;
   }
 }
 
