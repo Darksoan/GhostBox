@@ -378,6 +378,7 @@ export function PageRouter({
           userCollections={appData.userCollections}
           activeCollectionId={activeProfileCollectionId}
           onSelectCollection={setActiveProfileCollectionId}
+          scrollElementRef={contentRef}
           onUpdateProfile={appData.handleUpdateProfile}
           onOpenGame={openGame}
           removableGameAppIds={appData.addedLibraryGameAppIds}
@@ -395,7 +396,6 @@ export function PageRouter({
           onAddGameToCollection={appData.addGameToUserCollection}
           onOpenGameAchievements={(game) => openAchievements(game)}
           onSignOut={() => void appData.handleSteamSignOut()}
-          scrollElementRef={contentRef}
         />
       );
     }

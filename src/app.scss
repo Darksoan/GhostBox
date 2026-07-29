@@ -743,17 +743,6 @@ p {
       background: transparent;
     }
 
-    &--catalogue {
-      overflow-y: hidden;
-    }
-
-    &--catalogue .page--main-pages.page--active {
-      flex: 1 1 auto;
-      min-height: 0;
-      height: 100%;
-      overflow: hidden;
-    }
-
     &--modal-open {
       overscroll-behavior: contain;
       overflow-y: auto;
@@ -801,6 +790,13 @@ p {
   height: auto;
   overflow: visible;
   padding: 0 var(--space-6) var(--space-6) 0;
+}
+
+/* Precisa vir DEPOIS de `.page`: mesma especificidade, e o shorthand `padding`
+   acima repõe os 12px. Capa do perfil é full-bleed — sem essa faixa vazia entre
+   ela e a scrollbar, e com o conteúdo do perfil simétrico. */
+.page--profile {
+  padding-right: 0;
 }
 
 // Keep-alive tab wrappers use the HTML hidden attribute to stay mounted but
@@ -929,8 +925,10 @@ p {
     padding: var(--space-8);
     overflow-x: hidden;
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--surface-strong) transparent;
+    /* Sem `scrollbar-width`/`scrollbar-color` aqui: no Chromium essas duas
+       propriedades trocam o desenho padrão e DESLIGAM o `::-webkit-scrollbar`
+       global, então a sidebar ganhava uma barra fina e quase invisível
+       enquanto o resto do app usava a de 9px. */
   }
 
   &__section {
@@ -1564,8 +1562,9 @@ p {
 
 
 .header {
-  /* Single source of truth for titlebar geometry */
-  --header-height: 52px;
+  /* Single source of truth for titlebar geometry (o valor mora em :root como
+     --app-header-height, que o catálogo também consome) */
+  --header-height: var(--app-header-height);
   --header-control: 36px;
   --header-icon: 20px;
   --header-gap: var(--space-4);
@@ -2644,7 +2643,10 @@ p {
   padding: var(--home-page-block-start-padding) var(--home-page-inline-padding)
     var(--space-5);
   background: var(--background-dark);
-  overflow-x: hidden;
+  /* `clip` e não `hidden`: com `overflow-x: hidden` a spec computa o
+     `overflow-y: visible` como `auto`, e a Home virava scroller próprio — a
+     barra ficava 21px pra dentro em vez de na borda, como nas outras abas. */
+  overflow-x: clip;
   overflow-y: visible;
 }
 
@@ -7059,11 +7061,8 @@ p {
 
 .catalogue-page {
   display: flex;
-  height: 100%;
-  min-height: 0;
   flex-direction: column;
   gap: 0;
-  overflow: hidden;
   padding: 0 var(--space-10);
 
   &__header {
@@ -7106,30 +7105,20 @@ p {
     grid-template-columns: minmax(0, 1fr) clamp(260px, 24vw, 340px);
     gap: var(--space-8);
     align-items: start;
-    min-height: 0;
-    overflow: hidden;
 
     @media (max-width: 900px) {
       grid-template-columns: 1fr;
     }
   }
 
+  /* Rola no scroller compartilhado (`.container__content`) — a barra fica na
+     mesma posição das outras páginas. */
   &__results {
     display: flex;
-    align-self: stretch;
     min-width: 0;
-    min-height: 0;
     flex-direction: column;
     gap: var(--space-2);
-    overflow-x: hidden;
-    overflow-y: auto;
     padding-bottom: var(--space-12);
-    scrollbar-gutter: stable;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
   }
 
   &__list-container {
@@ -7277,12 +7266,15 @@ p {
 
 .catalogue-filters {
   display: flex;
-  position: relative;
+  /* Antes o painel ficava preso pela cadeia de ancestrais com altura limitada.
+     Agora que o catálogo rola no scroller compartilhado, o pinning é explícito:
+     gruda no topo do scrollport, cuja altura é a janela menos a titlebar. */
+  position: sticky;
+  top: 0;
   width: 100%;
   min-height: 0;
   height: auto;
-  max-height: 100%;
-  align-self: start;
+  max-height: calc(100dvh - var(--app-header-height));
   min-width: 0;
   flex-direction: column;
   gap: var(--space-6);
@@ -8668,7 +8660,7 @@ input[type="search"]::-ms-reveal {
   overflow: hidden;
   border: none;
   border-radius: var(--radius-md);
-  background: var(--background-dark);
+  background: var(--surface-modal);
 }
 
 .backup-restore-modal__backdrop {
@@ -10422,9 +10414,9 @@ html.no-backdrop-blur {
   max-height: min(720px, calc(100vh - 48px));
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--surface-tertiary);
+  background: var(--surface-modal);
   color: var(--text-primary);
   font-family: var(--font-sans);
 
@@ -10877,12 +10869,37 @@ html.no-backdrop-blur {
 .edit-profile-modal {
   width: min(520px, calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 48px));
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--surface-tertiary);
+  background: var(--surface-modal);
 
   .collection-modal__content {
     gap: var(--space-9);
+  }
+
+  .collection-modal__field input {
+    background: var(--surface-option);
+    border: none;
+    color: var(--text-primary);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: background var(--motion-fast) var(--ease);
+
+    &:hover {
+      background: var(--surface-option-hover);
+      outline: none;
+    }
+
+    &:focus {
+      background: var(--surface-option-hover);
+      outline: none;
+    }
+
+    &:focus-visible {
+      background: var(--surface-option-hover);
+      outline: none;
+    }
   }
 
   &--avatar-crop {
@@ -11175,9 +11192,9 @@ html.no-backdrop-blur {
   max-height: min(360px, calc(100vh - 48px));
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-ui);
+  border: none;
   border-radius: var(--radius-md);
-  background: var(--background-dark);
+  background: var(--surface-modal);
   color: var(--text-primary);
   font-family: var(--font-sans);
 
@@ -11353,9 +11370,9 @@ html.no-backdrop-blur {
   width: min(1080px, 100%);
   max-height: 100%;
   overflow: hidden;
-  border: 1px solid var(--border-ui);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--background-dark);
+  background: var(--surface-modal);
   color: var(--text-primary);
 
   &--details {
@@ -11369,7 +11386,7 @@ html.no-backdrop-blur {
     overflow: visible;
     border: 0;
     border-radius: 0;
-    background: var(--background-dark);
+    background: var(--surface-modal);
     animation: none;
   }
 
@@ -11475,9 +11492,9 @@ html.no-backdrop-blur {
     width: min(560px, calc(100vw - 48px));
     max-height: min(680px, calc(100vh - 48px));
     overflow: hidden;
-    border: 1px solid var(--border-ui);
+    border: none;
     border-radius: var(--radius-lg);
-    background: var(--background-dark);
+    background: var(--surface-modal);
     text-rendering: geometricPrecision;
 
     .collection-modal__content {

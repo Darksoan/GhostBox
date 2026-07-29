@@ -1,5 +1,5 @@
 import { ImageUp, Trash2, Camera, Crop } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
@@ -150,13 +150,26 @@ export function EditProfileModal({
   const avatarSources = useCachedImageSources(avatarUrl ? [avatarUrl] : []);
   const bannerSources = useCachedImageSources(bannerUrl ? [bannerUrl] : [profileBannerPlaceholderSource]);
   const avatarPreviewSource = avatarUrl.startsWith("data:") ? avatarUrl : avatarSources[0] ?? avatarUrl;
-  const bannerPreviewSource = bannerUrl.startsWith("data:")
-    ? bannerUrl
-    : bannerSources[0] ?? (bannerUrl || profileBannerPlaceholderSource);
+  // `bannerSources` vem de um hook assíncrono: por um frame após `bannerUrl`
+  // mudar ele ainda retorna o valor anterior (o placeholder ghost resolvido),
+  // causando o flash. Quando existe uma capa real, nunca caímos no placeholder:
+  // usamos a fonte resolvida só se ela não for o próprio placeholder.
+  const resolvedBannerSource = bannerSources[0];
+  const hasResolvedBanner =
+    !!resolvedBannerSource && resolvedBannerSource !== profileBannerPlaceholderSource;
+  const bannerPreviewSource = bannerUrl
+    ? bannerUrl.startsWith("data:")
+      ? bannerUrl
+      : hasResolvedBanner
+        ? resolvedBannerSource
+        : bannerUrl
+    : resolvedBannerSource ?? profileBannerPlaceholderSource;
   const isCoverMode = mode === "cover";
   const isBannerPlaceholder = !bannerUrl;
 
-  useEffect(() => {
+  // Sincroniza antes do paint: com `useEffect` o modal chegava a pintar um
+  // frame com `bannerUrl` vazio, mostrando o placeholder (ghost-solid).
+  useLayoutEffect(() => {
     if (open && profile) {
       setDisplayName(profile.displayName);
       setAvatarUrl(profile.avatarUrl || "");

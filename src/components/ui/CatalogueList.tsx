@@ -260,7 +260,9 @@ export function CatalogueList({
   onVirtualHeightChange,
 }: CatalogueListProps) {
   const preloadTimeoutRef = useRef<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
 
   const scheduleGamePreload = useCallback((game: GhostBoxGame) => {
     if (preloadTimeoutRef.current !== null) {
@@ -276,6 +278,21 @@ export function CatalogueList({
   useLayoutEffect(() => {
     setScrollElement(scrollElementRef?.current ?? null);
   }, [scrollElementRef, games.length]);
+
+  // A lista rola no scroller compartilhado da aplicação, então não começa no
+  // topo dele — há o cabeçalho do catálogo acima. Sem esse offset o
+  // virtualizador posiciona as linhas deslocadas.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!scrollElement || !list) return;
+
+    const offset =
+      list.getBoundingClientRect().top -
+      scrollElement.getBoundingClientRect().top +
+      scrollElement.scrollTop;
+
+    setScrollMargin((current) => (current === offset ? current : offset));
+  }, [scrollElement, games.length]);
 
   useEffect(() => {
     return () => {
@@ -293,6 +310,7 @@ export function CatalogueList({
     getScrollElement: () => scrollElement,
     estimateSize: () => CATALOGUE_ITEM_ESTIMATED_HEIGHT,
     overscan: 4,
+    scrollMargin,
   });
 
   useEffect(() => {
@@ -316,7 +334,7 @@ export function CatalogueList({
 
   if (!shouldVirtualize) {
     return (
-      <div className="catalogue-list">
+      <div className="catalogue-list" ref={listRef}>
         {games.map((game) => renderItem(game))}
       </div>
     );
@@ -325,6 +343,7 @@ export function CatalogueList({
   return (
     <div
       className="catalogue-list catalogue-list--virtual"
+      ref={listRef}
       style={{ height: virtualizer.getTotalSize(), position: "relative" }}
     >
       {virtualizer.getVirtualItems().map((virtualItem) => {
@@ -340,7 +359,7 @@ export function CatalogueList({
               top: 0,
               left: 0,
               width: "100%",
-              transform: `translateY(${virtualItem.start}px)`,
+              transform: `translateY(${virtualItem.start - scrollMargin}px)`,
             }}
           >
             {renderItem(game)}
