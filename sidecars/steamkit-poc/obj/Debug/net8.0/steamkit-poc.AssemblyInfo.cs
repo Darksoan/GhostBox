@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("steamkit-poc")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4319bc658d8aac8b5a0a7f8489461d35355ac8fd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3848c2905af7b26255f8f6fd0c8e7be15f0a573b")]
 [assembly: System.Reflection.AssemblyProductAttribute("steamkit-poc")]
 [assembly: System.Reflection.AssemblyTitleAttribute("steamkit-poc")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

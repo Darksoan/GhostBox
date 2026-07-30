@@ -566,13 +566,16 @@ public class SteamKitPocRunner
         for (var fileIdx = 0; fileIdx < manifest.Files.Count; fileIdx++)
         {
             var file = manifest.Files[fileIdx];
+            var fileFinalPath = Path.Combine(_config.OutputDir!, file.FileName);
+
             if (file.Chunks == null || file.Chunks.Count == 0)
             {
-                failedFiles++;
+                // Manifest entries without chunks are directory markers or empty placeholders.
+                // Skip them to avoid file/directory name collisions (e.g., "Gurei_Data" as
+                // both an empty file mark and a directory containing real files).
                 continue;
             }
 
-            var fileFinalPath = Path.Combine(_config.OutputDir!, file.FileName);
             var fileDir = Path.GetDirectoryName(fileFinalPath);
             if (!string.IsNullOrEmpty(fileDir))
                 Directory.CreateDirectory(fileDir);
