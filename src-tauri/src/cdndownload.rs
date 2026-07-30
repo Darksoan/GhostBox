@@ -127,6 +127,17 @@ pub async fn cdndownload_download_game(
         }));
     }
 
+    app.emit(
+        "download-progress",
+        serde_json::json!({
+            "Type": "status",
+            "Status": "depot-plan",
+            "AppId": app_id,
+            "DepotTotal": depots.len(),
+        }),
+    )
+    .ok();
+
     let mut all_results = Vec::new();
 
     for (depot_id, manifest_id) in &depots {
