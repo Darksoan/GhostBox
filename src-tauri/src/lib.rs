@@ -1406,6 +1406,7 @@ pub fn run() {
             luatools_bootstrap::luatools_dependencies_status,
             luatools_bootstrap::luatools_dependencies_ensure,
             cdndownload::cdndownload_download_game,
+            cdndownload::cdndownload_cancel_game,
             cdndownload::cdndownload_default_dir,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
@@ -1422,6 +1423,7 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                cdndownload::shutdown_download_worker();
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });

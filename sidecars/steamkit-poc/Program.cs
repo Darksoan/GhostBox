@@ -1,10 +1,20 @@
 ﻿using SteamKitPoc;
+using System.Collections.Concurrent;
+using System.Text.Json;
 
 Console.SetOut(new RedactionWriter(Console.Out));
 Console.SetError(new RedactionWriter(Console.Error));
 
 var config = ParseArgs(args);
 if (config == null) return 1;
+
+if (config.Worker)
+{
+    SteamKitPocRunner.EventOut = Console.Out;
+    Console.SetOut(Console.Error);
+    await RunWorkerAsync();
+    return 0;
+}
 
 if (config.Download)
 {
@@ -58,16 +68,22 @@ static Config? ParseArgs(string[] args)
             case "--download":
                 config.Download = true;
                 break;
+            case "--worker":
+                config.Worker = true;
+                break;
             case "--output-dir":
                 config.OutputDir = args[++i];
                 break;
             case "--manifest-id":
                 config.ManifestIdOverride = ulong.Parse(args[++i]);
                 break;
+            case "--parallel-chunks":
+                config.ParallelChunks = int.Parse(args[++i]);
+                break;
         }
     }
 
-    if (config.AppId == 0)
+    if (!config.Worker && config.AppId == 0)
     {
         Console.Error.WriteLine("Error: --app-id is required");
         PrintUsage();
@@ -96,7 +112,87 @@ static void PrintUsage()
     Console.WriteLine("Usage: SteamKitPoc --app-id <uint> [--deny-probe-app-id <uint>] [--ost-provider <uint>]");
     Console.WriteLine("       [--steam-path <path>] [--reuse-session] [--corrupt-chunk]");
     Console.WriteLine("       [--dry-run] [--bare-download --depot-id <uint>]");
+    Console.WriteLine("       [--worker]");
     Console.WriteLine("       [--download --depot-id <uint> --output-dir <path> [--manifest-id <ulong>]]");
+}
+
+static async Task RunWorkerAsync()
+{
+    while (await Console.In.ReadLineAsync() is { } line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) continue;
+
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            var type = root.TryGetProperty("Type", out var typeElement)
+                ? typeElement.GetString()
+                : null;
+
+            if (type == "shutdown")
+            {
+                foreach (var activeDownload in WorkerState.ActiveDownloads.Values)
+                    activeDownload.Cancel();
+                return;
+            }
+            if (type == "cancelDownload" || type == "pauseDownload")
+            {
+                var appId = root.GetProperty("AppId").GetUInt32();
+                if (WorkerState.ActiveDownloads.TryGetValue(appId, out var activeDownload))
+                    activeDownload.Cancel();
+                continue;
+            }
+            if (type != "downloadDepot") continue;
+
+            var commandConfig = new Config
+            {
+                Download = true,
+                AppId = root.GetProperty("AppId").GetUInt32(),
+                DepotId = root.GetProperty("DepotId").GetUInt32(),
+                ManifestIdOverride = root.GetProperty("ManifestId").GetUInt64(),
+                SteamPath = root.GetProperty("SteamPath").GetString(),
+                OutputDir = root.GetProperty("OutputDir").GetString(),
+                ParallelChunks = root.TryGetProperty("ParallelChunks", out var parallelChunks)
+                    ? parallelChunks.GetInt32()
+                    : 8,
+            };
+
+            var cancellation = new CancellationTokenSource();
+            if (WorkerState.ActiveDownloads.TryRemove(commandConfig.AppId, out var existingDownload))
+            {
+                existingDownload.Cancel();
+            }
+            WorkerState.ActiveDownloads[commandConfig.AppId] = cancellation;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await new SteamKitPocRunner(commandConfig, cancellation.Token).RunAsync();
+                }
+                finally
+                {
+                    WorkerState.ActiveDownloads.TryRemove(commandConfig.AppId, out _);
+                    cancellation.Dispose();
+                }
+            });
+        }
+        catch (Exception error)
+        {
+            SteamKitPocRunner.WriteEvent(new ProgressEvent
+            {
+                Type = "error",
+                Status = "worker-command-failed",
+                Message = error.Message,
+            });
+        }
+    }
+}
+
+static class WorkerState
+{
+    public static readonly ConcurrentDictionary<uint, CancellationTokenSource> ActiveDownloads = new();
 }
 
 public class Config
@@ -110,7 +206,9 @@ public class Config
     public bool DryRun { get; set; }
     public bool BareDownload { get; set; }
     public bool Download { get; set; }
+    public bool Worker { get; set; }
     public string? OutputDir { get; set; }
     public ulong ManifestIdOverride { get; set; }
     public uint DepotId { get; set; }
+    public int ParallelChunks { get; set; } = 8;
 }

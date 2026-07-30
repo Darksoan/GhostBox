@@ -1,13 +1,16 @@
-import { X } from "lucide-react";
+import { Pause, Play, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import {
   clearFinishedDownloadTasks,
+  cancelDownloadTask,
   downloadTasksChangedEvent,
+  pauseDownloadTask,
   readDownloadTasks,
   removeDownloadTask,
+  resumeDownloadTask,
   type DownloadTask,
 } from "../lib/downloadManager";
 import { formatBytes, formatSpeed } from "../utils/formatBytes";
@@ -15,20 +18,10 @@ import { layeredImageStyle } from "../utils/image";
 
 const emptyImageSources: string[] = [];
 
-const depotStatusKeys: Record<string, string> = {
-  starting: "downloads.status.starting",
-  "key-resolved": "downloads.status.keyResolved",
-  "loading-manifest": "downloads.status.loadingManifest",
-  "manifest-loaded": "downloads.status.manifestLoaded",
-  "connecting-steam": "downloads.status.connectingSteam",
-  "steam-connected": "downloads.status.steamConnected",
-  "cdn-ready": "downloads.status.cdnReady",
-  "starting-depot": "downloads.status.startingDepot",
-};
-
 const statusRank: Record<DownloadTask["status"], number> = {
   downloading: 0,
   queued: 1,
+  paused: 1,
   error: 2,
   completed: 2,
 };
@@ -48,10 +41,16 @@ function DownloadCard({
   task,
   queuePosition,
   onRemove,
+  onPause,
+  onResume,
+  onCancel,
 }: {
   task: DownloadTask;
   queuePosition: number | null;
   onRemove: (id: string) => void;
+  onPause: (id: string) => void;
+  onResume: (id: string) => void;
+  onCancel: (id: string) => void;
 }) {
   const { t } = useSettings();
   const progressPercent =
@@ -64,11 +63,15 @@ function DownloadCard({
       ? t("downloads.queuePosition", { position: queuePosition ?? 1 })
       : task.status === "downloading"
         ? t("downloads.statusDownloading")
-        : task.status === "completed"
-          ? t("downloads.statusCompleted")
-          : t("downloads.statusError");
-  const depotStatusKey = task.depotStatus ? depotStatusKeys[task.depotStatus] : undefined;
+        : task.status === "paused"
+          ? t("downloads.statusPaused")
+          : task.status === "completed"
+            ? t("downloads.statusCompleted")
+            : t("downloads.statusError");
   const canRemove = task.status !== "downloading";
+  const canPause = task.status === "downloading" || task.status === "queued";
+  const canResume = task.status === "paused";
+  const canCancel = task.status === "downloading" || task.status === "queued" || task.status === "paused";
 
   const coverSources = useCachedImageSources(task.headerSources);
   const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(
@@ -76,19 +79,10 @@ function DownloadCard({
     { appId: task.appId, kind: "header" },
   );
 
-  const depotCaption = [
-    task.depotTotal > 0
-      ? t("downloads.depotOf", { index: task.depotIndex, total: task.depotTotal })
-      : "",
-    depotStatusKey ? t(depotStatusKey) : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   return (
     <article
       className={`download-card download-card--${task.status}${
-        task.status === "downloading" ? " download-card--with-progress" : ""
+        task.status === "downloading" || task.status === "paused" ? " download-card--with-progress" : ""
       }`}
     >
       <span className="download-card__cover-slot" aria-hidden="true">
@@ -134,19 +128,55 @@ function DownloadCard({
           ) : null}
         </span>
 
-        {canRemove ? (
-          <button
-            type="button"
-            className="download-card__remove"
-            onClick={() => onRemove(task.id)}
-            aria-label={t("downloads.remove")}
-          >
-            <X size={15} strokeWidth={2} />
-          </button>
-        ) : null}
+        <span className="download-card__controls">
+          {canPause ? (
+            <button
+              type="button"
+              className="download-card__icon-button"
+              onClick={() => onPause(task.id)}
+              aria-label={t("downloads.pause")}
+              title={t("downloads.pause")}
+            >
+              <Pause size={15} strokeWidth={2} />
+            </button>
+          ) : null}
+          {canResume ? (
+            <button
+              type="button"
+              className="download-card__icon-button"
+              onClick={() => onResume(task.id)}
+              aria-label={t("downloads.resume")}
+              title={t("downloads.resume")}
+            >
+              <Play size={15} strokeWidth={2} />
+            </button>
+          ) : null}
+          {canCancel ? (
+            <button
+              type="button"
+              className="download-card__icon-button download-card__icon-button--danger"
+              onClick={() => onCancel(task.id)}
+              aria-label={t("downloads.cancel")}
+              title={t("downloads.cancel")}
+            >
+              <X size={15} strokeWidth={2} />
+            </button>
+          ) : null}
+          {canRemove && !canCancel ? (
+            <button
+              type="button"
+              className="download-card__icon-button"
+              onClick={() => onRemove(task.id)}
+              aria-label={t("downloads.remove")}
+              title={t("downloads.remove")}
+            >
+              <X size={15} strokeWidth={2} />
+            </button>
+          ) : null}
+        </span>
       </span>
 
-      {task.status === "downloading" ? (
+      {task.status === "downloading" || task.status === "paused" ? (
         <div className="download-card__progress-row">
           <span className="download-card__progress">
             <span className="download-card__progress-count">
@@ -166,9 +196,6 @@ function DownloadCard({
               {t("downloads.remaining", { size: formatBytes(remaining) })}
             </span>
           </span>
-          {depotCaption ? (
-            <small className="download-card__depot-caption">{depotCaption}</small>
-          ) : null}
         </div>
       ) : null}
     </article>
@@ -224,6 +251,9 @@ export function DownloadsPage() {
                   : null
               }
               onRemove={removeDownloadTask}
+              onPause={pauseDownloadTask}
+              onResume={resumeDownloadTask}
+              onCancel={cancelDownloadTask}
             />
           ))}
         </div>

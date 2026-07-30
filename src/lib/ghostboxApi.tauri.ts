@@ -742,6 +742,10 @@ export const ghostboxApi = {
     );
   },
 
+  cancelDepotGame(appId: string): Promise<boolean> {
+    return invokeOr<boolean>("cdndownload_cancel_game", { appId }, false);
+  },
+
   getDefaultDownloadsDir(): Promise<string> {
     return invokeOr<string>("cdndownload_default_dir", {}, "");
   },

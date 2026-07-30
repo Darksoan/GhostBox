@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check:tokens && tsc && vite build",
+    "sidecar:build": "dotnet build sidecars/steamkit-poc/steamkit-poc.csproj",
+    "dev:tauri": "npm run sidecar:build && vite",
+    "build:tauri": "npm run sidecar:build && npm run build",
     "check:tokens": "node scripts/check-tokens.mjs",
     "preview": "vite preview",
     "tauri": "tauri",

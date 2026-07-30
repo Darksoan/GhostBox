@@ -8569,7 +8569,15 @@ input[type="search"]::-ms-reveal {
     white-space: nowrap;
   }
 
-  &__remove {
+  &__controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+
+  &__remove,
+  &__icon-button {
     display: grid;
     width: 26px;
     height: 26px;
@@ -8587,6 +8595,11 @@ input[type="search"]::-ms-reveal {
       color: var(--text-primary);
       outline: 0;
     }
+  }
+
+  &__icon-button--danger:hover,
+  &__icon-button--danger:focus-visible {
+    color: var(--danger);
   }
 
   &__progress-row {

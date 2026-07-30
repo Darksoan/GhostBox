@@ -2,7 +2,7 @@ import { ghostboxApi } from "./ghostboxApi";
 import type { GhostBoxGame } from "../data";
 import { gameSteamHeaderFirstSources, getGameAppId } from "../utils/image";
 
-export type DownloadTaskStatus = "queued" | "downloading" | "completed" | "error";
+export type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
 
 export type DownloadTask = {
   id: string;
@@ -25,6 +25,7 @@ export type DownloadTask = {
   bytesDownloaded: number;
   bytesTotal: number;
   speedBytesPerSecond: number;
+  resumePending?: boolean;
   totalBytesDownloaded?: number;
   totalBytesAll?: number;
   failedFiles?: number;
@@ -37,6 +38,7 @@ export const downloadTasksChangedEvent = "ghostbox:download-tasks-changed";
 
 let liveTasks: DownloadTask[] = [];
 let activeAppId: string | null = null;
+let activeControlIntent: "pause" | "cancel" | null = null;
 let engineStarted = false;
 let cachedHistoryTasks: DownloadTask[] | null = null;
 
@@ -159,6 +161,7 @@ function startNextQueuedTask() {
   if (!next) return;
 
   activeAppId = next.appId;
+  activeControlIntent = null;
   updateLiveTask(next.appId, { status: "downloading", startedAt: Date.now() });
 
   ghostboxApi
@@ -174,11 +177,30 @@ function startNextQueuedTask() {
 
 function finishActiveTask(result: Record<string, unknown>) {
   const appId = activeAppId;
+  const controlIntent = activeControlIntent;
   activeAppId = null;
+  activeControlIntent = null;
   if (appId === null) return;
 
   const task = liveTasks.find((entry) => entry.appId === appId);
   if (!task) {
+    startNextQueuedTask();
+    return;
+  }
+
+  if (controlIntent === "pause") {
+    updateLiveTask(appId, {
+      status: "paused",
+      speedBytesPerSecond: 0,
+      depotStatus: "paused",
+    });
+    startNextQueuedTask();
+    return;
+  }
+
+  if (controlIntent === "cancel" || result.Type === "cancelled") {
+    removeLiveTask(appId);
+    notifyChanged();
     startNextQueuedTask();
     return;
   }
@@ -260,6 +282,49 @@ export function removeDownloadTask(id: string) {
   }
 }
 
+export function pauseDownloadTask(id: string) {
+  const task = liveTasks.find((entry) => entry.id === id);
+  if (!task) return;
+
+  if (task.status === "queued") {
+    updateLiveTask(task.appId, { status: "paused", speedBytesPerSecond: 0 });
+    return;
+  }
+
+  if (task.status !== "downloading" || activeAppId !== task.appId) return;
+  activeControlIntent = "pause";
+  updateLiveTask(task.appId, { status: "paused", speedBytesPerSecond: 0 });
+  void ghostboxApi.cancelDepotGame(task.appId);
+}
+
+export function resumeDownloadTask(id: string) {
+  const task = liveTasks.find((entry) => entry.id === id);
+  if (!task || task.status !== "paused") return;
+  updateLiveTask(task.appId, {
+    status: "queued",
+    depotStatus: undefined,
+    resumePending: true,
+  });
+  startNextQueuedTask();
+}
+
+export function cancelDownloadTask(id: string) {
+  const task = liveTasks.find((entry) => entry.id === id);
+  if (!task) {
+    removeDownloadTask(id);
+    return;
+  }
+
+  if (task.status === "downloading" && activeAppId === task.appId) {
+    activeControlIntent = "cancel";
+    void ghostboxApi.cancelDepotGame(task.appId);
+  }
+
+  removeLiveTask(task.appId);
+  notifyChanged();
+  if (activeAppId !== task.appId) startNextQueuedTask();
+}
+
 export function clearFinishedDownloadTasks() {
   writeHistoryTasks([]);
   notifyChanged();
@@ -289,13 +354,20 @@ function applyProgressEvent(payload: Record<string, unknown>) {
   if (type === "status" && status === "starting-depot") {
     if (eventAppId(payload) !== appId) return;
     const task = liveTasks.find((entry) => entry.appId === appId);
-    updateLiveTask(appId, {
-      depotIndex: (task?.depotIndex ?? 0) + 1,
+    const isResuming = task?.resumePending === true;
+    const patch: Partial<DownloadTask> = {
+      depotIndex: isResuming
+        ? Math.max(1, task?.depotIndex ?? 0)
+        : (task?.depotIndex ?? 0) + 1,
       depotStatus: status,
-      bytesDownloaded: 0,
-      bytesTotal: 0,
       speedBytesPerSecond: 0,
-    });
+      resumePending: false,
+    };
+    if (!isResuming) {
+      patch.bytesDownloaded = 0;
+      patch.bytesTotal = 0;
+    }
+    updateLiveTask(appId, patch);
     return;
   }
 

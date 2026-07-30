@@ -8,13 +8,15 @@ namespace SteamKitPoc;
 public class SteamKitPocRunner
 {
     private readonly Config _config;
+    private readonly CancellationToken _cancellationToken;
     private Steam3Session? _steam3;
     private CDNClientPool? _cdnPool;
     private byte[]? _depotKey;
 
-    public SteamKitPocRunner(Config config)
+    public SteamKitPocRunner(Config config, CancellationToken cancellationToken = default)
     {
         _config = config;
+        _cancellationToken = cancellationToken;
     }
 
     public async Task RunAsync()
@@ -104,7 +106,21 @@ public class SteamKitPocRunner
 
         if (_config.Download)
         {
-            await RunDownloadAsync(ost, steamPath);
+            try
+            {
+                await RunDownloadAsync(ost, steamPath);
+            }
+            catch (OperationCanceledException)
+            {
+                EmitProgress(new ProgressEvent
+                {
+                    Type = "cancelled",
+                    Status = "cancelled",
+                    AppId = _config.AppId,
+                    DepotId = _config.DepotId,
+                    OutputDir = _config.OutputDir
+                });
+            }
             return;
         }
 
@@ -397,6 +413,7 @@ public class SteamKitPocRunner
 
     private async Task RunDownloadAsync(OstKeyProvider ost, string steamPath)
     {
+        _cancellationToken.ThrowIfCancellationRequested();
         EmitProgress(new ProgressEvent
         {
             Type = "status",
@@ -406,6 +423,7 @@ public class SteamKitPocRunner
         });
 
         ost.Refresh();
+        _cancellationToken.ThrowIfCancellationRequested();
         var depotId = _config.DepotId;
 
         var keyResult = ost.GetDepotKey(_config.AppId, depotId);
@@ -551,6 +569,9 @@ public class SteamKitPocRunner
         var downloadedBytes = 0UL;
         var failedFiles = 0;
         var failedChunks = 0;
+        var progressLock = new object();
+        var parallelChunks = Math.Clamp(_config.ParallelChunks, 1, 32);
+        using var chunkSemaphore = new SemaphoreSlim(parallelChunks);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         if (manifest.Files == null)
@@ -565,6 +586,7 @@ public class SteamKitPocRunner
 
         for (var fileIdx = 0; fileIdx < manifest.Files.Count; fileIdx++)
         {
+            _cancellationToken.ThrowIfCancellationRequested();
             var file = manifest.Files[fileIdx];
             var fileFinalPath = Path.Combine(_config.OutputDir!, file.FileName);
 
@@ -586,43 +608,106 @@ public class SteamKitPocRunner
                 if (!string.IsNullOrEmpty(fileDir))
                     Directory.CreateDirectory(fileDir);
 
-                await using (var fileStream = File.Create(fileFinalPath))
+                var fileLength = file.Chunks.Max(chunk => (long)(chunk.Offset + chunk.UncompressedLength));
+                await using (var fileStream = new FileStream(
+                    fileFinalPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.Read,
+                    bufferSize: 1024 * 1024,
+                    FileOptions.Asynchronous | FileOptions.RandomAccess))
                 {
-                    foreach (var chunk in file.Chunks)
+                    var existingLength = fileStream.Length;
+                    var validExistingChunks = new bool[file.Chunks.Count];
+                    for (var chunkIndex = 0; chunkIndex < file.Chunks.Count; chunkIndex++)
                     {
+                        _cancellationToken.ThrowIfCancellationRequested();
+                        var existingChunk = file.Chunks[chunkIndex];
+                        var chunkEnd = (long)(existingChunk.Offset + existingChunk.UncompressedLength);
+                        if (chunkEnd > existingLength) continue;
+
+                        var existingBuffer = ArrayPool<byte>.Shared.Rent((int)existingChunk.UncompressedLength);
+                        try
+                        {
+                            var totalRead = 0;
+                            while (totalRead < existingChunk.UncompressedLength)
+                            {
+                                var read = await RandomAccess.ReadAsync(
+                                    fileStream.SafeFileHandle,
+                                    existingBuffer.AsMemory(totalRead, (int)existingChunk.UncompressedLength - totalRead),
+                                    (long)existingChunk.Offset + totalRead,
+                                    _cancellationToken);
+                                if (read == 0) break;
+                                totalRead += read;
+                            }
+
+                            if (totalRead != existingChunk.UncompressedLength) continue;
+                            var adler = ComputeAdler32(existingBuffer, totalRead);
+                            var expected = BitConverter.GetBytes(existingChunk.Checksum);
+                            if (!adler.AsSpan().SequenceEqual(expected)) continue;
+
+                            validExistingChunks[chunkIndex] = true;
+                            downloadedChunks++;
+                            downloadedBytes += existingChunk.UncompressedLength;
+                        }
+                        finally
+                        {
+                            ArrayPool<byte>.Shared.Return(existingBuffer);
+                        }
+                    }
+
+                    fileStream.SetLength(fileLength);
+                    var fileFailedChunks = 0;
+
+                    var chunkTasks = file.Chunks
+                        .Select((chunk, index) => (chunk, index))
+                        .Where(item => !validExistingChunks[item.index])
+                        .Select(async item =>
+                    {
+                        var chunk = item.chunk;
+                        await chunkSemaphore.WaitAsync(_cancellationToken);
                         var chunkBuffer = ArrayPool<byte>.Shared.Rent((int)chunk.UncompressedLength);
-                        Server? connection = null;
-                        var written = 0;
 
                         try
                         {
-                            var attempt = 0;
+                            var written = 0;
                             const int maxAttempts = 3;
-                            do
+                            for (var attempt = 1; attempt <= maxAttempts; attempt++)
                             {
-                                attempt++;
-                                connection = _cdnPool!.GetConnection();
-                                string? cdnToken = null;
-                                if (_steam3!.CDNAuthTokens.TryGetValue((manifest.DepotID, connection.Host), out var authTask))
+                                Server? connection = null;
+                                try
                                 {
-                                    var authResult = await authTask.Task;
-                                    cdnToken = authResult.Token;
-                                }
+                                    connection = _cdnPool!.GetConnection();
+                                    string? cdnToken = null;
+                                    if (_steam3!.CDNAuthTokens.TryGetValue((manifest.DepotID, connection.Host), out var authTask))
+                                    {
+                                        var authResult = await authTask.Task;
+                                        cdnToken = authResult.Token;
+                                    }
 
-                                written = await _cdnPool.CDNClient.DownloadDepotChunkAsync(
-                                    manifest.DepotID, chunk, connection,
-                                    chunkBuffer, _depotKey,
-                                    _cdnPool.ProxyServer, cdnToken
-                                );
-                                _cdnPool.ReturnConnection(connection);
-                                break;
+                                    written = await _cdnPool.CDNClient.DownloadDepotChunkAsync(
+                                        manifest.DepotID, chunk, connection,
+                                        chunkBuffer, _depotKey,
+                                        _cdnPool.ProxyServer, cdnToken
+                                    );
+                                    break;
+                                }
+                                catch when (attempt < maxAttempts)
+                                {
+                                    await Task.Delay(150 * attempt, _cancellationToken);
+                                }
+                                finally
+                                {
+                                    if (connection != null) _cdnPool?.ReturnConnection(connection);
+                                }
                             }
-                            while (attempt < maxAttempts);
+
+                            _cancellationToken.ThrowIfCancellationRequested();
 
                             if (written <= 0)
                             {
-                                failedChunks++;
-                                fileSuccess = false;
+                                Interlocked.Increment(ref fileFailedChunks);
+                                lock (progressLock) failedChunks++;
                                 EmitProgress(new ProgressEvent
                                 {
                                     Type = "error",
@@ -631,7 +716,7 @@ public class SteamKitPocRunner
                                     FileIndex = fileIdx,
                                     FileName = file.FileName
                                 });
-                                continue;
+                                return;
                             }
 
                             var adler = ComputeAdler32(chunkBuffer, written);
@@ -639,8 +724,8 @@ public class SteamKitPocRunner
                             var hashValid = adler.AsSpan().SequenceEqual(expected);
                             if (!hashValid)
                             {
-                                failedChunks++;
-                                fileSuccess = false;
+                                Interlocked.Increment(ref fileFailedChunks);
+                                lock (progressLock) failedChunks++;
                                 EmitProgress(new ProgressEvent
                                 {
                                     Type = "error",
@@ -649,19 +734,25 @@ public class SteamKitPocRunner
                                     FileIndex = fileIdx,
                                     FileName = file.FileName
                                 });
-                                continue;
+                                return;
                             }
 
-                            fileStream.Seek((long)chunk.Offset, SeekOrigin.Begin);
-                            await fileStream.WriteAsync(chunkBuffer.AsMemory(0, written));
+                            await RandomAccess.WriteAsync(fileStream.SafeFileHandle, chunkBuffer.AsMemory(0, written), (long)chunk.Offset, _cancellationToken);
 
-                            downloadedChunks++;
-                            downloadedBytes += chunk.UncompressedLength;
+                            lock (progressLock)
+                            {
+                                downloadedChunks++;
+                                downloadedBytes += chunk.UncompressedLength;
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
                         }
                         catch (Exception ex)
                         {
-                            failedChunks++;
-                            fileSuccess = false;
+                            Interlocked.Increment(ref fileFailedChunks);
+                            lock (progressLock) failedChunks++;
                             EmitProgress(new ProgressEvent
                             {
                                 Type = "error",
@@ -674,9 +765,12 @@ public class SteamKitPocRunner
                         finally
                         {
                             ArrayPool<byte>.Shared.Return(chunkBuffer);
-                            if (connection != null) _cdnPool?.ReturnConnection(connection);
+                            chunkSemaphore.Release();
                         }
-                    }
+                    });
+
+                    await Task.WhenAll(chunkTasks);
+                    fileSuccess = fileFailedChunks == 0;
                 }
 
                 if (fileSuccess)
@@ -711,6 +805,10 @@ public class SteamKitPocRunner
                     OutputDir = _config.OutputDir
                 });
                 return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -764,6 +862,8 @@ public class SteamKitPocRunner
     /// Canal dos eventos JSON. Em modo download o `Program` aponta isto pro stdout
     /// real e manda o resto do `Console.Out` pro stderr, para o stream ficar limpo.
     public static TextWriter EventOut { get; set; } = Console.Out;
+
+    public static void WriteEvent(ProgressEvent ev) => EmitProgress(ev);
 
     private static void EmitProgress(ProgressEvent ev)
     {

@@ -1,9 +1,99 @@
-use std::io::BufRead;
+use std::collections::{HashMap, HashSet};
+use std::io::{BufRead, Write};
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::Emitter;
 
 const POC_RELATIVE_PATH: &str = "../sidecars/steamkit-poc/bin/Debug/net8.0/steamkit-poc.exe";
+
+static ACTIVE_DOWNLOAD_PROCESSES: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+static CANCELLED_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static DOWNLOAD_WORKER: OnceLock<Mutex<Option<DownloadWorker>>> = OnceLock::new();
+
+struct DownloadWorker {
+    child: Child,
+    stdin: Arc<Mutex<ChildStdin>>,
+    stdout: Arc<Mutex<std::io::BufReader<ChildStdout>>>,
+}
+
+fn download_worker() -> &'static Mutex<Option<DownloadWorker>> {
+    DOWNLOAD_WORKER.get_or_init(|| Mutex::new(None))
+}
+
+pub fn shutdown_download_worker() {
+    let Ok(mut worker_guard) = download_worker().lock() else {
+        return;
+    };
+    let Some(mut worker) = worker_guard.take() else {
+        return;
+    };
+
+    if let Ok(mut stdin) = worker.stdin.lock() {
+        let _ = stdin.write_all(b"{\"Type\":\"shutdown\"}\n");
+        let _ = stdin.flush();
+    }
+    let _ = worker.child.kill();
+    let _ = worker.child.wait();
+}
+
+fn active_download_processes() -> &'static Mutex<HashMap<String, u32>> {
+    ACTIVE_DOWNLOAD_PROCESSES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cancelled_downloads() -> &'static Mutex<HashSet<String>> {
+    CANCELLED_DOWNLOADS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn take_download_cancelled(app_id: &str) -> bool {
+    cancelled_downloads()
+        .lock()
+        .map(|mut cancelled| cancelled.remove(app_id))
+        .unwrap_or(false)
+}
+
+fn clear_active_download_process(app_id: &str) {
+    let _ = active_download_processes()
+        .lock()
+        .map(|mut processes| processes.remove(app_id));
+}
+
+fn ensure_download_worker(worker: &mut Option<DownloadWorker>) -> Result<&mut DownloadWorker, String> {
+    let should_start = match worker.as_mut() {
+        Some(existing) => existing.child.try_wait().map_err(|error| error.to_string())?.is_some(),
+        None => true,
+    };
+
+    if should_start {
+        let poc_path = find_poc_binary()?;
+        let mut child = crate::util::silent_command(&poc_path)
+            .arg("--worker")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("Failed to spawn steamkit worker: {error}"))?;
+
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Failed to capture stdin from steamkit worker".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Failed to capture stdout from steamkit worker".to_string())?;
+
+        *worker = Some(DownloadWorker {
+            child,
+            stdin: Arc::new(Mutex::new(stdin)),
+            stdout: Arc::new(Mutex::new(std::io::BufReader::new(stdout))),
+        });
+    }
+
+    worker
+        .as_mut()
+        .ok_or_else(|| "SteamKit worker is unavailable".to_string())
+}
 
 fn find_poc_binary() -> Result<std::path::PathBuf, String> {
     if let Ok(path) = std::env::var("GHOSTBOX_POC_PATH") {
@@ -116,14 +206,43 @@ pub fn cdndownload_default_dir(app: tauri::AppHandle) -> Result<String, String> 
 }
 
 #[tauri::command]
+pub fn cdndownload_cancel_game(app_id: String) -> Result<bool, String> {
+    cancelled_downloads()
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(app_id.clone());
+
+    let worker_stdin = {
+        let worker_guard = download_worker().lock().map_err(|error| error.to_string())?;
+        let Some(worker) = worker_guard.as_ref() else {
+            return Ok(false);
+        };
+        worker.stdin.clone()
+    };
+
+    let command = serde_json::json!({
+        "Type": "cancelDownload",
+        "AppId": app_id.parse::<u32>().unwrap_or_default(),
+    });
+    let command_line = serde_json::to_string(&command).map_err(|error| error.to_string())?;
+    let mut stdin = worker_stdin.lock().map_err(|error| error.to_string())?;
+    stdin
+        .write_all(command_line.as_bytes())
+        .and_then(|_| stdin.write_all(b"\n"))
+        .and_then(|_| stdin.flush())
+        .map_err(|error| format!("Failed to write cancel command to steamkit worker: {error}"))?;
+
+    Ok(true)
+}
+
+#[tauri::command]
 pub async fn cdndownload_download_game(
     app: tauri::AppHandle,
     app_id: String,
     output_dir: String,
     steam_path: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let poc_path = find_poc_binary()?;
-
+    let _ = take_download_cancelled(&app_id);
     let steam_path = match steam_path {
         Some(path) => path,
         None => crate::resolve_steam_path(&app, None)
@@ -154,8 +273,26 @@ pub async fn cdndownload_download_game(
     .ok();
 
     let mut all_results = Vec::new();
+    let (worker_stdin, worker_stdout, worker_process_id) = {
+        let mut worker_guard = download_worker().lock().map_err(|error| error.to_string())?;
+        let worker = ensure_download_worker(&mut worker_guard)?;
+        (worker.stdin.clone(), worker.stdout.clone(), worker.child.id())
+    };
+    active_download_processes()
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(app_id.clone(), worker_process_id);
 
     for (depot_id, manifest_id) in &depots {
+        if take_download_cancelled(&app_id) {
+            clear_active_download_process(&app_id);
+            return Ok(serde_json::json!({
+                "Type": "cancelled",
+                "Status": "cancelled",
+                "AppId": app_id,
+            }));
+        }
+
         let depot_output = format!("{}\\depot_{}", output_dir.trim_end_matches('\\'), depot_id);
 
         app.emit(
@@ -171,75 +308,77 @@ pub async fn cdndownload_download_game(
         )
         .ok();
 
-        let mut cmd = crate::util::silent_command(&poc_path);
-        cmd.arg("--download")
-            .arg("--app-id")
-            .arg(&app_id)
-            .arg("--depot-id")
-            .arg(depot_id.to_string())
-            .arg("--manifest-id")
-            .arg(manifest_id.to_string())
-            .arg("--steam-path")
-            .arg(&steam_path)
-            .arg("--output-dir")
-            .arg(&depot_output)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("Failed to spawn steamkit-poc for depot {depot_id}: {e}"))?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "Failed to capture stdout from steamkit-poc".to_string())?;
-
-        let app_clone = app.clone();
-        let reader_handle = std::thread::spawn(move || -> Option<serde_json::Value> {
-            let reader = std::io::BufReader::new(stdout);
-            for line in reader.lines() {
-                let Ok(line) = line else { break };
-                let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                    continue;
-                };
-                let event_type = value
-                    .get("Type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let _ = app_clone.emit("download-progress", value.clone());
-                if event_type == "complete" || event_type == "error" {
-                    return Some(value);
-                }
-            }
-            None
+        let command = serde_json::json!({
+            "Type": "downloadDepot",
+            "AppId": app_id.parse::<u32>().unwrap_or_default(),
+            "DepotId": depot_id,
+            "ManifestId": manifest_id,
+            "SteamPath": steam_path,
+            "OutputDir": depot_output,
         });
+        let command_line = serde_json::to_string(&command).map_err(|error| error.to_string())?;
+        let mut stdin = worker_stdin.lock().map_err(|error| error.to_string())?;
+        stdin
+            .write_all(command_line.as_bytes())
+            .and_then(|_| stdin.write_all(b"\n"))
+            .and_then(|_| stdin.flush())
+            .map_err(|error| format!("Failed to write command to steamkit worker: {error}"))?;
+        drop(stdin);
 
-        let status = child
-            .wait()
-            .map_err(|e| format!("Process wait error for depot {depot_id}: {e}"))?;
-
-        // Sem linha `complete`/`error` o processo morreu antes de reportar. Antes isso
-        // virava um `"Type": "complete"` sintético e a UI mostrava o download como
-        // concluído com 0 byte; agora o código de saída decide o tipo.
-        let depot_result = reader_handle
-            .join()
-            .map_err(|_| "Reader thread panic".to_string())?
-            .unwrap_or_else(|| {
-                serde_json::json!({
-                    "Type": if status.success() { "complete" } else { "error" },
-                    "Status": "sidecar-exited-without-result",
-                    "Message": format!(
-                        "steamkit-poc encerrou sem reportar resultado do depot {depot_id} (exit {:?}).",
-                        status.code()
-                    ),
+        let depot_result = loop {
+            let mut line = String::new();
+            let mut stdout = worker_stdout.lock().map_err(|error| error.to_string())?;
+            let bytes_read = stdout
+                .read_line(&mut line)
+                .map_err(|error| format!("Failed to read from steamkit worker: {error}"))?;
+            drop(stdout);
+            if bytes_read == 0 {
+                let _ = download_worker().lock().map(|mut worker| *worker = None);
+                if take_download_cancelled(&app_id) {
+                    clear_active_download_process(&app_id);
+                    return Ok(serde_json::json!({
+                        "Type": "cancelled",
+                        "Status": "cancelled",
+                        "AppId": app_id,
+                        "DepotId": depot_id,
+                    }));
+                }
+                clear_active_download_process(&app_id);
+                return Ok(serde_json::json!({
+                    "Type": "error",
+                    "Status": "worker-exited",
+                    "Message": "steamkit worker exited before reporting a result.",
                     "DepotId": depot_id,
-                    "success": status.success(),
-                    "exitCode": status.code(),
-                })
-            });
+                }));
+            }
+
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            let event_type = value
+                .get("Type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let _ = app.emit("download-progress", value.clone());
+            if event_type == "complete" || event_type == "error" || event_type == "cancelled" {
+                break value;
+            }
+        };
+
+        if take_download_cancelled(&app_id) {
+            clear_active_download_process(&app_id);
+            return Ok(serde_json::json!({
+                "Type": "cancelled",
+                "Status": "cancelled",
+                "AppId": app_id,
+                "DepotId": depot_id,
+            }));
+        }
 
         all_results.push(depot_result);
     }
+
+    clear_active_download_process(&app_id);
 
     Ok(serde_json::json!({
         "Type": "complete",
