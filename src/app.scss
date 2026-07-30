@@ -8377,28 +8377,13 @@ input[type="search"]::-ms-reveal {
   height: auto;
   overflow: visible;
 
+  /* Header segue o padrão de `.content-section__header`; só o alinhamento do
+     botão de ação muda, porque o bloco de texto tem duas linhas. */
   &__header {
-    display: flex;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-8);
-    padding: 0;
-
-    h2 {
-      margin: 0 0 var(--space-3);
-      color: var(--text-primary);
-      font-size: var(--fs-700);
-      font-weight: var(--weight-semibold);
-      line-height: 1.2;
-    }
 
     p {
       max-width: 620px;
-      margin: 0;
-      color: var(--text-secondary);
-      font-size: var(--fs-400);
-      font-weight: var(--weight-semibold);
-      line-height: 1.5;
     }
   }
 
@@ -8443,135 +8428,276 @@ input[type="search"]::-ms-reveal {
   }
 }
 
+/*
+ * Mesma receita dos cards da aba "Geral" do perfil
+ * (`.profile-page__activity-card`): capa em header (460x215) ocupando a altura
+ * inteira à esquerda, título à esquerda e estado à direita, e a linha de
+ * progresso ocupando a segunda linha da coluna de conteúdo.
+ */
 .download-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-8);
-  border: 1px solid var(--border);
+  --download-cover-width: 196px;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
+  grid-template-rows: auto;
+  column-gap: var(--space-8);
+  row-gap: var(--space-5);
+  align-items: center;
+  min-width: 0;
+  min-height: 92px;
+  padding: 0 var(--space-6) 0 0;
+  overflow: hidden;
+  border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-tertiary);
-  transition:
-    border-color var(--motion-fast) ease,
-    background var(--motion-fast) ease;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  transition: background var(--motion-base) var(--ease);
 
-  &:hover {
-    border-color: var(--border-hover);
+  &--with-progress {
+    grid-template-rows: auto auto;
   }
 
-  &--error {
-    border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
-  }
-
-  &__header {
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-6);
+  /* A capa estica na altura inteira do card; o recorte fica com o
+     `background-size: cover`, então a arte encosta nas bordas. */
+  &__cover-slot {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    display: block;
+    width: var(--download-cover-width);
+    align-self: stretch;
+    min-height: 92px;
+    padding: 0;
+    background: transparent;
   }
 
   &__cover {
-    width: 42px;
-    height: 42px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--background-dark);
-    object-fit: cover;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 92px;
+    border: 0;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    background-color: var(--surface-solid);
+    background-size: cover;
+    background-position: center;
   }
 
-  &__title-group {
-    display: flex;
+  &__cover--loading {
+    background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  }
+
+  /* Keyframe própria: a de mesmo efeito no perfil vive em `ProfilePage.scss`,
+     que só é carregado quando a aba de perfil monta. */
+  &__cover--loaded {
+    animation: download-cover-in var(--motion-base) ease both;
+  }
+
+  &__main {
+    grid-column: 2;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-6);
+    width: 100%;
     min-width: 0;
-    flex-direction: column;
-    gap: var(--space-3);
+    padding: var(--space-6) 0 0;
+    text-align: left;
+  }
+
+  &__meta {
+    display: grid;
+    min-width: 0;
+    align-content: center;
+    gap: var(--space-1);
+    transform: translateY(3px);
 
     strong {
       overflow: hidden;
       color: var(--text-primary);
-      font-size: var(--fs-400);
-      font-weight: var(--weight-semibold);
+      font-size: 14.5px;
+      font-weight: var(--weight-medium);
       line-height: 1.3;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
   }
 
-  &__status-pill {
-    width: max-content;
-    padding: 0 var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-    background: var(--background-dark);
-    color: var(--text-secondary);
-    font-size: var(--fs-100);
-    font-weight: var(--weight-medium);
-    line-height: 20px;
+  &__side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: var(--space-2);
+    min-width: 0;
+    text-align: right;
   }
 
-  &--completed &__status-pill {
+  &__status,
+  &__speed {
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  &__status {
+    color: var(--text-primary);
+  }
+
+  &__speed {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &--completed &__status {
     color: var(--success);
   }
 
-  &--error &__status-pill {
+  &--error &__status {
     color: var(--danger);
+  }
+
+  &__error {
+    overflow: hidden;
+    color: var(--danger);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__remove {
     display: grid;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
     place-items: center;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-    background: var(--background-dark);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--overlay-subtle);
     color: var(--text-secondary);
     cursor: pointer;
-    transition:
-      border-color var(--motion-fast) ease,
-      color var(--motion-fast) ease;
+    transition: color var(--motion-fast) var(--ease);
 
     &:hover,
     &:focus-visible {
-      border-color: var(--border-hover);
       color: var(--text-primary);
+      outline: 0;
     }
   }
 
+  &__progress-row {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6) var(--space-7);
+    min-width: 0;
+    padding: 0 0 var(--space-5);
+  }
+
+  &__progress {
+    display: grid;
+    grid-template-columns: auto minmax(120px, 1fr) auto;
+    align-items: center;
+    gap: var(--space-4) var(--space-5);
+    min-width: 0;
+    flex: 1 1 auto;
+    max-width: 420px;
+  }
+
+  &__progress-count {
+    color: var(--text-primary);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
   &__progress-track {
+    display: block;
     width: 100%;
+    min-width: 120px;
     height: 6px;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: var(--background-dark);
-  }
+    background: color-mix(in srgb, var(--text-primary) 22%, transparent);
 
-  &__progress-fill {
-    height: 100%;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
-    transition: width var(--motion-base) var(--ease);
-  }
-
-  &__meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-6);
-    color: var(--text-secondary);
-    font-size: var(--fs-200);
-    font-weight: var(--weight-semibold);
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--text-primary);
+      transition: width var(--motion-slow) ease;
+    }
   }
 
   &__depot-caption {
-    color: var(--text-tertiary);
+    flex: 0 0 auto;
+    color: var(--text-secondary);
     font-size: var(--fs-100);
     font-weight: var(--weight-semibold);
+    white-space: nowrap;
+  }
+}
+
+@keyframes download-cover-in {
+  from {
+    opacity: 0;
   }
 
-  &__error {
-    margin: 0;
-    color: var(--danger);
-    font-size: var(--fs-300);
-    font-weight: var(--weight-medium);
+  to {
+    opacity: 1;
+  }
+}
+
+/* Empilhado: a capa vira faixa do topo e volta a ter altura própria (não há
+   linha para esticar contra), igual aos cards da aba "Geral" do perfil. */
+@media (max-width: 820px) {
+  .download-card {
+    --download-cover-width: min(160px, 42vw);
+  }
+
+  .download-card__cover-slot {
+    grid-row: 1;
+    align-self: start;
+    min-height: 0;
+  }
+
+  .download-card__cover {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 460 / 215;
+  }
+
+  .download-card--with-progress {
+    grid-template-rows: auto auto auto;
+  }
+
+  .download-card__main {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-5);
+  }
+
+  .download-card__side {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .download-card__progress-row {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    padding: 0 0 var(--space-6) var(--space-6);
+  }
+
+  .download-card__progress {
+    max-width: none;
+    gap: var(--space-3);
   }
 }
 

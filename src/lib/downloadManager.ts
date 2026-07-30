@@ -1,6 +1,6 @@
 import { ghostboxApi } from "./ghostboxApi";
 import type { GhostBoxGame } from "../data";
-import { getGameAppId } from "../utils/image";
+import { gameSteamHeaderFirstSources, getGameAppId } from "../utils/image";
 
 export type DownloadTaskStatus = "queued" | "downloading" | "completed" | "error";
 
@@ -9,6 +9,11 @@ export type DownloadTask = {
   appId: string;
   title: string;
   coverUrl: string;
+  /**
+   * Steam header-art candidates (wide 460x215), best-first — same list the
+   * profile overview cards use. Plain CDN URLs, so they survive persistence.
+   */
+  headerSources: string[];
   outputDir: string;
   status: DownloadTaskStatus;
   queuedAt: number;
@@ -53,6 +58,11 @@ function normalizeHistoryTask(value: unknown): DownloadTask | null {
     appId: item.appId,
     title: item.title,
     coverUrl: typeof item.coverUrl === "string" ? item.coverUrl : "",
+    headerSources: Array.isArray(item.headerSources)
+      ? item.headerSources.filter(
+          (source): source is string => typeof source === "string" && source.length > 0,
+        )
+      : [],
     outputDir: typeof item.outputDir === "string" ? item.outputDir : "",
     status: item.status,
     queuedAt: item.queuedAt,
@@ -219,6 +229,7 @@ export function enqueueDownload(game: GhostBoxGame, outputDir: string) {
       appId,
       title: game.title,
       coverUrl: game.coverUrl,
+      headerSources: gameSteamHeaderFirstSources(game),
       outputDir,
       status: "queued",
       queuedAt: Date.now(),

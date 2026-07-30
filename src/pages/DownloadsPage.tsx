@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
+import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import {
   clearFinishedDownloadTasks,
   downloadTasksChangedEvent,
@@ -10,6 +11,9 @@ import {
   type DownloadTask,
 } from "../lib/downloadManager";
 import { formatBytes, formatSpeed } from "../utils/formatBytes";
+import { layeredImageStyle } from "../utils/image";
+
+const emptyImageSources: string[] = [];
 
 const depotStatusKeys: Record<string, string> = {
   starting: "downloads.status.starting",
@@ -66,74 +70,107 @@ function DownloadCard({
   const depotStatusKey = task.depotStatus ? depotStatusKeys[task.depotStatus] : undefined;
   const canRemove = task.status !== "downloading";
 
+  const coverSources = useCachedImageSources(task.headerSources);
+  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(
+    coverSources,
+    { appId: task.appId, kind: "header" },
+  );
+
+  const depotCaption = [
+    task.depotTotal > 0
+      ? t("downloads.depotOf", { index: task.depotIndex, total: task.depotTotal })
+      : "",
+    depotStatusKey ? t(depotStatusKey) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <article className={`download-card download-card--${task.status}`}>
-      <div className="download-card__header">
-        {task.coverUrl ? (
-          <img className="download-card__cover" src={task.coverUrl} alt="" />
-        ) : (
-          <span
-            className="download-card__cover download-card__cover--empty"
-            aria-hidden="true"
-          />
-        )}
-        <div className="download-card__title-group">
+    <article
+      className={`download-card download-card--${task.status}${
+        task.status === "downloading" ? " download-card--with-progress" : ""
+      }`}
+    >
+      <span className="download-card__cover-slot" aria-hidden="true">
+        <span
+          className={`download-card__cover${
+            headerLoaded && headerSource
+              ? " download-card__cover--loaded"
+              : " download-card__cover--loading"
+          }`}
+          style={layeredImageStyle(
+            headerLoaded && headerSource ? [headerSource] : emptyImageSources,
+            "",
+          )}
+        />
+      </span>
+
+      <span className="download-card__main">
+        <span className="download-card__meta">
           <strong>{task.title}</strong>
-          <span className="download-card__status-pill">{statusLabel}</span>
-        </div>
-        {canRemove && (
+          {task.status === "error" ? (
+            <span className="download-card__error">
+              {task.errorMessage ?? t("downloads.genericError")}
+            </span>
+          ) : null}
+        </span>
+
+        <span className="download-card__side">
+          <span className="download-card__status">{statusLabel}</span>
+          {task.status === "downloading" ? (
+            <span className="download-card__speed">
+              {formatSpeed(task.speedBytesPerSecond)}
+            </span>
+          ) : null}
+          {task.status === "completed" ? (
+            <span className="download-card__speed">
+              {t("downloads.totalDownloaded", {
+                size: formatBytes(task.totalBytesDownloaded ?? 0),
+              })}
+              {task.failedFiles
+                ? ` · ${t("downloads.failedFiles", { count: task.failedFiles })}`
+                : ""}
+            </span>
+          ) : null}
+        </span>
+
+        {canRemove ? (
           <button
             type="button"
             className="download-card__remove"
             onClick={() => onRemove(task.id)}
             aria-label={t("downloads.remove")}
           >
-            <X size={16} strokeWidth={2} />
+            <X size={15} strokeWidth={2} />
           </button>
-        )}
-      </div>
+        ) : null}
+      </span>
 
-      {task.status === "downloading" && (
-        <>
-          <div className="download-card__progress-track">
-            <div
-              className="download-card__progress-fill"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="download-card__meta">
-            <span>
+      {task.status === "downloading" ? (
+        <div className="download-card__progress-row">
+          <span className="download-card__progress">
+            <span className="download-card__progress-count">
               {formatBytes(task.bytesDownloaded)} /{" "}
               {task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}
             </span>
-            <span>{formatSpeed(task.speedBytesPerSecond)}</span>
-            <span>{t("downloads.remaining", { size: formatBytes(remaining) })}</span>
-          </div>
-          <small className="download-card__depot-caption">
-            {task.depotTotal > 0
-              ? t("downloads.depotOf", { index: task.depotIndex, total: task.depotTotal })
-              : ""}
-            {depotStatusKey ? ` · ${t(depotStatusKey)}` : ""}
-          </small>
-        </>
-      )}
-
-      {task.status === "completed" && (
-        <div className="download-card__meta">
-          <span>
-            {t("downloads.totalDownloaded", {
-              size: formatBytes(task.totalBytesDownloaded ?? 0),
-            })}
+            <span
+              className="download-card__progress-track"
+              role="progressbar"
+              aria-valuenow={progressPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span style={{ width: `${progressPercent}%` }} />
+            </span>
+            <span className="download-card__progress-count">
+              {t("downloads.remaining", { size: formatBytes(remaining) })}
+            </span>
           </span>
-          {task.failedFiles ? (
-            <span>{t("downloads.failedFiles", { count: task.failedFiles })}</span>
+          {depotCaption ? (
+            <small className="download-card__depot-caption">{depotCaption}</small>
           ) : null}
         </div>
-      )}
-
-      {task.status === "error" && (
-        <p className="download-card__error">{task.errorMessage ?? t("downloads.genericError")}</p>
-      )}
+      ) : null}
     </article>
   );
 }
@@ -160,9 +197,9 @@ export function DownloadsPage() {
 
   return (
     <section className="downloads-page content-section content-section--full">
-      <header className="downloads-page__header">
+      <header className="downloads-page__header content-section__header">
         <div>
-          <h2>{t("downloads.title")}</h2>
+          <h3>{t("downloads.title")}</h3>
           <p>{t("downloads.description")}</p>
         </div>
         <button
