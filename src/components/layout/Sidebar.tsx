@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+  Download,
   Folder,
   Heart,
   Home,
@@ -22,6 +23,7 @@ import { useSettings } from "../../context/settings";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
 import { Grid } from "reicon-react";
 
 type SidebarNavIcon = LucideIcon | typeof Grid;
@@ -30,6 +32,7 @@ const navigation: { id: Page; icon: SidebarNavIcon; labelKey: string }[] = [
   { id: "home", labelKey: "nav.home", icon: Home },
   { id: "catalogue", labelKey: "nav.catalogue", icon: Grid },
   { id: "library", labelKey: "nav.library", icon: Layers },
+  { id: "downloads", labelKey: "nav.downloads", icon: Download },
 ];
 
 const sidebarFooterNavigation: { id: Page; icon: LucideIcon; labelKey: string }[] = [
@@ -137,6 +140,14 @@ export const Sidebar = memo(function Sidebar({
   const [, setShowRenameCollectionModal] = useState(false);
   const [, setCollectionName] = useState("");
   const { t } = useSettings();
+  const [activeDownloadCount, setActiveDownloadCount] = useState(() => getActiveDownloadCount());
+
+  useEffect(() => {
+    const refresh = () => setActiveDownloadCount(getActiveDownloadCount());
+    refresh();
+    window.addEventListener(downloadTasksChangedEvent, refresh);
+    return () => window.removeEventListener(downloadTasksChangedEvent, refresh);
+  }, []);
 
   const collectionGameContextMenuItems = useCollectionContextMenu({
     game: collectionGameContextMenu.game,
@@ -267,6 +278,9 @@ export const Sidebar = memo(function Sidebar({
                   >
                     <Icon size={19} strokeWidth={2} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
+                    {id === "downloads" && activeDownloadCount > 0 && (
+                      <strong>{activeDownloadCount > 99 ? "99+" : activeDownloadCount}</strong>
+                    )}
                   </button>
                 </li>
               ))}
