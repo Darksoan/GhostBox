@@ -266,6 +266,9 @@ const translations: Record<Language, TranslationTree> = {
         download: {
           label: "APIs",
         },
+        downloads: {
+          label: "Downloads",
+        },
       },
       general: {
         language: {
@@ -345,6 +348,14 @@ const translations: Record<Language, TranslationTree> = {
         inAppErrorToasts: {
           label: "Toasts de erro",
           description: "Permite avisos de falha, validação ou atenção.",
+        },
+      },
+      downloads: {
+        downloadsDir: {
+          label: "Pasta de downloads",
+          description:
+            "Diretório onde os jogos baixados serão salvos.",
+          default: "Nenhuma pasta selecionada",
         },
       },
       download: {
@@ -634,6 +645,9 @@ const translations: Record<Language, TranslationTree> = {
         download: {
           label: "APIs",
         },
+        downloads: {
+          label: "Downloads",
+        },
       },
       general: {
         language: {
@@ -711,6 +725,14 @@ const translations: Record<Language, TranslationTree> = {
         inAppErrorToasts: {
           label: "Error toasts",
           description: "Allows failure, validation, or attention alerts.",
+        },
+      },
+      downloads: {
+        downloadsDir: {
+          label: "Downloads folder",
+          description:
+            "Directory where downloaded games will be saved.",
+          default: "No folder selected",
         },
       },
       download: {

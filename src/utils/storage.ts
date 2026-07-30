@@ -24,6 +24,7 @@ import {
   overviewSortStorageKey,
   notificationsLastSeenStorageKey,
   autoRestoredCloudSavesStorageKey,
+  downloadsDirStorageKey,
 } from "../constants/catalogue";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
@@ -803,6 +804,26 @@ export function writeStoredLibrarySortBy(sortBy: LibrarySortBy) {
     window.localStorage.setItem(librarySortStorageKey, sortBy);
   } catch {
     // The setting still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredDownloadsDir(): string {
+  if (typeof window === "undefined") return "";
+
+  try {
+    return window.localStorage.getItem(downloadsDirStorageKey)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function writeStoredDownloadsDir(directory: string) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(downloadsDirStorageKey, directory);
+  } catch {
+    // The chosen folder still applies for the rest of the session.
   }
 }
 

@@ -1406,6 +1406,7 @@ pub fn run() {
             luatools_bootstrap::luatools_dependencies_status,
             luatools_bootstrap::luatools_dependencies_ensure,
             cdndownload::cdndownload_download_game,
+            cdndownload::cdndownload_default_dir,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
             window_lifecycle::tray_set_library_games,

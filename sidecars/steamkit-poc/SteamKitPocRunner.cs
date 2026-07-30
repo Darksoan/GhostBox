@@ -576,13 +576,16 @@ public class SteamKitPocRunner
                 continue;
             }
 
-            var fileDir = Path.GetDirectoryName(fileFinalPath);
-            if (!string.IsNullOrEmpty(fileDir))
-                Directory.CreateDirectory(fileDir);
-
             var fileSuccess = true;
             try
             {
+                // Dentro do try: um destino sem permissão de escrita (ex.: Program Files
+                // sem elevação) derrubava o processo inteiro antes de emitir "complete",
+                // e o chamador não tinha como saber que o download falhou.
+                var fileDir = Path.GetDirectoryName(fileFinalPath);
+                if (!string.IsNullOrEmpty(fileDir))
+                    Directory.CreateDirectory(fileDir);
+
                 await using (var fileStream = File.Create(fileFinalPath))
                 {
                     foreach (var chunk in file.Chunks)
@@ -694,6 +697,21 @@ public class SteamKitPocRunner
                     try { File.Delete(fileFinalPath); } catch { }
                 }
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Sem permissão no destino: nenhum outro arquivo vai gravar também.
+                // Aborta já em vez de repetir a mesma falha 45 mil vezes.
+                EmitProgress(new ProgressEvent
+                {
+                    Type = "error",
+                    Status = "output-dir-not-writable",
+                    Message = $"{ex.Message} (escolha outra pasta de downloads nos Ajustes)",
+                    FileIndex = fileIdx,
+                    FileName = file.FileName,
+                    OutputDir = _config.OutputDir
+                });
+                return;
+            }
             catch (Exception ex)
             {
                 failedFiles++;
@@ -743,9 +761,14 @@ public class SteamKitPocRunner
         });
     }
 
+    /// Canal dos eventos JSON. Em modo download o `Program` aponta isto pro stdout
+    /// real e manda o resto do `Console.Out` pro stderr, para o stream ficar limpo.
+    public static TextWriter EventOut { get; set; } = Console.Out;
+
     private static void EmitProgress(ProgressEvent ev)
     {
-        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(ev, ProgressJsonContext.Default.ProgressEvent));
+        EventOut.WriteLine(System.Text.Json.JsonSerializer.Serialize(ev, ProgressJsonContext.Default.ProgressEvent));
+        EventOut.Flush();
     }
 
     private static byte[] ComputeAdler32(byte[] data, int length)

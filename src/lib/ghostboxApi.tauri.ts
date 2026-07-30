@@ -742,6 +742,20 @@ export const ghostboxApi = {
     );
   },
 
+  getDefaultDownloadsDir(): Promise<string> {
+    return invokeOr<string>("cdndownload_default_dir", {}, "");
+  },
+
+  async selectDownloadsDir(): Promise<string | null> {
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Selecione a pasta de downloads",
+    });
+
+    return typeof selectedPath === "string" ? selectedPath : null;
+  },
+
   removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",

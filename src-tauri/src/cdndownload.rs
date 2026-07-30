@@ -100,6 +100,21 @@ fn resolve_depots(steam_path: &str, app_id: &str) -> Vec<(u32, u64)> {
     depots
 }
 
+/// Pasta padrão de downloads: sempre gravável, ao contrário de um caminho derivado
+/// da instalação da Steam (que em instalação padrão fica dentro de Program Files).
+#[tauri::command]
+pub fn cdndownload_default_dir(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("downloads");
+
+    Ok(directory.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub async fn cdndownload_download_game(
     app: tauri::AppHandle,
@@ -203,15 +218,25 @@ pub async fn cdndownload_download_game(
             .wait()
             .map_err(|e| format!("Process wait error for depot {depot_id}: {e}"))?;
 
+        // Sem linha `complete`/`error` o processo morreu antes de reportar. Antes isso
+        // virava um `"Type": "complete"` sintético e a UI mostrava o download como
+        // concluído com 0 byte; agora o código de saída decide o tipo.
         let depot_result = reader_handle
             .join()
             .map_err(|_| "Reader thread panic".to_string())?
-            .unwrap_or(serde_json::json!({
-                "Type": "complete",
-                "DepotId": depot_id,
-                "success": status.success(),
-                "exitCode": status.code(),
-            }));
+            .unwrap_or_else(|| {
+                serde_json::json!({
+                    "Type": if status.success() { "complete" } else { "error" },
+                    "Status": "sidecar-exited-without-result",
+                    "Message": format!(
+                        "steamkit-poc encerrou sem reportar resultado do depot {depot_id} (exit {:?}).",
+                        status.code()
+                    ),
+                    "DepotId": depot_id,
+                    "success": status.success(),
+                    "exitCode": status.code(),
+                })
+            });
 
         all_results.push(depot_result);
     }

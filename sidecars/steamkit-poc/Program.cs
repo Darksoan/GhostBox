@@ -6,6 +6,16 @@ Console.SetError(new RedactionWriter(Console.Error));
 var config = ParseArgs(args);
 if (config == null) return 1;
 
+if (config.Download)
+{
+    // Em modo download o stdout é um canal JSON-por-linha lido pelo app. Qualquer
+    // `Console.Write` solto (SteamKit, "Connecting to Steam3...") grudava na linha
+    // JSON seguinte e o parser descartava o evento. Manda tudo pro stderr e deixa
+    // só os eventos, escritos por `SteamKitPocRunner.EventOut`, no stdout.
+    SteamKitPocRunner.EventOut = Console.Out;
+    Console.SetOut(Console.Error);
+}
+
 var poc = new SteamKitPocRunner(config);
 await poc.RunAsync();
 

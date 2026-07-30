@@ -3,6 +3,7 @@ import {
   Check,
   Bell,
   Crown,
+  Download,
   ExternalLink,
   FolderCog,
   Code2,
@@ -17,6 +18,10 @@ import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import {
+  readStoredDownloadsDir,
+  writeStoredDownloadsDir,
+} from "../utils/storage";
 
 export type { SettingsTabId } from "../features/settings/settingsTabsShared";
 export { settingsTabLabelKeys } from "../features/settings/settingsTabsShared";
@@ -221,6 +226,17 @@ export const settingsTabs: SettingsTab[] = [
     icon: Code2,
     options: [],
   },
+  {
+    id: "downloads",
+    icon: Download,
+    options: [
+      {
+        labelKey: "settings.downloads.downloadsDir.label",
+        descriptionKey: "settings.downloads.downloadsDir.description",
+        control: "input",
+      },
+    ],
+  },
 ];
 
 interface SettingsPageProps {
@@ -259,6 +275,7 @@ export function SettingsPage({
   const [drafts, setDrafts] = useState<DraftsState>(() =>
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
   );
+  const [downloadsDir, setDownloadsDir] = useState(() => readStoredDownloadsDir());
   const [morrenusStats, setMorrenusStats] = useState<MorrenusStatsState>({ status: "idle" });
 
   useEffect(() => {
@@ -269,6 +286,13 @@ export function SettingsPage({
   useEffect(() => {
     writeDrafts(drafts);
   }, [drafts]);
+
+  const handleSelectDownloadsDir = useCallback(async () => {
+    const picked = await ghostboxApi.selectDownloadsDir();
+    if (!picked) return;
+    writeStoredDownloadsDir(picked);
+    setDownloadsDir(picked);
+  }, []);
 
   useEffect(() => {
     const general = drafts.general ?? {};
@@ -356,7 +380,7 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, () => {
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, downloadsDir, handleSelectDownloadsDir, morrenusApiKey, onMorrenusApiKeyChange, () => {
         onMorrenusApiKeySave();
         void refreshMorrenusStats();
       }),
@@ -365,6 +389,8 @@ export function SettingsPage({
       appearance,
       backupSettings,
       drafts,
+      downloadsDir,
+      handleSelectDownloadsDir,
       morrenusApiKey,
       notifications,
       onMorrenusApiKeyChange,
@@ -449,6 +475,8 @@ function buildTabOptions(
   t: (key: string, params?: Record<string, string | number>) => string,
   steamPath: string,
   onSelectSteamPath: () => void,
+  downloadsDir: string,
+  onSelectDownloadsDir: () => void,
   morrenusApiKey: string,
   onMorrenusApiKeyChange: (value: string) => void,
   onMorrenusApiKeyCheck: () => void
@@ -610,6 +638,18 @@ function buildTabOptions(
         confirmAriaLabel: t("settings.download.morrenusApiKey.saveKey"),
         onClick: onMorrenusApiKeyCheck,
         onChange: (value: string) => onMorrenusApiKeyChange(value),
+      },
+    ];
+  }
+
+  if (activeTab.id === "downloads") {
+    return [
+      {
+        label: t("settings.downloads.downloadsDir.label"),
+        description: t("settings.downloads.downloadsDir.description"),
+        control: "input" as const,
+        value: downloadsDir || t("settings.downloads.downloadsDir.default"),
+        onClick: onSelectDownloadsDir,
       },
     ];
   }
