@@ -3,6 +3,7 @@ import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import type { GhostBoxGame } from "../../data";
+import { ghostboxApi } from "../../lib/ghostboxApi";
 import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
@@ -185,6 +186,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             }
             isAdded={appData.availableLibraryGameAppIds.has(selectedAppId)}
             isInstalled={appData.addedLibraryGameAppIds.has(selectedAppId)}
+            isDownloaded={mergedGame.librarySource === "steam-installed"}
             isRemoving={
               appData.removingGameId === selectedGame.id ||
               appData.removingGameId === mergedGame.id
@@ -204,6 +206,12 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             onAddGameToCollection={appData.addGameToUserCollection}
             onRemoveGameFromCollection={appData.removeGameFromCollection}
             onPlayGame={appData.handlePlayGame}
+            onDownloadGame={() => {
+              const appId = getGameAppId(mergedGame);
+              const steamPath = appData.steamPathInput || "C:\\Program Files (x86)\\Steam";
+              const outputDir = `${steamPath}\\..\\GhostBoxDownloads\\${appId}`;
+              ghostboxApi.downloadDepotGame(appId, outputDir).catch(console.error);
+            }}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })
             }

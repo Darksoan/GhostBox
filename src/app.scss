@@ -1819,7 +1819,7 @@ p {
       .header__tooltip {
         opacity: 1;
         visibility: visible;
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(-50%) translateY(0) scale(1);
       }
     }
 
@@ -1930,7 +1930,7 @@ p {
       .header__tooltip {
         opacity: 1;
         visibility: visible;
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(-50%) translateY(0) scale(1);
       }
     }
 
@@ -2195,7 +2195,7 @@ p {
       .header__tooltip {
         opacity: 1;
         visibility: visible;
-        transform: translateX(-50%) translateY(0);
+        transform: translateX(-50%) translateY(0) scale(1);
       }
     }
 
@@ -2238,20 +2238,24 @@ p {
     }
   }
 
-  /* Match modal__achievement-tooltip: full border + diamond caret */
+  /* Borderless elevated popover with diamond caret */
   &__tooltip {
     position: absolute;
     top: calc(100% + 12px);
     left: 50%;
     z-index: var(--z-modal);
-    transform: translateX(-50%) translateY(-4px);
+    transform: translateX(-50%) translateY(-4px) scale(0.96);
+    transform-origin: top center;
     padding: var(--space-3) var(--space-5);
-    border: 1px solid var(--border);
+    border: none;
     border-radius: var(--radius-lg);
-    background: var(--background-dark);
+    background: var(--surface-option);
+    box-shadow: var(--shadow-3);
     color: var(--text-secondary);
     font-size: var(--fs-100);
     font-weight: var(--weight-semibold);
+    /* Explicit: icon buttons set line-height 0, which collapsed the box */
+    line-height: 1;
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
@@ -2261,17 +2265,16 @@ p {
       visibility var(--motion-fast) var(--ease),
       transform var(--motion-fast) var(--ease);
 
-    /* Caret with continuous border (same technique as achievement tooltips) */
+    /* Diamond caret, behind body so seam stays invisible */
     &::after {
       content: "";
       position: absolute;
       left: 50%;
       bottom: 100%;
+      z-index: -1;
       width: 10px;
       height: 10px;
-      border-top: 1px solid var(--border);
-      border-left: 1px solid var(--border);
-      background: var(--background-dark);
+      background: var(--surface-option);
       transform: translate(-50%, 5px) rotate(45deg);
     }
   }
@@ -6133,6 +6136,8 @@ p {
     gap: var(--space-4);
     margin: 0;
     padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
     list-style: none;
 
     li {
@@ -13035,130 +13040,10 @@ html.no-backdrop-blur {
     }
   }
 
-  &__add-button {
-    min-width: 0;
-    width: fit-content;
-    min-height: 34px;
-    height: 34px;
-    gap: var(--space-3);
-    padding: 0 var(--space-6);
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    border: 1px solid var(--border-subtle);
-    font-size: var(--fs-300);
-    font-weight: var(--weight-medium);
-
-    &:hover:not(:disabled) {
-      border-color: var(--border-strong);
-    }
-  }
-
-  &__favorite-button {
-    display: grid;
-    place-items: center;
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--overlay-medium);
-    color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
-    cursor: pointer;
-    transition:
-      background var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease),
-      transform var(--motion-fast) var(--ease);
-
-    svg {
-      width: 18px;
-      height: 18px;
-      flex: 0 0 18px;
-      transition: color var(--motion-base) var(--ease);
-    }
-
-    &:hover:not(:disabled) {
-      background: var(--overlay-strong);
-      color: var(--text-primary);
-
-      svg {
-        transform: none;
-      }
-    }
-
-    &--active {
-      color: var(--text-primary);
-      background: var(--overlay-medium);
-
-      svg {
-        fill: currentColor;
-      }
-    }
-  }
-
   &__play-button,
   &__add-button,
-  &__remove-button {
-    border-color: var(--border-ui);
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--surface-deep) 72%, transparent);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    transition: border-color var(--motion-fast) var(--ease);
-
-    svg {
-      transition: transform var(--motion-base) var(--ease);
-    }
-
-    &:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--surface-deep) 72%, transparent);
-
-      svg {
-        transform: none;
-      }
-    }
-  }
-
-  &__remove-button {
-    min-width: 0;
-    width: fit-content;
-    min-height: 34px;
-    height: 34px;
-    gap: var(--space-3);
-    padding: 0 var(--space-6);
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-ui);
-    font-size: var(--fs-300);
-
-    &:hover:not(:disabled) {
-    }
-  }
-
-  &__add-button {
-    min-width: 0;
-    width: fit-content;
-    min-height: 34px;
-    height: 34px;
-    gap: var(--space-3);
-    padding: 0 var(--space-6);
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-ui);
-    font-size: var(--fs-300);
-
-    &:hover:not(:disabled) {
-    }
-  }
-
-  &__play-button {
-    border-color: var(--border-ui);
+  &__remove-button,
+  &__download-button {
     min-width: 0;
     width: fit-content;
     min-height: 34px;
@@ -13170,20 +13055,6 @@ html.no-backdrop-blur {
     text-align: center;
     border-radius: var(--radius-sm);
     font-size: var(--fs-300);
-    transition:
-      background var(--motion-fast) ease,
-      border-color var(--motion-fast) ease,
-      color var(--motion-fast) ease;
-
-    &:hover:not(:disabled) {
-      background: rgba(4, 4, 4, 0.72);
-      color: var(--text-primary);
-    }
-  }
-
-  &__play-button,
-  &__add-button,
-  &__remove-button {
     line-height: 1;
     white-space: nowrap;
 
@@ -13194,16 +13065,26 @@ html.no-backdrop-blur {
     }
   }
 
-  &__action-label {
-    display: inline-flex;
-    align-items: center;
-    line-height: 1;
-    transform: translateY(0.5px);
+  &__favorite-button {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+  }
+
+  &__gear-button {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
   }
 
   &__play-button,
   &__add-button,
   &__remove-button,
+  &__download-button,
   &__favorite-button,
   &__gear-button {
     border: none;
@@ -13227,53 +13108,40 @@ html.no-backdrop-blur {
 
     &:hover:not(:disabled),
     &:focus-visible {
-      background: rgba(4, 4, 4, 0.72);
+      background: rgba(255, 255, 255, 0.12);
       color: var(--text-primary);
 
       svg {
         transform: none;
       }
     }
-
   }
 
+  /* Surface-option palette for the action row (play keeps its own look) */
+  &__add-button,
+  &__remove-button,
+  &__download-button,
+  &__favorite-button,
   &__gear-button {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border-radius: var(--radius-sm);
-  }
-
-  &__favorite-button {
-    display: grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border-radius: var(--radius-sm);
-    border: none;
-    background: rgba(4, 4, 4, 0.72);
-    color: var(--text-primary);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: var(--surface-option);
 
     &:hover:not(:disabled),
     &:focus-visible {
-      background: rgba(4, 4, 4, 0.72);
-      color: var(--text-primary);
+      background: var(--surface-option-hover);
     }
-  }
-
-  &__add-button:hover:not(:disabled) svg,
-  &__remove-button:hover:not(:disabled) svg {
-    transform: none;
   }
 
   &__favorite-button--active,
   &__gear-button--active {
     color: var(--text-primary);
-    border-color: var(--border-ui);
-    background: rgba(4, 4, 4, 0.72);
+    background: var(--surface-option);
+  }
+
+  &__action-label {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+    transform: translateY(0.5px);
   }
 
   &__adding-state {

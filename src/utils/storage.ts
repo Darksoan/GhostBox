@@ -23,6 +23,7 @@ import {
   librarySortStorageKey,
   overviewSortStorageKey,
   notificationsLastSeenStorageKey,
+  autoRestoredCloudSavesStorageKey,
 } from "../constants/catalogue";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
@@ -747,6 +748,38 @@ export function writeStoredStartupPage(page: StartupPage) {
     window.localStorage.setItem(startupPageStorageKey, page);
   } catch {
     // Startup page still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredAutoRestoredCloudSaves(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const parsed: unknown = JSON.parse(
+      window.localStorage.getItem(autoRestoredCloudSavesStorageKey) ?? "{}",
+    );
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+export function writeStoredAutoRestoredCloudSaves(value: Record<string, string>) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      autoRestoredCloudSavesStorageKey,
+      JSON.stringify(value),
+    );
+  } catch {
+    // Auto-restore still works during the session if localStorage is unavailable.
   }
 }
 

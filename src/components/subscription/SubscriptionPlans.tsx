@@ -367,13 +367,12 @@ export function SubscriptionPlans({
           : paymentStatus === "cancelled"
             ? "cancelled"
             : "pending";
-    const recentBackups = [...cloudBackupSummaries]
-      .sort((a, b) => {
-        const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
-        const dateB = b.lastBackupAt ? Date.parse(b.lastBackupAt) : 0;
-        return dateB - dateA;
-      })
-      .slice(0, 8);
+    // Full list: this panel is the only place backed-up games are listed.
+    const recentBackups = [...cloudBackupSummaries].sort((a, b) => {
+      const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
+      const dateB = b.lastBackupAt ? Date.parse(b.lastBackupAt) : 0;
+      return dateB - dateA;
+    });
 
     return (
       <section
@@ -454,7 +453,7 @@ export function SubscriptionPlans({
           <article className="subscription-account__panel">
             <h4>
               <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />
-              {copy("Últimos backups em nuvem", "Recent cloud backups")}
+              {copy("Jogos com backup em nuvem", "Games with cloud backup")}
             </h4>
             {recentBackups.length > 0 ? (
               <ul className="subscription-account__backup-list">

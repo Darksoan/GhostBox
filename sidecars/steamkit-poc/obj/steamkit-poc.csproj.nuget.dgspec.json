@@ -1,0 +1,158 @@
+{
+  "format": 1,
+  "restore": {
+    "E:\\GhostBox\\sidecars\\steamkit-poc\\steamkit-poc.csproj": {}
+  },
+  "projects": {
+    "E:\\GhostBox\\sidecars\\depotdownloader-mod\\DepotDownloader\\DepotDownloaderMod.csproj": {
+      "version": "3.4.0",
+      "restore": {
+        "projectUniqueName": "E:\\GhostBox\\sidecars\\depotdownloader-mod\\DepotDownloader\\DepotDownloaderMod.csproj",
+        "projectName": "DepotDownloaderMod",
+        "projectPath": "E:\\GhostBox\\sidecars\\depotdownloader-mod\\DepotDownloader\\DepotDownloaderMod.csproj",
+        "packagesPath": "C:\\Users\\demer\\.nuget\\packages\\",
+        "outputPath": "E:\\GhostBox\\sidecars\\depotdownloader-mod\\DepotDownloader\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\demer\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.Windows.CsWin32": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[0.3.183, )"
+            },
+            "QRCoder": {
+              "target": "Package",
+              "version": "[1.6.0, )"
+            },
+            "SteamKit2": {
+              "target": "Package",
+              "version": "[3.2.0, )"
+            },
+            "protobuf-net": {
+              "target": "Package",
+              "version": "[3.2.52, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "E:\\GhostBox\\sidecars\\steamkit-poc\\steamkit-poc.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "E:\\GhostBox\\sidecars\\steamkit-poc\\steamkit-poc.csproj",
+        "projectName": "steamkit-poc",
+        "projectPath": "E:\\GhostBox\\sidecars\\steamkit-poc\\steamkit-poc.csproj",
+        "packagesPath": "C:\\Users\\demer\\.nuget\\packages\\",
+        "outputPath": "E:\\GhostBox\\sidecars\\steamkit-poc\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\demer\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "E:\\GhostBox\\sidecars\\depotdownloader-mod\\DepotDownloader\\DepotDownloaderMod.csproj": {
+                "projectPath": "E:\\GhostBox\\sidecars\\depotdownloader-mod\\DepotDownloader\\DepotDownloaderMod.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "QRCoder": {
+              "target": "Package",
+              "version": "[1.8.0, )"
+            },
+            "protobuf-net": {
+              "target": "Package",
+              "version": "[3.2.56, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

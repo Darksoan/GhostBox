@@ -730,6 +730,18 @@ export const ghostboxApi = {
     );
   },
 
+  downloadDepotGame(
+    appId: string,
+    outputDir: string,
+    steamPath?: string,
+  ): Promise<Record<string, unknown>> {
+    return invokeOr<Record<string, unknown>>(
+      "cdndownload_download_game",
+      { appId, outputDir, steamPath },
+      { Type: "error", Message: "Não foi possível iniciar o download." },
+    );
+  },
+
   removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",

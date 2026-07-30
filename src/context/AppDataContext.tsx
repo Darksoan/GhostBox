@@ -27,7 +27,7 @@ import type {
 } from "../types";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { pushAppNotification } from "../lib/appNotifications";
-import type { GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
+import type { CloudSave, GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
 import {
   applyCloudProfileToLocal,
   buildCloudProfileSnapshot,
@@ -56,6 +56,8 @@ import {
   readStoredSteamProfile,
   readStoredStartupPage,
   readStoredCloudProfileUpdatedAt,
+  readStoredAutoRestoredCloudSaves,
+  writeStoredAutoRestoredCloudSaves,
   writeStoredFavoriteGames,
   writeStoredProfileHistoryGames,
   writeStoredUserCollections,
@@ -95,6 +97,11 @@ const initialLoadSteps: InitialLoadStep[] = [
 ];
 
 const initialLoadStepSet = new Set<InitialLoadStep>(initialLoadSteps);
+
+function cloudSaveTimestamp(save: CloudSave): number {
+  const parsed = Date.parse(save.updatedAt || save.createdAt || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 const defaultBackupSettings: BackupSettings = {
   outputPath: "",
@@ -359,6 +366,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const cloudProfileRestoreInFlightRef = useRef(false);
   const cloudProfileRestoreRetryTimerRef = useRef<number | null>(null);
   const appliedProfileBackupKeysRef = useRef<Map<string, string>>(new Map());
+  // appId -> cloud save id already auto-restored on this machine.
+  const autoRestoredCloudSaveIdsRef = useRef<Record<string, string>>(
+    readStoredAutoRestoredCloudSaves(),
+  );
+  const autoRestoreInFlightAppIdsRef = useRef<Set<string>>(new Set());
   const skipCloudProfileUploadCountRef = useRef(0);
   const cloudProfileLocalUpdatedAtRef = useRef<string | null>(
     readStoredCloudProfileUpdatedAt(),
@@ -1292,6 +1304,71 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [favoriteGameIds, showToast],
   );
 
+  // Cloud restore is fully automatic: re-adding or launching a game pulls the
+  // newest cloud save for that appId, once per save id per machine.
+  const autoRestoreCloudBackup = useCallback(
+    async (game: GhostBoxGame) => {
+      const appId = game.appId;
+      if (!appId) return;
+      if (autoRestoreInFlightAppIdsRef.current.has(appId)) return;
+
+      autoRestoreInFlightAppIdsRef.current.add(appId);
+      try {
+        if (!(await hasPremiumCloudProfileAccess())) return;
+
+        const saves = await ghostboxApi.listCloudSaves(appId);
+        const latestSave = saves.reduce<CloudSave | null>((latest, save) => {
+          if (!latest) return save;
+          return cloudSaveTimestamp(save) > cloudSaveTimestamp(latest)
+            ? save
+            : latest;
+        }, null);
+        if (!latestSave) return;
+        if (autoRestoredCloudSaveIdsRef.current[appId] === latestSave.id) return;
+
+        const result = await ghostboxApi.restoreCloudSave(game, latestSave.id);
+        if (!result?.success) return;
+
+        autoRestoredCloudSaveIdsRef.current = {
+          ...autoRestoredCloudSaveIdsRef.current,
+          [appId]: latestSave.id,
+        };
+        writeStoredAutoRestoredCloudSaves(autoRestoredCloudSaveIdsRef.current);
+
+        const title =
+          appearance.language === "en"
+            ? "Cloud backup restored"
+            : "Backup em nuvem restaurado";
+        const message =
+          appearance.language === "en"
+            ? `${game.title} was restored from the latest cloud backup.`
+            : `${game.title} foi restaurado a partir do backup em nuvem mais recente.`;
+
+        pushAppNotification({
+          id: `backup:auto-restore:${appId}:${latestSave.id}`,
+          type: "backup",
+          severity: "success",
+          title,
+          message,
+          createdAt: Date.now(),
+        });
+        if (notifications.backupSuccessEnabled) {
+          showToast(title, message, "success");
+        }
+      } catch {
+        // Auto-restore is best-effort: never block adding or launching a game.
+      } finally {
+        autoRestoreInFlightAppIdsRef.current.delete(appId);
+      }
+    },
+    [
+      appearance.language,
+      hasPremiumCloudProfileAccess,
+      notifications.backupSuccessEnabled,
+      showToast,
+    ],
+  );
+
   const queueGame = useCallback(
     async (game: GhostBoxGame) => {
       if (
@@ -1371,6 +1448,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             : `${libraryGame.title} foi adicionado à Biblioteca.`,
           createdAt: Date.now(),
         });
+
+        void autoRestoreCloudBackup(libraryGame);
       } catch (error) {
         const errorMessage = error instanceof Error
           ? error.message
@@ -1396,6 +1475,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [
       addingGameId,
       appearance.language,
+      autoRestoreCloudBackup,
       availableLibraryGameAppIds,
       mergeGamePlaytime,
       removingGameId,
@@ -1438,6 +1518,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           next.delete(result.appId);
           return next;
         });
+
+        // Removing wipes local saves, so the same cloud save must be restorable
+        // again when the game comes back.
+        if (autoRestoredCloudSaveIdsRef.current[result.appId]) {
+          const { [result.appId]: _removed, ...rest } =
+            autoRestoredCloudSaveIdsRef.current;
+          autoRestoredCloudSaveIdsRef.current = rest;
+          writeStoredAutoRestoredCloudSaves(rest);
+        }
 
         const historyGame = mergeGamePlaytime(game);
         setProfileHistoryGames((current) =>
@@ -1518,6 +1607,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (game: GhostBoxGame) => {
       setLaunchingGameId(game.id);
       try {
+        // Saves must be back in place before Steam opens the game.
+        await autoRestoreCloudBackup(game);
         const result = await ghostboxApi.launchGame(game);
         if (result && !result.success) {
           showToast(
@@ -1538,7 +1629,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setLaunchingGameId((current) => (current === game.id ? null : current));
       }
     },
-    [refreshGamePlaytimes, showToast],
+    [autoRestoreCloudBackup, refreshGamePlaytimes, showToast],
   );
 
   const addGameToUserCollection = useCallback(

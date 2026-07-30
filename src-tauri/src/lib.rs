@@ -30,6 +30,7 @@ impl ProfileProgressSnapshot {
 
 mod achievement_monitor;
 mod backup;
+mod cdndownload;
 mod catalogue;
 mod catalogue_cache;
 mod cloud_save;
@@ -1404,6 +1405,7 @@ pub fn run() {
             luatools::luatools_remove_game,
             luatools_bootstrap::luatools_dependencies_status,
             luatools_bootstrap::luatools_dependencies_ensure,
+            cdndownload::cdndownload_download_game,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
             window_lifecycle::tray_set_library_games,

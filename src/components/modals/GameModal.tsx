@@ -526,6 +526,7 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
 interface ModalActionsProps {
   isAdding: boolean;
   isInstalled: boolean;
+  isDownloaded: boolean;
   isAdded: boolean;
   isRemoving: boolean;
   isPlaying: boolean;
@@ -536,6 +537,7 @@ interface ModalActionsProps {
   game: GhostBoxGame;
   onPlay: (game: GhostBoxGame) => void;
   onRemove: (game: GhostBoxGame) => void;
+  onDownload: (game: GhostBoxGame) => void;
   onQueue: (game: GhostBoxGame) => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onOpenBackupOptions: () => void;
@@ -544,6 +546,7 @@ interface ModalActionsProps {
 const ModalActions = memo(function ModalActions({
   isAdding,
   isInstalled,
+  isDownloaded,
   isAdded,
   isRemoving,
   isPlaying,
@@ -554,13 +557,14 @@ const ModalActions = memo(function ModalActions({
   game,
   onPlay,
   onRemove,
+  onDownload,
   onQueue,
   onToggleFavorite,
   onOpenBackupOptions,
 }: ModalActionsProps) {
   return (
     <div className={`modal__actions ${isAdding ? "modal__actions--adding" : ""}`}>
-      {isInstalled && (
+      {isInstalled && isDownloaded && (
         <button
           type="button"
           className="button button--primary modal__play-button"
@@ -591,6 +595,18 @@ const ModalActions = memo(function ModalActions({
                 : language === "en"
                   ? "Play"
                   : "Jogar"}
+          </span>
+        </button>
+      )}
+      {isInstalled && !isDownloaded && (
+        <button
+          type="button"
+          className="button button--primary modal__download-button"
+          onClick={() => onDownload(game)}
+        >
+          <Download size={20} strokeWidth={2.0} />
+          <span className="button__label modal__action-label">
+            {language === "en" ? "Download" : "Baixar"}
           </span>
         </button>
       )}
@@ -716,6 +732,7 @@ interface GameModalProps {
   isAdding: boolean;
   isAdded: boolean;
   isInstalled: boolean;
+  isDownloaded: boolean;
   isRemoving: boolean;
   isPlaying: boolean;
   isSessionActive?: boolean;
@@ -725,6 +742,7 @@ interface GameModalProps {
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
+  onDownloadGame: (game: GhostBoxGame) => void | Promise<void>;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onAddGameToCollection: (
     game: GhostBoxGame,
@@ -744,6 +762,7 @@ export function GameModal({
   isAdding,
   isAdded,
   isInstalled,
+  isDownloaded = false,
   isRemoving,
   isPlaying,
   isSessionActive = false,
@@ -757,6 +776,7 @@ export function GameModal({
   onAddGameToCollection,
   onRemoveGameFromCollection,
   onPlayGame,
+  onDownloadGame,
   onDetailsLoaded,
   onViewAchievements,
 }: GameModalProps) {
@@ -1419,6 +1439,7 @@ export function GameModal({
                 <ModalActions
                   isAdding={isAdding}
                   isInstalled={isInstalled}
+                  isDownloaded={isDownloaded}
                   isAdded={isAdded}
                   isRemoving={isRemoving}
                   isPlaying={isPlaying}
@@ -1429,6 +1450,7 @@ export function GameModal({
                   game={displayGame}
                   onPlay={onPlayGame}
                   onRemove={onRemoveGame}
+                  onDownload={onDownloadGame}
                   onQueue={onQueueGame}
                   onToggleFavorite={onToggleFavorite}
                   onOpenBackupOptions={handleOpenBackupOptions}

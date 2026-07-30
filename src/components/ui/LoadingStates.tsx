@@ -199,12 +199,6 @@ export function PageSpinnerLoadingState({
   );
 }
 
-export function BackupListLoadingState({ count: _count = 5 }: { count?: number }) {
-  const { t } = useSettings();
-
-  return <PageSpinnerLoadingState label={t("backup.loading")} />;
-}
-
 export function AchievementsListLoadingState({ count = 8 }: { count?: number }) {
   return (
     <ul className="game-achievements-page__list" role="status" aria-hidden="true">
@@ -592,14 +586,6 @@ export function FavoritesPageLoadingState() {
   );
 }
 
-export function BackupPageLoadingState() {
-  return (
-    <section className="backup-page" aria-hidden="true">
-      <BackupListLoadingState count={4} />
-    </section>
-  );
-}
-
 export function NotificationsPageLoadingState() {
   return (
     <section className="notifications-page content-section content-section--full" aria-hidden="true">
@@ -618,8 +604,6 @@ export function PagePlaceholder({ page }: { page: Page | string }) {
       return <LibraryPageLoadingState />;
     case "favorites":
       return <FavoritesPageLoadingState />;
-    case "backup":
-      return <BackupPageLoadingState />;
     case "profile":
       return <ProfilePageLoadingState />;
     case "notifications":

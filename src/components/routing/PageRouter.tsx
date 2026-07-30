@@ -38,12 +38,6 @@ const LazyFavoritesPage = lazy(() =>
     return { default: m.FavoritesPage };
   }),
 );
-const LazyBackupPage = lazy(() =>
-  import("../../pages/BackupPage").then((m) => {
-    markPageLoaded("backup");
-    return { default: m.BackupPage };
-  }),
-);
 const LazySettingsPage = lazy(() =>
   import("../../pages/SettingsPage").then((m) => {
     markPageLoaded("settings");
@@ -69,7 +63,6 @@ const KEEP_ALIVE_PAGES: Page[] = [
   "home",
   "catalogue",
   "library",
-  "backup",
   "favorites",
   "settings",
   "profile",
@@ -80,7 +73,6 @@ const PREFETCH_DELAYS_MS: Record<Page, number> = {
   home: 1_800,
   catalogue: 1_800,
   library: 2_200,
-  backup: 3_200,
   favorites: 2_200,
   settings: 3_200,
   profile: 3_600,
@@ -91,7 +83,6 @@ const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
   home: () => import("../../pages/HomePage"),
   catalogue: () => import("../../pages/CataloguePage"),
   library: () => import("../../pages/LibraryPage"),
-  backup: () => import("../../pages/BackupPage"),
   favorites: () => import("../../pages/FavoritesPage"),
   settings: () => import("../../pages/SettingsPage"),
   profile: loadProfilePage,
@@ -320,17 +311,6 @@ export function PageRouter({
           onAddGameToCollection={appData.addGameToUserCollection}
           onRemoveGameFromCollection={appData.removeGameFromCollection}
           isActive={targetPage === page}
-        />
-      );
-    }
-
-    if (targetPage === "backup") {
-      return (
-        <LazyBackupPage
-          games={appData.addedLibraryGames.filter(
-            (game) => game.librarySource !== "steam-owned",
-          )}
-          backupSettings={appData.backupSettings}
         />
       );
     }
