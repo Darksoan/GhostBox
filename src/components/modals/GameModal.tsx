@@ -20,7 +20,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type {
   GhostBoxGame,
@@ -51,7 +50,6 @@ import {
 import { lazy, Suspense } from "react";
 import { useSettings } from "../../context/settings";
 import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
-import { useCollapsiblePanelHeight } from "../../hooks/useCollapsiblePanelHeight";
 
 const LazyGallerySlider = lazy(() =>
   import("../ui/GallerySlider").then((m) => ({ default: m.GallerySlider }))
@@ -71,8 +69,6 @@ const GameRequirementsSection = memo(function GameRequirementsSection({
   const minimum = requirements?.minimum ?? [];
   const recommended = requirements?.recommended ?? [];
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [requirementsPanelRef, requirementsPanelHeight] =
-    useCollapsiblePanelHeight();
   const [activeRequirement, setActiveRequirement] = useState<
     "minimum" | "recommended"
   >(minimum.length ? "minimum" : "recommended");
@@ -116,69 +112,67 @@ const GameRequirementsSection = memo(function GameRequirementsSection({
         />
       </button>
       <div
-        ref={requirementsPanelRef}
-        className="modal__requirements-panel modal__sidebar-section-content"
+        className="modal__sidebar-section-content"
         id={requirementsSectionPanelId}
         aria-hidden={isCollapsed}
         data-collapsed={isCollapsed ? "true" : "false"}
-        style={{
-          height: isCollapsed ? 0 : requirementsPanelHeight,
-        } as CSSProperties}
       >
-        <div
-          className="modal__requirements-tabs"
-          role="tablist"
-          aria-label={
-            appearance.language === "en"
-              ? "Requirement options"
-              : "Opções de requisitos"
-          }
-        >
-          <button
-            type="button"
-            className={`modal__requirements-tab ${activeRequirement === "minimum" ? "modal__requirements-tab--active" : ""}`}
-            onClick={() => setActiveRequirement("minimum")}
-            disabled={!minimum.length}
-            role="tab"
-            id={`${requirementsId}-minimum-tab`}
-            aria-selected={activeRequirement === "minimum"}
-            aria-controls={`${requirementsId}-panel`}
+        <div className="modal__sidebar-section-panel modal__requirements-panel">
+          <div
+            className="modal__requirements-tabs"
+            role="tablist"
+            aria-label={
+              appearance.language === "en"
+                ? "Requirement options"
+                : "Opções de requisitos"
+            }
           >
-            {appearance.language === "en" ? "Minimum" : "Mínimos"}
-          </button>
-          <button
-            type="button"
-            className={`modal__requirements-tab ${activeRequirement === "recommended" ? "modal__requirements-tab--active" : ""}`}
-            onClick={() => setActiveRequirement("recommended")}
-            disabled={!recommended.length}
-            role="tab"
-            id={`${requirementsId}-recommended-tab`}
-            aria-selected={activeRequirement === "recommended"}
-            aria-controls={`${requirementsId}-panel`}
-          >
-            {appearance.language === "en" ? "Recommended" : "Recomendados"}
-          </button>
-        </div>
+            <button
+              type="button"
+              className={`modal__requirements-tab ${activeRequirement === "minimum" ? "modal__requirements-tab--active" : ""}`}
+              onClick={() => setActiveRequirement("minimum")}
+              disabled={!minimum.length}
+              role="tab"
+              id={`${requirementsId}-minimum-tab`}
+              aria-selected={activeRequirement === "minimum"}
+              aria-controls={`${requirementsId}-panel`}
+            >
+              {appearance.language === "en" ? "Minimum" : "Mínimos"}
+            </button>
+            <button
+              type="button"
+              className={`modal__requirements-tab ${activeRequirement === "recommended" ? "modal__requirements-tab--active" : ""}`}
+              onClick={() => setActiveRequirement("recommended")}
+              disabled={!recommended.length}
+              role="tab"
+              id={`${requirementsId}-recommended-tab`}
+              aria-selected={activeRequirement === "recommended"}
+              aria-controls={`${requirementsId}-panel`}
+            >
+              {appearance.language === "en" ? "Recommended" : "Recomendados"}
+            </button>
+          </div>
 
-        <div
-          className="modal__requirements-content"
-          role="tabpanel"
-          id={`${requirementsId}-panel`}
-          aria-labelledby={`${requirementsId}-${activeRequirement}-tab`}
-        >
-          {activeItems.length ? (
-            <ul>
-              {activeItems.map((item) => (
-                <RequirementItem item={item} key={item} />
-              ))}
-            </ul>
-          ) : (
-            <p>
-              {appearance.language === "en"
-                ? "Not provided by Steam."
-                : "Não informado pela Steam."}
-            </p>
-          )}
+          <div
+            className="modal__requirements-content"
+            role="tabpanel"
+            id={`${requirementsId}-panel`}
+            aria-labelledby={`${requirementsId}-${activeRequirement}-tab`}
+          >
+            {activeItems.length ? (
+              <ul>
+                {activeItems.map((item) => (
+                  <RequirementItem item={item} key={item} />
+                ))}
+              </ul>
+            ) : (
+              <p>
+                {appearance.language === "en"
+                  ? "Not provided by Steam."
+                  : "Não informado pela Steam."}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </section>
@@ -221,9 +215,7 @@ function safeMediaSource(value: string) {
 // Steam ships untrusted HTML. Parse into an inert document (never the live one,
 // so nothing fetches or fires handlers mid-sanitize) and strip every attribute
 // we do not explicitly allow.
-function getSanitizedSteamAboutHtml(value?: string) {
-  if (!value || typeof window === "undefined") return "";
-
+function sanitizeSteamAboutHtml(value: string) {
   const document = new DOMParser().parseFromString(
     normalizeSteamHtml(value),
     "text/html"
@@ -233,35 +225,36 @@ function getSanitizedSteamAboutHtml(value?: string) {
   );
   blockedElements.forEach((element) => element.remove());
 
-  document.body.querySelectorAll("*").forEach((element) => {
-    [...element.attributes].forEach((attribute) => {
+  // TreeWalker instead of querySelectorAll("*"): no static NodeList of every
+  // element gets materialized just to be iterated once.
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_ELEMENT
+  );
+  for (
+    let element = walker.currentNode as Element | null;
+    element;
+    element = walker.nextNode() as Element | null
+  ) {
+    // Backwards over the live NamedNodeMap: removals do not shift indices we
+    // still have to visit, so no per-element array copy is needed.
+    const attributes = element.attributes;
+    for (let index = attributes.length - 1; index >= 0; index -= 1) {
+      const attribute = attributes[index];
       const name = attribute.name.toLowerCase();
-      const attributeValue = attribute.value;
 
-      if (name.startsWith("on")) {
+      if (name.startsWith("on") || name === "style") {
         element.removeAttribute(attribute.name);
-        return;
+        continue;
       }
 
-      if (name === "style") {
-        element.removeAttribute(attribute.name);
-        return;
-      }
-
-      if (name === "href") {
-        const href = safeMediaSource(attributeValue);
-        if (href) element.setAttribute(attribute.name, href);
-        else element.removeAttribute(attribute.name);
-        return;
-      }
-
-      if (name === "src" || name === "poster") {
-        const source = safeMediaSource(attributeValue);
+      if (name === "href" || name === "src" || name === "poster") {
+        const source = safeMediaSource(attribute.value);
         if (source) element.setAttribute(attribute.name, source);
         else element.removeAttribute(attribute.name);
       }
-    });
-  });
+    }
+  }
 
   document.body.querySelectorAll("a").forEach((anchor) => {
     anchor.setAttribute("target", "_blank");
@@ -278,15 +271,44 @@ function getSanitizedSteamAboutHtml(value?: string) {
 
   document.body.querySelectorAll("video").forEach((video) => {
     video.removeAttribute("controls");
-    video.autoplay = true;
+    video.removeAttribute("autoplay");
     video.loop = true;
     video.muted = true;
     video.playsInline = true;
+    // Nothing downloads until the video scrolls into view; GameModal flips this
+    // and starts playback from an IntersectionObserver.
+    video.preload = "none";
     video.removeAttribute("width");
     video.removeAttribute("height");
   });
 
   return document.body.innerHTML;
+}
+
+// Sanitizing a long Steam description costs a full HTML parse plus a walk over
+// every element. Reopening the same game should not pay it twice.
+// Keyed by the raw description, so a changed payload can never serve stale HTML.
+// Descriptions run to tens of KB, hence the low ceiling: this holds both the raw
+// key and the sanitized value for each entry.
+const sanitizedAboutHtmlCache = new Map<string, string>();
+const sanitizedAboutHtmlCacheLimit = 12;
+
+function getSanitizedSteamAboutHtml(value?: string) {
+  if (!value || typeof window === "undefined") return "";
+
+  const cached = sanitizedAboutHtmlCache.get(value);
+  if (cached !== undefined) return cached;
+
+  const html = sanitizeSteamAboutHtml(value);
+
+  // Insertion-ordered Map: the oldest key is the first one iterated.
+  if (sanitizedAboutHtmlCache.size >= sanitizedAboutHtmlCacheLimit) {
+    const oldestKey = sanitizedAboutHtmlCache.keys().next().value;
+    if (oldestKey !== undefined) sanitizedAboutHtmlCache.delete(oldestKey);
+  }
+  sanitizedAboutHtmlCache.set(value, html);
+
+  return html;
 }
 
 function formatAchievementPercent(
@@ -448,11 +470,13 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
           <span className="modal__details-loading-chevron loading-wave" />
         </div>
         <div className="modal__sidebar-section-content modal__details-loading-content">
+          <div className="modal__sidebar-section-panel modal__achievements-panel">
           <ul className="modal__achievements-grid">
             {Array.from({ length: 8 }, (_, index) => (
               <li className="modal__achievement-item modal__achievement-item--skeleton loading-wave" key={`achievement-loading-${index}`} />
             ))}
           </ul>
+          </div>
         </div>
       </section>
 
@@ -462,7 +486,8 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
           <strong className="modal__details-loading-title loading-wave" />
           <span className="modal__details-loading-chevron loading-wave" />
         </div>
-        <div className="modal__requirements-panel modal__sidebar-section-content modal__details-loading-content">
+        <div className="modal__sidebar-section-content modal__details-loading-content">
+          <div className="modal__sidebar-section-panel modal__requirements-panel">
           <div className="modal__requirements-tabs">
             <span className="modal__requirements-tab modal__requirements-tab--skeleton loading-wave" />
             <span className="modal__requirements-tab modal__requirements-tab--skeleton loading-wave" />
@@ -476,6 +501,7 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
               ))}
             </ul>
           </div>
+          </div>
         </div>
       </section>
 
@@ -485,10 +511,12 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
           <strong className="modal__details-loading-title loading-wave" />
           <span className="modal__details-loading-chevron loading-wave" />
         </div>
-        <div className="modal__chips modal__sidebar-section-content modal__details-loading-content">
-          {Array.from({ length: 6 }, (_, index) => (
-            <span className="modal__chip modal__chip--skeleton loading-wave" key={`chip-loading-${index}`} />
-          ))}
+        <div className="modal__sidebar-section-content modal__details-loading-content">
+          <div className="modal__sidebar-section-panel modal__chips">
+            {Array.from({ length: 6 }, (_, index) => (
+              <span className="modal__chip modal__chip--skeleton loading-wave" key={`chip-loading-${index}`} />
+            ))}
+          </div>
         </div>
       </section>
     </div>
@@ -753,15 +781,10 @@ export function GameModal({
     "idle" | "loading" | "ready" | "empty" | "unavailable"
   >("idle");
   const [isChipsCollapsed, setIsChipsCollapsed] = useState(false);
-  const [achievementsPanelRef, achievementsPanelHeight] =
-    useCollapsiblePanelHeight();
-  const [chipsPanelRef, chipsPanelHeight] = useCollapsiblePanelHeight();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const aboutContentShellRef = useRef<HTMLDivElement | null>(null);
+  const aboutContentRef = useRef<HTMLDivElement | null>(null);
   const aboutActionsRef = useRef<HTMLDivElement | null>(null);
-  const [aboutCollapsedMaxHeight, setAboutCollapsedMaxHeight] = useState<
-    number | null
-  >(null);
   const [isAboutOverflowing, setIsAboutOverflowing] = useState(false);
 
   useEffect(() => {
@@ -1178,6 +1201,41 @@ export function GameModal({
       cancelIdle();
     };
   }, [displayGame?.aboutTheGame]);
+
+  // Steam descriptions embed autoplaying clips. The sanitizer ships them with
+  // preload="none" and no autoplay, so only the ones actually on screen decode.
+  useEffect(() => {
+    const content = aboutContentRef.current;
+    if (!content || !aboutTheGameHtml) return;
+
+    const videos = content.querySelectorAll("video");
+    if (!videos.length) return;
+
+    const startPlayback = (video: HTMLVideoElement) => {
+      if (video.preload === "none") video.preload = "auto";
+      void video.play().catch(() => undefined);
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      videos.forEach(startPlayback);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const video = entry.target as HTMLVideoElement;
+          if (entry.isIntersecting) startPlayback(video);
+          else video.pause();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+    videos.forEach((video) => observer.observe(video));
+
+    return () => observer.disconnect();
+  }, [aboutTheGameHtml]);
+
   const hasRequirements = Boolean(
     displayGame?.pcRequirements?.minimum.length ||
     displayGame?.pcRequirements?.recommended.length
@@ -1188,9 +1246,16 @@ export function GameModal({
     !achievements.length &&
     !hasRequirements;
 
+  // A altura colapsada do "sobre" alinha com o fim da sidebar, que vive na outra
+  // coluna do grid — CSS não expressa isso, então medimos. Mas o resultado vai
+  // direto para uma custom property no elemento: escrever no DOM não re-renderiza
+  // o modal. Só `isAboutOverflowing` continua em state, porque decide se o botão
+  // "Ver mais" existe, e é booleano (React descarta o set quando não muda).
   useEffect(() => {
+    const shell = aboutContentShellRef.current;
+
     if (!aboutTheGameHtml || isAboutExpanded) {
-      setAboutCollapsedMaxHeight(null);
+      shell?.style.removeProperty("--about-collapsed-height");
       setIsAboutOverflowing(false);
       return;
     }
@@ -1200,47 +1265,53 @@ export function GameModal({
       window.cancelAnimationFrame(frameId);
       frameId = window.requestAnimationFrame(() => {
         const sidebar = sidebarRef.current;
-        const shell = aboutContentShellRef.current;
+        const currentShell = aboutContentShellRef.current;
         const actions = aboutActionsRef.current;
-        if (!sidebar || !shell) return;
+        if (!sidebar || !currentShell) return;
 
         const sidebarBottom = sidebar.getBoundingClientRect().bottom;
-        const shellTop = shell.getBoundingClientRect().top;
+        const shellTop = currentShell.getBoundingClientRect().top;
         const actionsHeight = actions?.getBoundingClientRect().height ?? 36;
         const nextHeight = Math.max(
           160,
           Math.floor(sidebarBottom - shellTop - actionsHeight - 10)
         );
-        const content = shell.firstElementChild;
+        const content = currentShell.firstElementChild;
         const contentHeight =
-          content instanceof HTMLElement ? content.scrollHeight : shell.scrollHeight;
-        const nextIsOverflowing = contentHeight > nextHeight + 1;
+          content instanceof HTMLElement
+            ? content.scrollHeight
+            : currentShell.scrollHeight;
 
-        setAboutCollapsedMaxHeight((current) =>
-          current !== null && Math.abs(current - nextHeight) <= 1
-            ? current
-            : nextHeight
+        currentShell.style.setProperty(
+          "--about-collapsed-height",
+          `${nextHeight}px`
         );
-        setIsAboutOverflowing(nextIsOverflowing);
+        setIsAboutOverflowing(contentHeight > nextHeight + 1);
       });
     };
 
     updateCollapsedHeight();
-    window.addEventListener("resize", updateCollapsedHeight);
 
+    // Uma única observação. As ações são deliberadamente não observadas: quando
+    // elas entram ou saem, o próprio shell muda de tamanho e o observer dispara.
     const observer =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(updateCollapsedHeight)
         : null;
     if (observer) {
       if (sidebarRef.current) observer.observe(sidebarRef.current);
-      if (aboutContentShellRef.current) observer.observe(aboutContentShellRef.current);
-      if (aboutActionsRef.current) observer.observe(aboutActionsRef.current);
+      if (shell) observer.observe(shell);
+    }
+
+    let handleResize: (() => void) | null = null;
+    if (!observer) {
+      handleResize = updateCollapsedHeight;
+      window.addEventListener("resize", handleResize);
     }
 
     return () => {
       window.cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", updateCollapsedHeight);
+      if (handleResize) window.removeEventListener("resize", handleResize);
       observer?.disconnect();
     };
   }, [aboutTheGameHtml, isAboutExpanded, displayGame?.id, shouldShowDetailLoading]);
@@ -1259,7 +1330,7 @@ export function GameModal({
       {displayGame && (
         <div
           className={`backdrop backdrop--details${appearance.reduceAllAnimations ? "" : " content-overlay-enter"}`}
-          key={displayGame.id}
+          key={game?.id ?? displayGame.id}
           onClick={onClose}
         >
           <article
@@ -1289,7 +1360,7 @@ export function GameModal({
                           <img
                             className={`modal__showcase-image ${item.displaySource === currentScreenshotSource && item.displaySource === visibleScreenshotSource ? "modal__showcase-image--visible" : ""}`}
                             src={item.displaySource}
-                            key={`${item.index}-${item.source}-${item.displaySource}`}
+                            key={`${item.index}-${item.source}`}
                             alt=""
                             aria-hidden="true"
                             decoding="async"
@@ -1390,16 +1461,9 @@ export function GameModal({
                     <div
                       ref={aboutContentShellRef}
                       className={`modal__about-content-shell ${isAboutExpanded ? "modal__about-content-shell--expanded" : ""} ${!isAboutExpanded && isAboutOverflowing ? "modal__about-content-shell--clamped" : ""}`}
-                      style={
-                        !isAboutExpanded && isAboutOverflowing && aboutCollapsedMaxHeight !== null
-                          ? {
-                              height: aboutCollapsedMaxHeight,
-                              maxHeight: aboutCollapsedMaxHeight,
-                            }
-                          : undefined
-                      }
                     >
                       <div
+                        ref={aboutContentRef}
                         className="modal__about-content"
                         dangerouslySetInnerHTML={{ __html: aboutTheGameHtml }}
                       />
@@ -1465,19 +1529,14 @@ export function GameModal({
                         </button>
 
                         <div
-                          ref={achievementsPanelRef}
                           className="modal__sidebar-section-content"
                           id={achievementsPanelId}
                           aria-hidden={isAchievementsCollapsed}
                           data-collapsed={
                             isAchievementsCollapsed ? "true" : "false"
                           }
-                          style={{
-                            height: isAchievementsCollapsed
-                              ? 0
-                              : achievementsPanelHeight,
-                          } as CSSProperties}
                         >
+                          <div className="modal__sidebar-section-panel modal__achievements-panel">
                           {achievements.length > 0 ? (
                             <div className="modal__achievements-locked-wrapper">
                               <ul
@@ -1529,6 +1588,7 @@ export function GameModal({
                               <ChevronDown size={16} />
                             </button>
                           )}
+                          </div>
                         </div>
                       </section>
                     )}
@@ -1566,20 +1626,18 @@ export function GameModal({
                           />
                         </button>
                         <div
-                          ref={chipsPanelRef}
-                          className="modal__chips modal__sidebar-section-content"
+                          className="modal__sidebar-section-content"
                           id={chipsPanelId}
                           aria-hidden={isChipsCollapsed}
                           data-collapsed={isChipsCollapsed ? "true" : "false"}
-                          style={{
-                            height: isChipsCollapsed ? 0 : chipsPanelHeight,
-                          } as CSSProperties}
                         >
-                          {visibleChips.map((chip) => (
-                            <span className="modal__chip" key={chip}>
-                              {chip}
-                            </span>
-                          ))}
+                          <div className="modal__sidebar-section-panel modal__chips">
+                            {visibleChips.map((chip) => (
+                              <span className="modal__chip" key={chip}>
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </section>
                     )}

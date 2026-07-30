@@ -38,7 +38,6 @@ import {
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useSettings } from "../context/settings";
-import { useCollapsiblePanelHeight } from "../hooks/useCollapsiblePanelHeight";
 import { preloadGameListAssets } from "../utils/image";
 import { useFlipLayout } from "../hooks/useFlipLayout";
 
@@ -152,7 +151,6 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
   const { appearance, t } = useSettings();
   const [isOpen, setIsOpen] = useState(() => selectedValues.length > 0);
   const contentId = useId();
-  const [contentInnerRef, contentHeight] = useCollapsiblePanelHeight();
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const normalizedSearchTerm = deferredSearchTerm.trim().toLowerCase();
@@ -207,9 +205,8 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
         id={contentId}
         aria-hidden={!isOpen}
         data-collapsed={isOpen ? "false" : "true"}
-        style={{ height: isOpen ? contentHeight : 0 } as CSSProperties}
       >
-        <div className="catalogue-filter-section__content-inner" ref={contentInnerRef}>
+        <div className="catalogue-filter-section__content-inner">
           {selectedValues.length > 0 && (
             <button
               type="button"

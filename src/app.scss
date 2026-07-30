@@ -7453,15 +7453,16 @@ p {
   }
 
   &__content {
+    display: grid;
+    grid-template-rows: 1fr;
     border-top: 0;
-    overflow: hidden;
     opacity: 1;
     transition:
-      height var(--motion-slow) var(--ease),
+      grid-template-rows var(--motion-slow) var(--ease),
       opacity var(--motion-fast) var(--ease);
-    will-change: height;
 
     &[data-collapsed="true"] {
+      grid-template-rows: 0fr;
       opacity: 0;
       pointer-events: none;
     }
@@ -7471,7 +7472,9 @@ p {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
+    min-height: 0;
     padding: 0 var(--space-6) var(--space-6);
+    overflow: hidden;
   }
 
   &__clear,
@@ -11358,6 +11361,7 @@ html.no-backdrop-blur {
     width: 100%;
     padding: 0;
     background: var(--background-dark);
+    contain: layout paint;
   }
 
   &__showcase-media {
@@ -11381,8 +11385,6 @@ html.no-backdrop-blur {
     background: rgba(0, 0, 0, 0.42);
     color: var(--text-primary);
     cursor: pointer;
-    backdrop-filter: blur(24px) saturate(1.05);
-    -webkit-backdrop-filter: blur(24px) saturate(1.05);
     transition:
       background var(--motion-fast) ease,
       border-color var(--motion-fast) ease,
@@ -11873,6 +11875,7 @@ html.no-backdrop-blur {
     height: fit-content;
     position: sticky;
     top: 0;
+    contain: layout paint;
 
     @media (max-width: 1024px) {
       grid-column: auto;
@@ -12092,22 +12095,33 @@ html.no-backdrop-blur {
       transform var(--motion-base) var(--ease);
   }
 
+  /* Colapso puramente em CSS: a linha do grid vai de 1fr a 0fr, então nada
+     precisa medir scrollHeight em JS para animar até a altura automática. */
   &__sidebar-section-content {
+    display: grid;
+    grid-template-rows: 1fr;
     min-width: 0;
     margin-top: 12px;
-    overflow: hidden;
     opacity: 1;
     transition:
-      height var(--motion-slow) var(--ease),
+      grid-template-rows var(--motion-slow) var(--ease),
       margin-top var(--motion-slow) var(--ease),
       opacity var(--motion-fast) var(--ease);
-    will-change: height;
 
     &[data-collapsed="true"] {
+      grid-template-rows: 0fr;
       margin-top: 0;
       opacity: 0;
       pointer-events: none;
     }
+  }
+
+  /* Filho único de __sidebar-section-content. min-height:0 é o que permite a
+     linha encolher abaixo do conteúdo; overflow recorta durante a animação. */
+  &__sidebar-section-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   &__review-summary-slot {
@@ -12362,7 +12376,11 @@ html.no-backdrop-blur {
     overflow: visible;
     max-height: none;
 
+    /* --about-collapsed-height é escrito no elemento pelo GameModal (alinha o
+       fim do texto com o fim da sidebar, que está na outra coluna do grid). */
     &--clamped {
+      height: var(--about-collapsed-height, auto);
+      max-height: var(--about-collapsed-height, none);
       overflow: hidden;
     }
 
@@ -12501,13 +12519,16 @@ html.no-backdrop-blur {
 
   &__achievements-section > &__sidebar-section-content {
     margin-top: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-7);
 
     &[data-collapsed="true"] {
       margin-top: 0;
     }
+  }
+
+  &__achievements-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-7);
   }
 
   &__achievements-heading {
@@ -13045,8 +13066,6 @@ html.no-backdrop-blur {
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     cursor: pointer;
-    backdrop-filter: blur(24px) saturate(1.05);
-    -webkit-backdrop-filter: blur(24px) saturate(1.05);
     transition:
       background var(--motion-fast) var(--ease),
       border-color var(--motion-fast) var(--ease),
