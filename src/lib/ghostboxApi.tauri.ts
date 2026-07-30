@@ -897,6 +897,27 @@ export const ghostboxApi = {
     };
   },
 
+  onDownloadProgress(
+    callback: (payload: Record<string, unknown>) => void,
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<Record<string, unknown>>("download-progress", (event) => {
+      callback(event.payload);
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
   saveSteamProfile(profile: SteamProfile): Promise<SteamProfile> {
     return invokeOr<SteamProfile>("steam_save_profile", { profile }, profile);
   },
