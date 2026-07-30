@@ -33,6 +33,7 @@ export const downloadTasksChangedEvent = "ghostbox:download-tasks-changed";
 let liveTasks: DownloadTask[] = [];
 let activeAppId: string | null = null;
 let engineStarted = false;
+let cachedHistoryTasks: DownloadTask[] | null = null;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -72,17 +73,25 @@ function normalizeHistoryTask(value: unknown): DownloadTask | null {
 }
 
 function readHistoryTasks(): DownloadTask[] {
+  if (cachedHistoryTasks !== null) return cachedHistoryTasks;
   if (typeof window === "undefined") return [];
 
   try {
     const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return [];
+    if (!raw) {
+      cachedHistoryTasks = [];
+      return cachedHistoryTasks;
+    }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
+    if (!Array.isArray(parsed)) {
+      cachedHistoryTasks = [];
+      return cachedHistoryTasks;
+    }
+    cachedHistoryTasks = parsed
       .map(normalizeHistoryTask)
       .filter((task): task is DownloadTask => task !== null)
       .slice(0, maxStoredHistory);
+    return cachedHistoryTasks;
   } catch {
     return [];
   }
@@ -93,6 +102,7 @@ function writeHistoryTasks(tasks: DownloadTask[]) {
 
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(tasks.slice(0, maxStoredHistory)));
+    cachedHistoryTasks = tasks.slice(0, maxStoredHistory);
   } catch {
     // History is best-effort only.
   }
@@ -104,7 +114,8 @@ function notifyChanged() {
 }
 
 export function readDownloadTasks(): DownloadTask[] {
-  return [...liveTasks, ...readHistoryTasks()];
+  const liveIds = new Set(liveTasks.map((task) => task.id));
+  return [...liveTasks, ...readHistoryTasks().filter((task) => !liveIds.has(task.id))];
 }
 
 export function getActiveDownloadCount(): number {
@@ -177,6 +188,10 @@ function finishActiveTask(result: Record<string, unknown>) {
     failedFiles += isFiniteNumber(depot.FailedFiles) ? depot.FailedFiles : 0;
   }
 
+  const failedDepotMessage = depots.find(
+    (depot) => depot.Type === "error" && typeof depot.Message === "string",
+  )?.Message as string | undefined;
+
   const finished: DownloadTask = {
     ...task,
     status: topLevelFailed || anyDepotFailed ? "error" : "completed",
@@ -184,7 +199,7 @@ function finishActiveTask(result: Record<string, unknown>) {
     totalBytesDownloaded,
     totalBytesAll,
     failedFiles,
-    errorMessage: typeof result.Message === "string" ? result.Message : undefined,
+    errorMessage: typeof result.Message === "string" ? result.Message : failedDepotMessage,
   };
 
   archiveTask(finished);
@@ -244,6 +259,8 @@ function eventAppId(payload: Record<string, unknown>): string {
 }
 
 function applyProgressEvent(payload: Record<string, unknown>) {
+  if (!payload || typeof payload !== "object") return;
+
   const appId = activeAppId;
   if (appId === null) return;
 
