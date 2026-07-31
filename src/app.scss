@@ -10778,17 +10778,32 @@ input[type="search"]::-ms-reveal {
     transition: color var(--motion-fast) var(--ease);
   }
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     background: var(--surface-secondary);
-  }
-
-  &--active {
-    background: var(--sidebar-selector);
     color: var(--text-primary);
 
     svg {
       color: var(--text-primary);
     }
+  }
+
+  &.library-chip--active,
+  &[aria-pressed="true"] {
+    background: var(--surface-option-hover);
+    color: var(--text-primary);
+
+    svg {
+      color: var(--text-primary);
+    }
+  }
+
+  &.library-chip--active:hover,
+  &.library-chip--active:focus-visible,
+  &[aria-pressed="true"]:hover,
+  &[aria-pressed="true"]:focus-visible {
+    background: var(--surface-option-hover);
+    color: var(--text-primary);
   }
 }
 

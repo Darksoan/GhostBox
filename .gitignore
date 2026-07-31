@@ -45,3 +45,4 @@ src-tauri/target/
 
 # Generated capability schemas
 src-tauri/gen/
+nul
