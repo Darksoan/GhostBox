@@ -20,12 +20,6 @@ export const profileBannerPlaceholderSource = new URL(
   import.meta.url
 ).href;
 
-const heroCapsuleSourceOverrides: Record<string, string[]> = {
-  "1449690": [
-    "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1449690/29c54f959792708565b8c5e200e636b93cd61cb4/hero_capsule.jpg?t=1760651835",
-  ],
-};
-
 type GameListPreloadOptions = {
   decode?: boolean;
   details?: boolean;
@@ -387,7 +381,6 @@ export function gameHeroCapsuleSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
   return uniqueSources([
-    ...(heroCapsuleSourceOverrides[appId] ?? []),
     `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,

@@ -17,6 +17,7 @@ import {
   isHeroImageSource,
   isLandscapeImageSource,
 } from "../utils/image";
+import { subscribeSteamAssetManifest } from "../utils/steamAssetManifest";
 
 export interface LoadableImageState {
   source: string;
@@ -87,6 +88,12 @@ export function useCachedImageSources(sources: string[]) {
       updateCachedSources();
     }
 
+    // O manifesto chega depois do primeiro paint; sem isso a URL com hash só
+    // entraria na lista no próximo render por outro motivo.
+    const unsubscribeManifest = subscribeSteamAssetManifest(() => {
+      if (!cancelled) updateCachedSources();
+    });
+
     const unresolvedSources = sources.filter(
       (source) =>
         !imageSourceCache.has(source) &&
@@ -94,19 +101,19 @@ export function useCachedImageSources(sources: string[]) {
         !isPredictableSteamAssetSource(source)
     );
 
-    if (!unresolvedSources.length) {
+    if (unresolvedSources.length) {
+      Promise.all(
+        unresolvedSources.map((source) => resolveCachedImageSource(source))
+      ).then(() => {
+        if (!cancelled) updateCachedSources();
+      });
+    } else {
       updateCachedSources();
-      return;
     }
-
-    Promise.all(
-      unresolvedSources.map((source) => resolveCachedImageSource(source))
-    ).then(() => {
-      if (!cancelled) updateCachedSources();
-    });
 
     return () => {
       cancelled = true;
+      unsubscribeManifest();
     };
   }, [currentKey]);
 

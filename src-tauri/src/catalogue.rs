@@ -1,6 +1,5 @@
 use crate::catalogue_cache;
 use crate::image_cache;
-use crate::util::{silent_steamcmd_output_many, with_steamcmd_lock};
 use crate::{FACETS_VERSION, RANKING_VERSION};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -19,7 +18,6 @@ const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.h
 const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
 const LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV: &str = "EDEN_STEAM_DETAILS_PROXY_URL";
 const LEGACY_STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
-const STEAMCMD_ICON_BATCH_SIZE: usize = 25;
 const GAME_ICON_URLS_RESOLVED_EVENT: &str = "game-icon-urls-resolved";
 const STEAM_APPINFO_ICON_SEARCH_WINDOW: usize = 65_536;
 const STEAMCMD_DOWNLOAD_URL: &str = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
@@ -1210,91 +1208,6 @@ fn cached_steam_icon_url(cache: &HashMap<String, String>, app_id: &str) -> Optio
     }
 }
 
-fn extract_client_icon_hash(value: &str) -> Option<String> {
-    let marker = "\"clienticon\"";
-    let marker_index = value.find(marker)?;
-    let after_marker = &value[marker_index + marker.len()..];
-    let value_start = after_marker.find('"')? + 1;
-    let after_quote = &after_marker[value_start..];
-    let value_end = after_quote.find('"')?;
-    let hash = after_quote[..value_end].trim();
-
-    if is_hex_icon_hash(hash) {
-        Some(hash.to_ascii_lowercase())
-    } else {
-        None
-    }
-}
-
-fn extract_client_icon_hashes(value: &str, app_ids: &[String]) -> HashMap<String, String> {
-    let mut app_positions = app_ids
-        .iter()
-        .filter_map(|app_id| {
-            value
-                .find(&format!("\"{app_id}\""))
-                .map(|index| (app_id, index))
-        })
-        .collect::<Vec<_>>();
-
-    app_positions.sort_by_key(|(_, index)| *index);
-
-    app_positions
-        .iter()
-        .enumerate()
-        .filter_map(|(position, (app_id, start))| {
-            let end = app_positions
-                .get(position + 1)
-                .map(|(_, index)| *index)
-                .unwrap_or(value.len());
-            extract_client_icon_hash(&value[*start..end])
-                .map(|hash| ((*app_id).clone(), steam_community_icon_url(app_id, &hash)))
-        })
-        .collect()
-}
-
-fn extract_community_icon_url_from_text(value: &str, app_id: &str) -> Option<String> {
-    if let Some(hash) = extract_client_icon_hash(value) {
-        return Some(steam_community_icon_url(app_id, &hash));
-    }
-
-    let needle = format!("steamcommunity/public/images/apps/{app_id}/");
-    let mut search_from = 0usize;
-    let mut fallback: Option<String> = None;
-
-    while let Some(relative) = value[search_from..].find(&needle) {
-        let start = search_from + relative + needle.len();
-        let rest = &value[start..];
-        let hash_end = rest
-            .find(|character: char| !character.is_ascii_hexdigit())
-            .unwrap_or(rest.len());
-        let hash = &rest[..hash_end];
-        if is_hex_icon_hash(hash) {
-            let after_hash = &rest[hash_end..];
-            if after_hash.starts_with(".ico") {
-                return Some(steam_community_image_url(app_id, &hash.to_ascii_lowercase(), "ico"));
-            }
-            if fallback.is_none() {
-                if after_hash.starts_with(".jpg") {
-                    fallback = Some(steam_community_image_url(
-                        app_id,
-                        &hash.to_ascii_lowercase(),
-                        "jpg",
-                    ));
-                } else if after_hash.starts_with(".png") {
-                    fallback = Some(steam_community_image_url(
-                        app_id,
-                        &hash.to_ascii_lowercase(),
-                        "png",
-                    ));
-                }
-            }
-        }
-        search_from = start + hash_end.max(1);
-    }
-
-    fallback
-}
-
 fn read_client_icon_from_vdf(bytes: &[u8], app_id: &str) -> Option<String> {
     let app_id = app_id.parse::<u32>().ok()?;
     let app_id_bytes = app_id.to_le_bytes();
@@ -1589,60 +1502,11 @@ async fn install_steamcmd(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(install_dir.join("steamcmd.exe"))
 }
 
-fn get_game_icons_from_steamcmd(
-    app: &tauri::AppHandle,
-    app_ids: &[String],
-) -> HashMap<String, String> {
-    let Some(steamcmd) = installed_steamcmd_path(app) else {
-        return HashMap::new();
-    };
-
-    let mut resolved = HashMap::new();
-    for chunk in app_ids.chunks(STEAMCMD_ICON_BATCH_SIZE) {
-        let app_id_refs = chunk.iter().map(String::as_str).collect::<Vec<_>>();
-        let Some(output) =
-            with_steamcmd_lock(|| silent_steamcmd_output_many(&steamcmd, &app_id_refs))
-        else {
-            continue;
-        };
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut chunk_resolved = extract_client_icon_hashes(&stdout, chunk);
-        for app_id in chunk {
-            if chunk_resolved.contains_key(app_id) {
-                continue;
-            }
-            if let Some(url) = extract_community_icon_url_from_text(&stdout, app_id) {
-                chunk_resolved.insert(app_id.clone(), url);
-            }
-        }
-        resolved.extend(chunk_resolved);
-        if !resolved.is_empty() {
-            let _ = app.emit(GAME_ICON_URLS_RESOLVED_EVENT, resolved.clone());
-        }
-    }
-
-    resolved
-}
-
-async fn get_game_icons_from_steamcmd_or_install(
-    app: &tauri::AppHandle,
-    app_ids: &[String],
-) -> HashMap<String, String> {
-    if app_ids.is_empty() {
-        return HashMap::new();
-    }
-    if installed_steamcmd_path(app).is_none() && install_steamcmd(app).await.is_err() {
-        return HashMap::new();
-    }
-    let app = app.clone();
-    let app_ids = app_ids.to_vec();
-    tauri::async_runtime::spawn_blocking(move || get_game_icons_from_steamcmd(&app, &app_ids))
-        .await
-        .unwrap_or_default()
-}
-
-async fn resolve_missing_game_icon_urls_with_steamcmd(
+/// Ícone via manifesto da `GetItems`. Sai da mesma chamada que resolve as capas,
+/// então não custa request extra quando o manifesto já foi buscado. É um JPG
+/// 32×32 sem alfa — pior que o `.ico` do `clienticon`, mas resolve sem exigir
+/// Steam instalado.
+async fn resolve_missing_game_icon_urls_from_manifest(
     app: &tauri::AppHandle,
     missing: &[String],
 ) -> HashMap<String, String> {
@@ -1650,7 +1514,6 @@ async fn resolve_missing_game_icon_urls_with_steamcmd(
         return HashMap::new();
     }
 
-    let mut resolved = HashMap::new();
     let pending = missing
         .iter()
         .filter(|app_id| !is_steam_icon_negative(app_id))
@@ -1658,18 +1521,23 @@ async fn resolve_missing_game_icon_urls_with_steamcmd(
         .collect::<Vec<_>>();
 
     if pending.is_empty() {
-        return resolved;
+        return HashMap::new();
     }
 
-    for (app_id, icon_url) in get_game_icons_from_steamcmd_or_install(app, &pending).await {
-        remember_steam_icon_url(&app_id, &icon_url);
-        resolved.insert(app_id, icon_url);
-    }
+    let mut resolved = crate::steam_assets::community_icon_urls(app, &pending).await;
+    resolved.retain(|app_id, icon_url| is_cached_icon_source(app_id, icon_url));
 
+    for (app_id, icon_url) in &resolved {
+        remember_steam_icon_url(app_id, icon_url);
+    }
     for app_id in pending {
         if !resolved.contains_key(&app_id) {
             mark_steam_icon_negative(&app_id);
         }
+    }
+
+    if !resolved.is_empty() {
+        let _ = app.emit(GAME_ICON_URLS_RESOLVED_EVENT, resolved.clone());
     }
 
     resolved
@@ -2014,7 +1882,7 @@ pub async fn steam_get_game_icon_urls(
         return resolved;
     }
 
-    let fetched = resolve_missing_game_icon_urls_with_steamcmd(&app, &still_missing).await;
+    let fetched = resolve_missing_game_icon_urls_from_manifest(&app, &still_missing).await;
     for (app_id, icon_url) in fetched {
         cache.insert(app_id.clone(), icon_url.clone());
         resolved.insert(app_id, icon_url);
@@ -2052,7 +1920,7 @@ pub async fn steam_resolve_game_icon_urls(
         })
         .collect::<Vec<_>>();
 
-    let fetched = resolve_missing_game_icon_urls_with_steamcmd(&app, &missing).await;
+    let fetched = resolve_missing_game_icon_urls_from_manifest(&app, &missing).await;
     let mut cache = read_steam_icon_url_cache(&app);
     for (app_id, icon_url) in fetched {
         cache.insert(app_id.clone(), icon_url.clone());
@@ -2098,8 +1966,8 @@ pub async fn cache_resolve_steam_library_asset(
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_community_icon_url_from_text, merge_cached_steam_store_details,
-        read_client_icon_from_vdf, steam_details_have_about, steam_reviews_response_is_usable,
+        is_cached_icon_source, merge_cached_steam_store_details, read_client_icon_from_vdf,
+        steam_details_have_about, steam_reviews_response_is_usable,
     };
 
     #[test]
@@ -2165,34 +2033,15 @@ mod tests {
     }
 
     #[test]
-    fn community_icon_extractor_prefers_ico_over_jpg() {
-        let app_id = "730";
-        let ico_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let jpg_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-        let html = format!(
-            r#"<img src="https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{jpg_hash}.jpg">
-               <img src="https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{ico_hash}.ico">"#
-        );
-
-        assert_eq!(
-            extract_community_icon_url_from_text(&html, app_id),
-            Some(format!(
-                "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{ico_hash}.ico"
-            ))
-        );
-    }
-
-    #[test]
-    fn community_icon_extractor_reads_clienticon_field() {
-        let app_id = "570";
-        let hash = "cccccccccccccccccccccccccccccccccccccccc";
-        let body = format!(r#"{{"clienticon":"{hash}","name":"Dota 2"}}"#);
-
-        assert_eq!(
-            extract_community_icon_url_from_text(&body, app_id),
-            Some(format!(
-                "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{hash}.ico"
-            ))
-        );
+    fn community_icon_hash_only_resolves_as_jpg() {
+        // O hash de `community_icon` (GetItems) e o de `clienticon` (appinfo.vdf)
+        // são namespaces diferentes: o primeiro só existe como .jpg, o segundo
+        // só como .ico. Trocar a extensão dá 404 no CDN.
+        let hash = "4cc8c99722309845b2c4775902ace66f468303ec";
+        assert!(is_cached_icon_source(
+            "3602290",
+            &format!("https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/3602290/{hash}.jpg")
+        ));
+        assert!(!is_cached_icon_source("3602290", &format!("https://example.com/{hash}.jpg")));
     }
 }

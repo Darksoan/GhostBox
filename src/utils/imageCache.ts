@@ -3,6 +3,11 @@ import {
   imageSourceCacheKey,
   imageSourceCacheLimit,
 } from "../constants/catalogue";
+import {
+  getSteamAssetUrl,
+  isSteamAssetManifestPending,
+  requestSteamAssetManifests,
+} from "./steamAssetManifest";
 
 export const imageSourceCache = new Map<string, string>();
 export const imageResolvePromises = new Map<string, Promise<string>>();
@@ -453,6 +458,54 @@ function canResolveSteamLibraryAssetFallback(source: string) {
   return steamLibraryAssetFallbackNames.has(parsed.asset.toLowerCase());
 }
 
+const steamLandscapeAssetNames = new Set([
+  "header.jpg",
+  "header_2x.jpg",
+  "capsule_616x353.jpg",
+  "capsule_231x87.jpg",
+  "capsule_467x181.jpg",
+  "hero_capsule.jpg",
+  "hero_capsule_2x.jpg",
+  "library_hero.jpg",
+  "library_hero_2x.jpg",
+]);
+
+/**
+ * Substitutos horizontais que aparecem no fim de uma cadeia de capa vertical:
+ * capsules, heroes e o screenshot que o backend inclui em `coverFallbacks`.
+ */
+function isLandscapeCoverSource(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (parsed) return steamLandscapeAssetNames.has(parsed.asset.toLowerCase());
+  return /(^|\/)ss_[^/]+\.(?:jpg|jpeg|png|webp)(?:[?#]|$)/i.test(source);
+}
+
+// Nomes antigos dos mesmos arquivos. O manifesto é indexado pelos nomes atuais.
+const steamAssetManifestAliases: Record<string, string> = {
+  "library_capsule.jpg": "library_600x900.jpg",
+  "library_capsule_2x.jpg": "library_600x900_2x.jpg",
+};
+
+/** URL com hash equivalente a este source, quando o manifesto já resolveu. */
+function steamAssetManifestSourceFor(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (!parsed) return "";
+
+  const asset = parsed.asset.toLowerCase();
+  const fileName = steamAssetManifestAliases[asset] ?? asset;
+  const manifestSource = getSteamAssetUrl(parsed.appId, fileName);
+
+  return manifestSource === source ? "" : manifestSource;
+}
+
+function steamAppIdsFromSources(sources: string[]) {
+  return [
+    ...new Set(
+      sources.map((source) => steamAppIdFromImageSource(source)).filter(Boolean)
+    ),
+  ];
+}
+
 export function withCachedImageSources(sources: string[]) {
   // Only inject the resolved library capsule for portrait requests. Prepending
   // it for header/landscape lists (home calendar, catalogue rows, etc.) causes
@@ -464,11 +517,26 @@ export function withCachedImageSources(sources: string[]) {
     ? resolvedSteamHeaderSourceForSources(sources)
     : "";
 
+  const appIds = steamAppIdsFromSources(sources);
+  requestSteamAssetManifests(appIds);
+
+  // Enquanto o manifesto do jogo não chegou, uma capa horizontal no fim da
+  // cadeia pintaria antes da vertical correta e depois trocaria na tela. Melhor
+  // segurar o placeholder por alguns frames.
+  const holdsLandscapeFallback =
+    sourceListRequestsPortraitLibraryCover(sources) &&
+    !resolvedCoverSource &&
+    appIds.some((appId) => isSteamAssetManifestPending(appId));
+  const orderedSources = holdsLandscapeFallback
+    ? sources.filter((source) => !isLandscapeCoverSource(source))
+    : sources;
+
   return uniqueSources(
     [
       ...(resolvedCoverSource ? [resolvedCoverSource] : []),
       ...(resolvedHeaderSource ? [resolvedHeaderSource] : []),
-      ...sources.flatMap((source) => {
+      ...orderedSources.flatMap((source) => {
+        const manifestSource = steamAssetManifestSourceFor(source);
         const cachedSource = imageSourceCache.get(source);
         const cdnFallback = steamCdnFallbackForSource(source);
         const shouldPrependCachedSource =
@@ -476,6 +544,7 @@ export function withCachedImageSources(sources: string[]) {
           cachedSource !== source &&
           !isHigherDensityFallbackForStandardSteamAsset(source, cachedSource);
         return uniqueSources([
+          ...(manifestSource ? [manifestSource] : []),
           source,
           ...(shouldPrependCachedSource ? [cachedSource] : []),
           ...(cdnFallback && cdnFallback !== source ? [cdnFallback] : []),

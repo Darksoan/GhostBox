@@ -1,4 +1,3 @@
-use crate::util::{silent_steamcmd_output, with_steamcmd_lock};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -467,80 +466,6 @@ fn get_library_asset_hash_from_vdf(
     read_library_asset_hash_from_vdf(&bytes, app_id, asset_name)
 }
 
-fn steamcmd_candidates(app: &AppHandle) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(app_data_dir) = app.path().app_data_dir() {
-        candidates.push(app_data_dir.join("steamcmd").join("steamcmd.exe"));
-    }
-    if let Some(app_data) = std::env::var_os("APPDATA") {
-        let app_data = PathBuf::from(app_data);
-        candidates.push(
-            app_data
-                .join("GhostBox")
-                .join("steamcmd")
-                .join("steamcmd.exe"),
-        );
-        candidates.push(app_data.join("Eden").join("steamcmd").join("steamcmd.exe"));
-        candidates.push(
-            app_data
-                .join("piratebox")
-                .join("steamcmd")
-                .join("steamcmd.exe"),
-        );
-    }
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(
-            resource_dir
-                .join("tools")
-                .join("steamcmd")
-                .join("steamcmd.exe"),
-        );
-    }
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            candidates.push(exe_dir.join("tools").join("steamcmd").join("steamcmd.exe"));
-        }
-    }
-    candidates.push(PathBuf::from("tools").join("steamcmd").join("steamcmd.exe"));
-    candidates
-}
-
-fn quoted_field_value(value: &str, field_name: &str) -> Option<String> {
-    let marker = format!("\"{field_name}\"");
-    let marker_index = value.find(&marker)?;
-    let after_marker = &value[marker_index + marker.len()..];
-    let value_start = after_marker.find('"')? + 1;
-    let after_quote = &after_marker[value_start..];
-    let value_end = after_quote.find('"')?;
-    Some(after_quote[..value_end].to_string())
-}
-
-fn get_library_asset_hash_from_steamcmd(
-    app: &AppHandle,
-    app_id: &str,
-    file_name: &str,
-) -> Option<String> {
-    let steamcmd = steamcmd_candidates(app)
-        .into_iter()
-        .find(|candidate| candidate.exists())?;
-    let output = with_steamcmd_lock(|| silent_steamcmd_output(&steamcmd, app_id))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let asset_name = file_name
-        .rsplit_once('.')
-        .map(|(name, _)| name)
-        .unwrap_or(file_name);
-    let field_reference = quoted_field_value(&stdout, asset_name)
-        .and_then(|value| extract_library_asset_reference(&value, app_id));
-    if field_reference.is_some() {
-        return field_reference;
-    }
-
-    stdout
-        .lines()
-        .find(|line| line.contains(file_name))
-        .and_then(|line| extract_library_asset_reference(line, app_id))
-}
-
 async fn fetch_and_cache_image(
     client: &reqwest::Client,
     directory: &Path,
@@ -651,13 +576,24 @@ async fn resolve_library_asset_url(
             }
         }
 
+        // Manifesto da GetItems: única fonte que sabe o hash de qualquer jogo,
+        // inclusive os que o Steam local nunca viu.
+        if let Some(manifest_url) =
+            crate::steam_assets::asset_url(app, app_id, candidate_file_name).await
+        {
+            if is_image_url_available(client, &manifest_url).await {
+                let available_url = manifest_url;
+                write_library_asset_cache_url(app, app_id, file_name, &available_url);
+                write_library_asset_cache_url(app, app_id, candidate_file_name, &available_url);
+                return Some(available_url);
+            }
+        }
+
         let asset_name = candidate_file_name
             .rsplit_once('.')
             .map(|(name, _)| name)
             .unwrap_or(candidate_file_name);
-        let asset_reference = get_library_asset_hash_from_vdf(app, app_id, asset_name)
-            .or_else(|| get_library_asset_hash_from_steamcmd(app, app_id, candidate_file_name));
-        let Some(asset_reference) = asset_reference else {
+        let Some(asset_reference) = get_library_asset_hash_from_vdf(app, app_id, asset_name) else {
             continue;
         };
 

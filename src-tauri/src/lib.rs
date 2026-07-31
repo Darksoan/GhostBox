@@ -43,6 +43,7 @@ mod playtime;
 mod settings;
 mod steam;
 mod steam_appcache;
+mod steam_assets;
 mod steam_localconfig;
 mod subscription;
 mod util;
@@ -1361,6 +1362,8 @@ pub fn run() {
             catalogue::app_install_steamtools,
             catalogue::cache_get_image,
             catalogue::cache_resolve_steam_library_asset,
+            steam_assets::steam_get_asset_manifests,
+            steam_assets::steam_get_cached_asset_manifests,
             settings::app_get_startup_settings,
             settings::app_set_startup_settings,
             settings::app_set_notification_settings,

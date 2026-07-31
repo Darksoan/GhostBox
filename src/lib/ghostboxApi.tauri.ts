@@ -711,6 +711,26 @@ export const ghostboxApi = {
     );
   },
 
+  getSteamAssetManifests(
+    appIds: string[],
+  ): Promise<Record<string, Record<string, string>>> {
+    return invokeOr<Record<string, Record<string, string>>>(
+      "steam_get_asset_manifests",
+      { appIds },
+      {},
+    );
+  },
+
+  getCachedSteamAssetManifests(
+    appIds: string[],
+  ): Promise<Record<string, Record<string, string>>> {
+    return invokeOr<Record<string, Record<string, string>>>(
+      "steam_get_cached_asset_manifests",
+      { appIds },
+      {},
+    );
+  },
+
   addGameViaLuaTools(game: GhostBoxGame): Promise<AddGameResult> {
     return invokeOr<AddGameResult>(
       "luatools_add_game",
