@@ -24,7 +24,7 @@ import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import {
   useCachedImageSources,
-  useLoadableImageSource,
+  useLoadableImageCover,
 } from "../../hooks/useCachedImageSources";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import {
@@ -54,21 +54,50 @@ const HighlightedSearchText = memo(function HighlightedSearchText({
   return <>{text}</>;
 });
 
-const SearchSuggestionThumbnail = memo(function SearchSuggestionThumbnail({
+const SearchSuggestionItem = memo(function SearchSuggestionItem({
   game,
+  isAdded,
+  isFavorite,
+  onSelect,
 }: {
   game: GhostBoxGame;
+  isAdded: boolean;
+  isFavorite: boolean;
+  onSelect: () => void;
 }) {
   const rawSources = useMemo(() => gameSteamHeaderFirstSources(game), [game]);
   const sources = useCachedImageSources(rawSources);
-  const source = useLoadableImageSource(sources);
+  const { source, loaded } = useLoadableImageCover(sources);
+
+  if (!loaded || !source) return null;
 
   return (
-    <span className="header__search-dropdown-thumbnail" aria-hidden="true">
-      {source ? (
-        <img src={source} alt="" decoding="async" draggable={false} />
-      ) : null}
-    </span>
+    <li>
+      <button
+        type="button"
+        className="header__search-dropdown-item"
+        onMouseDown={(event) => event.preventDefault()}
+        onFocus={() => preloadGameModalAssetsThrottled(game)}
+        onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
+        onClick={onSelect}
+      >
+        <span className="header__search-dropdown-thumbnail" aria-hidden="true">
+          <img src={source} alt="" decoding="async" draggable={false} />
+        </span>
+        <span className="header__search-dropdown-item-title">
+          <HighlightedSearchText text={game.title} />
+        </span>
+        <div className="header__search-dropdown-item__icons">
+          {isAdded && (
+            <Heart
+              size={14}
+              fill={isFavorite ? "var(--text-primary)" : "none"}
+              stroke={isFavorite ? "var(--text-primary)" : "currentColor"}
+            />
+          )}
+        </div>
+      </button>
+    </li>
   );
 });
 
@@ -678,35 +707,16 @@ export const Header = memo(function Header({
                       const isFavorite = favoriteGameIds.has(game.id);
                       const isAdded = addedGameAppIds.has(game.appId);
                       return (
-                        <li key={game.id}>
-                          <button
-                            type="button"
-                            className="header__search-dropdown-item"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onFocus={() => preloadGameModalAssetsThrottled(game)}
-                            onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
-                            onClick={() => {
-                              setFocused(false);
-                              onSelectSuggestion(game);
-                            }}
-                           >
-                            <SearchSuggestionThumbnail game={game} />
-                            <span className="header__search-dropdown-item-title">
-                              <HighlightedSearchText
-                                text={game.title}
-                              />
-                            </span>
-                            <div className="header__search-dropdown-item__icons">
-                              {isAdded && (
-                                <Heart
-                                  size={14}
-                                  fill={isFavorite ? "var(--text-primary)" : "none"}
-                                  stroke={isFavorite ? "var(--text-primary)" : "currentColor"}
-                                />
-                              )}
-                            </div>
-                          </button>
-                        </li>
+                        <SearchSuggestionItem
+                          key={game.id}
+                          game={game}
+                          isAdded={isAdded}
+                          isFavorite={isFavorite}
+                          onSelect={() => {
+                            setFocused(false);
+                            onSelectSuggestion(game);
+                          }}
+                        />
                       );
                     })}
                   </ul>
