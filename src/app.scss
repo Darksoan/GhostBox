@@ -2293,9 +2293,9 @@ p {
     width: 280px;
     max-height: 350px;
     overflow-y: auto;
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-md);
-    background: var(--background-dark);
+    background: var(--surface-option);
   }
 
   &__search-dropdown-section {
@@ -2321,8 +2321,9 @@ p {
     display: flex;
     width: 100%;
     align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-6);
+    gap: var(--space-5);
+    min-height: 55px;
+    padding: var(--space-3) var(--space-5);
     border: 0;
     background: transparent;
     color: var(--text-primary);
@@ -2337,15 +2338,7 @@ p {
       outline: none;
     }
 
-    img {
-      width: 16px;
-      height: 16px;
-      flex-shrink: 0;
-      border-radius: var(--radius-xs);
-      object-fit: cover;
-    }
-
-    span {
+    &-title {
       min-width: 0;
       overflow: hidden;
       font-size: var(--fs-400);
@@ -2394,8 +2387,27 @@ p {
   }
 
   &__search-empty-icon {
-    margin-top: 1px;
+    align-self: center;
     color: var(--text-secondary);
+  }
+
+  &__search-dropdown-thumbnail {
+    display: block;
+    width: 92px;
+    aspect-ratio: 460 / 215;
+    flex: 0 0 92px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: auto;
+      backface-visibility: visible;
+    }
   }
 
   &__search-empty-content {
@@ -2724,8 +2736,9 @@ p {
 
 .home-recommended-hero__cover {
   position: absolute;
-  inset: 0;
+  inset: -1px;
   z-index: var(--z-base);
+  border-radius: 0;
   background-color: var(--surface-solid);
   opacity: 1;
   transition: opacity var(--motion-base) ease;
@@ -3240,18 +3253,18 @@ p {
 
   &:hover,
   &:focus-visible {
-    background: var(--sidebar-selector);
+    background: var(--surface-secondary);
   }
 }
 
 .home-carousel-card__cover {
   position: absolute;
-  inset: 0;
+  inset: -1px;
   background-color: var(--surface-solid);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  border-radius: inherit;
+  border-radius: 0;
 
   &::after {
     @include home-cover-depth-overlay;
@@ -3350,7 +3363,7 @@ p {
 
   &:hover,
   &:focus-visible {
-    background: var(--sidebar-selector);
+    background: var(--surface-secondary);
   }
 
   &--hero-capsule {
@@ -3364,12 +3377,12 @@ p {
 
 .home-category-card__cover {
   position: absolute;
-  inset: 0;
+  inset: -1px;
   background-color: var(--surface-solid);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  border-radius: inherit;
+  border-radius: 0;
 
   &::after {
     @include home-cover-depth-overlay;
@@ -3586,13 +3599,14 @@ p {
 
   &:hover,
   &:focus-visible {
-    background: var(--sidebar-selector);
+    background: var(--surface-secondary);
   }
 }
 
 .home-calendar-card__cover {
   position: absolute;
-  inset: 0;
+  inset: -1px;
+  border-radius: 0;
   background-color: var(--surface-solid);
   background-position: center;
   background-repeat: no-repeat;
@@ -3832,7 +3846,7 @@ p {
   cursor: pointer;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background-color: transparent;
+  background-color: var(--surface-solid);
   opacity: 0;
   transition: opacity var(--motion-base) ease;
   @include media-depth(sm);
@@ -4410,18 +4424,18 @@ p {
 
   &:hover,
   &:focus-visible {
-    background: var(--sidebar-selector);
+    background: var(--surface-secondary);
   }
 }
 
 .home-recent-banner__cover {
   position: absolute;
-  inset: 0;
+  inset: -1px;
   background-color: var(--surface-solid);
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
-  border-radius: inherit;
+  border-radius: 0;
 }
 
 .home-recent-banner__cover::after {
@@ -4561,13 +4575,14 @@ p {
 
   &:hover,
   &:focus-visible {
-    background: var(--sidebar-selector);
+    background: var(--surface-secondary);
   }
 }
 
 .home-recent-card__cover {
   position: absolute;
-  inset: 0;
+  inset: -1px;
+  border-radius: 0;
   background-color: var(--surface-solid);
   background-position: center;
   background-repeat: no-repeat;

@@ -16,12 +16,16 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useState, useCallback, useEffect, useMemo, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
+import {
+  useCachedImageSources,
+  useLoadableImageSource,
+} from "../../hooks/useCachedImageSources";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import {
   appNotificationsChangedEvent,
@@ -29,7 +33,10 @@ import {
   markAppNotificationsSeen,
 } from "../../lib/appNotifications";
 import type { SubscriptionPortalFlow, UpdateCheckResult } from "../../lib/ghostboxApi.types";
-import { preloadGameModalAssetsThrottled } from "../../utils/image";
+import {
+  gameSteamHeaderFirstSources,
+  preloadGameModalAssetsThrottled,
+} from "../../utils/image";
 import {
   readNotificationsLastSeenAt,
   writeNotificationsLastSeenAt,
@@ -45,6 +52,24 @@ const HighlightedSearchText = memo(function HighlightedSearchText({
   text: string;
 }) {
   return <>{text}</>;
+});
+
+const SearchSuggestionThumbnail = memo(function SearchSuggestionThumbnail({
+  game,
+}: {
+  game: GhostBoxGame;
+}) {
+  const rawSources = useMemo(() => gameSteamHeaderFirstSources(game), [game]);
+  const sources = useCachedImageSources(rawSources);
+  const source = useLoadableImageSource(sources);
+
+  return (
+    <span className="header__search-dropdown-thumbnail" aria-hidden="true">
+      {source ? (
+        <img src={source} alt="" decoding="async" draggable={false} />
+      ) : null}
+    </span>
+  );
 });
 
 interface HeaderProps {
@@ -664,8 +689,9 @@ export const Header = memo(function Header({
                               setFocused(false);
                               onSelectSuggestion(game);
                             }}
-                          >
-                            <span>
+                           >
+                            <SearchSuggestionThumbnail game={game} />
+                            <span className="header__search-dropdown-item-title">
                               <HighlightedSearchText
                                 text={game.title}
                               />
