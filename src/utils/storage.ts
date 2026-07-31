@@ -25,6 +25,7 @@ import {
   notificationsLastSeenStorageKey,
   autoRestoredCloudSavesStorageKey,
   downloadsDirStorageKey,
+  downloadParallelChunksStorageKey,
 } from "../constants/catalogue";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
@@ -824,6 +825,38 @@ export function writeStoredDownloadsDir(directory: string) {
     window.localStorage.setItem(downloadsDirStorageKey, directory);
   } catch {
     // The chosen folder still applies for the rest of the session.
+  }
+}
+
+/* Faixa espelha o clamp do worker em SteamKitPocRunner: fora dela o valor é ignorado. */
+export const downloadParallelChunksMin = 1;
+export const downloadParallelChunksMax = 32;
+export const downloadParallelChunksDefault = 24;
+
+export function readStoredDownloadParallelChunks(): number {
+  if (typeof window === "undefined") return downloadParallelChunksDefault;
+
+  try {
+    const raw = window.localStorage.getItem(downloadParallelChunksStorageKey);
+    const parsed = Number.parseInt(raw ?? "", 10);
+    if (!Number.isFinite(parsed)) return downloadParallelChunksDefault;
+    return Math.min(downloadParallelChunksMax, Math.max(downloadParallelChunksMin, parsed));
+  } catch {
+    return downloadParallelChunksDefault;
+  }
+}
+
+export function writeStoredDownloadParallelChunks(value: number) {
+  if (typeof window === "undefined") return;
+
+  const clamped = Math.min(
+    downloadParallelChunksMax,
+    Math.max(downloadParallelChunksMin, Math.round(value)),
+  );
+  try {
+    window.localStorage.setItem(downloadParallelChunksStorageKey, String(clamped));
+  } catch {
+    // The value still applies for the rest of the session.
   }
 }
 

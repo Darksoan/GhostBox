@@ -221,7 +221,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
                 writeStoredDownloadsDir(downloadsDir);
               }
               const outputDir = `${downloadsDir}\\${appId}`;
-              enqueueDownload(mergedGame, outputDir);
+              enqueueDownload(mergedGame, outputDir, downloadsDir);
             }}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })

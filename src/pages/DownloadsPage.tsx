@@ -1,15 +1,14 @@
 import { Pause, Play, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
+import { DownloadDetailsModal } from "../components/modals/DownloadDetailsModal";
 import { useSettings } from "../context/settings";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import {
   clearFinishedDownloadTasks,
-  cancelDownloadTask,
   downloadTasksChangedEvent,
   pauseDownloadTask,
   readDownloadTasks,
-  removeDownloadTask,
   resumeDownloadTask,
   type DownloadTask,
 } from "../lib/downloadManager";
@@ -20,44 +19,71 @@ const emptyImageSources: string[] = [];
 
 const statusRank: Record<DownloadTask["status"], number> = {
   downloading: 0,
-  queued: 1,
-  paused: 1,
-  error: 2,
-  completed: 2,
+  queued: 0,
+  paused: 0,
+  error: 1,
+  completed: 1,
 };
+
+function isActiveTask(task: DownloadTask) {
+  return task.status === "downloading" || task.status === "queued" || task.status === "paused";
+}
 
 function sortTasks(tasks: DownloadTask[]): DownloadTask[] {
   return [...tasks].sort((left, right) => {
     const rankDiff = statusRank[left.status] - statusRank[right.status];
     if (rankDiff !== 0) return rankDiff;
-    if (left.status === "queued" && right.status === "queued") {
+    if (isActiveTask(left) && isActiveTask(right)) {
       return left.queuedAt - right.queuedAt;
     }
     return (right.finishedAt ?? 0) - (left.finishedAt ?? 0);
   });
 }
 
+function formatEta(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "--";
+
+  const totalSeconds = Math.ceil(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+  if (minutes > 0) return `${minutes}m ${remainingSeconds.toString().padStart(2, "0")}s`;
+  return `${remainingSeconds}s`;
+}
+
+function formatDownloadTimestamp(timestamp: number | undefined, language: "pt" | "en") {
+  if (!timestamp || !Number.isFinite(timestamp)) return "--";
+
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
 function DownloadCard({
   task,
   queuePosition,
-  onRemove,
   onPause,
   onResume,
-  onCancel,
+  onOpen,
 }: {
   task: DownloadTask;
   queuePosition: number | null;
-  onRemove: (id: string) => void;
   onPause: (id: string) => void;
   onResume: (id: string) => void;
-  onCancel: (id: string) => void;
+  onOpen: (id: string) => void;
 }) {
-  const { t } = useSettings();
+  const { appearance, t } = useSettings();
   const progressPercent =
     task.bytesTotal > 0
       ? Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100))
       : 0;
-  const remaining = Math.max(0, task.bytesTotal - task.bytesDownloaded);
+  const eta =
+    typeof task.estimatedSecondsRemaining === "number"
+      ? formatEta(task.estimatedSecondsRemaining)
+      : t("downloads.estimatedTimeCalculating");
   const statusLabel =
     task.status === "queued"
       ? t("downloads.queuePosition", { position: queuePosition ?? 1 })
@@ -68,10 +94,53 @@ function DownloadCard({
           : task.status === "completed"
             ? t("downloads.statusCompleted")
             : t("downloads.statusError");
-  const canRemove = task.status !== "downloading";
+  const downloadedAt = formatDownloadTimestamp(task.startedAt ?? task.queuedAt, appearance.language);
+  // Retomar passa por "queued" antes de "downloading", então os três estados precisam
+  // do mesmo esqueleto: sem isso a linha de progresso pisca a cada pause/resume.
+  const showsProgress =
+    task.status === "downloading" || task.status === "paused" || task.status === "queued";
+  const showsLiveSpeed = task.status === "downloading";
   const canPause = task.status === "downloading" || task.status === "queued";
   const canResume = task.status === "paused";
   const canCancel = task.status === "downloading" || task.status === "queued" || task.status === "paused";
+  const hasControls = canPause || canResume || canCancel;
+  const controls = (
+    <span className="download-card__controls">
+      {canPause ? (
+        <button
+          type="button"
+          className="download-card__icon-button"
+          onClick={() => onPause(task.id)}
+          aria-label={t("downloads.pause")}
+          title={t("downloads.pause")}
+        >
+          <Pause size={15} strokeWidth={2} />
+        </button>
+      ) : null}
+      {canResume ? (
+        <button
+          type="button"
+          className="download-card__icon-button"
+          onClick={() => onResume(task.id)}
+          aria-label={t("downloads.resume")}
+          title={t("downloads.resume")}
+        >
+          <Play size={15} strokeWidth={2} />
+        </button>
+      ) : null}
+      {canCancel ? (
+        <button
+          type="button"
+          className="download-card__icon-button download-card__icon-button--danger"
+          onClick={() => onOpen(task.id)}
+          aria-label={t("downloads.cancel")}
+          title={t("downloads.cancel")}
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      ) : null}
+    </span>
+  );
 
   const coverSources = useCachedImageSources(task.headerSources);
   const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(
@@ -82,9 +151,15 @@ function DownloadCard({
   return (
     <article
       className={`download-card download-card--${task.status}${
-        task.status === "downloading" || task.status === "paused" ? " download-card--with-progress" : ""
-      }`}
+        showsProgress ? " download-card--with-progress" : ""
+      }${hasControls ? "" : " download-card--no-controls"}`}
     >
+      <button
+        type="button"
+        className="download-card__open"
+        onClick={() => onOpen(task.id)}
+        aria-label={t("downloads.details.open", { title: task.title })}
+      />
       <span className="download-card__cover-slot" aria-hidden="true">
         <span
           className={`download-card__cover${
@@ -102,6 +177,7 @@ function DownloadCard({
       <span className="download-card__main">
         <span className="download-card__meta">
           <strong>{task.title}</strong>
+          <span className="download-card__date">{downloadedAt}</span>
           {task.status === "error" ? (
             <span className="download-card__error">
               {task.errorMessage ?? t("downloads.genericError")}
@@ -111,8 +187,13 @@ function DownloadCard({
 
         <span className="download-card__side">
           <span className="download-card__status">{statusLabel}</span>
-          {task.status === "downloading" ? (
-            <span className="download-card__speed">
+          {showsProgress ? (
+            <span
+              className={`download-card__speed${
+                showsLiveSpeed ? "" : " download-card__speed--hidden"
+              }`}
+              aria-hidden={!showsLiveSpeed}
+            >
               {formatSpeed(task.speedBytesPerSecond)}
             </span>
           ) : null}
@@ -128,55 +209,9 @@ function DownloadCard({
           ) : null}
         </span>
 
-        <span className="download-card__controls">
-          {canPause ? (
-            <button
-              type="button"
-              className="download-card__icon-button"
-              onClick={() => onPause(task.id)}
-              aria-label={t("downloads.pause")}
-              title={t("downloads.pause")}
-            >
-              <Pause size={15} strokeWidth={2} />
-            </button>
-          ) : null}
-          {canResume ? (
-            <button
-              type="button"
-              className="download-card__icon-button"
-              onClick={() => onResume(task.id)}
-              aria-label={t("downloads.resume")}
-              title={t("downloads.resume")}
-            >
-              <Play size={15} strokeWidth={2} />
-            </button>
-          ) : null}
-          {canCancel ? (
-            <button
-              type="button"
-              className="download-card__icon-button download-card__icon-button--danger"
-              onClick={() => onCancel(task.id)}
-              aria-label={t("downloads.cancel")}
-              title={t("downloads.cancel")}
-            >
-              <X size={15} strokeWidth={2} />
-            </button>
-          ) : null}
-          {canRemove && !canCancel ? (
-            <button
-              type="button"
-              className="download-card__icon-button"
-              onClick={() => onRemove(task.id)}
-              aria-label={t("downloads.remove")}
-              title={t("downloads.remove")}
-            >
-              <X size={15} strokeWidth={2} />
-            </button>
-          ) : null}
-        </span>
       </span>
 
-      {task.status === "downloading" || task.status === "paused" ? (
+      {showsProgress ? (
         <div className="download-card__progress-row">
           <span className="download-card__progress">
             <span className="download-card__progress-count">
@@ -192,11 +227,19 @@ function DownloadCard({
             >
               <span style={{ width: `${progressPercent}%` }} />
             </span>
-            <span className="download-card__progress-count">
-              {t("downloads.remaining", { size: formatBytes(remaining) })}
+            <span
+              className={`download-card__progress-count download-card__progress-count--eta${
+                showsLiveSpeed ? "" : " download-card__progress-count--hidden"
+              }`}
+              aria-hidden={!showsLiveSpeed}
+            >
+              {t("downloads.estimatedTime", { time: eta })}
             </span>
           </span>
+          {controls}
         </div>
+      ) : hasControls ? (
+        <div className="download-card__controls-row">{controls}</div>
       ) : null}
     </article>
   );
@@ -205,6 +248,7 @@ function DownloadCard({
 export function DownloadsPage() {
   const { t } = useSettings();
   const [tasks, setTasks] = useState<DownloadTask[]>(() => readDownloadTasks());
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     setTasks(readDownloadTasks());
@@ -221,24 +265,10 @@ export function DownloadsPage() {
   const hasFinishedTasks = tasks.some(
     (task) => task.status === "completed" || task.status === "error",
   );
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
 
   return (
     <section className="downloads-page content-section content-section--full">
-      <header className="downloads-page__header content-section__header">
-        <div>
-          <h3>{t("downloads.title")}</h3>
-          <p>{t("downloads.description")}</p>
-        </div>
-        <button
-          type="button"
-          className="downloads-page__clear"
-          onClick={() => clearFinishedDownloadTasks()}
-          disabled={!hasFinishedTasks}
-        >
-          {t("downloads.clear")}
-        </button>
-      </header>
-
       {sortedTasks.length > 0 ? (
         <div className="downloads-page__list">
           {sortedTasks.map((task) => (
@@ -250,10 +280,9 @@ export function DownloadsPage() {
                   ? queuedTasks.findIndex((entry) => entry.id === task.id) + 1
                   : null
               }
-              onRemove={removeDownloadTask}
               onPause={pauseDownloadTask}
               onResume={resumeDownloadTask}
-              onCancel={cancelDownloadTask}
+              onOpen={setSelectedTaskId}
             />
           ))}
         </div>
@@ -261,9 +290,22 @@ export function DownloadsPage() {
         <EmptyState
           className="downloads-page__empty"
           title={t("downloads.emptyTitle")}
-          description={t("downloads.emptyMessage")}
         />
       )}
+
+      {hasFinishedTasks && (
+        <div className="downloads-page__footer">
+          <button
+            type="button"
+            className="downloads-page__clear"
+            onClick={() => clearFinishedDownloadTasks()}
+          >
+            {t("downloads.clear")}
+          </button>
+        </div>
+      )}
+
+      <DownloadDetailsModal task={selectedTask} onClose={() => setSelectedTaskId(null)} />
     </section>
   );
 }

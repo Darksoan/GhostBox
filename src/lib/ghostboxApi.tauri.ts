@@ -734,16 +734,29 @@ export const ghostboxApi = {
     appId: string,
     outputDir: string,
     steamPath?: string,
+    parallelChunks?: number,
   ): Promise<Record<string, unknown>> {
     return invokeOr<Record<string, unknown>>(
       "cdndownload_download_game",
-      { appId, outputDir, steamPath },
+      { appId, outputDir, steamPath, parallelChunks },
       { Type: "error", Message: "Não foi possível iniciar o download." },
     );
   },
 
   cancelDepotGame(appId: string): Promise<boolean> {
     return invokeOr<boolean>("cdndownload_cancel_game", { appId }, false);
+  },
+
+  deleteDownloadOutputDir(
+    appId: string,
+    downloadsRoot: string,
+    outputDir: string,
+  ): Promise<boolean> {
+    return invoke<boolean>("cdndownload_delete_output_dir", {
+      appId,
+      downloadsRoot,
+      outputDir,
+    });
   },
 
   getDefaultDownloadsDir(): Promise<string> {

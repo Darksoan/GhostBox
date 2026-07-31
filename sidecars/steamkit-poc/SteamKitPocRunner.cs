@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Threading.Channels;
 using DepotDownloader;
 using SteamKit2;
 using SteamKit2.CDN;
@@ -12,6 +13,11 @@ public class SteamKitPocRunner
     private Steam3Session? _steam3;
     private CDNClientPool? _cdnPool;
     private byte[]? _depotKey;
+
+    private static readonly SemaphoreSlim WorkerSessionGate = new(1, 1);
+    private static readonly Dictionary<uint, CDNClientPool> WorkerCdnPools = [];
+    private static Steam3Session? WorkerSteam3Session;
+    private static readonly object EventOutputLock = new();
 
     public SteamKitPocRunner(Config config, CancellationToken cancellationToken = default)
     {
@@ -526,24 +532,19 @@ public class SteamKitPocRunner
             Status = "connecting-steam"
         });
 
-        AccountSettingsStore.Instance = new AccountSettingsStore();
-        _steam3 = new Steam3Session(new SteamUser.LogOnDetails { LoginID = 0xBEEF });
-
-        var connected = false;
-        for (var i = 0; i < 30; i++)
+        try
         {
-            _steam3.RunCallbacksOnce();
-            if (_steam3.steamClient.IsConnected) { connected = true; break; }
-            await Task.Delay(500);
+            (_steam3, _cdnPool) = await GetWorkerDownloadContextAsync(
+                _config.AppId,
+                _cancellationToken);
         }
-
-        if (!connected)
+        catch (Exception ex)
         {
             EmitProgress(new ProgressEvent
             {
                 Type = "error",
                 Status = "steam-connect-failed",
-                Message = "Could not connect to Steam (anonymous)"
+                Message = ex.Message
             });
             return;
         }
@@ -554,9 +555,6 @@ public class SteamKitPocRunner
             Status = "steam-connected"
         });
 
-        _cdnPool = new CDNClientPool(_steam3, _config.AppId);
-        await _cdnPool.UpdateServerList();
-
         EmitProgress(new ProgressEvent
         {
             Type = "status",
@@ -564,15 +562,130 @@ public class SteamKitPocRunner
             OutputDir = _config.OutputDir
         });
 
-        var downloadedFiles = 0;
-        var downloadedChunks = 0UL;
-        var downloadedBytes = 0UL;
-        var failedFiles = 0;
-        var failedChunks = 0;
-        var progressLock = new object();
-        var parallelChunks = Math.Clamp(_config.ParallelChunks, 1, 32);
-        using var chunkSemaphore = new SemaphoreSlim(parallelChunks);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var depotResult = await DownloadDepotFilesAsync(
+            manifest,
+            totalFiles,
+            totalChunks,
+            totalBytes,
+            stopwatch);
+
+        if (!depotResult.EmitComplete)
+            return;
+
+        stopwatch.Stop();
+        EmitProgress(new ProgressEvent
+        {
+            Type = "complete",
+            DownloadedFiles = depotResult.DownloadedFiles,
+            FileTotal = totalFiles,
+            DownloadedChunks = depotResult.DownloadedChunks,
+            ChunkTotal = totalChunks,
+            DownloadedBytes = depotResult.DownloadedBytes,
+            BytesTotal = totalBytes,
+            FailedFiles = depotResult.FailedFiles,
+            FailedChunks = depotResult.FailedChunks,
+            ElapsedSeconds = stopwatch.Elapsed.TotalSeconds,
+            OutputDir = _config.OutputDir
+        });
+    }
+
+    private static async Task<(Steam3Session Session, CDNClientPool Pool)> GetWorkerDownloadContextAsync(
+        uint appId,
+        CancellationToken cancellationToken)
+    {
+        await WorkerSessionGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (WorkerSteam3Session == null || !WorkerSteam3Session.steamClient.IsConnected)
+            {
+                if (WorkerSteam3Session != null)
+                {
+                    if (WorkerSteam3Session.steamClient.IsConnected)
+                    {
+                        try { WorkerSteam3Session.Disconnect(false); } catch { }
+                    }
+                    WorkerCdnPools.Clear();
+                }
+
+                AccountSettingsStore.Instance = new AccountSettingsStore();
+                var session = new Steam3Session(new SteamUser.LogOnDetails { LoginID = 0xBEEF });
+                var connected = false;
+                for (var i = 0; i < 30; i++)
+                {
+                    session.RunCallbacksOnce();
+                    if (session.steamClient.IsConnected)
+                    {
+                        connected = true;
+                        break;
+                    }
+
+                    await Task.Delay(500, cancellationToken);
+                }
+
+                if (!connected)
+                {
+                    throw new InvalidOperationException("Could not connect to Steam (anonymous)");
+                }
+
+                WorkerSteam3Session = session;
+                WorkerCdnPools.Clear();
+            }
+
+            if (!WorkerCdnPools.TryGetValue(appId, out var pool))
+            {
+                pool = new CDNClientPool(WorkerSteam3Session, appId);
+                await pool.UpdateServerList();
+                WorkerCdnPools[appId] = pool;
+            }
+
+            return (WorkerSteam3Session, pool);
+        }
+        finally
+        {
+            WorkerSessionGate.Release();
+        }
+    }
+
+    public static void ShutdownWorkerSession()
+    {
+        WorkerSessionGate.Wait();
+        try
+        {
+            if (WorkerSteam3Session?.steamClient.IsConnected == true)
+            {
+                try { WorkerSteam3Session.Disconnect(false); } catch { }
+            }
+            WorkerSteam3Session = null;
+            WorkerCdnPools.Clear();
+        }
+        finally
+        {
+            WorkerSessionGate.Release();
+        }
+    }
+
+    private async Task<DepotDownloadResult> DownloadDepotFilesAsync(
+        DepotManifest manifest,
+        int totalFiles,
+        ulong totalChunks,
+        ulong totalBytes,
+        System.Diagnostics.Stopwatch stopwatch)
+    {
+        long downloadedChunks = 0;
+        long downloadedBytes = 0;
+        long networkDownloadedBytes = 0;
+        int downloadedFiles = 0;
+        int failedFiles = 0;
+        int failedChunks = 0;
+        long lastProgressEmitAtMs = 0;
+        System.Diagnostics.Stopwatch? networkStopwatch = null;
+        var progressLock = new object();
+        var fileStates = new List<FileDownloadState>();
+        var parallelChunks = Math.Clamp(_config.ParallelChunks, 1, 32);
+        var validationIndexPath = Path.Combine(_config.OutputDir!, ".ghostbox-chunks.json");
+        var validationIndex = LoadValidationIndex(validationIndexPath, _config.ManifestIdOverride);
+        var validationIndexLock = new object();
 
         if (manifest.Files == null)
         {
@@ -581,169 +694,190 @@ public class SteamKitPocRunner
                 Type = "error",
                 Status = "no-files-in-manifest"
             });
-            return;
+            return new DepotDownloadResult(0, 0, 0, 0, 0, false);
         }
 
-        for (var fileIdx = 0; fileIdx < manifest.Files.Count; fileIdx++)
+        void CompleteFile(FileDownloadState state)
         {
-            _cancellationToken.ThrowIfCancellationRequested();
-            var file = manifest.Files[fileIdx];
-            var fileFinalPath = Path.Combine(_config.OutputDir!, file.FileName);
+            if (Interlocked.Exchange(ref state.CompletionSignaled, 1) != 0)
+                return;
 
-            if (file.Chunks == null || file.Chunks.Count == 0)
+            // Release the handle as soon as the file is done: the global chunk queue walks the
+            // whole depot, so keeping streams until the depot ends would leak one handle per file.
+            DisposeFileStream(state);
+
+            if (Volatile.Read(ref state.FailedChunks) == 0)
             {
-                // Manifest entries without chunks are directory markers or empty placeholders.
-                // Skip them to avoid file/directory name collisions (e.g., "Gurei_Data" as
-                // both an empty file mark and a directory containing real files).
-                continue;
+                Interlocked.Increment(ref downloadedFiles);
+                if ((state.File.Flags & SteamKit2.EDepotFileFlag.Executable) != 0)
+                {
+                    try
+                    {
+                        File.SetAttributes(state.Path, File.GetAttributes(state.Path) | FileAttributes.ReadOnly);
+                    }
+                    catch { }
+                }
+            }
+            else
+            {
+                Interlocked.Increment(ref failedFiles);
+                state.DeleteAfterDispose = true;
+            }
+        }
+
+        void RecordChunkFailure(ChunkWorkItem work, string status, string message)
+        {
+            Interlocked.Increment(ref work.FileState.FailedChunks);
+            Interlocked.Increment(ref failedChunks);
+            EmitProgress(new ProgressEvent
+            {
+                Type = "error",
+                Status = status,
+                Message = message,
+                FileIndex = work.FileIndex,
+                FileName = work.FileState.File.FileName
+            });
+        }
+
+        try
+        {
+            for (var fileIdx = 0; fileIdx < manifest.Files.Count; fileIdx++)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                var file = manifest.Files[fileIdx];
+
+                if (file.Chunks == null || file.Chunks.Count == 0)
+                {
+                    // Manifest entries without chunks are directory markers or empty placeholders.
+                    continue;
+                }
+
+                var fileFinalPath = Path.Combine(_config.OutputDir!, file.FileName);
+                try
+                {
+                    var fileDir = Path.GetDirectoryName(fileFinalPath);
+                    if (!string.IsNullOrEmpty(fileDir))
+                        Directory.CreateDirectory(fileDir);
+
+                    var fileLength = file.Chunks.Max(chunk => (long)(chunk.Offset + chunk.UncompressedLength));
+                    var state = new FileDownloadState(
+                        file,
+                        fileFinalPath,
+                        fileLength,
+                        new bool[file.Chunks.Count],
+                        0,
+                        fileIdx);
+                    fileStates.Add(state);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    EmitProgress(new ProgressEvent
+                    {
+                        Type = "error",
+                        Status = "output-dir-not-writable",
+                        Message = $"{ex.Message} (escolha outra pasta de downloads nos Ajustes)",
+                        FileIndex = fileIdx,
+                        FileName = file.FileName,
+                        OutputDir = _config.OutputDir
+                    });
+                    return new DepotDownloadResult(
+                        downloadedFiles,
+                        (ulong)downloadedChunks,
+                        (ulong)downloadedBytes,
+                        failedFiles,
+                        failedChunks,
+                        false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Increment(ref failedFiles);
+                    EmitProgress(new ProgressEvent
+                    {
+                        Type = "error",
+                        Status = "file-write-failed",
+                        Message = ex.Message,
+                        FileIndex = fileIdx,
+                        FileName = file.FileName
+                    });
+                    try { File.Delete(fileFinalPath); } catch { }
+                }
             }
 
-            var fileSuccess = true;
+            var preparationAbort = 0;
             try
             {
-                // Dentro do try: um destino sem permissão de escrita (ex.: Program Files
-                // sem elevação) derrubava o processo inteiro antes de emitir "complete",
-                // e o chamador não tinha como saber que o download falhou.
-                var fileDir = Path.GetDirectoryName(fileFinalPath);
-                if (!string.IsNullOrEmpty(fileDir))
-                    Directory.CreateDirectory(fileDir);
-
-                var fileLength = file.Chunks.Max(chunk => (long)(chunk.Offset + chunk.UncompressedLength));
-                await using (var fileStream = new FileStream(
-                    fileFinalPath,
-                    FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite,
-                    FileShare.Read,
-                    bufferSize: 1024 * 1024,
-                    FileOptions.Asynchronous | FileOptions.RandomAccess))
-                {
-                    var existingLength = fileStream.Length;
-                    var validExistingChunks = new bool[file.Chunks.Count];
-                    for (var chunkIndex = 0; chunkIndex < file.Chunks.Count; chunkIndex++)
+                await Parallel.ForEachAsync(
+                    fileStates,
+                    new ParallelOptions
                     {
-                        _cancellationToken.ThrowIfCancellationRequested();
-                        var existingChunk = file.Chunks[chunkIndex];
-                        var chunkEnd = (long)(existingChunk.Offset + existingChunk.UncompressedLength);
-                        if (chunkEnd > existingLength) continue;
-
-                        var existingBuffer = ArrayPool<byte>.Shared.Rent((int)existingChunk.UncompressedLength);
-                        try
-                        {
-                            var totalRead = 0;
-                            while (totalRead < existingChunk.UncompressedLength)
-                            {
-                                var read = await RandomAccess.ReadAsync(
-                                    fileStream.SafeFileHandle,
-                                    existingBuffer.AsMemory(totalRead, (int)existingChunk.UncompressedLength - totalRead),
-                                    (long)existingChunk.Offset + totalRead,
-                                    _cancellationToken);
-                                if (read == 0) break;
-                                totalRead += read;
-                            }
-
-                            if (totalRead != existingChunk.UncompressedLength) continue;
-                            var adler = ComputeAdler32(existingBuffer, totalRead);
-                            var expected = BitConverter.GetBytes(existingChunk.Checksum);
-                            if (!adler.AsSpan().SequenceEqual(expected)) continue;
-
-                            validExistingChunks[chunkIndex] = true;
-                            downloadedChunks++;
-                            downloadedBytes += existingChunk.UncompressedLength;
-                        }
-                        finally
-                        {
-                            ArrayPool<byte>.Shared.Return(existingBuffer);
-                        }
-                    }
-
-                    fileStream.SetLength(fileLength);
-                    var fileFailedChunks = 0;
-
-                    var chunkTasks = file.Chunks
-                        .Select((chunk, index) => (chunk, index))
-                        .Where(item => !validExistingChunks[item.index])
-                        .Select(async item =>
+                        MaxDegreeOfParallelism = parallelChunks,
+                        CancellationToken = _cancellationToken
+                    },
+                    async (state, cancellationToken) =>
                     {
-                        var chunk = item.chunk;
-                        await chunkSemaphore.WaitAsync(_cancellationToken);
-                        var chunkBuffer = ArrayPool<byte>.Shared.Rent((int)chunk.UncompressedLength);
+                        if (state.PreparationFailed) return;
 
                         try
                         {
-                            var written = 0;
-                            const int maxAttempts = 3;
-                            for (var attempt = 1; attempt <= maxAttempts; attempt++)
-                            {
-                                Server? connection = null;
-                                try
-                                {
-                                    connection = _cdnPool!.GetConnection();
-                                    string? cdnToken = null;
-                                    if (_steam3!.CDNAuthTokens.TryGetValue((manifest.DepotID, connection.Host), out var authTask))
-                                    {
-                                        var authResult = await authTask.Task;
-                                        cdnToken = authResult.Token;
-                                    }
+                            var validExistingChunks = await ValidateExistingChunksAsync(
+                                state.Path,
+                                state.File.Chunks,
+                                state.Length,
+                                cancellationToken,
+                                validationIndex,
+                                validationIndexLock);
+                            var missingChunks = validExistingChunks.Count(valid => !valid);
+                            state.ValidChunks = validExistingChunks;
+                            state.RemainingChunks = missingChunks;
 
-                                    written = await _cdnPool.CDNClient.DownloadDepotChunkAsync(
-                                        manifest.DepotID, chunk, connection,
-                                        chunkBuffer, _depotKey,
-                                        _cdnPool.ProxyServer, cdnToken
-                                    );
-                                    break;
-                                }
-                                catch when (attempt < maxAttempts)
-                                {
-                                    await Task.Delay(150 * attempt, _cancellationToken);
-                                }
-                                finally
-                                {
-                                    if (connection != null) _cdnPool?.ReturnConnection(connection);
-                                }
+                            for (var chunkIndex = 0; chunkIndex < state.File.Chunks.Count; chunkIndex++)
+                            {
+                                if (!validExistingChunks[chunkIndex]) continue;
+                                Interlocked.Increment(ref downloadedChunks);
+                                Interlocked.Add(ref downloadedBytes, state.File.Chunks[chunkIndex].UncompressedLength);
                             }
 
-                            _cancellationToken.ThrowIfCancellationRequested();
-
-                            if (written <= 0)
+                            var currentLength = File.Exists(state.Path)
+                                ? new FileInfo(state.Path).Length
+                                : -1;
+                            if (missingChunks > 0 || currentLength != state.Length)
                             {
-                                Interlocked.Increment(ref fileFailedChunks);
-                                lock (progressLock) failedChunks++;
+                                // Fail early for unwritable destinations, without opening one handle per
+                                // file for the whole depot. Workers reuse one lazy stream per file.
+                                await using var probe = new FileStream(
+                                    state.Path,
+                                    FileMode.OpenOrCreate,
+                                    FileAccess.ReadWrite,
+                                    FileShare.Read,
+                                    bufferSize: 1024 * 1024,
+                                    FileOptions.Asynchronous | FileOptions.RandomAccess);
+                                probe.SetLength(state.Length);
+                            }
+
+                            if (missingChunks == 0)
+                                CompleteFile(state);
+                        }
+                        catch (UnauthorizedAccessException ex)
+                        {
+                            state.PreparationFailed = true;
+                            if (Interlocked.Exchange(ref preparationAbort, 1) == 0)
+                            {
                                 EmitProgress(new ProgressEvent
                                 {
                                     Type = "error",
-                                    Status = "chunk-download-failed",
-                                    Message = $"Failed to download chunk for {file.FileName}",
-                                    FileIndex = fileIdx,
-                                    FileName = file.FileName
+                                    Status = "output-dir-not-writable",
+                                    Message = $"{ex.Message} (escolha outra pasta de downloads nos Ajustes)",
+                                    FileIndex = state.FileIndex,
+                                    FileName = state.File.FileName,
+                                    OutputDir = _config.OutputDir
                                 });
-                                return;
                             }
 
-                            var adler = ComputeAdler32(chunkBuffer, written);
-                            var expected = BitConverter.GetBytes(chunk.Checksum);
-                            var hashValid = adler.AsSpan().SequenceEqual(expected);
-                            if (!hashValid)
-                            {
-                                Interlocked.Increment(ref fileFailedChunks);
-                                lock (progressLock) failedChunks++;
-                                EmitProgress(new ProgressEvent
-                                {
-                                    Type = "error",
-                                    Status = "chunk-hash-mismatch",
-                                    Message = $"Hash mismatch for chunk in {file.FileName}",
-                                    FileIndex = fileIdx,
-                                    FileName = file.FileName
-                                });
-                                return;
-                            }
-
-                            await RandomAccess.WriteAsync(fileStream.SafeFileHandle, chunkBuffer.AsMemory(0, written), (long)chunk.Offset, _cancellationToken);
-
-                            lock (progressLock)
-                            {
-                                downloadedChunks++;
-                                downloadedBytes += chunk.UncompressedLength;
-                            }
+                            throw;
                         }
                         catch (OperationCanceledException)
                         {
@@ -751,113 +885,608 @@ public class SteamKitPocRunner
                         }
                         catch (Exception ex)
                         {
-                            Interlocked.Increment(ref fileFailedChunks);
-                            lock (progressLock) failedChunks++;
+                            state.PreparationFailed = true;
+                            Interlocked.Increment(ref failedFiles);
                             EmitProgress(new ProgressEvent
                             {
                                 Type = "error",
-                                Status = "chunk-exception",
+                                Status = "file-write-failed",
                                 Message = ex.Message,
-                                FileIndex = fileIdx,
-                                FileName = file.FileName
+                                FileIndex = state.FileIndex,
+                                FileName = state.File.FileName
                             });
-                        }
-                        finally
-                        {
-                            ArrayPool<byte>.Shared.Return(chunkBuffer);
-                            chunkSemaphore.Release();
+                            try { File.Delete(state.Path); } catch { }
                         }
                     });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return new DepotDownloadResult(
+                    downloadedFiles,
+                    (ulong)Interlocked.Read(ref downloadedChunks),
+                    (ulong)Interlocked.Read(ref downloadedBytes),
+                    failedFiles,
+                    failedChunks,
+                    false);
+            }
 
-                    await Task.WhenAll(chunkTasks);
-                    fileSuccess = fileFailedChunks == 0;
-                }
+            var channel = Channel.CreateBounded<ChunkWorkItem>(new BoundedChannelOptions(
+                Math.Max(parallelChunks * 4, 1))
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleWriter = true,
+                SingleReader = false
+            });
 
-                if (fileSuccess)
+            async Task ProduceChunksAsync()
+            {
+                try
                 {
-                    downloadedFiles++;
-                    if ((file.Flags & SteamKit2.EDepotFileFlag.Executable) != 0)
+                    foreach (var state in fileStates)
                     {
+                        if (state.PreparationFailed) continue;
+
+                        for (var chunkIndex = 0; chunkIndex < state.File.Chunks.Count; chunkIndex++)
+                        {
+                            if (state.ValidChunks[chunkIndex]) continue;
+
+                            await channel.Writer.WriteAsync(
+                                new ChunkWorkItem(state, chunkIndex),
+                                _cancellationToken);
+                        }
+                    }
+
+                    channel.Writer.TryComplete();
+                }
+                catch (Exception ex)
+                {
+                    channel.Writer.TryComplete(ex);
+                    throw;
+                }
+            }
+
+            async Task ConsumeChunksAsync()
+            {
+                await foreach (var work in channel.Reader.ReadAllAsync(_cancellationToken))
+                    await DownloadChunkAsync(work);
+            }
+
+            async Task DownloadChunkAsync(ChunkWorkItem work)
+            {
+                var chunk = work.FileState.File.Chunks[work.ChunkIndex];
+                var chunkBuffer = ArrayPool<byte>.Shared.Rent((int)chunk.UncompressedLength);
+                var workCompleted = false;
+
+                try
+                {
+                    lock (progressLock)
+                        networkStopwatch ??= System.Diagnostics.Stopwatch.StartNew();
+
+                    var written = 0;
+                    const int maxAttempts = 3;
+                    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+                    {
+                        Server? connection = null;
                         try
                         {
-                            File.SetAttributes(fileFinalPath, File.GetAttributes(fileFinalPath) | FileAttributes.ReadOnly);
+                            connection = _cdnPool!.GetConnection();
+                            string? cdnToken = null;
+                            if (_steam3!.CDNAuthTokens.TryGetValue((manifest.DepotID, connection.Host), out var authTask))
+                            {
+                                var authResult = await authTask.Task;
+                                cdnToken = authResult.Token;
+                            }
+
+                            written = await _cdnPool.CDNClient.DownloadDepotChunkAsync(
+                                manifest.DepotID,
+                                chunk,
+                                connection,
+                                chunkBuffer,
+                                _depotKey,
+                                _cdnPool.ProxyServer,
+                                cdnToken);
+
+                            if (written > 0)
+                            {
+                                _cdnPool.ReturnConnection(connection);
+                                connection = null;
+                                break;
+                            }
+
+                            _cdnPool.ReturnBrokenConnection(connection);
+                            connection = null;
                         }
-                        catch { }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch
+                        {
+                            if (connection != null)
+                                _cdnPool!.ReturnBrokenConnection(connection);
+                        }
+
+                        if (attempt < maxAttempts)
+                        {
+                            var backoffMs = Math.Min(4000, 150 * (1 << (attempt - 1)));
+                            await Task.Delay(backoffMs + Random.Shared.Next(0, 101), _cancellationToken);
+                        }
                     }
+
+                    _cancellationToken.ThrowIfCancellationRequested();
+
+                    if (written <= 0)
+                    {
+                        RecordChunkFailure(
+                            work,
+                            "chunk-download-failed",
+                            $"Failed to download chunk for {work.FileState.File.FileName}");
+                        workCompleted = true;
+                        return;
+                    }
+
+                    var adler = ComputeAdler32(chunkBuffer, written);
+                    var expected = BitConverter.GetBytes(chunk.Checksum);
+                    if (!adler.AsSpan().SequenceEqual(expected))
+                    {
+                        RecordChunkFailure(
+                            work,
+                            "chunk-hash-mismatch",
+                            $"Hash mismatch for chunk in {work.FileState.File.FileName}");
+                        workCompleted = true;
+                        return;
+                    }
+
+                    var fileStream = GetOrOpenFileStream(work.FileState);
+                    await RandomAccess.WriteAsync(
+                        fileStream.SafeFileHandle,
+                        chunkBuffer.AsMemory(0, written),
+                        (long)chunk.Offset,
+                        _cancellationToken);
+                    UpdateValidationIndexChunk(
+                        validationIndex,
+                        validationIndexLock,
+                        work.FileState,
+                        work.ChunkIndex,
+                        chunk);
+
+                    ProgressEvent? progressUpdate = null;
+                    lock (progressLock)
+                    {
+                        downloadedChunks++;
+                        downloadedBytes += chunk.UncompressedLength;
+                        networkDownloadedBytes += chunk.UncompressedLength;
+
+                        var elapsedMs = stopwatch.ElapsedMilliseconds;
+                        if (elapsedMs - lastProgressEmitAtMs >= 1000)
+                        {
+                            lastProgressEmitAtMs = elapsedMs;
+                            var networkElapsedSec = networkStopwatch?.Elapsed.TotalSeconds ?? 0;
+                            progressUpdate = new ProgressEvent
+                            {
+                                Type = "progress",
+                                FileIndex = work.FileIndex + 1,
+                                FileTotal = totalFiles,
+                                FileName = work.FileState.File.FileName,
+                                ChunkIndex = (ulong)Interlocked.Read(ref downloadedChunks),
+                                ChunkTotal = totalChunks,
+                                BytesDownloaded = (ulong)Interlocked.Read(ref downloadedBytes),
+                                BytesTotal = totalBytes,
+                                SpeedBytesPerSecond = networkElapsedSec > 0
+                                    ? (ulong)(networkDownloadedBytes / networkElapsedSec)
+                                    : 0,
+                                FailedFiles = Volatile.Read(ref failedFiles),
+                                FailedChunks = Volatile.Read(ref failedChunks)
+                            };
+                        }
+                    }
+
+                    if (progressUpdate != null)
+                        EmitProgress(progressUpdate);
+
+                    workCompleted = true;
                 }
-                else
+                catch (OperationCanceledException)
                 {
-                    failedFiles++;
-                    try { File.Delete(fileFinalPath); } catch { }
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    RecordChunkFailure(work, "chunk-exception", ex.Message);
+                    workCompleted = true;
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(chunkBuffer);
+                    if (workCompleted && Interlocked.Decrement(ref work.FileState.RemainingChunks) == 0)
+                        CompleteFile(work.FileState);
                 }
             }
-            catch (UnauthorizedAccessException ex)
+
+            var producer = ProduceChunksAsync();
+            var workers = Enumerable
+                .Range(0, parallelChunks)
+                .Select(_ => ConsumeChunksAsync())
+                .ToArray();
+
+            try
             {
-                // Sem permissão no destino: nenhum outro arquivo vai gravar também.
-                // Aborta já em vez de repetir a mesma falha 45 mil vezes.
-                EmitProgress(new ProgressEvent
-                {
-                    Type = "error",
-                    Status = "output-dir-not-writable",
-                    Message = $"{ex.Message} (escolha outra pasta de downloads nos Ajustes)",
-                    FileIndex = fileIdx,
-                    FileName = file.FileName,
-                    OutputDir = _config.OutputDir
-                });
-                return;
+                await producer;
+                await Task.WhenAll(workers);
             }
-            catch (OperationCanceledException)
+            catch
             {
+                channel.Writer.TryComplete();
+                try { await Task.WhenAll(workers); } catch { }
                 throw;
             }
-            catch (Exception ex)
+        }
+        finally
+        {
+            foreach (var state in fileStates)
+                DisposeFileStream(state);
+            foreach (var state in fileStates.Where(state => state.DeleteAfterDispose))
             {
-                failedFiles++;
-                EmitProgress(new ProgressEvent
-                {
-                    Type = "error",
-                    Status = "file-write-failed",
-                    Message = ex.Message,
-                    FileIndex = fileIdx,
-                    FileName = file.FileName
-                });
-                try { File.Delete(fileFinalPath); } catch { }
+                try { File.Delete(state.Path); } catch { }
             }
-
-            var elapsedSec = Math.Max(1, stopwatch.Elapsed.TotalSeconds);
-            var speedBytesPerSec = downloadedBytes / (ulong)elapsedSec;
-            EmitProgress(new ProgressEvent
-            {
-                Type = "progress",
-                FileIndex = fileIdx + 1,
-                FileTotal = totalFiles,
-                FileName = file.FileName,
-                ChunkIndex = downloadedChunks,
-                ChunkTotal = totalChunks,
-                BytesDownloaded = downloadedBytes,
-                BytesTotal = totalBytes,
-                SpeedBytesPerSecond = speedBytesPerSec,
-                FailedFiles = failedFiles,
-                FailedChunks = failedChunks
-            });
+            SaveValidationIndex(validationIndexPath, validationIndex);
         }
 
-        stopwatch.Stop();
-        EmitProgress(new ProgressEvent
-        {
-            Type = "complete",
-            DownloadedFiles = downloadedFiles,
-            FileTotal = totalFiles,
-            DownloadedChunks = downloadedChunks,
-            ChunkTotal = totalChunks,
-            DownloadedBytes = downloadedBytes,
-            BytesTotal = totalBytes,
-            FailedFiles = failedFiles,
-            FailedChunks = failedChunks,
-            ElapsedSeconds = stopwatch.Elapsed.TotalSeconds,
-            OutputDir = _config.OutputDir
-        });
+        return new DepotDownloadResult(
+            downloadedFiles,
+            (ulong)Interlocked.Read(ref downloadedChunks),
+            (ulong)Interlocked.Read(ref downloadedBytes),
+            Volatile.Read(ref failedFiles),
+            Volatile.Read(ref failedChunks),
+            true);
     }
+
+    private async Task<bool[]> ValidateExistingChunksAsync(
+        string filePath,
+        IReadOnlyList<DepotManifest.ChunkData> chunks,
+        long expectedFileLength,
+        CancellationToken cancellationToken,
+        ChunkValidationIndex? validationIndex,
+        object validationIndexLock)
+    {
+        var validChunks = new bool[chunks.Count];
+        if (!File.Exists(filePath))
+            return validChunks;
+
+        var fileInfo = new FileInfo(filePath);
+        var cachedFile = GetCachedFileIndex(validationIndex, validationIndexLock, filePath, fileInfo, expectedFileLength);
+        var needsDiskValidation = cachedFile == null;
+        await using var fileStream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite,
+            bufferSize: 1024 * 1024,
+            FileOptions.Asynchronous | FileOptions.RandomAccess);
+        var existingLength = fileStream.Length;
+
+        for (var chunkIndex = 0; chunkIndex < chunks.Count; chunkIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var chunk = chunks[chunkIndex];
+            if (!needsDiskValidation && TryGetCachedChunk(cachedFile!, chunkIndex, chunk))
+            {
+                validChunks[chunkIndex] = true;
+                continue;
+            }
+
+            var chunkEnd = (long)(chunk.Offset + chunk.UncompressedLength);
+            if (chunkEnd > existingLength) continue;
+
+            var existingBuffer = ArrayPool<byte>.Shared.Rent((int)chunk.UncompressedLength);
+            try
+            {
+                var totalRead = 0;
+                while (totalRead < chunk.UncompressedLength)
+                {
+                    var read = await RandomAccess.ReadAsync(
+                        fileStream.SafeFileHandle,
+                        existingBuffer.AsMemory(totalRead, (int)chunk.UncompressedLength - totalRead),
+                        (long)chunk.Offset + totalRead,
+                        cancellationToken);
+                    if (read == 0) break;
+                    totalRead += read;
+                }
+
+                if (totalRead != chunk.UncompressedLength) continue;
+                var adler = ComputeAdler32(existingBuffer, totalRead);
+                var expected = BitConverter.GetBytes(chunk.Checksum);
+                validChunks[chunkIndex] = adler.AsSpan().SequenceEqual(expected);
+                if (validChunks[chunkIndex])
+                {
+                    UpdateValidationIndexChunk(
+                        validationIndex,
+                        validationIndexLock,
+                        filePath,
+                        fileInfo,
+                        expectedFileLength,
+                        chunkIndex,
+                        chunk);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(existingBuffer);
+            }
+        }
+
+        return validChunks;
+    }
+
+    private static ChunkValidationIndex? LoadValidationIndex(string path, ulong manifestId)
+    {
+        if (manifestId == 0 || !File.Exists(path))
+            return manifestId == 0 ? null : new ChunkValidationIndex(manifestId);
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var index = System.Text.Json.JsonSerializer.Deserialize<ChunkValidationIndex>(json);
+            if (index == null || index.Version != 1 || index.ManifestId != manifestId)
+                return new ChunkValidationIndex(manifestId);
+
+            index.Files = new Dictionary<string, FileValidationIndex>(
+                index.Files ?? [],
+                StringComparer.OrdinalIgnoreCase);
+            return index;
+        }
+        catch
+        {
+            return new ChunkValidationIndex(manifestId);
+        }
+    }
+
+    private static FileValidationIndex? GetCachedFileIndex(
+        ChunkValidationIndex? validationIndex,
+        object validationIndexLock,
+        string filePath,
+        FileInfo fileInfo,
+        long expectedFileLength)
+    {
+        if (validationIndex == null)
+            return null;
+
+        lock (validationIndexLock)
+        {
+            if (!validationIndex.Files.TryGetValue(filePath, out var fileIndex))
+                return null;
+            if (fileInfo.Length != expectedFileLength ||
+                fileIndex.FileLength != expectedFileLength ||
+                fileIndex.LastWriteUtcTicks != fileInfo.LastWriteTimeUtc.Ticks)
+                return null;
+            return fileIndex;
+        }
+    }
+
+    private static bool TryGetCachedChunk(
+        FileValidationIndex fileIndex,
+        int chunkIndex,
+        DepotManifest.ChunkData chunk)
+    {
+        if (fileIndex.Chunks == null || chunkIndex >= fileIndex.Chunks.Count)
+            return false;
+
+        var cachedChunk = fileIndex.Chunks[chunkIndex];
+        return cachedChunk.Offset == chunk.Offset &&
+            cachedChunk.UncompressedLength == chunk.UncompressedLength &&
+            cachedChunk.Checksum == chunk.Checksum;
+    }
+
+    private static void UpdateValidationIndexChunk(
+        ChunkValidationIndex? validationIndex,
+        object validationIndexLock,
+        FileDownloadState state,
+        int chunkIndex,
+        DepotManifest.ChunkData chunk)
+    {
+        UpdateValidationIndexChunk(
+            validationIndex,
+            validationIndexLock,
+            state.Path,
+            state.Length,
+            chunkIndex,
+            chunk);
+    }
+
+    private static void UpdateValidationIndexChunk(
+        ChunkValidationIndex? validationIndex,
+        object validationIndexLock,
+        string filePath,
+        FileInfo fileInfo,
+        long expectedFileLength,
+        int chunkIndex,
+        DepotManifest.ChunkData chunk)
+    {
+        UpdateValidationIndexChunk(
+            validationIndex,
+            validationIndexLock,
+            filePath,
+            expectedFileLength,
+            chunkIndex,
+            chunk,
+            fileInfo.LastWriteTimeUtc.Ticks);
+    }
+
+    private static void UpdateValidationIndexChunk(
+        ChunkValidationIndex? validationIndex,
+        object validationIndexLock,
+        string filePath,
+        long expectedFileLength,
+        int chunkIndex,
+        DepotManifest.ChunkData chunk,
+        long lastWriteUtcTicks = 0)
+    {
+        if (validationIndex == null)
+            return;
+
+        lock (validationIndexLock)
+        {
+            if (!validationIndex.Files.TryGetValue(filePath, out var fileIndex))
+            {
+                fileIndex = new FileValidationIndex();
+                validationIndex.Files[filePath] = fileIndex;
+            }
+
+            fileIndex.FileLength = expectedFileLength;
+            fileIndex.LastWriteUtcTicks = lastWriteUtcTicks;
+            fileIndex.Chunks ??= [];
+            while (fileIndex.Chunks.Count <= chunkIndex)
+                fileIndex.Chunks.Add(new ChunkValidationEntry());
+
+            fileIndex.Chunks[chunkIndex] = new ChunkValidationEntry
+            {
+                Offset = chunk.Offset,
+                UncompressedLength = chunk.UncompressedLength,
+                Checksum = chunk.Checksum
+            };
+        }
+    }
+
+    private static void SaveValidationIndex(string path, ChunkValidationIndex? validationIndex)
+    {
+        if (validationIndex == null)
+            return;
+
+        var temporaryPath = $"{path}.tmp";
+        try
+        {
+            foreach (var (filePath, fileIndex) in validationIndex.Files.ToArray())
+            {
+                if (!File.Exists(filePath))
+                {
+                    validationIndex.Files.Remove(filePath);
+                    continue;
+                }
+
+                var fileInfo = new FileInfo(filePath);
+                fileIndex.FileLength = fileInfo.Length;
+                fileIndex.LastWriteUtcTicks = fileInfo.LastWriteTimeUtc.Ticks;
+            }
+
+            var json = System.Text.Json.JsonSerializer.Serialize(validationIndex);
+            File.WriteAllText(temporaryPath, json);
+            File.Move(temporaryPath, path, true);
+        }
+        catch
+        {
+            try { File.Delete(temporaryPath); } catch { }
+        }
+    }
+
+    private static FileStream GetOrOpenFileStream(FileDownloadState state)
+    {
+        lock (state.StreamGate)
+        {
+            if (state.Stream != null)
+                return state.Stream;
+
+            state.Stream = new FileStream(
+                state.Path,
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.Read,
+                bufferSize: 1024 * 1024,
+                FileOptions.Asynchronous | FileOptions.RandomAccess);
+            state.Stream.SetLength(state.Length);
+            return state.Stream;
+        }
+    }
+
+    private static void DisposeFileStream(FileDownloadState state)
+    {
+        lock (state.StreamGate)
+        {
+            state.Stream?.Dispose();
+            state.Stream = null;
+        }
+    }
+
+    private sealed class ChunkWorkItem
+    {
+        public ChunkWorkItem(FileDownloadState fileState, int chunkIndex)
+        {
+            FileState = fileState;
+            ChunkIndex = chunkIndex;
+            FileIndex = fileState.FileIndex;
+        }
+
+        public FileDownloadState FileState { get; }
+        public int ChunkIndex { get; }
+        public int FileIndex { get; }
+    }
+
+    private sealed class FileDownloadState
+    {
+        public FileDownloadState(
+            DepotManifest.FileData file,
+            string path,
+            long length,
+            bool[] validChunks,
+            int remainingChunks,
+            int fileIndex)
+        {
+            File = file;
+            Path = path;
+            Length = length;
+            ValidChunks = validChunks;
+            RemainingChunks = remainingChunks;
+            FileIndex = fileIndex;
+        }
+
+        public DepotManifest.FileData File { get; }
+        public string Path { get; }
+        public long Length { get; }
+        public bool[] ValidChunks { get; set; }
+        public int FileIndex { get; }
+        public bool PreparationFailed { get; set; }
+        public bool DeleteAfterDispose { get; set; }
+        public int RemainingChunks;
+        public int FailedChunks;
+        public int CompletionSignaled;
+        public FileStream? Stream;
+        public object StreamGate { get; } = new();
+    }
+
+    private sealed class ChunkValidationIndex
+    {
+        public ChunkValidationIndex() { }
+
+        public ChunkValidationIndex(ulong manifestId)
+        {
+            ManifestId = manifestId;
+        }
+
+        public int Version { get; set; } = 1;
+        public ulong ManifestId { get; set; }
+        public Dictionary<string, FileValidationIndex> Files { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class FileValidationIndex
+    {
+        public long FileLength { get; set; }
+        public long LastWriteUtcTicks { get; set; }
+        public List<ChunkValidationEntry> Chunks { get; set; } = [];
+    }
+
+    private sealed class ChunkValidationEntry
+    {
+        public ulong Offset { get; set; }
+        public uint UncompressedLength { get; set; }
+        public uint Checksum { get; set; }
+    }
+
+    private sealed record DepotDownloadResult(
+        int DownloadedFiles,
+        ulong DownloadedChunks,
+        ulong DownloadedBytes,
+        int FailedFiles,
+        int FailedChunks,
+        bool EmitComplete);
 
     /// Canal dos eventos JSON. Em modo download o `Program` aponta isto pro stdout
     /// real e manda o resto do `Console.Out` pro stderr, para o stream ficar limpo.
@@ -867,19 +1496,33 @@ public class SteamKitPocRunner
 
     private static void EmitProgress(ProgressEvent ev)
     {
-        EventOut.WriteLine(System.Text.Json.JsonSerializer.Serialize(ev, ProgressJsonContext.Default.ProgressEvent));
-        EventOut.Flush();
+        lock (EventOutputLock)
+        {
+            EventOut.WriteLine(System.Text.Json.JsonSerializer.Serialize(ev, ProgressJsonContext.Default.ProgressEvent));
+            EventOut.Flush();
+        }
     }
 
     private static byte[] ComputeAdler32(byte[] data, int length)
     {
+        const uint modulus = 65521;
+        const int blockSize = 5552;
         uint a = 0, b = 0;
-        for (var i = 0; i < length; i++)
+        var offset = 0;
+        while (offset < length)
         {
-            var c = (uint)data[i];
-            a = (a + c) % 65521;
-            b = (b + a) % 65521;
+            var blockLength = Math.Min(blockSize, length - offset);
+            for (var i = 0; i < blockLength; i++)
+            {
+                a += data[offset + i];
+                b += a;
+            }
+
+            a %= modulus;
+            b %= modulus;
+            offset += blockLength;
         }
+
         return BitConverter.GetBytes(a | (b << 16));
     }
 

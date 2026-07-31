@@ -26,6 +26,7 @@ export const overviewSortStorageKey = "ghostbox:overview-sort-by:v1";
 export const notificationsLastSeenStorageKey = "ghostbox:notifications-last-seen:v1";
 export const autoRestoredCloudSavesStorageKey = "ghostbox:auto-restored-cloud-saves:v1";
 export const downloadsDirStorageKey = "ghostbox:downloads-dir:v1";
+export const downloadParallelChunksStorageKey = "ghostbox:download-parallel-chunks:v1";
 export const imageSourceCacheLimit = 800;
 
 const legacyStorageKeys: Record<string, string[]> = {

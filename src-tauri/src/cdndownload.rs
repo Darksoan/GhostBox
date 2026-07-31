@@ -95,6 +95,38 @@ fn ensure_download_worker(worker: &mut Option<DownloadWorker>) -> Result<&mut Do
         .ok_or_else(|| "SteamKit worker is unavailable".to_string())
 }
 
+fn write_worker_command(
+    worker_stdin: &Arc<Mutex<ChildStdin>>,
+    command: &serde_json::Value,
+) -> Result<(), String> {
+    let command_line = serde_json::to_string(command).map_err(|error| error.to_string())?;
+    let mut stdin = worker_stdin.lock().map_err(|error| error.to_string())?;
+    stdin
+        .write_all(command_line.as_bytes())
+        .and_then(|_| stdin.write_all(b"\n"))
+        .and_then(|_| stdin.flush())
+        .map_err(|error| format!("Failed to write command to steamkit worker: {error}"))
+}
+
+fn read_worker_event(
+    worker_stdout: &Arc<Mutex<std::io::BufReader<ChildStdout>>>,
+) -> Result<Option<serde_json::Value>, String> {
+    loop {
+        let mut line = String::new();
+        let mut stdout = worker_stdout.lock().map_err(|error| error.to_string())?;
+        let bytes_read = stdout
+            .read_line(&mut line)
+            .map_err(|error| format!("Failed to read from steamkit worker: {error}"))?;
+        drop(stdout);
+        if bytes_read == 0 {
+            return Ok(None);
+        }
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+            return Ok(Some(value));
+        }
+    }
+}
+
 fn find_poc_binary() -> Result<std::path::PathBuf, String> {
     if let Ok(path) = std::env::var("GHOSTBOX_POC_PATH") {
         let p = std::path::PathBuf::from(&path);
@@ -236,13 +268,56 @@ pub fn cdndownload_cancel_game(app_id: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub fn cdndownload_delete_output_dir(
+    app_id: String,
+    downloads_root: String,
+    output_dir: String,
+) -> Result<bool, String> {
+    let app_id = app_id.trim();
+    let downloads_root = downloads_root.trim();
+    let output_dir = output_dir.trim();
+    if app_id.is_empty() || downloads_root.is_empty() || output_dir.is_empty() {
+        return Err(
+            "Download removal requires an app ID, downloads root, and output path."
+                .to_string(),
+        );
+    }
+
+    let root_path = Path::new(downloads_root);
+    let output_path = Path::new(output_dir);
+    if output_path.file_name().and_then(|name| name.to_str()) != Some(app_id) {
+        return Err("Download output folder does not match the requested app ID.".to_string());
+    }
+    if output_path.parent() != Some(root_path) {
+        return Err("Download output folder must be a direct child of the downloads root.".to_string());
+    }
+    if !output_path.exists() {
+        return Ok(true);
+    }
+    if !output_path.is_dir() {
+        return Err("Download output path is not a directory.".to_string());
+    }
+
+    let canonical_root = root_path.canonicalize().map_err(|error| error.to_string())?;
+    let canonical_output = output_path.canonicalize().map_err(|error| error.to_string())?;
+    if canonical_output.parent() != Some(canonical_root.as_path()) {
+        return Err("Download output folder resolves outside the downloads root.".to_string());
+    }
+
+    std::fs::remove_dir_all(canonical_output).map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
 pub async fn cdndownload_download_game(
     app: tauri::AppHandle,
     app_id: String,
     output_dir: String,
     steam_path: Option<String>,
+    parallel_chunks: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     let _ = take_download_cancelled(&app_id);
+    let parallel_chunks = parallel_chunks.unwrap_or(24).clamp(1, 32);
     let steam_path = match steam_path {
         Some(path) => path,
         None => crate::resolve_steam_path(&app, None)
@@ -283,7 +358,64 @@ pub async fn cdndownload_download_game(
         .map_err(|error| error.to_string())?
         .insert(app_id.clone(), worker_process_id);
 
+    let mut depot_sizes = Vec::with_capacity(depots.len());
     for (depot_id, manifest_id) in &depots {
+        if take_download_cancelled(&app_id) {
+            clear_active_download_process(&app_id);
+            return Ok(serde_json::json!({
+                "Type": "cancelled",
+                "Status": "cancelled",
+                "AppId": app_id,
+            }));
+        }
+
+        write_worker_command(
+            &worker_stdin,
+            &serde_json::json!({
+                "Type": "inspectDepot",
+                "AppId": app_id.parse::<u32>().unwrap_or_default(),
+                "DepotId": depot_id,
+                "ManifestId": manifest_id,
+                "SteamPath": steam_path,
+            }),
+        )?;
+
+        let Some(inspected) = read_worker_event(&worker_stdout)? else {
+            clear_active_download_process(&app_id);
+            return Ok(serde_json::json!({
+                "Type": "error",
+                "Status": "worker-exited-during-inspection",
+                "Message": "steamkit worker exited while inspecting download manifests.",
+            }));
+        };
+        if inspected.get("Type").and_then(|value| value.as_str()) != Some("depot-inspected") {
+            clear_active_download_process(&app_id);
+            return Ok(inspected);
+        }
+        depot_sizes.push(
+            inspected
+                .get("TotalBytes")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0),
+        );
+    }
+
+    let total_download_bytes: u64 = depot_sizes.iter().sum();
+    app.emit(
+        "download-progress",
+        serde_json::json!({
+            "Type": "status",
+            "Status": "depot-plan",
+            "AppId": app_id,
+            "DepotTotal": depots.len(),
+            "TotalBytes": total_download_bytes,
+        }),
+    )
+    .ok();
+
+    let mut completed_depot_bytes = 0u64;
+
+    for ((depot_id, manifest_id), depot_size) in depots.iter().zip(depot_sizes.iter()) {
         if take_download_cancelled(&app_id) {
             clear_active_download_process(&app_id);
             return Ok(serde_json::json!({
@@ -315,24 +447,12 @@ pub async fn cdndownload_download_game(
             "ManifestId": manifest_id,
             "SteamPath": steam_path,
             "OutputDir": depot_output,
+            "ParallelChunks": parallel_chunks,
         });
-        let command_line = serde_json::to_string(&command).map_err(|error| error.to_string())?;
-        let mut stdin = worker_stdin.lock().map_err(|error| error.to_string())?;
-        stdin
-            .write_all(command_line.as_bytes())
-            .and_then(|_| stdin.write_all(b"\n"))
-            .and_then(|_| stdin.flush())
-            .map_err(|error| format!("Failed to write command to steamkit worker: {error}"))?;
-        drop(stdin);
+        write_worker_command(&worker_stdin, &command)?;
 
         let depot_result = loop {
-            let mut line = String::new();
-            let mut stdout = worker_stdout.lock().map_err(|error| error.to_string())?;
-            let bytes_read = stdout
-                .read_line(&mut line)
-                .map_err(|error| format!("Failed to read from steamkit worker: {error}"))?;
-            drop(stdout);
-            if bytes_read == 0 {
+            let Some(mut value) = read_worker_event(&worker_stdout)? else {
                 let _ = download_worker().lock().map(|mut worker| *worker = None);
                 if take_download_cancelled(&app_id) {
                     clear_active_download_process(&app_id);
@@ -350,15 +470,28 @@ pub async fn cdndownload_download_game(
                     "Message": "steamkit worker exited before reporting a result.",
                     "DepotId": depot_id,
                 }));
-            }
-
-            let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                continue;
             };
             let event_type = value
                 .get("Type")
                 .and_then(|v| v.as_str())
-                .unwrap_or("");
+                .unwrap_or("")
+                .to_string();
+
+            if event_type == "progress" {
+                let current_depot_bytes = value
+                    .get("BytesDownloaded")
+                    .and_then(|bytes| bytes.as_u64())
+                    .unwrap_or(0);
+                value["BytesDownloaded"] =
+                    serde_json::json!(completed_depot_bytes + current_depot_bytes);
+                value["BytesTotal"] = serde_json::json!(total_download_bytes);
+            } else if event_type == "status"
+                && value.get("Status").and_then(|status| status.as_str())
+                    == Some("manifest-loaded")
+            {
+                value["TotalBytes"] = serde_json::json!(total_download_bytes);
+            }
+
             let _ = app.emit("download-progress", value.clone());
             if event_type == "complete" || event_type == "error" || event_type == "cancelled" {
                 break value;
@@ -376,6 +509,7 @@ pub async fn cdndownload_download_game(
         }
 
         all_results.push(depot_result);
+        completed_depot_bytes += *depot_size;
     }
 
     clear_active_download_process(&app_id);

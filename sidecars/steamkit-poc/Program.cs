@@ -1,6 +1,9 @@
 ﻿using SteamKitPoc;
+using DepotDownloader;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using SteamKit2;
+using SteamKit2.CDN;
 
 Console.SetOut(new RedactionWriter(Console.Out));
 Console.SetError(new RedactionWriter(Console.Error));
@@ -113,7 +116,7 @@ static void PrintUsage()
     Console.WriteLine("       [--steam-path <path>] [--reuse-session] [--corrupt-chunk]");
     Console.WriteLine("       [--dry-run] [--bare-download --depot-id <uint>]");
     Console.WriteLine("       [--worker]");
-    Console.WriteLine("       [--download --depot-id <uint> --output-dir <path> [--manifest-id <ulong>]]");
+    Console.WriteLine("       [--download --depot-id <uint> --output-dir <path> [--manifest-id <ulong>] [--parallel-chunks <int>]]");
 }
 
 static async Task RunWorkerAsync()
@@ -134,6 +137,7 @@ static async Task RunWorkerAsync()
             {
                 foreach (var activeDownload in WorkerState.ActiveDownloads.Values)
                     activeDownload.Cancel();
+                SteamKitPocRunner.ShutdownWorkerSession();
                 return;
             }
             if (type == "cancelDownload" || type == "pauseDownload")
@@ -141,6 +145,33 @@ static async Task RunWorkerAsync()
                 var appId = root.GetProperty("AppId").GetUInt32();
                 if (WorkerState.ActiveDownloads.TryGetValue(appId, out var activeDownload))
                     activeDownload.Cancel();
+                continue;
+            }
+            if (type == "inspectDepot")
+            {
+                var appId = root.GetProperty("AppId").GetUInt32();
+                var depotId = root.GetProperty("DepotId").GetUInt32();
+                var manifestId = root.GetProperty("ManifestId").GetUInt64();
+                var steamPath = root.GetProperty("SteamPath").GetString() ?? "";
+                var manifestPath = Path.Combine(
+                    steamPath,
+                    "depotcache",
+                    $"{depotId}_{manifestId}.manifest");
+
+                using var manifestStream = File.OpenRead(manifestPath);
+                var manifest = DepotManifest.Deserialize(manifestStream);
+                var totalBytes = manifest.Files?
+                    .Where(file => file.Chunks != null)
+                    .SelectMany(file => file.Chunks!)
+                    .Aggregate(0UL, (total, chunk) => total + chunk.UncompressedLength) ?? 0;
+
+                SteamKitPocRunner.WriteEvent(new ProgressEvent
+                {
+                    Type = "depot-inspected",
+                    AppId = appId,
+                    DepotId = depotId,
+                    TotalBytes = totalBytes,
+                });
                 continue;
             }
             if (type != "downloadDepot") continue;
@@ -155,7 +186,7 @@ static async Task RunWorkerAsync()
                 OutputDir = root.GetProperty("OutputDir").GetString(),
                 ParallelChunks = root.TryGetProperty("ParallelChunks", out var parallelChunks)
                     ? parallelChunks.GetInt32()
-                    : 8,
+                    : 24,
             };
 
             var cancellation = new CancellationTokenSource();
@@ -210,5 +241,5 @@ public class Config
     public string? OutputDir { get; set; }
     public ulong ManifestIdOverride { get; set; }
     public uint DepotId { get; set; }
-    public int ParallelChunks { get; set; } = 8;
+    public int ParallelChunks { get; set; } = 24;
 }

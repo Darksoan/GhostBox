@@ -49,7 +49,7 @@ const translations: Record<Language, TranslationTree> = {
     downloads: {
       title: "Downloads",
       description: "Acompanhe o progresso dos downloads de jogos iniciados pelo GhostBox.",
-      clear: "Limpar concluídos",
+      clear: "Limpar",
       emptyTitle: "Nenhum download por enquanto",
       emptyMessage: "Downloads iniciados pelo modal de um jogo aparecerão aqui.",
       remove: "Remover",
@@ -57,6 +57,7 @@ const translations: Record<Language, TranslationTree> = {
       resume: "Retomar",
       cancel: "Cancelar",
       queuePosition: "Na fila — posição {position}",
+      statusQueued: "Na fila",
       statusDownloading: "Baixando",
       statusPaused: "Pausado",
       statusCompleted: "Concluído",
@@ -66,6 +67,20 @@ const translations: Record<Language, TranslationTree> = {
       failedFiles: "{count} arquivo(s) com falha",
       genericError: "Não foi possível concluir o download.",
       depotOf: "Depot {index} de {total}",
+      details: {
+        open: "Abrir detalhes de {title}",
+        close: "Fechar",
+        allocated: "Espaço alocado",
+        date: "Data do download",
+        time: "Horário",
+        destination: "Pasta de destino",
+        cancel: "Cancelar download",
+        uninstall: "Desinstalar",
+        confirmDelete: "Os arquivos baixados de {title} serão removidos permanentemente.",
+        keepFiles: "Manter arquivos",
+        removing: "Removendo...",
+        deleteError: "Não foi possível remover os arquivos do jogo.",
+      },
       status: {
         starting: "Iniciando",
         keyResolved: "Chave obtida",
@@ -361,6 +376,11 @@ const translations: Record<Language, TranslationTree> = {
             "Diretório onde os jogos baixados serão salvos.",
           default: "Nenhuma pasta selecionada",
         },
+        parallelChunks: {
+          label: "Downloads simultâneos",
+          description:
+            "Quantidade de pedaços baixados ao mesmo tempo. Valores altos usam mais banda e memória.",
+        },
       },
       download: {
         morrenusApiKey: {
@@ -434,7 +454,7 @@ const translations: Record<Language, TranslationTree> = {
     downloads: {
       title: "Downloads",
       description: "Track the progress of game downloads started from GhostBox.",
-      clear: "Clear completed",
+      clear: "Clear",
       emptyTitle: "No downloads yet",
       emptyMessage: "Downloads started from a game's modal will appear here.",
       remove: "Remove",
@@ -442,6 +462,7 @@ const translations: Record<Language, TranslationTree> = {
       resume: "Resume",
       cancel: "Cancel",
       queuePosition: "Queued — position {position}",
+      statusQueued: "Queued",
       statusDownloading: "Downloading",
       statusPaused: "Paused",
       statusCompleted: "Completed",
@@ -451,6 +472,20 @@ const translations: Record<Language, TranslationTree> = {
       failedFiles: "{count} file(s) failed",
       genericError: "Could not complete the download.",
       depotOf: "Depot {index} of {total}",
+      details: {
+        open: "Open details for {title}",
+        close: "Close",
+        allocated: "Allocated space",
+        date: "Download date",
+        time: "Time",
+        destination: "Destination folder",
+        cancel: "Cancel download",
+        uninstall: "Uninstall",
+        confirmDelete: "Downloaded files for {title} will be permanently removed.",
+        keepFiles: "Keep files",
+        removing: "Removing...",
+        deleteError: "Could not remove the game files.",
+      },
       status: {
         starting: "Starting",
         keyResolved: "Key resolved",
@@ -741,6 +776,11 @@ const translations: Record<Language, TranslationTree> = {
           description:
             "Directory where downloaded games will be saved.",
           default: "No folder selected",
+        },
+        parallelChunks: {
+          label: "Parallel downloads",
+          description:
+            "How many chunks are fetched at once. Higher values use more bandwidth and memory.",
         },
       },
       download: {

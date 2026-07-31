@@ -21,6 +21,8 @@ import { ghostboxApi } from "../lib/ghostboxApi";
 import {
   readStoredDownloadsDir,
   writeStoredDownloadsDir,
+  readStoredDownloadParallelChunks,
+  writeStoredDownloadParallelChunks,
 } from "../utils/storage";
 
 export type { SettingsTabId } from "../features/settings/settingsTabsShared";
@@ -67,46 +69,12 @@ type SettingOptionDefinition = {
 type DraftValue = string | boolean;
 type DraftsState = Partial<Record<SettingsTabId, Record<string, DraftValue>>>;
 
-const downloadApiSources = [
-  { name: "Ryuu", typeKey: "settings.download.sources.auto", url: "https://discord.com/invite/manifests" },
-  { name: "Sushi", typeKey: "settings.download.sources.auto", url: "https://discord.com/invite/J5JMUBYyZK" },
-];
-
-type MorrenusStatsState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "success"; stats: Record<string, unknown> };
-
 type CloudBackupGame = {
   appId: string;
   title: string;
   lastBackupAt: string | null;
   lastBackupSuccess: boolean | null;
 };
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function statsText(stats: Record<string, unknown>, key: string) {
-  const value = stats[key];
-  if (value === null || typeof value === "undefined" || value === "") return "-";
-  if (typeof value === "boolean") return value ? "Sim" : "Não";
-  return String(value);
-}
-
-function statsNumber(stats: Record<string, unknown>, key: string) {
-  const value = stats[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function formatMorrenusDate(value: unknown) {
-  if (typeof value !== "string" || !value) return "-";
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return value;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(parsed);
-}
 
 function readDrafts(): DraftsState {
   if (typeof window === "undefined") return {};
@@ -276,7 +244,7 @@ export function SettingsPage({
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
   );
   const [downloadsDir, setDownloadsDir] = useState(() => readStoredDownloadsDir());
-  const [morrenusStats, setMorrenusStats] = useState<MorrenusStatsState>({ status: "idle" });
+  const [parallelChunks, setParallelChunks] = useState(() => readStoredDownloadParallelChunks());
 
   useEffect(() => {
     const defaults = getDefaultDrafts(appearance.language, initialPage, startupSettings);
@@ -292,6 +260,13 @@ export function SettingsPage({
     if (!picked) return;
     writeStoredDownloadsDir(picked);
     setDownloadsDir(picked);
+  }, []);
+
+  const handleParallelChunksChange = useCallback((value: string) => {
+    const nextValue = Number.parseInt(value, 10);
+    if (!Number.isFinite(nextValue)) return;
+    writeStoredDownloadParallelChunks(nextValue);
+    setParallelChunks(nextValue);
   }, []);
 
   useEffect(() => {
@@ -332,44 +307,6 @@ export function SettingsPage({
     updateAppearance,
   ]);
 
-  const refreshMorrenusStats = useCallback(async (apiKey = morrenusApiKey) => {
-    const normalizedApiKey = apiKey.trim();
-    if (!normalizedApiKey) {
-      setMorrenusStats({ status: "idle" });
-      return;
-    }
-
-    setMorrenusStats({ status: "loading" });
-    try {
-      const result = await ghostboxApi.getMorrenusStats(normalizedApiKey);
-      if (!result?.success) {
-        setMorrenusStats({ status: "error", message: result?.error || t("settings.download.accountStatus.defaultError") });
-        return;
-      }
-
-      setMorrenusStats({ status: "success", stats: asRecord(result.stats) });
-    } catch (error) {
-      setMorrenusStats({
-        status: "error",
-        message: error instanceof Error ? error.message : t("settings.download.accountStatus.defaultError"),
-      });
-    }
-  }, [morrenusApiKey, t]);
-
-  useEffect(() => {
-    const normalizedApiKey = morrenusApiKey.trim();
-    if (!normalizedApiKey) {
-      setMorrenusStats({ status: "idle" });
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void refreshMorrenusStats(normalizedApiKey);
-    }, 700);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [morrenusApiKey, refreshMorrenusStats]);
-
   const options = useMemo(
     () =>
       buildTabOptions(activeTab, drafts[activeTab.id] ?? {}, (tabId, key, value) => {
@@ -380,10 +317,7 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, downloadsDir, handleSelectDownloadsDir, morrenusApiKey, onMorrenusApiKeyChange, () => {
-        onMorrenusApiKeySave();
-        void refreshMorrenusStats();
-      }),
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, downloadsDir, handleSelectDownloadsDir, parallelChunks, handleParallelChunksChange, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave),
     [
       activeTab,
       appearance,
@@ -391,12 +325,13 @@ export function SettingsPage({
       drafts,
       downloadsDir,
       handleSelectDownloadsDir,
+      parallelChunks,
+      handleParallelChunksChange,
       morrenusApiKey,
       notifications,
       onMorrenusApiKeyChange,
       onMorrenusApiKeySave,
       onSelectSteamPath,
-      refreshMorrenusStats,
       steamPath,
       t,
       updateAppearance,
@@ -439,25 +374,6 @@ export function SettingsPage({
               steamProfile={steamProfile}
             />
           )}
-          {activeTab.id === "download" && (
-            <>
-              <MorrenusAccountStatus
-                statsState={morrenusStats}
-                onRefresh={() => void refreshMorrenusStats()}
-                t={t}
-                enterDelay={`${0.04 + options.length * 0.035}s`}
-              />
-              <div
-                className="download-api-divider settings-panel__animated-block"
-                aria-hidden="true"
-                style={{ ["--settings-enter-delay" as string]: `${0.08 + options.length * 0.035}s` }}
-              />
-              <DownloadApiSourcesInfo
-                t={t}
-                enterDelay={`${0.12 + options.length * 0.035}s`}
-              />
-            </>
-          )}
         </div>
       </article>
     </section>
@@ -477,6 +393,8 @@ function buildTabOptions(
   onSelectSteamPath: () => void,
   downloadsDir: string,
   onSelectDownloadsDir: () => void,
+  parallelChunks: number,
+  onParallelChunksChange: (value: string) => void,
   morrenusApiKey: string,
   onMorrenusApiKeyChange: (value: string) => void,
   onMorrenusApiKeyCheck: () => void
@@ -651,6 +569,17 @@ function buildTabOptions(
         value: downloadsDir || t("settings.downloads.downloadsDir.default"),
         onClick: onSelectDownloadsDir,
       },
+      {
+        label: t("settings.downloads.parallelChunks.label"),
+        description: t("settings.downloads.parallelChunks.description"),
+        control: "select" as const,
+        value: String(parallelChunks),
+        choices: [8, 16, 24, 32].map((amount) => ({
+          label: String(amount),
+          value: String(amount),
+        })),
+        onChange: onParallelChunksChange,
+      },
     ];
   }
 
@@ -721,46 +650,6 @@ function buildTabOptions(
       value: option.valueKey ? t(option.valueKey) : option.value,
     };
   });
-}
-
-function DownloadApiSourcesInfo({
-  t,
-  enterDelay,
-}: {
-  t: (key: string, params?: Record<string, string | number>) => string;
-  enterDelay?: string;
-}) {
-  return (
-    <div
-      className="download-api-info settings-panel__animated-block"
-      style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
-    >
-      <div className="download-api-info__header">
-        <strong>{t("settings.download.sources.title")}</strong>
-      </div>
-
-      <div className="download-api-info__grid">
-        {downloadApiSources.map((source) => (
-          <div key={source.name} className="download-api-info__source">
-            <div className="download-api-info__source-name">
-              <strong>{source.name}</strong>
-              <button
-                type="button"
-                className="settings-option__label-link"
-                aria-label={t("settings.download.sources.openDiscord", { source: source.name })}
-                onClick={() => {
-                  void ghostboxApi.openExternal(source.url);
-                }}
-              >
-                <ExternalLink size={13} aria-hidden="true" />
-              </button>
-            </div>
-            <small>{t(source.typeKey)}</small>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?: string }) {
@@ -862,109 +751,6 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
             <span>{option.value}</span>
           </button>
         )}
-      </div>
-    </div>
-  );
-}
-
-function MorrenusAccountStatus({
-  statsState,
-  onRefresh,
-  t,
-  enterDelay,
-}: {
-  statsState: MorrenusStatsState;
-  onRefresh: () => void;
-  t: (key: string, params?: Record<string, string | number>) => string;
-  enterDelay?: string;
-}) {
-  if (statsState.status === "idle") {
-    return (
-      <div
-        className="morrenus-status morrenus-status--idle settings-panel__animated-block"
-        style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
-      >
-        <span>{t("settings.download.accountStatus.missingKey")}</span>
-      </div>
-    );
-  }
-
-  if (statsState.status === "loading") {
-    return (
-      <div
-        className="morrenus-status morrenus-status--loading settings-panel__animated-block"
-        style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
-        aria-hidden="true"
-      >
-        <div className="morrenus-status__header">
-          <div>
-            <strong className="morrenus-status__line morrenus-status__line--title loading-wave" />
-            <span className="morrenus-status__line morrenus-status__line--meta loading-wave" />
-          </div>
-        </div>
-        <div className="morrenus-status__grid">
-          {Array.from({ length: 4 }, (_, index) => (
-            <div key={`morrenus-loading-${index}`}>
-              <span className="morrenus-status__line morrenus-status__line--label loading-wave" />
-              <strong className="morrenus-status__line morrenus-status__line--value loading-wave" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (statsState.status === "error") {
-    return (
-      <div
-        className="morrenus-status morrenus-status--error settings-panel__animated-block"
-        style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
-      >
-        <div>
-          <strong>{t("settings.download.accountStatus.errorTitle")}</strong>
-          <span>{statsState.message}</span>
-        </div>
-        <button type="button" onClick={onRefresh}>{t("settings.download.accountStatus.retry")}</button>
-      </div>
-    );
-  }
-
-  const stats = statsState.stats;
-  const dailyUsage = statsNumber(stats, "daily_usage");
-  const dailyLimit = statsNumber(stats, "daily_limit");
-  const roleLimit = statsNumber(stats, "role_daily_limit");
-  const customLimit = statsNumber(stats, "custom_api_limit");
-  const usageLabel = dailyUsage !== null && dailyLimit !== null ? `${dailyUsage}/${dailyLimit}` : statsText(stats, "daily_usage");
-
-  return (
-    <div
-      className="morrenus-status morrenus-status--success settings-panel__animated-block"
-      style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
-    >
-      <div className="morrenus-status__header">
-        <div>
-          <strong>{statsText(stats, "username")}</strong>
-          <span>ID: {statsText(stats, "user_id")}</span>
-        </div>
-      </div>
-
-      <div className="morrenus-status__grid">
-        <div>
-          <span>{t("settings.download.accountStatus.dailyUsage")}</span>
-          <strong>{usageLabel}</strong>
-        </div>
-        <div>
-          <span>{t("settings.download.accountStatus.planLimit")}</span>
-          <strong>{roleLimit ?? "-"}</strong>
-        </div>
-        <div>
-          <span>{t("settings.download.accountStatus.customLimit")}</span>
-          <strong>{customLimit ?? "-"}</strong>
-        </div>
-        <div>
-          <span>{t("settings.download.accountStatus.expiresAt")}</span>
-          <strong>{formatMorrenusDate(stats.api_key_expires_at)}</strong>
-        </div>
       </div>
     </div>
   );
