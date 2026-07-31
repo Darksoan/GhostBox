@@ -125,6 +125,15 @@ export type LoadableImageOptions = {
   kind?: GameCoverKind;
   /** Force failure after this many ms so lists can hide broken covers. */
   failTimeoutMs?: number;
+  /**
+   * Walk the list strictly in order, ignoring the "already decoded" shortcut.
+   *
+   * The shortcut paints whichever source decoded before, even when it sits at
+   * the end of the list — great against flicker in lists, wrong for a hero that
+   * ranks its sources by resolution, because a thumbnail loaded elsewhere wins
+   * over the high-density art at the top.
+   */
+  preferOrder?: boolean;
 };
 
 export function useLoadableImageState(
@@ -139,9 +148,10 @@ export function useLoadableImageState(
   const coverKind = options.kind ?? inferCoverKind(sources);
   const coverAppId = options.appId || inferCoverAppId(sources);
   const failTimeoutMs = options.failTimeoutMs ?? 0;
+  const preferOrder = options.preferOrder === true;
 
   const [state, setState] = useState<LoadableImageState>(() => {
-    const readySource = findReadySource(sources);
+    const readySource = preferOrder ? null : findReadySource(sources);
     if (readySource) {
       lastGoodSourceRef.current = readySource;
       return { source: readySource, loaded: true, failed: false };
@@ -203,7 +213,7 @@ export function useLoadableImageState(
 
     // Synchronous shortcut: a source from this set already decoded before, so
     // paint it immediately (no reset, no extra Image() round-trip).
-    const readySource = findReadySource(sources);
+    const readySource = preferOrder ? null : findReadySource(sources);
     if (readySource) {
       commit(readySource);
       return () => {
@@ -334,7 +344,7 @@ export function useLoadableImageState(
         clearTimeout(failTimer);
       }
     };
-  }, [sourceKey, coverAppId, coverKind, failTimeoutMs]);
+  }, [sourceKey, coverAppId, coverKind, failTimeoutMs, preferOrder]);
 
   return state;
 }

@@ -9,6 +9,7 @@ import {
   downloadTasksChangedEvent,
   pauseDownloadTask,
   readDownloadTasks,
+  removeDownloadTask,
   resumeDownloadTask,
   type DownloadTask,
 } from "../lib/downloadManager";
@@ -40,17 +41,23 @@ function sortTasks(tasks: DownloadTask[]): DownloadTask[] {
   });
 }
 
+/**
+ * Uma unidade só. A segunda casa muda a cada segundo sem alterar a decisão de
+ * ninguém, e ainda fazia o rótulo oscilar de largura o tempo todo.
+ */
 function formatEta(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "--";
 
   const totalSeconds = Math.ceil(seconds);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const remainingSeconds = totalSeconds % 60;
+  if (totalSeconds < 60) return `${totalSeconds}s`;
 
-  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
-  if (minutes > 0) return `${minutes}m ${remainingSeconds.toString().padStart(2, "0")}s`;
-  return `${remainingSeconds}s`;
+  // Arredonda ao minuto mais próximo: com `ceil`, 61s virava "2min".
+  const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+  if (totalMinutes < 60) return `${totalMinutes}min`;
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
 }
 
 function formatDownloadTimestamp(timestamp: number | undefined, language: "pt" | "en") {
@@ -80,9 +87,13 @@ function DownloadCard({
     task.bytesTotal > 0
       ? Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100))
       : 0;
-  const eta =
+  // O texto de "calculando" é o rótulo inteiro, não o valor: interpolado como
+  // `{time}` ele saía como "calculando… restantes".
+  const etaLabel =
     typeof task.estimatedSecondsRemaining === "number"
-      ? formatEta(task.estimatedSecondsRemaining)
+      ? t("downloads.estimatedTime", {
+          time: formatEta(task.estimatedSecondsRemaining),
+        })
       : t("downloads.estimatedTimeCalculating");
   const statusLabel =
     task.status === "queued"
@@ -100,10 +111,48 @@ function DownloadCard({
   const showsProgress =
     task.status === "downloading" || task.status === "paused" || task.status === "queued";
   const showsLiveSpeed = task.status === "downloading";
+
+  /**
+   * Uma linha só, em vez dos quatro fragmentos que antes ficavam ancorados em
+   * cantos diferentes do card. Sem separador: o espaçamento entre itens já
+   * marca a quebra, um "·" era decoração sem função.
+   *
+   * Ordem por estabilidade de largura: o que muda a cada segundo vai por
+   * último, para não empurrar o resto da linha. "Baixando" fica de fora — os
+   * números já dizem isso, e a palavra ocupava a posição mais nobre à toa. A
+   * data não entra aqui: com o download já terminado ela vai para o canto
+   * direito, junto do título, não disputando espaço com o tamanho baixado.
+   */
+  const metaItems = (
+    showsProgress
+      ? [
+          task.status === "downloading" ? "" : statusLabel,
+          `${formatBytes(task.bytesDownloaded)} / ${
+            task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"
+          }`,
+          showsLiveSpeed ? etaLabel : "",
+          showsLiveSpeed ? formatSpeed(task.speedBytesPerSecond) : "",
+        ]
+      : [
+          statusLabel,
+          task.status === "completed"
+            ? t("downloads.totalDownloaded", {
+                size: formatBytes(task.totalBytesDownloaded ?? 0),
+              })
+            : "",
+          task.status === "completed" && task.failedFiles
+            ? t("downloads.failedFiles", { count: task.failedFiles })
+            : "",
+        ]
+  ).filter(Boolean);
   const canPause = task.status === "downloading" || task.status === "queued";
   const canResume = task.status === "paused";
   const canCancel = task.status === "downloading" || task.status === "queued" || task.status === "paused";
-  const hasControls = canPause || canResume || canCancel;
+  // Só para erro: concluído não tem nada para descartar além do registro em
+  // si, e um X ali ao lado de um download que deu certo lia como se algo
+  // tivesse dado errado.
+  const canRemove = task.status === "error";
+  const hasControls = canPause || canResume || canCancel || canRemove;
   const controls = (
     <span className="download-card__controls">
       {canPause ? (
@@ -139,6 +188,17 @@ function DownloadCard({
           <X size={15} strokeWidth={2} />
         </button>
       ) : null}
+      {canRemove ? (
+        <button
+          type="button"
+          className="download-card__remove"
+          onClick={() => removeDownloadTask(task.id)}
+          aria-label={t("downloads.remove")}
+          title={t("downloads.remove")}
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      ) : null}
     </span>
   );
 
@@ -151,8 +211,8 @@ function DownloadCard({
   return (
     <article
       className={`download-card download-card--${task.status}${
-        showsProgress ? " download-card--with-progress" : ""
-      }${hasControls ? "" : " download-card--no-controls"}`}
+        hasControls ? "" : " download-card--no-controls"
+      }`}
     >
       <button
         type="button"
@@ -174,73 +234,44 @@ function DownloadCard({
         />
       </span>
 
-      <span className="download-card__main">
-        <span className="download-card__meta">
-          <strong>{task.title}</strong>
-          <span className="download-card__date">{downloadedAt}</span>
-          {task.status === "error" ? (
-            <span className="download-card__error">
-              {task.errorMessage ?? t("downloads.genericError")}
-            </span>
-          ) : null}
+      <div className="download-card__content">
+        <span className="download-card__title-row">
+          <strong className="download-card__title">{task.title}</strong>
+          {/* Só aparece quando o download já terminou: durante o progresso a
+              barra ocupa esse lugar e a data não interessa ainda. */}
+          {showsProgress ? null : (
+            <span className="download-card__date">{downloadedAt}</span>
+          )}
         </span>
 
-        <span className="download-card__side">
-          <span className="download-card__status">{statusLabel}</span>
-          {showsProgress ? (
-            <span
-              className={`download-card__speed${
-                showsLiveSpeed ? "" : " download-card__speed--hidden"
-              }`}
-              aria-hidden={!showsLiveSpeed}
-            >
-              {formatSpeed(task.speedBytesPerSecond)}
-            </span>
-          ) : null}
-          {task.status === "completed" ? (
-            <span className="download-card__speed">
-              {t("downloads.totalDownloaded", {
-                size: formatBytes(task.totalBytesDownloaded ?? 0),
-              })}
-              {task.failedFiles
-                ? ` · ${t("downloads.failedFiles", { count: task.failedFiles })}`
-                : ""}
-            </span>
-          ) : null}
-        </span>
-
-      </span>
-
-      {showsProgress ? (
-        <div className="download-card__progress-row">
-          <span className="download-card__progress">
-            <span className="download-card__progress-count">
-              {formatBytes(task.bytesDownloaded)} /{" "}
-              {task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}
-            </span>
-            <span
-              className="download-card__progress-track"
-              role="progressbar"
-              aria-valuenow={progressPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <span style={{ width: `${progressPercent}%` }} />
-            </span>
-            <span
-              className={`download-card__progress-count download-card__progress-count--eta${
-                showsLiveSpeed ? "" : " download-card__progress-count--hidden"
-              }`}
-              aria-hidden={!showsLiveSpeed}
-            >
-              {t("downloads.estimatedTime", { time: eta })}
-            </span>
+        {showsProgress ? (
+          <span
+            className="download-card__progress-track"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <span style={{ width: `${progressPercent}%` }} />
           </span>
-          {controls}
-        </div>
-      ) : hasControls ? (
-        <div className="download-card__controls-row">{controls}</div>
-      ) : null}
+        ) : null}
+
+        <span className="download-card__meta-line">
+          {metaItems.map((item) => (
+            <span key={item} className="download-card__meta-item">
+              {item}
+            </span>
+          ))}
+        </span>
+
+        {task.status === "error" ? (
+          <span className="download-card__error">
+            {task.errorMessage ?? t("downloads.genericError")}
+          </span>
+        ) : null}
+      </div>
+
+      {hasControls ? controls : null}
     </article>
   );
 }

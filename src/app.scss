@@ -8505,13 +8505,12 @@ input[type="search"]::-ms-reveal {
 
   position: relative;
   display: grid;
-  grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
-  /* Linha explícita elástica: `grid-row: 1 / -1` só alcança o fim das linhas
-     explícitas, então uma linha implícita deixaria os itens presos no topo. */
-  grid-template-rows: minmax(0, 1fr);
-  column-gap: var(--space-8);
-  row-gap: var(--space-5);
+  /* Três colunas fixas: capa, conteúdo, controles. Antes o card alternava
+     entre dois e três eixos conforme o estado, e cada estado alinhava os
+     elementos em cantos diferentes. */
+  grid-template-columns: var(--download-cover-width) minmax(0, 1fr) auto;
   align-items: center;
+  column-gap: var(--space-8);
   min-width: 0;
   min-height: 92px;
   padding: 0 var(--space-6) 0 0;
@@ -8524,6 +8523,11 @@ input[type="search"]::-ms-reveal {
 
   &:hover {
     background: var(--surface-option-hover);
+  }
+
+  /* Sem botões (concluído), a terceira coluna só deixaria uma faixa morta. */
+  &--no-controls {
+    grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
   }
 
   &__open {
@@ -8541,17 +8545,10 @@ input[type="search"]::-ms-reveal {
     }
   }
 
-  /* Linha do topo elástica: a sobra de altura fica disponível para o
-     `align-items: center` centralizar título/data de fato. */
-  &--with-progress {
-    grid-template-rows: 1fr auto;
-  }
-
   /* A capa estica na altura inteira do card; o recorte fica com o
      `background-size: cover`, então a arte encosta nas bordas. */
   &__cover-slot {
     grid-column: 1;
-    grid-row: 1 / -1;
     display: block;
     width: var(--download-cover-width);
     align-self: stretch;
@@ -8582,106 +8579,99 @@ input[type="search"]::-ms-reveal {
     animation: download-cover-in var(--motion-base) ease both;
   }
 
-  &__main {
+  /* Margem esquerda única para título, barra e métricas. */
+  &__content {
     grid-column: 2;
-    grid-row: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-6);
-    width: 100%;
+    gap: var(--space-4);
     min-width: 0;
+    padding: var(--space-6) 0;
     text-align: left;
   }
 
-  /* Sem barra de progresso (concluído/erro), o botão de remover precisa da
-     própria coluna: dividindo a coluna 2 com __main ele ficava sobreposto ao
-     status/tamanho, que também se ancoram na borda direita. */
-  &:not(&--with-progress) {
-    grid-template-columns: var(--download-cover-width) minmax(0, 1fr) auto;
-  }
-
-  /* Concluído não tem botão nenhum: sem a terceira coluna o `column-gap`
-     deixaria uma faixa morta na direita do card. */
-  &--no-controls:not(&--with-progress) {
-    grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
-  }
-
-  &:not(&--with-progress) &__main {
-    grid-column: 2;
-    grid-row: 1 / -1;
-    align-self: center;
-  }
-
-  &__meta {
-    display: grid;
+  /* Título e data dividem a linha do topo: a data só existe quando o download
+     já terminou, então ela ocupa o canto que a barra deixa livre nesse
+     estado, em vez de brigar por espaço com o tamanho baixado embaixo. */
+  &__title-row {
+    display: flex;
+    /* `flex-start`, não `baseline`: o título é maior que a data, e alinhar
+       pela linha de base empurrava a data para o meio da altura do título em
+       vez de encostar no topo do card, perto do canto superior direito. */
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-5);
     min-width: 0;
-    align-content: center;
-    gap: var(--space-1);
-
-    strong {
-      overflow: hidden;
-      color: var(--text-primary);
-      font-size: 14.5px;
-      font-weight: var(--weight-medium);
-      line-height: 1.3;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
   }
 
-  &__date {
+  &__title {
     overflow: hidden;
-    color: var(--text-secondary);
-    font-size: var(--fs-200);
-    font-weight: var(--weight-semibold);
-    line-height: 1.2;
+    color: var(--text-primary);
+    font-size: var(--fs-400);
+    font-weight: var(--weight-medium);
+    line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  &__side {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: center;
-    gap: var(--space-2);
-    /* Largura reservada: o rótulo troca entre "na fila", "pausado" e a velocidade
-       conforme o download alterna, e sem a reserva o título ao lado se desloca. */
-    min-width: 14ch;
-    text-align: right;
-  }
-
-  &__status,
-  &__speed {
+  &__date {
+    flex: 0 0 auto;
+    /* Compensa o `line-height` maior do título ao lado: sem isto o
+       `flex-start` ainda deixava a data alguns pixels abaixo do topo real do
+       texto do título. */
+    padding-top: 2px;
+    color: var(--text-secondary);
     font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
-    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
-  /* Hierarquia: só o título fica em primário; status, data, velocidade e
-     contadores são detalhe e vão em secundário. */
-  &__status {
-    color: var(--text-secondary);
-  }
+  /* Atravessa a coluna inteira: barra que para no meio lê como widget solto,
+     barra que vai de ponta a ponta lê como medida do próprio card. */
+  &__progress-track {
+    display: block;
+    width: 100%;
+    height: 6px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--text-primary) 22%, transparent);
 
-  &__speed {
-    color: var(--text-secondary);
-    font-variant-numeric: tabular-nums;
-
-    /* Mantém a linha ocupando espaço quando pausado/na fila: escondê-la de vez
-       encolheria o card a cada pause/resume. */
-    &--hidden {
-      visibility: hidden;
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--text-primary);
+      transition: width var(--motion-slow) ease;
     }
   }
 
-  &--completed &__status {
+  /* Legenda da barra. A velocidade fica por último de propósito: é o número
+     que muda a cada segundo, e no fim da linha ele não empurra o resto. */
+  &__meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    column-gap: var(--space-3);
+    row-gap: var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--fs-200);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+
+  &__meta-item {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  &--completed &__meta-item:first-child {
     color: var(--text-primary);
   }
 
-  &--error &__status {
+  &--error &__meta-item:first-child {
     color: var(--danger);
   }
 
@@ -8698,27 +8688,16 @@ input[type="search"]::-ms-reveal {
   &__controls {
     position: relative;
     z-index: 2;
+    grid-column: 3;
     display: flex;
     align-items: center;
+    align-self: center;
     justify-content: flex-end;
     gap: var(--space-2);
   }
 
-  &__controls-row {
-    grid-column: 2;
-    grid-row: 2;
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 0 var(--space-5);
-  }
-
-  &:not(&--with-progress) &__controls-row {
-    grid-column: 3;
-    grid-row: 1 / -1;
-    align-self: center;
-    padding: 0;
-  }
-
+  /* Sem caixa: os controles ficam sobre a superfície do card e só o ícone
+     responde ao hover. A caixa escura competia com a capa e com a barra. */
   &__remove,
   &__icon-button {
     display: grid;
@@ -8728,80 +8707,27 @@ input[type="search"]::-ms-reveal {
     place-items: center;
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--overlay-subtle);
+    background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     transition: color var(--motion-fast) var(--ease);
 
-    &:hover,
+    &:hover {
+      color: var(--text-primary);
+    }
+
+    /* Sem fundo, o foco por teclado precisa do anel: era a caixa que marcava
+       o alvo antes. */
     &:focus-visible {
       color: var(--text-primary);
-      outline: 0;
+      outline: 2px solid var(--icon-default);
+      outline-offset: 2px;
     }
   }
 
   &__icon-button--danger:hover,
   &__icon-button--danger:focus-visible {
     color: var(--danger);
-  }
-
-  &__progress-row {
-    grid-column: 2;
-    grid-row: 2;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-6) var(--space-7);
-    min-width: 0;
-    padding: 0 0 var(--space-5);
-  }
-
-  &__progress {
-    display: grid;
-    grid-template-columns: auto minmax(120px, 1fr) auto;
-    align-items: center;
-    gap: var(--space-4) var(--space-5);
-    min-width: 0;
-    flex: 1 1 auto;
-    max-width: 420px;
-  }
-
-  &__progress-count {
-    color: var(--text-secondary);
-    font-size: var(--fs-200);
-    font-weight: var(--weight-semibold);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.2;
-    white-space: nowrap;
-
-    &--hidden {
-      visibility: hidden;
-    }
-
-    /* Reserva de largura: o texto alterna entre "calculando" e o tempo estimado,
-       e sem isto a barra muda de tamanho a cada troca. */
-    &--eta {
-      min-width: 14ch;
-      text-align: right;
-    }
-  }
-
-  &__progress-track {
-    display: block;
-    width: 100%;
-    min-width: 120px;
-    height: 6px;
-    overflow: hidden;
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--text-primary) 22%, transparent);
-
-    > span {
-      display: block;
-      height: 100%;
-      border-radius: inherit;
-      background: var(--text-primary);
-      transition: width var(--motion-slow) ease;
-    }
   }
 
   &__depot-caption {
@@ -8827,7 +8753,11 @@ input[type="search"]::-ms-reveal {
 .download-details-modal {
   position: relative;
   display: flex;
-  width: min(640px, calc(100vw - 48px));
+  /* Teto de resolução, não de gosto: o hero acompanha a largura do modal e a
+     maior arte disponível é o `header_2x` (920×430). A 640px o hero já pedia
+     960 pixels físicos em tela a 150% e a imagem era ampliada. 560px mantém a
+     demanda em 840px, dentro do que a fonte entrega. */
+  width: min(560px, calc(100vw - 48px));
   max-height: min(760px, calc(100vh - 48px));
   flex-direction: column;
   overflow: hidden;
@@ -8863,8 +8793,22 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  /* Duas camadas: um véu curto no topo, que dá contraste ao botão de fechar sem
+     escurecer a arte, e a fusão com o corpo do modal começando só abaixo da
+     metade. O gradiente único de altura inteira lavava a imagem toda. */
   &__hero-shade {
-    background: linear-gradient(to bottom, transparent, var(--surface-modal));
+    background:
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--surface-modal) 55%, transparent) 0%,
+        transparent 34%
+      ),
+      linear-gradient(
+        to bottom,
+        transparent 40%,
+        color-mix(in srgb, var(--surface-modal) 86%, transparent) 80%,
+        var(--surface-modal) 100%
+      );
   }
 
   &__hero-copy {
@@ -8997,6 +8941,9 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-9) var(--space-9);
   }
 
+  /* Vale para "Cancelar download" e para o confirmar do diálogo: os dois usam
+     esta classe. Neutro em repouso, vermelho só no hover — a ação destrutiva se
+     anuncia quando o ponteiro chega, não o tempo todo. */
   &__danger {
     display: inline-flex;
     align-items: center;
@@ -9006,10 +8953,13 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-7);
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--danger-soft);
-    color: var(--danger-hover);
+    background: var(--surface-option);
+    color: var(--text-primary);
     cursor: pointer;
     font-weight: var(--weight-medium);
+    transition:
+      background var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
@@ -9052,12 +9002,20 @@ input[type="search"]::-ms-reveal {
 /* Empilhado: a capa vira faixa do topo e volta a ter altura própria (não há
    linha para esticar contra), igual aos cards da aba "Geral" do perfil. */
 @media (max-width: 820px) {
+  /* Sem recuo lateral no card: a capa é uma faixa e precisa encostar nas duas
+     bordas. O recuo passa para o conteúdo e para os controles. */
   .download-card {
-    --download-cover-width: min(160px, 42vw);
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0 0 var(--space-6);
+  }
+
+  .download-card--no-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .download-card__cover-slot {
-    grid-row: 1;
+    grid-column: 1 / -1;
+    width: 100%;
     align-self: start;
     min-height: 0;
   }
@@ -9065,32 +9023,19 @@ input[type="search"]::-ms-reveal {
   .download-card__cover {
     height: auto;
     min-height: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     aspect-ratio: 460 / 215;
   }
 
-  .download-card--with-progress {
-    grid-template-rows: auto auto auto;
+  .download-card__content {
+    grid-column: 1;
+    padding: var(--space-6) 0 0 var(--space-6);
   }
 
-  .download-card__main {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-2) var(--space-5);
-  }
-
-  .download-card__side {
-    align-items: flex-start;
-    text-align: left;
-  }
-
-  .download-card__progress-row {
-    grid-column: 1 / -1;
-    flex-wrap: wrap;
-    padding: 0 0 var(--space-6) var(--space-6);
-  }
-
-  .download-card__progress {
-    max-width: none;
-    gap: var(--space-3);
+  .download-card__controls {
+    grid-column: 2;
+    align-self: end;
+    padding-right: var(--space-6);
   }
 }
 

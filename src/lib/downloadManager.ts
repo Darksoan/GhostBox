@@ -41,6 +41,59 @@ export type DownloadTask = {
 
 const storageKey = "ghostbox:download-tasks:v1";
 const maxStoredHistory = 50;
+
+/**
+ * Intervalo mínimo entre amostras de velocidade. Curto de propósito: a primeira
+ * estimativa aparece na segunda amostra, então um limiar de 1s adiava o número
+ * por vários segundos no começo do download.
+ */
+const speedSampleMinSeconds = 0.35;
+/** Amostras guardadas para a mediana. ~8 amostras ≈ 3s de janela. */
+const speedSampleWindow = 8;
+/** Sem bytes novos por este tempo, a estimativa é descartada em vez de envelhecer. */
+const speedStallSeconds = 5;
+/** Teto de sanidade: acima disto o número não informa nada e só assusta. */
+const maxEstimatedSeconds = 99 * 3600;
+/** Cadência do vigia de travamento, para o caso de os eventos pararem de chegar. */
+const stallWatchIntervalMs = 2000;
+
+/**
+ * Mediana, não média nem percentil baixo: resiste tanto a picos de cache quanto
+ * a quedas momentâneas, sem o pessimismo sistemático de um percentil 25.
+ */
+function medianOf(values: number[]): number {
+  if (!values.length) return 0;
+  const ordered = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(ordered.length / 2);
+  return ordered.length % 2 === 0
+    ? (ordered[middle - 1] + ordered[middle]) / 2
+    : ordered[middle];
+}
+
+function clampEstimatedSeconds(seconds: number | undefined): number | undefined {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) {
+    return undefined;
+  }
+  return Math.min(seconds, maxEstimatedSeconds);
+}
+
+/**
+ * Combina a estimativa anterior (já descontado o tempo decorrido) com a nova.
+ * A inércia alisa o número enquanto a velocidade oscila pouco, mas uma mudança
+ * real — dobrou ou caiu pela metade — passa direto, sem arrastar o valor velho.
+ */
+function blendEstimatedSeconds(
+  previousSeconds: number | undefined,
+  instantSeconds: number,
+): number {
+  if (typeof previousSeconds !== "number" || previousSeconds <= 0) {
+    return instantSeconds;
+  }
+  if (instantSeconds > previousSeconds * 2 || instantSeconds < previousSeconds / 2) {
+    return instantSeconds;
+  }
+  return previousSeconds * 0.5 + instantSeconds * 0.5;
+}
 export const downloadTasksChangedEvent = "ghostbox:download-tasks-changed";
 
 let liveTasks: DownloadTask[] = [];
@@ -599,8 +652,16 @@ function applyProgressEvent(payload: Record<string, unknown>) {
     const canSample =
       !isResumeRecovered &&
       typeof lastProgressBytes === "number" &&
-      elapsedSeconds >= 1 &&
+      elapsedSeconds >= speedSampleMinSeconds &&
       progressedBytes > 0;
+    /* Bytes parados por tempo demais. Manter a estimativa antiga aqui era o
+       pior caso: a barra congelava e o card seguia prometendo um tempo. */
+    const isStalled =
+      !canSample &&
+      typeof lastProgressAt === "number" &&
+      typeof lastProgressBytes === "number" &&
+      progressedBytes === 0 &&
+      elapsedSeconds >= speedStallSeconds;
 
     let speedSamples = task?.speedSamples ?? [];
     let smoothedSpeed = task?.speedBytesPerSecond ?? 0;
@@ -610,31 +671,31 @@ function applyProgressEvent(payload: Record<string, unknown>) {
 
     if (canSample) {
       const observedSpeed = progressedBytes / elapsedSeconds;
-      speedSamples = [...speedSamples, observedSpeed].slice(-7);
-      const orderedSamples = [...speedSamples].sort((left, right) => left - right);
-      const conservativeSample = orderedSamples[
-        Math.floor((orderedSamples.length - 1) * 0.25)
-      ];
+      speedSamples = [...speedSamples, observedSpeed].slice(-speedSampleWindow);
+      const sampledSpeed = medianOf(speedSamples);
       smoothedSpeed = smoothedSpeed > 0
-        ? smoothedSpeed * 0.65 + conservativeSample * 0.35
-        : conservativeSample;
+        ? smoothedSpeed * 0.6 + sampledSpeed * 0.4
+        : sampledSpeed;
 
-      const remainingBytes = Math.max(0, incomingTotal - displayedBytes);
-      const instantEta = smoothedSpeed > 0
-        ? (remainingBytes / smoothedSpeed) * 1.1
-        : undefined;
+      /* `bytesTotal` chega zerado até o manifesto carregar; sem essa guarda o
+         restante virava 0 e a estimativa nascia como "terminando agora". */
+      const instantEta =
+        incomingTotal > 0 && smoothedSpeed > 0
+          ? Math.max(0, incomingTotal - displayedBytes) / smoothedSpeed
+          : undefined;
       const previousEta = task?.estimatedSecondsRemaining;
       const predictedPreviousEta = typeof previousEta === "number"
         ? Math.max(0, previousEta - elapsedSeconds)
         : undefined;
-      estimatedSecondsRemaining = typeof instantEta === "number"
-        ? typeof predictedPreviousEta === "number"
-          ? predictedPreviousEta * 0.6 + instantEta * 0.4
-          : instantEta
-        : undefined;
+      estimatedSecondsRemaining = clampEstimatedSeconds(
+        typeof instantEta === "number"
+          ? blendEstimatedSeconds(predictedPreviousEta, instantEta)
+          : undefined,
+      );
       nextSampleAt = now;
       nextSampleBytes = displayedBytes;
     } else if (
+      isStalled ||
       typeof lastProgressAt !== "number" ||
       typeof lastProgressBytes !== "number" ||
       isResumeRecovered
@@ -665,15 +726,42 @@ function applyProgressEvent(payload: Record<string, unknown>) {
   }
 }
 
+/**
+ * Rede de segurança para o caso de os eventos de progresso simplesmente
+ * pararem: sem isto a velocidade e a estimativa ficariam congeladas nos últimos
+ * valores conhecidos, indistinguíveis de um download saudável.
+ */
+function clearStalledEstimates() {
+  ensureLiveTasksHydrated();
+  const now = Date.now();
+
+  for (const task of liveTasks) {
+    if (task.status !== "downloading") continue;
+    if (task.speedBytesPerSecond === 0 && task.estimatedSecondsRemaining === undefined) {
+      continue;
+    }
+    if (typeof task.lastProgressAt !== "number") continue;
+    if (now - task.lastProgressAt < speedStallSeconds * 1000) continue;
+
+    updateLiveTask(task.appId, {
+      speedBytesPerSecond: 0,
+      estimatedSecondsRemaining: undefined,
+      speedSamples: [],
+    });
+  }
+}
+
 export function startDownloadManager(): () => void {
   if (engineStarted) return () => undefined;
   engineStarted = true;
 
   const unlisten = ghostboxApi.onDownloadProgress(applyProgressEvent);
+  const stallWatcher = setInterval(clearStalledEstimates, stallWatchIntervalMs);
 
   return () => {
     engineStarted = false;
     unlisten();
+    clearInterval(stallWatcher);
     flushStoredTasks();
   };
 }
