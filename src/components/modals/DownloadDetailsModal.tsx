@@ -159,9 +159,6 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
         </div>
 
         <footer className="download-details-modal__actions">
-          <button type="button" className="button button--outline" onClick={onClose} disabled={deleting || confirmOpen}>
-            {t("downloads.details.close")}
-          </button>
           <button
             type="button"
             className="button download-details-modal__danger"

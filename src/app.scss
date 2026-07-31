@@ -8581,6 +8581,7 @@ input[type="search"]::-ms-reveal {
 
   /* Margem esquerda única para título, barra e métricas. */
   &__content {
+    position: relative;
     grid-column: 2;
     display: grid;
     gap: var(--space-4);
@@ -8614,11 +8615,10 @@ input[type="search"]::-ms-reveal {
   }
 
   &__date {
+    position: absolute;
+    top: 0;
+    right: 0;
     flex: 0 0 auto;
-    /* Compensa o `line-height` maior do título ao lado: sem isto o
-       `flex-start` ainda deixava a data alguns pixels abaixo do topo real do
-       texto do título. */
-    padding-top: 2px;
     color: var(--text-secondary);
     font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
@@ -8850,14 +8850,13 @@ input[type="search"]::-ms-reveal {
     height: 36px;
     place-items: center;
     border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--overlay-medium);
+    background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
 
     &:hover,
     &:focus-visible {
-      background: var(--surface-option-hover);
+      background: transparent;
       color: var(--text-primary);
     }
 
@@ -11869,7 +11868,6 @@ html.no-backdrop-blur {
   &__content {
     display: grid;
     gap: 0;
-    border-top: 1px solid var(--border);
     padding: var(--space-9) var(--space-8) var(--space-9);
 
     p {
