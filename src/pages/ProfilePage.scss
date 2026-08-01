@@ -645,7 +645,7 @@
     position: relative;
     display: flex;
     gap: var(--space-10);
-    padding: 0 0 var(--space-10);
+    padding: 0 0 var(--page-bottom-space);
     align-items: flex-start;
     overflow: visible;
   }
@@ -2260,6 +2260,32 @@
     outline: 0;
   }
 
+  &__game-grid.game-grid--portrait .game-card {
+    --pb-cover-hover-scale: var(--pb-cover-rest-scale);
+    transition:
+      border-color var(--motion-base) ease,
+      background var(--motion-base) var(--ease);
+  }
+
+  /*
+   * Same hover zoom as the library portrait grid: repaint the background at a
+   * larger size instead of `transform: scale()` on the card, which would
+   * resample an already-rasterized composited layer and soften the art.
+   */
+  &__game-grid.game-grid--portrait .game-card__cover {
+    transition:
+      background-size var(--motion-base) var(--ease),
+      filter var(--motion-base) ease,
+      opacity var(--motion-slow) ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &__game-grid.game-grid--portrait .game-card:hover .game-card__cover,
+    &__game-grid.game-grid--portrait .game-card:focus-within .game-card__cover {
+      --pb-background-size-current: var(--pb-background-size-hover);
+    }
+  }
+
   &__tabs {
     display: flex;
     align-items: center;
@@ -2976,15 +3002,6 @@
     border-color: var(--border-hover);
   }
 
-  @media (hover: hover) and (pointer: fine) {
-    &__game-grid.game-grid--portrait .game-card:hover,
-    &__game-grid.game-grid--portrait .game-card:focus-within {
-      position: relative;
-      z-index: var(--z-raised);
-      transform: scale(1.03);
-    }
-  }
-
   &__load-more-sentinel {
     width: 100%;
     height: 1px;
@@ -2995,10 +3012,6 @@
   .profile-page__hero-action,
   .profile-page__hero-action-label {
     transition: none;
-  }
-
-  .profile-page__game-grid.game-grid--portrait .game-card {
-    transform: none;
   }
 }
 

@@ -6,6 +6,7 @@ import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem, UserCollectio
 import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { HomeWishlistCardSkeleton } from "../components/ui/LoadingStates";
+import { SectionHeader } from "../components/ui/SectionHeader";
 import { useSettings } from "../context/settings";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
@@ -48,7 +49,7 @@ type HomeGameSeed = {
   shortDescription?: string;
 };
 
-type HomeCategoryImageVariant = "header" | "heroCapsule";
+type HomeCategoryCardVariant = "tile" | "portrait";
 
 type HomeExploreCategory = {
   label: string;
@@ -524,31 +525,28 @@ async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>())
 
 function HomeCategoryCard({
   game,
-  imageVariant = "header",
-  labelBelowCover = false,
+  variant = "tile",
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
-  imageVariant?: HomeCategoryImageVariant;
-  labelBelowCover?: boolean;
+  variant?: HomeCategoryCardVariant;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const fallbackCoverSources = useMemo(
     () =>
-      imageVariant === "heroCapsule"
+      variant === "portrait"
         ? gameHeroCapsuleSources(game).slice(
             0,
             homeRecommendedHeroCapsulePreloadLimit
           )
         : gameHeaderOnlySources(game),
-    [game, imageVariant]
+    [game, variant]
   );
-  const isHeroCapsule = imageVariant === "heroCapsule";
   const cachedSources = useCachedImageSources(fallbackCoverSources);
   const { source: coverSource, loaded } = useLoadableImageCover(cachedSources);
-  const layeredSources = isHeroCapsule
+  const layeredSources = variant === "portrait"
     ? loaded && coverSource
       ? [coverSource]
       : []
@@ -559,9 +557,7 @@ function HomeCategoryCard({
   return (
     <button
       type="button"
-      className={`home-category-card${isHeroCapsule ? " home-category-card--hero-capsule" : ""}${
-        labelBelowCover ? " home-category-card--label-below" : ""
-      }`}
+      className={`home-category-card home-category-card--${variant}`}
       aria-label={game.title}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
@@ -577,7 +573,8 @@ function HomeCategoryCard({
         style={layeredImageStyle(layeredSources, "")}
         aria-hidden="true"
       />
-      <span className="home-category-card__content" aria-hidden="true">
+      {/* Revealed on hover/focus — the button's aria-label already names the game. */}
+      <span className="home-category-card__label" aria-hidden="true">
         <strong>{game.title}</strong>
       </span>
     </button>
@@ -588,55 +585,42 @@ function HomeCategorySection({
   title,
   games,
   className = "",
-  imageVariant = "header",
+  variant = "tile",
   maxGames = 3,
-  showCardContentAlways = false,
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
   games: GhostBoxGame[];
   className?: string;
-  imageVariant?: HomeCategoryImageVariant;
+  variant?: HomeCategoryCardVariant;
   maxGames?: number;
-  showCardContentAlways?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const visibleGames = games.slice(0, maxGames);
-  const isHeroCapsule = imageVariant === "heroCapsule";
-  const labelBelowCover = className.includes("home-category--featured");
 
   return (
     <section
-      className={`home-category${className ? ` ${className}` : ""}${
-        showCardContentAlways ? " home-category--show-card-content" : ""
-      }`}
+      className={`home-category${className ? ` ${className}` : ""}`}
       aria-label={title}
     >
-      <h3 className="home-category__title">{title}</h3>
-      <div
-        className={`home-category__games ${
-          isHeroCapsule ? "home-category__games--hero-capsule" : ""
-        }`}
-      >
+      <SectionHeader title={title} />
+      <div className="home-category__games">
         {Array.from({ length: maxGames }, (_, index) => {
           const game = visibleGames[index];
           return game ? (
             <HomeCategoryCard
               key={game.appId || game.id}
               game={game}
-              imageVariant={imageVariant}
-              labelBelowCover={labelBelowCover}
+              variant={variant}
               onOpenGame={onOpenGame}
               onGameContextMenu={onGameContextMenu}
             />
           ) : (
             <span
               key={`placeholder-${index}`}
-              className={`home-category-card home-category-card--empty ${
-                isHeroCapsule ? "home-category-card--hero-capsule" : ""
-              }`}
+              className={`home-category-card home-category-card--${variant} home-category-card--empty`}
               aria-hidden="true"
             />
           );
@@ -1017,9 +1001,7 @@ function HomeExploreCategories({
 
   return (
     <section className="home-explore" aria-label={title}>
-      <div className="home-explore__header">
-        <h3 className="home-explore__title">{title}</h3>
-      </div>
+      <SectionHeader title={title} />
       <div className="home-explore__rail">
         {hasControls && (
           <button
@@ -1186,65 +1168,16 @@ function HomePersonalCalendar({
     cycleStart,
     homePersonalCalendarDays
   );
-  const carouselRef = useRef<HTMLDivElement | null>(null);
-  const [isAtStart, setIsAtStart] = useState(true);
-  const [isAtEnd, setIsAtEnd] = useState(false);
+  const calendarRef = useRef<HTMLDivElement | null>(null);
   const gamesPerDay = homePersonalCalendarGamesPerDay;
-  const canScrollCalendar = weekdays.length > 3;
-
-  const updateCalendarScrollState = () => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-    setIsAtStart(carousel.scrollLeft <= 1);
-    setIsAtEnd(
-      carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth - 2
-    );
-  };
-
-  useLayoutEffect(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-
-    carousel.scrollLeft = 0;
-    updateCalendarScrollState();
-    const frame = requestAnimationFrame(updateCalendarScrollState);
-
-    return () => cancelAnimationFrame(frame);
-  }, [games.length]);
-
-  const handleScroll = useRafThrottle(updateCalendarScrollState);
 
   if (!games.length && !loading) return null;
 
-  const scrollCalendar = (direction: -1 | 1) => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-
-    carousel.scrollBy({
-      left: direction * carousel.clientWidth,
-      behavior: "smooth",
-    });
-  };
-
   return (
     <section className="home-calendar" aria-label={title}>
-      <div className="home-calendar__header">
-        <h3 className="home-calendar__title">{title}</h3>
-        {subtitle && <span className="home-calendar__subtitle">{subtitle}</span>}
-      </div>
-      <div className="home-calendar__rail">
-        {canScrollCalendar ? (
-          <button
-            type="button"
-            className="home-calendar__arrow home-calendar__arrow--prev"
-            aria-label={language === "en" ? "Previous calendar days" : "Dias anteriores"}
-            onClick={() => scrollCalendar(-1)}
-            style={{ visibility: isAtStart ? "hidden" : "visible" }}
-          >
-            <ChevronLeft size={30} strokeWidth={2.0} aria-hidden="true" />
-          </button>
-        ) : null}
-        <div className="home-calendar__carousel" ref={carouselRef} onScroll={handleScroll}>
+      <SectionHeader title={title} subtitle={subtitle || undefined} />
+      <div className="home-calendar__rail" ref={calendarRef}>
+        <div className="home-calendar__carousel">
           <div className="home-calendar__track">
             {weekdays.map((date, dayIndex) => {
               const dayGames = games.slice(
@@ -1262,7 +1195,7 @@ function HomePersonalCalendar({
                         <HomeCalendarGameCard
                           key={homeGameKey(game)}
                           game={game}
-                          rootRef={carouselRef}
+                          rootRef={calendarRef}
                           onOpenGame={onOpenGame}
                           onGameContextMenu={onGameContextMenu}
                         />
@@ -1280,17 +1213,6 @@ function HomePersonalCalendar({
             })}
           </div>
         </div>
-        {canScrollCalendar ? (
-          <button
-            type="button"
-            className="home-calendar__arrow home-calendar__arrow--next"
-            aria-label={language === "en" ? "Next calendar days" : "Próximos dias"}
-            onClick={() => scrollCalendar(1)}
-            style={{ visibility: isAtEnd ? "hidden" : "visible" }}
-          >
-            <ChevronRight size={30} strokeWidth={2.0} aria-hidden="true" />
-          </button>
-        ) : null}
       </div>
     </section>
   );
@@ -1318,9 +1240,7 @@ function HomeRecommendedHero({
 
   useEffect(() => {
     const cancelPreload = runWhenIdle(() => {
-      availableGroups.forEach((group) => {
-        void preloadHomeRecommendedGroup(group);
-      });
+      void preloadHomeRecommendedGroup(availableGroups[0] ?? []);
     }, 450);
 
     return cancelPreload;
@@ -1330,16 +1250,13 @@ function HomeRecommendedHero({
 
   return (
     <section className="home-recommended" aria-label={title}>
-      <div className="home-recommended__header">
-        <h3 className="home-recommended__title">{title}</h3>
-      </div>
+      <SectionHeader title={title} />
       <div className="home-recommended__grid">
         {visibleGames.map((game) => (
           <HomeCategoryCard
             key={game.appId || game.id}
             game={game}
-            imageVariant="heroCapsule"
-            labelBelowCover
+            variant="portrait"
             onOpenGame={onOpenGame}
             onGameContextMenu={onGameContextMenu}
           />
@@ -1771,16 +1688,20 @@ const HomeWishlistCard = memo(HomeWishlistCardComponent);
 
 function HomeWishlistRecommendations({
   title,
+  subtitle,
   recommendations,
   loading,
   language,
+  seeMore,
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
+  subtitle?: string;
   recommendations: HomeWishlistRecommendation[];
   loading: boolean;
   language: "pt" | "en";
+  seeMore: (count: number) => string;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -1798,9 +1719,7 @@ function HomeWishlistRecommendations({
 
   return (
     <section className="home-wishlist" aria-label={title}>
-      <div className="home-wishlist__header">
-        <h3 className="home-wishlist__title">{title}</h3>
-      </div>
+      <SectionHeader title={title} subtitle={subtitle} />
       <div className="home-wishlist__list">
         {loading && recommendations.length === 0
           ? Array.from({ length: 3 }, (_, index) => (
@@ -1823,7 +1742,7 @@ function HomeWishlistRecommendations({
             className="home-wishlist__more"
             onClick={() => setExpanded(true)}
           >
-            {language === "en" ? `See more (${hiddenCount})` : `Ver mais (${hiddenCount})`}
+            {seeMore(hiddenCount)}
           </button>
         )}
       </div>
@@ -2308,18 +2227,17 @@ export function HomePage({
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
-      <div className="home-categories" aria-label={t("home.categoriesAria")}>
-        <HomeCategorySection
-          title={t("home.featuredGames")}
-          games={featuredGames}
-          className="home-category--featured"
-          maxGames={6}
-          onOpenGame={onOpenGame}
-          onGameContextMenu={handleGameContextMenu}
-        />
-      </div>
+      <HomeCategorySection
+        title={t("home.featuredGames")}
+        games={featuredGames}
+        className="home-category--featured"
+        variant="tile"
+        maxGames={6}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={handleGameContextMenu}
+      />
       <HomeExploreCategories
-        title={appearance.language === "en" ? "Explore by category" : "Explore por categoria"}
+        title={t("home.exploreByCategory")}
         categories={exploreCategories}
         allGames={[...homeTopReviewedGames, ...homeFeaturedGames]}
         language={appearance.language}
@@ -2328,7 +2246,7 @@ export function HomePage({
         }
       />
       <HomePersonalCalendar
-        title={appearance.language === "en" ? "Personal calendar" : "Calendário pessoal"}
+        title={t("home.personalCalendar")}
         subtitle=""
         games={enrichedPersonalCalendarGames}
         cycleStart={personalCalendarCycleStart}
@@ -2338,10 +2256,12 @@ export function HomePage({
         onGameContextMenu={handleGameContextMenu}
       />
       <HomeWishlistRecommendations
-        title={appearance.language === "en" ? "From your Steam wishlist" : "Da sua wishlist da Steam"}
+        title={t("home.steamWishlist")}
+        subtitle={t("home.steamWishlistSubtitle")}
         recommendations={wishlistRecommendations}
         loading={isLoadingWishlistRecommendations}
         language={appearance.language}
+        seeMore={(count) => t("home.seeMore", { count })}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

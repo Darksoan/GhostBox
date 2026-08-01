@@ -116,6 +116,11 @@
   // Altura da titlebar. Vive no :root porque o painel de filtros do catálogo
   // precisa dela para calcular a altura do scrollport (`.container__content`).
   --app-header-height: 52px;
+  // Respiro no fim de cada página. O `padding-bottom` do scroller compartilhado
+  // (`.container__content`) não é confiável sozinho: a raiz de cada aba estica
+  // até o fim do scrollport, então o último elemento encosta na borda da janela.
+  // Toda raiz de página aplica este token.
+  --page-bottom-space: var(--space-14);
 
   // --- Peso de fonte ---
   --weight-regular: 400;

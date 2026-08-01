@@ -147,7 +147,10 @@ export const GameCard = memo(function GameCard({
         style={layeredImageStyle(
           coverSources,
           "",
-          portrait ? "cover" : "100% 100%",
+          // `auto 100%` equals `cover` for every portrait source (all are 2:3 or
+          // wider), but unlike the `cover` keyword it interpolates on hover.
+          portrait ? "auto 100%" : "100% 100%",
+          portrait ? "auto 106%" : "100% 100%",
         )}
       >
         {showLockedBadge ? (

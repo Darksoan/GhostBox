@@ -123,9 +123,13 @@ const translations: Record<Language, TranslationTree> = {
     },
     home: {
       pageAria: "Jogos recomendados e categorias da página inicial",
-      categoriesAria: "Categorias da página inicial",
       recommended: "Recomendados",
       featuredGames: "Bem avaliados",
+      exploreByCategory: "Explore por categoria",
+      personalCalendar: "Calendário pessoal",
+      steamWishlist: "Da sua wishlist da Steam",
+      steamWishlistSubtitle: "Recomendações baseadas nos seus jogos desejados",
+      seeMore: "Ver mais ({count})",
     },
     sidebar: {
       collections: "Coleções",
@@ -468,9 +472,13 @@ const translations: Record<Language, TranslationTree> = {
     },
     home: {
       pageAria: "Recommended games and home categories",
-      categoriesAria: "Home categories",
       recommended: "Recommended",
       featuredGames: "Top rated",
+      exploreByCategory: "Explore by category",
+      personalCalendar: "Personal calendar",
+      steamWishlist: "From your Steam wishlist",
+      steamWishlistSubtitle: "Recommendations based on your wishlist",
+      seeMore: "See more ({count})",
     },
     sidebar: {
       collections: "Collections",

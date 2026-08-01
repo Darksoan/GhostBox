@@ -235,23 +235,18 @@ export function SearchSuggestionsLoadingState({ count: _count = 3 }: { count?: n
 }
 
 export function HomeCategoryCardSkeleton({
-  heroCapsule = false,
+  variant = "tile",
 }: {
-  heroCapsule?: boolean;
+  variant?: "tile" | "portrait";
 }) {
   return (
     <button
       type="button"
-      className={`home-category-card ${heroCapsule ? "home-category-card--hero-capsule" : ""} home-category-card--placeholder`}
+      className={`home-category-card home-category-card--${variant} home-category-card--placeholder`}
       disabled
       aria-hidden="true"
     >
       <span className="home-category-card__cover home-category-card__cover--skeleton" />
-      <span className="home-category-card__content" aria-hidden="true">
-        <strong>
-          <span className="home-category-card__title-skeleton loading-wave" />
-        </strong>
-      </span>
     </button>
   );
 }
@@ -292,46 +287,17 @@ export function HomeWishlistCardSkeleton() {
   );
 }
 
-export function HomeRecentBannerSkeleton({ title }: { title?: string }) {
+/** Mirrors the markup of `SectionHeader` so the skeleton keeps the same layout. */
+function SectionHeaderSkeleton({ withSubtitle = false }: { withSubtitle?: boolean }) {
   return (
-    <section className="home-recent-banner" aria-label={title}>
-      {title ? (
-        <h3 className="home-recent-banner__heading">{title}</h3>
-      ) : (
-        <span className="home-recent-banner__heading home-section-title-placeholder loading-plate" />
-      )}
-      <div className="home-recent-banner__card home-recent-banner__card--skeleton" aria-hidden="true">
-        <span className="home-recent-banner__cover home-recent-banner__cover--skeleton" />
-        <span className="home-recent-banner__content home-recent-banner__content--skeleton">
-          <span className="home-recent-banner__title-row home-recent-banner__title-row--skeleton">
-            <span className="home-recent-banner__game-icon home-recent-banner__game-icon--skeleton" />
-            <strong className="home-recent-banner__title home-recent-banner__title--skeleton">
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--title" />
-            </strong>
-          </span>
-          <span className="home-recent-banner__meta" aria-hidden="true">
-            <small className="home-recent-banner__meta-item">
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-            </small>
-            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--playtime">
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
-              <span className="home-recent-banner__meta-copy">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-              </span>
-            </small>
-            <small className="home-recent-banner__meta-item home-recent-banner__meta-item--achievements">
-              <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--icon" />
-              <span className="home-recent-banner__meta-copy">
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--label" />
-                <span className="home-recent-banner__skeleton-line home-recent-banner__skeleton-line--value" />
-              </span>
-            </small>
-          </span>
-        </span>
+    <div className="section-header">
+      <div className="section-header__copy">
+        <span className="section-header__title home-section-title-placeholder loading-wave" />
+        {withSubtitle ? (
+          <span className="section-header__subtitle home-section-title-placeholder loading-wave" />
+        ) : null}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -339,33 +305,26 @@ export function HomePageLoadingState() {
   return (
     <section className="home-page" aria-hidden="true">
       <section className="home-recommended">
-        <div className="home-recommended__header">
-          <span className="home-section-title-placeholder loading-wave" />
-        </div>
+        <SectionHeaderSkeleton />
         <div className="home-recommended__grid">
           {Array.from({ length: 4 }, (_, index) => (
-              <HomeCategoryCardSkeleton heroCapsule key={`home-recommended-${index}`} />
-            ))}
-          </div>
+            <HomeCategoryCardSkeleton variant="portrait" key={`home-recommended-${index}`} />
+          ))}
+        </div>
       </section>
 
-      <div className="home-categories">
-        <div className="home-category home-category--featured">
-          <span className="home-section-title-placeholder loading-wave" />
-          <div className="home-category__games">
-            {Array.from({ length: 6 }, (_, index) => (
-              <HomeCategoryCardSkeleton key={`home-featured-${index}`} />
-            ))}
-          </div>
+      <section className="home-category home-category--featured">
+        <SectionHeaderSkeleton />
+        <div className="home-category__games">
+          {Array.from({ length: 6 }, (_, index) => (
+            <HomeCategoryCardSkeleton variant="tile" key={`home-featured-${index}`} />
+          ))}
         </div>
-      </div>
+      </section>
 
       <section className="home-explore">
-        <div className="home-explore__header">
-          <span className="home-section-title-placeholder loading-wave" />
-        </div>
+        <SectionHeaderSkeleton />
         <div className="home-explore__rail">
-          <span className="home-explore__arrow-placeholder loading-wave" />
           <div className="home-explore__carousel">
             <div className="home-explore__track">
               {Array.from({ length: 5 }, (_, index) => (
@@ -376,16 +335,12 @@ export function HomePageLoadingState() {
               ))}
             </div>
           </div>
-          <span className="home-explore__arrow-placeholder loading-wave" />
         </div>
       </section>
 
       <section className="home-calendar">
-        <div className="home-calendar__header">
-          <span className="home-section-title-placeholder loading-wave" />
-        </div>
+        <SectionHeaderSkeleton />
         <div className="home-calendar__rail">
-          <span className="home-calendar__arrow-placeholder loading-wave" />
           <div className="home-calendar__carousel">
             <div className="home-calendar__track">
               {Array.from({ length: 3 }, (_, dayIndex) => (
@@ -399,22 +354,17 @@ export function HomePageLoadingState() {
               ))}
             </div>
           </div>
-          <span className="home-calendar__arrow-placeholder loading-wave" />
         </div>
       </section>
 
       <section className="home-wishlist">
-        <div className="home-wishlist__header">
-          <span className="home-section-title-placeholder loading-wave" />
-        </div>
+        <SectionHeaderSkeleton withSubtitle />
         <div className="home-wishlist__list">
           {Array.from({ length: 3 }, (_, index) => (
             <HomeWishlistCardSkeleton key={`wishlist-${index}`} />
           ))}
         </div>
       </section>
-
-      <HomeRecentBannerSkeleton />
     </section>
   );
 }
