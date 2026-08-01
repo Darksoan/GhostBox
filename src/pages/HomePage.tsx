@@ -2,13 +2,16 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
-import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem, UserCollection } from "../types";
+import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
 import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
-import { HomeWishlistCardSkeleton } from "../components/ui/LoadingStates";
+import {
+  HomeWishlistCardSkeleton,
+  HomeWishlistReviewSkeleton,
+} from "../components/ui/LoadingStates";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { useSettings } from "../context/settings";
-import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import {
   useCachedImageSources,
@@ -1367,26 +1370,7 @@ function HomeWishlistPlayerReview({
   }, [appId, reviewLanguage, hasBeenVisible]);
 
   if (isLoading) {
-    return (
-      <span
-        ref={reviewRef}
-        className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton"
-        aria-hidden="true"
-      >
-        <span className="home-wishlist-card__player-review-quote-skeleton">
-          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review-short" />
-        </span>
-        <span className="home-wishlist-card__player-review-author">
-          <span className="home-wishlist-card__player-review-avatar home-wishlist-card__player-review-avatar--skeleton" />
-          <span className="home-wishlist-card__player-review-author-skeleton">
-            <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-name" />
-            <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-meta" />
-          </span>
-        </span>
-      </span>
-    );
+    return <HomeWishlistReviewSkeleton rootRef={reviewRef} ariaHidden />;
   }
 
   if (!review) return null;
@@ -1752,36 +1736,12 @@ function HomeWishlistRecommendations({
 
 export function HomePage({
   onOpenGame,
-  favoriteGameIds,
   libraryGameAppIds,
-  removableGameAppIds,
-  playableGameAppIds,
-  addingGameId,
-  launchingGameId,
-  userCollections,
-  onToggleFavorite,
-  onAddGame,
-  onPlayGame,
-  onRemoveGame,
-  onAddGameToCollection,
-  onRemoveGameFromCollection,
   onOpenCatalogueCategory,
   steamProfile,
 }: {
   onOpenGame: (game: GhostBoxGame) => void;
-  favoriteGameIds: Set<string>;
   libraryGameAppIds: Set<string>;
-  removableGameAppIds: Set<string>;
-  playableGameAppIds: Set<string>;
-  addingGameId: string | null;
-  launchingGameId: string | null;
-  userCollections: UserCollection[];
-  onToggleFavorite: (game: GhostBoxGame) => void;
-  onAddGame: (game: GhostBoxGame) => void;
-  onPlayGame: (game: GhostBoxGame) => void;
-  onRemoveGame: (game: GhostBoxGame) => void;
-  onAddGameToCollection: (game: GhostBoxGame, collectionId: string) => void;
-  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   onOpenCatalogueCategory: (
     key: Extract<CatalogueFilterKey, "genres" | "tags">,
     value: string
@@ -2201,22 +2161,9 @@ export function HomePage({
   const exploreCategories = useMemo(() => {
     return getHomeExploreCategories([...homeTopReviewedGames, ...homeFeaturedGames]);
   }, [homeTopReviewedGames, homeFeaturedGames]);
-  const homeContextMenuItems = useCollectionContextMenu({
+  const homeContextMenuItems = useGameContextMenu({
     game: homeContextMenu?.game ?? null,
-    favoriteGameIds,
-    libraryGameAppIds,
-    removableGameAppIds,
-    playableGameAppIds,
-    addingGameId,
-    launchingGameId,
-    userCollections,
     onOpenGame,
-    onToggleFavorite,
-    onAddGame,
-    onPlayGame,
-    onRemoveGame,
-    onAddGameToCollection,
-    onRemoveGameFromCollection,
   });
 
   return (

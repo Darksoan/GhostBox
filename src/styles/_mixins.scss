@@ -120,6 +120,15 @@
   white-space: nowrap;
 }
 
+/// Full-width vertical section container with a constrained flex child.
+@mixin section-column {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+}
+
 @mixin type-label {
   font-size: var(--fs-100);
   line-height: var(--lh-100);

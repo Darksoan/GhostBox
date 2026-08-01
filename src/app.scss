@@ -2619,11 +2619,7 @@ p {
 
 .home-recommended {
   position: relative;
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
+  @include mixins.section-column;
   gap: var(--home-section-heading-gap);
   /* Extra breathing room below the hero, on top of `--home-section-gap` from
      `.home-page`. Anything larger reads as a hole between hero and rails. */
@@ -2640,14 +2636,22 @@ p {
   min-width: 0;
 }
 
+@media (max-width: 1100px) {
+  .home-recommended__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .home-recommended__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .home-explore {
   content-visibility: auto;
   contain-intrinsic-size: 200px;
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
+  @include mixins.section-column;
   gap: var(--home-section-heading-gap);
   padding-inline: var(--home-content-inline-inset);
 }
@@ -2855,11 +2859,7 @@ p {
 }
 
 .home-category {
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
+  @include mixins.section-column;
   gap: var(--home-section-heading-gap);
   padding-inline: var(--home-content-inline-inset);
 }
@@ -2981,11 +2981,7 @@ p {
   contain-intrinsic-size: 320px;
   --home-calendar-gap: clamp(12px, 1.4vw, 18px);
   --home-calendar-day-heading-space: 21px;
-  display: flex;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
+  @include mixins.section-column;
   gap: var(--home-section-heading-gap);
   padding-inline: var(--home-content-inline-inset);
 }
@@ -3006,25 +3002,6 @@ p {
   gap: var(--home-calendar-gap);
   width: 100%;
   min-width: 0;
-}
-
-/* Every home grid collapses on the same two steps, so the sections stay aligned
-   with each other at narrow widths. Declared after all the base grids above:
-   media queries add no specificity, they only win by source order. */
-@media (max-width: 1100px) {
-  .home-recommended__grid,
-  .home-category__games,
-  .home-calendar__track {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .home-recommended__grid,
-  .home-category__games,
-  .home-calendar__track {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .home-calendar-day {
@@ -9188,13 +9165,6 @@ input[type="search"]::-ms-reveal {
   /* Pins the library portrait hover zoom at its rest size. */
   .game-card__cover {
     --pb-background-size-current: var(--pb-background-size) !important;
-  }
-
-  /* Home cards: the hover label appears instantly, with no slide or lift. */
-  .home-category-card,
-  .home-category-card__label {
-    transition: none;
-    transform: none;
   }
 
   .profile-page__tab-indicator {

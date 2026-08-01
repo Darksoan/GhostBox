@@ -346,20 +346,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           onRestartSteam={appData.handleRestartSteam}
           onCreateCollection={appData.openCreateUserCollectionModal}
           onRemoveFavorite={appData.toggleFavoriteGame}
-          onRemoveGame={appData.removeQueuedGame}
-          onRemoveGameFromCollection={appData.removeGameFromCollection}
           onDeleteCollection={appData.deleteCollection}
-          favoriteGameIds={appData.favoriteGameIds}
-          libraryGameAppIds={appData.availableLibraryGameAppIds}
-          removableGameAppIds={appData.addedLibraryGameAppIds}
-          playableGameAppIds={appData.playableGameAppIds}
           activeSessionAppIds={appData.activeSessionAppIds}
-          addingGameId={appData.addingGameId}
-          launchingGameId={appData.launchingGameId}
-          onAddGame={appData.queueGame}
-          onPlayGame={appData.handlePlayGame}
-          onAddGameToCollection={appData.addGameToUserCollection}
-          onToggleFavorite={appData.toggleFavoriteGame}
           activeSettingsTabId={shell.activeSettingsTabId}
           onSettingsTabChange={handleSidebarSettingsTabChange}
         />

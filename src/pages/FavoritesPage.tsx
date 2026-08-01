@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import { Clock, Lock } from "lucide-react";
 import { Cup } from "reicon-react";
-import type { UserCollection } from "../types";
 import {
   useCachedImageSources,
   useLoadableImageSource,
@@ -16,7 +15,7 @@ import {
 } from "../utils/image";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { EmptyState } from "../components/ui/LoadingStates";
-import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useFlipLayout } from "../hooks/useFlipLayout";
 import { useMetricsUnlocked } from "../context/MetricsVisibilityContext";
 import { useSettings } from "../context/settings";
@@ -143,40 +142,14 @@ export const FavoriteCard = memo(function FavoriteCard({
 interface FavoritesPageProps {
   games: GhostBoxGame[];
   onOpenGame: (game: GhostBoxGame) => void;
-  onToggleFavorite: (game: GhostBoxGame) => void;
   emptyTitle?: string;
-  favoriteGameIds?: Set<string>;
-  libraryGameAppIds?: Set<string>;
-  removableGameAppIds?: Set<string>;
-  playableGameAppIds?: Set<string>;
-  addingGameId?: string | null;
-  launchingGameId?: string | null;
-  userCollections?: UserCollection[];
-  onAddGame?: (game: GhostBoxGame) => void;
-  onPlayGame?: (game: GhostBoxGame) => void;
-  onRemoveGame?: (game: GhostBoxGame) => void;
-  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
-  onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
   isActive?: boolean;
 }
 
 export function FavoritesPage({
   games,
   onOpenGame,
-  onToggleFavorite,
   emptyTitle = "Sem favoritos",
-  favoriteGameIds = new Set(),
-  libraryGameAppIds = new Set(),
-  removableGameAppIds = new Set(),
-  playableGameAppIds = new Set(),
-  addingGameId = null,
-  launchingGameId = null,
-  userCollections = [],
-  onAddGame,
-  onPlayGame,
-  onRemoveGame,
-  onAddGameToCollection,
-  onRemoveGameFromCollection,
   isActive = true,
 }: FavoritesPageProps) {
   const [contextMenu, setContextMenu] = useState<{
@@ -187,23 +160,10 @@ export function FavoritesPage({
   const layoutKey = games.map((game) => game.id).join("|");
   const gridRef = useFlipLayout<HTMLDivElement>(layoutKey, isActive);
 
-  const contextMenuItems = useCollectionContextMenu({
+  const contextMenuItems = useGameContextMenu({
     game: contextMenu?.game ?? null,
-    favoriteGameIds,
-    libraryGameAppIds,
-    removableGameAppIds,
-    playableGameAppIds,
-    addingGameId,
-    launchingGameId,
-    userCollections,
     onOpenGame,
-    onAddGame,
-    onPlayGame,
-    onRemoveGame,
-    onToggleFavorite,
     directFavoriteAction: true,
-    onAddGameToCollection,
-    onRemoveGameFromCollection,
   });
 
   const handleGameContextMenu = useCallback(

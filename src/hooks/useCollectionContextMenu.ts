@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
 
-interface UseCollectionContextMenuOptions {
+export interface UseCollectionContextMenuOptions {
   game: GhostBoxGame | null;
   favoriteGameIds: Set<string>;
   libraryGameAppIds?: Set<string>;

@@ -5,7 +5,7 @@ import type { UserCollection } from "../types";
 import { GameGrid, GameGridLoadingState } from "../components/ui/GameCard";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
-import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
@@ -59,17 +59,10 @@ interface LibraryPageProps {
   loading: boolean;
   query: string;
   onOpenGame: (game: GhostBoxGame) => void;
-  removableGameAppIds: Set<string>;
-  playableGameAppIds?: Set<string>;
-  launchingGameId?: string | null;
-  onRemoveGame: (game: GhostBoxGame) => void;
-  onPlayGame?: (game: GhostBoxGame) => void;
   favoriteGameIds?: Set<string>;
   userCollections?: UserCollection[];
   activeCollectionId?: string | null;
   onActiveCollectionChange?: (collectionId: string | null) => void;
-  onToggleFavorite?: (game: GhostBoxGame) => void;
-  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   activeSessionAppIds?: Set<string>;
   isActive?: boolean;
 }
@@ -80,17 +73,10 @@ export function LibraryPage({
   loading,
   query,
   onOpenGame,
-  removableGameAppIds,
-  playableGameAppIds = new Set(),
-  launchingGameId = null,
-  onRemoveGame,
-  onPlayGame,
   favoriteGameIds = new Set(),
   userCollections = [],
   activeCollectionId: propActiveCollectionId,
   onActiveCollectionChange,
-  onToggleFavorite,
-  onAddGameToCollection,
   activeSessionAppIds = new Set(),
   isActive = true,
 }: LibraryPageProps) {
@@ -215,19 +201,10 @@ export function LibraryPage({
     setContextMenu({ game, x, y });
   }, []);
 
-  const collectionContextMenuItems = useCollectionContextMenu({
+  const collectionContextMenuItems = useGameContextMenu({
     game: contextMenu?.game ?? null,
-    favoriteGameIds,
-    removableGameAppIds,
-    playableGameAppIds,
-    launchingGameId,
-    userCollections,
     onOpenGame,
-    onPlayGame,
-    onRemoveGame,
-    onToggleFavorite,
     directFavoriteAction: true,
-    onAddGameToCollection,
   });
 
   useEffect(() => {

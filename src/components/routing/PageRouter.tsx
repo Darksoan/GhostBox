@@ -190,20 +190,8 @@ export function PageRouter({
       return (
         <LazyHomePage
           onOpenGame={openGame}
-          favoriteGameIds={appData.favoriteGameIds}
           libraryGameAppIds={appData.availableLibraryGameAppIds}
-          removableGameAppIds={appData.addedLibraryGameAppIds}
-          playableGameAppIds={appData.playableGameAppIds}
-          addingGameId={appData.addingGameId}
-          launchingGameId={appData.launchingGameId}
-          userCollections={appData.userCollections}
           steamProfile={steamProfile}
-          onToggleFavorite={appData.toggleFavoriteGame}
-          onAddGame={appData.queueGame}
-          onPlayGame={appData.handlePlayGame}
-          onRemoveGame={appData.removeQueuedGame}
-          onAddGameToCollection={appData.addGameToUserCollection}
-          onRemoveGameFromCollection={appData.removeGameFromCollection}
           onOpenCatalogueCategory={(
             key: Extract<CatalogueFilterKey, "genres" | "tags">,
             value: string,
@@ -247,20 +235,10 @@ export function PageRouter({
           onFiltersChange={catalogue.handleCatalogueFiltersChange}
           onPageChange={catalogue.handleCataloguePageChange}
           onOpenGame={openGame}
-          favoriteGameIds={appData.favoriteGameIds}
           addedGameAppIds={appData.addedLibraryGameAppIds}
-          libraryGameAppIds={appData.availableLibraryGameAppIds}
-          playableGameAppIds={appData.playableGameAppIds}
           addingGameId={appData.addingGameId}
-          launchingGameId={appData.launchingGameId}
           removingGameId={appData.removingGameId}
-          onToggleFavorite={appData.toggleFavoriteGame}
-          onAddGame={appData.queueGame}
-          onPlayGame={appData.handlePlayGame}
           onRemoveGame={appData.removeQueuedGame}
-          userCollections={appData.userCollections}
-          onAddGameToCollection={appData.addGameToUserCollection}
-          onRemoveGameFromCollection={appData.removeGameFromCollection}
           pulseLoading={catalogue.shouldPulseCatalogueLoading}
           scrollElementRef={contentRef}
         />
@@ -275,19 +253,12 @@ export function PageRouter({
           loading={false}
           query={debouncedQuery}
           onOpenGame={openGame}
-          removableGameAppIds={appData.addedLibraryGameAppIds}
-          playableGameAppIds={appData.playableGameAppIds}
-          launchingGameId={appData.launchingGameId}
-          onRemoveGame={appData.removeQueuedGame}
-          onPlayGame={appData.handlePlayGame}
           favoriteGameIds={appData.favoriteGameIds}
           userCollections={appData.userCollections}
           activeCollectionId={activeProfileCollectionId ?? null}
           onActiveCollectionChange={(id) =>
             setActiveProfileCollectionId(id ?? undefined)
           }
-          onToggleFavorite={appData.toggleFavoriteGame}
-          onAddGameToCollection={appData.addGameToUserCollection}
           activeSessionAppIds={appData.activeSessionAppIds}
           isActive={targetPage === page}
         />
@@ -299,19 +270,6 @@ export function PageRouter({
         <LazyFavoritesPage
           games={appData.favoriteGames}
           onOpenGame={openGame}
-          onToggleFavorite={appData.toggleFavoriteGame}
-          favoriteGameIds={appData.favoriteGameIds}
-          libraryGameAppIds={appData.availableLibraryGameAppIds}
-          removableGameAppIds={appData.addedLibraryGameAppIds}
-          playableGameAppIds={appData.playableGameAppIds}
-          addingGameId={appData.addingGameId}
-          launchingGameId={appData.launchingGameId}
-          userCollections={appData.userCollections}
-          onAddGame={appData.queueGame}
-          onPlayGame={appData.handlePlayGame}
-          onRemoveGame={appData.removeQueuedGame}
-          onAddGameToCollection={appData.addGameToUserCollection}
-          onRemoveGameFromCollection={appData.removeGameFromCollection}
           isActive={targetPage === page}
         />
       );
@@ -361,19 +319,7 @@ export function PageRouter({
           scrollElementRef={contentRef}
           onUpdateProfile={appData.handleUpdateProfile}
           onOpenGame={openGame}
-          removableGameAppIds={appData.addedLibraryGameAppIds}
-          libraryGameAppIds={appData.availableLibraryGameAppIds}
-          playableGameAppIds={appData.playableGameAppIds}
           activeSessionAppIds={appData.activeSessionAppIds}
-          addingGameId={appData.addingGameId}
-          launchingGameId={appData.launchingGameId}
-          onAddGame={appData.queueGame}
-          onRemoveGame={appData.removeQueuedGame}
-          onPlayGame={appData.handlePlayGame}
-          onRemoveGameFromCollection={appData.removeGameFromCollection}
-          favoriteGameIds={appData.favoriteGameIds}
-          onToggleFavorite={appData.toggleFavoriteGame}
-          onAddGameToCollection={appData.addGameToUserCollection}
           onOpenGameAchievements={(game) => openAchievements(game)}
           onSignOut={() => void appData.handleSteamSignOut()}
         />

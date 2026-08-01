@@ -15,7 +15,7 @@ import { memo, useCallback, useEffect, useDeferredValue, useMemo, useState } fro
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { ContextMenu } from "../ui/ContextMenu";
-import { useCollectionContextMenu } from "../../hooks/useCollectionContextMenu";
+import { useGameContextMenu } from "../../hooks/useGameContextMenu";
 import { preloadGameIconUrls, useGameIconUrl } from "../../hooks/useGameIconUrl";
 import { settingsNavigationTabs, settingsTabLabelKeys, type SettingsTabId } from "../../features/settings/settingsTabsShared";
 import { useSettings } from "../../context/settings";
@@ -57,20 +57,8 @@ interface SidebarProps {
   onRestartSteam: () => void;
   onCreateCollection: () => void;
   onRemoveFavorite: (game: GhostBoxGame) => void;
-  onRemoveGame: (game: GhostBoxGame) => void;
-  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   onDeleteCollection?: (collectionId: string) => void;
-  favoriteGameIds?: Set<string>;
-  libraryGameAppIds?: Set<string>;
-  removableGameAppIds?: Set<string>;
-  playableGameAppIds?: Set<string>;
   activeSessionAppIds?: Set<string>;
-  addingGameId?: string | null;
-  launchingGameId?: string | null;
-  onAddGame?: (game: GhostBoxGame) => void;
-  onPlayGame?: (game: GhostBoxGame) => void;
-  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
-  onToggleFavorite?: (game: GhostBoxGame) => void;
   activeSettingsTabId: SettingsTabId;
   onSettingsTabChange: (tabId: SettingsTabId) => void;
 }
@@ -101,20 +89,8 @@ export const Sidebar = memo(function Sidebar({
   onRestartSteam,
   onCreateCollection,
   onRemoveFavorite: _onRemoveFavorite,
-  onRemoveGame,
-  onRemoveGameFromCollection,
   onDeleteCollection,
-  favoriteGameIds = new Set(),
-  libraryGameAppIds = new Set(),
-  removableGameAppIds = new Set(),
-  playableGameAppIds = new Set(),
   activeSessionAppIds = new Set(),
-  addingGameId = null,
-  launchingGameId = null,
-  onAddGame,
-  onPlayGame,
-  onAddGameToCollection,
-  onToggleFavorite,
   activeSettingsTabId,
   onSettingsTabChange,
 }: SidebarProps) {
@@ -137,23 +113,10 @@ export const Sidebar = memo(function Sidebar({
   const [, setShowRenameCollectionModal] = useState(false);
   const [, setCollectionName] = useState("");
   const { t } = useSettings();
-  const collectionGameContextMenuItems = useCollectionContextMenu({
+  const collectionGameContextMenuItems = useGameContextMenu({
     game: collectionGameContextMenu.game,
-    favoriteGameIds,
-    libraryGameAppIds,
-    removableGameAppIds,
-    playableGameAppIds,
-    addingGameId,
-    launchingGameId,
-    userCollections,
     onOpenGame,
-    onAddGame,
-    onPlayGame,
-    onRemoveGame,
-    onToggleFavorite,
     directFavoriteAction: true,
-    onAddGameToCollection,
-    onRemoveGameFromCollection,
   });
 
   const deferredFavoriteGames = useDeferredValue(favoriteGames);

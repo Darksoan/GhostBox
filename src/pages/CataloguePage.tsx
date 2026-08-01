@@ -14,7 +14,6 @@ import type { GhostBoxGame } from "../data";
 import type {
   CatalogueFilters,
   CatalogueFilterKey,
-  UserCollection,
 } from "../types";
 import {
   filterCategoryColors,
@@ -37,7 +36,7 @@ import {
   EmptyState,
 } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
-import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import { useFlipLayout } from "../hooks/useFlipLayout";
@@ -294,20 +293,10 @@ interface CataloguePageProps {
   onFiltersChange: (filters: CatalogueFilters) => void;
   onPageChange: (page: number) => void;
   onOpenGame: (game: GhostBoxGame) => void;
-  favoriteGameIds: Set<string>;
   addedGameAppIds: Set<string>;
-  libraryGameAppIds: Set<string>;
-  playableGameAppIds: Set<string>;
   addingGameId: string | null;
-  launchingGameId: string | null;
   removingGameId: string | null;
-  onToggleFavorite: (game: GhostBoxGame) => void;
-  onAddGame: (game: GhostBoxGame) => void;
-  onPlayGame: (game: GhostBoxGame) => void;
   onRemoveGame: (game: GhostBoxGame) => void;
-  userCollections: UserCollection[];
-  onAddGameToCollection: (game: GhostBoxGame, collectionId: string) => void;
-  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   pulseLoading: boolean;
   scrollElementRef?: RefObject<HTMLElement | null>;
 }
@@ -330,20 +319,10 @@ export function CataloguePage({
   onFiltersChange,
   onPageChange,
   onOpenGame,
-  favoriteGameIds,
   addedGameAppIds,
-  libraryGameAppIds,
-  playableGameAppIds,
   addingGameId,
-  launchingGameId,
   removingGameId,
-  onToggleFavorite,
-  onAddGame,
-  onPlayGame,
   onRemoveGame,
-  userCollections,
-  onAddGameToCollection,
-  onRemoveGameFromCollection,
   pulseLoading,
   scrollElementRef,
 }: CataloguePageProps) {
@@ -497,25 +476,12 @@ export function CataloguePage({
     []
   );
 
-  const contextMenuItems = useCollectionContextMenu({
+  const contextMenuItems = useGameContextMenu({
     game: contextMenu?.game ?? null,
-    favoriteGameIds,
-    libraryGameAppIds,
-    removableGameAppIds: addedGameAppIds,
-    playableGameAppIds,
-    addingGameId,
-    launchingGameId,
-    userCollections,
     onOpenGame,
-    onAddGame,
-    onPlayGame,
-    onRemoveGame,
-    onToggleFavorite,
     includeFavorites: contextMenu?.mode !== "collection",
     directFavoriteAction: contextMenu?.mode !== "collection",
     onlyCollectionActions: contextMenu?.mode === "collection",
-    onAddGameToCollection,
-    onRemoveGameFromCollection,
   });
 
   if (initialLoading) {

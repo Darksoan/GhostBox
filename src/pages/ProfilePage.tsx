@@ -40,7 +40,7 @@ import {
   ProfileActivityListSkeleton,
 } from "../components/ui/LoadingStates";
 import { PaginationControls } from "../components/ui/PaginationControls";
-import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
+import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import steamIcon from "../../Icons/steam-colored.svg";
@@ -509,19 +509,7 @@ interface ProfilePageProps {
     bannerPosition: BannerPosition
   ) => Promise<void> | void;
   onOpenGame: (game: GhostBoxGame) => void;
-  removableGameAppIds: Set<string>;
-  libraryGameAppIds?: Set<string>;
-  playableGameAppIds?: Set<string>;
   activeSessionAppIds?: Set<string>;
-  addingGameId?: string | null;
-  launchingGameId?: string | null;
-  onAddGame?: (game: GhostBoxGame) => void;
-  onRemoveGame: (game: GhostBoxGame) => void;
-  onPlayGame?: (game: GhostBoxGame) => void;
-  onRemoveGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
-  favoriteGameIds?: Set<string>;
-  onToggleFavorite?: (game: GhostBoxGame) => void;
-  onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   onOpenGameAchievements?: (
     game: GhostBoxGame,
     achievementId?: string
@@ -645,19 +633,7 @@ export function ProfilePage({
   onSelectCollection,
   onUpdateProfile,
   onOpenGame,
-  removableGameAppIds,
-  libraryGameAppIds = new Set(),
-  playableGameAppIds = new Set(),
   activeSessionAppIds = new Set(),
-  addingGameId = null,
-  launchingGameId = null,
-  onAddGame,
-  onRemoveGame,
-  onPlayGame,
-  onRemoveGameFromCollection,
-  favoriteGameIds = new Set(),
-  onToggleFavorite,
-  onAddGameToCollection,
   onOpenGameAchievements,
   onSignOut,
   scrollElementRef,
@@ -1758,23 +1734,10 @@ export function ProfilePage({
   );
   const renderedGames = useEnrichedGameCards(baseRenderedGames);
 
-  const contextMenuItems = useCollectionContextMenu({
+  const contextMenuItems = useGameContextMenu({
     game: gameContextMenu?.game ?? null,
-    favoriteGameIds,
-    libraryGameAppIds,
-    removableGameAppIds,
-    playableGameAppIds,
-    addingGameId,
-    launchingGameId,
-    userCollections,
     onOpenGame,
-    onAddGame,
-    onPlayGame,
-    onRemoveGame,
-    onToggleFavorite,
     directFavoriteAction: true,
-    onAddGameToCollection,
-    onRemoveGameFromCollection,
   });
 
   const handleGameContextMenu = useCallback(

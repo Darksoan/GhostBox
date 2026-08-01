@@ -2,6 +2,7 @@ import { Info } from "lucide-react";
 import { cataloguePageSize } from "../../constants/catalogue";
 import { useSettings } from "../../context/settings";
 import type { Page } from "../../types";
+import type { Ref } from "react";
 
 function placeholderClassName(blockClassName: string, animate = true, pulse = false) {
   if (!animate) return `${blockClassName} loading-plate`;
@@ -261,20 +262,7 @@ export function HomeWishlistCardSkeleton() {
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span className="home-wishlist-card__cover home-wishlist-card__cover--skeleton" />
         <span className="home-wishlist-card__details">
-          <span className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton">
-            <span className="home-wishlist-card__player-review-quote-skeleton">
-              <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-              <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
-              <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review-short" />
-            </span>
-            <span className="home-wishlist-card__player-review-author">
-              <span className="home-wishlist-card__player-review-avatar home-wishlist-card__player-review-avatar--skeleton" />
-              <span className="home-wishlist-card__player-review-author-skeleton">
-                <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-name" />
-                <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-meta" />
-              </span>
-            </span>
-          </span>
+          <HomeWishlistReviewSkeleton />
           <span className="home-wishlist-card__tag-skeleton-row">
             <span className="home-wishlist-card__tag-skeleton" />
             <span className="home-wishlist-card__tag-skeleton" />
@@ -284,6 +272,35 @@ export function HomeWishlistCardSkeleton() {
         </span>
       </span>
     </div>
+  );
+}
+
+export function HomeWishlistReviewSkeleton({
+  rootRef,
+  ariaHidden = false,
+}: {
+  rootRef?: Ref<HTMLSpanElement>;
+  ariaHidden?: boolean;
+} = {}) {
+  return (
+    <span
+      ref={rootRef}
+      className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton"
+      aria-hidden={ariaHidden || undefined}
+    >
+      <span className="home-wishlist-card__player-review-quote-skeleton">
+        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
+        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review" />
+        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--review-short" />
+      </span>
+      <span className="home-wishlist-card__player-review-author">
+        <span className="home-wishlist-card__player-review-avatar home-wishlist-card__player-review-avatar--skeleton" />
+        <span className="home-wishlist-card__player-review-author-skeleton">
+          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-name" />
+          <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--author-meta" />
+        </span>
+      </span>
+    </span>
   );
 }
 
