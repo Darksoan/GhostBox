@@ -52,3 +52,12 @@ As screenshots usam o hook de cache de imagens já adotado pela aplicação. O p
 - Alinhar pesos e tamanhos ao catálogo: título em `--fs-400`/`--weight-semibold`; linha de desenvolvedora em `--fs-300`/`--weight-medium`, com o rótulo em `--weight-semibold`.
 - Manter o preview ativo por 2500 ms após a saída do card; cancelar o clear ao entrar em outro card ou no próprio minimodal, preparando futuras interações.
 - Verificação manual: hover entre vários jogos, foco por teclado, jogo sem screenshots, viewport estreito e filtro “Ano” recolhido.
+
+## Controles manuais de screenshots
+
+- Renderizar chevrons `<` e `>` sobre a area de screenshot, usando tokens semanticos existentes e sem nova borda externa.
+- Exibir os controles no hover ou foco do preview, com `aria-label` localizado para screenshot anterior/proxima.
+- Pausar o autoplay enquanto o ponteiro estiver dentro do preview; retomar a rotacao de 1000 ms ao sair.
+- A navegacao manual percorre apenas screenshots prontas, preservando a camada anti-flash existente.
+- Os controles nao devem abrir o card do jogo nem interferir na futura interacao com o preview.
+- Verificar navegacao manual, pausa no hover, retomada ao sair, teclado, screenshots nao prontas e movimento reduzido.
