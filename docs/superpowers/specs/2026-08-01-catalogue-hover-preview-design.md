@@ -42,5 +42,12 @@ As screenshots usam o hook de cache de imagens já adotado pela aplicação. O p
 
 - Testes unitários de layout garantem a presença dos seletores do painel e que nenhum valor de cor literal novo foi introduzido.
 - `npm run check:tokens`, `npx tsc --noEmit` e `npm test` devem passar.
-- Verificação manual: hover entre vários jogos, foco por teclado, jogo sem screenshots, viewport estreito e filtro “Ano” recolhido.
 
+## Revisão aprovada — rotação e hierarquia visual
+
+- Exibir somente uma screenshot por vez e avançar automaticamente a cada 1500 ms.
+- O ciclo é controlado pelo componente, reiniciado quando o jogo ativo muda e limpo quando o preview desmonta ou não possui screenshots.
+- Remover a borda do container externo do preview; manter superfície, raio e sombra existentes.
+- Remover publisher do conteúdo e das traduções do preview; manter somente a desenvolvedora.
+- Alinhar pesos e tamanhos ao catálogo: título em `--fs-400`/`--weight-semibold`; linha de desenvolvedora em `--fs-300`/`--weight-medium`, com o rótulo em `--weight-semibold`.
+- Verificação manual: hover entre vários jogos, foco por teclado, jogo sem screenshots, viewport estreito e filtro “Ano” recolhido.
