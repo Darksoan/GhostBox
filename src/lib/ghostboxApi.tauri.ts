@@ -750,49 +750,6 @@ export const ghostboxApi = {
     );
   },
 
-  downloadDepotGame(
-    appId: string,
-    outputDir: string,
-    steamPath?: string,
-    parallelChunks?: number,
-  ): Promise<Record<string, unknown>> {
-    return invokeOr<Record<string, unknown>>(
-      "cdndownload_download_game",
-      { appId, outputDir, steamPath, parallelChunks },
-      { Type: "error", Message: "Não foi possível iniciar o download." },
-    );
-  },
-
-  cancelDepotGame(appId: string): Promise<boolean> {
-    return invokeOr<boolean>("cdndownload_cancel_game", { appId }, false);
-  },
-
-  deleteDownloadOutputDir(
-    appId: string,
-    downloadsRoot: string,
-    outputDir: string,
-  ): Promise<boolean> {
-    return invoke<boolean>("cdndownload_delete_output_dir", {
-      appId,
-      downloadsRoot,
-      outputDir,
-    });
-  },
-
-  getDefaultDownloadsDir(): Promise<string> {
-    return invokeOr<string>("cdndownload_default_dir", {}, "");
-  },
-
-  async selectDownloadsDir(): Promise<string | null> {
-    const selectedPath = await open({
-      directory: true,
-      multiple: false,
-      title: "Selecione a pasta de downloads",
-    });
-
-    return typeof selectedPath === "string" ? selectedPath : null;
-  },
-
   removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",
@@ -933,27 +890,6 @@ export const ghostboxApi = {
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void listen<SteamAccountStats>("steam-account-stats-updated", (event) => {
-      callback(event.payload);
-    }).then((nextUnlisten) => {
-      if (disposed) {
-        nextUnlisten();
-      } else {
-        unlisten = nextUnlisten;
-      }
-    });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  },
-
-  onDownloadProgress(
-    callback: (payload: Record<string, unknown>) => void,
-  ): () => void {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void listen<Record<string, unknown>>("download-progress", (event) => {
       callback(event.payload);
     }).then((nextUnlisten) => {
       if (disposed) {

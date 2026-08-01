@@ -3,12 +3,6 @@ import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import type { GhostBoxGame } from "../../data";
-import { enqueueDownload } from "../../lib/downloadManager";
-import { ghostboxApi } from "../../lib/ghostboxApi";
-import {
-  readStoredDownloadsDir,
-  writeStoredDownloadsDir,
-} from "../../utils/storage";
 import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
@@ -211,18 +205,6 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             onAddGameToCollection={appData.addGameToUserCollection}
             onRemoveGameFromCollection={appData.removeGameFromCollection}
             onPlayGame={appData.handlePlayGame}
-            onDownloadGame={async () => {
-              const appId = getGameAppId(mergedGame);
-              if (!appId) return;
-              let downloadsDir = readStoredDownloadsDir();
-              if (!downloadsDir) {
-                downloadsDir = await ghostboxApi.getDefaultDownloadsDir();
-                if (!downloadsDir) return;
-                writeStoredDownloadsDir(downloadsDir);
-              }
-              const outputDir = `${downloadsDir}\\${appId}`;
-              enqueueDownload(mergedGame, outputDir, downloadsDir);
-            }}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })
             }

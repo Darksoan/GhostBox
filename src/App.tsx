@@ -12,7 +12,6 @@ import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
 import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
-import { startDownloadManager } from "./lib/downloadManager";
 import {
   getTrayHiddenNotificationCopy,
   showTrayHiddenDesktopNotification,
@@ -163,10 +162,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       void queryClient.invalidateQueries({ queryKey: ["home"] });
     });
   }, [queryClient]);
-
-  useEffect(() => {
-    return startDownloadManager();
-  }, []);
 
   useEffect(() => {
     return ghostboxApi.onWindowHiddenToTray(() => {

@@ -2035,3 +2035,4 @@ fn is_steam_process_running() -> bool {
 pub fn steam_is_running() -> bool {
     is_steam_process_running()
 }
+

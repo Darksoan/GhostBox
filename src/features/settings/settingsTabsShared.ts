@@ -2,7 +2,6 @@ import {
   Code2,
   Crown,
   Bell,
-  Download,
   FolderCog,
   Gauge,
   SlidersHorizontal,
@@ -15,8 +14,7 @@ export type SettingsTabId =
   | "library"
   | "subscription"
   | "notifications"
-  | "download"
-  | "downloads";
+  | "download";
 
 export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   general: "settings.tabs.general.label",
@@ -25,7 +23,6 @@ export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   subscription: "settings.tabs.subscription.label",
   notifications: "settings.tabs.notifications.label",
   download: "settings.tabs.download.label",
-  downloads: "settings.tabs.downloads.label",
 };
 
 export type SettingsNavigationTab = {
@@ -40,5 +37,4 @@ export const settingsNavigationTabs: SettingsNavigationTab[] = [
   { id: "subscription", icon: Crown },
   { id: "notifications", icon: Bell },
   { id: "download", icon: Code2 },
-  { id: "downloads", icon: Download },
 ];

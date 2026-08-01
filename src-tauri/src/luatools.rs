@@ -40,11 +40,17 @@ fn validate_lua_tools_url(url: &str) -> bool {
         .map(|url| {
             url.scheme() == "https"
                 || (url.scheme() == "http" && url.host_str() == Some("167.235.229.108"))
+                || (cfg!(test)
+                    && url.scheme() == "http"
+                    && url.host_str() == Some("127.0.0.1"))
         })
         .unwrap_or(false)
 }
 
-async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), String> {
+async fn download_lua_tools_package_from_apis(
+    app_id: &str,
+    apis: &[LuaToolsApi],
+) -> Result<(String, Vec<u8>), String> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(LUA_TOOLS_CONNECT_TIMEOUT_SECS))
         .timeout(Duration::from_secs(LUA_TOOLS_REQUEST_TIMEOUT_SECS))
@@ -52,7 +58,7 @@ async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), S
         .map_err(|error| error.to_string())?;
     let mut errors = Vec::new();
 
-    for api in DEFAULT_LUA_TOOLS_APIS {
+    for api in apis {
         let url = lua_tools_url(api, app_id);
         if !validate_lua_tools_url(&url) {
             errors.push(format!("{}: URL insegura", api.name));
@@ -80,7 +86,23 @@ async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), S
                     continue;
                 }
 
-                let bytes = response.bytes().await.map_err(|error| error.to_string())?;
+                let bytes = match response.bytes().await {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        if error.is_timeout() {
+                            errors.push(format!(
+                                "{}: tempo limite excedido durante o download",
+                                api.name
+                            ));
+                        } else {
+                            errors.push(format!(
+                                "{}: falha ao receber o pacote ({error})",
+                                api.name
+                            ));
+                        }
+                        continue;
+                    }
+                };
                 if bytes.len() > MAX_LUA_TOOLS_PACKAGE_BYTES {
                     errors.push(format!("{}: pacote excede 64 MB", api.name));
                     continue;
@@ -105,6 +127,10 @@ async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), S
     Err(errors
         .if_empty(vec!["Jogo indisponível nas APIs configuradas.".to_string()])
         .join("; "))
+}
+
+async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), String> {
+    download_lua_tools_package_from_apis(app_id, DEFAULT_LUA_TOOLS_APIS).await
 }
 
 fn zip_entry_file_name(name: &str) -> Option<String> {
@@ -429,4 +455,68 @@ pub fn luatools_remove_game(app: tauri::AppHandle, game: serde_json::Value) -> s
         "appId": app_id,
         "removedFiles": removed_files
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{download_lua_tools_package_from_apis, LuaToolsApi};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn falls_back_when_successful_response_body_is_truncated() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let responses = [
+                b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nPK".as_slice(),
+                b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nPK\x03\x04"
+                    .as_slice(),
+            ];
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            let mut response_index = 0;
+            while response_index < responses.len() && std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let mut request = [0_u8; 1024];
+                        let _ = stream.read(&mut request);
+                        stream.write_all(responses[response_index]).unwrap();
+                        response_index += 1;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("test server failed: {error}"),
+                }
+            }
+        });
+
+        let broken_url = Box::leak(format!("http://{address}/broken").into_boxed_str());
+        let fallback_url = Box::leak(format!("http://{address}/fallback").into_boxed_str());
+        let apis = [
+            LuaToolsApi {
+                name: "Broken",
+                url: broken_url,
+                success_code: 200,
+                unavailable_code: 404,
+            },
+            LuaToolsApi {
+                name: "Fallback",
+                url: fallback_url,
+                success_code: 200,
+                unavailable_code: 404,
+            },
+        ];
+
+        let result = tauri::async_runtime::block_on(download_lua_tools_package_from_apis(
+            "1332010",
+            &apis,
+        ));
+        server.join().unwrap();
+
+        let (api, bytes) = result.unwrap();
+        assert_eq!(api, "Fallback");
+        assert_eq!(bytes, b"PK\x03\x04");
+    }
 }

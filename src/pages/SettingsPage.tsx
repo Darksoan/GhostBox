@@ -3,7 +3,6 @@ import {
   Check,
   Bell,
   Crown,
-  Download,
   ExternalLink,
   FolderCog,
   Code2,
@@ -11,7 +10,7 @@ import {
   SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import type { GhostBoxGame } from "../data";
@@ -19,10 +18,6 @@ import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from 
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import {
-  readStoredDownloadsDir,
-  writeStoredDownloadsDir,
-  readStoredDownloadParallelChunks,
-  writeStoredDownloadParallelChunks,
 } from "../utils/storage";
 
 export type { SettingsTabId } from "../features/settings/settingsTabsShared";
@@ -194,17 +189,6 @@ export const settingsTabs: SettingsTab[] = [
     icon: Code2,
     options: [],
   },
-  {
-    id: "downloads",
-    icon: Download,
-    options: [
-      {
-        labelKey: "settings.downloads.downloadsDir.label",
-        descriptionKey: "settings.downloads.downloadsDir.description",
-        control: "input",
-      },
-    ],
-  },
 ];
 
 interface SettingsPageProps {
@@ -243,8 +227,6 @@ export function SettingsPage({
   const [drafts, setDrafts] = useState<DraftsState>(() =>
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
   );
-  const [downloadsDir, setDownloadsDir] = useState(() => readStoredDownloadsDir());
-  const [parallelChunks, setParallelChunks] = useState(() => readStoredDownloadParallelChunks());
 
   useEffect(() => {
     const defaults = getDefaultDrafts(appearance.language, initialPage, startupSettings);
@@ -254,20 +236,6 @@ export function SettingsPage({
   useEffect(() => {
     writeDrafts(drafts);
   }, [drafts]);
-
-  const handleSelectDownloadsDir = useCallback(async () => {
-    const picked = await ghostboxApi.selectDownloadsDir();
-    if (!picked) return;
-    writeStoredDownloadsDir(picked);
-    setDownloadsDir(picked);
-  }, []);
-
-  const handleParallelChunksChange = useCallback((value: string) => {
-    const nextValue = Number.parseInt(value, 10);
-    if (!Number.isFinite(nextValue)) return;
-    writeStoredDownloadParallelChunks(nextValue);
-    setParallelChunks(nextValue);
-  }, []);
 
   useEffect(() => {
     const general = drafts.general ?? {};
@@ -317,16 +285,12 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, downloadsDir, handleSelectDownloadsDir, parallelChunks, handleParallelChunksChange, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave),
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave),
     [
       activeTab,
       appearance,
       backupSettings,
       drafts,
-      downloadsDir,
-      handleSelectDownloadsDir,
-      parallelChunks,
-      handleParallelChunksChange,
       morrenusApiKey,
       notifications,
       onMorrenusApiKeyChange,
@@ -391,10 +355,6 @@ function buildTabOptions(
   t: (key: string, params?: Record<string, string | number>) => string,
   steamPath: string,
   onSelectSteamPath: () => void,
-  downloadsDir: string,
-  onSelectDownloadsDir: () => void,
-  parallelChunks: number,
-  onParallelChunksChange: (value: string) => void,
   morrenusApiKey: string,
   onMorrenusApiKeyChange: (value: string) => void,
   onMorrenusApiKeyCheck: () => void
@@ -556,29 +516,6 @@ function buildTabOptions(
         confirmAriaLabel: t("settings.download.morrenusApiKey.saveKey"),
         onClick: onMorrenusApiKeyCheck,
         onChange: (value: string) => onMorrenusApiKeyChange(value),
-      },
-    ];
-  }
-
-  if (activeTab.id === "downloads") {
-    return [
-      {
-        label: t("settings.downloads.downloadsDir.label"),
-        description: t("settings.downloads.downloadsDir.description"),
-        control: "input" as const,
-        value: downloadsDir || t("settings.downloads.downloadsDir.default"),
-        onClick: onSelectDownloadsDir,
-      },
-      {
-        label: t("settings.downloads.parallelChunks.label"),
-        description: t("settings.downloads.parallelChunks.description"),
-        control: "select" as const,
-        value: String(parallelChunks),
-        choices: [8, 16, 24, 32].map((amount) => ({
-          label: String(amount),
-          value: String(amount),
-        })),
-        onChange: onParallelChunksChange,
       },
     ];
   }

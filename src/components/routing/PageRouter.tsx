@@ -58,12 +58,6 @@ const LazyNotificationsPage = lazy(() =>
     return { default: m.NotificationsPage };
   }),
 );
-const LazyDownloadsPage = lazy(() =>
-  import("../../pages/DownloadsPage").then((m) => {
-    markPageLoaded("downloads");
-    return { default: m.DownloadsPage };
-  }),
-);
 
 const KEEP_ALIVE_PAGES: Page[] = [
   "home",
@@ -73,7 +67,6 @@ const KEEP_ALIVE_PAGES: Page[] = [
   "settings",
   "profile",
   "notifications",
-  "downloads",
 ];
 
 const PREFETCH_DELAYS_MS: Record<Page, number> = {
@@ -84,7 +77,6 @@ const PREFETCH_DELAYS_MS: Record<Page, number> = {
   settings: 3_200,
   profile: 3_600,
   notifications: 3_200,
-  downloads: 3_200,
 };
 
 const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
@@ -95,7 +87,6 @@ const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
   settings: () => import("../../pages/SettingsPage"),
   profile: loadProfilePage,
   notifications: () => import("../../pages/NotificationsPage"),
-  downloads: () => import("../../pages/DownloadsPage"),
 };
 
 interface PageRouterProps {
@@ -389,10 +380,6 @@ export function PageRouter({
 
     if (targetPage === "notifications") {
       return <LazyNotificationsPage />;
-    }
-
-    if (targetPage === "downloads") {
-      return <LazyDownloadsPage />;
     }
 
     return null;
