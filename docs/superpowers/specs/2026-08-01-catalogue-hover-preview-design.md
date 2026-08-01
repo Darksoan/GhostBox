@@ -50,4 +50,5 @@ As screenshots usam o hook de cache de imagens já adotado pela aplicação. O p
 - Remover a borda do container externo do preview; manter superfície, raio e sombra existentes.
 - Remover publisher do conteúdo e das traduções do preview; manter somente a desenvolvedora.
 - Alinhar pesos e tamanhos ao catálogo: título em `--fs-400`/`--weight-semibold`; linha de desenvolvedora em `--fs-300`/`--weight-medium`, com o rótulo em `--weight-semibold`.
+- Manter o preview ativo por 2500 ms após a saída do card; cancelar o clear ao entrar em outro card ou no próprio minimodal, preparando futuras interações.
 - Verificação manual: hover entre vários jogos, foco por teclado, jogo sem screenshots, viewport estreito e filtro “Ano” recolhido.

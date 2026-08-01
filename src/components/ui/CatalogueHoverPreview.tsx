@@ -7,9 +7,15 @@ import { getNextReadyScreenshotSource } from "../../utils/cataloguePreview";
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
 }
 
-export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
+export function CatalogueHoverPreview({
+  game,
+  onPointerEnter,
+  onPointerLeave,
+}: CatalogueHoverPreviewProps) {
   const { appearance, t } = useSettings();
   const isEnglish = appearance.language === "en";
   const screenshotSources = useMemo(
@@ -94,6 +100,8 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     <section
       className="catalogue-hover-preview"
       aria-label={isEnglish ? `Preview of ${game.title}` : `Preview de ${game.title}`}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       <div className="catalogue-hover-preview__screenshots">
         {cachedScreenshotSources.length > 0 ? (

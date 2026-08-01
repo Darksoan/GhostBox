@@ -41,6 +41,7 @@ import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import { useFlipLayout } from "../hooks/useFlipLayout";
+import { createCatalogueHoverPreviewRetention } from "../utils/cataloguePreview";
 
 const maxVisibleFilterOptions = 160;
 
@@ -335,6 +336,11 @@ export function CataloguePage({
     mode: "game" | "collection";
   } | null>(null);
   const [hoveredGame, setHoveredGame] = useState<GhostBoxGame | null>(null);
+  const clearHoveredGame = useCallback(() => setHoveredGame(null), []);
+  const hoverPreviewRetention = useMemo(
+    () => createCatalogueHoverPreviewRetention(clearHoveredGame),
+    [clearHoveredGame]
+  );
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
   const hasSearchQuery = Boolean(query.trim());
@@ -430,8 +436,35 @@ export function CataloguePage({
   );
 
   useEffect(() => {
+    hoverPreviewRetention.cancelClear();
     setHoveredGame(null);
-  }, [displayedPage, visibleGamesCacheKey]);
+  }, [displayedPage, hoverPreviewRetention, visibleGamesCacheKey]);
+
+  useEffect(
+    () => () => hoverPreviewRetention.dispose(),
+    [hoverPreviewRetention]
+  );
+
+  const handleHoverGame = useCallback(
+    (game: GhostBoxGame | null) => {
+      if (game) {
+        hoverPreviewRetention.cancelClear();
+        setHoveredGame(game);
+        return;
+      }
+
+      hoverPreviewRetention.scheduleClear();
+    },
+    [hoverPreviewRetention]
+  );
+
+  const handlePreviewPointerEnter = useCallback(() => {
+    hoverPreviewRetention.cancelClear();
+  }, [hoverPreviewRetention]);
+
+  const handlePreviewPointerLeave = useCallback(() => {
+    hoverPreviewRetention.scheduleClear();
+  }, [hoverPreviewRetention]);
 
   useEffect(() => {
     if (loading || !visibleGames.length) return;
@@ -526,7 +559,7 @@ export function CataloguePage({
               <CatalogueList
                 games={visibleGames}
                 onOpenGame={onOpenGame}
-                onHoverGame={setHoveredGame}
+                onHoverGame={handleHoverGame}
                 addedGameAppIds={addedGameAppIds}
                 addingGameId={addingGameId}
                 removingGameId={removingGameId}
@@ -580,7 +613,11 @@ export function CataloguePage({
                 onClear={clearFilter}
               />
             ))}
-            <CatalogueHoverPreview game={hoveredGame} />
+            <CatalogueHoverPreview
+              game={hoveredGame}
+              onPointerEnter={handlePreviewPointerEnter}
+              onPointerLeave={handlePreviewPointerLeave}
+            />
           </div>
         </aside>
       </div>

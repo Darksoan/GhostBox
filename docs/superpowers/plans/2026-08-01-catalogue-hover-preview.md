@@ -255,3 +255,16 @@ Expected: 26+ tests pass and Vite build completes successfully.
 git add src/components/ui/CatalogueHoverPreview.tsx src/app.scss src/i18n.ts tests/catalogue-hover-preview.test.ts docs/superpowers/plans/2026-08-01-catalogue-hover-preview.md
 git commit -m "feat: refine catalogue hover preview media"
 ```
+
+### Task 9: Retain preview between cards
+
+**Files:**
+- Modify: `src/utils/cataloguePreview.ts`
+- Modify: `src/pages/CataloguePage.tsx`
+- Modify: `src/components/ui/CatalogueHoverPreview.tsx`
+- Create: `tests/catalogue-hover-retention.test.ts`
+
+- [ ] **Step 1: Add a cancelable 2500 ms retention controller and test its expiration/cancellation with fake timers.**
+- [ ] **Step 2: Route card leave through the controller instead of clearing immediately; cancel on another card hover and on preview pointer enter.**
+- [ ] **Step 3: Add preview pointer callbacks so leaving the preview starts the same delayed clear.**
+- [ ] **Step 4: Run the full test suite and build.**

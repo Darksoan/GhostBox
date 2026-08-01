@@ -1,3 +1,32 @@
+export const CATALOGUE_HOVER_PREVIEW_RETENTION_MS = 2500;
+
+export function createCatalogueHoverPreviewRetention(
+  onClear: () => void,
+  delayMs = CATALOGUE_HOVER_PREVIEW_RETENTION_MS
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const cancelClear = () => {
+    if (timeoutId === null) return;
+    clearTimeout(timeoutId);
+    timeoutId = null;
+  };
+
+  return {
+    scheduleClear() {
+      cancelClear();
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        onClear();
+      }, delayMs);
+    },
+    cancelClear,
+    dispose() {
+      cancelClear();
+    },
+  };
+}
+
 export function getNextReadyScreenshotSource(
   sources: string[],
   readySources: ReadonlySet<string>,
