@@ -28,6 +28,7 @@ import {
   getReleaseYear,
 } from "../utils/filters";
 import { CatalogueList } from "../components/ui/CatalogueList";
+import { CatalogueHoverPreview } from "../components/ui/CatalogueHoverPreview";
 import { PaginationControls } from "../components/ui/PaginationControls";
 import {
   CatalogueFilterSectionsLoadingState,
@@ -333,6 +334,7 @@ export function CataloguePage({
     y: number;
     mode: "game" | "collection";
   } | null>(null);
+  const [hoveredGame, setHoveredGame] = useState<GhostBoxGame | null>(null);
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
   const hasSearchQuery = Boolean(query.trim());
@@ -428,6 +430,10 @@ export function CataloguePage({
   );
 
   useEffect(() => {
+    setHoveredGame(null);
+  }, [displayedPage, visibleGamesCacheKey]);
+
+  useEffect(() => {
     if (loading || !visibleGames.length) return;
 
     preloadGameListAssets(visibleGames, {
@@ -520,6 +526,7 @@ export function CataloguePage({
               <CatalogueList
                 games={visibleGames}
                 onOpenGame={onOpenGame}
+                onHoverGame={setHoveredGame}
                 addedGameAppIds={addedGameAppIds}
                 addingGameId={addingGameId}
                 removingGameId={removingGameId}
@@ -573,6 +580,7 @@ export function CataloguePage({
                 onClear={clearFilter}
               />
             ))}
+            <CatalogueHoverPreview game={hoveredGame} />
           </div>
         </aside>
       </div>

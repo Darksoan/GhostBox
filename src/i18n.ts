@@ -72,6 +72,10 @@ const translations: Record<Language, TranslationTree> = {
         clearShort: "Limpar",
         selected: "{count} filtro(s)",
       },
+      preview: {
+        developer: "Desenvolvedora",
+        publisher: "Publicadora",
+      },
     },
     profile: {
       changeBanner: "Mudar capa",
@@ -421,6 +425,10 @@ const translations: Record<Language, TranslationTree> = {
         clearAll: "Clear filters",
         clearShort: "Clear",
         selected: "{count} filter(s)",
+      },
+      preview: {
+        developer: "Developer",
+        publisher: "Publisher",
       },
     },
     profile: {

@@ -24,6 +24,7 @@ interface CatalogueListItemProps {
   isAdding?: boolean;
   isRemoving?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
+  onHoverGame: (game: GhostBoxGame | null) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onPreloadGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
@@ -35,6 +36,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   isAdding = false,
   isRemoving = false,
   onOpenGame,
+  onHoverGame,
   onRemoveGame,
   onPreloadGame,
   onGameContextMenu,
@@ -166,8 +168,21 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       role="button"
       aria-busy={isAdding}
       onClick={() => onOpenGame(game)}
-      onFocus={() => onPreloadGame(game)}
-      onPointerEnter={() => onPreloadGame(game)}
+      onFocus={() => {
+        onPreloadGame(game);
+        onHoverGame(game);
+      }}
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (!nextTarget || !event.currentTarget.contains(nextTarget as Node)) {
+          onHoverGame(null);
+        }
+      }}
+      onPointerEnter={() => {
+        onPreloadGame(game);
+        onHoverGame(game);
+      }}
+      onPointerLeave={() => onHoverGame(null)}
       onContextMenu={(event) => {
         if (!onGameContextMenu) return;
         event.preventDefault();
@@ -237,6 +252,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 interface CatalogueListProps {
   games: GhostBoxGame[];
   onOpenGame: (game: GhostBoxGame) => void;
+  onHoverGame: (game: GhostBoxGame | null) => void;
   addedGameAppIds?: Set<string>;
   addingGameId?: string | null;
   removingGameId?: string | null;
@@ -247,6 +263,7 @@ interface CatalogueListProps {
 export function CatalogueList({
   games,
   onOpenGame,
+  onHoverGame,
   addedGameAppIds = new Set(),
   addingGameId = null,
   removingGameId = null,
@@ -288,6 +305,7 @@ export function CatalogueList({
           isAdding={addingGameId === game.id}
           isRemoving={removingGameId === game.id}
           onOpenGame={onOpenGame}
+          onHoverGame={onHoverGame}
           onRemoveGame={onRemoveGame}
           onPreloadGame={scheduleGamePreload}
           onGameContextMenu={onGameContextMenu}
