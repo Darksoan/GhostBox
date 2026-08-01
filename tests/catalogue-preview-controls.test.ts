@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getAdjacentReadyScreenshotSource } from "../src/utils/cataloguePreview";
 
@@ -27,5 +28,20 @@ describe("catalogue preview manual navigation", () => {
         "previous"
       )
     ).toBe("a");
+  });
+
+  it("renders accessible controls and pauses autoplay on preview hover", () => {
+    const component = readFileSync(
+      "src/components/ui/CatalogueHoverPreview.tsx",
+      "utf8"
+    );
+
+    expect(component).toContain("catalogue-hover-preview__control");
+    expect(component).toContain("previousScreenshot");
+    expect(component).toContain("nextScreenshot");
+    expect(component).toContain("getAdjacentReadyScreenshotSource");
+    expect(component).toContain("isAutoplayPaused");
+    expect(component).toContain("onFocusCapture");
+    expect(component).toContain("onBlurCapture");
   });
 });

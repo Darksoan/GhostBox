@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { withoutHeaderImageSources } from "../../utils/image";
-import { getNextReadyScreenshotSource } from "../../utils/cataloguePreview";
+import {
+  getAdjacentReadyScreenshotSource,
+  getNextReadyScreenshotSource,
+} from "../../utils/cataloguePreview";
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
@@ -29,12 +32,15 @@ export function CatalogueHoverPreview({
   const [activeScreenshotSource, setActiveScreenshotSource] = useState<
     string | null
   >(null);
+  const [readyScreenshotCount, setReadyScreenshotCount] = useState(0);
+  const [isAutoplayPaused, setIsAutoplayPaused] = useState(false);
   const readyScreenshotSourcesRef = useRef<Set<string>>(new Set());
   const screenshotSourceKey = screenshotSources.join("\n");
   const screenshotKey = cachedScreenshotSources.join("\n");
 
   useEffect(() => {
     readyScreenshotSourcesRef.current = new Set();
+    setReadyScreenshotCount(0);
     setActiveScreenshotSource(null);
   }, [screenshotSourceKey]);
 
@@ -53,7 +59,7 @@ export function CatalogueHoverPreview({
   }, [cachedScreenshotSources]);
 
   useEffect(() => {
-    if (cachedScreenshotSources.length <= 1) return;
+    if (cachedScreenshotSources.length <= 1 || isAutoplayPaused) return;
 
     const intervalId = window.setInterval(() => {
       setActiveScreenshotSource((currentSource) =>
@@ -66,7 +72,39 @@ export function CatalogueHoverPreview({
     }, 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [cachedScreenshotSources, screenshotKey]);
+  }, [cachedScreenshotSources, isAutoplayPaused, screenshotKey]);
+
+  const navigateScreenshot = (direction: "previous" | "next") => {
+    setActiveScreenshotSource((currentSource) =>
+      getAdjacentReadyScreenshotSource(
+        cachedScreenshotSources,
+        readyScreenshotSourcesRef.current,
+        currentSource,
+        direction
+      )
+    );
+  };
+
+  const handlePreviewPointerEnter = () => {
+    setIsAutoplayPaused(true);
+    onPointerEnter?.();
+  };
+
+  const handlePreviewPointerLeave = () => {
+    setIsAutoplayPaused(false);
+    onPointerLeave?.();
+  };
+
+  const handlePreviewFocus = () => {
+    setIsAutoplayPaused(true);
+    onPointerEnter?.();
+  };
+
+  const handlePreviewBlur = (event: FocusEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsAutoplayPaused(false);
+    onPointerLeave?.();
+  };
 
   if (!game) return null;
 
@@ -84,7 +122,9 @@ export function CatalogueHoverPreview({
     }
     if (!cachedScreenshotSources.includes(source)) return;
 
+    if (readyScreenshotSourcesRef.current.has(source)) return;
     readyScreenshotSourcesRef.current.add(source);
+    setReadyScreenshotCount(readyScreenshotSourcesRef.current.size);
     setActiveScreenshotSource((currentSource) =>
       currentSource && readyScreenshotSourcesRef.current.has(currentSource)
         ? currentSource
@@ -100,8 +140,10 @@ export function CatalogueHoverPreview({
     <section
       className="catalogue-hover-preview"
       aria-label={isEnglish ? `Preview of ${game.title}` : `Preview de ${game.title}`}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
+      onPointerEnter={handlePreviewPointerEnter}
+      onPointerLeave={handlePreviewPointerLeave}
+      onFocusCapture={handlePreviewFocus}
+      onBlurCapture={handlePreviewBlur}
     >
       <div className="catalogue-hover-preview__screenshots">
         {cachedScreenshotSources.length > 0 ? (
@@ -127,6 +169,37 @@ export function CatalogueHoverPreview({
           })
         ) : (
           <div className="catalogue-hover-preview__empty-media" />
+        )}
+
+        {cachedScreenshotSources.length > 1 && (
+          <>
+            <button
+              className="catalogue-hover-preview__control catalogue-hover-preview__control--previous"
+              type="button"
+              aria-label={t("catalogue.preview.previousScreenshot")}
+              disabled={readyScreenshotCount < 2}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                navigateScreenshot("previous");
+              }}
+            >
+              <span aria-hidden="true">&lt;</span>
+            </button>
+            <button
+              className="catalogue-hover-preview__control catalogue-hover-preview__control--next"
+              type="button"
+              aria-label={t("catalogue.preview.nextScreenshot")}
+              disabled={readyScreenshotCount < 2}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                navigateScreenshot("next");
+              }}
+            >
+              <span aria-hidden="true">&gt;</span>
+            </button>
+          </>
         )}
       </div>
 
