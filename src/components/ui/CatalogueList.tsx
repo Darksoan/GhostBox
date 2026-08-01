@@ -24,7 +24,7 @@ interface CatalogueListItemProps {
   isAdding?: boolean;
   isRemoving?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
-  onHoverGame: (game: GhostBoxGame | null) => void;
+  onHoverGame: (game: GhostBoxGame | null, options?: { immediate?: boolean }) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onPreloadGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
@@ -170,7 +170,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       onClick={() => onOpenGame(game)}
       onFocus={() => {
         onPreloadGame(game);
-        onHoverGame(game);
+        onHoverGame(game, { immediate: true });
       }}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget;
@@ -252,7 +252,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 interface CatalogueListProps {
   games: GhostBoxGame[];
   onOpenGame: (game: GhostBoxGame) => void;
-  onHoverGame: (game: GhostBoxGame | null) => void;
+  onHoverGame: (game: GhostBoxGame | null, options?: { immediate?: boolean }) => void;
   addedGameAppIds?: Set<string>;
   addingGameId?: string | null;
   removingGameId?: string | null;

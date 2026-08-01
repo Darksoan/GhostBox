@@ -41,7 +41,10 @@ import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import { useFlipLayout } from "../hooks/useFlipLayout";
-import { createCatalogueHoverPreviewRetention } from "../utils/cataloguePreview";
+import {
+  createCatalogueHoverPreviewIntent,
+  createCatalogueHoverPreviewRetention,
+} from "../utils/cataloguePreview";
 
 const maxVisibleFilterOptions = 160;
 
@@ -341,6 +344,10 @@ export function CataloguePage({
     () => createCatalogueHoverPreviewRetention(clearHoveredGame),
     [clearHoveredGame]
   );
+  const hoverPreviewIntent = useMemo(
+    () => createCatalogueHoverPreviewIntent<GhostBoxGame>(setHoveredGame),
+    []
+  );
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
   const hasSearchQuery = Boolean(query.trim());
@@ -437,25 +444,34 @@ export function CataloguePage({
 
   useEffect(() => {
     hoverPreviewRetention.cancelClear();
+    hoverPreviewIntent.cancel();
     setHoveredGame(null);
-  }, [displayedPage, hoverPreviewRetention, visibleGamesCacheKey]);
+  }, [displayedPage, hoverPreviewIntent, hoverPreviewRetention, visibleGamesCacheKey]);
 
   useEffect(
-    () => () => hoverPreviewRetention.dispose(),
-    [hoverPreviewRetention]
+    () => () => {
+      hoverPreviewRetention.dispose();
+      hoverPreviewIntent.dispose();
+    },
+    [hoverPreviewRetention, hoverPreviewIntent]
   );
 
   const handleHoverGame = useCallback(
-    (game: GhostBoxGame | null) => {
+    (game: GhostBoxGame | null, options?: { immediate?: boolean }) => {
       if (game) {
         hoverPreviewRetention.cancelClear();
-        setHoveredGame(game);
+        if (options?.immediate) {
+          hoverPreviewIntent.showImmediately(game);
+        } else {
+          hoverPreviewIntent.scheduleShow(game);
+        }
         return;
       }
 
+      hoverPreviewIntent.cancel();
       hoverPreviewRetention.scheduleClear();
     },
-    [hoverPreviewRetention]
+    [hoverPreviewIntent, hoverPreviewRetention]
   );
 
   const handlePreviewPointerEnter = useCallback(() => {
