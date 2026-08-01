@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Cloud, Lock } from "lucide-react";
+import { Clock, Lock } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
@@ -26,8 +26,6 @@ interface GameCardProps {
   onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   portrait?: boolean;
   showAchievements?: boolean;
-  showBackupStatus?: boolean;
-  hasBackup?: boolean;
   active?: boolean;
   libraryCoverFade?: boolean;
 }
@@ -38,8 +36,6 @@ export const GameCard = memo(function GameCard({
   onContextMenu,
   portrait = false,
   showAchievements = false,
-  showBackupStatus = false,
-  hasBackup = false,
   libraryCoverFade = false,
 }: GameCardProps) {
   const { t } = useSettings();
@@ -154,19 +150,6 @@ export const GameCard = memo(function GameCard({
           portrait ? "cover" : "100% 100%",
         )}
       >
-        {showBackupStatus && (
-          <div
-            className={`game-card__backup-badge ${hasBackup ? "game-card__backup-badge--success" : "game-card__backup-badge--error"}`}
-            aria-label={hasBackup ? "Backup disponível" : "Backup indisponível"}
-            title={
-              hasBackup
-                ? "Backup em nuvem disponível"
-                : "Sem backup em nuvem recente"
-            }
-          >
-            <Cloud size={15} strokeWidth={2.15} aria-hidden="true" />
-          </div>
-        )}
         {showLockedBadge ? (
           <div
             className="game-card__achievement-badges game-card__achievement-badges--locked"
@@ -214,8 +197,6 @@ interface GameGridProps {
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   portrait?: boolean;
   showAchievements?: boolean;
-  showBackupStatus?: boolean;
-  hasBackupByAppId?: Set<string>;
   activeSessionAppIds?: Set<string>;
   libraryCoverFade?: boolean;
   animateLayout?: boolean;
@@ -229,8 +210,6 @@ export function GameGrid({
   onGameContextMenu,
   portrait = false,
   showAchievements = false,
-  showBackupStatus = false,
-  hasBackupByAppId = new Set(),
   activeSessionAppIds = new Set(),
   libraryCoverFade = false,
   animateLayout = false,
@@ -251,8 +230,6 @@ export function GameGrid({
           onContextMenu={onGameContextMenu}
           portrait={portrait}
           showAchievements={showAchievements}
-          showBackupStatus={showBackupStatus}
-          hasBackup={hasBackupByAppId.has(game.appId)}
           active={activeSessionAppIds.has(game.appId)}
           libraryCoverFade={libraryCoverFade}
         />

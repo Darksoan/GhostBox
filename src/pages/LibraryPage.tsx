@@ -2,7 +2,6 @@ import { ChevronLeft, Folder, Heart } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
-import type { BackupSettings } from "../types";
 import { GameGrid, GameGridLoadingState } from "../components/ui/GameCard";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
@@ -71,7 +70,6 @@ interface LibraryPageProps {
   onActiveCollectionChange?: (collectionId: string | null) => void;
   onToggleFavorite?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
-  backupSettings?: BackupSettings | null;
   activeSessionAppIds?: Set<string>;
   isActive?: boolean;
 }
@@ -93,7 +91,6 @@ export function LibraryPage({
   onActiveCollectionChange,
   onToggleFavorite,
   onAddGameToCollection,
-  backupSettings = null,
   activeSessionAppIds = new Set(),
   isActive = true,
 }: LibraryPageProps) {
@@ -123,15 +120,6 @@ export function LibraryPage({
     userCollections.some((collection) => collection.id === selectedCollectionId)
       ? selectedCollectionId
       : null;
-  const gamesWithBackup = useMemo(
-    () =>
-      new Set(
-        Object.entries(backupSettings?.backupRecords ?? {})
-          .filter(([, record]) => record?.lastBackupSuccess === true)
-          .map(([appId]) => appId),
-      ),
-    [backupSettings],
-  );
   const changeActiveCollection = (collectionId: string | null) => {
     setInternalActiveCollectionId(collectionId);
     onActiveCollectionChange?.(collectionId);
@@ -350,7 +338,7 @@ export function LibraryPage({
       </div>
 
       {loading ? (
-        <GameGridLoadingState dense count={8} portrait showAchievements showBackupStatus libraryCoverFade />
+        <GameGridLoadingState dense count={8} portrait showAchievements libraryCoverFade />
       ) : libraryGames.length > 0 ? (
         <GameGrid
           games={libraryGames}
@@ -359,8 +347,6 @@ export function LibraryPage({
           dense
           portrait
           showAchievements
-          showBackupStatus
-          hasBackupByAppId={gamesWithBackup}
           activeSessionAppIds={activeSessionAppIds}
           libraryCoverFade
           animateLayout

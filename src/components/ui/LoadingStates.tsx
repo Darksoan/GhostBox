@@ -49,14 +49,12 @@ export function GameGridLoadingState({
   count = dense ? 8 : 9,
   portrait = false,
   showAchievements = false,
-  showBackupStatus = false,
   libraryCoverFade = false,
 }: {
   dense?: boolean;
   count?: number;
   portrait?: boolean;
   showAchievements?: boolean;
-  showBackupStatus?: boolean;
   libraryCoverFade?: boolean;
 }) {
   const gridClass = [
@@ -73,9 +71,6 @@ export function GameGridLoadingState({
           key={`game-card-loading-${index}`}
         >
           <div className="game-card__cover game-card__cover--loaded loading-wave">
-            {showBackupStatus && (
-              <div className="game-card__placeholder-badge loading-wave" />
-            )}
             {showAchievements && (
               <div className="game-card__placeholder-achievements">
                 <span className="loading-wave" />
@@ -557,7 +552,7 @@ export function LibraryPageLoadingState() {
           </div>
         </div>
       </div>
-      <GameGridLoadingState dense portrait count={8} showAchievements showBackupStatus libraryCoverFade />
+      <GameGridLoadingState dense portrait count={8} showAchievements libraryCoverFade />
     </section>
   );
 }

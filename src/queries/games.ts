@@ -92,6 +92,9 @@ export function useGamesQuery(
     queryKey,
     queryFn: () => loadGames(normalizedRequest),
     enabled: options.enabled ?? true,
+    // Mantém a página anterior visível enquanto o próximo chunk chega — sem
+    // isso cada tecla do debounce troca a lista inteira por skeleton.
+    placeholderData: keepPreviousData,
     retry: 1,
   });
 }

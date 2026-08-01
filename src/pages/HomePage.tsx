@@ -525,11 +525,13 @@ async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>())
 function HomeCategoryCard({
   game,
   imageVariant = "header",
+  labelBelowCover = false,
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
   imageVariant?: HomeCategoryImageVariant;
+  labelBelowCover?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -557,9 +559,10 @@ function HomeCategoryCard({
   return (
     <button
       type="button"
-      className={`home-category-card ${
-        isHeroCapsule ? "home-category-card--hero-capsule" : ""
+      className={`home-category-card${isHeroCapsule ? " home-category-card--hero-capsule" : ""}${
+        labelBelowCover ? " home-category-card--label-below" : ""
       }`}
+      aria-label={game.title}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
         if (!onGameContextMenu) return;
@@ -602,6 +605,7 @@ function HomeCategorySection({
 }) {
   const visibleGames = games.slice(0, maxGames);
   const isHeroCapsule = imageVariant === "heroCapsule";
+  const labelBelowCover = className.includes("home-category--featured");
 
   return (
     <section
@@ -623,6 +627,7 @@ function HomeCategorySection({
               key={game.appId || game.id}
               game={game}
               imageVariant={imageVariant}
+              labelBelowCover={labelBelowCover}
               onOpenGame={onOpenGame}
               onGameContextMenu={onGameContextMenu}
             />
@@ -1334,6 +1339,7 @@ function HomeRecommendedHero({
             key={game.appId || game.id}
             game={game}
             imageVariant="heroCapsule"
+            labelBelowCover
             onOpenGame={onOpenGame}
             onGameContextMenu={onGameContextMenu}
           />

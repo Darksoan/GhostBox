@@ -2976,6 +2976,15 @@
     border-color: var(--border-hover);
   }
 
+  @media (hover: hover) and (pointer: fine) {
+    &__game-grid.game-grid--portrait .game-card:hover,
+    &__game-grid.game-grid--portrait .game-card:focus-within {
+      position: relative;
+      z-index: var(--z-raised);
+      transform: scale(1.03);
+    }
+  }
+
   &__load-more-sentinel {
     width: 100%;
     height: 1px;
@@ -2986,6 +2995,10 @@
   .profile-page__hero-action,
   .profile-page__hero-action-label {
     transition: none;
+  }
+
+  .profile-page__game-grid.game-grid--portrait .game-card {
+    transform: none;
   }
 }
 

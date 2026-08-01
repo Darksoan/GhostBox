@@ -285,7 +285,6 @@ export function PageRouter({
           }
           onToggleFavorite={appData.toggleFavoriteGame}
           onAddGameToCollection={appData.addGameToUserCollection}
-          backupSettings={appData.backupSettings}
           activeSessionAppIds={appData.activeSessionAppIds}
           isActive={targetPage === page}
         />
