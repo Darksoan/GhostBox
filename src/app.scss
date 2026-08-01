@@ -6648,7 +6648,6 @@ p {
     color: var(--text-primary);
     cursor: pointer;
     opacity: 0;
-    pointer-events: none;
     transform: translateY(-50%);
     transition:
       opacity var(--motion-fast) var(--ease),
@@ -6668,6 +6667,7 @@ p {
     &:disabled {
       cursor: not-allowed;
       opacity: 0;
+      pointer-events: none;
     }
 
     &--previous {
@@ -6679,8 +6679,8 @@ p {
     }
   }
 
-  &__screenshots:hover &__control,
-  &__screenshots:focus-within &__control {
+  &__screenshots:hover &__control:not(:disabled),
+  &__screenshots:focus-within &__control:not(:disabled) {
     opacity: 1;
     pointer-events: auto;
   }

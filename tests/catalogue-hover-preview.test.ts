@@ -48,6 +48,7 @@ describe("Catalogue hover preview", () => {
     );
     expect(controlRule?.toString()).toContain("background: var(--surface-secondary)");
     expect(controlRule?.toString()).toContain("color: var(--text-primary)");
+    expect(controlRule?.toString()).not.toContain("pointer-events: none");
     expect(controlRule?.toString()).not.toMatch(/#[0-9a-f]{3,8}/i);
   });
 
