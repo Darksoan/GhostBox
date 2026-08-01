@@ -47,3 +47,32 @@ export function getNextReadyScreenshotSource(
 
   return null;
 }
+
+export function getAdjacentReadyScreenshotSource(
+  sources: string[],
+  readySources: ReadonlySet<string>,
+  currentSource: string | null,
+  direction: "previous" | "next"
+) {
+  if (!sources.length || !readySources.size) return null;
+
+  const currentIndex = currentSource ? sources.indexOf(currentSource) : -1;
+  const startIndex =
+    currentIndex >= 0
+      ? currentIndex
+      : direction === "next"
+        ? -1
+        : 0;
+  const step = direction === "next" ? 1 : -1;
+
+  for (let distance = 1; distance <= sources.length; distance += 1) {
+    const candidateIndex =
+      (startIndex + step * distance + sources.length) % sources.length;
+    const candidate = sources[candidateIndex];
+    if (readySources.has(candidate)) return candidate;
+  }
+
+  return currentSource && readySources.has(currentSource)
+    ? currentSource
+    : null;
+}
