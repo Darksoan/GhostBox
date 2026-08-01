@@ -1,9 +1,6 @@
 import type { GhostBoxGame } from "../data";
 import type { OverviewSortBy } from "./storage";
-import {
-  getProfileAchievementTotal,
-  getProfileUnlockedAchievementCount,
-} from "./profileAchievements";
+import { getProfileUnlockedAchievementCount } from "./profileAchievements";
 import { parseLastPlayed } from "./time";
 
 function getOverviewLastPlayedTime(game: GhostBoxGame) {
@@ -34,50 +31,54 @@ export function sortOverviewGames(
   sortBy: OverviewSortBy,
   language: "pt" | "en",
 ) {
+  const decoratedGames = games.map((game) => {
+    const unlocked = getProfileUnlockedAchievementCount(game);
+    const total = Math.max(
+      game.achievementList?.length ?? 0,
+      game.achievements?.total ?? 0,
+      unlocked,
+    );
+
+    return {
+      game,
+      unlocked,
+      total,
+      playtime: getOverviewPlaytimeInMilliseconds(game),
+      lastPlayed: getOverviewLastPlayedTime(game),
+    };
+  });
+
   const filteredGames = sortBy === "perfect"
-    ? games.filter((game) => {
-        const total = getProfileAchievementTotal(game);
-        return total > 0 && getProfileUnlockedAchievementCount(game) >= total;
-      })
-    : games;
+    ? decoratedGames.filter(({ total, unlocked }) => total > 0 && unlocked >= total)
+    : decoratedGames;
 
   return [...filteredGames].sort((left, right) => {
     if (sortBy === "recent") {
-      const recentDiff =
-        getOverviewLastPlayedTime(right) - getOverviewLastPlayedTime(left);
+      const recentDiff = right.lastPlayed - left.lastPlayed;
       if (recentDiff) return recentDiff;
 
-      const playtimeDiff =
-        getOverviewPlaytimeInMilliseconds(right) -
-        getOverviewPlaytimeInMilliseconds(left);
+      const playtimeDiff = right.playtime - left.playtime;
       if (playtimeDiff) return playtimeDiff;
     }
 
     if (sortBy === "playtime") {
-      const playtimeDiff =
-        getOverviewPlaytimeInMilliseconds(right) -
-        getOverviewPlaytimeInMilliseconds(left);
+      const playtimeDiff = right.playtime - left.playtime;
       if (playtimeDiff) return playtimeDiff;
     }
 
     if (sortBy === "achievements") {
-      const unlockedDiff =
-        getProfileUnlockedAchievementCount(right) -
-        getProfileUnlockedAchievementCount(left);
+      const unlockedDiff = right.unlocked - left.unlocked;
       if (unlockedDiff) return unlockedDiff;
 
-      const totalDiff =
-        getProfileAchievementTotal(right) - getProfileAchievementTotal(left);
+      const totalDiff = right.total - left.total;
       if (totalDiff) return totalDiff;
     }
 
     if (sortBy === "perfect") {
-      const playtimeDiff =
-        getOverviewPlaytimeInMilliseconds(right) -
-        getOverviewPlaytimeInMilliseconds(left);
+      const playtimeDiff = right.playtime - left.playtime;
       if (playtimeDiff) return playtimeDiff;
     }
 
-    return compareOverviewTitles(left, right, language);
-  });
+    return compareOverviewTitles(left.game, right.game, language);
+  }).map(({ game }) => game);
 }

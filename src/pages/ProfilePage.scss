@@ -1230,6 +1230,8 @@
 
   &__activity-card {
     --activity-cover-width: 196px;
+    content-visibility: auto;
+    contain-intrinsic-size: 0 120px;
     position: relative;
     display: grid;
     grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
@@ -2602,6 +2604,8 @@
   }
 
   &__achievement-game {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 320px;
     display: flex;
     flex-direction: column;
     gap: 0;

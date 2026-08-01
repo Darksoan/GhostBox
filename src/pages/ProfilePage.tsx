@@ -6,6 +6,7 @@ import {
   useRef,
   startTransition,
   useState,
+  memo,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -75,6 +76,7 @@ import {
   type OverviewSortBy,
 } from "../utils/storage";
 import {
+  buildSteamAchievementIndex,
   mergeAchievementDetailsIntoGame,
   mergeSteamAchievementsIntoGame,
   mergeSteamAchievementsIntoGames,
@@ -99,7 +101,7 @@ const overviewSortOptions: OverviewSortBy[] = [
   "perfect",
 ];
 
-function ProfileActivityCard({
+const ProfileActivityCard = memo(function ProfileActivityCard({
   game,
   displayGame,
   displayTitle,
@@ -269,7 +271,7 @@ function ProfileActivityCard({
       ) : null}
     </article>
   );
-}
+});
 
 function LoadedProfileAchievementGameIcon({ game }: { game: GhostBoxGame }) {
   const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
@@ -549,6 +551,24 @@ type ProfileAchievementHighlight = {
   unlockedAt?: string;
 };
 
+type ProfileActivityViewModel = {
+  game: GhostBoxGame;
+  displayGame: GhostBoxGame;
+  displayTitle: string;
+  achievementTotal: number;
+  achievementUnlocked: number;
+  achievementProgress: number;
+  latestAchievements: ProfileAchievementHighlight[];
+  overflowCount: number;
+  statusLabel: string | null;
+};
+
+// Candidates here are exactly the games Steam has no remote achievement data
+// for, so local hydration is the only thing that can make them pass
+// `isRecognizedSteamProfileGame` and show up on the profile at all. Capping the
+// pass lower drops games from the page instead of merely delaying them, so the
+// budget stays wide and the cost is paid down by idle batching + the staged
+// flush below rather than by hydrating less.
 const localAchievementHydrationLimit = 80;
 const localAchievementHydrationBatchSize = 5;
 let hasPreparedProfileOverviewData = false;
@@ -659,9 +679,13 @@ export function ProfilePage({
   );
   const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
     useState<Map<string, GhostBoxGame>>(() => new Map());
+  const localAchievementRequestedAppIdsRef = useRef(new Set<string>());
+  const localAchievementCompletedAppIdsRef = useRef(new Set<string>());
   const localAchievementHydrationFailedUntilRef = useRef(new Map<string, number>());
   const [resolvedGameTitlesByAppId, setResolvedGameTitlesByAppId] =
     useState<Map<string, string>>(() => new Map());
+  const resolvedGameTitleAppIdsRef = useRef(new Set<string>());
+  const resolvedGameTitleCompletedAppIdsRef = useRef(new Set<string>());
   const [isOverviewDataReady, setIsOverviewDataReady] = useState(
     () => hasPreparedProfileOverviewData
   );
@@ -759,25 +783,30 @@ export function ProfilePage({
     [userCollections]
   );
 
-  const activeCollection =
-    profileCollections.find(
-      (collection) => collection.id === activeCollectionId
-    ) ??
-    (() => {
-      const collection = userCollectionById.get(activeCollectionId);
-      return collection
-        ? {
-            id: collection.id,
-            name: collection.name,
-            count: collection.gameIds.length,
-          }
-        : profileCollections[0];
-    })();
+  const activeCollection = useMemo(
+    () =>
+      profileCollections.find(
+        (collection) => collection.id === activeCollectionId
+      ) ??
+      (() => {
+        const collection = userCollectionById.get(activeCollectionId);
+        return collection
+          ? {
+              id: collection.id,
+              name: collection.name,
+              count: collection.gameIds.length,
+            }
+          : profileCollections[0];
+      })(),
+    [activeCollectionId, profileCollections, userCollectionById],
+  );
   const activeTabId = activeCollection.id;
   const isOverviewActive = activeCollection.id === "overview";
   const isAchievementsActive = activeCollection.id === "achievements";
   const shouldBuildCollectionGameData = !isOverviewActive;
-  const shouldComputeOverviewData = !isOverviewActive || isOverviewDataReady;
+  const shouldComputeOverviewData = isOverviewActive
+    ? isOverviewDataReady
+    : isAchievementsActive;
 
   useEffect(() => {
     if (!isOverviewActive || isOverviewDataReady) return;
@@ -798,44 +827,54 @@ export function ProfilePage({
     };
   }, [isOverviewActive, isOverviewDataReady]);
 
+  const steamAchievementIndex = useMemo(
+    () =>
+      shouldComputeOverviewData
+        ? buildSteamAchievementIndex(steamAccountStats)
+        : new Map(),
+    [shouldComputeOverviewData, steamAccountStats],
+  );
+
   // Steam account games are not listed in the library, but profile recognition
   // still needs playtime + achievements from the owned stats payload.
   const steamOwnedProfileGames = useMemo(() => {
-    if (!steamAccountStats?.ownedPlaytimes?.length) return [];
+    if (!shouldComputeOverviewData || !steamAccountStats?.ownedPlaytimes?.length) {
+      return [];
+    }
     return mergeSteamAchievementsIntoGames(
       buildSteamOwnedGamesFromPlaytimes(steamAccountStats.ownedPlaytimes, {}),
       steamAccountStats,
+      steamAchievementIndex,
     );
-  }, [steamAccountStats]);
+  }, [shouldComputeOverviewData, steamAccountStats, steamAchievementIndex]);
+
+  const profileGameBase = useMemo(() => {
+    if (!shouldComputeOverviewData) return [];
+
+    const games = new Map<string, GhostBoxGame>();
+    const addGame = (game: GhostBoxGame) => {
+      games.set(
+        game.appId,
+        getRicherAchievementGame(games.get(game.appId), game),
+      );
+    };
+
+    for (const game of achievementHistoryGames) addGame(game);
+    for (const game of addedLibraryGames) addGame(game);
+    for (const game of favoriteGames) addGame(game);
+    for (const game of steamOwnedProfileGames) addGame(game);
+
+    return [...games.values()];
+  }, [
+    achievementHistoryGames,
+    addedLibraryGames,
+    favoriteGames,
+    shouldComputeOverviewData,
+    steamOwnedProfileGames,
+  ]);
 
   const overviewPreloadGames = useMemo(() => {
-    const games = new Map<string, GhostBoxGame>();
-    for (const game of achievementHistoryGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-    for (const game of addedLibraryGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-    for (const game of favoriteGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-    for (const game of steamOwnedProfileGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-
-    return [...games.values()]
+    return profileGameBase
       .filter((game) => isRecognizedSteamProfileGame(game, getGamePlaytime(game)))
       .sort((left, right) => {
         const lastPlayedDelta =
@@ -845,16 +884,8 @@ export function ProfilePage({
         return getGamePlaytime(right) - getGamePlaytime(left);
       });
   }, [
-    achievementHistoryGames,
-    addedLibraryGames,
-    favoriteGames,
-    steamOwnedProfileGames,
+    profileGameBase,
   ]);
-
-  const overviewPreloadGamesKey = overviewPreloadGames
-    .slice(0, recentActivityPageSize)
-    .map((game) => game.id)
-    .join("|");
 
   useEffect(() => {
     if (!isOverviewActive || overviewPreloadGames.length === 0) return;
@@ -869,7 +900,7 @@ export function ProfilePage({
       roundRobin: true,
       steamHeaderFirst: true,
     });
-  }, [isOverviewActive, overviewPreloadGames, overviewPreloadGamesKey]);
+  }, [isOverviewActive, overviewPreloadGames]);
 
   const enrichedGameByAppId = useMemo(() => {
     const map = new Map<string, GhostBoxGame>();
@@ -934,35 +965,7 @@ export function ProfilePage({
   const profileAchievementGames = useMemo(() => {
     if (!shouldComputeOverviewData) return [];
 
-    const games = new Map<string, GhostBoxGame>();
-    for (const game of achievementHistoryGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-    for (const game of addedLibraryGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-    // Favorites often already carry real store titles; prefer them over
-    // history placeholders like "STEAM APP 242760".
-    for (const game of favoriteGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
-    // Owned Steam account games (not auto-listed in library) still feed
-    // playtime + achievement recognition on the profile overview.
-    for (const game of steamOwnedProfileGames) {
-      games.set(
-        game.appId,
-        getRicherAchievementGame(games.get(game.appId), game)
-      );
-    }
+    const games = new Map(profileGameBase.map((game) => [game.appId, game]));
     // Freshly hydrated local achievement details are merged with remote Steam
     // account unlocks so the local appcache monitor stays additive instead of
     // wiping profile-level achievement data for uninstalled games.
@@ -986,19 +989,23 @@ export function ProfilePage({
       .map((game) =>
         withResolvedProfileGameTitle(game, resolvedGameTitlesByAppId),
       )
-      .map((game) => mergeSteamAchievementsIntoGame(game, steamAccountStats))
+      .map((game) =>
+        mergeSteamAchievementsIntoGame(
+          game,
+          steamAccountStats,
+          steamAchievementIndex,
+        ),
+      )
       .filter((game) =>
         isRecognizedSteamProfileGame(game, getGamePlaytime(game)),
       );
   }, [
-    achievementHistoryGames,
-    addedLibraryGames,
-    favoriteGames,
     localAchievementGamesByAppId,
+    profileGameBase,
     resolvedGameTitlesByAppId,
     shouldComputeOverviewData,
+    steamAchievementIndex,
     steamAccountStats,
-    steamOwnedProfileGames,
   ]);
 
   useEffect(() => {
@@ -1021,7 +1028,12 @@ export function ProfilePage({
       ...steamOwnedProfileGames,
     ]
       .filter((game) => {
-        if (!game.appId || localAchievementGamesByAppId.has(game.appId)) return false;
+        if (
+          !game.appId ||
+          localAchievementRequestedAppIdsRef.current.has(game.appId)
+        ) {
+          return false;
+        }
         if (remoteAchievementAppIds.has(game.appId)) return false;
         return (failedUntil.get(game.appId) ?? 0) <= now;
       })
@@ -1042,8 +1054,46 @@ export function ProfilePage({
       .slice(0, localAchievementHydrationLimit);
 
     if (candidates.length === 0) return;
+    for (const game of candidates) {
+      localAchievementRequestedAppIdsRef.current.add(game.appId);
+    }
 
     void (async () => {
+      const pendingHydratedGames = new Map<string, GhostBoxGame>();
+      const pendingResolvedTitles = new Map<string, string>();
+      const flushPendingResults = () => {
+        if (pendingHydratedGames.size > 0) {
+          for (const appId of pendingHydratedGames.keys()) {
+            localAchievementCompletedAppIdsRef.current.add(appId);
+          }
+          setLocalAchievementGamesByAppId((current) => {
+            let changed = false;
+            const next = new Map(current);
+            for (const [appId, game] of pendingHydratedGames) {
+              if (next.has(appId)) continue;
+              next.set(appId, game);
+              changed = true;
+            }
+            return changed ? next : current;
+          });
+          pendingHydratedGames.clear();
+        }
+
+        if (pendingResolvedTitles.size > 0) {
+          setResolvedGameTitlesByAppId((current) => {
+            let changed = false;
+            const next = new Map(current);
+            for (const [appId, title] of pendingResolvedTitles) {
+              if (next.has(appId)) continue;
+              next.set(appId, title);
+              changed = true;
+            }
+            return changed ? next : current;
+          });
+          pendingResolvedTitles.clear();
+        }
+      };
+
       for (let index = 0; index < candidates.length; index += localAchievementHydrationBatchSize) {
         if (cancelled) return;
 
@@ -1066,6 +1116,7 @@ export function ProfilePage({
               loadGameStoreDetailsCached(gameId).catch(() => null),
             ]);
             if (!details?.achievementList?.length && !storeDetails) {
+              localAchievementRequestedAppIdsRef.current.delete(game.appId);
               const retryAfter = details?.achievementMetadata?.retryAfter ?? 0;
               localAchievementHydrationFailedUntilRef.current.set(
                 game.appId,
@@ -1095,43 +1146,36 @@ export function ProfilePage({
         );
         if (cancelled) return;
 
-        setLocalAchievementGamesByAppId((current) => {
-          let changed = false;
-          const next = new Map(current);
-          for (const game of hydratedGames) {
-            if (!game || next.has(game.appId)) continue;
-            next.set(game.appId, game);
-            changed = true;
+        for (const game of hydratedGames) {
+          if (!game) continue;
+          pendingHydratedGames.set(game.appId, game);
+          if (!isSteamTitlePlaceholder(game.title, game.appId)) {
+            pendingResolvedTitles.set(game.appId, game.title);
           }
-          return changed ? next : current;
-        });
+        }
 
-        setResolvedGameTitlesByAppId((current) => {
-          let changed = false;
-          const next = new Map(current);
-          for (const game of hydratedGames) {
-            if (
-              !game ||
-              next.has(game.appId) ||
-              isSteamTitlePlaceholder(game.title, game.appId)
-            ) {
-              continue;
-            }
-            next.set(game.appId, game.title);
-            changed = true;
-          }
-          return changed ? next : current;
-        });
+        const batchNumber = Math.floor(index / localAchievementHydrationBatchSize) + 1;
+        const isLastBatch =
+          index + localAchievementHydrationBatchSize >= candidates.length;
+        // Flush the first batch on its own so the top cards paint immediately,
+        // then every 4th to keep the remaining re-renders down.
+        if (batchNumber === 1 || batchNumber % 4 === 0 || isLastBatch) {
+          flushPendingResults();
+        }
       }
     })();
 
     return () => {
       cancelled = true;
+      for (const game of candidates) {
+        if (!localAchievementCompletedAppIdsRef.current.has(game.appId)) {
+          localAchievementRequestedAppIdsRef.current.delete(game.appId);
+        }
+      }
     };
   }, [
     achievementHistoryGames,
     addedLibraryGames,
-    localAchievementGamesByAppId,
     shouldComputeOverviewData,
     steamOwnedProfileGames,
     steamAccountStats,
@@ -1268,17 +1312,21 @@ export function ProfilePage({
 
   const achievementTabGames = useMemo(() => {
     return profileAchievementGames
-      .slice()
+      .map((game) => ({
+        game,
+        unlocked: getUnlockedAchievementCount(game),
+        total: getAchievementTotal(game),
+      }))
       .sort((left, right) => {
-        const unlockedDelta =
-          getUnlockedAchievementCount(right) - getUnlockedAchievementCount(left);
+        const unlockedDelta = right.unlocked - left.unlocked;
         if (unlockedDelta !== 0) return unlockedDelta;
 
-        const totalDelta = getAchievementTotal(right) - getAchievementTotal(left);
+        const totalDelta = right.total - left.total;
         if (totalDelta !== 0) return totalDelta;
 
-        return left.title.localeCompare(right.title);
-      });
+        return left.game.title.localeCompare(right.game.title);
+      })
+      .map(({ game }) => game);
   }, [profileAchievementGames]);
 
   const achievementTabTotalPages = Math.max(
@@ -1455,9 +1503,13 @@ export function ProfilePage({
       (game) =>
         game.appId &&
         isSteamTitlePlaceholder(game.title, game.appId) &&
-        !resolvedGameTitlesByAppId.has(game.appId)
+        !resolvedGameTitleAppIdsRef.current.has(game.appId)
     );
     if (gamesToResolve.length === 0) return;
+
+    for (const game of gamesToResolve) {
+      resolvedGameTitleAppIdsRef.current.add(game.appId);
+    }
 
     let cancelled = false;
 
@@ -1467,17 +1519,27 @@ export function ProfilePage({
           game.id || `steam-${game.appId}`
         ).catch(() => null);
         const title = details?.title?.trim();
-        if (!title || isSteamTitlePlaceholder(title, game.appId)) return null;
+        if (!title || isSteamTitlePlaceholder(title, game.appId)) {
+          return { appId: game.appId, title: null };
+        }
         return { appId: game.appId, title };
       })
     ).then((resolvedTitles) => {
       if (cancelled) return;
 
+      for (const resolvedTitle of resolvedTitles) {
+        if (!resolvedTitle.title) {
+          resolvedGameTitleAppIdsRef.current.delete(resolvedTitle.appId);
+          continue;
+        }
+        resolvedGameTitleCompletedAppIdsRef.current.add(resolvedTitle.appId);
+      }
+
       setResolvedGameTitlesByAppId((current) => {
         let changed = false;
         const next = new Map(current);
         for (const resolvedTitle of resolvedTitles) {
-          if (!resolvedTitle || next.has(resolvedTitle.appId)) continue;
+          if (!resolvedTitle.title || next.has(resolvedTitle.appId)) continue;
           next.set(resolvedTitle.appId, resolvedTitle.title);
           changed = true;
         }
@@ -1487,10 +1549,96 @@ export function ProfilePage({
 
     return () => {
       cancelled = true;
+      for (const game of gamesToResolve) {
+        if (!resolvedGameTitleCompletedAppIdsRef.current.has(game.appId)) {
+          resolvedGameTitleAppIdsRef.current.delete(game.appId);
+        }
+      }
     };
-  }, [profileAchievementGames, resolvedGameTitlesByAppId]);
+  }, [profileAchievementGames]);
 
-  const visibleGamesKey = visibleGames.map((game) => game.id).join("|");
+  const profileActivityViewModels = useMemo<ProfileActivityViewModel[]>(
+    () =>
+      pagedRecentActivityGames.map((game) => {
+        const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
+        const displayGame = resolvedTitle
+          ? { ...game, title: resolvedTitle }
+          : game;
+        const achievementTotal = getAchievementTotal(game);
+        const achievementUnlocked = getUnlockedAchievementCount(game);
+        const achievementProgress =
+          achievementTotal > 0
+            ? (achievementUnlocked / achievementTotal) * 100
+            : 0;
+        const latestAchievements = (game.achievementList ?? [])
+          .filter(isAchievementUnlocked)
+          .slice()
+          .sort((left, right) => {
+            const unlockTimeDelta =
+              achievementUnlockedTime(right.unlockedAt) -
+              achievementUnlockedTime(left.unlockedAt);
+            if (unlockTimeDelta !== 0) return unlockTimeDelta;
+            return (
+              (right.globalPercent ?? 100) -
+              (left.globalPercent ?? 100)
+            );
+          })
+          .flatMap<ProfileAchievementHighlight>((achievement) => {
+            const icon = achievementShowcaseIcon(achievement, true);
+            if (!icon) return [];
+            return [
+              {
+                key: achievementShowcaseKey(game, achievement),
+                game: displayGame,
+                achievementId: achievement.name || achievement.title,
+                title: achievement.title,
+                description: achievement.description,
+                icon,
+                unlocked: true,
+                gameTitle: displayGame.title,
+                globalPercent: achievement.globalPercent,
+                unlockedAt: achievement.unlockedAt,
+              },
+            ];
+          })
+          .slice(0, 5);
+        const overflowCount = Math.max(
+          0,
+          achievementUnlocked - latestAchievements.length,
+        );
+        const statusLabel = game.sessionActive
+          ? t("profile.currentlyInGame")
+          : Number.isFinite(parseLastPlayed(game.lastTimePlayed))
+            ? `${t("profile.lastPlayed")} ${formatProfileLastSession(
+                game.lastTimePlayed,
+                appearance.language,
+              )}`
+            : null;
+
+        return {
+          game,
+          displayGame,
+          displayTitle: getProfileGameTitle(
+            game,
+            appearance.language,
+            resolvedTitle,
+          ),
+          achievementTotal,
+          achievementUnlocked,
+          achievementProgress,
+          latestAchievements,
+          overflowCount,
+          statusLabel,
+        };
+      }),
+    [
+      appearance.language,
+      pagedRecentActivityGames,
+      resolvedGameTitlesByAppId,
+      t,
+    ],
+  );
+
   const profileImageKey = `${steamProfile?.avatarUrl ?? ""}\n${steamProfile?.bannerUrl ?? ""}`;
   const avatarSources = useCachedImageSources(
     steamProfile?.avatarUrl ? [steamProfile.avatarUrl] : []
@@ -1575,11 +1723,11 @@ export function ProfilePage({
       limit: 8,
       idle: false,
     });
-  }, [visibleGamesKey]);
+  }, [visibleGames]);
 
   useEffect(() => {
     setRenderedGameCount(Math.min(24, visibleGames.length));
-  }, [visibleGamesKey, visibleGames.length]);
+  }, [visibleGames]);
 
   useEffect(() => {
     const sentinel = loadMoreGamesRef.current;
@@ -1659,7 +1807,7 @@ export function ProfilePage({
               className={`profile-page__banner-image${isBannerPlaceholder ? " profile-page__banner-image--placeholder" : ""}`}
               src={bannerImageSource}
               alt=""
-              decoding="sync"
+              decoding="async"
               loading="eager"
               fetchPriority="high"
               style={bannerImageStyle}
@@ -1948,85 +2096,22 @@ export function ProfilePage({
                         </div>
                       </div>
                       <div className="profile-page__activity-list">
-                        {recentActivityGames.length > 0 ? pagedRecentActivityGames.map((game) => {
-                          const resolvedTitle = resolvedGameTitlesByAppId.get(game.appId);
-                          const displayGame = resolvedTitle
-                            ? { ...game, title: resolvedTitle }
-                            : game;
-                          const achievementTotal = getAchievementTotal(game);
-                          const achievementUnlocked =
-                            getUnlockedAchievementCount(game);
-                          const achievementProgress =
-                            achievementTotal > 0
-                              ? (achievementUnlocked / achievementTotal) * 100
-                              : 0;
-                          const latestAchievements = (game.achievementList ?? [])
-                            .filter(isAchievementUnlocked)
-                            .slice()
-                            .sort((left, right) => {
-                              const unlockTimeDelta =
-                                achievementUnlockedTime(right.unlockedAt) -
-                                achievementUnlockedTime(left.unlockedAt);
-                              if (unlockTimeDelta !== 0) return unlockTimeDelta;
-                              return (
-                                (right.globalPercent ?? 100) -
-                                (left.globalPercent ?? 100)
-                              );
-                            })
-                            .flatMap<ProfileAchievementHighlight>((achievement) => {
-                              const icon = achievementShowcaseIcon(achievement, true);
-                              if (!icon) return [];
-                              return [
-                                {
-                                  key: achievementShowcaseKey(game, achievement),
-                                  game: displayGame,
-                                  achievementId:
-                                    achievement.name || achievement.title,
-                                  title: achievement.title,
-                                  description: achievement.description,
-                                  icon,
-                                  unlocked: true,
-                                  gameTitle: displayGame.title,
-                                  globalPercent: achievement.globalPercent,
-                                  unlockedAt: achievement.unlockedAt,
-                                },
-                              ];
-                            })
-                            .slice(0, 5);
-                          const overflowCount = Math.max(
-                            0,
-                            achievementUnlocked - latestAchievements.length,
-                          );
-                          const statusLabel = game.sessionActive
-                            ? t("profile.currentlyInGame")
-                            : Number.isFinite(parseLastPlayed(game.lastTimePlayed))
-                              ? `${t("profile.lastPlayed")} ${formatProfileLastSession(
-                                  game.lastTimePlayed,
-                                  appearance.language,
-                                )}`
-                              : null;
-
-                          return (
+                        {recentActivityGames.length > 0 ? profileActivityViewModels.map((viewModel) => (
                             <ProfileActivityCard
-                              key={game.id}
-                              game={game}
-                              displayGame={displayGame}
-                              displayTitle={getProfileGameTitle(
-                                game,
-                                appearance.language,
-                                resolvedTitle,
-                              )}
-                              achievementTotal={achievementTotal}
-                              achievementUnlocked={achievementUnlocked}
-                              achievementProgress={achievementProgress}
-                              latestAchievements={latestAchievements}
-                              overflowCount={overflowCount}
-                              statusLabel={statusLabel}
+                              key={viewModel.game.id}
+                              game={viewModel.game}
+                              displayGame={viewModel.displayGame}
+                              displayTitle={viewModel.displayTitle}
+                              achievementTotal={viewModel.achievementTotal}
+                              achievementUnlocked={viewModel.achievementUnlocked}
+                              achievementProgress={viewModel.achievementProgress}
+                              latestAchievements={viewModel.latestAchievements}
+                              overflowCount={viewModel.overflowCount}
+                              statusLabel={viewModel.statusLabel}
                               t={t}
                               onOpenGame={onOpenGame}
                             />
-                          );
-                        }) : (
+                        )) : (
                           <EmptyState
                             className="profile-page__no-games"
                             title={t("profile.noPerfectGames")}

@@ -1,122 +1,140 @@
-# Plano — Desempenho da aba de perfil
+# Registro — Refatoração de desempenho da aba de perfil
 
-Alvo: `src/pages/ProfilePage.tsx` (2301 linhas) e utils de conquistas.
-Sintoma: entrada na aba trava/demora, especialmente com biblioteca Steam grande (500+ jogos).
+> **Pendente e importante:** isto **não foi medido**. Não existe baseline antes/depois.
+> As mudanças são justificadas por complexidade algorítmica e contagem de re-renders
+> lidas no código, não por profiler. Enquanto a medição não rodar, trate o ganho como
+> hipótese, não como fato.
+>
+> **Verificado:** `npx tsc --noEmit` limpo · `npm run build` passa (inclui `check:tokens`)
+> · `npm test` 8 testes verdes (`tests/profile-performance.test.ts`, `tests/profile-sort.test.ts`).
 
----
+Alvo: `src/pages/ProfilePage.tsx` e os utils de conquistas do perfil.
+Sintoma relatado: entrada na aba trava/demora com biblioteca Steam grande (500+ jogos).
+Código de partida: commit `347c0d0`.
 
-## Diagnóstico
-
-### 1. Pipeline de conquistas recomputa ~16x na entrada
-`src/pages/ProfilePage.tsx:934` — `profileAchievementGames` depende de
-`localAchievementGamesByAppId`. A hidratação local roda em 16 lotes
-(`localAchievementHydrationLimit` 80 / `localAchievementHydrationBatchSize` 5) e cada lote
-chama `setLocalAchievementGamesByAppId`, disparando rebuild completo do Map + 3 passadas
-`.map()` sobre a biblioteca inteira.
-
-Cascata a jusante, tudo refeito por lote:
-- `achievementTabGames` (`ProfilePage.tsx:1269`) — sort completo
-- `recentActivityGames` (`ProfilePage.tsx:1310`) — `sortOverviewGames`
-- `steamOverviewMetrics` (`ProfilePage.tsx:1315`) — reduce completo
-
-### 2. `mergeSteamAchievementsIntoGame` é O(N x M)
-`src/utils/steamAchievementMerge.ts:112` — `stats.achievements.find(...)` é varredura linear
-por jogo. 500 jogos x 500 entradas = 250k comparações por rebuild, multiplicado por 16 rebuilds.
-Além disso `buildSteamAchievementList(summary)` é chamada **duas vezes** (linhas 116 e 117)
-para o mesmo summary.
-
-### 3. Efeitos que se reiniciam a si mesmos
-- `ProfilePage.tsx:1004-1138` — o efeito de hidratação depende de
-  `localAchievementGamesByAppId`, que ele próprio seta. O cleanup marca `cancelled = true`,
-  aborta o loop no meio, refiltra + reordena a lista completa de candidatos e recomeça.
-- `ProfilePage.tsx:1451-1491` — mesmo padrão: depende de `resolvedGameTitlesByAppId`,
-  que ele próprio seta.
-
-### 4. Contadores alocam array por chamada
-`src/utils/profileAchievements.ts:9` — `getProfileUnlockedAchievementCount` faz `.filter()`
-(novo array a cada chamada) e é invocado **dentro de comparadores de sort**:
-`ProfilePage.tsx:1272` e `src/utils/overviewSort.ts:64`.
-Custo: O(n log n x tamanho da achievementList) por ordenação.
-
-### 5. Trabalho pesado dentro do JSX
-`ProfilePage.tsx:1963-1995` — cada card de atividade filtra + ordena + `flatMap` a
-`achievementList` inteira (pode passar de 500 itens) em **todo render**.
-`ProfileActivityCard` não é `memo()`, e o pai re-renderiza a cada `setSteamLevel`,
-`setDiscordLink` e lote de hidratação.
-
-### 6. Trabalho de aba inativa
-`ProfilePage.tsx:780` — `shouldComputeOverviewData = !isOverviewActive || isOverviewDataReady`.
-Na aba **library** isso é `true`, então todo o pipeline de conquistas roda mesmo sem a aba usá-lo
-(`getGamesForCollection` só usa `profileAchievementGames` no caso `"achievements"`).
-
-### 7. Map duplicado
-`ProfilePage.tsx:811` (`overviewPreloadGames`) repete quase a mesma construção de
-`ProfilePage.tsx:934` (`profileAchievementGames`): mesmas 4 fontes, mesmo
-`getRicherAchievementGame`, mesmo filtro de reconhecimento.
-
-### 8. 160 chamadas IPC na entrada
-80 jogos x (`loadGameAchievementDetailsCached` + `loadGameStoreDetailsCached`).
+Referências abaixo usam **nome de símbolo**, não número de linha — o arquivo cresceu de
+2301 para 2386 linhas durante o trabalho e qualquer linha fixada aqui apodreceria.
 
 ---
 
-## Fases
+## O que estava errado (estado em `347c0d0`)
 
-### Fase 0 — Medir (obrigatório antes de mexer)
-- React DevTools Profiler: gravar entrada na aba perfil; contar renders de `ProfilePage`
-  e tempo de commit.
-- `performance.mark` / `measure` em volta dos useMemo em 803, 811, 934, 1269, 1310.
-- Baseline com biblioteca grande (500+ jogos): tempo até o primeiro card pintado.
-- Sem baseline não há como provar ganho — não pular.
+**1. Pipeline de conquistas recomputava ~16x na entrada.**
+`profileAchievementGames` dependia do state `localAchievementGamesByAppId`. A hidratação
+local roda em lotes (`localAchievementHydrationLimit` / `localAchievementHydrationBatchSize`)
+e cada lote chamava `setLocalAchievementGamesByAppId`, disparando rebuild completo do Map
+mais três passadas `.map()` sobre a biblioteca inteira. A cascata (`achievementTabGames`,
+`recentActivityGames`, `steamOverviewMetrics`) refazia sort e reduce completos junto.
 
-### Fase 1 — Indexar lookups O(N x M) → O(N)
-Maior ganho, menor risco.
+**2. `mergeSteamAchievementsIntoGame` era O(N × M).**
+Fazia `stats.achievements.find(...)` — varredura linear por jogo. 500 jogos × 500 entradas
+= 250k comparações por rebuild, vezes 16 rebuilds. E chamava `buildSteamAchievementList`
+duas vezes para o mesmo summary.
 
-1. `src/utils/steamAchievementMerge.ts`: adicionar
-   `buildSteamAchievementIndex(stats): Map<appId, SteamAchievement[]>`, memoizada por
-   `steamAccountStats`. `mergeSteamAchievementsIntoGame(s)` passa a receber o índice.
-   Chamar `buildSteamAchievementList` **uma** vez, não duas.
-2. `src/utils/profileAchievements.ts`: reescrever `getProfileUnlockedAchievementCount`
-   com laço `for` contando, sem `.filter()`.
-3. Sorts com Schwartzian transform: decorar uma vez
-   `{ game, unlocked, total, playtime, lastPlayed }` e ordenar pelos campos cacheados.
-   Aplicar em `ProfilePage.tsx:1269` e em `sortOverviewGames`.
+**3. Dois efeitos se reiniciavam a si mesmos.**
+O de hidratação dependia de `localAchievementGamesByAppId`, que ele próprio setava; o
+cleanup abortava o loop no meio, refiltrava e reordenava a lista de candidatos inteira e
+recomeçava. O de resolução de títulos tinha o mesmo padrão com `resolvedGameTitlesByAppId`.
 
-### Fase 2 — Parar os efeitos de se auto-reiniciarem
-1. Hidratação local: mover o dedupe de `localAchievementGamesByAppId` (state) para
-   `useRef<Set<string>>`; remover o state das deps. O efeito passa a rodar uma vez por
-   mudança real de biblioteca, não 16x.
-2. Mesmo tratamento no efeito de títulos (`ProfilePage.tsx:1451`): ref com os appIds já
-   pedidos, remover `resolvedGameTitlesByAppId` das deps.
-3. Acumular resultados dos lotes e fazer **um** `setState` no fim (ou a cada 4 lotes),
-   em vez de 16.
+**4. Contadores alocavam array por chamada.**
+`getProfileUnlockedAchievementCount` fazia `.filter()` e era invocado **dentro de
+comparadores de sort** — O(n log n × tamanho da achievementList) por ordenação.
 
-### Fase 3 — Cortar trabalho de aba inativa
-1. `shouldComputeOverviewData = isOverviewActive ? isOverviewDataReady : isAchievementsActive`.
-2. Unificar `overviewPreloadGames` e `profileAchievementGames` numa base comum memoizada
-   (`profileGameBase`) e derivar as duas variantes dela.
+**5. Trabalho pesado dentro do JSX.**
+Cada card de atividade filtrava, ordenava e `flatMap`ava a `achievementList` inteira em
+todo render. `ProfileActivityCard` não era `memo()`, e o pai re-renderizava a cada
+`setSteamLevel`, `setDiscordLink` e lote de hidratação.
 
-### Fase 4 — Render
-1. `memo()` em `ProfileActivityCard`. Verificar se `t` (de `useSettings`) é referencialmente
-   estável; se não for, puxar de ref.
-2. Mover o cálculo de `latestAchievements` / `statusLabel` do JSX para um `useMemo` que
-   produz view-models prontos apenas dos 8 jogos paginados.
-3. Memoizar `activeCollection` (`ProfilePage.tsx:762`).
-4. Remover `visibleGamesKey` e `overviewPreloadGamesKey` (join de string O(n) por render) —
-   usar contagem + primeiro/último id, ou o próprio array memoizado como dep.
+**6. Trabalho de aba inativa.**
+`shouldComputeOverviewData` era `!isOverviewActive || isOverviewDataReady` — verdadeiro na
+aba *library*, que não consome `profileAchievementGames`.
 
-### Fase 5 — IO e paint
-1. Reduzir `localAchievementHydrationLimit` de 80 para ~24 iniciais; o resto sob demanda
-   (paginação / IntersectionObserver).
-2. Banner (`ProfilePage.tsx:1658`): `decoding="sync"` + `loading="eager"` bloqueia.
-   Manter `fetchPriority="high"`, trocar `decoding` para `"async"`.
-3. `content-visibility: auto` + `contain-intrinsic-size` em
-   `.profile-page__achievement-game` e `.profile-page__activity-card` —
-   `ProfilePage.scss` tem 32 ocorrências de blur / box-shadow / animation, o paint pesa.
+**7. Map duplicado.** `overviewPreloadGames` repetia quase inteira a construção de
+`profileAchievementGames`: mesmas quatro fontes, mesmo `getRicherAchievementGame`.
+
+**8. Chaves de string O(n) por render.** `visibleGamesKey` e `overviewPreloadGamesKey`
+faziam `.map().join("|")` sobre a lista toda a cada render, só para servir de dep.
 
 ---
 
-## Ordem e expectativa
+## O que mudou
 
-Fases 1 e 2 devem entregar ~80% do ganho. Fase 3 é barata e segura.
-Fases 4 e 5 só se o profiler ainda apontar problema depois.
-Remedir ao fim de cada fase contra o baseline da Fase 0.
+### Índices e contadores — `src/utils/`
+
+- `steamAchievementMerge.ts`: novo `buildSteamAchievementIndex(stats)` devolve
+  `Map<appId, SteamAchievement[]>`, memoizado num `WeakMap` chaveado pelo objeto `stats`.
+  `mergeSteamAchievementsIntoGame` e `...IntoGames` aceitam o índice como terceiro
+  parâmetro. `buildSteamAchievementList` roda uma vez por summary. O(N × M) → O(N).
+- `profileAchievements.ts`: `getProfileUnlockedAchievementCount` conta em laço `for`,
+  sem alocar array.
+- `overviewSort.ts`: `sortOverviewGames` decora uma vez
+  (`{ game, unlocked, total, playtime, lastPlayed }`) e ordena pelos campos cacheados.
+  Mesmo tratamento em `achievementTabGames`.
+
+### Efeitos — `ProfilePage.tsx`
+
+- Dedupe da hidratação migrou do state para `localAchievementRequestedAppIdsRef`, e a
+  resolução de títulos para `resolvedGameTitleAppIdsRef`. Os states saíram das deps, então
+  os efeitos não se reiniciam mais sozinhos.
+- Resultados dos lotes são acumulados e liberados em flush escalonado: lote 1 (para os
+  primeiros cards pintarem cedo), depois a cada 4, mais o último. ~16 re-renders → ~5.
+- Refs de "completado" (`localAchievementCompletedAppIdsRef`,
+  `resolvedGameTitleCompletedAppIdsRef`) permitem o cleanup desmarcar só o que não foi
+  commitado, para que um cancelamento não perca jogos permanentemente.
+
+### Escopo e derivação
+
+- `shouldComputeOverviewData` virou `isOverviewActive ? isOverviewDataReady : isAchievementsActive`.
+- `profileGameBase` é a base única memoizada; `overviewPreloadGames` e
+  `profileAchievementGames` derivam dela.
+- `steamAchievementIndex` é memoizado no componente e repassado aos merges.
+
+### Render
+
+- `ProfileActivityCard` embrulhado em `memo()`. Funciona porque `t` é `useCallback` em
+  `src/context/settings.tsx` — se isso mudar, o `memo` vira decoração inútil.
+- `profileActivityViewModels` calcula fora do JSX, só para os jogos da página atual.
+- `activeCollection` memoizado.
+- `visibleGamesKey` / `overviewPreloadGamesKey` removidos; as deps passaram a ser os
+  próprios arrays memoizados.
+
+### IO e paint
+
+- Banner com `decoding="async"` (era `"sync"`, que bloqueia), mantendo `fetchPriority="high"`.
+- `content-visibility: auto` + `contain-intrinsic-size` em `.profile-page__activity-card`
+  e `.profile-page__achievement-game`.
+
+---
+
+## Lições
+
+**O limite de hidratação não pode ser cortado — a ideia original estava errada.**
+O plano previa baixar `localAchievementHydrationLimit` de 80 para ~24 e carregar o resto
+sob demanda. Foi aplicado e depois revertido. Motivo: os candidatos da hidratação são
+filtrados por `remoteAchievementAppIds`, ou seja, são exatamente os jogos para os quais o
+Steam **não** tem conquistas remotas. Sem hidratação local eles não passam por
+`isRecognizedSteamProfileGame` (que exige `unlocked > 0`) e **somem da página** — não é
+atraso, é perda de conteúdo. E "sob demanda por viewport" é impossível aqui: o jogo só
+entra na lista *depois* de hidratado, então não há nada no viewport para observar.
+O limite voltou para 80; o custo é pago por `requestIdleCallback` entre lotes e pelo flush
+escalonado.
+
+**Medir antes era a primeira etapa do plano e foi pulada.** Todo o resto foi executado sem
+baseline. O plano original ainda condicionava as fases finais a "só se o profiler ainda
+apontar problema" — condição nunca avaliada. Se o próximo passo for mexer mais em
+desempenho aqui, medir primeiro, de verdade.
+
+---
+
+## Aberto
+
+1. **Medir.** React DevTools Profiler na entrada da aba com biblioteca 500+: contar renders
+   de `ProfilePage` e tempo de commit. `performance.mark` em volta de `profileGameBase`,
+   `profileAchievementGames`, `achievementTabGames`, `recentActivityGames`.
+   Sem isso, nada aqui está comprovado.
+2. **Cobertura de teste.** Os utils puros têm testes; o comportamento dos efeitos de
+   hidratação (dedupe por ref, flush escalonado, cleanup parcial) não tem nenhum, e é a
+   parte mais sutil da mudança.
+3. **160 chamadas IPC na entrada** (80 jogos × store + achievements) continuam de pé.
+   Diagnosticado, nunca endereçado — e a saída óbvia (hidratar menos) está descartada pela
+   lição acima. Precisaria de batching no lado Tauri, não no React.

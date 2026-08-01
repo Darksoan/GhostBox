@@ -1,6 +1,13 @@
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamAccountStats, SteamGameAchievementSummary } from "../types";
 
+export type SteamAchievementIndex = ReadonlyMap<string, SteamAchievement[]>;
+
+const steamAchievementIndexCache = new WeakMap<
+  SteamAccountStats,
+  SteamAchievementIndex
+>();
+
 function isoFromUnixSeconds(value: number) {
   if (!Number.isFinite(value) || value <= 0) return undefined;
   return new Date(value * 1000).toISOString();
@@ -37,6 +44,26 @@ export function buildSteamAchievementList(
         ? achievement.globalPercent
         : undefined,
   }));
+}
+
+export function buildSteamAchievementIndex(
+  stats: SteamAccountStats | null | undefined,
+): SteamAchievementIndex {
+  if (!stats?.achievements?.length) return new Map();
+
+  const cached = steamAchievementIndexCache.get(stats);
+  if (cached) return cached;
+
+  const index = new Map<string, SteamAchievement[]>();
+  for (const summary of stats.achievements) {
+    // Preserve the existing find() semantics when malformed payloads contain
+    // more than one summary for the same app.
+    if (index.has(summary.appId)) continue;
+    index.set(summary.appId, buildSteamAchievementList(summary));
+  }
+
+  steamAchievementIndexCache.set(stats, index);
+  return index;
 }
 
 export function mergeAchievementLists(
@@ -108,13 +135,15 @@ export function mergeAchievementDetailsIntoGame(
 export function mergeSteamAchievementsIntoGame(
   game: GhostBoxGame,
   stats: SteamAccountStats | null | undefined,
+  achievementIndex?: SteamAchievementIndex,
 ): GhostBoxGame {
-  const summary = stats?.achievements?.find((entry) => entry.appId === game.appId);
-  if (!summary?.achievements.length) return game;
+  const index = achievementIndex ?? buildSteamAchievementIndex(stats);
+  const achievementList = index.get(game.appId);
+  if (!achievementList?.length) return game;
 
   const remoteGame: Pick<GhostBoxGame, "achievements" | "achievementList"> = {
-    achievements: calculateAchievementStats(buildSteamAchievementList(summary)),
-    achievementList: buildSteamAchievementList(summary),
+    achievements: calculateAchievementStats(achievementList),
+    achievementList,
   };
 
   return mergeAchievementDetailsIntoGame(game, remoteGame);
@@ -123,7 +152,11 @@ export function mergeSteamAchievementsIntoGame(
 export function mergeSteamAchievementsIntoGames(
   games: GhostBoxGame[],
   stats: SteamAccountStats | null | undefined,
+  achievementIndex?: SteamAchievementIndex,
 ) {
-  if (!stats?.achievements?.length) return games;
-  return games.map((game) => mergeSteamAchievementsIntoGame(game, stats));
+  const index = achievementIndex ?? buildSteamAchievementIndex(stats);
+  if (index.size === 0) return games;
+  return games.map((game) =>
+    mergeSteamAchievementsIntoGame(game, stats, index),
+  );
 }

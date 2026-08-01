@@ -6,9 +6,10 @@ export function isProfileAchievementUnlocked(achievement: SteamAchievement) {
 }
 
 export function getProfileUnlockedAchievementCount(game: GhostBoxGame) {
-  const explicitUnlocked = (game.achievementList ?? []).filter(
-    isProfileAchievementUnlocked
-  ).length;
+  let explicitUnlocked = 0;
+  for (const achievement of game.achievementList ?? []) {
+    if (isProfileAchievementUnlocked(achievement)) explicitUnlocked += 1;
+  }
 
   return Math.max(explicitUnlocked, game.achievements?.unlocked ?? 0);
 }

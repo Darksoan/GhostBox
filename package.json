@@ -9,6 +9,8 @@
     "dev:tauri": "vite",
     "build:tauri": "npm run build",
     "check:tokens": "node scripts/check-tokens.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -36,6 +38,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "sass-embedded": "^1.100.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.10"
   }
 }
