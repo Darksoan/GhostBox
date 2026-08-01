@@ -16,6 +16,8 @@ describe("Catalogue hover preview", () => {
     expect(selectors).toContain(".catalogue-hover-preview__screenshots");
     expect(selectors).toContain(".catalogue-hover-preview__screenshot");
     expect(selectors).toContain(".catalogue-hover-preview__control");
+    expect(selectors).toContain(".catalogue-hover-preview--visible");
+    expect(selectors).toContain(".catalogue-hover-preview--hidden");
     expect(mediaQueries).toContain("(prefers-reduced-motion: reduce)");
 
     const previewRule = stylesheet.nodes.find(
@@ -40,13 +42,13 @@ describe("Catalogue hover preview", () => {
         node.type === "rule" &&
         node.selector === ".catalogue-hover-preview__screenshot"
     );
-    expect(screenshotRule?.toString()).not.toContain("transition:");
+    expect(screenshotRule?.toString()).toContain("transition:");
 
     const controlRule = stylesheet.nodes.find(
       (node) =>
         node.type === "rule" && node.selector === ".catalogue-hover-preview__control"
     );
-    expect(controlRule?.toString()).toContain("background: var(--surface-secondary)");
+    expect(controlRule?.toString()).toContain("background-color: rgba(0, 0, 0, 0.4)");
     expect(controlRule?.toString()).toContain("color: var(--text-primary)");
     expect(controlRule?.toString()).not.toContain("pointer-events: none");
     expect(controlRule?.toString()).not.toMatch(/#[0-9a-f]{3,8}/i);
@@ -66,7 +68,19 @@ describe("Catalogue hover preview", () => {
     const previewBlocks = [...source.matchAll(/preview:\s*{([\s\S]*?)\n\s*},/g)];
     expect(previewBlocks).toHaveLength(2);
     expect(previewBlocks.every(([, block]) => !block.includes("publisher:"))).toBe(true);
-    expect(component).toContain("1000");
+    expect(component).toContain("3200");
     expect(component).not.toContain("catalogue.preview.publisher");
+  });
+
+  it("keeps the panel mounted during exit and drives visibility via a class", () => {
+    const component = readFileSync(
+      "src/components/ui/CatalogueHoverPreview.tsx",
+      "utf8"
+    );
+
+    expect(component).toContain("CATALOGUE_PREVIEW_EXIT_TRANSITION_MS");
+    expect(component).toContain("catalogue-hover-preview--visible");
+    expect(component).toContain("catalogue-hover-preview--hidden");
+    expect(component).toContain("displayedGame");
   });
 });

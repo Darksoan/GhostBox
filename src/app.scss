@@ -6618,11 +6618,19 @@ p {
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
   box-shadow: var(--shadow-1);
-  opacity: 1;
-  transform: translateY(0);
   transition:
     opacity var(--motion-base) var(--ease-out),
     transform var(--motion-base) var(--ease-out);
+
+  &--visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  &--hidden {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 
   &__screenshots {
     position: relative;
@@ -6636,25 +6644,27 @@ p {
     position: absolute;
     top: 50%;
     z-index: 2;
-    display: grid;
+    display: flex;
     width: 32px;
     height: 32px;
     padding: 0;
-    place-items: center;
-    border: 1px solid var(--border-ui);
+    align-items: center;
+    justify-content: center;
+    border: none;
     border-radius: var(--radius-circle);
-    background: var(--surface-secondary);
-    box-shadow: var(--shadow-1);
+    background-color: rgba(0, 0, 0, 0.4);
     color: var(--text-primary);
     cursor: pointer;
     opacity: 0;
     transform: translateY(-50%);
-    transition:
-      opacity var(--motion-fast) var(--ease),
-      background-color var(--motion-fast) var(--ease);
+    transition: all var(--motion-slow) var(--ease);
 
     &:hover {
-      background: var(--surface-hover);
+      background-color: rgba(0, 0, 0, 0.6);
+    }
+
+    &:active {
+      transform: translateY(-50%) scale(0.95);
     }
 
     &:focus-visible {
@@ -6672,11 +6682,23 @@ p {
 
     &--previous {
       left: var(--space-3);
+      transform: translateY(-50%) translateX(-40px);
     }
 
     &--next {
       right: var(--space-3);
+      transform: translateY(-50%) translateX(40px);
     }
+  }
+
+  &__screenshots:hover &__control--previous:not(:disabled),
+  &__screenshots:focus-within &__control--previous:not(:disabled) {
+    transform: translateY(-50%) translateX(0);
+  }
+
+  &__screenshots:hover &__control--next:not(:disabled),
+  &__screenshots:focus-within &__control--next:not(:disabled) {
+    transform: translateY(-50%) translateX(0);
   }
 
   &__screenshots:hover &__control:not(:disabled),
@@ -6702,6 +6724,7 @@ p {
     opacity: 0;
     backface-visibility: hidden;
     pointer-events: none;
+    transition: opacity var(--motion-base) var(--ease);
 
     &--active {
       z-index: 1;

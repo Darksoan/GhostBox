@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { withoutHeaderImageSources } from "../../utils/image";
+import { withCachedImageSources } from "../../utils/imageCache";
 import {
+  CATALOGUE_PREVIEW_EXIT_TRANSITION_MS,
   getAdjacentReadyScreenshotSource,
   getNextReadyScreenshotSource,
+  pickDistinctScreenshotSources,
 } from "../../utils/cataloguePreview";
+
+const AUTOPLAY_INTERVAL_MS = 3200;
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
@@ -21,14 +27,75 @@ export function CatalogueHoverPreview({
 }: CatalogueHoverPreviewProps) {
   const { appearance, t } = useSettings();
   const isEnglish = appearance.language === "en";
+
+  // Kept mounted across `game` briefly going null so the exit transition can
+  // play instead of the panel popping out instantly.
+  const [displayedGame, setDisplayedGame] = useState<GhostBoxGame | null>(
+    null
+  );
+  const [isVisible, setIsVisible] = useState(false);
+  const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasVisibleRef = useRef(false);
+
+  useEffect(() => {
+    if (game) {
+      if (exitTimeoutRef.current !== null) {
+        clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = null;
+      }
+      setDisplayedGame(game);
+
+      if (!wasVisibleRef.current) {
+        // First appearance: paint hidden, then flip to visible a frame later
+        // so the enter transition actually has a state change to animate.
+        setIsVisible(false);
+        const frameId = requestAnimationFrame(() => {
+          wasVisibleRef.current = true;
+          setIsVisible(true);
+        });
+        return () => cancelAnimationFrame(frameId);
+      }
+
+      return;
+    }
+
+    wasVisibleRef.current = false;
+    setIsVisible(false);
+    exitTimeoutRef.current = setTimeout(() => {
+      exitTimeoutRef.current = null;
+      setDisplayedGame(null);
+    }, CATALOGUE_PREVIEW_EXIT_TRANSITION_MS);
+
+    return () => {
+      if (exitTimeoutRef.current !== null) {
+        clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = null;
+      }
+    };
+  }, [game]);
+
   const screenshotSources = useMemo(
     () =>
-      game
-        ? withoutHeaderImageSources(game.screenshots ?? []).slice(0, 3)
+      displayedGame
+        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 3)
         : [],
-    [game]
+    [displayedGame]
   );
-  const cachedScreenshotSources = useCachedImageSources(screenshotSources);
+  // Drives cache/manifest resolution and re-renders when a better URL lands.
+  const resolvedScreenshotSources = useCachedImageSources(screenshotSources);
+  const [failedScreenshotSources, setFailedScreenshotSources] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  // One source per screenshot: the resolved list holds several candidate URLs
+  // for the same picture, and cycling through those looked like a dead chevron.
+  const cachedScreenshotSources = useMemo(
+    () =>
+      pickDistinctScreenshotSources(
+        screenshotSources.map((source) => withCachedImageSources([source])),
+        failedScreenshotSources
+      ),
+    [screenshotSources, resolvedScreenshotSources, failedScreenshotSources]
+  );
   const [activeScreenshotSource, setActiveScreenshotSource] = useState<
     string | null
   >(null);
@@ -41,6 +108,7 @@ export function CatalogueHoverPreview({
   useEffect(() => {
     readyScreenshotSourcesRef.current = new Set();
     setReadyScreenshotCount(0);
+    setFailedScreenshotSources(new Set());
     setActiveScreenshotSource(null);
   }, [screenshotSourceKey]);
 
@@ -69,7 +137,7 @@ export function CatalogueHoverPreview({
           currentSource
         )
       );
-    }, 1000);
+    }, AUTOPLAY_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
   }, [cachedScreenshotSources, isAutoplayPaused, screenshotKey]);
@@ -106,13 +174,24 @@ export function CatalogueHoverPreview({
     onPointerLeave?.();
   };
 
-  if (!game) return null;
+  if (!displayedGame) return null;
 
-  const developers = game.developers?.filter(Boolean) ?? [];
+  const developers = displayedGame.developers?.filter(Boolean) ?? [];
   const screenshotAlt = (index: number) =>
     isEnglish
-      ? `Screenshot ${index + 1} of ${game.title}`
-      : `Screenshot ${index + 1} de ${game.title}`;
+      ? `Screenshot ${index + 1} of ${displayedGame.title}`
+      : `Screenshot ${index + 1} de ${displayedGame.title}`;
+  // A broken candidate must step aside so the group falls back to the next URL.
+  const markScreenshotFailed = (source: string) => {
+    readyScreenshotSourcesRef.current.delete(source);
+    setReadyScreenshotCount(readyScreenshotSourcesRef.current.size);
+    setFailedScreenshotSources((currentFailed) => {
+      if (currentFailed.has(source)) return currentFailed;
+      const nextFailed = new Set(currentFailed);
+      nextFailed.add(source);
+      return nextFailed;
+    });
+  };
   const markScreenshotReady = async (
     source: string,
     image: HTMLImageElement
@@ -138,8 +217,14 @@ export function CatalogueHoverPreview({
 
   return (
     <section
-      className="catalogue-hover-preview"
-      aria-label={isEnglish ? `Preview of ${game.title}` : `Preview de ${game.title}`}
+      className={`catalogue-hover-preview ${
+        isVisible ? "catalogue-hover-preview--visible" : "catalogue-hover-preview--hidden"
+      }`}
+      aria-label={
+        isEnglish
+          ? `Preview of ${displayedGame.title}`
+          : `Preview de ${displayedGame.title}`
+      }
       onPointerEnter={handlePreviewPointerEnter}
       onPointerLeave={handlePreviewPointerLeave}
       onFocusCapture={handlePreviewFocus}
@@ -164,6 +249,7 @@ export function CatalogueHoverPreview({
                 onLoad={(event) => {
                   void markScreenshotReady(source, event.currentTarget);
                 }}
+                onError={() => markScreenshotFailed(source)}
               />
             );
           })
@@ -184,7 +270,7 @@ export function CatalogueHoverPreview({
                 navigateScreenshot("previous");
               }}
             >
-              <span aria-hidden="true">&lt;</span>
+              <ChevronLeft size={20} />
             </button>
             <button
               className="catalogue-hover-preview__control catalogue-hover-preview__control--next"
@@ -197,14 +283,16 @@ export function CatalogueHoverPreview({
                 navigateScreenshot("next");
               }}
             >
-              <span aria-hidden="true">&gt;</span>
+              <ChevronRight size={20} />
             </button>
           </>
         )}
       </div>
 
       <div className="catalogue-hover-preview__details" aria-live="polite">
-        <strong className="catalogue-hover-preview__title">{game.title}</strong>
+        <strong className="catalogue-hover-preview__title">
+          {displayedGame.title}
+        </strong>
         {developers.length > 0 && (
           <span className="catalogue-hover-preview__credit">
             <span>{t("catalogue.preview.developer")}:</span> {developers.join(", ")}
