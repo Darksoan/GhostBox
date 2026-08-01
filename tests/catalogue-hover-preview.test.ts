@@ -52,7 +52,7 @@ describe("Catalogue hover preview", () => {
     const previewBlocks = [...source.matchAll(/preview:\s*{([\s\S]*?)\n\s*},/g)];
     expect(previewBlocks).toHaveLength(2);
     expect(previewBlocks.every(([, block]) => !block.includes("publisher:"))).toBe(true);
-    expect(component).toContain("1500");
+    expect(component).toContain("1000");
     expect(component).not.toContain("catalogue.preview.publisher");
   });
 });

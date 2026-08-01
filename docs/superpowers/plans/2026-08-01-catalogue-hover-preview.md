@@ -205,7 +205,7 @@ git commit -m "feat: add catalogue hover game preview"
 
 - [ ] **Step 1: Add failing assertions**
 
-Read `src/components/ui/CatalogueHoverPreview.tsx` and `src/app.scss` in the test and assert that the component contains `1500`, does not contain `catalogue.preview.publisher`, and the stylesheet rule for `.catalogue-hover-preview` does not contain a `border` declaration. Also assert the component contains `--weight-semibold`/`--weight-medium` class styling hooks through the Sass output.
+Read `src/components/ui/CatalogueHoverPreview.tsx` and `src/app.scss` in the test and assert that the component contains `1000`, does not contain `catalogue.preview.publisher`, and the stylesheet rule for `.catalogue-hover-preview` does not contain a `border` declaration. Also assert the component contains `--weight-semibold`/`--weight-medium` class styling hooks through the Sass output.
 
 - [ ] **Step 2: Run the focused test**
 
@@ -222,7 +222,7 @@ Expected: FAIL until the rotation, publisher removal, and style changes are impl
 
 - [ ] **Step 1: Add rotation state and timer**
 
-Track `activeScreenshot` with `useState(0)`. Reset it when `game` changes. Start a `setInterval` of `1500` ms only when there are at least two cached screenshots, advance with modulo length, and clear the interval in the effect cleanup. Render only `cachedScreenshotSources[activeScreenshot]`; keep the empty media fallback.
+Track `activeScreenshot` with `useState(0)`. Reset it when `game` changes. Start a `setInterval` of `1000` ms only when there are at least two cached screenshots, advance with modulo length, and clear the interval in the effect cleanup. Render only `cachedScreenshotSources[activeScreenshot]`; keep the empty media fallback.
 
 - [ ] **Step 2: Keep only developer details**
 

@@ -45,7 +45,7 @@ As screenshots usam o hook de cache de imagens já adotado pela aplicação. O p
 
 ## Revisão aprovada — rotação e hierarquia visual
 
-- Exibir somente uma screenshot por vez e avançar automaticamente a cada 1500 ms.
+- Exibir somente uma screenshot por vez e avançar automaticamente a cada 1000 ms.
 - O ciclo é controlado pelo componente, reiniciado quando o jogo ativo muda e limpo quando o preview desmonta ou não possui screenshots.
 - Remover a borda do container externo do preview; manter superfície, raio e sombra existentes.
 - Remover publisher do conteúdo e das traduções do preview; manter somente a desenvolvedora.

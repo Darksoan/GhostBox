@@ -57,7 +57,7 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
           currentSource
         )
       );
-    }, 1500);
+    }, 1000);
 
     return () => window.clearInterval(intervalId);
   }, [cachedScreenshotSources, screenshotKey]);
