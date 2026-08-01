@@ -1,4 +1,3 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { CircleCheck, Loader2, Trash2 } from "lucide-react";
 import {
   memo,
@@ -8,7 +7,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type RefObject,
 } from "react";
 import type { GhostBoxGame } from "../../data";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
@@ -19,9 +17,6 @@ import {
 } from "../../utils/image";
 import { CatalogueListLoadingState } from "./LoadingStates";
 import { useSettings } from "../../context/settings";
-
-const CATALOGUE_ITEM_ESTIMATED_HEIGHT = 108;
-const CATALOGUE_VIRTUALIZATION_THRESHOLD = 30;
 
 interface CatalogueListItemProps {
   game: GhostBoxGame;
@@ -190,8 +185,11 @@ export const CatalogueListItem = memo(function CatalogueListItem({
           ref={genresRef}
           style={{ visibility: genresMeasured ? "visible" : "hidden" }}
         >
-          {renderedGenreLabels.map((tag) => (
-            <span className="catalogue-list__genre-chip" key={tag}>{tag}</span>
+          {/* index no key: o backend pode repetir tags e a colisão quebra a lista */}
+          {renderedGenreLabels.map((tag, index) => (
+            <span className="catalogue-list__genre-chip" key={`${tag}-${index}`}>
+              {tag}
+            </span>
           ))}
         </div>
       </div>
@@ -244,8 +242,6 @@ interface CatalogueListProps {
   removingGameId?: string | null;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-  scrollElementRef?: RefObject<HTMLElement | null>;
-  onVirtualHeightChange?: (height: number) => void;
 }
 
 export function CatalogueList({
@@ -256,13 +252,9 @@ export function CatalogueList({
   removingGameId = null,
   onRemoveGame,
   onGameContextMenu,
-  scrollElementRef,
-  onVirtualHeightChange,
 }: CatalogueListProps) {
   const preloadTimeoutRef = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
 
   const scheduleGamePreload = useCallback((game: GhostBoxGame) => {
     if (preloadTimeoutRef.current !== null) {
@@ -275,25 +267,6 @@ export function CatalogueList({
     }, 80);
   }, []);
 
-  useLayoutEffect(() => {
-    setScrollElement(scrollElementRef?.current ?? null);
-  }, [scrollElementRef, games.length]);
-
-  // A lista rola no scroller compartilhado da aplicação, então não começa no
-  // topo dele — há o cabeçalho do catálogo acima. Sem esse offset o
-  // virtualizador posiciona as linhas deslocadas.
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!scrollElement || !list) return;
-
-    const offset =
-      list.getBoundingClientRect().top -
-      scrollElement.getBoundingClientRect().top +
-      scrollElement.scrollTop;
-
-    setScrollMargin((current) => (current === offset ? current : offset));
-  }, [scrollElement, games.length]);
-
   useEffect(() => {
     return () => {
       if (preloadTimeoutRef.current !== null) {
@@ -302,70 +275,24 @@ export function CatalogueList({
     };
   }, []);
 
-  const shouldVirtualize =
-    Boolean(scrollElement) && games.length > CATALOGUE_VIRTUALIZATION_THRESHOLD;
-
-  const virtualizer = useVirtualizer({
-    count: games.length,
-    getScrollElement: () => scrollElement,
-    estimateSize: () => CATALOGUE_ITEM_ESTIMATED_HEIGHT,
-    overscan: 4,
-    scrollMargin,
-  });
-
-  useEffect(() => {
-    if (!shouldVirtualize || !onVirtualHeightChange) return;
-    onVirtualHeightChange(virtualizer.getTotalSize());
-  }, [onVirtualHeightChange, shouldVirtualize, virtualizer, games.length]);
-
-  const renderItem = (game: GhostBoxGame) => (
-    <CatalogueListItem
-      game={game}
-      key={game.id}
-      isAdded={addedGameAppIds.has(game.appId)}
-      isAdding={addingGameId === game.id}
-      isRemoving={removingGameId === game.id}
-      onOpenGame={onOpenGame}
-      onRemoveGame={onRemoveGame}
-      onPreloadGame={scheduleGamePreload}
-      onGameContextMenu={onGameContextMenu}
-    />
-  );
-
-  if (!shouldVirtualize) {
-    return (
-      <div className="catalogue-list" ref={listRef}>
-        {games.map((game) => renderItem(game))}
-      </div>
-    );
-  }
-
+  // Sem virtualização de propósito: a página do catálogo entrega no máximo
+  // `cataloguePageSize` (20) itens, e o gate de `IntersectionObserver` por linha
+  // já evita carregar as capas fora da viewport.
   return (
-    <div
-      className="catalogue-list catalogue-list--virtual"
-      ref={listRef}
-      style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-    >
-      {virtualizer.getVirtualItems().map((virtualItem) => {
-        const game = games[virtualItem.index];
-        if (!game) return null;
-
-        return (
-          <div
-            key={game.id}
-            className="catalogue-list__virtual-row"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              transform: `translateY(${virtualItem.start - scrollMargin}px)`,
-            }}
-          >
-            {renderItem(game)}
-          </div>
-        );
-      })}
+    <div className="catalogue-list" ref={listRef}>
+      {games.map((game) => (
+        <CatalogueListItem
+          game={game}
+          key={game.id}
+          isAdded={addedGameAppIds.has(game.appId)}
+          isAdding={addingGameId === game.id}
+          isRemoving={removingGameId === game.id}
+          onOpenGame={onOpenGame}
+          onRemoveGame={onRemoveGame}
+          onPreloadGame={scheduleGamePreload}
+          onGameContextMenu={onGameContextMenu}
+        />
+      ))}
     </div>
   );
 }

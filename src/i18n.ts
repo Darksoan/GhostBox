@@ -52,6 +52,10 @@ const translations: Record<Language, TranslationTree> = {
       emptyQuery: 'Não há resultados para "{term}".',
     },
     catalogue: {
+      errorTitle: "Não foi possível carregar o catálogo",
+      errorDescription:
+        "Verifique sua conexão. O catálogo salvo em disco é usado quando disponível.",
+      errorRetry: "Tentar novamente",
       filters: {
         genres: "Gêneros",
         tags: "Tags",
@@ -394,6 +398,10 @@ const translations: Record<Language, TranslationTree> = {
       emptyQuery: 'No results for "{term}".',
     },
     catalogue: {
+      errorTitle: "Could not load the catalogue",
+      errorDescription:
+        "Check your connection. The catalogue cached on disk is used when available.",
+      errorRetry: "Try again",
       filters: {
         genres: "Genres",
         tags: "Tags",

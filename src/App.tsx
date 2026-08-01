@@ -16,7 +16,6 @@ import {
   getTrayHiddenNotificationCopy,
   showTrayHiddenDesktopNotification,
 } from "./lib/trayNotifications";
-import { clearCatalogueGamesCache } from "./utils/gameCache";
 import { type SettingsTabId } from "./features/settings/settingsTabsShared";
 import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
 import { ingestRemoteGameByAppId, type GhostBoxGame } from "./data";
@@ -157,7 +156,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   useEffect(() => {
     return ghostboxApi.onCatalogueCacheUpdated(() => {
-      clearCatalogueGamesCache();
       void queryClient.invalidateQueries({ queryKey: ["games"] });
       void queryClient.invalidateQueries({ queryKey: ["home"] });
     });
@@ -296,7 +294,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     if (/^\d{1,10}$/.test(game.appId) && !game.databaseAddedAt) {
       void ingestRemoteGameByAppId(game.appId)
         .then(() => {
-          clearCatalogueGamesCache();
           void queryClient.invalidateQueries({ queryKey: ["games"] });
           void queryClient.invalidateQueries({ queryKey: ["home"] });
         })

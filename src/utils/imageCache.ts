@@ -498,7 +498,7 @@ function steamAssetManifestSourceFor(source: string) {
   return manifestSource === source ? "" : manifestSource;
 }
 
-function steamAppIdsFromSources(sources: string[]) {
+export function steamAppIdsFromSources(sources: string[]) {
   return [
     ...new Set(
       sources.map((source) => steamAppIdFromImageSource(source)).filter(Boolean)

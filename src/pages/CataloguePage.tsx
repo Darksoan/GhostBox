@@ -1,6 +1,7 @@
 import { ChevronRight, Check, X } from "lucide-react";
 import {
   memo,
+  useCallback,
   useDeferredValue,
   useEffect,
   useId,
@@ -90,10 +91,17 @@ const CatalogueActiveFilters = memo(function CatalogueActiveFilters({
 }: CatalogueActiveFiltersProps) {
   const { appearance, t } = useSettings();
   const isEnglish = appearance.language === "en";
-  const activeFilters = (
-    Object.entries(filters) as [CatalogueFilterKey, string[]][]
-  ).flatMap(([key, values]) => values.map((value) => ({ key, value })));
-  const layoutKey = activeFilters.map(({ key, value }) => `${key}:${value}`).join("|");
+  const activeFilters = useMemo(
+    () =>
+      (Object.entries(filters) as [CatalogueFilterKey, string[]][]).flatMap(
+        ([key, values]) => values.map((value) => ({ key, value }))
+      ),
+    [filters]
+  );
+  const layoutKey = useMemo(
+    () => activeFilters.map(({ key, value }) => `${key}:${value}`).join("|"),
+    [activeFilters]
+  );
   const filtersRef = useFlipLayout<HTMLUListElement>(layoutKey);
 
   if (!activeFilters.length) return null;
@@ -275,8 +283,12 @@ interface CataloguePageProps {
   initialLoading: boolean;
   query: string;
   page: number;
+  /** Página do chunk atualmente na tela — pode ficar atrás de `page` durante um refetch. */
+  displayedPage: number;
   chunkOffset: number;
   matched: number;
+  hasError?: boolean;
+  onRetry?: () => void;
   filters: CatalogueFilters;
   animateFilterPlaceholders: boolean;
   onFiltersChange: (filters: CatalogueFilters) => void;
@@ -308,8 +320,11 @@ export function CataloguePage({
   initialLoading,
   query,
   page,
+  displayedPage,
   chunkOffset,
   matched,
+  hasError = false,
+  onRetry,
   filters,
   animateFilterPlaceholders,
   onFiltersChange,
@@ -400,15 +415,21 @@ export function CataloguePage({
   }, [facets, filters, filtersLoading, games, t]);
 
   const totalPages = Math.max(1, Math.ceil(matched / cataloguePageSize));
-  const currentPage = Math.min(page, totalPages);
+  // Só limita a página pedida quando já existe uma contagem real. Durante um
+  // refetch `matched` pode zerar e o clamp jogaria a página para 1 e de volta,
+  // disparando dois scrolls suaves.
+  const currentPage = matched > 0 ? Math.min(page, totalPages) : page;
 
   useEffect(() => {
     scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentPage, scrollElementRef]);
 
+  // O slice acompanha a página *exibida* (a do chunk que está na tela), não a
+  // pedida — com `keepPreviousData` as duas divergem enquanto o chunk novo
+  // carrega, e fatiar o array velho no offset novo pintava um vazio de um frame.
   const startIndex = Math.max(
     0,
-    (currentPage - 1) * cataloguePageSize - chunkOffset
+    (displayedPage - 1) * cataloguePageSize - chunkOffset
   );
   const visibleGames = useMemo(
     () => games.slice(startIndex, startIndex + cataloguePageSize),
@@ -423,8 +444,8 @@ export function CataloguePage({
     [games, startIndex]
   );
   const visibleGamesCacheKey = useMemo(
-    () => `${currentPage}-${chunkOffset}-${visibleGames.map((game) => game.id).join("|")}`,
-    [chunkOffset, currentPage, visibleGames]
+    () => `${displayedPage}-${chunkOffset}-${visibleGames.map((game) => game.id).join("|")}`,
+    [chunkOffset, displayedPage, visibleGames]
   );
 
   useEffect(() => {
@@ -441,20 +462,40 @@ export function CataloguePage({
     });
   }, [loading, nextPageGames, visibleGames, visibleGamesCacheKey]);
 
-  function updateFilter(key: CatalogueFilterKey, value: string) {
-    const currentValues = filters[key];
-    const nextValues = currentValues.includes(value)
-      ? currentValues.filter((item) => item !== value)
-      : [...currentValues, value];
-    onFiltersChange({ ...filters, [key]: nextValues });
-  }
+  // Estáveis de propósito: `CatalogueFilterSection` e `CatalogueListItem` são
+  // `memo` e qualquer callback recriado por render anula a memoização — cada
+  // clique repintava todas as seções de filtro (até 160 checkboxes cada).
+  const updateFilter = useCallback(
+    (key: CatalogueFilterKey, value: string) => {
+      const currentValues = filters[key];
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+      onFiltersChange({ ...filters, [key]: nextValues });
+    },
+    [filters, onFiltersChange]
+  );
 
-  function clearFilter(key: CatalogueFilterKey, value?: string) {
-    onFiltersChange({
-      ...filters,
-      [key]: value ? filters[key].filter((item) => item !== value) : [],
-    });
-  }
+  const clearFilter = useCallback(
+    (key: CatalogueFilterKey, value?: string) => {
+      onFiltersChange({
+        ...filters,
+        [key]: value ? filters[key].filter((item) => item !== value) : [],
+      });
+    },
+    [filters, onFiltersChange]
+  );
+
+  const clearAllFilters = useCallback(() => {
+    onFiltersChange(emptyCatalogueFilters);
+  }, [onFiltersChange]);
+
+  const handleGameContextMenu = useCallback(
+    (game: GhostBoxGame, x: number, y: number) => {
+      setContextMenu({ game, x, y, mode: "game" });
+    },
+    []
+  );
 
   const contextMenuItems = useCollectionContextMenu({
     game: contextMenu?.game ?? null,
@@ -490,13 +531,20 @@ export function CataloguePage({
     <section className="catalogue-page">
       <CatalogueActiveFilters
         filters={filters}
-        onClearAll={() => onFiltersChange(emptyCatalogueFilters)}
+        onClearAll={clearAllFilters}
         onRemove={clearFilter}
       />
 
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
-          {loading ? (
+          {hasError ? (
+            <EmptyState
+              title={t("catalogue.errorTitle")}
+              description={t("catalogue.errorDescription")}
+              actionLabel={onRetry ? t("catalogue.errorRetry") : undefined}
+              onAction={onRetry}
+            />
+          ) : loading ? (
             <CatalogueListLoadingState
               animateListText={pulseLoading}
               pulseLoading={pulseLoading}
@@ -510,10 +558,7 @@ export function CataloguePage({
                 addingGameId={addingGameId}
                 removingGameId={removingGameId}
                 onRemoveGame={onRemoveGame}
-                scrollElementRef={scrollElementRef}
-                onGameContextMenu={(game, x, y) =>
-                  setContextMenu({ game, x, y, mode: "game" })
-                }
+                onGameContextMenu={handleGameContextMenu}
               />
             </div>
           ) : (
@@ -533,11 +578,11 @@ export function CataloguePage({
               actionLabel={
                 hasActiveFilters ? t("catalogue.filters.clearAll") : undefined
               }
-              onAction={hasActiveFilters ? () => onFiltersChange(emptyCatalogueFilters) : undefined}
+              onAction={hasActiveFilters ? clearAllFilters : undefined}
             />
           )}
 
-          {!loading && totalPages > 1 && (
+          {!loading && !hasError && totalPages > 1 && (
             <div className="catalogue-page__footer">
               <PaginationControls
                 page={currentPage}

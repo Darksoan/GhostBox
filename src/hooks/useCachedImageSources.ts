@@ -10,6 +10,7 @@ import {
   resolveSteamHeaderSource,
   resolveSteamLibraryCoverSource,
   steamAppIdFromImageSource,
+  steamAppIdsFromSources,
   type GameCoverKind,
 } from "../utils/imageCache";
 import {
@@ -92,7 +93,7 @@ export function useCachedImageSources(sources: string[]) {
     // entraria na lista no próximo render por outro motivo.
     const unsubscribeManifest = subscribeSteamAssetManifest(() => {
       if (!cancelled) updateCachedSources();
-    });
+    }, steamAppIdsFromSources(sources));
 
     const unresolvedSources = sources.filter(
       (source) =>

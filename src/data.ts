@@ -182,6 +182,13 @@ export async function loadGames(
   return ghostboxApi.getGames(request);
 }
 
+/** Versão que propaga a falha — usada pelo catálogo, que mostra estado de erro. */
+export async function loadGamesOrThrow(
+  request: GameDatabaseRequest = {}
+): Promise<GameDatabaseResult> {
+  return ghostboxApi.getGamesOrThrow(request);
+}
+
 export async function loadGameDetails(
   gameId: string
 ): Promise<GhostBoxGame | null> {

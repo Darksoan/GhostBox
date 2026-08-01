@@ -34,10 +34,10 @@ export function useAppShellState(page: Page) {
 
   const baseHeaderSearchSuggestions = useMemo(
     () =>
-      query.trim() && !isSearchLoading
+      trimmedDebouncedQuery && !isSearchLoading
         ? (headerSearchQuery.data?.games ?? []).slice(0, 6)
         : [],
-    [headerSearchQuery.data?.games, isSearchLoading, query]
+    [headerSearchQuery.data?.games, isSearchLoading, trimmedDebouncedQuery]
   );
 
   const hasNoHeaderSearchResults =

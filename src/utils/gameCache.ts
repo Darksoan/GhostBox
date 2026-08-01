@@ -1,25 +1,12 @@
-import type { GameDatabaseResult, GhostBoxGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import {
   loadGameAchievementDetails,
   loadGameDetails,
   loadGameReviews,
   loadGameStoreDetails,
-  loadGames,
 } from "../data";
 import type { SteamGameReviewsResult } from "../lib/ghostboxApi.types";
-import type { CatalogueFilters, CatalogueSort } from "../types";
-import { emptyCatalogueFilters } from "../constants/catalogue";
 
-const catalogueFacetsCacheVersion = "catalogue-response-v2";
-const catalogueFacetKeys = Object.keys(
-  emptyCatalogueFilters
-) as (keyof CatalogueFilters)[];
-
-export const gamesCache = new Map<
-  string,
-  { cachedAt: number; result: GameDatabaseResult }
->();
-export const gameRequestCache = new Map<string, Promise<GameDatabaseResult>>();
 export const gameDetailsCache = new Map<string, GhostBoxGame | null>();
 export const gameDetailsRequestCache = new Map<
   string,
@@ -62,73 +49,6 @@ export function normalizeGameCacheId(
 
 export function setHasLoadedCatalogueGlobally(value: boolean) {
   hasLoadedCatalogueGlobally = value;
-}
-
-export function clearCatalogueGamesCache() {
-  gamesCache.clear();
-  gameRequestCache.clear();
-}
-
-export function getCatalogueFiltersCacheKey(
-  filters: CatalogueFilters = emptyCatalogueFilters
-) {
-  return JSON.stringify(
-    Object.fromEntries(
-      catalogueFacetKeys.map((key) => [key, [...filters[key]].sort()])
-    )
-  );
-}
-
-export function getGamesCacheKey(
-  query: string,
-  limit: number,
-  offset = 0,
-  filters = emptyCatalogueFilters,
-  sort: CatalogueSort = "popular",
-  includeFacets = false,
-  facetsOnly = false
-) {
-  return `${catalogueFacetsCacheVersion}|${sort}|${includeFacets ? "facets" : "games"}|${facetsOnly ? "facets-only" : "page"}|${query.trim().toLowerCase()}|${getCatalogueFiltersCacheKey(filters)}|${offset}|${limit}`;
-}
-
-export function loadGamesCached(
-  query: string,
-  limit: number,
-  offset = 0,
-  filters = emptyCatalogueFilters,
-  sort: CatalogueSort = "popular",
-  includeFacets = false,
-  facetsOnly = false
-) {
-  const cacheKey = getGamesCacheKey(
-    query,
-    limit,
-    offset,
-    filters,
-    sort,
-    includeFacets,
-    facetsOnly
-  );
-
-  const pending = gameRequestCache.get(cacheKey);
-  if (pending) return pending;
-
-  const request = loadGames({
-    query,
-    limit,
-    offset,
-    filters,
-    sort,
-    includeFacets,
-    facetsOnly,
-  })
-    .finally(() => {
-      gameRequestCache.delete(cacheKey);
-    });
-
-  gameRequestCache.set(cacheKey, request);
-
-  return request;
 }
 
 function loadCachedGameRequest(

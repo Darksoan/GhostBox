@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { GameDatabaseRequest } from "../data";
 import {
   loadGameAchievementDetails,
   loadGameDetails,
   loadGameStoreDetails,
-  loadGames,
+  loadGamesOrThrow,
 } from "../data";
 import { emptyCatalogueFilters } from "../constants/catalogue";
 import type { CatalogueFilterKey, CatalogueFilters } from "../types";
@@ -90,7 +90,7 @@ export function useGamesQuery(
 
   return useQuery({
     queryKey,
-    queryFn: () => loadGames(normalizedRequest),
+    queryFn: () => loadGamesOrThrow(normalizedRequest),
     enabled: options.enabled ?? true,
     // Mantém a página anterior visível enquanto o próximo chunk chega — sem
     // isso cada tecla do debounce troca a lista inteira por skeleton.

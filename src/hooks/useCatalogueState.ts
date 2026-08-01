@@ -5,13 +5,10 @@ import {
   catalogueChunkPageCount,
   catalogueChunkSize,
   emptyCatalogueFilters,
+  emptyGameDatabase,
 } from "../constants/catalogue";
 import { hasSelectedCatalogueFilters } from "../utils/filters";
-import {
-  getCatalogueFiltersCacheKey,
-  getGamesCacheKey,
-  setHasLoadedCatalogueGlobally,
-} from "../utils/gameCache";
+import { setHasLoadedCatalogueGlobally } from "../utils/gameCache";
 import { useGamesQuery } from "../queries/games";
 
 function normalizeCatalogueQuery(query: string) {
@@ -20,7 +17,6 @@ function normalizeCatalogueQuery(query: string) {
 
 export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const [cataloguePage, setCataloguePage] = useState(1);
-  const [catalogueChunkOffset, setCatalogueChunkOffset] = useState(0);
   const [catalogueFilters, setCatalogueFilters] =
     useState<CatalogueFilters>(emptyCatalogueFilters);
   const catalogueSort = "popular" as const;
@@ -31,8 +27,6 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const previousNormalizedQueryRef = useRef(normalizedQuery);
   const isQueryResetPending = previousNormalizedQueryRef.current !== normalizedQuery;
   const effectiveCataloguePage = isQueryResetPending ? 1 : cataloguePage;
-
-  const catalogueFiltersCacheKey = getCatalogueFiltersCacheKey(catalogueFilters);
 
   const catalogueRequestMeta = useMemo(() => {
     const requestedChunkOffset =
@@ -71,23 +65,30 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     { enabled }
   );
 
+  // `keepPreviousData` mantém o chunk anterior visível enquanto o próximo
+  // carrega. O slice da página precisa então acompanhar o chunk que está *na
+  // tela*, não o que foi pedido — senão a página nova fatia o array velho no
+  // offset errado e pinta um "nenhum resultado" de um frame.
+  const displayedChunkOffsetRef = useRef(0);
+  const displayedPageRef = useRef(1);
+  const hasFreshCatalogueData =
+    Boolean(catalogueQuery.data) && !catalogueQuery.isPlaceholderData;
+  if (hasFreshCatalogueData) {
+    displayedChunkOffsetRef.current = catalogueRequestMeta.requestedChunkOffset;
+    displayedPageRef.current = effectiveCataloguePage;
+  }
+
   useEffect(() => {
     previousNormalizedQueryRef.current = normalizedQuery;
     setCataloguePage(1);
-    setCatalogueChunkOffset(0);
   }, [normalizedQuery]);
 
   useEffect(() => {
-    if (catalogueQuery.data && enabled) {
+    if (hasFreshCatalogueData && enabled) {
       setHasLoadedCatalogueOnce(true);
       setHasLoadedCatalogueGlobally(true);
-      setCatalogueChunkOffset(catalogueRequestMeta.requestedChunkOffset);
     }
-  }, [
-    catalogueQuery.data,
-    catalogueRequestMeta.requestedChunkOffset,
-    enabled,
-  ]);
+  }, [enabled, hasFreshCatalogueData]);
 
   useEffect(() => {
     const facets = facetsQuery.data?.facets ?? catalogueQuery.data?.facets;
@@ -96,20 +97,11 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     }
   }, [catalogueQuery.data?.facets, enabled, facetsQuery.data?.facets]);
 
-  const requestedCatalogueCacheKey = getGamesCacheKey(
-    normalizedQuery,
-    catalogueRequestMeta.requestedLimit,
-    catalogueRequestMeta.requestedChunkOffset,
-    catalogueFilters,
-    catalogueSort
-  );
-
-  const hasRequestedCatalogueData = Boolean(catalogueQuery.data);
-  const isPageChunkLoading = catalogueQuery.isFetching;
-  const shouldShowCatalogueLoading =
-    !hasRequestedCatalogueData ||
-    isPageChunkLoading ||
-    !hasLoadedCatalogueOnce;
+  const hasAnyCatalogueData = Boolean(catalogueQuery.data);
+  const isCatalogueRefreshing = catalogueQuery.isFetching;
+  // Só cobre a lista com skeleton quando não há absolutamente nada para
+  // mostrar. Refetch com dado anterior na tela vira indicador sutil.
+  const shouldShowCatalogueLoading = !hasAnyCatalogueData && !catalogueQuery.isError;
 
   const handleCatalogueFiltersChange = useCallback(
     (filters: CatalogueFilters) => {
@@ -123,28 +115,28 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     setCataloguePage(page);
   }, []);
 
+  const handleCatalogueRetry = useCallback(() => {
+    void catalogueQuery.refetch();
+  }, [catalogueQuery]);
+
   return {
-    catalogueDatabase: catalogueQuery.data ?? {
-      games: [],
-      total: 0,
-      matched: 0,
-      limited: false,
-      source: "stub",
-    },
+    catalogueDatabase: catalogueQuery.data ?? emptyGameDatabase,
     catalogueFacets:
       facetsQuery.data?.facets ?? catalogueQuery.data?.facets ?? lastCatalogueFacets,
     isLoadingCatalogueFacets: facetsQuery.isFetching,
     isInitialCatalogueLoading: shouldShowCatalogueLoading && !hasLoadedCatalogueOnce,
     shouldShowCatalogueLoading,
+    isCatalogueRefreshing,
+    hasCatalogueError: catalogueQuery.isError && !hasAnyCatalogueData,
+    onCatalogueRetry: handleCatalogueRetry,
     shouldPulseCatalogueLoading:
-      (isPageChunkLoading || !hasRequestedCatalogueData) &&
+      (isCatalogueRefreshing || !hasAnyCatalogueData) &&
       hasSelectedCatalogueFilters(catalogueFilters),
     cataloguePage: effectiveCataloguePage,
-    catalogueChunkOffset,
+    catalogueDisplayedPage: displayedPageRef.current,
+    catalogueChunkOffset: displayedChunkOffsetRef.current,
     catalogueFilters,
     catalogueSort,
-    catalogueFiltersCacheKey,
-    requestedCatalogueCacheKey,
     handleCatalogueFiltersChange,
     handleCataloguePageChange,
   };

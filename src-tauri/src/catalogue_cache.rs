@@ -96,13 +96,13 @@ fn is_valid_catalogue_response(url: &reqwest::Url, body: &serde_json::Value) -> 
             let Some(games) = object.get("games").and_then(serde_json::Value::as_array) else {
                 return false;
             };
-            let Some(total) = valid_count(object.get("total")) else {
-                return false;
-            };
-            let Some(matched) = valid_count(object.get("matched")) else {
-                return false;
-            };
-            if total != matched || object.get("limited").and_then(serde_json::Value::as_bool).is_none() {
+            // `total` e `matched` só precisam existir e ser números. Exigir que
+            // fossem iguais transformava qualquer divergência do worker em
+            // "resposta inválida" — ou seja, catálogo vazio sem erro visível.
+            if valid_count(object.get("total")).is_none()
+                || valid_count(object.get("matched")).is_none()
+                || object.get("limited").and_then(serde_json::Value::as_bool).is_none()
+            {
                 return false;
             }
             if url.query_pairs().any(|(key, value)| key == "facetsOnly" && value == "1") {

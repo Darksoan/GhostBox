@@ -10,6 +10,22 @@ const IMAGE_CACHE_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const IMAGE_CACHE_CLEANUP_INTERVAL_MS: u64 = 6 * 60 * 60 * 1000;
 
 static CLEANUP_STARTED: OnceLock<()> = OnceLock::new();
+static IMAGE_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+static LIBRARY_ASSET_CACHE_WRITE_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+
+/// Um cliente com pool para todas as imagens. Antes cada capa construía um
+/// `reqwest::Client` novo — handshake TLS completo por imagem, sem reuso de
+/// conexão. `connect_timeout` separado impede que um TCP em buraco negro coma
+/// o orçamento inteiro dos 10 s.
+fn image_http_client() -> &'static reqwest::Client {
+    IMAGE_HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    })
+}
 
 fn image_cache_directory(app: &AppHandle) -> Result<PathBuf, String> {
     let directory = app
@@ -312,6 +328,12 @@ fn write_library_asset_cache_url(app: &AppHandle, app_id: &str, file_name: &str,
     let Ok(app_data_dir) = app.path().app_data_dir() else {
         return;
     };
+    // Read-modify-write do arquivo inteiro: sem o lock, duas capas resolvendo em
+    // paralelo perdiam a atualização uma da outra (e a escrita não-atômica podia
+    // deixar o JSON truncado).
+    let _guard = LIBRARY_ASSET_CACHE_WRITE_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock();
     let path = app_data_dir.join("steamcmd-library-asset-cache.json");
     let mut cache = std::fs::read_to_string(&path)
         .ok()
@@ -334,7 +356,14 @@ fn write_library_asset_cache_url(app: &AppHandle, app_id: &str, file_name: &str,
         let _ = std::fs::create_dir_all(parent);
     }
     if let Ok(contents) = serde_json::to_string(&cache) {
-        let _ = std::fs::write(path, contents);
+        let temp_path = path.with_extension("json.tmp");
+        if std::fs::write(&temp_path, contents).is_ok() {
+            if std::fs::rename(&temp_path, &path).is_err() {
+                let _ = std::fs::remove_file(&temp_path);
+            }
+        } else {
+            let _ = std::fs::remove_file(&temp_path);
+        }
     }
 }
 
@@ -623,15 +652,9 @@ pub async fn resolve_steam_library_asset_url(
         return String::new();
     }
 
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return String::new(),
-    };
+    let client = image_http_client();
 
-    resolve_library_asset_url(app, &client, app_id, file_name)
+    resolve_library_asset_url(app, client, app_id, file_name)
         .await
         .unwrap_or_default()
 }
@@ -690,10 +713,15 @@ pub fn start_image_cache_cleanup(app: AppHandle) {
         return;
     }
 
-    cleanup_image_cache(&app);
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_millis(IMAGE_CACHE_CLEANUP_INTERVAL_MS));
+    // A primeira limpeza também vai para a thread de fundo: rodando dentro do
+    // `setup()` ela varria um diretório de até 512 MB (read_dir + metadata +
+    // deletes) antes da janela aparecer.
+    std::thread::spawn(move || {
         cleanup_image_cache(&app);
+        loop {
+            std::thread::sleep(Duration::from_millis(IMAGE_CACHE_CLEANUP_INTERVAL_MS));
+            cleanup_image_cache(&app);
+        }
     });
 }
 
@@ -712,13 +740,7 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
         return existing.to_string_lossy().into_owned();
     }
 
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return String::new(),
-    };
+    let client = image_http_client().clone();
     let steam_asset_request = steam_asset_fallback_request(url);
 
     if let Some((app_id, file_name)) = steam_asset_request.as_ref() {

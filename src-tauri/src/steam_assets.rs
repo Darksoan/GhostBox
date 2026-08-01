@@ -30,6 +30,19 @@ static MANIFEST_MEMORY: OnceLock<Mutex<HashMap<String, AssetManifest>>> = OnceLo
 static MANIFEST_DISK_LOADED: OnceLock<()> = OnceLock::new();
 static MANIFEST_NEGATIVE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 static FETCH_GATE: OnceLock<tauri::async_runtime::Mutex<Option<Instant>>> = OnceLock::new();
+static GET_ITEMS_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+/// Cliente único: um `Client` novo por lote refazia o handshake TLS a cada
+/// chamada, e um cold start dispara mais de uma dezena de lotes.
+fn get_items_client() -> &'static reqwest::Client {
+    GET_ITEMS_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(GET_ITEMS_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    })
+}
 
 /// Manifesto de assets de um appId, como devolvido pela `GetItems` e persistido
 /// em disco. `url_format` já vem com o cache-buster `?t=` da Steam.
@@ -148,9 +161,12 @@ fn write_disk_manifests(app: &AppHandle) {
     let Some(path) = manifest_cache_path(app) else {
         return;
     };
-    let Ok(memory) = manifest_memory().lock() else {
+    let Ok(mut memory) = manifest_memory().lock() else {
         return;
     };
+    // Entradas expiradas só eram filtradas na leitura, então o arquivo crescia
+    // para sempre e era re-serializado inteiro a cada escrita.
+    memory.retain(|_, manifest| !manifest.is_expired());
     let Ok(contents) = serde_json::to_string(&*memory) else {
         return;
     };
@@ -159,7 +175,16 @@ fn write_disk_manifests(app: &AppHandle) {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(path, contents);
+    // Escrita atômica: um crash no meio de um `fs::write` deixava JSON inválido,
+    // e `load_disk_manifests` descarta o cache *inteiro* em silêncio nesse caso.
+    let temp_path = path.with_extension("json.tmp");
+    if std::fs::write(&temp_path, contents).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+        return;
+    }
+    if std::fs::rename(&temp_path, &path).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+    }
 }
 
 fn cached_manifest(app_id: &str) -> Option<AssetManifest> {
@@ -315,8 +340,9 @@ fn parse_get_items_response(body: &serde_json::Value) -> HashMap<String, AssetMa
         .collect()
 }
 
-/// Uma chamada `GetItems` por vez, com intervalo mínimo entre elas. A Steam não
-/// documenta o limite e um catálogo grande dispararia dezenas de lotes juntos.
+/// Espaça o *início* das chamadas `GetItems` em `GET_ITEMS_MIN_INTERVAL_MS`. As
+/// requisições em si podem se sobrepor — o gate é solto antes do `send`. A Steam
+/// não documenta o limite e um catálogo grande dispararia dezenas de lotes juntos.
 async fn fetch_batch(
     client: &reqwest::Client,
     app_ids: &[String],
@@ -366,16 +392,28 @@ pub async fn manifests(app: &AppHandle, app_ids: &[String]) -> HashMap<String, A
         return resolved;
     }
 
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(Duration::from_secs(GET_ITEMS_TIMEOUT_SECS))
-        .build()
-    else {
-        return resolved;
-    };
+    let client = get_items_client().clone();
+
+    // Os lotes saem em paralelo; o `fetch_gate` continua espaçando o *início* de
+    // cada chamada em 250 ms, então a Steam segue vendo o mesmo ritmo — o que
+    // deixa de ser serial é a espera pela resposta. Uma biblioteca de 2000 jogos
+    // esperava 17 round-trips em fila.
+    let mut tasks = Vec::new();
+    for chunk in missing.chunks(GET_ITEMS_BATCH_SIZE) {
+        let client = client.clone();
+        let chunk = chunk.to_vec();
+        tasks.push(tauri::async_runtime::spawn(async move {
+            let batch = fetch_batch(&client, &chunk).await;
+            (chunk, batch)
+        }));
+    }
 
     let mut fetched_any = false;
-    for chunk in missing.chunks(GET_ITEMS_BATCH_SIZE) {
-        let Some(batch) = fetch_batch(&client, chunk).await else {
+    for task in tasks {
+        let Ok((chunk, batch)) = task.await else {
+            continue;
+        };
+        let Some(batch) = batch else {
             // Falha de rede não é ausência de asset: sem cache negativo, para
             // que a próxima tentativa reconsulte.
             continue;
@@ -386,7 +424,7 @@ pub async fn manifests(app: &AppHandle, app_ids: &[String]) -> HashMap<String, A
                 memory.insert(app_id.clone(), manifest.clone());
             }
         }
-        for app_id in chunk {
+        for app_id in &chunk {
             match batch.get(app_id) {
                 Some(manifest) => {
                     resolved.insert(app_id.clone(), manifest.clone());

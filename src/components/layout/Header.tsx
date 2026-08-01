@@ -69,7 +69,10 @@ const SearchSuggestionItem = memo(function SearchSuggestionItem({
   const sources = useCachedImageSources(rawSources);
   const { source, loaded } = useLoadableImageCover(sources);
 
-  if (!loaded || !source) return null;
+  // A sugestão sempre aparece: descartar o resultado inteiro quando a capa
+  // falha fazia o dropdown mostrar 3 de 6 jogos, e os itens iam pipocando um a
+  // um conforme cada imagem decodificava.
+  const hasCover = loaded && Boolean(source);
 
   return (
     <li>
@@ -82,7 +85,9 @@ const SearchSuggestionItem = memo(function SearchSuggestionItem({
         onClick={onSelect}
       >
         <span className="header__search-dropdown-thumbnail" aria-hidden="true">
-          <img src={source} alt="" decoding="async" draggable={false} />
+          {hasCover && (
+            <img src={source} alt="" decoding="async" draggable={false} />
+          )}
         </span>
         <span className="header__search-dropdown-item-title">
           <HighlightedSearchText text={game.title} />

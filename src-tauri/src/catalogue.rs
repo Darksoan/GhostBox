@@ -48,16 +48,6 @@ fn text(value: Option<&Value>) -> String {
         .unwrap_or_default()
 }
 
-pub(crate) fn empty_game_database(source: &str) -> serde_json::Value {
-    serde_json::json!({
-        "games": [],
-        "total": 0,
-        "matched": 0,
-        "limited": false,
-        "source": source
-    })
-}
-
 fn default_games_api_url() -> String {
     "https://piratebox-catalogue.hella.workers.dev".to_string()
 }
@@ -1677,7 +1667,10 @@ pub async fn database_get_games(
             catalogue_cache::prepare_cached_response(&mut value, updated_at, from_cache);
             Ok(value)
         }
-        Err(_) => Ok(empty_game_database("remote-unavailable")),
+        // Um catálogo vazio é indistinguível de "nenhum resultado" na UI. O
+        // fallback offline já acontece dentro de `fetch_json_with_cache` (stale
+        // cache); chegar aqui significa que não há nada utilizável.
+        Err(error) => Err(error),
     }
 }
 
@@ -1871,7 +1864,15 @@ pub async fn steam_get_game_icon_urls(
         return HashMap::new();
     }
 
-    let mut resolved = resolve_local_game_icon_urls(&app, &app_ids);
+    // `resolve_local_game_icon_urls` varre o `appinfo.vdf` inteiro; num `async
+    // fn` ela bloquearia um worker do Tokio.
+    let mut resolved = {
+        let app = app.clone();
+        let app_ids = app_ids.clone();
+        tauri::async_runtime::spawn_blocking(move || resolve_local_game_icon_urls(&app, &app_ids))
+            .await
+            .unwrap_or_default()
+    };
     let mut cache = read_steam_icon_url_cache(&app);
     let still_missing = app_ids
         .iter()
@@ -1892,13 +1893,18 @@ pub async fn steam_get_game_icon_urls(
     resolved
 }
 
+/// Sai da thread principal de propósito: resolver ícones locais lê o
+/// `appinfo.vdf` inteiro (dezenas de MB) e o varre por appId. Como comando
+/// síncrono, isso travava a UI a cada lote da viewport.
 #[tauri::command]
-pub fn steam_get_local_game_icon_urls(
+pub async fn steam_get_local_game_icon_urls(
     app: tauri::AppHandle,
     app_ids: Vec<String>,
 ) -> HashMap<String, String> {
     let app_ids = normalize_game_icon_app_ids(app_ids);
-    resolve_local_game_icon_urls(&app, &app_ids)
+    tauri::async_runtime::spawn_blocking(move || resolve_local_game_icon_urls(&app, &app_ids))
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]

@@ -237,8 +237,11 @@ export function PageRouter({
           initialLoading={catalogue.isInitialCatalogueLoading}
           query={debouncedQuery}
           page={catalogue.cataloguePage}
+          displayedPage={catalogue.catalogueDisplayedPage}
           chunkOffset={catalogue.catalogueChunkOffset}
           matched={catalogue.catalogueDatabase.matched}
+          hasError={catalogue.hasCatalogueError}
+          onRetry={catalogue.onCatalogueRetry}
           filters={catalogue.catalogueFilters}
           animateFilterPlaceholders={animateCatalogueFilterPlaceholders}
           onFiltersChange={catalogue.handleCatalogueFiltersChange}

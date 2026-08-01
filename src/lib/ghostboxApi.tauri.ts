@@ -646,6 +646,18 @@ export const ghostboxApi = {
     );
   },
 
+  /**
+   * Igual a `getGames`, mas propaga a falha em vez de devolver um resultado
+   * vazio. O catálogo precisa distinguir "backend fora" de "nenhum resultado";
+   * quem só enfeita a home continua usando a versão tolerante.
+   */
+  getGamesOrThrow(request?: GameDatabaseRequest): Promise<GameDatabaseResult> {
+    return invoke<GameDatabaseResult>("database_get_games", {
+      request: request ?? null,
+      apiUrl: getGamesApiUrl(),
+    });
+  },
+
   getGameDetails(gameId: string): Promise<GhostBoxGame | null> {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_details",
@@ -711,13 +723,17 @@ export const ghostboxApi = {
     );
   },
 
+  /**
+   * Propaga a falha de propósito: engolir o erro aqui fazia o lote inteiro ser
+   * marcado como resolvido sem manifesto, e as capas desses appIds sumiam pelo
+   * resto da sessão. Quem chama precisa poder tentar de novo.
+   */
   getSteamAssetManifests(
     appIds: string[],
   ): Promise<Record<string, Record<string, string>>> {
-    return invokeOr<Record<string, Record<string, string>>>(
+    return invoke<Record<string, Record<string, string>>>(
       "steam_get_asset_manifests",
       { appIds },
-      {},
     );
   },
 
