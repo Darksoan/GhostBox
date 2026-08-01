@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { withoutHeaderImageSources } from "../../utils/image";
+import { getNextReadyScreenshotSource } from "../../utils/cataloguePreview";
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
@@ -19,27 +20,32 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     [game]
   );
   const cachedScreenshotSources = useCachedImageSources(screenshotSources);
-  const [activeScreenshot, setActiveScreenshot] = useState(0);
+  const [activeScreenshotSource, setActiveScreenshotSource] = useState<
+    string | null
+  >(null);
+  const readyScreenshotSourcesRef = useRef<Set<string>>(new Set());
   const screenshotKey = cachedScreenshotSources.join("\n");
 
   useEffect(() => {
-    setActiveScreenshot(0);
-  }, [game?.id]);
+    readyScreenshotSourcesRef.current = new Set();
+    setActiveScreenshotSource(null);
+  }, [screenshotKey]);
 
   useEffect(() => {
-    if (cachedScreenshotSources.length <= 1) {
-      setActiveScreenshot(0);
-      return;
-    }
+    if (cachedScreenshotSources.length <= 1) return;
 
     const intervalId = window.setInterval(() => {
-      setActiveScreenshot((index) =>
-        (index + 1) % cachedScreenshotSources.length
+      setActiveScreenshotSource((currentSource) =>
+        getNextReadyScreenshotSource(
+          cachedScreenshotSources,
+          readyScreenshotSourcesRef.current,
+          currentSource
+        )
       );
     }, 1500);
 
     return () => window.clearInterval(intervalId);
-  }, [cachedScreenshotSources.length, game?.id, screenshotKey]);
+  }, [cachedScreenshotSources, screenshotKey]);
 
   if (!game) return null;
 
@@ -48,6 +54,26 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     isEnglish
       ? `Screenshot ${index + 1} of ${game.title}`
       : `Screenshot ${index + 1} de ${game.title}`;
+  const markScreenshotReady = async (
+    source: string,
+    image: HTMLImageElement
+  ) => {
+    if (typeof image.decode === "function") {
+      await image.decode().catch(() => undefined);
+    }
+    if (!cachedScreenshotSources.includes(source)) return;
+
+    readyScreenshotSourcesRef.current.add(source);
+    setActiveScreenshotSource((currentSource) =>
+      currentSource && readyScreenshotSourcesRef.current.has(currentSource)
+        ? currentSource
+        : getNextReadyScreenshotSource(
+            cachedScreenshotSources,
+            readyScreenshotSourcesRef.current,
+            null
+          )
+    );
+  };
 
   return (
     <section
@@ -56,14 +82,26 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     >
       <div className="catalogue-hover-preview__screenshots">
         {cachedScreenshotSources.length > 0 ? (
-          <img
-            className="catalogue-hover-preview__screenshot"
-            key={cachedScreenshotSources[activeScreenshot]}
-            src={cachedScreenshotSources[activeScreenshot]}
-            alt={screenshotAlt(activeScreenshot)}
-            loading="lazy"
-            decoding="async"
-          />
+          cachedScreenshotSources.map((source, index) => {
+            const isActive = source === activeScreenshotSource;
+            return (
+              <img
+                className={`catalogue-hover-preview__screenshot${
+                  isActive ? " catalogue-hover-preview__screenshot--active" : ""
+                }`}
+                key={source}
+                src={source}
+                alt={isActive ? screenshotAlt(index) : ""}
+                aria-hidden={!isActive}
+                loading="eager"
+                decoding="async"
+                fetchPriority={index === 0 ? "high" : "low"}
+                onLoad={(event) => {
+                  void markScreenshotReady(source, event.currentTarget);
+                }}
+              />
+            );
+          })
         ) : (
           <div className="catalogue-hover-preview__empty-media" />
         )}
