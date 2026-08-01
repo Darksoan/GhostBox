@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
@@ -19,11 +19,31 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     [game]
   );
   const cachedScreenshotSources = useCachedImageSources(screenshotSources);
+  const [activeScreenshot, setActiveScreenshot] = useState(0);
+  const screenshotKey = cachedScreenshotSources.join("\n");
+
+  useEffect(() => {
+    setActiveScreenshot(0);
+  }, [game?.id]);
+
+  useEffect(() => {
+    if (cachedScreenshotSources.length <= 1) {
+      setActiveScreenshot(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveScreenshot((index) =>
+        (index + 1) % cachedScreenshotSources.length
+      );
+    }, 1500);
+
+    return () => window.clearInterval(intervalId);
+  }, [cachedScreenshotSources.length, game?.id, screenshotKey]);
 
   if (!game) return null;
 
   const developers = game.developers?.filter(Boolean) ?? [];
-  const publishers = game.publishers?.filter(Boolean) ?? [];
   const screenshotAlt = (index: number) =>
     isEnglish
       ? `Screenshot ${index + 1} of ${game.title}`
@@ -36,16 +56,14 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     >
       <div className="catalogue-hover-preview__screenshots">
         {cachedScreenshotSources.length > 0 ? (
-          cachedScreenshotSources.map((source, index) => (
-            <img
-              className="catalogue-hover-preview__screenshot"
-              key={`${source}-${index}`}
-              src={source}
-              alt={screenshotAlt(index)}
-              loading="lazy"
-              decoding="async"
-            />
-          ))
+          <img
+            className="catalogue-hover-preview__screenshot"
+            key={cachedScreenshotSources[activeScreenshot]}
+            src={cachedScreenshotSources[activeScreenshot]}
+            alt={screenshotAlt(activeScreenshot)}
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
           <div className="catalogue-hover-preview__empty-media" />
         )}
@@ -56,11 +74,6 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
         {developers.length > 0 && (
           <span className="catalogue-hover-preview__credit">
             <span>{t("catalogue.preview.developer")}:</span> {developers.join(", ")}
-          </span>
-        )}
-        {publishers.length > 0 && (
-          <span className="catalogue-hover-preview__credit">
-            <span>{t("catalogue.preview.publisher")}:</span> {publishers.join(", ")}
           </span>
         )}
       </div>

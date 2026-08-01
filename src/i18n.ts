@@ -74,7 +74,6 @@ const translations: Record<Language, TranslationTree> = {
       },
       preview: {
         developer: "Desenvolvedora",
-        publisher: "Publicadora",
       },
     },
     profile: {
@@ -428,7 +427,6 @@ const translations: Record<Language, TranslationTree> = {
       },
       preview: {
         developer: "Developer",
-        publisher: "Publisher",
       },
     },
     profile: {

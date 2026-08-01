@@ -193,3 +193,65 @@ Open the catalogue and verify: moving across games swaps the panel; tab focus sh
 git add src/components/ui/CatalogueHoverPreview.tsx src/components/ui/CatalogueList.tsx src/pages/CataloguePage.tsx src/app.scss src/i18n.ts tests/catalogue-hover-preview.test.ts
 git commit -m "feat: add catalogue hover game preview"
 ```
+
+---
+
+## Revision: rotating single screenshot
+
+### Task 6: Lock the revised behavior with tests
+
+**Files:**
+- Modify: `tests/catalogue-hover-preview.test.ts`
+
+- [ ] **Step 1: Add failing assertions**
+
+Read `src/components/ui/CatalogueHoverPreview.tsx` and `src/app.scss` in the test and assert that the component contains `1500`, does not contain `catalogue.preview.publisher`, and the stylesheet rule for `.catalogue-hover-preview` does not contain a `border` declaration. Also assert the component contains `--weight-semibold`/`--weight-medium` class styling hooks through the Sass output.
+
+- [ ] **Step 2: Run the focused test**
+
+Run: `npx.cmd vitest run tests/catalogue-hover-preview.test.ts`
+
+Expected: FAIL until the rotation, publisher removal, and style changes are implemented.
+
+### Task 7: Implement one-at-a-time screenshot rotation and visual cleanup
+
+**Files:**
+- Modify: `src/components/ui/CatalogueHoverPreview.tsx`
+- Modify: `src/app.scss`
+- Modify: `src/i18n.ts`
+
+- [ ] **Step 1: Add rotation state and timer**
+
+Track `activeScreenshot` with `useState(0)`. Reset it when `game` changes. Start a `setInterval` of `1500` ms only when there are at least two cached screenshots, advance with modulo length, and clear the interval in the effect cleanup. Render only `cachedScreenshotSources[activeScreenshot]`; keep the empty media fallback.
+
+- [ ] **Step 2: Keep only developer details**
+
+Remove publishers from the component and delete `catalogue.preview.publisher` from both locale dictionaries. Keep the developer label and values exactly as currently sourced from `game.developers`.
+
+- [ ] **Step 3: Align styling with catalogue text hierarchy**
+
+Remove the `border` declaration from `.catalogue-hover-preview`. Keep the existing surface/radius/shadow. Style the title with `--fs-400` and `--weight-semibold`; style the developer line with `--fs-300` and `--weight-medium`, and its label with `--weight-semibold`. Preserve semantic tokens and reduced-motion behavior.
+
+- [ ] **Step 4: Run focused verification**
+
+Run: `npx.cmd tsc --noEmit; npm.cmd run check:tokens; npx.cmd vitest run tests/catalogue-hover-preview.test.ts tests/catalogue-layout.test.ts`
+
+Expected: PASS.
+
+### Task 8: Full verification and commit
+
+**Files:**
+- Modify: files from Tasks 6–7 only
+
+- [ ] **Step 1: Run the complete suite and build**
+
+Run: `npm.cmd test; npm.cmd run build`
+
+Expected: 26+ tests pass and Vite build completes successfully.
+
+- [ ] **Step 2: Commit the revision**
+
+```bash
+git add src/components/ui/CatalogueHoverPreview.tsx src/app.scss src/i18n.ts tests/catalogue-hover-preview.test.ts docs/superpowers/plans/2026-08-01-catalogue-hover-preview.md
+git commit -m "feat: refine catalogue hover preview media"
+```

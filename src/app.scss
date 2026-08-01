@@ -6615,7 +6615,6 @@ p {
   flex: 0 0 auto;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
   box-shadow: var(--shadow-1);
@@ -6672,12 +6671,13 @@ p {
 
   &__credit {
     color: var(--text-secondary);
-    font-size: var(--fs-200);
+    font-size: var(--fs-300);
     font-weight: var(--weight-medium);
     line-height: var(--lh-200);
 
     span {
       color: var(--text-tertiary);
+      font-weight: var(--weight-semibold);
     }
   }
 }

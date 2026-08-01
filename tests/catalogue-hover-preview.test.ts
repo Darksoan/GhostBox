@@ -16,15 +16,36 @@ describe("Catalogue hover preview", () => {
     expect(selectors).toContain(".catalogue-hover-preview__screenshots");
     expect(selectors).toContain(".catalogue-hover-preview__screenshot");
     expect(mediaQueries).toContain("(prefers-reduced-motion: reduce)");
+
+    const previewRule = stylesheet.nodes.find(
+      (node) => node.type === "rule" && node.selector === ".catalogue-hover-preview"
+    );
+    expect(previewRule?.toString()).not.toContain("border:");
+
+    const titleRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" && node.selector === ".catalogue-hover-preview__title"
+    );
+    expect(titleRule?.toString()).toContain("font-weight: var(--weight-semibold)");
+
+    const creditRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" && node.selector === ".catalogue-hover-preview__credit"
+    );
+    expect(creditRule?.toString()).toContain("font-weight: var(--weight-medium)");
   });
 
   it("keeps preview copy localized", () => {
     const source = readFileSync("src/i18n.ts", "utf8");
+    const component = readFileSync("src/components/ui/CatalogueHoverPreview.tsx", "utf8");
 
     expect(source).toContain("preview: {");
     expect(source).toContain('developer: "Desenvolvedora"');
-    expect(source).toContain('publisher: "Publicadora"');
     expect(source).toContain('developer: "Developer"');
-    expect(source).toContain('publisher: "Publisher"');
+    const previewBlocks = [...source.matchAll(/preview:\s*{([\s\S]*?)\n\s*},/g)];
+    expect(previewBlocks).toHaveLength(2);
+    expect(previewBlocks.every(([, block]) => !block.includes("publisher:"))).toBe(true);
+    expect(component).toContain("1500");
+    expect(component).not.toContain("catalogue.preview.publisher");
   });
 });
