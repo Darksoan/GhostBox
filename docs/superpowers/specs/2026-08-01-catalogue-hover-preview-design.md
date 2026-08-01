@@ -18,7 +18,7 @@ O componente recebe o `GhostBoxGame` selecionado e renderiza:
 
 - até três screenshots de `game.screenshots`, filtrando fontes de header com os utilitários existentes;
 - título do jogo;
-- desenvolvedora e publisher, quando disponíveis, com fallback textual localizado para dados ausentes.
+- desenvolvedora, quando disponível, com fallback textual localizado para dados ausentes.
 
 As screenshots usam o hook de cache de imagens já adotado pela aplicação. O preload de assets existente no hover da lista continua sendo a primeira camada de aquecimento; o painel não cria uma nova fonte de URLs.
 
