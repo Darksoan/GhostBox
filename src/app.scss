@@ -6632,6 +6632,59 @@ p {
     background: var(--surface-media-letterbox);
   }
 
+  &__control {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    place-items: center;
+    border: 1px solid var(--border-ui);
+    border-radius: var(--radius-circle);
+    background: var(--surface-secondary);
+    box-shadow: var(--shadow-1);
+    color: var(--text-primary);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition:
+      opacity var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    &:hover {
+      background: var(--surface-hover);
+    }
+
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid var(--border-hover);
+      outline-offset: 2px;
+      pointer-events: auto;
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0;
+    }
+
+    &--previous {
+      left: var(--space-3);
+    }
+
+    &--next {
+      right: var(--space-3);
+    }
+  }
+
+  &__screenshots:hover &__control,
+  &__screenshots:focus-within &__control {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   &__screenshot,
   &__empty-media {
     display: block;
@@ -6696,6 +6749,10 @@ p {
     transition: none;
 
     &__screenshot {
+      transition: none;
+    }
+
+    &__control {
       transition: none;
     }
   }

@@ -15,6 +15,7 @@ describe("Catalogue hover preview", () => {
     expect(selectors).toContain(".catalogue-hover-preview");
     expect(selectors).toContain(".catalogue-hover-preview__screenshots");
     expect(selectors).toContain(".catalogue-hover-preview__screenshot");
+    expect(selectors).toContain(".catalogue-hover-preview__control");
     expect(mediaQueries).toContain("(prefers-reduced-motion: reduce)");
 
     const previewRule = stylesheet.nodes.find(
@@ -40,6 +41,14 @@ describe("Catalogue hover preview", () => {
         node.selector === ".catalogue-hover-preview__screenshot"
     );
     expect(screenshotRule?.toString()).not.toContain("transition:");
+
+    const controlRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" && node.selector === ".catalogue-hover-preview__control"
+    );
+    expect(controlRule?.toString()).toContain("background: var(--surface-secondary)");
+    expect(controlRule?.toString()).toContain("color: var(--text-primary)");
+    expect(controlRule?.toString()).not.toMatch(/#[0-9a-f]{3,8}/i);
   });
 
   it("keeps preview copy localized", () => {
@@ -49,6 +58,10 @@ describe("Catalogue hover preview", () => {
     expect(source).toContain("preview: {");
     expect(source).toContain('developer: "Desenvolvedora"');
     expect(source).toContain('developer: "Developer"');
+    expect(source).toContain('previousScreenshot: "Screenshot anterior"');
+    expect(source).toContain('nextScreenshot: "Próxima screenshot"');
+    expect(source).toContain('previousScreenshot: "Previous screenshot"');
+    expect(source).toContain('nextScreenshot: "Next screenshot"');
     const previewBlocks = [...source.matchAll(/preview:\s*{([\s\S]*?)\n\s*},/g)];
     expect(previewBlocks).toHaveLength(2);
     expect(previewBlocks.every(([, block]) => !block.includes("publisher:"))).toBe(true);

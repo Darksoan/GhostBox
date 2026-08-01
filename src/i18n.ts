@@ -74,6 +74,8 @@ const translations: Record<Language, TranslationTree> = {
       },
       preview: {
         developer: "Desenvolvedora",
+        previousScreenshot: "Screenshot anterior",
+        nextScreenshot: "Próxima screenshot",
       },
     },
     profile: {
@@ -427,6 +429,8 @@ const translations: Record<Language, TranslationTree> = {
       },
       preview: {
         developer: "Developer",
+        previousScreenshot: "Previous screenshot",
+        nextScreenshot: "Next screenshot",
       },
     },
     profile: {
