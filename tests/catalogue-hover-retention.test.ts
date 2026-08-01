@@ -33,4 +33,8 @@ describe("catalogue hover preview retention", () => {
     retention.dispose();
     vi.useRealTimers();
   });
+
+  it("uses a 500ms retention delay", () => {
+    expect(CATALOGUE_HOVER_PREVIEW_RETENTION_MS).toBe(500);
+  });
 });
