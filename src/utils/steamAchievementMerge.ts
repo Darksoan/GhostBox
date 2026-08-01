@@ -1,5 +1,6 @@
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamAccountStats, SteamGameAchievementSummary } from "../types";
+import { isAchievementUnlocked } from "./achievementStats";
 
 export type SteamAchievementIndex = ReadonlyMap<string, SteamAchievement[]>;
 
@@ -18,7 +19,7 @@ function normalizeKey(value: string) {
 }
 
 function calculateAchievementStats(achievementList: SteamAchievement[]) {
-  const unlocked = achievementList.filter((achievement) => achievement.unlocked).length;
+  const unlocked = achievementList.filter(isAchievementUnlocked).length;
   const total = achievementList.length;
 
   return {

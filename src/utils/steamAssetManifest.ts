@@ -75,10 +75,6 @@ function pruneMemoryCaches() {
   }
 }
 
-export function getSteamAssetManifestVersion() {
-  return version;
-}
-
 function readStoredManifests() {
   if (typeof window === "undefined") return;
 
@@ -118,10 +114,6 @@ function scheduleStorageWrite() {
 /** URL já resolvida do asset, ou "" quando o manifesto ainda não chegou. */
 export function getSteamAssetUrl(appId: string, fileName: string) {
   return manifestByAppId.get(appId)?.[fileName] ?? "";
-}
-
-export function hasSteamAssetManifest(appId: string) {
-  return manifestByAppId.has(appId);
 }
 
 /** True enquanto o lote deste appId não voltou — usado para evitar flicker. */

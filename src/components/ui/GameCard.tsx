@@ -11,9 +11,9 @@ import {
   gameHeaderOnlySources,
   gamePortraitPreviewSources,
   gameStyle,
-  getGameAppId,
   preloadGameModalAssets,
 } from "../../utils/image";
+import { isAchievementUnlocked } from "../../utils/achievementStats";
 import { formatCompactPlaytime } from "../../utils/time";
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
@@ -50,10 +50,7 @@ export const GameCard = memo(function GameCard({
   const headerSources = useCachedImageSources(
     shouldLoadCover ? rawHeaderSources : [],
   );
-  const coverImage = useLoadableImageState(headerSources, {
-    appId: getGameAppId(game),
-    kind: portrait ? "portrait" : "header",
-  });
+  const coverImage = useLoadableImageState(headerSources);
   const previousCoverSourceRef = useRef(
     coverImage.loaded ? coverImage.source : "",
   );
@@ -106,9 +103,7 @@ export const GameCard = memo(function GameCard({
   const achievementUnlocked = showAchievements
     ? Math.min(
         achievementListTotal > 0
-          ? (game.achievementList ?? []).filter(
-              (achievement) => achievement.unlocked === true,
-            ).length
+          ? (game.achievementList ?? []).filter(isAchievementUnlocked).length
           : game.achievements.unlocked,
         achievementTotal,
       )

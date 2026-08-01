@@ -33,6 +33,7 @@ import {
   loadGameAchievementDetailsCached,
   loadGameStoreDetailsCached,
 } from "../../utils/gameCache";
+import { isAchievementUnlocked } from "../../utils/achievementStats";
 import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
 import {
   imageSourceCache,
@@ -335,7 +336,7 @@ const AchievementIcon = memo(function AchievementIcon({
 }) {
   const { appearance } = useSettings();
   const itemRef = useRef<HTMLLIElement>(null);
-  const isUnlocked = achievement.unlocked === true;
+  const isUnlocked = isAchievementUnlocked(achievement);
   const isRare =
     isUnlocked &&
     typeof achievement.globalPercent === "number" &&
@@ -980,7 +981,7 @@ export function GameModal({
   const achievements = useMemo(
     () =>
       [...(displayGame?.achievementList ?? [])].sort(
-        (a, b) => Number(b.unlocked === true) - Number(a.unlocked === true)
+        (a, b) => Number(isAchievementUnlocked(b)) - Number(isAchievementUnlocked(a))
       ),
     [displayGame?.achievementList]
   );

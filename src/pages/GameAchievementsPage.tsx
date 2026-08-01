@@ -2,15 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import { useSettings } from "../context/settings";
 import { AchievementsListLoadingState, EmptyState } from "../components/ui/LoadingStates";
+import { isAchievementUnlocked } from "../utils/achievementStats";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
 import { mergeAchievementDetailsIntoGame } from "../utils/steamAchievementMerge";
 import { formatCompactPlaytime } from "../utils/time";
 import { useMetricsUnlocked } from "../context/MetricsVisibilityContext";
 import "./GameAchievementsPage.scss";
-
-function isAchievementUnlocked(achievement: SteamAchievement) {
-  return achievement.unlocked === true;
-}
 
 function achievementIconSource(
   achievement: SteamAchievement,

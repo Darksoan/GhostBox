@@ -46,3 +46,6 @@ src-tauri/target/
 # Generated capability schemas
 src-tauri/gen/
 nul
+
+# Compiled from app.scss by Vite (was committed by mistake)
+src/app.css

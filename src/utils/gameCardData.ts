@@ -1,38 +1,6 @@
 import type { GhostBoxGame } from "../data";
+import { getRicherAchievementGame } from "./achievementStats";
 import { isSteamTitlePlaceholder } from "./steamTitles";
-
-function getUnlockedAchievementCount(game: GhostBoxGame) {
-  const explicitUnlocked = (game.achievementList ?? []).filter(
-    (achievement) => achievement.unlocked === true
-  ).length;
-
-  return Math.max(explicitUnlocked, game.achievements?.unlocked ?? 0);
-}
-
-function getAchievementTotal(game: GhostBoxGame) {
-  return Math.max(
-    game.achievementList?.length ?? 0,
-    game.achievements?.total ?? 0,
-    getUnlockedAchievementCount(game)
-  );
-}
-
-function getRicherAchievementGame(current: GhostBoxGame, incoming: GhostBoxGame) {
-  const currentTotal = getAchievementTotal(current);
-  const incomingTotal = getAchievementTotal(incoming);
-  const currentUnlocked = getUnlockedAchievementCount(current);
-  const incomingUnlocked = getUnlockedAchievementCount(incoming);
-
-  if (incomingTotal > currentTotal) return incoming;
-  if (incomingTotal < currentTotal) return current;
-  if (incomingUnlocked > currentUnlocked) return incoming;
-  if (incomingUnlocked < currentUnlocked) return current;
-
-  return (incoming.achievementList?.length ?? 0) >=
-    (current.achievementList?.length ?? 0)
-    ? incoming
-    : current;
-}
 
 function preferString(primary: string | undefined, fallback: string) {
   return primary?.trim() ? primary : fallback;

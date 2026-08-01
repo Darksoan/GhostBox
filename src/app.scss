@@ -80,10 +80,7 @@
 }
 
 .tray-menu__item-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @include mixins.truncate;
 }
 
 .tray-menu__item-status {
@@ -637,11 +634,8 @@ input,
 .sidebar__collection-game-title {
   display: block;
   flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  @include mixins.truncate;
   line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   transform: none;
 }
 
@@ -941,12 +935,8 @@ p {
 
   /* Section label: COLLECTIONS (canonical uppercase) */
   &__section-title {
-    color: var(--text-secondary);
-    font-size: var(--fs-200);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--ls-100);
+    @include mixins.eyebrow;
     line-height: 1;
-    text-transform: uppercase;
     transition: color var(--motion-fast) var(--ease);
   }
 
@@ -1008,12 +998,8 @@ p {
     width: 28px;
     height: 28px;
     place-items: center;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
+    @include mixins.ghost-button;
     font-weight: var(--weight-semibold);
-    cursor: pointer;
     transition:
       color var(--motion-fast) var(--ease),
       background-color var(--motion-fast) var(--ease);
@@ -1181,15 +1167,12 @@ p {
   &__menu-item-label {
     display: inline-flex;
     align-items: center;
-    min-width: 0;
+    @include mixins.truncate;
     min-height: 18px;
-    overflow: hidden;
     color: inherit;
     font-size: var(--fs-400);
     font-weight: var(--weight-medium);
     line-height: 1;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   /* Collections */
@@ -1260,11 +1243,8 @@ p {
   &__collection-game-title {
     display: block;
     flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
+    @include mixins.truncate;
     line-height: 16px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   &__collection-game-button {
@@ -1278,11 +1258,7 @@ p {
     min-width: 0;
     min-height: 28px;
     padding: var(--space-3) var(--space-4);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
+    @include mixins.ghost-button;
     font-size: var(--fs-300);
     font-weight: var(--weight-semibold);
     text-align: left;
@@ -1334,11 +1310,7 @@ p {
     width: 100%;
     min-height: 36px;
     padding: var(--space-4) var(--space-4);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
+    @include mixins.ghost-button;
     font-size: var(--fs-400);
     font-weight: var(--weight-semibold);
     line-height: 1;
@@ -1632,13 +1604,9 @@ p {
     min-height: var(--header-control);
     margin: 0;
     padding: 0;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
+    @include mixins.ghost-button;
     font-weight: var(--weight-semibold);
     line-height: 0;
-    cursor: pointer;
     opacity: 0.7;
     transition:
       color var(--motion-fast) var(--ease),
@@ -1727,12 +1695,8 @@ p {
     margin: 0;
     padding: 0;
     flex: 0 0 auto;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
+    @include mixins.ghost-button;
     font-weight: var(--weight-semibold);
-    cursor: pointer;
     opacity: 0.7;
     line-height: 0;
     transition:
@@ -2016,11 +1980,7 @@ p {
     width: 100%;
     min-height: 32px;
     padding: 0 var(--space-5);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
+    @include mixins.ghost-button;
     font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
     line-height: 1;
@@ -2279,11 +2239,7 @@ p {
 
   &__search-dropdown-header {
     padding: var(--space-4) var(--space-6);
-    color: var(--text-secondary);
-    font-size: var(--fs-200);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--ls-100);
-    text-transform: uppercase;
+    @include mixins.eyebrow;
   }
 
   &__search-dropdown-list {
@@ -2314,12 +2270,9 @@ p {
     }
 
     &-title {
-      min-width: 0;
-      overflow: hidden;
+      @include mixins.truncate;
       font-size: var(--fs-400);
       font-weight: var(--weight-medium);
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     &__icons {
@@ -2539,11 +2492,7 @@ p {
 
 // Canonical uppercase section label (Home / Catalogue / Profile / Filters)
 .eyebrow {
-  color: var(--text-secondary);
-  font-size: var(--fs-200);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--ls-100);
-  text-transform: uppercase;
+  @include mixins.eyebrow;
 }
 
 .section-header {
@@ -2691,37 +2640,9 @@ p {
   min-width: 0;
 }
 
-@media (max-width: 1100px) {
-  .home-recommended__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .home-recommended__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.home-explore,
-.home-calendar,
- .home-wishlist {
+.home-explore {
   content-visibility: auto;
-}
-
-.home-explore {
   contain-intrinsic-size: 200px;
-}
-
-.home-calendar {
-  contain-intrinsic-size: 320px;
-}
-
-.home-wishlist {
-  contain-intrinsic-size: 480px;
-}
-
-.home-explore {
   display: flex;
   box-sizing: border-box;
   width: 100%;
@@ -3056,6 +2977,8 @@ p {
 }
 
 .home-calendar {
+  content-visibility: auto;
+  contain-intrinsic-size: 320px;
   --home-calendar-gap: clamp(12px, 1.4vw, 18px);
   --home-calendar-day-heading-space: 21px;
   display: flex;
@@ -3083,6 +3006,25 @@ p {
   gap: var(--home-calendar-gap);
   width: 100%;
   min-width: 0;
+}
+
+/* Every home grid collapses on the same two steps, so the sections stay aligned
+   with each other at narrow widths. Declared after all the base grids above:
+   media queries add no specificity, they only win by source order. */
+@media (max-width: 1100px) {
+  .home-recommended__grid,
+  .home-category__games,
+  .home-calendar__track {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .home-recommended__grid,
+  .home-category__games,
+  .home-calendar__track {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .home-calendar-day {
@@ -3229,6 +3171,8 @@ p {
 // ─── Home Wishlist Recommendations ────────────────────────────────────────────
 
 .home-wishlist {
+  content-visibility: auto;
+  contain-intrinsic-size: 480px;
   display: flex;
   box-sizing: border-box;
   flex-direction: column;
@@ -3785,11 +3729,7 @@ p {
     }
 
     span {
-      color: var(--text-secondary);
-      font-size: var(--fs-200);
-      font-weight: var(--weight-semibold);
-      letter-spacing: var(--ls-100);
-      text-transform: uppercase;
+      @include mixins.eyebrow;
     }
   }
 
@@ -4898,10 +4838,7 @@ p {
       transform var(--motion-fast) var(--ease);
 
     span {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      @include mixins.truncate;
     }
 
     svg:last-child {
@@ -4968,16 +4905,13 @@ p {
     }
 
     strong {
-      min-width: 0;
+      @include mixins.truncate;
       margin-top: auto;
-      overflow: hidden;
       color: var(--text-primary);
       font-size: var(--fs-400);
       font-weight: var(--weight-semibold);
       line-height: 1.35;
       font-variant-numeric: tabular-nums;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     &--accent {
@@ -5170,13 +5104,10 @@ p {
 
     strong {
       flex: 1;
-      min-width: 0;
-      overflow: hidden;
+      @include mixins.truncate;
       color: var(--text-primary);
       font-size: var(--fs-300);
       font-weight: var(--weight-medium);
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     span {
@@ -5778,11 +5709,8 @@ p {
 
   span {
     flex: 1;
-    min-width: 0;
-    overflow: hidden;
+    @include mixins.truncate;
     text-align: center;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     padding-right: var(--space-8);
     padding-left: var(--space-8);
   }
@@ -5855,11 +5783,7 @@ p {
   width: 100%;
   min-height: 34px;
   padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
+  @include mixins.ghost-button;
   font-size: var(--fs-300);
   font-weight: var(--weight-regular);
   text-align: center;
@@ -6421,14 +6345,11 @@ p {
     }
 
     strong {
-      min-width: 0;
+      @include mixins.truncate;
       flex: 1;
-      overflow: hidden;
       font-size: var(--fs-400);
       font-weight: var(--weight-semibold);
       color: var(--text-secondary);
-      text-overflow: ellipsis;
-      white-space: nowrap;
       transition: color var(--motion-fast) var(--ease);
     }
 
@@ -6632,11 +6553,7 @@ p {
   align-items: center;
   gap: var(--space-5);
   padding: var(--space-3) var(--space-5);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
+  @include mixins.ghost-button;
   font-size: var(--fs-300);
   font-weight: var(--weight-semibold);
   line-height: 1.5;
@@ -7782,22 +7699,16 @@ input[type="search"]::-ms-reveal {
   }
 
   span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include mixins.truncate;
   }
 
   small {
     margin-left: auto;
-    min-width: 0;
+    @include mixins.truncate;
     max-width: 42%;
-    overflow: hidden;
     color: var(--text-tertiary);
     font-weight: var(--weight-semibold);
     font-size: var(--fs-100);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
 
@@ -8708,12 +8619,9 @@ input[type="search"]::-ms-reveal {
   }
 
   &__title-container h4 {
-    min-width: 0;
+    @include mixins.truncate;
     max-width: 100%;
-    overflow: hidden;
     color: var(--text-primary);
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   &__title-placeholder {
@@ -9280,6 +9188,13 @@ input[type="search"]::-ms-reveal {
   /* Pins the library portrait hover zoom at its rest size. */
   .game-card__cover {
     --pb-background-size-current: var(--pb-background-size) !important;
+  }
+
+  /* Home cards: the hover label appears instantly, with no slide or lift. */
+  .home-category-card,
+  .home-category-card__label {
+    transition: none;
+    transform: none;
   }
 
   .profile-page__tab-indicator {
@@ -10330,11 +10245,7 @@ html.no-backdrop-blur {
   gap: var(--space-3);
   min-height: 26px;
   padding: 0 var(--space-4);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
+  @include mixins.ghost-button;
   font-size: var(--fs-200);
   font-weight: var(--weight-semibold);
   transition: background-color var(--motion-base) ease, color var(--motion-base) ease, opacity var(--motion-base) ease;
@@ -11040,11 +10951,7 @@ html.no-backdrop-blur {
   }
 
   &__playtime-label {
-    color: var(--text-secondary);
-    font-size: var(--fs-200);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--ls-100);
-    text-transform: uppercase;
+    @include mixins.eyebrow;
   }
 
   &__playtime-value {
@@ -11071,12 +10978,8 @@ html.no-backdrop-blur {
     min-width: 0;
 
     dt {
-      color: var(--text-secondary);
-      font-size: var(--fs-200);
-      font-weight: var(--weight-semibold);
-      letter-spacing: var(--ls-100);
+      @include mixins.eyebrow;
       line-height: 1.1;
-      text-transform: uppercase;
     }
 
     dd {
@@ -11829,10 +11732,7 @@ html.no-backdrop-blur {
 
     &-game {
       display: block;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      @include mixins.truncate;
       font-size: var(--fs-100);
       font-weight: var(--weight-semibold);
       line-height: 1.35;

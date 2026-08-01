@@ -369,6 +369,35 @@ export function HomePageLoadingState() {
   );
 }
 
+/** Also used by ProfilePage itself while the overview data is still resolving. */
+export function ProfileActivityListSkeleton() {
+  return (
+    <div
+      className="profile-page__activity-list profile-page__activity-list--skeleton"
+      aria-hidden="true"
+    >
+      {[0, 1, 2].map((index) => (
+        <div
+          key={index}
+          className="profile-page__activity-card profile-page__activity-card--skeleton"
+        >
+          <span className="profile-page__activity-cover-button" aria-hidden="true">
+            <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
+          </span>
+          <span className="profile-page__activity-main" aria-hidden="true">
+            <span className="profile-page__activity-meta">
+              <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
+            </span>
+            <span className="profile-page__activity-side">
+              <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ProfilePageLoadingState() {
   return (
     <section className="profile-page" aria-hidden="true">
@@ -434,26 +463,7 @@ export function ProfilePageLoadingState() {
                       </button>
                     </div>
                   </div>
-                  <div className="profile-page__activity-list profile-page__activity-list--skeleton">
-                    {[0, 1, 2].map((index) => (
-                      <div
-                        key={index}
-                        className="profile-page__activity-card profile-page__activity-card--skeleton"
-                      >
-                        <span className="profile-page__activity-cover-button" aria-hidden="true">
-                          <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
-                        </span>
-                        <span className="profile-page__activity-main" aria-hidden="true">
-                          <span className="profile-page__activity-meta">
-                            <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
-                          </span>
-                          <span className="profile-page__activity-side">
-                            <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                          </span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <ProfileActivityListSkeleton />
                 </div>
               </section>
             </div>

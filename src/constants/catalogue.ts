@@ -1,13 +1,10 @@
 import type { CatalogueFilters, CatalogueFilterKey } from "../types";
 import type { GameDatabaseResult } from "../data";
 
-export const gameResultLimit = 200;
 export const cataloguePageSize = 20;
 export const catalogueChunkPageCount = 10;
 export const catalogueChunkSize = cataloguePageSize * catalogueChunkPageCount;
 export const searchDebounceMs = 300;
-export const catalogueFilterLimit = 120;
-export const hiddenLibraryAppIds = new Set(["228980"]);
 export const favoriteGamesStorageKey = "ghostbox:favorites:v1";
 export const userCollectionsStorageKey = "ghostbox:user-collections:v1";
 export const steamProfileStorageKey = "ghostbox:steam-profile:v1";

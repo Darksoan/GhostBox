@@ -1,8 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { GameDatabaseRequest } from "../data";
 import {
-  loadGameAchievementDetails,
-  loadGameDetails,
   loadGameStoreDetails,
   loadGamesOrThrow,
 } from "../data";
@@ -99,17 +97,6 @@ export function useGamesQuery(
   });
 }
 
-export function useGameDetailsQuery(
-  gameId: string,
-  options: GamesQueryOptions = {}
-) {
-  return useQuery({
-    queryKey: gamesQueryKeys.details(gameId),
-    queryFn: () => loadGameDetails(gameId),
-    enabled: Boolean(gameId) && (options.enabled ?? true),
-  });
-}
-
 export function useGameStoreDetailsQuery(
   gameId: string,
   options: GamesQueryOptions = {}
@@ -117,17 +104,6 @@ export function useGameStoreDetailsQuery(
   return useQuery({
     queryKey: gamesQueryKeys.storeDetails(gameId),
     queryFn: () => loadGameStoreDetails(gameId),
-    enabled: Boolean(gameId) && (options.enabled ?? true),
-  });
-}
-
-export function useGameAchievementDetailsQuery(
-  gameId: string,
-  options: GamesQueryOptions = {}
-) {
-  return useQuery({
-    queryKey: gamesQueryKeys.achievementDetails(gameId),
-    queryFn: () => loadGameAchievementDetails(gameId),
     enabled: Boolean(gameId) && (options.enabled ?? true),
   });
 }

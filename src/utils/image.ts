@@ -6,12 +6,9 @@ import {
   normalizeGameCacheId,
 } from "./gameCache";
 import {
-  imageSourceCache,
   uniqueSources,
   cssImageUrl,
   preloadImageSources,
-  preloadBrowserImage,
-  resolveCachedImageSource,
 } from "./imageCache";
 import { preloadGameModalModule } from "./gameModalLoader";
 
@@ -87,23 +84,6 @@ export function getPriorityScreenshotSources(
       (index) => screenshots[(index + screenshots.length) % screenshots.length]
     )
   );
-}
-
-export function gameHeaderSources(game: GhostBoxGame) {
-  const appId = getGameAppId(game);
-  const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
-
-  return uniqueSources([
-    game.coverUrl,
-    ...(game.coverFallbacks ?? []),
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    screenshotFallback,
-  ]);
 }
 
 export function gameCatalogueHeaderSources(game: GhostBoxGame) {
@@ -405,27 +385,6 @@ export function gameHeroCapsuleSources(game: GhostBoxGame) {
   ]);
 }
 
-export function gameMainCapsuleSources(game: GhostBoxGame) {
-  const appId = getGameAppId(game);
-
-  return uniqueSources([
-    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
-    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
-  ]);
-}
-
 export function gameLogoSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
 
@@ -453,29 +412,6 @@ export function gameModalAssetSources(game: GhostBoxGame, activeScreenshot = 0) 
 
 export function preloadGamePortraitSources(game: GhostBoxGame) {
   preloadImageSources(gamePortraitPreviewSources(game), { limit: 4, idle: true });
-}
-
-export function preloadGameHeroCapsuleSources(game: GhostBoxGame) {
-  preloadImageSources(gameHeroCapsuleSources(game), { limit: 3, idle: true });
-}
-
-export function preloadGameHeaderSources(game: GhostBoxGame) {
-  preloadImageSources(gameHeaderSources(game), { limit: 3, idle: true });
-}
-
-export function preloadGameHeaderOnlySources(game: GhostBoxGame) {
-  preloadImageSources(gameHeaderOnlySources(game), { limit: 3, idle: true });
-}
-
-export function preloadGameHeroSources(game: GhostBoxGame) {
-  preloadImageSources(
-    uniqueSources([...gameHeroSources(game), ...gameLogoSources(game)]),
-    { limit: 6, idle: true }
-  );
-}
-
-export function preloadGameLogoSources(game: GhostBoxGame) {
-  preloadImageSources(gameLogoSources(game), { limit: 3, decode: true });
 }
 
 export function preloadGameModalAssets(
@@ -564,36 +500,6 @@ export function preloadGameListAssets(
   });
 }
 
-export async function preloadGameListAssetsReady(
-  games: GhostBoxGame[],
-  options: GameListPreloadOptions = {}
-) {
-  const variant = options.variant ?? "header";
-  const limit = options.limit ?? games.length;
-
-  const sources = games.slice(0, limit).flatMap((game) => {
-    if (variant === "portrait") return gamePortraitPreviewSources(game).slice(0, 1);
-    if (variant === "hero") {
-      return uniqueSources([...gameHeroSources(game), ...gameLogoSources(game)]).slice(0, 1);
-    }
-
-    if (variant === "catalogueHeader") {
-      return gameCatalogueHeaderSources(game).slice(0, 1);
-    }
-
-    return gameHeaderOnlySources(game).slice(0, 1);
-  });
-
-  await Promise.all(
-    uniqueSources(sources).map(async (source) => {
-      const resolvedSource = await resolveCachedImageSource(source);
-      await preloadBrowserImage(resolvedSource, {
-        decode: options.decode ?? true,
-      });
-    })
-  );
-}
-
 export function preloadProfileImages(
   profile: { avatarUrl?: string; bannerUrl?: string } | null | undefined
 ) {
@@ -623,8 +529,4 @@ export function gameStyle(game: GhostBoxGame): import("react").CSSProperties {
   return {
     "--accent": game.accent,
   } as import("react").CSSProperties;
-}
-
-export function getImageFromCache(source: string) {
-  return imageSourceCache.get(source);
 }

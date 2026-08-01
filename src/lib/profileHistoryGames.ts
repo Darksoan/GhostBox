@@ -1,6 +1,10 @@
 import type { GhostBoxGame } from "../data";
 import type { BackupDetails, BackupSettings } from "../types";
 import type { SteamAchievement } from "../data";
+import {
+  getUnlockedAchievementCount,
+  isAchievementUnlocked,
+} from "../utils/achievementStats";
 import { isSteamTitlePlaceholder, normalizeSteamGameTitle } from "../utils/steamTitles";
 
 function normalizeAchievementKey(value: string) {
@@ -25,13 +29,6 @@ export function upsertProfileHistoryGame(
   ].slice(0, 50);
 }
 
-export function removeProfileHistoryGameByAppId(
-  games: GhostBoxGame[],
-  appId: string
-) {
-  return games.filter((game) => game.appId !== appId);
-}
-
 export function getBackupRecordLatestKey(
   record: BackupSettings["backupRecords"][string]
 ) {
@@ -45,13 +42,7 @@ export function getBackupRecordLatestKey(
 
 export function countUnlockedAchievements(game: GhostBoxGame | undefined) {
   if (!game) return 0;
-
-  const explicitUnlocked = (game.achievementList ?? []).filter(
-    (achievement) =>
-      achievement.unlocked === true || Boolean(achievement.unlockedAt)
-  ).length;
-
-  return Math.max(explicitUnlocked, game.achievements.unlocked);
+  return getUnlockedAchievementCount(game);
 }
 
 export function mergeGameDetailsPreservingAchievements(
@@ -78,10 +69,7 @@ export function mergeGameDetailsPreservingAchievements(
   const unlocked = Math.max(
     gameUnlocked,
     detailsUnlocked,
-    achievementList.filter(
-      (achievement) =>
-        achievement.unlocked === true || Boolean(achievement.unlockedAt)
-    ).length
+    achievementList.filter(isAchievementUnlocked).length
   );
   const total = Math.max(
     game.achievements?.total ?? 0,

@@ -12,7 +12,3 @@ const loadedPages = new Set<Page>();
 export function markPageLoaded(page: Page): void {
   loadedPages.add(page);
 }
-
-export function isPageLoaded(page: Page): boolean {
-  return loadedPages.has(page);
-}

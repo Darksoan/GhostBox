@@ -91,6 +91,35 @@
   animation: subscription-premium-border-shine #{$duration} linear infinite;
 }
 
+/// Canonical uppercase section label. The `.eyebrow` class is this mixin;
+/// use the class in markup you control, the mixin when the selector is fixed
+/// (a `dt`, a `span` inside a component block).
+@mixin eyebrow {
+  color: var(--text-secondary);
+  font-size: var(--fs-200);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-100);
+  text-transform: uppercase;
+}
+
+/// Borderless button that only carries an icon/label. Callers still set their
+/// own padding and sizing.
+@mixin ghost-button {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/// Single-line ellipsis. Needs a constrained parent to do anything.
+@mixin truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @mixin type-label {
   font-size: var(--fs-100);
   line-height: var(--lh-100);

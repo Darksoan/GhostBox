@@ -70,39 +70,3 @@ export function buildSteamOwnedGamesFromPlaytimes(
     })
     .filter((game): game is GhostBoxGame => game !== null);
 }
-
-export function buildSteamOwnedGamesFromSnapshot(
-  snapshot: GamePlaytimeSnapshot,
-): GhostBoxGame[] {
-  return buildSteamOwnedGamesFromPlaytimes(
-    Object.values(snapshot)
-      .filter((entry) => (entry as typeof entry & { source?: string }).source === "steam")
-      .map((entry) => ({
-        appId: entry.appId,
-        playtimeForever: Math.floor(entry.playTimeInMilliseconds / 60_000),
-        rtimeLastPlayed: entry.lastTimePlayed
-          ? Math.floor(Date.parse(entry.lastTimePlayed) / 1000)
-          : 0,
-      })),
-    snapshot,
-  );
-}
-
-export function mergeSteamOwnedLibraryGames(
-  localGames: GhostBoxGame[],
-  steamOwnedGames: GhostBoxGame[],
-  showSteamGames: boolean,
-) {
-  if (!showSteamGames || steamOwnedGames.length === 0) return localGames;
-
-  const localAppIds = new Set(localGames.map((game) => game.appId));
-  const nextGames = [...localGames];
-
-  for (const game of steamOwnedGames) {
-    if (localAppIds.has(game.appId)) continue;
-    localAppIds.add(game.appId);
-    nextGames.push(game);
-  }
-
-  return nextGames;
-}

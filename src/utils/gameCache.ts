@@ -2,10 +2,8 @@ import type { GhostBoxGame } from "../data";
 import {
   loadGameAchievementDetails,
   loadGameDetails,
-  loadGameReviews,
   loadGameStoreDetails,
 } from "../data";
-import type { SteamGameReviewsResult } from "../lib/ghostboxApi.types";
 
 export const gameDetailsCache = new Map<string, GhostBoxGame | null>();
 export const gameDetailsRequestCache = new Map<
@@ -23,11 +21,6 @@ export const gameAchievementDetailsRequestCache = new Map<
   Promise<GhostBoxGame | null>
 >();
 const gameAchievementNegativeCache = new Map<string, number>();
-export const gameReviewsCache = new Map<string, SteamGameReviewsResult>();
-export const gameReviewsRequestCache = new Map<
-  string,
-  Promise<SteamGameReviewsResult>
->();
 const queuedGameDetailsPreloadIds = new Set<string>();
 export let hasLoadedCatalogueGlobally = false;
 
@@ -150,35 +143,6 @@ export function loadGameAchievementDetailsCached(gameId: string) {
     },
     { cacheEmpty: false }
   );
-}
-
-export function loadGameReviewsCached(
-  gameId: string,
-  language: "all" | "brazilian" | "english",
-  reviewType: "all" | "positive" | "negative" = "all"
-) {
-  const normalizedGameId = normalizeGameCacheId(gameId);
-  const cacheKey = `${normalizedGameId}:${language}:${reviewType}`;
-  if (gameReviewsCache.has(cacheKey)) {
-    return Promise.resolve(gameReviewsCache.get(cacheKey) ?? { success: 0, reviews: [] });
-  }
-
-  const pending = gameReviewsRequestCache.get(cacheKey);
-  if (pending) return pending;
-
-  const request = loadGameReviews(normalizedGameId, language, reviewType)
-    .then((result) => {
-      if (result.success === 1) {
-        gameReviewsCache.set(cacheKey, result);
-      }
-      return result;
-    })
-    .finally(() => {
-      gameReviewsRequestCache.delete(cacheKey);
-    });
-
-  gameReviewsRequestCache.set(cacheKey, request);
-  return request;
 }
 
 export function preloadGameDetailsCached(gameId: string) {

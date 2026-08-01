@@ -1,26 +1,18 @@
-import type { GhostBoxGame, SteamAchievement } from "../data";
-import { isSteamTitlePlaceholder } from "./steamTitles";
+import type { GhostBoxGame } from "../data";
+import {
+  getAchievementTotal,
+  getRicherAchievementGame,
+  getUnlockedAchievementCount,
+  isAchievementUnlocked,
+} from "./achievementStats";
 
-export function isProfileAchievementUnlocked(achievement: SteamAchievement) {
-  return achievement.unlocked === true;
-}
-
-export function getProfileUnlockedAchievementCount(game: GhostBoxGame) {
-  let explicitUnlocked = 0;
-  for (const achievement of game.achievementList ?? []) {
-    if (isProfileAchievementUnlocked(achievement)) explicitUnlocked += 1;
-  }
-
-  return Math.max(explicitUnlocked, game.achievements?.unlocked ?? 0);
-}
-
-export function getProfileAchievementTotal(game: GhostBoxGame) {
-  return Math.max(
-    game.achievementList?.length ?? 0,
-    game.achievements?.total ?? 0,
-    getProfileUnlockedAchievementCount(game)
-  );
-}
+// Achievement counting lives in `achievementStats`. These aliases keep the
+// profile-flavoured names their call sites already use.
+export {
+  isAchievementUnlocked as isProfileAchievementUnlocked,
+  getUnlockedAchievementCount as getProfileUnlockedAchievementCount,
+  getAchievementTotal as getProfileAchievementTotal,
+};
 
 const steamSoftwareLabelMarkers = [
   "software",
@@ -66,50 +58,20 @@ export function isRecognizedSteamProfileGame(
 ) {
   if (playtimeInMilliseconds <= 0) return false;
   // Require at least one unlocked achievement — total-only (e.g. 0 of 53) is not enough.
-  if (getProfileUnlockedAchievementCount(game) <= 0) return false;
+  if (getUnlockedAchievementCount(game) <= 0) return false;
   if (isSteamSoftwareLikeGame(game)) return false;
   return true;
 }
 
-function preferProfileGameTitle(
-  current: GhostBoxGame,
-  incoming: GhostBoxGame,
-  richer: GhostBoxGame
-) {
-  if (isSteamTitlePlaceholder(richer.title, richer.appId)) {
-    if (!isSteamTitlePlaceholder(current.title, current.appId)) return current.title;
-    if (!isSteamTitlePlaceholder(incoming.title, incoming.appId)) return incoming.title;
-  }
-
-  return richer.title;
-}
-
+/**
+ * Profile flavour of the richer-game pick: history and local appcache entries often
+ * arrive titled "STEAM APP 242760", so a real title from the losing side wins.
+ */
 export function getRicherProfileAchievementGame(
   current: GhostBoxGame | undefined,
-  incoming: GhostBoxGame
+  incoming: GhostBoxGame,
 ) {
-  if (!current) return incoming;
-
-  const currentTotal = getProfileAchievementTotal(current);
-  const incomingTotal = getProfileAchievementTotal(incoming);
-  const currentUnlocked = getProfileUnlockedAchievementCount(current);
-  const incomingUnlocked = getProfileUnlockedAchievementCount(incoming);
-
-  let richer: GhostBoxGame;
-
-  if (incomingTotal > currentTotal) richer = incoming;
-  else if (incomingTotal < currentTotal) richer = current;
-  else if (incomingUnlocked > currentUnlocked) richer = incoming;
-  else if (incomingUnlocked < currentUnlocked) richer = current;
-  else {
-    richer = (incoming.achievementList?.length ?? 0) >=
-      (current.achievementList?.length ?? 0)
-      ? incoming
-      : current;
-  }
-
-  return {
-    ...richer,
-    title: preferProfileGameTitle(current, incoming, richer),
-  };
+  return getRicherAchievementGame(current, incoming, {
+    preferNonPlaceholderTitle: true,
+  });
 }

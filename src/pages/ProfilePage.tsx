@@ -35,7 +35,10 @@ import { GameGrid } from "../components/ui/GameCard";
 import {
   ContextMenu,
 } from "../components/ui/ContextMenu";
-import { EmptyState } from "../components/ui/LoadingStates";
+import {
+  EmptyState,
+  ProfileActivityListSkeleton,
+} from "../components/ui/LoadingStates";
 import { PaginationControls } from "../components/ui/PaginationControls";
 import { useCollectionContextMenu } from "../hooks/useCollectionContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
@@ -49,7 +52,6 @@ import {
 } from "../hooks/useCachedImageSources";
 import {
   gameSteamHeaderFirstSources,
-  getGameAppId,
   layeredImageStyle,
   preloadGameListAssets,
   preloadProfileImages,
@@ -126,15 +128,11 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
   t: (key: string) => string;
   onOpenGame: (game: GhostBoxGame) => void;
 }) {
-  const appId = getGameAppId(game);
   const coverSources = useCachedImageSources(gameSteamHeaderFirstSources(game));
   const {
     source: headerSource,
     loaded: headerLoaded,
-  } = useLoadableImageCover(coverSources, {
-    appId,
-    kind: "header",
-  });
+  } = useLoadableImageCover(coverSources);
 
   function preloadActivityCover() {
     preloadGameListAssets([displayGame], {
@@ -614,10 +612,6 @@ function withResolvedProfileGameTitle(
   return { ...game, title: resolvedTitle };
 }
 
-function mergeProfileGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
-  return mergeGameCardData(game, details);
-}
-
 function achievementShowcaseKey(
   game: GhostBoxGame,
   achievement: SteamAchievement
@@ -908,7 +902,7 @@ export function ProfilePage({
 
     const addGame = (game: GhostBoxGame) => {
       const current = map.get(game.appId);
-      map.set(game.appId, current ? mergeProfileGameCardData(current, game) : game);
+      map.set(game.appId, current ? mergeGameCardData(current, game) : game);
     };
 
     for (const game of achievementHistoryGames) addGame(game);
@@ -927,7 +921,7 @@ export function ProfilePage({
 
       return favoriteGames.map((game) => {
         const details = enrichedGameByAppId.get(game.appId);
-        return details ? mergeProfileGameCardData(game, details) : game;
+        return details ? mergeGameCardData(game, details) : game;
       });
     },
     [enrichedGameByAppId, favoriteGames, shouldBuildCollectionGameData]
@@ -939,7 +933,7 @@ export function ProfilePage({
 
       return addedLibraryGames.map((game) => {
         const details = enrichedGameByAppId.get(game.appId);
-        return details ? mergeProfileGameCardData(game, details) : game;
+        return details ? mergeGameCardData(game, details) : game;
       });
     },
     [addedLibraryGames, enrichedGameByAppId, shouldBuildCollectionGameData]
@@ -949,15 +943,19 @@ export function ProfilePage({
     const map = new Map<string, GhostBoxGame>();
     if (!shouldBuildCollectionGameData) return map;
 
-    const addGame = (game: GhostBoxGame) => {
-      const details = enrichedGameByAppId.get(game.appId);
-      map.set(game.id, details ? mergeProfileGameCardData(game, details) : game);
-    };
+    // Both lists were already merged against `enrichedGameByAppId` above. Merging
+    // them again is not a no-op: the second pass re-runs the richer-game pick, and
+    // an equal-length tie resolves to `details`, which can drop achievements that
+    // only the game side carried.
+    for (const game of enrichedAddedLibraryGames) map.set(game.id, game);
+    for (const game of enrichedFavoriteGames) map.set(game.id, game);
 
-    for (const game of enrichedAddedLibraryGames) addGame(game);
-    for (const game of enrichedFavoriteGames) addGame(game);
+    // Collection games are raw, so they still need the merge.
     for (const collection of userCollections) {
-      for (const game of collection.games ?? []) addGame(game);
+      for (const game of collection.games ?? []) {
+        const details = enrichedGameByAppId.get(game.appId);
+        map.set(game.id, details ? mergeGameCardData(game, details) : game);
+      }
     }
     return map;
   }, [enrichedAddedLibraryGames, enrichedFavoriteGames, enrichedGameByAppId, shouldBuildCollectionGameData, userCollections]);
@@ -2129,29 +2127,7 @@ export function ProfilePage({
                       ) : null}
                       </>
                     ) : !isOverviewDataReady ? (
-                      <div
-                        className="profile-page__activity-list profile-page__activity-list--skeleton"
-                        aria-hidden="true"
-                      >
-                        {[0, 1, 2].map((index) => (
-                          <div
-                            key={index}
-                            className="profile-page__activity-card profile-page__activity-card--skeleton"
-                          >
-                            <span className="profile-page__activity-cover-button" aria-hidden="true">
-                              <span className="profile-page__activity-game-cover profile-page__skeleton-block" />
-                            </span>
-                            <span className="profile-page__activity-main" aria-hidden="true">
-                              <span className="profile-page__activity-meta">
-                                <span className="profile-page__skeleton-line profile-page__skeleton-line--title" />
-                              </span>
-                              <span className="profile-page__activity-side">
-                                <span className="profile-page__skeleton-line profile-page__skeleton-line--value" />
-                              </span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                      <ProfileActivityListSkeleton />
                     ) : null}
                   </div>
                 </section>

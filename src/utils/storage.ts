@@ -6,14 +6,12 @@ import type {
 } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { StartupPage, UserCollection, SteamProfile } from "../types";
-import { parseLastPlayed } from "./time";
 import {
   favoriteGamesStorageKey,
   userCollectionsStorageKey,
   steamProfileStorageKey,
   cloudProfileUpdatedAtStorageKey,
   startupPageStorageKey,
-  recentPlayedGamesStorageKey,
   profileHistoryGamesStorageKey,
   showSteamGamesStorageKey,
   personalCalendarStorageKey,
@@ -25,7 +23,6 @@ import {
   notificationsLastSeenStorageKey,
   autoRestoredCloudSavesStorageKey,
 } from "../constants/catalogue";
-import { isSteamTitlePlaceholder } from "./steamTitles";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
 export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements" | "perfect";
@@ -67,13 +64,6 @@ function storedString(value: unknown, fallback = "") {
 
 function storedNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function hasCompletedPlaySession(game: GhostBoxGame) {
-  return (
-    Number.isFinite(parseLastPlayed(game.lastTimePlayed)) &&
-    !isSteamTitlePlaceholder(game.title, game.appId)
-  );
 }
 
 function storedBannerPosition(value: unknown) {
@@ -404,51 +394,6 @@ export function writeStoredFavoriteGames(favoriteGames: GhostBoxGame[]) {
   }
 }
 
-export function readStoredRecentPlayedGames(): GhostBoxGame[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(recentPlayedGamesStorageKey) ?? "[]"
-    ) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    const games: GhostBoxGame[] = [];
-    const seenAppIds = new Set<string>();
-
-    parsed.forEach((game) => {
-      const recentGame = normalizeStoredFavoriteGame(game);
-      if (
-        !recentGame ||
-        !hasCompletedPlaySession(recentGame) ||
-        seenAppIds.has(recentGame.appId)
-      ) return;
-
-      seenAppIds.add(recentGame.appId);
-      games.push(recentGame);
-    });
-
-    return games.slice(0, recentLibrarySessionLimit);
-  } catch {
-    return [];
-  }
-}
-
-export function writeStoredRecentPlayedGames(games: GhostBoxGame[]) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(
-      recentPlayedGamesStorageKey,
-      JSON.stringify(
-        games.filter(hasCompletedPlaySession).slice(0, recentLibrarySessionLimit)
-      )
-    );
-  } catch {
-    // Recent games still work during the session if localStorage is unavailable.
-  }
-}
-
 export function readStoredProfileHistoryGames(): GhostBoxGame[] {
   if (typeof window === "undefined") return [];
 
@@ -492,19 +437,6 @@ export function writeStoredProfileHistoryGames(games: GhostBoxGame[]) {
   } catch {
     // Profile history still works during the session if localStorage is unavailable.
   }
-}
-
-export function readStoredShowSteamGames(): boolean {
-  // Steam account games are never auto-listed in the library.
-  // Keep the storage helper for compatibility, but always return false.
-  if (typeof window === "undefined") return false;
-
-  try {
-    window.localStorage.setItem(showSteamGamesStorageKey, "false");
-  } catch {
-    // Ignore storage failures.
-  }
-  return false;
 }
 
 export function writeStoredShowSteamGames(value: boolean) {
@@ -805,8 +737,6 @@ export function writeStoredLibrarySortBy(sortBy: LibrarySortBy) {
     // The setting still works during the session if localStorage is unavailable.
   }
 }
-
-/* Faixa espelha o clamp do worker em SteamKitPocRunner: fora dela o valor é ignorado. */
 
 export function readStoredOverviewSortBy(): OverviewSortBy {
   if (typeof window === "undefined") return "recent";
