@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
@@ -1676,7 +1676,6 @@ function HomeWishlistRecommendations({
   recommendations,
   loading,
   language,
-  seeMore,
   onOpenGame,
   onGameContextMenu,
 }: {
@@ -1685,7 +1684,6 @@ function HomeWishlistRecommendations({
   recommendations: HomeWishlistRecommendation[];
   loading: boolean;
   language: "pt" | "en";
-  seeMore: (count: number) => string;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -1725,8 +1723,9 @@ function HomeWishlistRecommendations({
             type="button"
             className="home-wishlist__more"
             onClick={() => setExpanded(true)}
+            aria-label={language === "en" ? "Show more" : "Ver mais"}
           >
-            {seeMore(hiddenCount)}
+            <ChevronDown size={15} strokeWidth={2.25} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -2208,7 +2207,6 @@ export function HomePage({
         recommendations={wishlistRecommendations}
         loading={isLoadingWishlistRecommendations}
         language={appearance.language}
-        seeMore={(count) => t("home.seeMore", { count })}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

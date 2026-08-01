@@ -2187,7 +2187,7 @@ p {
     border: none;
     border-radius: var(--radius-lg);
     background: var(--surface-option);
-    box-shadow: var(--shadow-3);
+    box-shadow: none;
     color: var(--text-secondary);
     font-size: var(--fs-100);
     font-weight: var(--weight-semibold);
@@ -3161,7 +3161,11 @@ p {
 
 
 .home-wishlist__more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   align-self: center;
+  margin-block-end: var(--space-8);
   border: 0;
   background: transparent;
   color: var(--text-tertiary);
@@ -6449,7 +6453,7 @@ p {
     width: 100%;
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-modal);
+    background: var(--surface-option-hover);
     color: var(--text-primary);
     font: inherit;
     font-size: var(--fs-300);
@@ -11430,7 +11434,7 @@ html.no-backdrop-blur {
     min-width: 128px;
     min-height: 36px;
     border-color: var(--border-hover);
-    background: var(--surface-deep);
+    background: var(--surface-option);
     transition:
       background var(--motion-fast) var(--ease),
       border-color var(--motion-fast) var(--ease);
@@ -11438,7 +11442,7 @@ html.no-backdrop-blur {
     &:hover,
     &:focus-visible {
       border-color: var(--border-hover);
-      background: var(--surface-hover);
+      background: var(--surface-option-hover);
     }
   }
 
@@ -11848,7 +11852,6 @@ html.no-backdrop-blur {
 
     &:hover {
       background: var(--sidebar-selector);
-      color: var(--text-primary);
     }
 
     &:disabled {
@@ -11999,6 +12002,7 @@ html.no-backdrop-blur {
     width: 34px;
     height: 34px;
     padding: 0;
+    cursor: pointer;
   }
 
   &__gear-button {
