@@ -24,12 +24,27 @@ export function CatalogueHoverPreview({ game }: CatalogueHoverPreviewProps) {
     string | null
   >(null);
   const readyScreenshotSourcesRef = useRef<Set<string>>(new Set());
+  const screenshotSourceKey = screenshotSources.join("\n");
   const screenshotKey = cachedScreenshotSources.join("\n");
 
   useEffect(() => {
     readyScreenshotSourcesRef.current = new Set();
     setActiveScreenshotSource(null);
-  }, [screenshotKey]);
+  }, [screenshotSourceKey]);
+
+  useEffect(() => {
+    setActiveScreenshotSource((currentSource) => {
+      if (currentSource && cachedScreenshotSources.includes(currentSource)) {
+        return currentSource;
+      }
+
+      return getNextReadyScreenshotSource(
+        cachedScreenshotSources,
+        readyScreenshotSourcesRef.current,
+        null
+      );
+    });
+  }, [cachedScreenshotSources]);
 
   useEffect(() => {
     if (cachedScreenshotSources.length <= 1) return;

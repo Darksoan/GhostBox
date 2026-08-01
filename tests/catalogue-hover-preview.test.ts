@@ -33,6 +33,13 @@ describe("Catalogue hover preview", () => {
         node.type === "rule" && node.selector === ".catalogue-hover-preview__credit"
     );
     expect(creditRule?.toString()).toContain("font-weight: var(--weight-medium)");
+
+    const screenshotRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" &&
+        node.selector === ".catalogue-hover-preview__screenshot"
+    );
+    expect(screenshotRule?.toString()).not.toContain("transition:");
   });
 
   it("keeps preview copy localized", () => {
