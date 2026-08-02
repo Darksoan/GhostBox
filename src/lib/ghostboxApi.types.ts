@@ -1,5 +1,6 @@
 import type {
   AddGameResult,
+  FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
   HomeResult,
@@ -20,6 +21,7 @@ import type {
 
 export type {
   AddGameResult,
+  FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
   HomeResult,

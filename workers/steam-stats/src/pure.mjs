@@ -71,6 +71,34 @@ export function mergeGlobalPercentages(achievements, percentageMap) {
   }));
 }
 
+/**
+ * Curation only — every price/discount field from featuredcategories is
+ * dropped on purpose (final_price, original_price, discount_percent,
+ * discounted, discount_expiration, currency). This proxy exists to answer
+ * "what does Steam feature", never "how much does it cost".
+ */
+function normalizeFeaturedItems(items) {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    const appId = String(item?.id ?? "").trim();
+    const name = String(item?.name ?? "").trim();
+    if (!/^\d+$/.test(appId) || !name || seen.has(appId)) continue;
+    seen.add(appId);
+    out.push({ appId, name, headerImage: String(item?.header_image ?? "").trim() });
+  }
+  return out;
+}
+
+export function normalizeFeaturedCategories(payload) {
+  return {
+    topSellers: normalizeFeaturedItems(payload?.top_sellers?.items),
+    newReleases: normalizeFeaturedItems(payload?.new_releases?.items),
+    comingSoon: normalizeFeaturedItems(payload?.coming_soon?.items),
+  };
+}
+
 export function parseSimilarAppIds(html, sourceAppId) {
   const marker = 'data-ds-appid="';
   const appIds = [];

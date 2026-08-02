@@ -104,9 +104,10 @@ describe("rotates", () => {
     expect(rotates(search("?limit=200&offset=0&seed=20260801"))).toBe(true);
   });
 
-  it("does not rotate text searches or recentlyAdded", () => {
+  it("does not rotate text searches, recentlyAdded, or playingNow", () => {
     expect(rotates(search("?q=portal&seed=20260801"))).toBe(false);
     expect(rotates(search("?sort=recentlyAdded&seed=20260801"))).toBe(false);
+    expect(rotates(search("?sort=playingNow&seed=20260801"))).toBe(false);
   });
 
   it("does not rotate facet-only requests", () => {
@@ -164,11 +165,5 @@ describe("rotation cache keys", () => {
     const first = canonicalSearchKey(search("?q=portal&seed=20260801"), "2026-01-01");
     const second = canonicalSearchKey(search("?q=portal&seed=20260802"), "2026-01-01");
     expect(first).toBe(second);
-  });
-
-  it("separates match=any from match=all", () => {
-    const all = canonicalSearchKey(search("?genres=RPG&limit=20"), "2026-01-01");
-    const any = canonicalSearchKey(search("?genres=RPG&limit=20&match=any"), "2026-01-01");
-    expect(all).not.toBe(any);
   });
 });

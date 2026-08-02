@@ -1,4 +1,5 @@
 import {
+  normalizeFeaturedCategories,
   normalizeSchemaAchievements,
   normalizeGlobalPercentages,
   mergeGlobalPercentages,
@@ -177,6 +178,9 @@ const tagsFreshTtlSeconds = 12 * 60 * 60;
 const tagsCacheTtlSeconds = 24 * 60 * 60;
 const reviewsFreshTtlSeconds = 20 * 60;
 const reviewsCacheTtlSeconds = 6 * 60 * 60;
+const featuredFreshTtlSeconds = 30 * 60;
+const featuredCacheTtlSeconds = 6 * 60 * 60;
+const featuredRegions = { br: "portuguese", us: "english" } as const;
 const similarFreshTtlSeconds = 14 * 24 * 60 * 60;
 const similarEmptyFreshTtlSeconds = 60 * 60;
 const similarCacheTtlSeconds = 30 * 24 * 60 * 60;
@@ -399,6 +403,17 @@ async function putEdgeCache(
 
 function reviewsCacheKey(appId: string, language: string, reviewType: string) {
   return `steam:v9:reviews:${appId}:${language}:${reviewType}`;
+}
+
+function featuredCacheKey(cc: string, language: string) {
+  return `steam:v9:featured:${cc}:${language}`;
+}
+
+/** Only two regions are wired up today (pt->br, en->us) — anything else falls back to br. */
+function featuredRegion(url: URL): { cc: keyof typeof featuredRegions; language: string } {
+  const cc = url.searchParams.get("cc");
+  if (cc === "us") return { cc: "us", language: featuredRegions.us };
+  return { cc: "br", language: featuredRegions.br };
 }
 
 function similarCacheKey(appId: string) {
@@ -2015,6 +2030,60 @@ async function handleGameReviews(request: Request, env: Env, context: ExecutionC
   }
 }
 
+const emptyFeatured = { topSellers: [], newReleases: [], comingSoon: [] };
+
+async function handleFeatured(request: Request, env: Env, context: ExecutionContext) {
+  if (await rateLimitExceeded(request, env)) {
+    return jsonResponse({ error: "Rate limit exceeded" }, env, 429);
+  }
+
+  const url = new URL(request.url);
+  const { cc, language } = featuredRegion(url);
+  const cacheKey = `${cc}:${language}`;
+  const edgeHit = await matchEdgeCache("/steam/featured", cacheKey);
+  if (edgeHit) return edgeHit;
+
+  const kvKey = featuredCacheKey(cc, language);
+  const cached = await env.STATS_CACHE.get<{
+    payload: ReturnType<typeof normalizeFeaturedCategories>;
+    fetchedAt: number;
+  }>(kvKey, "json");
+  const now = nowSeconds();
+  if (cached && now - cached.fetchedAt < featuredFreshTtlSeconds) {
+    const response = jsonResponse(cached.payload, env, 200, {
+      cacheStatus: "KV",
+      maxAge: Math.min(edgeCacheTtlSeconds, featuredFreshTtlSeconds),
+    });
+    await putEdgeCache("/steam/featured", cacheKey, response, context);
+    return response;
+  }
+
+  try {
+    const raw = await storeJsonFetch(
+      `https://store.steampowered.com/api/featuredcategories?cc=${cc}&l=${language}`,
+      env,
+      "store-featured"
+    );
+    const featured = normalizeFeaturedCategories(raw);
+    await env.STATS_CACHE.put(
+      kvKey,
+      JSON.stringify({ payload: featured, fetchedAt: now }),
+      { expirationTtl: featuredCacheTtlSeconds }
+    );
+    const response = jsonResponse(featured, env, 200, {
+      cacheStatus: "MISS",
+      maxAge: Math.min(edgeCacheTtlSeconds, featuredFreshTtlSeconds),
+    });
+    await putEdgeCache("/steam/featured", cacheKey, response, context);
+    return response;
+  } catch {
+    if (cached?.payload) {
+      return jsonResponse({ ...cached.payload, stale: true }, env, 200, { cacheStatus: "STALE" });
+    }
+    return jsonResponse(emptyFeatured, env, 200);
+  }
+}
+
 async function handleGameSchema(request: Request, env: Env, context: ExecutionContext) {
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId");
@@ -2332,6 +2401,8 @@ export default {
       response = await handleRecommendedTags(request, env, context);
     } else if (url.pathname === "/steam/game-reviews") {
       response = await handleGameReviews(request, env, context);
+    } else if (url.pathname === "/steam/featured") {
+      response = await handleFeatured(request, env, context);
     } else if (url.pathname === "/steam/game-schema") {
       response = await handleGameSchema(request, env, context);
     } else if (url.pathname === "/steam/similar") {

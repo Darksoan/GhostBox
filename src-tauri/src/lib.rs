@@ -1353,6 +1353,7 @@ pub fn run() {
             catalogue::database_get_game_achievement_details,
             catalogue::database_get_game_reviews,
             catalogue::catalogue_get_home,
+            catalogue::steam_get_featured,
             catalogue::steam_get_game_icon_url,
             catalogue::steam_get_game_icon_urls,
             catalogue::steam_get_local_game_icon_urls,

@@ -16,7 +16,8 @@ export function parseSearch(url: URL): SearchRequest {
     const value = Number.parseInt(url.searchParams.get(name) ?? "", 10);
     return Number.isFinite(value) ? Math.min(Math.max(value, 0), max) : fallback;
   };
-  const sort: Sort = url.searchParams.get("sort") === "recentlyAdded" ? "recentlyAdded" : "popular";
+  const sortParam = url.searchParams.get("sort");
+  const sort: Sort = sortParam === "recentlyAdded" || sortParam === "playingNow" ? sortParam : "popular";
   return {
     q: normalizeSearchText(url.searchParams.get("q") ?? ""),
     limit: integer("limit", 20, 200),
@@ -29,7 +30,6 @@ export function parseSearch(url: URL): SearchRequest {
     seed: url.searchParams.has("seed")
       ? integer("seed", rotationSeed(new Date()))
       : rotationSeed(new Date()),
-    match: url.searchParams.get("match") === "any" ? "any" : "all",
     filters: Object.fromEntries(FILTER_NAMES.map((name) => [name,
       url.searchParams.getAll(name).map((value) => value.trim()).filter(Boolean),
     ])) as SearchRequest["filters"],

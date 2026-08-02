@@ -37,7 +37,6 @@ export function normalizeGameRequest(
     includeFacets: request.includeFacets ?? false,
     facetsOnly: request.facetsOnly ?? false,
     seed: request.seed ?? 0,
-    match: request.match ?? "all",
     filters: normalizeFilters(request.filters),
   };
 }

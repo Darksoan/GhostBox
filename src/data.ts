@@ -110,20 +110,21 @@ export type GhostBoxGame = {
   recommendations?: number;
   rankingScore?: number;
   rankingTier?: number;
+  /** Live SteamSpy concurrent-player sample. Absent when there's no sample. */
+  playingNow?: number;
+  /** SteamSpy estimated owners (upper bound). Absent when there's no sample. */
+  ownersEstimate?: number;
 };
 
 export type GameDatabaseRequest = {
   query?: string;
   limit?: number;
   offset?: number;
-  sort?: "popular" | "recentlyAdded";
+  sort?: "popular" | "recentlyAdded" | "playingNow";
   includeFacets?: boolean;
   facetsOnly?: boolean;
   /** Rotation period seed; see src/utils/rotation.ts. */
   seed?: number;
-  /** "any" matches a game with at least one selected value per filter category; used for
-   * recommendation candidate pools. Defaults to "all" (require every selected value). */
-  match?: "any" | "all";
   filters?: {
     genres?: string[];
     tags?: string[];
@@ -157,6 +158,19 @@ export type HomeResult = {
   updatedAt?: string;
   source: string;
   facets?: GameDatabaseResult["facets"];
+};
+
+/** A game as Steam's featuredcategories curates it — no price/discount data by design. */
+export type FeaturedGame = {
+  appId: string;
+  name: string;
+  headerImage: string;
+};
+
+export type FeaturedResult = {
+  topSellers: FeaturedGame[];
+  newReleases: FeaturedGame[];
+  comingSoon: FeaturedGame[];
 };
 
 export type AddGameResult =
@@ -194,6 +208,10 @@ export async function loadGamesOrThrow(
   request: GameDatabaseRequest = {}
 ): Promise<GameDatabaseResult> {
   return ghostboxApi.getGamesOrThrow(request);
+}
+
+export async function loadFeatured(cc: "br" | "us"): Promise<FeaturedResult> {
+  return ghostboxApi.getFeatured(cc);
 }
 
 export async function loadGameDetails(

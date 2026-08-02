@@ -77,10 +77,6 @@ const translations: Record<Language, TranslationTree> = {
         previousScreenshot: "Screenshot anterior",
         nextScreenshot: "Próxima screenshot",
       },
-      recommended: {
-        titleForYou: "Para você",
-        titleTrending: "Em alta hoje",
-      },
     },
     profile: {
       changeBanner: "Mudar capa",
@@ -435,10 +431,6 @@ const translations: Record<Language, TranslationTree> = {
         developer: "Developer",
         previousScreenshot: "Previous screenshot",
         nextScreenshot: "Next screenshot",
-      },
-      recommended: {
-        titleForYou: "For you",
-        titleTrending: "Trending today",
       },
     },
     profile: {

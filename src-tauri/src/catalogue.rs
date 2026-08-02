@@ -1652,9 +1652,6 @@ pub async fn database_get_games(
     if let Some(sort) = sort.as_ref() {
         url.query_pairs_mut().append_pair("sort", &sort);
     }
-    if get_string(&request, "match").as_deref() == Some("any") {
-        url.query_pairs_mut().append_pair("match", "any");
-    }
     // The rotation seed must ride on the URL: it is what makes the disk cache
     // key roll over with the period instead of serving a stale day's order.
     if let Some(seed) = get_u64(&request, "seed") {
@@ -1835,6 +1832,25 @@ pub async fn database_get_game_reviews(
     }
 
     Ok(proxy_result.unwrap_or_else(|| serde_json::json!({ "success": 0, "reviews": [] })))
+}
+
+#[tauri::command]
+pub async fn steam_get_featured(
+    app: tauri::AppHandle,
+    cc: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let proxy_url = crate::settings::load_steam_stats_proxy_url();
+    let cc = if cc.as_deref() == Some("us") { "us" } else { "br" };
+    let mut url = reqwest::Url::parse(&format!("{proxy_url}/steam/featured"))
+        .map_err(|error| error.to_string())?;
+    url.query_pairs_mut().append_pair("cc", cc);
+    // Reuses the catalogue disk cache so a featured shelf still has something
+    // to show offline, same stale-while-error behavior as the other catalogue
+    // endpoints — this path just isn't one `is_valid_catalogue_response`
+    // recognizes, so it takes the permissive `_ => true` arm unchanged.
+    let (value, _updated_at, _from_cache) =
+        catalogue_cache::fetch_json_with_cache(&app, url, false).await?;
+    Ok(value)
 }
 
 #[tauri::command]

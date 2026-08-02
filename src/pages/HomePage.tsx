@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ChevronDown } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
@@ -10,6 +10,7 @@ import {
   HomeWishlistReviewSkeleton,
 } from "../components/ui/LoadingStates";
 import { SectionHeader } from "../components/ui/SectionHeader";
+import { Shelf } from "../components/ui/Shelf";
 import { useSettings } from "../context/settings";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
@@ -34,6 +35,7 @@ import {
   withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
+import { createSeedGame, type GameSeed } from "../utils/gameSeed";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime } from "../utils/time";
 import {
@@ -46,11 +48,7 @@ import {
   pickPersonalCalendarGames,
 } from "../utils/personalCalendar";
 
-type HomeGameSeed = {
-  appId: string;
-  title: string;
-  shortDescription?: string;
-};
+type HomeGameSeed = GameSeed;
 
 type HomeCategoryCardVariant = "tile" | "portrait";
 
@@ -153,59 +151,8 @@ const homeWishlistRecommendationSourceLimit = 10;
 const homeWishlistRecommendationAlgorithmVersion = "steam-morelike-v1";
 const homeWishlistCacheRefreshMs = 7 * 24 * 60 * 60 * 1000;
 
-function homeSteamCdnUrl(appId: string, asset: string) {
-  return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/${asset}`;
-}
-
 function homeGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
-}
-
-function createHomeSeedFallbackGame(
-  game: HomeGameSeed,
-  index: number,
-  subtitle = "Mais avaliados na Steam"
-): GhostBoxGame {
-  // Brand-aligned card accents only (no blue UI tints).
-  const accent = ["#ff2d35", "#f59e0b", "#35d07f", "#8b5cf6", "#c084fc"][
-    index % 5
-  ];
-  const headerImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/header.jpg`;
-  const heroImage = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/library_hero.jpg`;
-  const headerCdn = homeSteamCdnUrl(game.appId, "header.jpg");
-  const heroCdn = homeSteamCdnUrl(game.appId, "library_hero.jpg");
-  const logoCdn = homeSteamCdnUrl(game.appId, "logo.png");
-
-  return {
-    appId: game.appId,
-    id: `steam-${game.appId}`,
-    title: game.title,
-    subtitle,
-    status: "discover",
-    hours: 0,
-    rating: 0,
-    size: "Steam",
-    release: "Steam",
-    progress: 0,
-    accent,
-    cover: headerImage,
-    hero: heroImage,
-    coverUrl: headerImage,
-    heroUrl: heroImage,
-    coverFallbacks: [headerImage, headerCdn],
-    heroFallbacks: [heroImage, heroCdn, headerImage, headerCdn],
-    logo: logoCdn,
-    tags: [],
-    genres: [],
-    screenshots: [],
-    shortDescription: game.shortDescription,
-    achievements: {
-      unlocked: 0,
-      total: 0,
-      progress: 0,
-    },
-    achievementList: [],
-  };
 }
 
 function homeGameKey(game: GhostBoxGame) {
@@ -256,7 +203,7 @@ function createWishlistFallbackGames(
   titleByAppId = new Map<string, string>()
 ) {
   return appIds.map((appId, index) =>
-    createHomeSeedFallbackGame(
+    createSeedGame(
       { appId, title: titleByAppId.get(appId) || `Steam App ${appId}` },
       index
     )
@@ -264,7 +211,7 @@ function createWishlistFallbackGames(
 }
 
 function createWishlistFallbackGame(appId: string, index = 0, title?: string) {
-  return createHomeSeedFallbackGame({ appId, title: title || `Steam App ${appId}` }, index);
+  return createSeedGame({ appId, title: title || `Steam App ${appId}` }, index);
 }
 
 function preloadHomeRecommendedCover(game: GhostBoxGame) {
@@ -819,34 +766,6 @@ function getHomeExplorePreviewRows(
   return rows.filter((row) => row.length > 0);
 }
 
-/**
- * Coalesces high-frequency callbacks (e.g. scroll handlers) to at most one
- * invocation per animation frame, so we never run setState more than once per
- * painted frame during a scroll gesture.
- */
-function useRafThrottle(callback: () => void) {
-  const callbackRef = useRef(callback);
-  callbackRef.current = callback;
-  const frameRef = useRef<number | null>(null);
-
-  useEffect(
-    () => () => {
-      if (frameRef.current !== null) {
-        cancelAnimationFrame(frameRef.current);
-      }
-    },
-    []
-  );
-
-  return useCallback(() => {
-    if (frameRef.current !== null) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      callbackRef.current();
-    });
-  }, []);
-}
-
 function HomeExploreCategoryImage({ game }: { game: GhostBoxGame }) {
   const sources = gameHeaderOnlySources(game);
   const cachedSources = useCachedImageSources(sources);
@@ -965,85 +884,24 @@ function HomeExploreCategories({
   language: "pt" | "en";
   onOpenCategory: (category: HomeExploreCategory) => void;
 }) {
-  const carouselRef = useRef<HTMLDivElement | null>(null);
-  const [isAtStart, setIsAtStart] = useState(true);
-  const [isAtEnd, setIsAtEnd] = useState(false);
-  const hasControls = categories.length > 5;
-  const categoryOrderKey = categories.map((category) => category.label).join("|");
-
-  useLayoutEffect(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-
-    carousel.scrollLeft = 0;
-    setIsAtStart(true);
-    setIsAtEnd(carousel.clientWidth >= carousel.scrollWidth - 2);
-  }, [categoryOrderKey]);
-
-  const handleScroll = useRafThrottle(() => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-    setIsAtStart(carousel.scrollLeft <= 1);
-    setIsAtEnd(
-      carousel.scrollLeft + carousel.clientWidth >=
-      carousel.scrollWidth - 2
-    );
-  });
-
-  if (!categories.length) return null;
-
-  const scrollCategories = (direction: -1 | 1) => {
-    const carousel = carouselRef.current;
-    if (!carousel) return;
-
-    carousel.scrollBy({
-      left: direction * carousel.clientWidth,
-      behavior: "smooth",
-    });
-  };
-
   return (
-    <section className="home-explore" aria-label={title}>
-      <SectionHeader title={title} />
-      <div className="home-explore__rail">
-        {hasControls && (
-          <button
-            type="button"
-            className="home-explore__arrow home-explore__arrow--prev"
-            aria-label={language === "en" ? "Previous categories" : "Categorias anteriores"}
-            onClick={() => scrollCategories(-1)}
-            style={{ visibility: isAtStart ? "hidden" : "visible" }}
-          >
-            <ChevronLeft size={30} strokeWidth={2.0} aria-hidden="true" />
-          </button>
-        )}
-        <div className="home-explore__carousel" ref={carouselRef} onScroll={handleScroll}>
-          <div className="home-explore__track">
-            {categories.map((category) => (
-              <HomeExploreCard
-                key={category.label}
-                category={category}
-                allGames={allGames}
-                language={language}
-                rootRef={carouselRef}
-                onOpenCategory={onOpenCategory}
-              />
-            ))}
-          </div>
-        </div>
-        {hasControls && (
-          <button
-            type="button"
-            className="home-explore__arrow home-explore__arrow--next"
-            aria-label={language === "en" ? "Next categories" : "Próximas categorias"}
-            onClick={() => scrollCategories(1)}
-            style={{ visibility: isAtEnd ? "hidden" : "visible" }}
-          >
-            <ChevronRight size={30} strokeWidth={2.0} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-    </section>
+    <Shelf
+      blockName="home-explore"
+      title={title}
+      items={categories}
+      getKey={(category) => category.label}
+      prevLabel={language === "en" ? "Previous categories" : "Categorias anteriores"}
+      nextLabel={language === "en" ? "Next categories" : "Próximas categorias"}
+      renderItem={(category, rootRef) => (
+        <HomeExploreCard
+          category={category}
+          allGames={allGames}
+          language={language}
+          rootRef={rootRef}
+          onOpenCategory={onOpenCategory}
+        />
+      )}
+    />
   );
 }
 
@@ -1751,12 +1609,12 @@ export function HomePage({
   const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
     () =>
       topReviewedSteamGames.map((game, index) =>
-        createHomeSeedFallbackGame(game, index)
+        createSeedGame(game, index)
       )
   );
   const [homeFeaturedGames, setHomeFeaturedGames] = useState<GhostBoxGame[]>(() =>
     homeFeaturedSteamGames.map((game, index) =>
-      createHomeSeedFallbackGame(game, index, "")
+      createSeedGame(game, index, "")
     )
   );
   const [storedPersonalCalendar, setStoredPersonalCalendar] = useState<StoredPersonalCalendar | null>(() =>
@@ -1801,7 +1659,7 @@ export function HomePage({
           const detailed = await loadGameStoreDetails(game.appId).catch(
             () => null
           );
-          if (!detailed) return createHomeSeedFallbackGame(game, start + index);
+          if (!detailed) return createSeedGame(game, start + index);
           const enriched =
             game.shortDescription && !detailed.shortDescription
               ? { ...detailed, shortDescription: game.shortDescription }

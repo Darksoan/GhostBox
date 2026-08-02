@@ -7,6 +7,7 @@ import type {
   AppStatus,
   BackupDetails,
   BackupSettings,
+  FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
   GamePlaytimeSnapshot,
@@ -229,6 +230,12 @@ const emptyHomeResult: HomeResult = {
   recentlyAdded: [],
   total: 0,
   source: "tauri-stub",
+};
+
+const emptyFeaturedResult: FeaturedResult = {
+  topSellers: [],
+  newReleases: [],
+  comingSoon: [],
 };
 
 async function invokeOr<T>(
@@ -636,6 +643,10 @@ export const ghostboxApi = {
       { apiUrl: getGamesApiUrl() },
       emptyHomeResult,
     );
+  },
+
+  getFeatured(cc: "br" | "us"): Promise<FeaturedResult> {
+    return invokeOr<FeaturedResult>("steam_get_featured", { cc }, emptyFeaturedResult);
   },
 
   getGames(request?: GameDatabaseRequest): Promise<GameDatabaseResult> {

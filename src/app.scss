@@ -6023,23 +6023,6 @@ p {
   }
 }
 
-.catalogue-recommended {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  // `.catalogue-page` already pads left/right via `--space-10`; this is
-  // nested inside it, so only vertical spacing is needed here.
-  margin: 0 0 var(--space-8);
-
-  &__title {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: var(--fs-500);
-    font-weight: var(--weight-semibold);
-    line-height: 1.25;
-  }
-}
-
 .catalogue-page {
   display: flex;
   flex-direction: column;

@@ -13,7 +13,7 @@ const SOURCE = "cloudflare-d1";
 export const GAME_COLUMNS = `app_id, name, release_date, release_year, header_image,
   developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
   updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
-  metacritic_score, recommendations, ranking_score, ranking_tier`;
+  metacritic_score, recommendations, ranking_score, ranking_tier, steamspy_ccu, steamspy_owners_max`;
 
 export const POPULAR_ORDER = RANKING_ORDER;
 
@@ -42,6 +42,8 @@ interface GameRow {
   recommendations: number;
   ranking_score: number;
   ranking_tier: number;
+  steamspy_ccu: number;
+  steamspy_owners_max: number;
 }
 
 let facetsInFlight: Promise<Facets> | undefined;
@@ -127,6 +129,8 @@ export function toGame(row: GameRow, origin: string) {
     recommendations: row.recommendations,
     rankingScore: row.ranking_score,
     rankingTier: row.ranking_tier,
+    playingNow: row.steamspy_ccu || undefined,
+    ownersEstimate: row.steamspy_owners_max || undefined,
     databaseAddedAt: row.updated_at,
   };
 }
@@ -359,6 +363,9 @@ export async function getCatalogueFacets(db: D1Database, updatedAt: string): Pro
 export function searchConditions(request: SearchRequest): { sql: string; bindings: unknown[] } {
   const clauses: string[] = [];
   const bindings: unknown[] = [];
+  // "Jogando agora" is meaningless for the ~107k games with no SteamSpy sample
+  // (steamspy_ccu = 0) — without this they'd fill the entire page with zeros.
+  if (request.sort === "playingNow") clauses.push("steamspy_ccu > 0");
   const tokens = request.q.split(/\s+/).filter(Boolean);
   for (const token of tokens) {
     clauses.push("search_text LIKE ? ESCAPE '\\'");
@@ -387,8 +394,7 @@ export function searchConditions(request: SearchRequest): { sql: string; binding
       : columns[name];
     const keyLimit = name === "tags" ? "f.key < 12 AND " : "";
     const tests = values.map(() => `EXISTS (SELECT 1 FROM json_each(${jsonSource}) f WHERE ${keyLimit}lower(CAST(f.value AS TEXT)) = lower(?))`);
-    const joiner = request.match === "any" ? " OR " : " AND ";
-    clauses.push(`(${tests.join(joiner)})`);
+    clauses.push(`(${tests.join(" AND ")})`);
     bindings.push(...values);
   }
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", bindings };
@@ -490,6 +496,8 @@ export async function searchCatalogue(
     orderBindings.push(normalizedQuery, `${escapedQuery}%`, `%${escapedQuery}%`);
   } else if (request.sort === "recentlyAdded") {
     order = "updated_at DESC, CAST(app_id AS INTEGER) DESC";
+  } else if (request.sort === "playingNow") {
+    order = "steamspy_ccu DESC, CAST(app_id AS INTEGER) ASC";
   }
   const rowLimit = request.limit + 1;
   const rowsPromise = db.prepare(`SELECT ${GAME_COLUMNS} FROM games ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)

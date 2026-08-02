@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  normalizeFeaturedCategories,
   normalizeSchemaAchievements,
   normalizeGlobalPercentages,
   mergeGlobalPercentages,
@@ -39,6 +40,81 @@ test("parseSimilarAppIds extracts unique app ids", () => {
     <div data-ds-appid="440"></div>
   `;
   assert.deepEqual(parseSimilarAppIds(html, "570"), ["730", "440"]);
+});
+
+test("normalizeFeaturedCategories keeps only appId/name/headerImage", () => {
+  const rawItem = {
+    id: 3282300,
+    type: 0,
+    name: "Mistfall Hunter",
+    discounted: true,
+    discount_percent: 10,
+    original_price: 8399,
+    final_price: 7559,
+    currency: "BRL",
+    discount_expiration: 1786554016,
+    large_capsule_image: "https://example.com/large.jpg",
+    small_capsule_image: "https://example.com/small.jpg",
+    windows_available: true,
+    header_image: "https://example.com/header.jpg",
+  };
+  const result = normalizeFeaturedCategories({
+    top_sellers: { items: [rawItem] },
+    new_releases: { items: [rawItem] },
+    coming_soon: { items: [rawItem] },
+  });
+  assert.deepEqual(result, {
+    topSellers: [{ appId: "3282300", name: "Mistfall Hunter", headerImage: "https://example.com/header.jpg" }],
+    newReleases: [{ appId: "3282300", name: "Mistfall Hunter", headerImage: "https://example.com/header.jpg" }],
+    comingSoon: [{ appId: "3282300", name: "Mistfall Hunter", headerImage: "https://example.com/header.jpg" }],
+  });
+});
+
+test("normalizeFeaturedCategories never leaks a price/discount/currency field", () => {
+  const rawItem = {
+    id: 1,
+    name: "Priced Game",
+    discounted: true,
+    discount_percent: 50,
+    original_price: 1000,
+    final_price: 500,
+    currency: "USD",
+    discount_expiration: 123,
+    header_image: "https://example.com/header.jpg",
+  };
+  const result = normalizeFeaturedCategories({ top_sellers: { items: [rawItem] }, new_releases: { items: [] }, coming_soon: { items: [] } });
+  const keys = Object.keys(result.topSellers[0]);
+  for (const forbidden of ["price", "discount", "currency", "final", "original"]) {
+    assert.ok(
+      !keys.some((key) => key.toLowerCase().includes(forbidden)),
+      `expected no key containing "${forbidden}", got keys: ${keys.join(", ")}`
+    );
+  }
+  assert.deepEqual(keys.sort(), ["appId", "headerImage", "name"]);
+});
+
+test("normalizeFeaturedCategories drops items with no numeric id or empty name", () => {
+  const result = normalizeFeaturedCategories({
+    top_sellers: { items: [{ id: "not-a-number", name: "Bad" }, { id: 5, name: "" }, { id: 6, name: "Good" }] },
+    new_releases: { items: [] },
+    coming_soon: { items: [] },
+  });
+  assert.deepEqual(result.topSellers, [{ appId: "6", name: "Good", headerImage: "" }]);
+});
+
+test("normalizeFeaturedCategories de-dupes repeated app ids within a category", () => {
+  const result = normalizeFeaturedCategories({
+    top_sellers: { items: [{ id: 6, name: "Good" }, { id: 6, name: "Good again" }] },
+    new_releases: { items: [] },
+    coming_soon: { items: [] },
+  });
+  assert.equal(result.topSellers.length, 1);
+});
+
+test("normalizeFeaturedCategories tolerates a missing or malformed payload", () => {
+  assert.deepEqual(normalizeFeaturedCategories({}), { topSellers: [], newReleases: [], comingSoon: [] });
+  assert.deepEqual(normalizeFeaturedCategories(null), { topSellers: [], newReleases: [], comingSoon: [] });
+  assert.deepEqual(normalizeFeaturedCategories({ top_sellers: {} }), { topSellers: [], newReleases: [], comingSoon: [] });
 });
 
 test("normalizeSchemaAchievements maps steam schema fields", () => {

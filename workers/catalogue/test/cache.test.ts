@@ -25,6 +25,7 @@ describe("cache TTL", () => {
   it.each([
     ["?facetsOnly=1", 86400],
     ["?sort=recentlyAdded", 300],
+    ["?sort=playingNow", 300],
     ["?q=portal", 600],
     ["?tags=RPG", 600],
     ["?sort=popular", 3600],
@@ -62,6 +63,8 @@ describe("production schema", () => {
       recommendations: 821472,
       ranking_score: 0.974,
       ranking_tier: 48,
+      steamspy_ccu: 1200,
+      steamspy_owners_max: 20000000,
     }, "https://catalogue.example");
 
     expect(game).toMatchObject({
@@ -75,10 +78,47 @@ describe("production schema", () => {
       achievements: { unlocked: 0, total: 0, progress: 0 },
       popularityScore: 163.4545,
       databaseAddedAt: 1778860368375,
+      playingNow: 1200,
+      ownersEstimate: 20000000,
     });
     expect(game.genres).toHaveLength(6);
     expect(game.screenshots).toHaveLength(8);
     expect(game.coverUrl).toBe("https://catalogue.example/images/steam/apps/413150/header.jpg");
+  });
+
+  it("omits playingNow/ownersEstimate instead of leaking a zero for unsampled games", () => {
+    const game = toGame({
+      app_id: "1",
+      name: "No SteamSpy sample",
+      release_date: "",
+      release_year: "",
+      header_image: "",
+      developers_json: "[]",
+      publishers_json: "[]",
+      categories_json: "[]",
+      genres_json: "[]",
+      screenshots_json: "[]",
+      tags_json: "[]",
+      updated_at: 0,
+      popularity_score: 0,
+      popularity_rank: null,
+      steam_review_count: 0,
+      steam_positive_ratio: 0,
+      metacritic_score: 0,
+      recommendations: 0,
+      ranking_score: 0,
+      ranking_tier: 0,
+      steamspy_ccu: 0,
+      steamspy_owners_max: 0,
+    }, "https://catalogue.example");
+
+    expect(game.playingNow).toBeUndefined();
+    expect(game.ownersEstimate).toBeUndefined();
+  });
+
+  it("selects the steamspy columns needed for the playingNow sort", () => {
+    expect(GAME_COLUMNS).toContain("steamspy_ccu");
+    expect(GAME_COLUMNS).toContain("steamspy_owners_max");
   });
 
   it("builds token search and filters from real columns", () => {
@@ -96,21 +136,10 @@ describe("production schema", () => {
     const request = parseSearch(new URL(
       "https://example.com/catalogue/search?tags=Puzzle&tags=Horror&genres=Action&genres=Adventure"
     ));
-    expect(request.match).toBe("all");
     const query = searchConditions(request);
     expect(query.sql).toContain(") AND EXISTS");
     expect(query.sql).not.toContain(" OR EXISTS");
     expect(query.bindings).toEqual(["Action", "Adventure", "Puzzle", "Horror"]);
-  });
-
-  it("matches any selected value within a category when match=any", () => {
-    const request = parseSearch(new URL(
-      "https://example.com/catalogue/search?genres=Action&genres=Adventure&match=any"
-    ));
-    expect(request.match).toBe("any");
-    const query = searchConditions(request);
-    expect(query.sql).toContain(") OR EXISTS");
-    expect(query.sql).not.toContain(") AND EXISTS");
   });
 
   it("selects only real schema columns and orders by the ranking tier", () => {
@@ -119,6 +148,34 @@ describe("production schema", () => {
     expect(GAME_COLUMNS).toContain("ranking_tier");
     expect(RANKING_ORDER).toContain("ranking_tier DESC");
     expect(RANKING_ORDER).toContain("CAST(app_id AS INTEGER) ASC");
+  });
+});
+
+describe("playingNow sort", () => {
+  it("parses sort=playingNow from the query string", () => {
+    const request = parseSearch(new URL("https://example.com/catalogue/search?sort=playingNow"));
+    expect(request.sort).toBe("playingNow");
+  });
+
+  it("excludes games with no SteamSpy sample from the WHERE clause", () => {
+    const request = parseSearch(new URL("https://example.com/catalogue/search?sort=playingNow"));
+    const query = searchConditions(request);
+    expect(query.sql).toContain("steamspy_ccu > 0");
+  });
+
+  it("does not filter by steamspy_ccu for other sorts", () => {
+    const popular = searchConditions(parseSearch(new URL("https://example.com/catalogue/search?sort=popular")));
+    const recent = searchConditions(parseSearch(new URL("https://example.com/catalogue/search?sort=recentlyAdded")));
+    expect(popular.sql).not.toContain("steamspy_ccu");
+    expect(recent.sql).not.toContain("steamspy_ccu");
+  });
+
+  it("combines the ccu filter with an explicit genre filter", () => {
+    const request = parseSearch(new URL("https://example.com/catalogue/search?sort=playingNow&genres=Action"));
+    const query = searchConditions(request);
+    expect(query.sql).toContain("steamspy_ccu > 0");
+    expect(query.sql).toContain("EXISTS");
+    expect(query.sql).toMatch(/WHERE steamspy_ccu > 0 AND/);
   });
 });
 
