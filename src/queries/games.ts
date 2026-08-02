@@ -7,7 +7,7 @@ import {
 import { emptyCatalogueFilters } from "../constants/catalogue";
 import type { CatalogueFilterKey, CatalogueFilters } from "../types";
 
-const catalogueFacetsCacheVersion = "catalogue-response-v2";
+const catalogueFacetsCacheVersion = "catalogue-response-v3";
 
 function normalizeFilterValues(
   filters: Partial<CatalogueFilters> | undefined,
@@ -36,6 +36,8 @@ export function normalizeGameRequest(
     sort: request.sort ?? "popular",
     includeFacets: request.includeFacets ?? false,
     facetsOnly: request.facetsOnly ?? false,
+    seed: request.seed ?? 0,
+    match: request.match ?? "all",
     filters: normalizeFilters(request.filters),
   };
 }

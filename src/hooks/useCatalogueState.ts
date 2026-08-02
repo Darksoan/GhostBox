@@ -9,6 +9,7 @@ import {
 } from "../constants/catalogue";
 import { hasSelectedCatalogueFilters } from "../utils/filters";
 import { setHasLoadedCatalogueGlobally } from "../utils/gameCache";
+import { catalogueRotationSeed } from "../utils/rotation";
 import { useGamesQuery } from "../queries/games";
 
 function normalizeCatalogueQuery(query: string) {
@@ -20,6 +21,9 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const [catalogueFilters, setCatalogueFilters] =
     useState<CatalogueFilters>(emptyCatalogueFilters);
   const catalogueSort = "popular" as const;
+  // Fixed for the lifetime of the hook. Recomputing per render would reshuffle
+  // the pool mid-navigation and make pages repeat or skip games.
+  const [catalogueRotationSeedValue] = useState(() => catalogueRotationSeed());
   const [hasLoadedCatalogueOnce, setHasLoadedCatalogueOnce] = useState(false);
   const [lastCatalogueFacets, setLastCatalogueFacets] =
     useState<GameDatabaseResult["facets"]>();
@@ -44,9 +48,15 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
         filters: catalogueFilters,
         sort: catalogueSort,
         includeFacets: false,
+        seed: catalogueRotationSeedValue,
       },
     };
-  }, [catalogueFilters, effectiveCataloguePage, normalizedQuery]);
+  }, [
+    catalogueFilters,
+    catalogueRotationSeedValue,
+    effectiveCataloguePage,
+    normalizedQuery,
+  ]);
 
   const catalogueQuery = useGamesQuery(catalogueRequestMeta.request, {
     enabled,

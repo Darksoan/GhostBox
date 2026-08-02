@@ -1652,6 +1652,14 @@ pub async fn database_get_games(
     if let Some(sort) = sort.as_ref() {
         url.query_pairs_mut().append_pair("sort", &sort);
     }
+    if get_string(&request, "match").as_deref() == Some("any") {
+        url.query_pairs_mut().append_pair("match", "any");
+    }
+    // The rotation seed must ride on the URL: it is what makes the disk cache
+    // key roll over with the period instead of serving a stale day's order.
+    if let Some(seed) = get_u64(&request, "seed") {
+        url.query_pairs_mut().append_pair("seed", &seed.to_string());
+    }
 
     append_filter_params(&mut url, &request, "genres");
     append_filter_params(&mut url, &request, "tags");

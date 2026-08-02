@@ -195,6 +195,34 @@ fn write_cache_entry(
     .map_err(|error| error.to_string())
 }
 
+/// Drops entries past the stale window. The rotation seed is part of the cache
+/// key, so every period mints a fresh set of entries and the old ones can never
+/// be served again — without this they would accumulate forever.
+fn prune_expired_entries(app: &AppHandle) {
+    let Ok(root) = catalogue_cache_root(app) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(root.join("entries")) else {
+        return;
+    };
+    let now = current_millis();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let expired = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|contents| serde_json::from_str::<CatalogueCacheEntry>(&contents).ok())
+            .map(|cached| now.saturating_sub(cached.cached_at) > CATALOGUE_ENTRY_STALE_MAX_MS)
+            // An unreadable or malformed entry can never be served either.
+            .unwrap_or(true);
+        if expired {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 pub fn normalize_update_interval_hours(value: Option<u64>) -> u64 {
     match value {
         Some(24 | 72 | 168 | 288 | 720) => value.unwrap(),
@@ -307,8 +335,11 @@ pub async fn refresh_warm_catalogue_endpoints(
         }
     }
 
+    // The seed has to match what the client will ask for, or the warm cache
+    // entry sits under a key nobody reads.
+    let seed = rotation_seed();
     let search_url = format!(
-        "{base}/catalogue/search?limit=200&offset=0&sort=popular&facetsVersion={}&rankingVersion={}",
+        "{base}/catalogue/search?limit=200&offset=0&sort=popular&seed={seed}&facetsVersion={}&rankingVersion={}",
         crate::FACETS_VERSION,
         crate::RANKING_VERSION
     );
@@ -347,6 +378,8 @@ pub async fn refresh_warm_catalogue_endpoints(
         return None;
     }
 
+    prune_expired_entries(app);
+
     let now = current_millis();
     let previous = read_meta(app);
     let meta = CatalogueCacheMeta {
@@ -363,6 +396,13 @@ pub async fn refresh_warm_catalogue_endpoints(
     }
 
     latest_updated_at
+}
+
+/// Mirrors `rotationSeed` in workers/catalogue/src/ranking.ts (daily period).
+pub fn rotation_seed() -> u64 {
+    use chrono::Datelike;
+    let today = chrono::Utc::now().date_naive();
+    today.year() as u64 * 10000 + today.month() as u64 * 100 + today.day() as u64
 }
 
 fn should_refresh(meta: &CatalogueCacheMeta, interval_hours: u64) -> bool {
@@ -439,7 +479,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_incompatible_search_count_contract() {
+    fn accepts_search_response_whose_total_and_matched_differ() {
+        // Requiring total == matched turned any worker divergence into
+        // "invalid response", i.e. an empty catalogue with no visible error.
+        // Only the shape is contractual; see is_valid_catalogue_response.
         let url = reqwest::Url::parse("https://example.com/catalogue/search?genres=Action")
             .expect("valid URL");
         let response = serde_json::json!({
@@ -449,7 +492,21 @@ mod tests {
             "limited": false
         });
 
-        assert!(!is_valid_catalogue_response(&url, &response));
+        assert!(is_valid_catalogue_response(&url, &response));
+    }
+
+    #[test]
+    fn rejects_search_response_missing_contract_fields() {
+        let url = reqwest::Url::parse("https://example.com/catalogue/search?genres=Action")
+            .expect("valid URL");
+
+        for response in [
+            serde_json::json!({ "total": 3, "matched": 3, "limited": false }),
+            serde_json::json!({ "games": [], "matched": 3, "limited": false }),
+            serde_json::json!({ "games": [], "total": 3, "matched": 3 }),
+        ] {
+            assert!(!is_valid_catalogue_response(&url, &response));
+        }
     }
 
     #[test]

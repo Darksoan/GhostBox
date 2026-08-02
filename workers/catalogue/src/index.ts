@@ -1,5 +1,6 @@
 import { cacheControl, cacheKey, canonicalSearchKey, cloudflareCacheControl, searchTtl } from "./cache";
 import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, searchCatalogue } from "./catalogue";
+import { rotationSeed } from "./ranking";
 import { FILTER_NAMES, type Env, type SearchRequest, type Sort } from "./types";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" };
@@ -23,6 +24,12 @@ export function parseSearch(url: URL): SearchRequest {
     sort,
     includeFacets: url.searchParams.get("includeFacets") === "1",
     facetsOnly: url.searchParams.get("facetsOnly") === "1",
+    // Clients send the seed so their own disk caches rotate with it. A missing
+    // or malformed seed falls back to the current period rather than freezing.
+    seed: url.searchParams.has("seed")
+      ? integer("seed", rotationSeed(new Date()))
+      : rotationSeed(new Date()),
+    match: url.searchParams.get("match") === "any" ? "any" : "all",
     filters: Object.fromEntries(FILTER_NAMES.map((name) => [name,
       url.searchParams.getAll(name).map((value) => value.trim()).filter(Boolean),
     ])) as SearchRequest["filters"],

@@ -108,6 +108,8 @@ export type GhostBoxGame = {
   steamPositiveRatio?: number;
   metacriticScore?: number;
   recommendations?: number;
+  rankingScore?: number;
+  rankingTier?: number;
 };
 
 export type GameDatabaseRequest = {
@@ -117,6 +119,11 @@ export type GameDatabaseRequest = {
   sort?: "popular" | "recentlyAdded";
   includeFacets?: boolean;
   facetsOnly?: boolean;
+  /** Rotation period seed; see src/utils/rotation.ts. */
+  seed?: number;
+  /** "any" matches a game with at least one selected value per filter category; used for
+   * recommendation candidate pools. Defaults to "all" (require every selected value). */
+  match?: "any" | "all";
   filters?: {
     genres?: string[];
     tags?: string[];

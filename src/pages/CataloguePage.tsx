@@ -45,6 +45,9 @@ import {
   createCatalogueHoverPreviewIntent,
   createCatalogueHoverPreviewRetention,
 } from "../utils/cataloguePreview";
+import { useCatalogueRecommendations } from "../hooks/useCatalogueRecommendations";
+
+const recommendedRailSize = 6;
 
 const maxVisibleFilterOptions = 160;
 
@@ -304,6 +307,9 @@ interface CataloguePageProps {
   onRemoveGame: (game: GhostBoxGame) => void;
   pulseLoading: boolean;
   scrollElementRef?: RefObject<HTMLElement | null>;
+  libraryGames?: GhostBoxGame[];
+  favoriteGames?: GhostBoxGame[];
+  collectionGames?: GhostBoxGame[];
 }
 
 export function CataloguePage({
@@ -330,6 +336,9 @@ export function CataloguePage({
   onRemoveGame,
   pulseLoading,
   scrollElementRef,
+  libraryGames = [],
+  favoriteGames = [],
+  collectionGames = [],
 }: CataloguePageProps) {
   const { t } = useSettings();
   const [contextMenu, setContextMenu] = useState<{
@@ -351,6 +360,20 @@ export function CataloguePage({
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
   const hasSearchQuery = Boolean(query.trim());
+  const showRecommendedRail = !initialLoading && !hasSearchQuery && !hasActiveFilters;
+
+  const { recommendations, hasProfile } = useCatalogueRecommendations({
+    libraryGames,
+    favoriteGames,
+    collectionGames,
+    enabled: showRecommendedRail,
+  });
+  // No local affinity signal yet (new user, or a library with no genre data)
+  // — show the rotated catalogue top instead. The rail never sits empty.
+  const recommendedGames = hasProfile ? recommendations : games.slice(0, recommendedRailSize);
+  const recommendedTitle = hasProfile
+    ? t("catalogue.recommended.titleForYou")
+    : t("catalogue.recommended.titleTrending");
 
   const filterSections = useMemo(() => {
     if (filtersLoading && !facets) return [];
@@ -550,6 +573,22 @@ export function CataloguePage({
 
   return (
     <section className="catalogue-page">
+      {showRecommendedRail && recommendedGames.length > 0 && (
+        <section className="catalogue-recommended" aria-label={recommendedTitle}>
+          <h2 className="catalogue-recommended__title">{recommendedTitle}</h2>
+          <CatalogueList
+            games={recommendedGames}
+            onOpenGame={onOpenGame}
+            onHoverGame={handleHoverGame}
+            addedGameAppIds={addedGameAppIds}
+            addingGameId={addingGameId}
+            removingGameId={removingGameId}
+            onRemoveGame={onRemoveGame}
+            onGameContextMenu={handleGameContextMenu}
+          />
+        </section>
+      )}
+
       <CatalogueActiveFilters
         filters={filters}
         onClearAll={clearAllFilters}

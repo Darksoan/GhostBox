@@ -1,24 +1,25 @@
 import { FILTER_NAMES, type CatalogueMeta, type Facets, type FilterName, type SearchRequest } from "./types";
+import {
+  RANKING_ORDER,
+  ROTATION_POOL_SIZE,
+  rotatePool,
+  rotates,
+  rotationSeed,
+  type RotationEntry,
+} from "./ranking";
 
 const SOURCE = "cloudflare-d1";
 
 export const GAME_COLUMNS = `app_id, name, release_date, release_year, header_image,
   developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
   updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
-  metacritic_score, recommendations`;
+  metacritic_score, recommendations, ranking_score, ranking_tier`;
 
-export const POPULAR_ORDER = `max(
-  steam_positive_ratio * steam_positive_ratio * (CAST(steam_review_count AS REAL) / (steam_review_count + 5000)),
-  (CAST(recommendations AS REAL) / (recommendations + 2000)) * 0.82,
-  (CAST(metacritic_score AS REAL) / 100) * (CAST(metacritic_score AS REAL) / 100) * 0.75
-) DESC,
-steam_review_count DESC,
-recommendations DESC,
-metacritic_score DESC,
-popularity_score DESC,
-popularity_rank ASC,
-name COLLATE NOCASE ASC,
-CAST(app_id AS INTEGER) ASC`;
+export const POPULAR_ORDER = RANKING_ORDER;
+
+const POOL_CACHE_TTL_MS = 60_000;
+const POOL_CACHE_MAX_ENTRIES = 32;
+const poolCache = new Map<string, { expiresAt: number; promise: Promise<RotationEntry[]> }>();
 
 interface GameRow {
   app_id: string;
@@ -39,6 +40,8 @@ interface GameRow {
   steam_positive_ratio: number;
   metacritic_score: number;
   recommendations: number;
+  ranking_score: number;
+  ranking_tier: number;
 }
 
 let facetsInFlight: Promise<Facets> | undefined;
@@ -122,6 +125,8 @@ export function toGame(row: GameRow, origin: string) {
     steamPositiveRatio: row.steam_positive_ratio,
     metacriticScore: row.metacritic_score,
     recommendations: row.recommendations,
+    rankingScore: row.ranking_score,
+    rankingTier: row.ranking_tier,
     databaseAddedAt: row.updated_at,
   };
 }
@@ -382,10 +387,64 @@ export function searchConditions(request: SearchRequest): { sql: string; binding
       : columns[name];
     const keyLimit = name === "tags" ? "f.key < 12 AND " : "";
     const tests = values.map(() => `EXISTS (SELECT 1 FROM json_each(${jsonSource}) f WHERE ${keyLimit}lower(CAST(f.value AS TEXT)) = lower(?))`);
-    clauses.push(`(${tests.join(" AND ")})`);
+    const joiner = request.match === "any" ? " OR " : " AND ";
+    clauses.push(`(${tests.join(joiner)})`);
     bindings.push(...values);
   }
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", bindings };
+}
+
+type WhereClause = ReturnType<typeof searchConditions>;
+
+async function loadRotationPool(db: D1Database, seed: number, where: WhereClause): Promise<RotationEntry[]> {
+  // Index-only walk over idx_games_ranking: ids and tiers, never full rows.
+  const rows = await db.prepare(`SELECT app_id, ranking_tier FROM games ${where.sql} ORDER BY ${RANKING_ORDER} LIMIT ?`)
+    .bind(...where.bindings, ROTATION_POOL_SIZE)
+    .all<{ app_id: string; ranking_tier: number }>();
+  const entries = rows.results.map((row) => ({ appId: String(row.app_id), tier: row.ranking_tier }));
+  return rotatePool(entries, seed);
+}
+
+function rotationPool(db: D1Database, seed: number, where: WhereClause): Promise<RotationEntry[]> {
+  const key = JSON.stringify([seed, where.sql, where.bindings]);
+  const now = Date.now();
+  const cached = poolCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.promise;
+  const promise = loadRotationPool(db, seed, where).catch((error) => {
+    poolCache.delete(key);
+    throw error;
+  });
+  if (poolCache.size >= POOL_CACHE_MAX_ENTRIES) poolCache.clear();
+  poolCache.set(key, { expiresAt: now + POOL_CACHE_TTL_MS, promise });
+  return promise;
+}
+
+/**
+ * Builds the page fetch for a rotated slice.
+ *
+ * The ids are inlined rather than bound: D1 caps a statement at 100 bind
+ * variables and a catalogue page holds up to 200 rows, so binding them fails
+ * outright. Inlining is injection-safe because every id is digit-validated
+ * here, and they are quoted so the TEXT `app_id` column compares without
+ * relying on SQLite's numeric-literal affinity conversion.
+ */
+export function rotatedRowsSql(appIds: readonly string[]): string | null {
+  const safe = appIds.filter((appId) => /^\d{1,10}$/.test(appId));
+  if (!safe.length) return null;
+  return `SELECT ${GAME_COLUMNS} FROM games WHERE app_id IN (${safe.map((appId) => `'${appId}'`).join(", ")})`;
+}
+
+async function rotatedPageRows(db: D1Database, request: SearchRequest, where: WhereClause): Promise<GameRow[]> {
+  const pool = await rotationPool(db, request.seed, where);
+  const slice = pool.slice(request.offset, request.offset + request.limit);
+  const sql = rotatedRowsSql(slice.map((entry) => entry.appId));
+  if (!sql) return [];
+  const rows = await db.prepare(sql).all<GameRow>();
+  const byAppId = new Map(rows.results.map((row) => [String(row.app_id), row]));
+  // `IN (...)` returns rows in storage order — restore the rotated order here.
+  return slice
+    .map((entry) => byAppId.get(entry.appId))
+    .filter((row): row is GameRow => row !== undefined);
 }
 
 export async function searchCatalogue(
@@ -399,6 +458,24 @@ export async function searchCatalogue(
     return { games: [], total, matched: total, limited: false, source: SOURCE, facets };
   }
   const where = searchConditions(request);
+  const countQuery = () => (where.sql
+    ? db.prepare(`SELECT COUNT(*) AS matched FROM games ${where.sql}`).bind(...where.bindings).first<{ matched: number }>()
+    : Promise.resolve({ matched: total }));
+
+  if (rotates(request)) {
+    const [pageRows, count] = await Promise.all([rotatedPageRows(db, request, where), countQuery()]);
+    const games = pageRows.map((row) => toGame(row, origin));
+    const matched = Number(count?.matched ?? 0);
+    return {
+      games,
+      total: matched,
+      matched,
+      limited: request.offset + games.length < matched,
+      source: SOURCE,
+      ...(facets ? { facets } : {}),
+    };
+  }
+
   const normalizedQuery = request.q.split(/\s+/).filter(Boolean).join(" ");
   const escapedQuery = normalizedQuery.replace(/[\\%_]/g, "\\$&");
   const orderBindings: unknown[] = [];
@@ -418,10 +495,7 @@ export async function searchCatalogue(
   const rowsPromise = db.prepare(`SELECT ${GAME_COLUMNS} FROM games ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
     .bind(...where.bindings, ...orderBindings, rowLimit, request.offset)
     .all<GameRow>();
-  const countPromise = where.sql
-    ? db.prepare(`SELECT COUNT(*) AS matched FROM games ${where.sql}`).bind(...where.bindings).first<{ matched: number }>()
-    : Promise.resolve({ matched: total });
-  const [rows, count] = await Promise.all([rowsPromise, countPromise]);
+  const [rows, count] = await Promise.all([rowsPromise, countQuery()]);
   const pageRows = rows.results.slice(0, request.limit);
   const games = pageRows.map((row) => toGame(row, origin));
   const matched = Number(count?.matched ?? 0);
@@ -444,7 +518,15 @@ export async function getHome(db: D1Database, meta: CatalogueMeta, origin: strin
   const emptyFilters = Object.fromEntries(
     FILTER_NAMES.map((name) => [name, [] as string[]]),
   ) as unknown as Record<FilterName, string[]>;
-  const base = { q: "", offset: 0, includeFacets: false, facetsOnly: false, filters: emptyFilters };
+  const base = {
+    q: "",
+    offset: 0,
+    includeFacets: false,
+    facetsOnly: false,
+    seed: rotationSeed(new Date()),
+    match: "all" as const,
+    filters: emptyFilters,
+  };
   const [popular, recent] = await Promise.all([
     searchCatalogue(db, { ...base, limit: 20, sort: "popular" }, meta.total, origin),
     searchCatalogue(db, { ...base, limit: 12, sort: "recentlyAdded" }, meta.total, origin),

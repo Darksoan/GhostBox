@@ -1,6 +1,7 @@
+import { rotates } from "./ranking";
 import type { SearchRequest } from "./types";
 
-export const CACHE_VERSION = "catalogue-v3-strict-filters";
+export const CACHE_VERSION = "catalogue-v4-ranking-score";
 
 export type CacheRoute = "facets" | "search" | "game" | "home";
 
@@ -22,6 +23,8 @@ export function canonicalSearchKey(request: SearchRequest, updatedAt: string, or
     sort: request.sort,
     includeFacets: request.includeFacets ? "1" : "0",
     facetsOnly: request.facetsOnly ? "1" : "0",
+    seed: String(rotates(request) ? request.seed : 0),
+    match: request.match,
   });
   for (const [name, values] of Object.entries(request.filters)) {
     for (const value of [...new Set(values)].sort((a, b) => a.localeCompare(b))) {

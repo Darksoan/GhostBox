@@ -1,5 +1,5 @@
 pub(crate) const FACETS_VERSION: &str = "catalogue-response-v2";
-pub(crate) const RANKING_VERSION: &str = "ranking-v8-strict-filters";
+pub(crate) const RANKING_VERSION: &str = "ranking-v9-quality-score";
 const BACKUP_SETTINGS_FILE: &str = "backup-settings.json";
 const STEAM_LIBRARY_PATH_FILE: &str = "steam-library-path.json";
 const BACKUP_ROOT_FOLDER_NAME: &str = "GhostBoxBackups";

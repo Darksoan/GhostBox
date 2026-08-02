@@ -131,6 +131,10 @@ export function PageRouter({
   const { hasOverlay } = useContentOverlayState();
 
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
+  const catalogueCollectionGames = useMemo(
+    () => appData.userCollections.flatMap((collection) => collection.games ?? []),
+    [appData.userCollections]
+  );
 
   const [mountedPages, setMountedPages] = useState<Set<Page>>(
     () => new Set<Page>([page]),
@@ -241,6 +245,9 @@ export function PageRouter({
           onRemoveGame={appData.removeQueuedGame}
           pulseLoading={catalogue.shouldPulseCatalogueLoading}
           scrollElementRef={contentRef}
+          libraryGames={appData.addedLibraryGames}
+          favoriteGames={appData.favoriteGames}
+          collectionGames={catalogueCollectionGames}
         />
       );
     }

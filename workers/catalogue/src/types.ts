@@ -21,6 +21,11 @@ export interface SearchRequest {
   sort: Sort;
   includeFacets: boolean;
   facetsOnly: boolean;
+  /** Rotation seed. 0 disables rotation and keeps the pure ranking order. */
+  seed: number;
+  /** "any" matches a game with at least one selected value per filter category (used for
+   * recommendation candidate pools); "all" (default) requires every selected value. */
+  match: "any" | "all";
   filters: Record<FilterName, string[]>;
 }
 
