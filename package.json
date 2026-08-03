@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check:tokens && tsc && vite build",
+    "site:dev": "vite --config GhostBoxSite/vite.config.ts",
+    "site:build": "vite build --config GhostBoxSite/vite.config.ts",
+    "site:check": "tsc --project GhostBoxSite/tsconfig.json --noEmit",
     "dev:tauri": "vite",
     "build:tauri": "npm run build",
     "check:tokens": "node scripts/check-tokens.mjs",
