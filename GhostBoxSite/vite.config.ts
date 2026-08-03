@@ -8,7 +8,7 @@ const siteDirectory = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root: siteDirectory,
   plugins: [react()],
-  publicDir: path.resolve(siteDirectory, "..", "public"),
+  publicDir: path.resolve(siteDirectory, "public"),
   server: {
     port: 4173,
     strictPort: false,

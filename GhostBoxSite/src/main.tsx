@@ -1,12 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-
-function SitePlaceholder() {
-  return <main aria-label="GhostBox">GhostBox</main>;
-}
+import LandingPage from "./LandingPage";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <SitePlaceholder />
+    <LandingPage />
   </StrictMode>,
 );
