@@ -83,14 +83,14 @@
       background:
         linear-gradient(
           to right,
-          rgba(0, 0, 0, 0.5) 0%,
-          rgba(0, 0, 0, 0.18) 32%,
+          color-mix(in srgb, var(--black) 50%, transparent) 0%,
+          color-mix(in srgb, var(--black) 18%, transparent) 32%,
           transparent 62%
         ),
         radial-gradient(
           128% 96% at 50% 4%,
           transparent 56%,
-          rgba(0, 0, 0, 0.42) 100%
+          color-mix(in srgb, var(--black) 42%, transparent) 100%
         );
       pointer-events: none;
       z-index: 1;
@@ -377,7 +377,7 @@
     min-height: 28px;
     margin: 0;
     padding: 0;
-    border: 2px solid #c43c3c;
+    border: 2px solid var(--steam-level-ring);
     border-radius: var(--radius-circle);
     background: transparent;
     box-sizing: border-box;
@@ -474,10 +474,6 @@
 
   &__steam-id-copy--copied {
     color: var(--text-primary);
-
-    &:hover {
-      color: var(--text-primary);
-    }
   }
 
   &__steam-id-copy {
@@ -532,7 +528,7 @@
     display: block;
     width: 18px;
     height: 18px;
-    fill: #5865f2;
+    fill: var(--discord-brand);
     flex-shrink: 0;
     filter: none;
   }
@@ -555,7 +551,7 @@
     padding: var(--space-3) var(--space-4);
     overflow: hidden;
     border-radius: var(--radius-md);
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: color-mix(in srgb, var(--black) 30%, transparent);
     color: var(--text-primary);
     cursor: pointer;
     transition: background-color ease 0.2s;
@@ -563,7 +559,7 @@
 
     &:hover,
     &--copied {
-      background-color: rgba(0, 0, 0, 0.4);
+      background-color: color-mix(in srgb, var(--black) 40%, transparent);
     }
 
     span {
@@ -604,7 +600,7 @@
     min-height: 72px;
     padding: var(--space-8) var(--space-10);
     border-top: 1px solid var(--border);
-    background-color: rgba(0, 0, 0, 0.42);
+    background-color: color-mix(in srgb, var(--black) 42%, transparent);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
@@ -987,9 +983,9 @@
         left: 0;
         width: 1px;
         background: linear-gradient(
-          rgba(255, 255, 255, 0),
-          rgba(255, 255, 255, 0.1),
-          rgba(255, 255, 255, 0)
+          color-mix(in srgb, var(--white) 0%, transparent),
+          color-mix(in srgb, var(--white) 10%, transparent),
+          color-mix(in srgb, var(--white) 0%, transparent)
         );
       }
     }
@@ -1185,6 +1181,7 @@
       border-color: transparent;
       background: var(--surface-secondary);
       font-size: var(--fs-300);
+      font-weight: var(--weight-medium);
 
       &:hover,
       &:focus-visible {
@@ -1204,6 +1201,7 @@
 
     .settings-dropdown__option {
       background: transparent;
+      font-weight: var(--weight-medium);
 
       &:hover,
       &:focus-visible {
@@ -1285,7 +1283,7 @@
           background: linear-gradient(
             90deg,
             color-mix(in srgb, var(--premium-gold) 78%, transparent),
-            color-mix(in srgb, var(--premium-gold) 92%, #fff 10%),
+            color-mix(in srgb, var(--premium-gold) 92%, var(--white) 10%),
             color-mix(in srgb, var(--premium-gold) 84%, transparent)
           ) !important;
 
@@ -1297,7 +1295,7 @@
               100deg,
               transparent 0%,
               transparent 42%,
-              color-mix(in srgb, #fff 18%, var(--premium-gold) 12%) 50%,
+              color-mix(in srgb, var(--white) 18%, var(--premium-gold) 12%) 50%,
               transparent 58%,
               transparent 100%
             );
@@ -1390,7 +1388,7 @@
     strong {
       overflow: hidden;
       color: var(--text-primary);
-      font-size: 14.5px;
+      font-size: var(--fs-400);
       font-weight: var(--weight-medium);
       line-height: 1.3;
       text-overflow: ellipsis;
@@ -2129,7 +2127,7 @@
     padding: var(--space-5);
     border: 0;
     border-radius: var(--radius-sm);
-    background: rgba(0, 0, 0, 0.34);
+    background: color-mix(in srgb, var(--black) 34%, transparent);
     color: var(--text-primary);
     cursor: pointer;
     text-align: left;
@@ -2139,7 +2137,7 @@
 
     &:hover,
     &:focus-visible {
-      background: rgba(255, 255, 255, 0.055);
+      background: color-mix(in srgb, var(--white) 5.5%, transparent);
       transform: translateY(-1px);
       outline: 0;
     }
@@ -2210,13 +2208,13 @@
     height: 5px;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--white) 8%, transparent);
 
     span {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: rgba(255, 255, 255, 0.9);
+      background: color-mix(in srgb, var(--white) 90%, transparent);
     }
   }
 
@@ -2526,7 +2524,7 @@
     min-width: 24px;
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-md);
-    background-color: rgba(239, 243, 244, 0.1);
+    background-color: color-mix(in srgb, var(--white) 10%, transparent);
     color: var(--text-secondary);
     font-size: var(--fs-200);
     font-weight: var(--weight-semibold);
@@ -2583,7 +2581,7 @@
       transition: background-color ease 0.2s;
 
       &:hover {
-        background-color: rgba(239, 243, 244, 0.08);
+        background-color: color-mix(in srgb, var(--white) 8%, transparent);
       }
     }
   }

@@ -10,7 +10,9 @@ export type AppNotificationType =
   | "backup"
   | "achievement"
   | "account"
-  | "download";
+  | "download"
+  | "favorite"
+  | "collection";
 
 export type AppNotificationSeverity = "info" | "success" | "warning" | "error";
 
@@ -26,6 +28,12 @@ export type AppNotificationItem = {
     page?: Page;
     url?: string;
   };
+  game?: {
+    appId?: string;
+    title: string;
+    coverUrl?: string;
+    headerUrl?: string;
+  };
 };
 
 const storageKey = "ghostbox:notification-feed:v1";
@@ -39,11 +47,33 @@ function isNotificationType(value: unknown): value is AppNotificationType {
     value === "backup" ||
     value === "achievement" ||
     value === "account" ||
-    value === "download";
+    value === "download" ||
+    value === "favorite" ||
+    value === "collection";
 }
 
 function isSeverity(value: unknown): value is AppNotificationSeverity {
   return value === "info" || value === "success" || value === "warning" || value === "error";
+}
+
+function normalizeNotificationGame(value: unknown): AppNotificationItem["game"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const game = value as Record<string, unknown>;
+  if (typeof game.title !== "string" || !game.title.trim()) return undefined;
+
+  return {
+    ...(typeof game.appId === "string" && game.appId.trim()
+      ? { appId: game.appId }
+      : {}),
+    title: game.title,
+    ...(typeof game.coverUrl === "string" && game.coverUrl.trim()
+      ? { coverUrl: game.coverUrl }
+      : {}),
+    ...(typeof game.headerUrl === "string" && game.headerUrl.trim()
+      ? { headerUrl: game.headerUrl }
+      : {}),
+  };
 }
 
 function normalizeNotification(value: unknown): AppNotificationItem | null {
@@ -65,6 +95,7 @@ function normalizeNotification(value: unknown): AppNotificationItem | null {
     message: item.message,
     createdAt: item.createdAt,
     action: item.action,
+    game: normalizeNotificationGame(item.game),
   };
 }
 

@@ -2,11 +2,10 @@ import {
   AlertTriangle,
   Bell,
   CheckCircle2,
-  CloudUpload,
-  Download,
-  Layers,
+  Folder,
+  Gamepad2,
+  Heart,
   Settings,
-  Trophy,
   UserRound,
   XCircle,
   type LucideIcon,
@@ -25,26 +24,28 @@ import {
   type AppNotificationType,
 } from "../lib/appNotifications";
 
-type NotificationFilter = "all" | "important" | AppNotificationType;
+type NotificationFilter = "all" | "important" | "games" | "favorite" | "collection";
 
-const notificationFilters: NotificationFilter[] = [
-  "all",
-  "important",
-  "backup",
-  "achievement",
-  "account",
-  "library",
-  "download",
-  "system",
+const notificationFilters: Array<{
+  id: NotificationFilter;
+  icon: LucideIcon;
+}> = [
+  { id: "all", icon: Bell },
+  { id: "important", icon: AlertTriangle },
+  { id: "games", icon: Gamepad2 },
+  { id: "favorite", icon: Heart },
+  { id: "collection", icon: Folder },
 ];
 
 const notificationTypeIcons: Record<AppNotificationType, LucideIcon> = {
   system: Settings,
-  library: Layers,
-  backup: CloudUpload,
-  achievement: Trophy,
+  library: Gamepad2,
+  backup: Gamepad2,
+  achievement: Gamepad2,
   account: UserRound,
-  download: Download,
+  download: Gamepad2,
+  favorite: Heart,
+  collection: Folder,
 };
 
 const severityIcons: Record<AppNotificationSeverity, LucideIcon> = {
@@ -76,12 +77,9 @@ function filterLabel(filter: NotificationFilter, language: "pt" | "en") {
   const labels: Record<NotificationFilter, { pt: string; en: string }> = {
     all: { pt: "Tudo", en: "All" },
     important: { pt: "Importantes", en: "Important" },
-    backup: { pt: "Backups", en: "Backups" },
-    achievement: { pt: "Conquistas", en: "Achievements" },
-    account: { pt: "Conta", en: "Account" },
-    library: { pt: "Biblioteca", en: "Library" },
-    download: { pt: "Downloads", en: "Downloads" },
-    system: { pt: "Sistema", en: "System" },
+    games: { pt: "Jogos", en: "Games" },
+    favorite: { pt: "Favoritos", en: "Favorites" },
+    collection: { pt: "Coleções", en: "Collections" },
   };
 
   return labels[filter][language];
@@ -129,9 +127,13 @@ function NotificationRow({
           </button>
         ) : null}
       </div>
-      <span className="app-notification__severity">
-        <SeverityIcon size={13} aria-hidden />
-        {severityLabel(item.severity, language)}
+      <span
+        className={`app-notification__status app-notification__status--${item.severity}`}
+        role="img"
+        aria-label={severityLabel(item.severity, language)}
+        title={severityLabel(item.severity, language)}
+      >
+        <SeverityIcon size={14} aria-hidden />
       </span>
     </article>
   );
@@ -150,6 +152,14 @@ export function NotificationsPage() {
     if (activeFilter === "all") return items;
     if (activeFilter === "important") {
       return items.filter((item) => item.severity === "warning" || item.severity === "error");
+    }
+    if (activeFilter === "games") {
+      return items.filter((item) =>
+        item.type === "library" ||
+        item.type === "backup" ||
+        item.type === "achievement" ||
+        item.type === "download"
+      );
     }
     return items.filter((item) => item.type === activeFilter);
   }, [activeFilter, items]);
@@ -185,14 +195,16 @@ export function NotificationsPage() {
       </header>
 
       <div className="notifications-hub__filters" aria-label={t("notifications.filters")}>
-        {notificationFilters.map((filter) => (
+        {notificationFilters.map(({ id, icon: FilterIcon }) => (
           <button
             type="button"
-            key={filter}
-            className={activeFilter === filter ? "is-active" : undefined}
-            onClick={() => setActiveFilter(filter)}
+            key={id}
+            className={activeFilter === id ? "is-active" : undefined}
+            aria-pressed={activeFilter === id}
+            onClick={() => setActiveFilter(id)}
           >
-            {filterLabel(filter, appearance.language)}
+            <FilterIcon size={15} strokeWidth={2} aria-hidden />
+            <span>{filterLabel(id, appearance.language)}</span>
           </button>
         ))}
       </div>

@@ -852,6 +852,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         title: pendingToast.title,
         message: pendingToast.message,
         createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+        game: { title: record.title },
       });
 
       if (isAppFocused()) {
@@ -1081,6 +1082,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           title: achievementUnlockedTitle,
           message,
           createdAt: Date.now(),
+          game: { appId: payload.appId, title: payload.title },
         });
 
         showAchievementDesktopNotification(
@@ -1300,8 +1302,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? `${game.title} saiu dos favoritos.`
           : `${game.title} foi salvo nos favoritos.`,
       );
+      pushAppNotification({
+        id: `favorite:${game.appId}:${Date.now()}:${isFavorite ? "removed" : "added"}`,
+        type: "favorite",
+        severity: isFavorite ? "info" : "success",
+        title: isFavorite
+          ? appearance.language === "en"
+            ? "Removed from favorites"
+            : "Removido dos favoritos"
+          : appearance.language === "en"
+            ? "Added to favorites"
+            : "Adicionado aos favoritos",
+        message: isFavorite
+          ? appearance.language === "en"
+            ? `${game.title} was removed from favorites.`
+            : `${game.title} saiu dos favoritos.`
+          : appearance.language === "en"
+            ? `${game.title} was saved to favorites.`
+            : `${game.title} foi salvo nos favoritos.`,
+        createdAt: Date.now(),
+        game: {
+          appId: game.appId,
+          title: game.title,
+          coverUrl: game.coverUrl,
+          headerUrl: game.heroUrl,
+        },
+      });
     },
-    [favoriteGameIds, showToast],
+    [appearance.language, favoriteGameIds, showToast],
   );
 
   // Cloud restore is fully automatic: re-adding or launching a game pulls the
@@ -1351,6 +1379,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           title,
           message,
           createdAt: Date.now(),
+          game: {
+            appId: game.appId,
+            title: game.title,
+            coverUrl: game.coverUrl,
+            headerUrl: game.heroUrl,
+          },
         });
         if (notifications.backupSuccessEnabled) {
           showToast(title, message, "success");
@@ -1405,6 +1439,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               ? `${game.title} could not be added to the Library. ${errorMessage}`
               : `${game.title} não pôde ser adicionado à Biblioteca. ${errorMessage}`,
             createdAt: Date.now(),
+            game: {
+              appId: game.appId,
+              title: game.title,
+              coverUrl: game.coverUrl,
+              headerUrl: game.heroUrl,
+            },
           });
           return;
         }
@@ -1447,6 +1487,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? `${libraryGame.title} was added to the Library.`
             : `${libraryGame.title} foi adicionado à Biblioteca.`,
           createdAt: Date.now(),
+          game: {
+            appId: libraryGame.appId,
+            title: libraryGame.title,
+            coverUrl: libraryGame.coverUrl,
+            headerUrl: libraryGame.heroUrl,
+          },
         });
 
         void autoRestoreCloudBackup(libraryGame);
@@ -1467,6 +1513,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? `${game.title} could not be added to the Library. ${errorMessage}`
             : `${game.title} não pôde ser adicionado à Biblioteca. ${errorMessage}`,
           createdAt: Date.now(),
+          game: {
+            appId: game.appId,
+            title: game.title,
+            coverUrl: game.coverUrl,
+            headerUrl: game.heroUrl,
+          },
         });
       } finally {
         setAddingGameId(null);
@@ -1503,6 +1555,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               ? `${game.title} could not be removed from the Library. ${errorMessage}`
               : `${game.title} não pôde ser removido da Biblioteca. ${errorMessage}`,
             createdAt: Date.now(),
+            game: {
+              appId: game.appId,
+              title: game.title,
+              coverUrl: game.coverUrl,
+              headerUrl: game.heroUrl,
+            },
           });
           return;
         }
@@ -1558,6 +1616,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? `${game.title} was removed from the Library.`
             : `${game.title} foi removido da Biblioteca.`,
           createdAt: Date.now(),
+          game: {
+            appId: game.appId,
+            title: game.title,
+            coverUrl: game.coverUrl,
+            headerUrl: game.heroUrl,
+          },
         });
       } catch (error) {
         const errorMessage = error instanceof Error
@@ -1576,6 +1640,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? `${game.title} could not be removed from the Library. ${errorMessage}`
             : `${game.title} não pôde ser removido da Biblioteca. ${errorMessage}`,
           createdAt: Date.now(),
+          game: {
+            appId: game.appId,
+            title: game.title,
+            coverUrl: game.coverUrl,
+            headerUrl: game.heroUrl,
+          },
         });
       } finally {
         setRemovingGameId(null);
@@ -1646,8 +1716,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             : collection,
         ),
       );
+      const collectionName =
+        userCollections.find((collection) => collection.id === collectionId)?.name ??
+        "coleção";
+      pushAppNotification({
+        id: `collection:add:${collectionId}:${game.id}:${Date.now()}`,
+        type: "collection",
+        severity: "success",
+        title: appearance.language === "en"
+          ? "Added to collection"
+          : "Adicionado à coleção",
+        message: appearance.language === "en"
+          ? `${game.title} was added to the ${collectionName} collection.`
+          : `${game.title} foi adicionado à coleção ${collectionName}.`,
+        createdAt: Date.now(),
+        game: {
+          appId: game.appId,
+          title: game.title,
+          coverUrl: game.coverUrl,
+          headerUrl: game.heroUrl,
+        },
+      });
     },
-    [],
+    [appearance.language, pushAppNotification, userCollections],
   );
 
   const removeGameFromCollection = useCallback(
@@ -1665,8 +1756,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             : collection,
         ),
       );
+      const collectionName =
+        userCollections.find((collection) => collection.id === collectionId)?.name ??
+        "coleção";
+      pushAppNotification({
+        id: `collection:remove:${collectionId}:${game.id}:${Date.now()}`,
+        type: "collection",
+        severity: "info",
+        title: appearance.language === "en"
+          ? "Removed from collection"
+          : "Removido da coleção",
+        message: appearance.language === "en"
+          ? `${game.title} was removed from the ${collectionName} collection.`
+          : `${game.title} foi removido da coleção ${collectionName}.`,
+        createdAt: Date.now(),
+        game: {
+          appId: game.appId,
+          title: game.title,
+          coverUrl: game.coverUrl,
+          headerUrl: game.heroUrl,
+        },
+      });
     },
-    [],
+    [appearance.language, pushAppNotification, userCollections],
   );
 
   const deleteCollection = useCallback((collectionId: string) => {
@@ -1701,8 +1813,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ]);
       setCollectionModalOpen(false);
       showToast("Coleção criada", `${trimmed} foi adicionada ao perfil.`);
+      pushAppNotification({
+        id: `collection:create:${trimmed}:${Date.now()}`,
+        type: "collection",
+        severity: "success",
+        title: appearance.language === "en"
+          ? "Collection created"
+          : "Coleção criada",
+        message: appearance.language === "en"
+          ? `${trimmed} was added to your profile.`
+          : `${trimmed} foi adicionada ao perfil.`,
+        createdAt: Date.now(),
+      });
     },
-    [setCollectionModalOpen, showToast, userCollections],
+    [appearance.language, pushAppNotification, setCollectionModalOpen, showToast, userCollections],
   );
 
   const openCreateUserCollectionModal = useCallback(() => {

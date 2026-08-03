@@ -99,7 +99,8 @@ export function LibraryPage({
       : propActiveCollectionId === "library"
         ? null
         : propActiveCollectionId;
-  const favoritesOnly = selectedCollectionId === "favorites";
+  const hasFavorites = favoriteGames.length > 0;
+  const favoritesOnly = hasFavorites && selectedCollectionId === "favorites";
   const activeCollectionId =
     selectedCollectionId &&
     selectedCollectionId !== "favorites" &&
@@ -270,23 +271,25 @@ export function LibraryPage({
           </div>
 
           <div className="library-toolbar__chips">
-            <button
-              type="button"
-              className={
-                favoritesOnly
-                  ? "library-chip library-chip--active"
-                  : "library-chip"
-              }
-              aria-pressed={favoritesOnly}
-              onClick={() => {
-                changeActiveCollection(
-                  selectedCollectionId === "favorites" ? null : "favorites"
-                );
-              }}
-            >
-              <Heart size={15} strokeWidth={2.0} fill="none" />
-              <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
-            </button>
+            {hasFavorites && (
+              <button
+                type="button"
+                className={
+                  favoritesOnly
+                    ? "library-chip library-chip--active"
+                    : "library-chip"
+                }
+                aria-pressed={favoritesOnly}
+                onClick={() => {
+                  changeActiveCollection(
+                    selectedCollectionId === "favorites" ? null : "favorites"
+                  );
+                }}
+              >
+                <Heart size={15} strokeWidth={2.0} fill="none" />
+                <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
+              </button>
+            )}
 
             {userCollections.map((collection) => (
               <button

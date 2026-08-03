@@ -21,6 +21,22 @@ const BASELINE_PATH = join(ROOT, "scripts", "token-baseline.json");
 // src/styles/ é onde os tokens são DEFINIDOS — valores crus ali são o ponto.
 const EXEMPT_DIRS = [join("src", "styles")];
 
+// Exceções por ARQUIVO (não por diretório): apenas FALSO-POSITIVO conhecido —
+// hex/rgb/hsl em contexto não-visual (IDs de app, regex, docs, exemplos).
+// Só entra aqui com comentário explicando o porquê; arquivos TS/TSX reais
+// com cor crua são violação e ficam fora da lista.
+//
+// Paletas de DADOS (não estilos): cores de acento dinâmicas consumidas em runtime
+// (orbs de categoria do catálogo, acentos de seed/avatar, destaque de contas Steam).
+// São dados arbitrários por categoria/conta, fora da rampa neutra — tokenizar
+// exigiria um token por categoria e ainda assim só serviria a um único consumidor.
+const EXCEPTIONS = [
+  "src/constants/catalogue.ts", // orbs de categoria: 5 hue distintos arbitrários
+  "src/utils/gameSeed.ts", // paleta de acento para seed de avatar (5 cores)
+  "src/lib/profileHistoryGames.ts", // accent do jogo em destaque no histórico
+  "src/utils/steamLibraryMerge.ts", // hex de destaque de conta Steam
+  "src/utils/storage.ts", // hex de acento de conta persistido
+];
 const RULES = [
   {
     id: "raw-hex",
@@ -28,32 +44,52 @@ const RULES = [
     hint: "use um token de --styles/_primitives.scss (ex.: var(--n-3), var(--gold-500))",
     // 3/4/6/8 dígitos, sem capturar interpolação Sass #{...} nem IDs de seletor.
     re: /#[0-9a-fA-F]{3,8}\b/g,
+    exts: [".scss", ".ts", ".tsx"],
   },
   {
     id: "raw-rgb",
     label: "rgb()/rgba() cru",
     hint: "use --a-hover/--a-active/--a-scrim-* ou color-mix() sobre um token",
     re: /\brgba?\(/g,
+    exts: [".scss", ".ts", ".tsx"],
+  },
+  {
+    id: "raw-hsl",
+    label: "hsl()/hsla() cru",
+    hint: "use tokens ou palette por papel",
+    re: /\bhsla?\(/g,
+    exts: [".ts", ".tsx"],
+  },
+  {
+    id: "direct-primitive",
+    label: "token primitivo usado direto no componente",
+    hint: "use tokens semanticos (--surface-*, --text-*, --overlay-*) — primitivos so em src/styles/",
+    re: /\bvar\(--(?:n|a|gold|red|green|black|white)-/g,
+    exts: [".scss"],
   },
   {
     id: "font-size-px",
     label: "font-size literal em px",
     hint: "use a escala --fs-100 … --fs-800",
     re: /font-size:\s*-?[\d.]+px/g,
+    exts: [".scss"],
   },
   {
     id: "z-index-literal",
     label: "z-index literal de camada global (>= 10)",
     // 1–9 são empilhamento local dentro do próprio componente e continuam livres;
     // é a partir de 10 que o valor vira camada do app e precisa da escala nomeada.
-    hint: "use --z-raised/--z-sticky/--z-header/--z-drawer/--z-modal/--z-popover/--z-toast/--z-tooltip",
+    // A regra permanece na escala global — z-index local (1–9) segue permitido.
+    hint: "use --z-raised/--z-sticky/--z-header/--z-drawer/--z-modal/--z-popover/--z-toast/--z-tooltip (z-index local 1–9 fica no componente; 10+ é camada global)",
     re: /z-index:\s*(\d{2,})\b/g,
+    exts: [".scss"],
   },
   {
     id: "box-shadow-literal",
     label: "box-shadow literal",
     hint: "use --shadow-1/--shadow-2/--shadow-3/--shadow-inset-hairline",
     re: /box-shadow:\s*(?!none|var\(|inherit|initial|unset)\S/g,
+    exts: [".scss"],
   },
 ];
 
@@ -90,11 +126,11 @@ function stripComments(source) {
   return out;
 }
 
-function collectScss(dir, acc = []) {
+function collectFiles(dir, exts, acc = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) collectScss(full, acc);
-    else if (entry.endsWith(".scss")) acc.push(full);
+    if (statSync(full).isDirectory()) collectFiles(full, exts, acc);
+    else if (exts.some((e) => entry.endsWith(e))) acc.push(full);
   }
   return acc;
 }
@@ -103,20 +139,28 @@ function isExempt(relPath) {
   return EXEMPT_DIRS.some((d) => relPath.startsWith(d + sep) || relPath === d);
 }
 
+function isException(relPath) {
+  return EXCEPTIONS.includes(relPath);
+}
+
 function scan() {
   const findings = [];
   if (!existsSync(SRC)) return findings;
-  for (const file of collectScss(SRC)) {
+  for (const file of collectFiles(SRC, [".scss", ".ts", ".tsx"])) {
     const rel = relative(ROOT, file);
     if (isExempt(rel)) continue;
+    const relPosix = rel.split(sep).join("/");
+    if (isException(relPosix)) continue;
+    const ext = file.slice(file.lastIndexOf("."));
     const lines = stripComments(readFileSync(file, "utf8"));
     lines.forEach((line, i) => {
       for (const rule of RULES) {
+        if (!rule.exts.includes(ext)) continue;
         rule.re.lastIndex = 0;
         let m;
         while ((m = rule.re.exec(line)) !== null) {
           findings.push({
-            file: rel.split(sep).join("/"),
+            file: relPosix,
             rule: rule.id,
             line: i + 1,
             text: line.trim(),

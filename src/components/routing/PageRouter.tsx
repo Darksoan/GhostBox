@@ -220,6 +220,7 @@ export function PageRouter({
           filtersLoading={
             catalogue.isLoadingCatalogueFacets && !catalogue.catalogueFacets
           }
+          refreshing={catalogue.shouldPulseCatalogueLoading}
           loading={catalogue.shouldShowCatalogueLoading}
           initialLoading={catalogue.isInitialCatalogueLoading}
           query={debouncedQuery}

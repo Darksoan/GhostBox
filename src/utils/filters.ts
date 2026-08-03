@@ -15,9 +15,37 @@ export function limitFilterValues(values: string[], selectedValues: string[]) {
   return [...selected, ...available];
 }
 
+export function sortYearValues(values: string[]) {
+  return [...new Set(values.filter((value) => /^\d{4}$/.test(value)))].sort(
+    (left, right) => Number(left) - Number(right)
+  );
+}
+
+export function getYearRangeIndices(years: string[], selectedYears: string[]) {
+  const selectedIndices = selectedYears.flatMap((year) => {
+    const index = years.indexOf(year);
+    return index >= 0 ? [index] : [];
+  });
+
+  if (!selectedIndices.length) {
+    return { start: 0, end: Math.max(0, years.length - 1) };
+  }
+
+  return {
+    start: Math.min(...selectedIndices),
+    end: Math.max(...selectedIndices),
+  };
+}
+
+export function getYearsInRange(years: string[], start: number, end: number) {
+  const first = Math.max(0, Math.min(start, end));
+  const last = Math.min(years.length - 1, Math.max(start, end));
+  return years.slice(first, last + 1);
+}
+
 export function getSelectedFilterCount(filters: CatalogueFilters) {
-  return Object.values(filters).reduce(
-    (total, values) => total + values.length,
+  return Object.entries(filters).reduce(
+    (total, [key, values]) => total + (key === "years" ? Number(values.length > 0) : values.length),
     0
   );
 }

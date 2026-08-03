@@ -2,18 +2,20 @@
 // Ver plans/design-tokens-launcher.md para a tabela de contraste de cada degrau.
 :root {
   // --- Rampa neutra (13 degraus, canvas → ênfase máxima) ---
-  --n-0: #0a0a0a;
-  --n-1: #101010;
-  --n-2: #161616;
-  --n-3: #1c1c1c;
-  --n-4: #242424;
-  --n-5: #2e2e2e;
-  --n-6: #3d3d3d;
-  --n-7: #4f4f4f;
-  --n-8: #6b6b6b;
-  --n-9: #8f8f8f;
-  --n-10: #b4b4b4;
-  --n-11: #d6d6d6;
+  // Passos de 6-10 RGB no escuro, ~30 RGB no claro; degraus 7+ mantêm
+  // contraste de papel: borda interativa ≥3:1, texto terciário ≥4.5:1.
+  --n-0: #0b0b0b;
+  --n-1: #111111;
+  --n-2: #181818;
+  --n-3: #202020;
+  --n-4: #2a2a2a;
+  --n-5: #363636;
+  --n-6: #464646;
+  --n-7: #606060;
+  --n-8: #7d7d7d;
+  --n-9: #989898;
+  --n-10: #b8b8b8;
+  --n-11: #d8d8d8;
   --n-12: #f2f2f2;
 
   // Fora da rampa: extremos absolutos. --n-000 fica abaixo de --n-0 e serve a
@@ -23,12 +25,12 @@
   --white: #ffffff;
 
   // --- Camadas de estado (alpha, independentes da rampa) ---
-  --a-hover: rgba(255, 255, 255, 0.045);
-  --a-active: rgba(255, 255, 255, 0.08);
-  --a-selected: rgba(255, 255, 255, 0.1);
-  --a-scrim-1: rgba(0, 0, 0, 0.28);
-  --a-scrim-2: rgba(0, 0, 0, 0.48);
-  --a-scrim-3: rgba(0, 0, 0, 0.72);
+  --a-hover: rgba(255, 255, 255, 0.04);
+  --a-active: rgba(255, 255, 255, 0.07);
+  --a-selected: rgba(255, 255, 255, 0.11);
+  --a-scrim-1: rgba(0, 0, 0, 0.34);
+  --a-scrim-2: rgba(0, 0, 0, 0.54);
+  --a-scrim-3: rgba(0, 0, 0, 0.78);
 
   // --- Dourado (assinatura + conquista rara — únicos usos permitidos) ---
   --gold-500: #f5b342;

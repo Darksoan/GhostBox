@@ -1,4 +1,4 @@
-import { ChevronRight, Check, X } from "lucide-react";
+import { ChevronRight, Check } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -6,6 +6,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type RefObject,
@@ -22,10 +23,13 @@ import {
 } from "../constants/catalogue";
 import {
   getSelectedFilterCount,
+  getYearRangeIndices,
+  getYearsInRange,
   hasSelectedCatalogueFilters,
   uniqueSorted,
   limitFilterValues,
   getReleaseYear,
+  sortYearValues,
 } from "../utils/filters";
 import { CatalogueList } from "../components/ui/CatalogueList";
 import { CatalogueHoverPreview } from "../components/ui/CatalogueHoverPreview";
@@ -35,12 +39,12 @@ import {
   CatalogueLoadingState,
   CatalogueListLoadingState,
   EmptyState,
+  PageSpinnerLoadingState,
 } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
-import { useFlipLayout } from "../hooks/useFlipLayout";
 import {
   createCatalogueHoverPreviewIntent,
   createCatalogueHoverPreviewRetention,
@@ -74,70 +78,126 @@ function getFilterDisplayValue(
   return value;
 }
 
-function getFilterCategoryLabel(
-  key: CatalogueFilterKey,
-  t: (key: string, params?: Record<string, string | number>) => string
-) {
-  return t(`catalogue.filters.${key}`);
+const yearRangeCommitKeys = new Set([
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "End",
+  "Home",
+  "PageDown",
+  "PageUp",
+]);
+
+interface CatalogueYearRangeProps {
+  title: string;
+  values: string[];
+  selectedValues: string[];
+  startLabel: string;
+  endLabel: string;
+  onChange: (values: string[]) => void;
 }
 
-interface CatalogueActiveFiltersProps {
-  filters: CatalogueFilters;
-  onRemove: (key: CatalogueFilterKey, value?: string) => void;
-  onClearAll: () => void;
-}
-
-const CatalogueActiveFilters = memo(function CatalogueActiveFilters({
-  filters,
-  onRemove,
-  onClearAll: _onClearAll,
-}: CatalogueActiveFiltersProps) {
-  const { appearance, t } = useSettings();
-  const isEnglish = appearance.language === "en";
-  const activeFilters = useMemo(
-    () =>
-      (Object.entries(filters) as [CatalogueFilterKey, string[]][]).flatMap(
-        ([key, values]) => values.map((value) => ({ key, value }))
-      ),
-    [filters]
+const CatalogueYearRange = memo(function CatalogueYearRange({
+  title,
+  values,
+  selectedValues,
+  startLabel,
+  endLabel,
+  onChange,
+}: CatalogueYearRangeProps) {
+  const selectedRange = useMemo(
+    () => getYearRangeIndices(values, selectedValues),
+    [selectedValues, values]
   );
-  const layoutKey = useMemo(
-    () => activeFilters.map(({ key, value }) => `${key}:${value}`).join("|"),
-    [activeFilters]
-  );
-  const filtersRef = useFlipLayout<HTMLUListElement>(layoutKey);
+  const [range, setRange] = useState(selectedRange);
+  const rangeRef = useRef(range);
 
-  if (!activeFilters.length) return null;
+  useEffect(() => {
+    rangeRef.current = selectedRange;
+    setRange(selectedRange);
+  }, [selectedRange]);
+
+  const lastIndex = values.length - 1;
+  const setDraftRange = useCallback((nextRange: { start: number; end: number }) => {
+    rangeRef.current = nextRange;
+    setRange(nextRange);
+  }, []);
+  const commitRange = useCallback(() => {
+    const { start, end } = rangeRef.current;
+    const nextValues =
+      start === 0 && end === lastIndex
+        ? []
+        : getYearsInRange(values, start, end);
+
+    onChange(nextValues);
+  }, [lastIndex, onChange, values]);
+
+  if (!values.length) return null;
+
+  const startYear = values[range.start];
+  const endYear = values[range.end];
+  const rangeStyle = {
+    "--catalogue-year-range-start": `${lastIndex > 0 ? (range.start / lastIndex) * 100 : 0}%`,
+    "--catalogue-year-range-end": `${lastIndex > 0 ? (range.end / lastIndex) * 100 : 0}%`,
+  } as CSSProperties;
+  const handleKeyUp = (key: string) => {
+    if (yearRangeCommitKeys.has(key)) commitRange();
+  };
 
   return (
-    <div className="catalogue-page__active-filters">
-      <ul ref={filtersRef}>
-        {activeFilters.map(({ key, value }) => (
-          <li key={`${key}-${value}`} data-layout-id={`${key}:${value}`}>
-            <button
-              type="button"
-              className="catalogue-filter-chip"
-              style={
-                {
-                  "--filter-color": filterCategoryColors[key],
-                } as CSSProperties
-              }
-              onClick={() => onRemove(key, value)}
-              aria-label={
-                isEnglish
-                  ? `Remove filter ${getFilterDisplayValue(key, value, appearance.language)}`
-                  : `Remover filtro ${getFilterDisplayValue(key, value, appearance.language)}`
-              }
-            >
-              <span className="catalogue-filter-chip__orb" />
-              <span>
-                {getFilterCategoryLabel(key, t)}: {getFilterDisplayValue(key, value, appearance.language)}
-              </span>
-              <X size={13} />
-            </button>
-          </li>
-        ))}
-      </ul>
+    <div className="catalogue-filter-section__year-range" role="group" aria-label={title}>
+      <output className="catalogue-filter-section__year-range-value" aria-live="polite">
+        {startYear === endYear ? startYear : `${startYear} - ${endYear}`}
+      </output>
+      <div className="catalogue-filter-section__year-range-track" style={rangeStyle}>
+        <input
+          type="range"
+          className="catalogue-filter-section__year-range-input catalogue-filter-section__year-range-input--start"
+          min={0}
+          max={lastIndex}
+          step={1}
+          value={range.start}
+          disabled={lastIndex === 0}
+          aria-label={startLabel}
+          aria-valuetext={startYear}
+          onChange={(event) => {
+            const start = Math.min(
+              Number(event.currentTarget.value),
+              rangeRef.current.end
+            );
+            setDraftRange({ start, end: rangeRef.current.end });
+          }}
+          onPointerUp={commitRange}
+          onBlur={commitRange}
+          onKeyUp={(event) => handleKeyUp(event.key)}
+        />
+        <input
+          type="range"
+          className="catalogue-filter-section__year-range-input catalogue-filter-section__year-range-input--end"
+          min={0}
+          max={lastIndex}
+          step={1}
+          value={range.end}
+          disabled={lastIndex === 0}
+          aria-label={endLabel}
+          aria-valuetext={endYear}
+          onChange={(event) => {
+            const end = Math.max(
+              Number(event.currentTarget.value),
+              rangeRef.current.start
+            );
+            setDraftRange({ start: rangeRef.current.start, end });
+          }}
+          onPointerUp={commitRange}
+          onBlur={commitRange}
+          onKeyUp={(event) => handleKeyUp(event.key)}
+        />
+      </div>
+      <div className="catalogue-filter-section__year-range-bounds" aria-hidden="true">
+        <span>{values[0]}</span>
+        <span>{values[lastIndex]}</span>
+      </div>
     </div>
   );
 });
@@ -148,7 +208,7 @@ interface CatalogueFilterSectionProps {
   values: string[];
   selectedValues: string[];
   onToggle: (key: CatalogueFilterKey, value: string) => void;
-  onClear: (key: CatalogueFilterKey, value?: string) => void;
+  onYearRangeChange?: (values: string[]) => void;
 }
 
 const CatalogueFilterSection = memo(function CatalogueFilterSection({
@@ -157,7 +217,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
   values,
   selectedValues,
   onToggle,
-  onClear,
+  onYearRangeChange,
 }: CatalogueFilterSectionProps) {
   const { appearance, t } = useSettings();
   const [isOpen, setIsOpen] = useState(() => selectedValues.length > 0);
@@ -182,6 +242,11 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
     () => visibleValues.slice(0, maxVisibleFilterOptions),
     [visibleValues]
   );
+  const yearValues = useMemo(
+    () => (filterKey === "years" ? sortYearValues(values) : []),
+    [filterKey, values]
+  );
+  const selectedCount = filterKey === "years" ? Number(selectedValues.length > 0) : selectedValues.length;
   useEffect(() => {
     if (selectedValues.length > 0) setIsOpen(true);
   }, [selectedValues.length]);
@@ -208,7 +273,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
           style={{ ["--filter-orb-color" as string]: filterCategoryColors[filterKey] }}
         />
         <strong>{title}</strong>
-        <span>{selectedValues.length || values.length}</span>
+        {selectedCount > 0 && <span>{selectedCount}</span>}
       </button>
 
       <div
@@ -218,55 +283,58 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
         data-collapsed={isOpen ? "false" : "true"}
       >
         <div className="catalogue-filter-section__content-inner">
-          {selectedValues.length > 0 && (
-            <button
-              type="button"
-              className="catalogue-filter-section__clear"
-              onClick={() => onClear(filterKey)}
-            >
-              {t("catalogue.filters.clear", { count: selectedValues.length })}
-            </button>
-          )}
-
-          <input
-            type="search"
-            className="catalogue-filter-section__search"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder={t("catalogue.filters.search", {
-              title: title.toLowerCase(),
-            })}
-            aria-label={t("catalogue.filters.search", {
-              title: title.toLowerCase(),
-            })}
-          />
-
-          <div className="catalogue-filter-section__options">
-            {visibleValues.length > 0 ? (
-              <>
-                {renderedValues.map((value) => {
-                  const checked = selectedValueSet.has(value);
-                  return (
-                    <label className="catalogue-filter-option" key={value}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => onToggle(filterKey, value)}
-                      />
-                      <span className="catalogue-filter-option__box">
-                        {checked && <Check size={12} strokeWidth={2.0} />}
-                      </span>
-                      <span>{getFilterDisplayValue(filterKey, value, appearance.language)}</span>
-                    </label>
-                  );
+          {filterKey === "years" && onYearRangeChange ? (
+            <CatalogueYearRange
+              title={title}
+              values={yearValues}
+              selectedValues={selectedValues}
+              startLabel={t("catalogue.filters.yearStart")}
+              endLabel={t("catalogue.filters.yearEnd")}
+              onChange={onYearRangeChange}
+            />
+          ) : (
+            <>
+              <input
+                type="search"
+                className="catalogue-filter-section__search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder={t("catalogue.filters.search", {
+                  title: title.toLowerCase(),
                 })}
-              </>
-            ) : (
-              <span className="catalogue-filter-section__empty">
-                {t("catalogue.filters.empty")}
-              </span>
-            )}
-          </div>
+                aria-label={t("catalogue.filters.search", {
+                  title: title.toLowerCase(),
+                })}
+              />
+
+              <div className="catalogue-filter-section__options">
+                {visibleValues.length > 0 ? (
+                  <>
+                    {renderedValues.map((value) => {
+                      const checked = selectedValueSet.has(value);
+                      return (
+                        <label className="catalogue-filter-option" key={value}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => onToggle(filterKey, value)}
+                          />
+                          <span className="catalogue-filter-option__box">
+                            {checked && <Check size={12} strokeWidth={2.0} />}
+                          </span>
+                          <span>{getFilterDisplayValue(filterKey, value, appearance.language)}</span>
+                        </label>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <span className="catalogue-filter-section__empty">
+                    {t("catalogue.filters.empty")}
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -282,6 +350,7 @@ interface CataloguePageProps {
     years?: string[];
   };
   filtersLoading: boolean;
+  refreshing: boolean;
   loading: boolean;
   initialLoading: boolean;
   query: string;
@@ -309,6 +378,7 @@ export function CataloguePage({
   games,
   facets,
   filtersLoading,
+  refreshing,
   loading,
   initialLoading,
   query,
@@ -509,12 +579,9 @@ export function CataloguePage({
     [filters, onFiltersChange]
   );
 
-  const clearFilter = useCallback(
-    (key: CatalogueFilterKey, value?: string) => {
-      onFiltersChange({
-        ...filters,
-        [key]: value ? filters[key].filter((item) => item !== value) : [],
-      });
+  const updateYearRange = useCallback(
+    (values: string[]) => {
+      onFiltersChange({ ...filters, years: values });
     },
     [filters, onFiltersChange]
   );
@@ -549,12 +616,6 @@ export function CataloguePage({
 
   return (
     <section className="catalogue-page">
-      <CatalogueActiveFilters
-        filters={filters}
-        onClearAll={clearAllFilters}
-        onRemove={clearFilter}
-      />
-
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
           {hasError ? (
@@ -564,6 +625,8 @@ export function CataloguePage({
               actionLabel={onRetry ? t("catalogue.errorRetry") : undefined}
               onAction={onRetry}
             />
+          ) : refreshing ? (
+            <PageSpinnerLoadingState label={t("loading.catalogue")} />
           ) : loading ? (
             <CatalogueListLoadingState
               animateListText={pulseLoading}
@@ -603,7 +666,7 @@ export function CataloguePage({
             />
           )}
 
-          {!loading && !hasError && totalPages > 1 && (
+          {!refreshing && !loading && !hasError && totalPages > 1 && (
             <div className="catalogue-page__footer">
               <PaginationControls
                 page={currentPage}
@@ -614,10 +677,15 @@ export function CataloguePage({
           )}
         </div>
 
-        <aside className="catalogue-filters" aria-label={t("catalogue.filters.label")}>
+        <aside
+          className="catalogue-filters"
+          aria-label={t("catalogue.filters.label")}
+          onPointerEnter={handlePreviewPointerEnter}
+          onPointerLeave={handlePreviewPointerLeave}
+        >
           <div className="catalogue-filters__sections">
-            {filtersLoading && <CatalogueFilterSectionsLoadingState />}
-            {!filtersLoading && filterSections.map((section) => (
+            {filtersLoading && !filterSections.length && <CatalogueFilterSectionsLoadingState />}
+            {filterSections.map((section) => (
               <CatalogueFilterSection
                 key={section.key}
                 title={section.title}
@@ -625,15 +693,15 @@ export function CataloguePage({
                 values={section.values}
                 selectedValues={filters[section.key]}
                 onToggle={updateFilter}
-                onClear={clearFilter}
+                onYearRangeChange={
+                  section.key === "years" ? updateYearRange : undefined
+                }
               />
             ))}
-            <CatalogueHoverPreview
-              game={hoveredGame}
-              onPointerEnter={handlePreviewPointerEnter}
-              onPointerLeave={handlePreviewPointerLeave}
-            />
           </div>
+          <CatalogueHoverPreview
+            game={hoveredGame}
+          />
         </aside>
       </div>
 
