@@ -24,6 +24,8 @@
   --surface-deep: var(--surface-tertiary);
   --surface-option: #151515;
   --surface-option-hover: #202020;
+  --surface-option-active: #252525;
+  --settings-dropdown-surface: #202020;
   // Card de explorar da home: um degrau acima do canvas, sem virar --surface-card.
   --surface-explore-card: color-mix(in srgb, var(--surface-solid) 86%, var(--white) 4%);
   // Fundo atrás de capa/arte com proporção fixa — preto puro evita halo na borda.

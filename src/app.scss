@@ -5190,12 +5190,15 @@ p {
 
   &:hover,
   &:focus-within {
-    background: var(--surface-option-hover);
+    background: var(--surface-option);
   }
 
-  &:focus-within,
-  &:has(.settings-dropdown--open) {
+  &:focus-within {
     z-index: var(--z-raised);
+  }
+
+  &:has(.settings-dropdown--open) {
+    z-index: var(--z-sticky);
   }
 
   &__copy {
@@ -5796,6 +5799,32 @@ p {
     background: var(--sidebar-selector);
     color: var(--text-primary);
   }
+}
+
+.settings-dropdown--settings-page {
+  .settings-dropdown__trigger,
+  .settings-dropdown__menu {
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--settings-dropdown-surface);
+  }
+
+  .settings-dropdown__trigger:hover,
+  .settings-dropdown__trigger:focus-visible {
+    border-color: transparent;
+    background: var(--settings-dropdown-surface);
+  }
+
+  .settings-dropdown__option {
+    border-radius: var(--radius-lg);
+    background: var(--settings-dropdown-surface);
+  }
+}
+
+.settings-page .settings-dropdown--settings-page .settings-dropdown__option:hover,
+.settings-page .settings-dropdown--settings-page .settings-dropdown__option:focus-visible,
+.settings-page .settings-dropdown--settings-page .settings-dropdown__option--active {
+  background: var(--surface-option-active);
 }
 
 @keyframes settings-dropdown-open {

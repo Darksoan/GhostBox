@@ -734,7 +734,7 @@ function SettingsDropdown({
   };
 
   return (
-    <div className={`settings-dropdown ${open ? "settings-dropdown--open" : ""}`} ref={rootRef}>
+    <div className={`settings-dropdown settings-dropdown--settings-page ${open ? "settings-dropdown--open" : ""}`} ref={rootRef}>
       <button
         type="button"
         className="settings-dropdown__trigger"
