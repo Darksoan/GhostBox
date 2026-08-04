@@ -516,7 +516,6 @@ function HomeCategoryCard({
       ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
       : fallbackCoverSources;
   const metadataCategories = getHomeMetadataCategories(game);
-  const reviewScore = game.steamPositiveRatio ?? game.rating ?? 0;
   const coverImageSize = variant === "portrait" ? "auto 100%" : "100% 100%";
   const hoverCoverImageSize = showMetadata
     ? coverImageSize
@@ -559,9 +558,6 @@ function HomeCategoryCard({
                   {category}
                 </span>
               ))}
-            </span>
-            <span className="home-category-card__rating">
-              {reviewScore > 0 ? `${Math.round(reviewScore * 100)}%` : "-"}
             </span>
           </span>
         </span>

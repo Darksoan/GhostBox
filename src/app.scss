@@ -894,9 +894,8 @@ p {
   min-width: 280px;
   overflow: hidden;
   border-right: 0;
-  background: var(--surface-secondary);
+  background: var(--surface-sidebar);
   color: var(--text-primary);
-  --sidebar-option-hover: var(--sidebar-option-active-hover);
 
   &__content {
     display: flex;
@@ -1057,14 +1056,13 @@ p {
   &__menu-item {
     position: relative;
     overflow: hidden;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: var(--radius-lg);
     background: transparent;
     color: var(--text-primary);
     text-wrap: nowrap;
     transition:
       background var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease);
 
     &::before {
@@ -1074,19 +1072,16 @@ p {
     // Hover and active share the same selector color.
     &:hover:not(.sidebar__menu-item--active) {
       color: var(--text-primary);
-      border-color: transparent;
       background: var(--sidebar-option-hover);
     }
 
     // Active uses the shared interactive surface token.
     &--active {
       color: var(--text-primary);
-      border-color: transparent;
       background: var(--sidebar-option-active);
     }
 
     &--active:hover {
-      border-color: transparent;
       background: var(--sidebar-option-active);
     }
 
@@ -1102,18 +1097,15 @@ p {
 
       &:hover:not(.sidebar__menu-item--active) {
         color: var(--text-primary);
-        border-color: transparent;
         background: var(--sidebar-selector);
       }
 
       &.sidebar__menu-item--active {
         color: var(--text-primary);
-        border-color: transparent;
         background: var(--sidebar-option-active);
       }
 
       &.sidebar__menu-item--active:hover {
-        border-color: transparent;
         background: var(--sidebar-option-active);
       }
     }
@@ -1543,7 +1535,7 @@ p {
   padding: 0 var(--space-6) 0 var(--space-10);
   box-sizing: border-box;
   color: var(--text-primary);
-  background-color: var(--app-gradient);
+  background-color: var(--surface-titlebar);
   border-bottom: 0;
   overflow: visible;
   user-select: none;
@@ -3120,15 +3112,12 @@ p {
 }
 
 .home-category-card__metadata-summary {
-  display: flex;
+  display: block;
   min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
 }
 
 .home-category-card__genres {
-  flex: 1 1 auto;
+  width: 100%;
   display: flex;
   min-width: 0;
   max-height: calc(var(--space-10) * 2 + var(--space-6));
@@ -3148,14 +3137,6 @@ p {
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.home-category-card__rating {
-  flex: 0 0 auto;
-  color: var(--text-primary);
-  font-size: var(--type-size-caption);
-  font-weight: var(--weight-semibold);
-  font-variant-numeric: tabular-nums;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3901,7 +3882,7 @@ p {
 .settings-backups-list {
   margin: var(--space-6) var(--space-9) var(--space-9);
   padding: var(--space-7) var(--space-8);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--white) 2.5%, transparent);
 
@@ -4222,7 +4203,7 @@ p {
     display: flex;
     align-items: flex-start;
     padding: var(--space-9);
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: var(--radius-md);
     background:
       radial-gradient(
@@ -4264,7 +4245,7 @@ p {
     justify-content: space-between;
     gap: var(--space-8);
     padding: var(--space-7) var(--space-8);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-tertiary);
   }
@@ -4313,7 +4294,7 @@ p {
     justify-content: center;
     gap: var(--space-4);
     padding: 0 var(--space-6);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-tertiary);
     color: var(--text-primary);
@@ -4327,7 +4308,6 @@ p {
 
     &:hover,
     &:focus-visible {
-      border-color: var(--border);
       background: var(--surface-secondary);
       outline: none;
     }
@@ -4352,7 +4332,7 @@ p {
     align-items: center;
     gap: var(--space-5);
     padding: var(--space-6) var(--space-7);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-tertiary);
     color: var(--text-secondary);
@@ -4388,7 +4368,7 @@ p {
 
   &__detail-card,
   &__policy-note {
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-tertiary);
   }
@@ -4467,11 +4447,10 @@ p {
   grid-template-rows: auto 1fr auto;
   gap: var(--space-7);
   padding: var(--space-8) var(--space-7) var(--space-7);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
   transition:
-    border-color var(--motion-fast) var(--ease),
     background var(--motion-fast) var(--ease);
 
   &--disabled {
@@ -4479,7 +4458,7 @@ p {
   }
 
   &--featured {
-    border-color: color-mix(in srgb, var(--border-hover) 70%, var(--border-subtle));
+    background: var(--surface-raised);
   }
 
   &__badge {
@@ -4487,7 +4466,7 @@ p {
     top: -10px;
     left: 50%;
     padding: var(--space-2) var(--space-5);
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: var(--radius-pill);
     background: var(--background);
     color: var(--text-primary);
@@ -4496,7 +4475,7 @@ p {
     letter-spacing: var(--ls-100);
     text-transform: uppercase;
     transform: translateX(-50%);
-    transition: border-color var(--motion-fast) var(--ease);
+    transition: background-color var(--motion-fast) var(--ease);
     white-space: nowrap;
   }
 
@@ -4708,24 +4687,20 @@ p {
   min-height: 350px;
   gap: var(--space-7);
   padding: var(--space-9) var(--space-9) var(--space-9);
-  border-color: var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-secondary);
   transform: translateY(0);
   transition:
     background var(--motion-fast) var(--ease),
-    border-color var(--motion-fast) var(--ease),
     transform var(--motion-base) var(--ease);
 
   &:hover:not(&--disabled) {
-    border-color: var(--border);
     background: var(--surface-hover);
     transform: translateY(-2px);
   }
 
   &--disabled {
     opacity: 0.55;
-    border-color: var(--border);
 
     &:hover {
       background: var(--surface-interactive);
@@ -4736,7 +4711,6 @@ p {
   &--featured {
     position: relative;
     overflow: hidden;
-    border: 1px solid var(--border);
     background: var(--surface-interactive);
 
     &:hover {
@@ -5061,7 +5035,7 @@ p {
 
   &__summary-card,
   &__panel {
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-tertiary);
   }
@@ -5963,7 +5937,7 @@ p {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-sm);
-  background: var(--background-dark);
+  background: var(--surface-dropdown-menu);
   overflow: hidden auto;
   transform-origin: top center;
   animation: settings-dropdown-open var(--motion-fast) var(--ease);
@@ -6012,18 +5986,26 @@ p {
 
 .settings-dropdown--settings-page {
   .settings-dropdown__trigger {
+    min-height: 32px;
+    padding: 0 var(--space-6);
     border: 0;
     border-radius: var(--radius-lg);
     background: var(--settings-dropdown-surface);
-    font-size: var(--type-size-body);
+    color: var(--text-secondary);
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
     outline: none;
     box-shadow: none;
   }
 
   .settings-dropdown__menu {
+    min-width: 100%;
+    right: 0;
+    left: auto;
+    padding: var(--space-2) var(--space-3);
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--settings-dropdown-surface);
+    background: var(--settings-dropdown-menu);
     outline: none;
     box-shadow: none;
   }
@@ -6031,21 +6013,24 @@ p {
   .settings-dropdown__trigger:hover,
   .settings-dropdown__trigger:focus-visible {
     border: 0;
-    background: var(--settings-dropdown-surface-hover);
+    background: var(--settings-dropdown-trigger-hover);
+    color: var(--text-primary);
     outline: none;
     box-shadow: none;
   }
 
   &.settings-dropdown--open .settings-dropdown__trigger {
     border: 0;
+    background: var(--settings-dropdown-trigger-hover);
+    color: var(--text-primary);
     outline: none;
     box-shadow: none;
   }
 
   .settings-dropdown__option {
+    background: transparent;
     border-radius: var(--radius-lg);
-    background: var(--settings-dropdown-surface);
-    font-size: var(--type-size-body);
+    font-size: var(--type-size-compact);
     font-weight: var(--weight-medium);
     outline: none;
     box-shadow: none;
@@ -6058,7 +6043,7 @@ p {
 }
 
 .settings-page .settings-dropdown--settings-page .settings-dropdown__option--active {
-  background: var(--settings-dropdown-surface-hover);
+  background: var(--settings-dropdown-surface);
 }
 
 @keyframes settings-dropdown-open {
@@ -8076,7 +8061,7 @@ input[type="search"]::-ms-reveal {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--white) 2.5%, transparent);
   padding: var(--space-6);
@@ -8089,7 +8074,6 @@ input[type="search"]::-ms-reveal {
   gap: var(--space-4);
   margin: -var(--space-6) -var(--space-6) var(--space-5);
   padding: var(--space-6);
-  border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-sunken) 96%, transparent);
   color: var(--text-primary);
 
@@ -8295,14 +8279,13 @@ input[type="search"]::-ms-reveal {
   align-items: stretch;
   gap: var(--space-3);
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
   background: var(--background);
   color: var(--text-secondary);
   font-weight: var(--weight-semibold);
   text-align: left;
   transition:
-    border-color var(--motion-fast) ease,
     background var(--motion-fast) ease,
     color var(--motion-fast) ease;
 
@@ -8311,7 +8294,7 @@ input[type="search"]::-ms-reveal {
   }
 
   &--selected {
-    border-color: var(--border);
+    background: var(--surface-raised);
     color: var(--text-primary);
   }
 

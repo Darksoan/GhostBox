@@ -12,6 +12,8 @@
   --surface-panel: var(--n-1);
   --surface-raised: var(--n-3);
   --surface-sunken: var(--n-000);
+  --surface-sidebar: var(--n-1);
+  --surface-titlebar: var(--surface-canvas);
 
   --surface-interactive: var(--surface-canvas);
   --surface-primary: var(--surface-canvas);
@@ -42,9 +44,13 @@
   --surface-tray-item-hover: var(--n-000);
   --surface-tray-item-focus: var(--n-3);
   --focus-ring-tray: inset 0 0 0 1px var(--border-interactive);
-  // Dropdowns da aba Ajustes: padrão quase canvas, hover só um degrau acima.
-  --settings-dropdown-surface: #070707;
-  --settings-dropdown-surface-hover: #0b0b0b;
+  // Dropdowns da aba Ajustes: mesmos tons do dropdown da aba Perfil.
+  --settings-dropdown-surface: var(--n-2);
+  --settings-dropdown-surface-hover: var(--n-4);
+  --settings-dropdown-menu: #252525;
+  --settings-dropdown-trigger-hover: var(--settings-dropdown-menu);
+  // Painel/menu dos dropdowns: um degrau acima do trigger para destacar a lista.
+  --surface-dropdown-menu: #1a1a1a;
   // Toggles: trilho derivado dos tokens existentes — desligado é borda
   // apagada, ligado é a cor mais clara do app.
   --toggle-track: color-mix(in srgb, var(--border-hover) 38%, var(--surface-sunken));
@@ -53,11 +59,18 @@
   --surface-explore-card: color-mix(in srgb, var(--surface-solid) 86%, var(--white) 4%);
   // Fundo atrás de capa/arte com proporção fixa — neutro profundo evita halo na borda.
   --surface-media-letterbox: var(--n-000);
-  --pill-bg: #151515;
+--pill-bg: #151515;
   --surface-modal: var(--n-000);
-  --sidebar-selector: var(--n-2);
-  --sidebar-option-active: var(--sidebar-selector);
-  --sidebar-option-active-hover: var(--n-3);
+  // Dropdown da aba Perfil (ordenação da atividade): fundo próprio, quase preto.
+  --profile-dropdown-surface: var(--n-1);
+  --profile-dropdown-surface-hover: var(--n-2);
+  --profile-dropdown-menu: var(--surface-dropdown-menu);
+  --profile-dropdown-option-hover: var(--n-4);
+  --sidebar-option-hover: var(--n-2);
+  --sidebar-option-selected: var(--n-4);
+  --sidebar-selector: var(--sidebar-option-hover);
+  --sidebar-option-active: var(--sidebar-option-selected);
+  --sidebar-option-active-hover: var(--sidebar-option-hover);
 
   --surface: var(--a-hover);
   --surface-subtle: rgba(255, 255, 255, 0.015);

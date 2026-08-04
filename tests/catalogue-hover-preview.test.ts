@@ -48,7 +48,9 @@ describe("Catalogue hover preview", () => {
       (node) =>
         node.type === "rule" && node.selector === ".catalogue-hover-preview__control"
     );
-    expect(controlRule?.toString()).toContain("background-color: rgba(0, 0, 0, 0.4)");
+    expect(controlRule?.toString()).toContain(
+      "background-color: color-mix(in srgb, var(--black) 40%, transparent)"
+    );
     expect(controlRule?.toString()).toContain("color: var(--text-primary)");
     expect(controlRule?.toString()).not.toContain("pointer-events: none");
     expect(controlRule?.toString()).not.toMatch(/#[0-9a-f]{3,8}/i);

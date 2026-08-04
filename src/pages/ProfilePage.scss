@@ -161,7 +161,7 @@
     margin: 0;
     padding: 0;
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-pill);
     /*
      * Vidro fumê sobre a arte. O scrim fraco (--overlay-subtle) sumia em capas
      * claras: usamos o médio + um fio de luz na borda, que é o que faz o vidro
@@ -170,7 +170,6 @@
     background: var(--overlay-medium);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    box-shadow: var(--glass-ring);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     cursor: pointer;
@@ -183,7 +182,9 @@
     transition:
       color var(--motion-fast) var(--ease),
       background-color var(--motion-fast) var(--ease),
-      box-shadow var(--motion-fast) var(--ease);
+      box-shadow var(--motion-fast) var(--ease),
+      opacity var(--motion-base) var(--ease),
+      visibility var(--motion-base) var(--ease);
 
     svg {
       display: block;
@@ -194,7 +195,6 @@
     &:hover,
     &:focus-visible {
       background: var(--overlay-strong);
-      box-shadow: var(--glass-ring-strong);
       color: var(--text-primary);
       outline: none;
       border: 0;
@@ -208,7 +208,7 @@
 
     /* Anel de foco de teclado — o outline é removido acima, isto o repõe. */
     &:focus-visible {
-      box-shadow: var(--glass-ring-strong), var(--focus-ring-inset);
+      box-shadow: var(--focus-ring-inset);
     }
 
     /*
@@ -257,7 +257,7 @@
     opacity: 1;
   }
 
-  /* Cover hover: show boxes instantly (no transition delay) */
+  /* Cover hover: reveal boxes with a smooth fade-in/out */
   &__content-box:hover &__hero-action,
   &__content-box:focus-within &__hero-action {
     opacity: 1;
@@ -1020,7 +1020,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
     overflow: hidden;
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-tertiary) 78%, transparent);
   }
@@ -1034,8 +1034,8 @@
     gap: var(--space-4);
     padding: var(--space-8) var(--space-9);
 
-    & + .profile-page__showcase-stat {
-      border-left: 1px solid var(--border-subtle);
+    &:nth-child(even) {
+      background: var(--surface-raised);
     }
 
     strong {
@@ -1068,7 +1068,7 @@
     gap: var(--space-4);
     min-height: 48px;
     padding: var(--space-6) var(--space-7);
-    border: 1px solid var(--border-subtle);
+    border: 0;
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-tertiary) 74%, transparent);
     color: var(--text-secondary);
@@ -1168,10 +1168,12 @@
   &__activity-sort {
     flex: 0 0 auto;
     min-width: 0;
+    margin-left: var(--space-6);
 
     &.settings-dropdown--open .settings-dropdown__trigger {
       border-color: transparent;
-      background: var(--sidebar-selector);
+      background: var(--profile-dropdown-surface-hover);
+      color: var(--text-primary);
     }
 
     .settings-dropdown__trigger {
@@ -1179,14 +1181,16 @@
       padding: 0 var(--space-6);
       border-radius: var(--radius-lg);
       border-color: transparent;
-      background: var(--surface-secondary);
+      background: var(--profile-dropdown-surface);
+      color: var(--text-secondary);
       font-size: var(--type-size-compact);
       font-weight: var(--weight-medium);
 
       &:hover,
       &:focus-visible {
         border-color: transparent;
-        background: var(--sidebar-selector);
+        background: var(--profile-dropdown-surface-hover);
+        color: var(--text-primary);
       }
     }
 
@@ -1195,17 +1199,18 @@
       right: 0;
       left: auto;
       border-color: transparent;
-      background: var(--surface-secondary);
+      background: var(--profile-dropdown-menu);
       padding: var(--space-2) var(--space-3);
     }
 
     .settings-dropdown__option {
       background: transparent;
+      border-radius: var(--radius-lg);
       font-weight: var(--weight-medium);
 
-      &:hover,
+&:hover,
       &:focus-visible {
-        background: var(--sidebar-selector);
+        background: var(--profile-dropdown-option-hover);
       }
     }
   }

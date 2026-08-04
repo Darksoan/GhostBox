@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { compile } from "sass-embedded";
 import postcss from "postcss";
 import { describe, expect, it } from "vitest";
@@ -40,9 +41,18 @@ describe("Home layout", () => {
     expect(customProperties.get("--background")).toBe("var(--surface-canvas)");
     expect(customProperties.get("--background-dark")).toBe("var(--surface-canvas)");
     expect(customProperties.get("--surface-canvas")).toBe("var(--n-0)");
-    expect(customProperties.get("--n-0")).toBe("#0b0b0b");
+    expect(customProperties.get("--n-0")).toBe("#0d0d0d");
+    expect(customProperties.get("--surface-sidebar")).toBe("var(--n-1)");
+    expect(customProperties.get("--surface-titlebar")).toBe("var(--surface-canvas)");
+    expect(customProperties.get("--n-1")).toBe("#101010");
+    expect(customProperties.get("--sidebar-option-hover")).toBe("var(--n-2)");
+    expect(customProperties.get("--n-2")).toBe("#1a1a1a");
+    expect(customProperties.get("--sidebar-option-selected")).toBe("var(--n-4)");
+    expect(customProperties.get("--n-4")).toBe("#2a2a2a");
+    expect(declarations.get(".sidebar")?.get("background")).toBe("var(--surface-sidebar)");
+    expect(declarations.get(".subscription-plan-card")?.get("border")).toBe("0");
     expect(declarations.get(".app-main")?.get("background")).toBe("var(--app-gradient)");
-    expect(declarations.get(".header")?.get("background-color")).toBe("var(--app-gradient)");
+    expect(declarations.get(".header")?.get("background-color")).toBe("var(--surface-titlebar)");
     expect(declarations.get(".home-page")?.get("background")).toBe("var(--background-dark)");
   });
 
@@ -67,5 +77,34 @@ describe("Home layout", () => {
 
     expect(terminalMargin, "the terminal chevron needs its own bottom clearance").toBeDefined();
     expect(resolvePixels(terminalMargin ?? "", customProperties)).toBeGreaterThanOrEqual(16);
+  });
+
+  it("removes the rated percentage and gives Home pills the full metadata row", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const cardStart = component.indexOf("function HomeCategoryCard");
+    const sectionStart = component.indexOf("function HomeCategorySection");
+    expect(cardStart).toBeGreaterThanOrEqual(0);
+    expect(sectionStart).toBeGreaterThan(cardStart);
+    const cardSource = component.slice(cardStart, sectionStart);
+
+    expect(cardSource).not.toContain("home-category-card__rating");
+    expect(cardSource).not.toContain("reviewScore");
+
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const summaryRule = stylesheet.nodes.find(
+      (node) => node.type === "rule" && node.selector === ".home-category-card__metadata-summary",
+    );
+    const genresRule = stylesheet.nodes.find(
+      (node) => node.type === "rule" && node.selector === ".home-category-card__genres",
+    );
+
+    expect(summaryRule?.toString()).toContain("display: block");
+    expect(genresRule?.toString()).toContain("width: 100%");
+    expect(stylesheet.nodes).not.toContainEqual(
+      expect.objectContaining({
+        type: "rule",
+        selector: ".home-category-card__rating",
+      }),
+    );
   });
 });
