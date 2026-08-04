@@ -14,6 +14,8 @@
   --surface-sunken: var(--n-000);
   --surface-sidebar: var(--n-1);
   --surface-titlebar: var(--surface-canvas);
+  --surface-titlebar-control: #1a1a1a;
+  --surface-titlebar-popover: #1a1a1a;
 
   --surface-interactive: var(--surface-canvas);
   --surface-primary: var(--surface-canvas);
@@ -47,7 +49,7 @@
   // Dropdowns da aba Ajustes: mesmos tons do dropdown da aba Perfil.
   --settings-dropdown-surface: var(--n-2);
   --settings-dropdown-surface-hover: var(--n-4);
-  --settings-dropdown-menu: #252525;
+  --settings-dropdown-menu: #202020;
   --settings-dropdown-trigger-hover: var(--settings-dropdown-menu);
   // Painel/menu dos dropdowns: um degrau acima do trigger para destacar a lista.
   --surface-dropdown-menu: #1a1a1a;

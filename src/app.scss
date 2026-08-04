@@ -1857,7 +1857,7 @@ p {
     flex: 0 0 auto;
     border: 1px solid transparent;
     border-radius: var(--radius-pill);
-    background: var(--surface-secondary);
+    background: var(--surface-titlebar-control);
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
@@ -1967,7 +1967,7 @@ p {
     padding: var(--space-3);
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-secondary);
+    background: var(--surface-titlebar-popover);
     transform: translateX(50%);
   }
 
@@ -2050,7 +2050,7 @@ p {
     padding: 0 var(--space-6);
     box-sizing: border-box;
     border-radius: var(--radius-md);
-    background: var(--surface-option);
+    background: var(--surface-titlebar-control);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     line-height: 1;
@@ -2091,7 +2091,7 @@ p {
     }
 
     &--focused {
-      width: 280px;
+      width: 240px;
       color: var(--text-primary);
       opacity: 1;
     }
@@ -2173,10 +2173,10 @@ p {
     }
   }
 
-  /* Borderless elevated popover with diamond caret */
+  /* Borderless elevated popover (bubble style, no caret) */
   &__tooltip {
     position: absolute;
-    top: calc(100% + 12px);
+    top: calc(100% + 8px);
     left: 50%;
     z-index: var(--z-modal);
     transform: translateX(-50%) translateY(-4px) scale(0.96);
@@ -2184,7 +2184,7 @@ p {
     padding: var(--space-3) var(--space-5);
     border: none;
     border-radius: var(--radius-lg);
-    background: var(--surface-option);
+    background: var(--surface-titlebar-popover);
     box-shadow: none;
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
@@ -2199,19 +2199,6 @@ p {
       opacity var(--motion-fast) var(--ease),
       visibility var(--motion-fast) var(--ease),
       transform var(--motion-fast) var(--ease);
-
-    /* Diamond caret, behind body so seam stays invisible */
-    &::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: 100%;
-      z-index: -1;
-      width: 10px;
-      height: 10px;
-      background: var(--surface-option);
-      transform: translate(-50%, 5px) rotate(45deg);
-    }
   }
 
   &__window-controls-spinner {
@@ -2228,7 +2215,7 @@ p {
     overflow-y: auto;
     border: 0;
     border-radius: var(--radius-md);
-    background: var(--surface-option);
+    background: var(--surface-titlebar-popover);
   }
 
   &__search-dropdown-section {
@@ -5934,7 +5921,7 @@ p {
   right: 0;
   left: 0;
   z-index: var(--z-sticky);
-  padding: var(--space-2) var(--space-3);
+  padding: 0;
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-sm);
   background: var(--surface-dropdown-menu);
@@ -6002,7 +5989,7 @@ p {
     min-width: 100%;
     right: 0;
     left: auto;
-    padding: var(--space-2) var(--space-3);
+    padding: 0;
     border: 0;
     border-radius: var(--radius-lg);
     background: var(--settings-dropdown-menu);
@@ -12079,10 +12066,11 @@ html.no-backdrop-blur {
     min-width: 180px;
     max-width: 240px;
     gap: var(--space-2);
-    padding: var(--space-5) var(--space-6);
-    border: 1px solid var(--border);
+    padding: var(--space-3) var(--space-5);
+    border: none;
     border-radius: var(--radius-lg);
-    background: var(--background-dark);
+    background: var(--surface-titlebar-popover);
+    box-shadow: none;
     color: var(--text-primary);
     opacity: 0;
     pointer-events: none;
@@ -12095,19 +12083,6 @@ html.no-backdrop-blur {
     -webkit-font-smoothing: subpixel-antialiased;
     -moz-osx-font-smoothing: auto;
     text-rendering: optimizeLegibility;
-
-    &::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 100%;
-      width: 10px;
-      height: 10px;
-      border-right: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      background: var(--background-dark);
-      transform: translate(-50%, -5px) rotate(45deg);
-    }
 
     strong {
       position: relative;

@@ -119,6 +119,7 @@ const translations: Record<Language, TranslationTree> = {
       pageAria: "Conquistas de {title}",
       progressSummary:
         "{unlocked} de {total} ({percent}%) conquistas alcançadas",
+      globalPercent: "dos jogadores",
       viewMore: "Ver mais",
       empty: "Este jogo não possui conquistas.",
     },
@@ -475,6 +476,7 @@ const translations: Record<Language, TranslationTree> = {
       title: "Achievements",
       pageAria: "Achievements for {title}",
       progressSummary: "{unlocked} of {total} ({percent}%) achievements earned",
+      globalPercent: "of players",
       viewMore: "View more",
       empty: "This game has no achievements.",
     },

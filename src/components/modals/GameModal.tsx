@@ -334,7 +334,7 @@ const AchievementIcon = memo(function AchievementIcon({
   onSelect?: () => void;
   interactive?: boolean;
 }) {
-  const { appearance } = useSettings();
+  const { appearance, t } = useSettings();
   const itemRef = useRef<HTMLLIElement>(null);
   const isUnlocked = isAchievementUnlocked(achievement);
   const isRare =
@@ -351,8 +351,7 @@ const AchievementIcon = memo(function AchievementIcon({
     top: number;
   } | null>(null);
   const globalPercent = formatAchievementPercent(achievement.globalPercent, appearance.language);
-  const globalPercentLabel =
-    appearance.language === "en" ? "of players" : "dos jogadores";
+  const globalPercentLabel = t("achievements.globalPercent");
   const fallbackPercentLabel =
     appearance.language === "en"
       ? "Global percentage unavailable"

@@ -251,9 +251,10 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
                   />
                   <span className="profile-page__activity-tooltip" role="tooltip">
                     <strong>{achievement.title}</strong>
-                    {achievement.description ? <span>{achievement.description}</span> : null}
                     {typeof achievement.globalPercent === "number" ? (
-                      <small>{achievement.globalPercent.toFixed(1)}% global</small>
+                      <small>
+                        {achievement.globalPercent.toFixed(1)}% {t("achievements.globalPercent")}
+                      </small>
                     ) : null}
                   </span>
                 </span>
