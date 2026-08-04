@@ -295,7 +295,7 @@ export function CatalogueHoverPreview({
         </strong>
         {developers.length > 0 && (
           <span className="catalogue-hover-preview__credit">
-            <span>{t("catalogue.preview.developer")}:</span> {developers.join(", ")}
+            {developers.join(", ")}
           </span>
         )}
       </div>

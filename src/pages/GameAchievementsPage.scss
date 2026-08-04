@@ -21,7 +21,7 @@
     margin: 0;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: var(--fs-500);
+    font-size: var(--type-size-body-emphasis);
     font-weight: var(--weight-semibold);
     line-height: 1.2;
     text-overflow: ellipsis;
@@ -40,7 +40,7 @@
   &__summary-progress-text {
     margin: 0;
     color: var(--text-secondary);
-    font-size: var(--fs-200);
+    font-size: var(--type-size-caption);
     font-weight: var(--weight-semibold);
     line-height: 1.45;
   }
@@ -87,7 +87,7 @@
     padding: var(--space-16) var(--space-10);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
-    font-size: var(--fs-300);
+    font-size: var(--type-size-compact);
   }
 
   &__loading-spinner {
@@ -205,7 +205,7 @@
 
     strong {
       color: var(--text-primary);
-      font-size: var(--fs-400);
+      font-size: var(--type-size-body);
       font-weight: var(--weight-medium);
       line-height: 1.25;
     }
@@ -213,7 +213,7 @@
     p {
       margin: 0;
       color: var(--text-secondary);
-      font-size: var(--fs-200);
+      font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
       line-height: 1.4;
     }
@@ -223,7 +223,7 @@
     flex: 0 0 auto;
     max-width: 220px;
     color: var(--text-secondary);
-    font-size: var(--fs-200);
+    font-size: var(--type-size-caption);
     font-weight: var(--weight-semibold);
     line-height: 1.35;
     text-align: right;

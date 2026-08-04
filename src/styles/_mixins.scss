@@ -96,7 +96,7 @@
 /// (a `dt`, a `span` inside a component block).
 @mixin eyebrow {
   color: var(--text-secondary);
-  font-size: var(--fs-200);
+  font-size: var(--type-size-caption);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--ls-100);
   text-transform: uppercase;
@@ -130,56 +130,63 @@
 }
 
 @mixin type-label {
-  font-size: var(--fs-100);
-  line-height: var(--lh-100);
+  font-size: var(--type-size-micro);
+  line-height: var(--type-line-micro);
   letter-spacing: var(--ls-100);
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
 }
 
 @mixin type-meta {
-  font-size: var(--fs-200);
-  line-height: var(--lh-200);
+  font-size: var(--type-size-caption);
+  line-height: var(--type-line-caption);
   letter-spacing: var(--ls-200);
 }
 
 @mixin type-body {
-  font-size: var(--fs-300);
-  line-height: var(--lh-300);
+  font-size: var(--type-size-compact);
+  line-height: var(--type-line-compact);
   letter-spacing: var(--ls-300);
 }
 
 @mixin type-body-strong {
-  font-size: var(--fs-400);
-  line-height: var(--lh-400);
+  font-size: var(--type-size-body);
+  line-height: var(--type-line-body);
   letter-spacing: var(--ls-400);
   font-weight: var(--weight-medium);
 }
 
 @mixin type-title {
-  font-size: var(--fs-500);
-  line-height: var(--lh-500);
+  font-size: var(--type-size-body-emphasis);
+  line-height: var(--type-line-body-emphasis);
   letter-spacing: var(--ls-500);
   font-weight: var(--weight-semibold);
 }
 
 @mixin type-section {
-  font-size: var(--fs-600);
-  line-height: var(--lh-600);
+  font-size: var(--type-size-section);
+  line-height: var(--type-line-section);
   letter-spacing: var(--ls-600);
   font-weight: var(--weight-semibold);
 }
 
 @mixin type-page {
-  font-size: var(--fs-700);
-  line-height: var(--lh-700);
+  font-size: var(--type-size-page);
+  line-height: var(--type-line-page);
   letter-spacing: var(--ls-700);
   font-weight: var(--weight-semibold);
 }
 
 @mixin type-hero {
-  font-size: var(--fs-800);
-  line-height: var(--lh-800);
+  font-size: var(--type-size-hero);
+  line-height: var(--type-line-hero);
+  letter-spacing: var(--ls-800);
+  font-weight: var(--weight-semibold);
+}
+
+@mixin type-showcase {
+  font-size: var(--type-size-showcase);
+  line-height: var(--type-line-showcase);
   letter-spacing: var(--ls-800);
   font-weight: var(--weight-semibold);
 }

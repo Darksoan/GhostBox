@@ -132,7 +132,7 @@ const homeFeaturedSteamGames: HomeGameSeed[] = [
 ];
 
 const homeCarouselGroupSize = 4;
-const homeRecommendedHeroCapsulePreloadLimit = 8;
+const homeRecommendedHeroPreloadLimit = 8;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
 const homeRecommendedAppIdGroups = [
   ["1693980", "208650", "413150", "1714320"],
@@ -215,9 +215,9 @@ function createWishlistFallbackGame(appId: string, index = 0, title?: string) {
 }
 
 function preloadHomeRecommendedCover(game: GhostBoxGame) {
-  const sources = gameHeroCapsuleSources(game).slice(
+  const sources = gameHeroSources(game).slice(
     0,
-    homeRecommendedHeroCapsulePreloadLimit
+    homeRecommendedHeroPreloadLimit
   );
 
   if (!sources.length || sources.some((source) => loadedImageSources.has(source))) {
@@ -473,24 +473,36 @@ async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>())
   return getUniquePersonalCalendarPool(games);
 }
 
+function getHomeMetadataCategories(game: GhostBoxGame) {
+  return Array.from(
+    new Set(
+      [...game.genres, ...game.tags]
+        .map(normalizeHomeCategory)
+        .filter(Boolean)
+    )
+  );
+}
+
 function HomeCategoryCard({
   game,
   variant = "tile",
+  showMetadata = false,
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
   variant?: HomeCategoryCardVariant;
+  showMetadata?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const fallbackCoverSources = useMemo(
     () =>
       variant === "portrait"
-        ? gameHeroCapsuleSources(game).slice(
-            0,
-            homeRecommendedHeroCapsulePreloadLimit
-          )
+          ? gameHeroCapsuleSources(game).slice(
+              0,
+              homeRecommendedHeroPreloadLimit
+            )
         : gameHeaderOnlySources(game),
     [game, variant]
   );
@@ -503,11 +515,21 @@ function HomeCategoryCard({
     : coverSource
       ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
       : fallbackCoverSources;
+  const metadataCategories = getHomeMetadataCategories(game);
+  const reviewScore = game.steamPositiveRatio ?? game.rating ?? 0;
+  const coverImageSize = variant === "portrait" ? "auto 100%" : "100% 100%";
+  const hoverCoverImageSize = showMetadata
+    ? coverImageSize
+    : variant === "portrait"
+      ? "auto 106%"
+      : "104.5% 104.5%";
 
   return (
     <button
       type="button"
-      className={`home-category-card home-category-card--${variant}`}
+      className={`home-category-card home-category-card--${variant}${
+        showMetadata ? " home-category-card--with-metadata" : ""
+      }`}
       aria-label={game.title}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
@@ -520,13 +542,30 @@ function HomeCategoryCard({
         className={`home-category-card__cover${
           loaded ? " home-category-card__cover--loaded" : ""
         }`}
-        style={layeredImageStyle(layeredSources, "")}
+        style={layeredImageStyle(
+          layeredSources,
+          "",
+          coverImageSize,
+          hoverCoverImageSize
+        )}
         aria-hidden="true"
       />
-      {/* Revealed on hover/focus — the button's aria-label already names the game. */}
-      <span className="home-category-card__label" aria-hidden="true">
-        <strong>{game.title}</strong>
-      </span>
+      {showMetadata ? (
+        <span className="home-category-card__metadata" aria-hidden="true">
+          <span className="home-category-card__metadata-summary">
+            <span className="home-category-card__genres">
+              {metadataCategories.map((category) => (
+                <span className="home-category-card__genre" key={category}>
+                  {category}
+                </span>
+              ))}
+            </span>
+            <span className="home-category-card__rating">
+              {reviewScore > 0 ? `${Math.round(reviewScore * 100)}%` : "-"}
+            </span>
+          </span>
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -537,6 +576,7 @@ function HomeCategorySection({
   className = "",
   variant = "tile",
   maxGames = 3,
+  showMetadata = false,
   onOpenGame,
   onGameContextMenu,
 }: {
@@ -545,6 +585,7 @@ function HomeCategorySection({
   className?: string;
   variant?: HomeCategoryCardVariant;
   maxGames?: number;
+  showMetadata?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -564,6 +605,7 @@ function HomeCategorySection({
               key={game.appId || game.id}
               game={game}
               variant={variant}
+              showMetadata={showMetadata}
               onOpenGame={onOpenGame}
               onGameContextMenu={onGameContextMenu}
             />
@@ -1079,14 +1121,64 @@ function HomePersonalCalendar({
   );
 }
 
+function HomeRecommendedBanner({
+  game,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  game: GhostBoxGame;
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  const fallbackHeroSources = useMemo(() => gameHeroSources(game), [game]);
+  const cachedSources = useCachedImageSources(fallbackHeroSources);
+  const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
+  const layeredSources = heroSource
+    ? [heroSource, ...fallbackHeroSources.filter((source) => source !== heroSource)]
+    : fallbackHeroSources;
+
+  return (
+    <button
+      type="button"
+      className="home-recommended__banner"
+      aria-label={game.title}
+      onClick={() => onOpenGame(game)}
+      onContextMenu={(event) => {
+        if (!onGameContextMenu) return;
+        event.preventDefault();
+        onGameContextMenu(game, event.clientX, event.clientY);
+      }}
+    >
+      <span
+        className={`home-recommended__banner-cover${
+          loaded ? " home-recommended__banner-cover--loaded" : ""
+        }`}
+        style={layeredImageStyle(layeredSources, "", "cover", "cover")}
+        aria-hidden="true"
+      />
+      <span className="home-recommended__banner-overlay" aria-hidden="true" />
+      <span className="home-recommended__banner-meta" aria-hidden="true">
+        <strong className="home-recommended__banner-title">{game.title}</strong>
+        {game.developers?.[0] ? (
+          <span className="home-recommended__banner-developer">
+            {game.developers[0]}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
 function HomeRecommendedHero({
   title,
   gameGroups,
+  language,
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
   gameGroups: GhostBoxGame[][];
+  language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -1098,6 +1190,13 @@ function HomeRecommendedHero({
     0,
     homeCarouselGroupSize
   );
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex((currentIndex) =>
+      Math.min(currentIndex, Math.max(visibleGames.length - 1, 0))
+    );
+  }, [visibleGames.length]);
 
   useEffect(() => {
     const cancelPreload = runWhenIdle(() => {
@@ -1107,21 +1206,48 @@ function HomeRecommendedHero({
     return cancelPreload;
   }, [availableGroups]);
 
-  if (!visibleGames.length) return null;
+  const activeGame = visibleGames[activeIndex];
+  if (!activeGame) return null;
 
   return (
     <section className="home-recommended" aria-label={title}>
       <SectionHeader title={title} />
-      <div className="home-recommended__grid">
-        {visibleGames.map((game) => (
-          <HomeCategoryCard
-            key={game.appId || game.id}
-            game={game}
-            variant="portrait"
-            onOpenGame={onOpenGame}
-            onGameContextMenu={onGameContextMenu}
-          />
-        ))}
+      <div className="home-recommended__stage">
+        <HomeRecommendedBanner
+          key={homeGameKey(activeGame)}
+          game={activeGame}
+          onOpenGame={onOpenGame}
+          onGameContextMenu={onGameContextMenu}
+        />
+        {visibleGames.length > 1 ? (
+          <div
+            className="home-recommended__pagination"
+            role="group"
+            aria-label={
+              language === "en"
+                ? "Recommended game navigation"
+                : "Navegação de jogos recomendados"
+            }
+          >
+            {visibleGames.map((game, index) => {
+              const isActive = index === activeIndex;
+              return (
+                <button
+                  type="button"
+                  className={`home-recommended__page${
+                    isActive ? " home-recommended__page--active" : ""
+                  }`}
+                  aria-label={`${language === "en" ? "Show" : "Mostrar"} ${game.title}`}
+                  aria-current={isActive ? "true" : undefined}
+                  key={homeGameKey(game)}
+                  onClick={() => setActiveIndex(index)}
+                >
+                  <span aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -2028,6 +2154,7 @@ export function HomePage({
       <HomeRecommendedHero
         title={t("home.recommended")}
         gameGroups={homeVisibleGameGroups}
+        language={appearance.language}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
@@ -2037,6 +2164,7 @@ export function HomePage({
         className="home-category--featured"
         variant="tile"
         maxGames={6}
+        showMetadata
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

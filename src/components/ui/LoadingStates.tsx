@@ -275,6 +275,19 @@ export function HomeWishlistCardSkeleton() {
   );
 }
 
+function HomeRecommendedBannerSkeleton() {
+  return (
+    <div className="home-recommended__banner home-recommended__banner--skeleton">
+      <span className="home-recommended__banner-cover home-recommended__banner-cover--skeleton loading-wave" />
+      <span className="home-recommended__banner-overlay" />
+      <span className="home-recommended__banner-meta">
+        <span className="home-recommended__banner-title home-recommended__banner-placeholder home-recommended__banner-placeholder--title loading-wave" />
+        <span className="home-recommended__banner-placeholder home-recommended__banner-placeholder--developer loading-wave" />
+      </span>
+    </div>
+  );
+}
+
 export function HomeWishlistReviewSkeleton({
   rootRef,
   ariaHidden = false,
@@ -323,10 +336,8 @@ export function HomePageLoadingState() {
     <section className="home-page" aria-hidden="true">
       <section className="home-recommended">
         <SectionHeaderSkeleton />
-        <div className="home-recommended__grid">
-          {Array.from({ length: 4 }, (_, index) => (
-            <HomeCategoryCardSkeleton variant="portrait" key={`home-recommended-${index}`} />
-          ))}
+        <div className="home-recommended__stage">
+          <HomeRecommendedBannerSkeleton />
         </div>
       </section>
 
