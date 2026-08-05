@@ -502,7 +502,7 @@ body {
   padding: var(--space-4) var(--space-7);
   border: 1px solid var(--border-ui);
   border-radius: var(--radius-sm);
-  background: var(--surface-ui);
+  background: var(--surface-canvas);
   color: var(--text-strong);
   font-weight: var(--weight-semibold);
   cursor: pointer;
@@ -1404,7 +1404,7 @@ p {
     place-items: center;
     overflow: hidden;
     border-radius: var(--radius-md);
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
     color: var(--text-primary);
 
     img {
@@ -2631,7 +2631,7 @@ p {
   padding: 0;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-solid);
+  background: var(--surface-canvas);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
@@ -2673,7 +2673,7 @@ p {
   display: block;
   width: 100%;
   height: 100%;
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -2970,7 +2970,7 @@ p {
 .home-explore-card__image {
   flex: 0 0 112px;
   height: 52px;
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -3000,7 +3000,7 @@ p {
   padding: var(--space-4) var(--space-6);
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--white) 92%, transparent);
-  color: var(--surface-tertiary);
+  color: var(--surface-canvas);
   font-family: var(--font-sans);
   font-size: var(--type-size-fluid-caption);
   font-weight: var(--weight-semibold);
@@ -3073,7 +3073,7 @@ p {
   display: block;
   width: 100%;
   aspect-ratio: 460 / 215;
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -3239,7 +3239,7 @@ p {
   position: absolute;
   inset: -1px;
   border-radius: 0;
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -3311,7 +3311,7 @@ p {
 .home-calendar-card--fallback {
   background:
     radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--icon-default) 24%, transparent), transparent 42%),
-    linear-gradient(135deg, var(--surface-solid), var(--surface-subtle));
+    linear-gradient(135deg, var(--surface-canvas), var(--surface-subtle));
 
   .home-calendar-card__content {
     opacity: 1;
@@ -3461,7 +3461,7 @@ p {
   cursor: pointer;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   opacity: 0;
   transition: opacity var(--motion-base) ease;
   @include media-depth(sm);
@@ -3583,7 +3583,7 @@ p {
     flex: 0 0 34px;
     width: 34px;
     height: 34px;
-    background: var(--surface-solid);
+    background: var(--surface-canvas);
     object-fit: cover;
   }
 
@@ -4198,7 +4198,7 @@ p {
         color-mix(in srgb, var(--text-primary) 5%, transparent) 0%,
         transparent 58%
       ),
-      var(--surface-tertiary);
+      var(--surface-canvas);
 
     h4 {
       display: inline-flex;
@@ -4234,7 +4234,7 @@ p {
     padding: var(--space-7) var(--space-8);
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
   }
 
   &__discord-copy {
@@ -4283,7 +4283,7 @@ p {
     padding: 0 var(--space-6);
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
@@ -4321,7 +4321,7 @@ p {
     padding: var(--space-6) var(--space-7);
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-semibold);
@@ -4357,7 +4357,7 @@ p {
   &__policy-note {
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
   }
 
   &__detail-card {
@@ -4513,7 +4513,7 @@ p {
     padding: var(--space-2);
     border: 0;
     border-radius: var(--radius-pill);
-    background: var(--surface-interactive);
+    background: var(--surface-canvas);
   }
 
   &__billing-toggle-thumb {
@@ -4619,7 +4619,7 @@ p {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    background: var(--surface-interactive);
+    background: var(--surface-canvas);
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
@@ -4645,7 +4645,7 @@ p {
     &:disabled:hover,
     &:disabled:focus-visible {
       border-color: var(--border);
-      background: var(--surface-interactive);
+      background: var(--surface-canvas);
     }
   }
 }
@@ -4690,7 +4690,7 @@ p {
     opacity: 0.55;
 
     &:hover {
-      background: var(--surface-interactive);
+      background: var(--surface-canvas);
       transform: none;
     }
   }
@@ -4698,7 +4698,7 @@ p {
   &--featured {
     position: relative;
     overflow: hidden;
-    background: var(--surface-interactive);
+    background: var(--surface-canvas);
 
     &:hover {
       background: var(--surface-hover);
@@ -4845,8 +4845,8 @@ p {
       ),
       linear-gradient(
         135deg,
-        color-mix(in srgb, var(--surface-secondary) 55%, var(--surface-tertiary)) 0%,
-        var(--surface-tertiary) 100%
+        color-mix(in srgb, var(--surface-secondary) 55%, var(--surface-canvas)) 0%,
+        var(--surface-canvas) 100%
       );
 
     // Soft gold flash: bright near the head, long dim trail, fully transparent elsewhere.
@@ -5024,7 +5024,7 @@ p {
   &__panel {
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
   }
 
   &__summary-card {
@@ -5039,7 +5039,7 @@ p {
       linear-gradient(
         180deg,
         color-mix(in srgb, var(--surface-secondary) 70%, transparent),
-        var(--surface-tertiary)
+        var(--surface-canvas)
       );
 
     svg {
@@ -5076,7 +5076,7 @@ p {
         linear-gradient(
           180deg,
           color-mix(in srgb, var(--surface-secondary) 70%, transparent),
-          var(--surface-tertiary)
+          var(--surface-canvas)
         );
 
       svg {
@@ -5127,7 +5127,7 @@ p {
     gap: var(--space-6);
     min-height: 132px;
     padding: var(--space-7) var(--space-8);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
 
     &--wide {
       gap: var(--space-5);
@@ -5459,7 +5459,7 @@ p {
     background: var(--toggle-track-on);
 
     span {
-      background: var(--surface-solid);
+      background: var(--surface-canvas);
       transform: translateX(20px);
     }
   }
@@ -5531,7 +5531,7 @@ p {
   padding: 0 var(--space-8);
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
-  background: var(--surface-deep);
+  background: var(--surface-canvas);
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--type-size-compact);
@@ -6793,7 +6793,7 @@ p {
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     background: var(--sidebar-selector);
-    color: var(--surface-tertiary);
+    color: var(--surface-canvas);
     transition:
       background var(--motion-fast) var(--ease),
       border-color var(--motion-fast) var(--ease);
@@ -6806,7 +6806,7 @@ p {
   input:checked + &__box {
     border-color: var(--text-primary);
     background: var(--text-primary);
-    color: var(--surface-tertiary);
+    color: var(--surface-canvas);
   }
 
   span:last-child {
@@ -7093,7 +7093,7 @@ input[type="search"]::-ms-reveal {
   aspect-ratio: 460 / 215;
   border: none;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   opacity: 0;
   transition: opacity var(--motion-slow) ease;
   image-rendering: auto;
@@ -7711,7 +7711,7 @@ input[type="search"]::-ms-reveal {
     height: 24px;
     place-items: center;
     border-radius: var(--radius-pill);
-    background: var(--surface-primary);
+    background: var(--surface-canvas);
     color: var(--text-tertiary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-semibold);
@@ -7974,7 +7974,7 @@ input[type="search"]::-ms-reveal {
 .backup-panel {
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-interactive);
+  background: var(--surface-canvas);
 }
 
 .backup-restore-modal {
@@ -8415,7 +8415,7 @@ input[type="search"]::-ms-reveal {
   }
 
   &--hero {
-    background: var(--surface-interactive);
+    background: var(--surface-canvas);
     border-color: var(--border);
   }
 }
@@ -8525,7 +8525,7 @@ input[type="search"]::-ms-reveal {
     object-fit: cover;
     border: none;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
   }
 
   &__content {
@@ -8580,7 +8580,7 @@ input[type="search"]::-ms-reveal {
 .favorites-grid__cover {
   position: absolute;
   inset: 0;
-  background-color: var(--surface-solid);
+  background-color: var(--surface-canvas);
   background-size: cover;
   background-position: center;
   transition:
@@ -8800,7 +8800,7 @@ input[type="search"]::-ms-reveal {
   &__cover {
     position: absolute;
     inset: 0;
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
     opacity: 0;
     transition:
       filter var(--motion-base) ease,
@@ -8932,7 +8932,7 @@ input[type="search"]::-ms-reveal {
     padding: var(--space-4) var(--space-4) var(--space-4);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--background-dark) 78%, var(--surface-primary) 22%);
+    background: color-mix(in srgb, var(--background-dark) 78%, var(--surface-canvas) 22%);
     color: var(--text-primary);
     font-size: var(--type-size-micro);
     font-weight: var(--weight-semibold);
@@ -10450,11 +10450,11 @@ html.no-backdrop-blur {
   &__avatar-placeholder {
     width: 100%;
     height: 100%;
-    background: var(--surface-solid);
+    background: var(--surface-canvas);
   }
 
   &__banner-button.edit-profile-cover-modal__preview {
-    background: var(--surface-solid);
+    background: var(--surface-canvas);
     border-radius: 0;
     clip-path: none;
   }
@@ -11005,7 +11005,7 @@ html.no-backdrop-blur {
     overflow: hidden;
     border: 1px solid var(--border-ui);
     border-radius: var(--radius-md);
-    background: var(--surface-deep);
+    background: var(--surface-canvas);
   }
 
   &__collection-picker-header {
@@ -11688,7 +11688,7 @@ html.no-backdrop-blur {
     padding: var(--space-8);
     border: 1px solid var(--border-hover);
     border-radius: var(--radius-md);
-    background: var(--surface-deep);
+    background: var(--surface-canvas);
   }
 
   &__chips-heading {
@@ -12551,7 +12551,7 @@ html.no-backdrop-blur {
     position: relative;
     min-width: 148px;
     border: 1px solid var(--border-ui);
-    background: var(--surface-deep);
+    background: var(--surface-canvas);
     color: var(--text-primary);
     justify-content: center;
     transition:
@@ -12682,7 +12682,7 @@ html.no-backdrop-blur {
   padding: var(--space-4) var(--space-6);
   border: 1px solid var(--border-ui);
   border-radius: var(--radius-sm);
-  background: var(--surface-deep);
+  background: var(--surface-canvas);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
@@ -13843,7 +13843,7 @@ button,
 
 .settings-option--skeleton:hover,
 .settings-option--skeleton:focus-within {
-  background: var(--surface-tertiary);
+  background: var(--surface-canvas);
 }
 
 /* Library page skeleton */

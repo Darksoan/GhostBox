@@ -20,14 +20,8 @@
   --surface-titlebar-control: var(--n-3);
   --surface-titlebar-popover: var(--n-3);
 
-  --surface-interactive: var(--surface-canvas);
-  --surface-primary: var(--surface-canvas);
   --surface-secondary: var(--surface-panel);
-  --surface-tertiary: var(--surface-canvas);
 
-  --surface-solid: var(--surface-primary);
-  --surface-ui: var(--surface-primary);
-  --surface-deep: var(--surface-tertiary);
   // Superfícies de opção: card acompanha o primeiro degrau acima do canvas;
   // dropdown e hover sobem degraus reais da rampa.
   --surface-option: var(--n-1);
@@ -35,16 +29,9 @@
   --surface-option-active: var(--n-4);
   --library-box: var(--n-0);
   --library-box-active: var(--surface-option);
-  // Controles e popovers mantêm papéis próprios para não reutilizar hover
-  // como fundo estrutural e perder separação quando um menu abre.
-  --surface-control: var(--surface-popover);
-  --surface-control-hover: var(--n-4);
-  --surface-control-open: var(--n-4);
   --surface-popover: var(--n-3);
-  --surface-popover-hover: var(--n-2);
-  --surface-popover-active: var(--n-4);
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
-  --surface-tray: var(--surface-solid);
+  --surface-tray: var(--surface-canvas);
   --surface-tray-item: var(--surface-popover);
   --surface-tray-item-hover: var(--n-2);
   --surface-tray-item-focus: var(--n-4);
@@ -201,5 +188,5 @@
   // --- Foco ---
   --focus-ring-color: var(--n-10);
 
-  --app-gradient: var(--surface-tertiary);
+  --app-gradient: var(--surface-canvas);
 }

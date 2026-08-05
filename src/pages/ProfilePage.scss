@@ -26,7 +26,7 @@
     gap: var(--space-6);
     min-height: 280px;
     border: 0;
-    background: color-mix(in srgb, var(--surface-deep) 82%, transparent);
+    background: color-mix(in srgb, var(--surface-canvas) 82%, transparent);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     text-align: center;
@@ -797,7 +797,7 @@
     padding: 0;
     border: 1px solid transparent;
     border-radius: var(--radius-md);
-    background: var(--surface-tertiary);
+    background: var(--surface-canvas);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     box-shadow: none;
@@ -846,7 +846,7 @@
     animation: none;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-tertiary) 88%, transparent);
+    background: color-mix(in srgb, var(--surface-canvas) 88%, transparent);
     pointer-events: none;
 
     &:hover,
@@ -1022,7 +1022,7 @@
     overflow: hidden;
     border: 0;
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-tertiary) 78%, transparent);
+    background: color-mix(in srgb, var(--surface-canvas) 78%, transparent);
   }
 
   &__showcase-stat {
@@ -1070,7 +1070,7 @@
     padding: var(--space-6) var(--space-7);
     border: 0;
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-tertiary) 74%, transparent);
+    background: color-mix(in srgb, var(--surface-canvas) 74%, transparent);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
     font-size: var(--type-size-compact);
@@ -1368,7 +1368,7 @@
     flex: 0 0 auto;
     border: 0;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
     background-size: cover;
     background-position: center;
     outline: 0;
@@ -1519,7 +1519,7 @@
     padding: 0;
     border: 0;
     border-radius: var(--radius-panel);
-    background: var(--surface-solid);
+    background: var(--surface-canvas);
     cursor: inherit;
     overflow: visible;
     outline: 1px solid oklch(1 0 0 / 0.1);
@@ -1742,7 +1742,7 @@
     min-height: 0;
     flex: 0 0 auto;
     border-radius: var(--radius-sm);
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
     background-size: var(--pb-background-size);
     background-position: center;
   }
@@ -1905,7 +1905,7 @@
       flex: 0 0 auto;
       border-radius: var(--radius-sm);
       object-fit: cover;
-      background: var(--surface-deep);
+      background: var(--surface-canvas);
     }
   }
 
@@ -2040,7 +2040,7 @@
     height: 48px;
     border-radius: var(--radius-md);
     object-fit: cover;
-    background: var(--surface-deep);
+    background: var(--surface-canvas);
   }
 
   &__achievement-timeline-content {
@@ -2132,7 +2132,7 @@
   &__recent-cover {
     min-height: 70px;
     border-radius: var(--radius-xs);
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
     background-size: var(--pb-background-size);
   }
 
@@ -2216,7 +2216,7 @@
       flex: 0 0 auto;
       border-radius: var(--radius-sm);
       object-fit: cover;
-      background: var(--surface-solid);
+      background: var(--surface-canvas);
     }
   }
 
@@ -2804,7 +2804,7 @@
     min-height: 50px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--surface-ui);
+    background: var(--surface-canvas);
     color: var(--text-primary);
     cursor: pointer;
     text-align: left;
@@ -3210,7 +3210,7 @@ html.no-backdrop-blur .profile-page {
   &__top-game-icons img,
   &__recent-icons img,
   &__achievement-timeline-icon {
-    background-color: var(--surface-solid);
+    background-color: var(--surface-canvas);
   }
 
   &__top-game-content > span:not(.profile-page__top-game-stats),
@@ -3235,7 +3235,7 @@ html.no-backdrop-blur .profile-page {
 
   &__recent-progress,
   &__progress-track {
-    background: var(--surface-primary);
+    background: var(--surface-canvas);
   }
 
   &__recent-progress span,
