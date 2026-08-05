@@ -4457,7 +4457,7 @@ p {
   padding: var(--space-8) var(--space-7) var(--space-7);
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-secondary);
+  background: var(--surface-canvas);
   transition:
     background var(--motion-fast) var(--ease);
 
@@ -4832,6 +4832,18 @@ p {
 }
 
 .subscription-account {
+  // Sizes derivadas da escala de espaçamento — sem literais espalhados pelo bloco.
+  --subscription-brand-size: var(--space-14);
+  --subscription-brand-glyph: var(--space-9);
+  --subscription-pill-height: var(--space-10);
+  --subscription-summary-min: calc(var(--space-16) * 2);
+  --subscription-panel-min: calc(var(--space-16) * 2 + var(--space-12));
+  --subscription-payment-row-min: calc(var(--space-16) + var(--space-5));
+  --subscription-backup-row-min: calc(var(--space-16) + var(--space-6));
+  --subscription-backup-list-max: calc(var(--space-16) * 6 + var(--space-12));
+  --subscription-status-size: calc(var(--space-10) + var(--space-2));
+  --subscription-backup-thumb-width: calc(var(--space-16) * 2);
+
   display: grid;
   gap: var(--space-6);
   padding: var(--space-8) var(--space-9) var(--space-9);
@@ -4854,33 +4866,15 @@ p {
     overflow: hidden;
     gap: var(--space-7);
     padding: var(--space-8) var(--space-9);
-    // No solid gold rim — only the moving flash draws the border; far from the
-    // hot spot the edge fades to empty so the card barely outlines itself.
-    border: 1px solid transparent;
     border-radius: var(--radius-lg);
-    background:
-      radial-gradient(
-        ellipse at 0 0,
-        color-mix(in srgb, var(--premium-gold) 4%, transparent) 0%,
-        transparent 55%
-      ),
-      linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--surface-secondary) 55%, var(--surface-canvas)) 0%,
-        var(--surface-canvas) 100%
-      );
-
-    // Soft gold flash: bright near the head, long dim trail, fully transparent elsewhere.
-    &::before {
-      @include mixins.gold-flashlight-border($intensity: 1, $opacity: 0.72, $duration: 9s);
-    }
+    background: var(--surface-panel);
 
     h3 {
       margin: 0;
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-semibold);
-      line-height: 1.25;
+      line-height: var(--type-line-body);
     }
 
     p {
@@ -4888,7 +4882,7 @@ p {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
-      line-height: 1.4;
+      line-height: var(--type-line-caption);
     }
   }
 
@@ -4904,19 +4898,16 @@ p {
   &__brand-icon {
     display: inline-flex;
     flex: 0 0 auto;
-    width: 42px;
-    height: 42px;
+    width: var(--subscription-brand-size);
+    height: var(--subscription-brand-size);
     align-items: center;
     justify-content: center;
-    border: 1px solid color-mix(in srgb, var(--premium-gold) 32%, var(--border));
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--premium-gold) 16%, transparent), transparent),
-      var(--surface-secondary);
+    background: var(--surface-raised);
 
     &::before {
-      width: 21px;
-      height: 21px;
+      width: var(--subscription-brand-glyph);
+      height: var(--subscription-brand-glyph);
       background: var(--premium-gold);
       content: "";
       mask: var(--subscription-ghost-icon) center / contain no-repeat;
@@ -4935,11 +4926,10 @@ p {
     flex: 0 0 auto;
     align-items: center;
     gap: var(--space-3);
-    min-height: 24px;
+    min-height: var(--subscription-pill-height);
     padding: 0 var(--space-5);
-    border: 1px solid var(--border);
     border-radius: var(--radius-pill);
-    background: var(--surface-secondary);
+    background: var(--surface-raised);
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
     font-weight: var(--weight-semibold);
@@ -4949,13 +4939,12 @@ p {
   }
 
   &__status-badge--skeleton {
-    width: 72px;
-    border-color: transparent;
+    width: calc(var(--space-16) + var(--space-10));
   }
 
   &__status-dot {
-    width: 5px;
-    height: 5px;
+    width: var(--space-2);
+    height: var(--space-2);
     border-radius: var(--radius-circle);
     background: color-mix(in srgb, var(--premium-gold) 72%, var(--text-secondary));
     opacity: 0.9;
@@ -4963,11 +4952,11 @@ p {
 
   &__eyebrow {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: var(--space-3);
     color: var(--premium-gold);
     font-size: var(--type-size-micro);
     font-weight: var(--weight-semibold);
-    letter-spacing: 0.08em;
+    letter-spacing: var(--ls-100);
     text-transform: uppercase;
   }
 
@@ -4980,7 +4969,7 @@ p {
   &__details-grid {
     display: grid;
     gap: var(--space-5);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   &__actions {
@@ -4994,18 +4983,16 @@ p {
     align-items: center;
     justify-content: center;
     gap: var(--space-4);
-    min-height: 40px;
+    min-height: var(--space-14);
     padding: 0 var(--space-7);
-    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--background-dark);
+    background: var(--surface-raised);
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-weight: var(--weight-semibold);
     transition:
       background-color var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease),
       transform var(--motion-fast) var(--ease);
 
@@ -5016,19 +5003,21 @@ p {
     svg:last-child {
       flex: 0 0 auto;
       color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
     }
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      border-color: var(--border-hover);
-      background: var(--surface-secondary);
+      background: var(--surface-popover);
       color: var(--text-strong);
-      outline: none;
 
       svg:last-child {
         color: var(--text-primary);
       }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
     }
 
     &:active:not(:disabled) {
@@ -5045,7 +5034,7 @@ p {
   &__panel {
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--surface-canvas);
+    background: var(--surface-panel);
   }
 
   &__summary-card {
@@ -5054,25 +5043,18 @@ p {
     align-content: start;
     overflow: hidden;
     gap: var(--space-4);
-    min-height: 92px;
+    min-height: var(--subscription-summary-min);
     padding: var(--space-7);
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--surface-secondary) 70%, transparent),
-        var(--surface-canvas)
-      );
 
     svg {
       color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
     }
 
     span {
       color: var(--text-secondary);
       font-size: var(--type-size-micro);
       font-weight: var(--weight-semibold);
-      letter-spacing: 0.07em;
+      letter-spacing: var(--ls-100);
       text-transform: uppercase;
     }
 
@@ -5082,24 +5064,11 @@ p {
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-semibold);
-      line-height: 1.35;
+      line-height: var(--type-line-body);
       font-variant-numeric: tabular-nums;
     }
 
     &--accent {
-      border-color: color-mix(in srgb, var(--premium-gold) 18%, var(--border));
-      background:
-        radial-gradient(
-          ellipse at 0 0,
-          color-mix(in srgb, var(--premium-gold) 8%, transparent) 0%,
-          transparent 60%
-        ),
-        linear-gradient(
-          180deg,
-          color-mix(in srgb, var(--surface-secondary) 70%, transparent),
-          var(--surface-canvas)
-        );
-
       svg {
         color: var(--premium-gold);
       }
@@ -5111,44 +5080,44 @@ p {
   }
 
   &__summary-icon-skeleton {
-    width: 18px;
-    height: 18px;
+    width: var(--space-9);
+    height: var(--space-9);
     border-radius: var(--radius-sm);
   }
 
   &__line {
     display: block;
+    max-width: 100%;
     border-radius: var(--radius-sm);
   }
 
   &__line--eyebrow {
-    width: 128px;
-    height: 11px;
-    margin-bottom: 6px;
+    width: 60%;
+    height: var(--space-6);
+    margin-bottom: var(--space-3);
   }
 
   &__line--title {
-    width: 164px;
-    height: 18px;
+    width: 70%;
+    height: var(--space-9);
   }
 
   &__line--copy {
-    width: 122px;
-    height: 12px;
+    width: 55%;
+    height: var(--space-6);
   }
 
   &__line--value {
-    width: 84px;
-    height: 16px;
+    width: 40%;
+    height: var(--space-8);
   }
 
   &__panel {
     display: grid;
     align-content: start;
     gap: var(--space-6);
-    min-height: 132px;
+    min-height: var(--subscription-panel-min);
     padding: var(--space-7) var(--space-8);
-    background: var(--surface-canvas);
 
     &--wide {
       gap: var(--space-5);
@@ -5181,11 +5150,10 @@ p {
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: var(--space-7);
-      min-height: 58px;
+      min-height: var(--subscription-payment-row-min);
       padding: var(--space-6) var(--space-7);
-      border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      background: var(--surface-secondary);
+      background: var(--surface-raised);
     }
 
     div {
@@ -5198,7 +5166,7 @@ p {
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-semibold);
-      line-height: 1.35;
+      line-height: var(--type-line-body);
       font-variant-numeric: tabular-nums;
     }
 
@@ -5207,7 +5175,7 @@ p {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
-      line-height: 1.4;
+      line-height: var(--type-line-caption);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -5217,40 +5185,40 @@ p {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 24px;
+    min-height: var(--subscription-pill-height);
     padding: 0 var(--space-5);
-    border: 1px solid var(--border);
     border-radius: var(--radius-pill);
+    // Um degrau acima da linha de pagamento (raised) para separar sem borda.
+    background: var(--surface-popover);
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
     font-weight: var(--weight-semibold);
-    letter-spacing: 0.04em;
+    letter-spacing: var(--ls-100);
     text-transform: uppercase;
     white-space: nowrap;
 
+    // Indicadores de status — única exceção à regra "sem bordas em surfaces".
     &--paid {
-      border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--success) 28%, var(--border));
       background: var(--success-soft);
       color: var(--text-primary);
     }
 
     &--pending {
-      border-color: color-mix(in srgb, var(--premium-gold) 28%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--premium-gold) 28%, var(--border));
       background: color-mix(in srgb, var(--premium-gold) 10%, transparent);
       color: var(--text-primary);
     }
 
     &--failed {
-      border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
       background: var(--danger-soft);
       color: var(--text-primary);
     }
 
     &--cancelled {
-      border-color: var(--border);
-      background: var(--surface-subtle);
+      background: var(--surface-popover);
       color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
     }
   }
 
@@ -5259,7 +5227,7 @@ p {
     gap: var(--space-4);
     margin: 0;
     padding: 0;
-    max-height: 320px;
+    max-height: var(--subscription-backup-list-max);
     overflow-y: auto;
     list-style: none;
 
@@ -5267,11 +5235,10 @@ p {
       display: flex;
       align-items: center;
       gap: var(--space-6);
-      min-height: 44px;
+      min-height: var(--subscription-backup-row-min);
       padding: var(--space-5) var(--space-6);
-      border: 1px dotted var(--border);
       border-radius: var(--radius-sm);
-      background: var(--surface-secondary);
+      background: var(--surface-raised);
     }
 
     strong {
@@ -5292,12 +5259,24 @@ p {
     }
   }
 
+  &__backup-thumb {
+    flex: 0 0 auto;
+    width: var(--subscription-backup-thumb-width);
+    // Mesmo aspect ratio do header do catálogo (460/215) — cover em vez de
+    // stretch, então a imagem recorta ao invés de deformar.
+    aspect-ratio: 460 / 215;
+    border-radius: var(--radius-sm);
+    background: var(--surface-popover);
+    object-fit: cover;
+  }
+
   &__backup-status {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: var(--subscription-status-size);
+    height: var(--subscription-status-size);
+    // Indicador de sucesso/erro — borda permitida.
     border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
     border-radius: var(--radius-sm);
     background: var(--success-soft);
@@ -5317,9 +5296,8 @@ p {
     gap: var(--space-2);
     margin: 0;
     padding: var(--space-6) var(--space-7);
-    border: 1px dashed color-mix(in srgb, var(--border-strong) 55%, var(--border));
     border-radius: var(--radius-sm);
-    background: var(--surface-subtle);
+    background: var(--surface-raised);
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
 
@@ -5327,23 +5305,22 @@ p {
       color: var(--text-primary);
       font-size: var(--type-size-compact);
       font-weight: var(--weight-semibold);
-      line-height: 1.35;
+      line-height: var(--type-line-compact);
     }
 
     p {
       margin: 0;
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-medium);
-      line-height: 1.45;
+      line-height: var(--type-line-caption);
     }
   }
 
   &__loading-indicator {
     display: grid;
-    min-height: 140px;
-    min-width: 140px;
+    min-height: calc(var(--space-16) * 3);
+    min-width: calc(var(--space-16) * 3);
     place-items: center;
     gap: var(--space-6);
     border: 0;
@@ -5356,8 +5333,9 @@ p {
   }
 
   &__spinner {
-    width: 36px;
-    height: 36px;
+    width: var(--space-12);
+    height: var(--space-12);
+    // Indicador de progresso, não superfície — borda permitida.
     border: 2px solid var(--border);
     border-top-color: var(--text-primary);
     border-radius: var(--radius-circle);
