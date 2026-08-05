@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
@@ -1220,6 +1220,36 @@ function HomeRecommendedHero({
           onOpenGame={onOpenGame}
           onGameContextMenu={onGameContextMenu}
         />
+        {visibleGames.length > 1 ? (
+          <button
+            type="button"
+            className="home-recommended__nav home-recommended__nav--prev"
+            aria-label={
+              language === "en" ? "Previous game" : "Jogo anterior"
+            }
+            onClick={() =>
+              setActiveIndex(
+                (index) => (index - 1 + visibleGames.length) % visibleGames.length
+              )
+            }
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+        ) : null}
+        {visibleGames.length > 1 ? (
+          <button
+            type="button"
+            className="home-recommended__nav home-recommended__nav--next"
+            aria-label={
+              language === "en" ? "Next game" : "Próximo jogo"
+            }
+            onClick={() =>
+              setActiveIndex((index) => (index + 1) % visibleGames.length)
+            }
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        ) : null}
         {visibleGames.length > 1 ? (
           <div
             className="home-recommended__pagination"
