@@ -11,6 +11,9 @@
   --surface-canvas: var(--n-0);
   --surface-panel: var(--n-1);
   --surface-raised: var(--n-2);
+  // Igual ao canvas: nada pode ficar abaixo do piso da rampa (#0f0f0f). Mantido
+  // como papel nomeado para quem precisa declarar "afundado"; a distinção vem de
+  // geometria (padding, inset), não de cor.
   --surface-sunken: var(--n-0);
   --surface-sidebar: var(--n-1);
   --surface-titlebar: var(--surface-canvas);
@@ -59,8 +62,10 @@
   --toggle-track-on: var(--text-strong);
   // Card de explorar da home: um degrau acima do canvas, sem virar --surface-card.
   --surface-explore-card: var(--n-1);
-  // Fundo atrás de capa/arte com proporção fixa — neutro profundo evita halo na borda.
-  --surface-media-letterbox: var(--n-0);
+  // Fundo atrás de capa/arte com proporção fixa. Fora da rampa de propósito: não
+  // é um tier de UI, é o vazio atrás da arte. Preto absoluto evita halo quando a
+  // capa já tem barras pretas — o piso da rampa (#0f0f0f) desenharia uma caixa.
+  --surface-media-letterbox: var(--black);
   --pill-bg: var(--n-3);
   --surface-modal: var(--n-4);
   // Dropdown da aba Perfil (ordenação da atividade): fundo próprio, quase preto.
