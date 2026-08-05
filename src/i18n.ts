@@ -132,6 +132,8 @@ const translations: Record<Language, TranslationTree> = {
     home: {
       pageAria: "Jogos recomendados e categorias da página inicial",
       recommended: "Recomendados",
+      recommendedPreviousGame: "Jogo anterior",
+      recommendedNextGame: "Próximo jogo",
       featuredGames: "Bem avaliados",
       exploreByCategory: "Explore por categoria",
       personalCalendar: "Calendário pessoal",
@@ -489,6 +491,8 @@ const translations: Record<Language, TranslationTree> = {
     home: {
       pageAria: "Recommended games and home categories",
       recommended: "Recommended",
+      recommendedPreviousGame: "Previous game",
+      recommendedNextGame: "Next game",
       featuredGames: "Top rated",
       exploreByCategory: "Explore by category",
       personalCalendar: "Personal calendar",
