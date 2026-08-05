@@ -4676,7 +4676,7 @@ p {
 }
 
 .subscription-plans--modal .subscription-plan-card {
-  min-height: 260px;
+  min-height: calc(var(--space-16) * 6 + var(--space-9));
   padding: var(--space-9) var(--space-8) var(--space-8);
 
   .subscription-plan-card__top {
@@ -4696,11 +4696,11 @@ p {
 
 .subscription-plans--settings .subscription-plan-card {
   grid-template-rows: auto auto auto;
-  min-height: 350px;
+  min-height: calc(var(--space-16) * 7 + var(--space-9));
   gap: var(--space-7);
   padding: var(--space-9) var(--space-9) var(--space-9);
   border-radius: var(--radius-md);
-  background: var(--surface-secondary);
+  background: var(--surface-canvas);
   transform: translateY(0);
   transition:
     background var(--motion-fast) var(--ease),
@@ -4723,7 +4723,7 @@ p {
   &--featured {
     position: relative;
     overflow: hidden;
-    background: var(--surface-canvas);
+    background: var(--surface-raised);
 
     &:hover {
       background: var(--surface-hover);
@@ -4812,8 +4812,7 @@ p {
   }
 
   &--featured &__action:not(:disabled) {
-    border-color: var(--border);
-    background: var(--sidebar-selector);
+    background: var(--surface-popover);
     color: var(--text-primary);
   }
 
