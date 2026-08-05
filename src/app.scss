@@ -182,7 +182,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 26px;
+  min-height: var(--pill-height);
   max-width: 100%;
   padding: var(--space-2) var(--space-5);
   border: 0;
@@ -3103,24 +3103,27 @@ p {
   min-width: 0;
 }
 
-/* Uma linha, sempre. O recorte anterior era por `max-height` com `flex-wrap`,
-   e 60px não é múltiplo da altura de linha (26px + 4px de gap): sobravam 4px
-   mortos e uma terceira linha podia vazar como fatia de 1px. Com contagem fixa
-   de pills e linha única, todo card da grade fecha na mesma altura. */
+/* Exatamente duas linhas. Altura fechada (não `max-height`) para que todo card
+   da grade feche igual, independente de quantas pills o jogo tem — o que variava
+   antes era justamente isso. O cálculo usa `--pill-height` em vez de um valor
+   chutado: duas linhas medem 2 alturas + 1 gap, sem folga morta nem terceira
+   linha vazando pela borda. */
 .home-category-card__genres {
   width: 100%;
   display: flex;
+  height: calc(var(--pill-height) * 2 + var(--space-2));
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: var(--space-2);
   overflow: hidden;
 }
 
-/* `flex: 0 1 auto` deixa a pill encolher quando o conjunto não cabe, em vez de
-   empurrar as vizinhas para fora do overflow. O texto resolve em reticências. */
+/* `flex: 0 0 auto` mantém a largura natural para a pill quebrar limpa para a
+   linha de baixo. Rótulo longo demais é contido por `max-width` + reticências. */
 .home-category-card__genre {
   @include tag-chip;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
