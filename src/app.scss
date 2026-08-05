@@ -4449,6 +4449,10 @@ p {
 }
 
 .subscription-plan-card {
+  // Local scale-derived tokens — mirrors the pattern in .subscription-account.
+  --plan-badge-offset: calc(var(--space-3) * -1 - var(--space-1));
+  --plan-action-min-height: var(--space-14);
+
   position: relative;
   display: grid;
   min-height: 0;
@@ -4471,12 +4475,12 @@ p {
 
   &__badge {
     position: absolute;
-    top: -10px;
+    top: var(--plan-badge-offset);
     left: 50%;
     padding: var(--space-2) var(--space-5);
     border: 0;
     border-radius: var(--radius-pill);
-    background: var(--background);
+    background: var(--surface-popover);
     color: var(--text-primary);
     font-size: var(--type-size-micro);
     font-weight: var(--weight-semibold);
@@ -4534,17 +4538,17 @@ p {
     padding: var(--space-2);
     border: 0;
     border-radius: var(--radius-pill);
-    background: var(--surface-canvas);
+    background: var(--surface-raised);
   }
 
   &__billing-toggle-thumb {
     position: absolute;
-    top: 3px;
-    bottom: 3px;
-    left: 3px;
-    width: calc(50% - 3px);
+    top: var(--space-1);
+    bottom: var(--space-1);
+    left: var(--space-1);
+    width: calc(50% - var(--space-1));
     border-radius: var(--radius-pill);
-    background: var(--sidebar-selector);
+    background: var(--surface-popover);
     transition: transform var(--motion-base) var(--ease);
 
     &--quarterly {
@@ -4571,7 +4575,7 @@ p {
     }
 
     &:focus-visible {
-      outline: 2px solid var(--icon-default);
+      outline: 2px solid var(--focus-ring-color);
       outline-offset: 2px;
     }
   }
@@ -4636,26 +4640,28 @@ p {
   }
 
   &__action {
-    min-height: 34px;
+    min-height: var(--plan-action-min-height);
     width: 100%;
-    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    background: var(--surface-canvas);
+    background: var(--surface-raised);
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-weight: var(--weight-medium);
     transition:
-      border-color var(--motion-fast) var(--ease),
       background var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
 
     &:hover,
     &:focus-visible {
-      border-color: var(--border);
-      background: var(--surface-hover);
+      background: var(--surface-popover);
       outline: none;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
     }
 
     &:disabled {
@@ -4663,10 +4669,8 @@ p {
       opacity: 0.48;
     }
 
-    &:disabled:hover,
-    &:disabled:focus-visible {
-      border-color: var(--border);
-      background: var(--surface-canvas);
+    &:disabled:hover {
+      background: var(--surface-raised);
     }
   }
 }
