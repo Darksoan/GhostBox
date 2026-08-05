@@ -132,6 +132,10 @@ const homeFeaturedSteamGames: HomeGameSeed[] = [
 ];
 
 const homeCarouselGroupSize = 4;
+// Pills por card. Sem teto, um jogo da Steam traz 20+ tags e o card renderiza
+// todas para o CSS recortar quase todas — quais sobravam dependia do
+// comprimento das strings, então dois cards vizinhos nunca batiam.
+const homeMetadataCategoryLimit = 3;
 const homeRecommendedHeroPreloadLimit = 8;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
 const homeRecommendedAppIdGroups = [
@@ -480,7 +484,7 @@ function getHomeMetadataCategories(game: GhostBoxGame) {
         .map(normalizeHomeCategory)
         .filter(Boolean)
     )
-  );
+  ).slice(0, homeMetadataCategoryLimit);
 }
 
 function HomeCategoryCard({

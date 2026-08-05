@@ -3103,19 +3103,24 @@ p {
   min-width: 0;
 }
 
+/* Uma linha, sempre. O recorte anterior era por `max-height` com `flex-wrap`,
+   e 60px não é múltiplo da altura de linha (26px + 4px de gap): sobravam 4px
+   mortos e uma terceira linha podia vazar como fatia de 1px. Com contagem fixa
+   de pills e linha única, todo card da grade fecha na mesma altura. */
 .home-category-card__genres {
   width: 100%;
   display: flex;
   min-width: 0;
-  max-height: calc(var(--space-10) * 2 + var(--space-6));
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-2);
   overflow: hidden;
 }
 
+/* `flex: 0 1 auto` deixa a pill encolher quando o conjunto não cabe, em vez de
+   empurrar as vizinhas para fora do overflow. O texto resolve em reticências. */
 .home-category-card__genre {
   @include tag-chip;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -3126,9 +3131,19 @@ p {
   white-space: nowrap;
 }
 
+/* A pill acompanha o card: o card sobe um degrau no hover/foco, a pill sobe
+   junto para manter a mesma distância de dois degraus da rampa. */
+.home-category-card--with-metadata:focus-visible .home-category-card__genre {
+  background: var(--pill-bg-hover);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .home-category-card--with-metadata:hover {
     background: var(--surface-option-hover);
+  }
+
+  .home-category-card--with-metadata:hover .home-category-card__genre {
+    background: var(--pill-bg-hover);
   }
 }
 

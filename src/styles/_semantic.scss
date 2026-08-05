@@ -53,7 +53,11 @@
   // é um tier de UI, é o vazio atrás da arte. Preto absoluto evita halo quando a
   // capa já tem barras pretas — o piso da rampa (#0f0f0f) desenharia uma caixa.
   --surface-media-letterbox: var(--black);
+  // Pill sobre container clicável. O par existe porque o container sobe um
+  // degrau no hover; sem subir junto, a pill cairia para 1 degrau de distância
+  // (~1.04:1) e sumiria dentro do card.
   --pill-bg: var(--n-3);
+  --pill-bg-hover: var(--n-4);
   --surface-modal: var(--n-4);
   // Dropdown da aba Perfil (ordenação da atividade): fundo próprio, quase preto.
   --profile-dropdown-surface: var(--n-1);
