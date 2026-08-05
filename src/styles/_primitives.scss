@@ -4,11 +4,14 @@
   // --- Rampa neutra (13 degraus, canvas → ênfase máxima) ---
   // Passos de 6-10 RGB no escuro, ~30 RGB no claro; degraus 7+ mantêm
   // contraste de papel: borda interativa ≥3:1, texto terciário ≥4.5:1.
-  --n-0: #0d0d0d;
-  --n-1: #101010;
-  --n-2: #1a1a1a;
-  --n-3: #202020;
-  --n-4: #2a2a2a;
+  --n-0: #000000;
+  --n-1: #0b0b0b;
+  --n-2: #141414;
+  --n-3: #1a1a1a;
+  --n-4: #202020;
+  // Rampa de borda: independente da rampa de superfície. Superfícies ficam
+  // limitadas a #202020; bordas não são.
+  --b-0: #2a2a2a;
   --n-5: #363636;
   --n-6: #464646;
   --n-7: #606060;
@@ -18,9 +21,6 @@
   --n-11: #d8d8d8;
   --n-12: #f2f2f2;
 
-  // Fora da rampa: extremos absolutos. --n-000 fica abaixo de --n-0 e serve a
-  // indicadores desenhados sobre superfícies claras (ex.: trilho de spinner).
-  --n-000: #070707;
   --black: #000000;
   --white: #ffffff;
 

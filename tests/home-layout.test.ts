@@ -41,14 +41,14 @@ describe("Home layout", () => {
     expect(customProperties.get("--background")).toBe("var(--surface-canvas)");
     expect(customProperties.get("--background-dark")).toBe("var(--surface-canvas)");
     expect(customProperties.get("--surface-canvas")).toBe("var(--n-0)");
-    expect(customProperties.get("--n-0")).toBe("#0d0d0d");
+    expect(customProperties.get("--n-0")).toBe("#000000");
     expect(customProperties.get("--surface-sidebar")).toBe("var(--n-1)");
     expect(customProperties.get("--surface-titlebar")).toBe("var(--surface-canvas)");
-    expect(customProperties.get("--n-1")).toBe("#101010");
+    expect(customProperties.get("--n-1")).toBe("#0b0b0b");
     expect(customProperties.get("--sidebar-option-hover")).toBe("var(--n-2)");
-    expect(customProperties.get("--n-2")).toBe("#1a1a1a");
+    expect(customProperties.get("--n-2")).toBe("#141414");
     expect(customProperties.get("--sidebar-option-selected")).toBe("var(--n-4)");
-    expect(customProperties.get("--n-4")).toBe("#2a2a2a");
+    expect(customProperties.get("--n-4")).toBe("#202020");
     expect(declarations.get(".sidebar")?.get("background")).toBe("var(--surface-sidebar)");
     expect(declarations.get(".subscription-plan-card")?.get("border")).toBe("0");
     expect(declarations.get(".app-main")?.get("background")).toBe("var(--app-gradient)");
