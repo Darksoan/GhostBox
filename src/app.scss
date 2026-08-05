@@ -194,7 +194,11 @@
   line-height: 1;
   letter-spacing: var(--ls-200);
   white-space: nowrap;
-  cursor: default;
+  /* A chip nunca é o alvo do clique: ou é decorativa, ou é rótulo dentro de um
+     container clicável. Herdar deixa o cursor do container passar direto, em vez
+     de a chip abrir um buraco de seta no meio de um card com `pointer`. Fora de
+     container clicável, `inherit` já resolve como seta. */
+  cursor: inherit;
   box-shadow: none;
   transition:
     border-color var(--motion-fast) var(--ease),
@@ -7164,7 +7168,6 @@ input[type="search"]::-ms-reveal {
   @include tag-chip;
   background: var(--pill-bg);
   border-color: transparent;
-  cursor: inherit;
 }
 
 .catalogue-list__item:hover .catalogue-list__genre-chip,
