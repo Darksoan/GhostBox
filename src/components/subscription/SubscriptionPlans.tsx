@@ -233,7 +233,10 @@ export function SubscriptionPlans({
   function refreshCloudSaves() {
     void ghostboxApi.listCloudSaves()
       .then((saves) => setCloudSaves(saves))
-      .catch(() => setCloudSaves([]));
+      .catch((error) => {
+        console.warn("Could not list cloud saves", error);
+        setCloudSaves([]);
+      });
   }
 
   function refreshSubscriptionStatus(steamId: string) {

@@ -13,16 +13,23 @@ pub(crate) fn ludusavi_config_dir(app: &tauri::AppHandle) -> Result<std::path::P
 }
 
 pub(crate) fn ludusavi_binary_path() -> Result<std::path::PathBuf, String> {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let candidates = [
-        manifest_dir
-            .join("binaries")
-            .join("ludusavi-x86_64-pc-windows-msvc.exe"),
-        manifest_dir.join("binaries").join("ludusavi.exe"),
-    ];
+    const BINARY_NAMES: [&str; 2] = ["ludusavi-x86_64-pc-windows-msvc.exe", "ludusavi.exe"];
 
-    candidates
+    // Installed builds get the sidecar next to the executable (tauri.conf.json
+    // `externalBin`). CARGO_MANIFEST_DIR is a build-time path that only exists
+    // on the dev machine, so it is a fallback, never the first choice.
+    let mut roots = Vec::new();
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+    {
+        roots.push(exe_dir);
+    }
+    roots.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries"));
+
+    roots
         .into_iter()
+        .flat_map(|root| BINARY_NAMES.map(|name| root.join(name)))
         .find(|path| path.exists())
         .ok_or_else(|| "Sidecar do Ludusavi não encontrado.".to_string())
 }
@@ -98,15 +105,62 @@ pub(crate) fn resolved_game_title(
         .unwrap_or_else(|| app_id.to_string())
 }
 
+/// Resolve the game name Ludusavi's manifest actually knows.
+///
+/// Ludusavi's `backup`/`restore` take manifest game *names*, not Steam app ids:
+/// passing "2138720" yields `unknownGames` and silently copies zero saves.
+/// `find --steam-id` maps the app id to the canonical name ("Rematch"), which
+/// also differs in casing from the Steam store title ("REMATCH").
+pub(crate) fn resolve_ludusavi_game_name(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    title: &str,
+) -> Option<String> {
+    let first_match = |value: serde_json::Value| -> Option<String> {
+        value
+            .get("games")?
+            .as_object()?
+            .keys()
+            .next()
+            .map(String::to_owned)
+    };
+
+    if !app_id.trim().is_empty() {
+        let args = [
+            "find".to_string(),
+            "--api".to_string(),
+            "--steam-id".to_string(),
+            app_id.trim().to_string(),
+        ];
+        if let Some(name) = run_ludusavi(app, &args).ok().and_then(first_match) {
+            return Some(name);
+        }
+    }
+
+    if !title.trim().is_empty() && !is_steam_app_title_placeholder(title, app_id) {
+        let args = [
+            "find".to_string(),
+            "--api".to_string(),
+            "--normalized".to_string(),
+            title.trim().to_string(),
+        ];
+        if let Some(name) = run_ludusavi(app, &args).ok().and_then(first_match) {
+            return Some(name);
+        }
+    }
+
+    None
+}
+
 pub(crate) fn ludusavi_args(
     command: &str,
-    app_id: &str,
+    game_name: &str,
     path_arg: Option<&str>,
     preview: bool,
 ) -> Vec<String> {
     let mut args = vec![
         command.to_string(),
-        app_id.to_string(),
+        game_name.to_string(),
         "--api".to_string(),
         "--force".to_string(),
     ];

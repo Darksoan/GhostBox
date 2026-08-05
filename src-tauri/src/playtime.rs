@@ -341,6 +341,16 @@ pub(crate) fn run_automatic_backup_after_close(
 
         let should_run_cloud = has_cloud_session(&app);
         if !should_run_cloud {
+            // Record the skip so the user learns nothing was saved instead of
+            // the backup silently never happening.
+            let title = resolved_game_title(&app, &game, &app_id);
+            let _ = crate::save_failed_backup_record(
+                &app,
+                &app_id,
+                &title,
+                "",
+                "Backup em nuvem ignorado: faça login com a Steam.",
+            );
             if let Ok(mut guard) = steam_monitor_state().lock() {
                 guard.backup_in_progress.remove(&app_id);
             }
@@ -357,25 +367,18 @@ pub(crate) fn run_automatic_backup_after_close(
             game
         };
 
-        let mut cloud_ok = false;
-        if should_run_cloud {
-            cloud_ok = tauri::async_runtime::block_on(crate::cloud_save::cloud_backup_game(
-                app.clone(),
-                backup_game.clone(),
-            ))
-            .is_ok();
-        }
+        let cloud_error = tauri::async_runtime::block_on(crate::cloud_save::cloud_backup_game(
+            app.clone(),
+            backup_game.clone(),
+        ))
+        .err();
 
         // Record cloud failures so backup status can reflect the latest attempt.
-        if should_run_cloud && !cloud_ok {
+        // Keep the message from cloud_backup_game: it already explains whether
+        // the session expired, premium lapsed, or nothing was found to back up.
+        if let Some(error) = cloud_error {
             let title = resolved_game_title(&app, &backup_game, &app_id);
-            let _ = crate::save_failed_backup_record(
-                &app,
-                &app_id,
-                &title,
-                "",
-                "Falha no backup automático em nuvem.",
-            );
+            let _ = crate::save_failed_backup_record(&app, &app_id, &title, "", &error);
         }
 
         if let Ok(mut guard) = steam_monitor_state().lock() {

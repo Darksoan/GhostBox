@@ -1,5 +1,7 @@
 use crate::extract_app_id;
-use crate::ludusavi::{ludusavi_args, resolved_game_title, run_ludusavi};
+use crate::ludusavi::{
+    ludusavi_args, resolve_ludusavi_game_name, resolved_game_title, run_ludusavi,
+};
 use crate::settings::{
     decrypt_secret_for_current_user, encrypt_secret_for_current_user, read_binary_file,
     remove_data_file, write_binary_file,
@@ -201,12 +203,19 @@ pub async fn cloud_backup_game(
     let backup_dir = temp_root.join("backup");
     std::fs::create_dir_all(&backup_dir).map_err(|error| error.to_string())?;
     let backup_path = backup_dir.to_string_lossy().to_string();
-    let args = ludusavi_args("backup", &app_id, Some(&backup_path), false);
     let cleanup_path = temp_root.clone();
 
     let result = async {
         // Saves first; profile progress (achievements + playtime) is always layered on top.
-        let ludusavi_error = run_ludusavi(&app, &args).err();
+        let ludusavi_error = match resolve_ludusavi_game_name(&app, &app_id, &title) {
+            Some(game_name) => {
+                let args = ludusavi_args("backup", &game_name, Some(&backup_path), false);
+                run_ludusavi(&app, &args).err()
+            }
+            None => Some(format!(
+                "Ludusavi não conhece saves para {title}; apenas conquistas e tempo de jogo foram salvos."
+            )),
+        };
         let profile_progress =
             crate::export_game_profile_progress(&app, &app_id, &title, &backup_dir);
         if !crate::directory_has_content(&backup_dir) {
@@ -343,22 +352,9 @@ pub async fn cloud_list_saves(
     let status = response.status();
     let body = response.text().await.map_err(|error| error.to_string())?;
     if !status.is_success() {
-        return Err(body);
+        return Err(format_cloud_api_error(&body, status.as_u16()));
     }
-    let parsed: serde_json::Value =
-        serde_json::from_str(&body).map_err(|error| error.to_string())?;
-    let app_id = parsed
-        .get("appId")
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
-    let remaining_saves = parsed
-        .get("remainingSaves")
-        .and_then(|value| value.as_u64())
-        .unwrap_or(1);
-    if !app_id.is_empty() && remaining_saves == 0 {
-        let _ = crate::remove_backup_record(&app, app_id);
-    }
-    Ok(parsed)
+    serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -411,9 +407,14 @@ pub async fn cloud_restore_save(
         std::fs::create_dir_all(&restore_dir).map_err(|error| error.to_string())?;
         unzip_to_directory(&zip_path, &restore_dir)?;
         let restore_path = restore_dir.to_string_lossy().to_string();
-        let args = ludusavi_args("restore", &app_id, Some(&restore_path), false);
         // Restore saves when present; always restore profile progress (achievements + playtime).
-        let ludusavi_error = run_ludusavi(&app, &args).err();
+        let ludusavi_error = match resolve_ludusavi_game_name(&app, &app_id, &title) {
+            Some(game_name) => {
+                let args = ludusavi_args("restore", &game_name, Some(&restore_path), false);
+                run_ludusavi(&app, &args).err()
+            }
+            None => Some(format!("Ludusavi não conhece saves para {title}.")),
+        };
         let profile_progress =
             crate::import_game_profile_progress(&app, &app_id, &title, &restore_dir);
         if ludusavi_error.is_some() && !profile_progress.has_any() {

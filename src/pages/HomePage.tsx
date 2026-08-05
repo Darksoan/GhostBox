@@ -17,6 +17,7 @@ import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import {
   useCachedImageSources,
   useLoadableImageCover,
+  useLoadableImageState,
 } from "../hooks/useCachedImageSources";
 import {
   readStoredPersonalCalendar,
@@ -31,6 +32,7 @@ import {
   gameHeaderOnlySources,
   gameHeroSources,
   gameHeroCapsuleSources,
+  gameLogoSources,
   layeredImageStyle,
   withoutHeaderImageSources,
 } from "../utils/image";
@@ -1132,8 +1134,14 @@ function HomeRecommendedBanner({
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const fallbackHeroSources = useMemo(() => gameHeroSources(game), [game]);
+  const fallbackLogoSources = useMemo(() => gameLogoSources(game), [game]);
   const cachedSources = useCachedImageSources(fallbackHeroSources);
+  const cachedLogoSources = useCachedImageSources(fallbackLogoSources);
   const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
+  const { source: logoSource, loaded: logoLoaded } = useLoadableImageState(
+    cachedLogoSources,
+    { preferOrder: true },
+  );
   const layeredSources = heroSource
     ? [heroSource, ...fallbackHeroSources.filter((source) => source !== heroSource)]
     : fallbackHeroSources;
@@ -1159,11 +1167,13 @@ function HomeRecommendedBanner({
       />
       <span className="home-recommended__banner-overlay" aria-hidden="true" />
       <span className="home-recommended__banner-meta" aria-hidden="true">
-        <strong className="home-recommended__banner-title">{game.title}</strong>
-        {game.developers?.[0] ? (
-          <span className="home-recommended__banner-developer">
-            {game.developers[0]}
-          </span>
+        {logoLoaded && logoSource ? (
+          <img
+            className="home-recommended__banner-logo"
+            src={logoSource}
+            alt=""
+            decoding="async"
+          />
         ) : null}
       </span>
     </button>
@@ -1212,7 +1222,6 @@ function HomeRecommendedHero({
 
   return (
     <section className="home-recommended" aria-label={title}>
-      <SectionHeader title={title} />
       <div className="home-recommended__stage">
         <HomeRecommendedBanner
           key={homeGameKey(activeGame)}
@@ -1249,35 +1258,6 @@ function HomeRecommendedHero({
           >
             <ChevronRight aria-hidden="true" />
           </button>
-        ) : null}
-        {visibleGames.length > 1 ? (
-          <div
-            className="home-recommended__pagination"
-            role="group"
-            aria-label={
-              language === "en"
-                ? "Recommended game navigation"
-                : "Navegação de jogos recomendados"
-            }
-          >
-            {visibleGames.map((game, index) => {
-              const isActive = index === activeIndex;
-              return (
-                <button
-                  type="button"
-                  className={`home-recommended__page${
-                    isActive ? " home-recommended__page--active" : ""
-                  }`}
-                  aria-label={`${language === "en" ? "Show" : "Mostrar"} ${game.title}`}
-                  aria-current={isActive ? "true" : undefined}
-                  key={homeGameKey(game)}
-                  onClick={() => setActiveIndex(index)}
-                >
-                  <span aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
         ) : null}
       </div>
     </section>

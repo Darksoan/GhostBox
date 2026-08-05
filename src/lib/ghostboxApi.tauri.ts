@@ -956,50 +956,44 @@ export const ghostboxApi = {
     return invokeOr<void>("cloud_sign_out", {}, undefined);
   },
 
-  listCloudSaves(appId?: string): Promise<CloudSave[]> {
-    return invokeOr<{ saves: CloudSave[] }>(
-      "cloud_list_saves",
-      { appId: appId ?? null },
-      { saves: [] },
-    ).then((result) => result.saves ?? []);
+  // Cloud save calls propagate errors on purpose: the Rust side already
+  // translates worker error codes into user-facing pt-BR messages, and
+  // swallowing them makes an expired session look like "no backups yet".
+  async listCloudSaves(appId?: string): Promise<CloudSave[]> {
+    const result = await invoke<{ saves: CloudSave[] }>("cloud_list_saves", {
+      appId: appId ?? null,
+    });
+    return result?.saves ?? [];
   },
 
   backupGameToCloud(game: GhostBoxGame): Promise<CloudBackupResult | null> {
-    return invokeOr<CloudBackupResult | null>(
-      "cloud_backup_game",
-      { game },
-      null,
-    );
+    return invoke<CloudBackupResult | null>("cloud_backup_game", { game });
   },
 
   restoreCloudSave(
     game: GhostBoxGame,
     saveId: string,
   ): Promise<CloudRestoreResult | null> {
-    return invokeOr<CloudRestoreResult | null>(
-      "cloud_restore_save",
-      { game, saveId },
-      null,
-    );
+    return invoke<CloudRestoreResult | null>("cloud_restore_save", {
+      game,
+      saveId,
+    });
   },
 
   deleteCloudSave(saveId: string): Promise<CloudSaveDeletionResult | null> {
-    return invokeOr<CloudSaveDeletionResult | null>(
-      "cloud_delete_save",
-      { saveId },
-      null,
-    );
+    return invoke<CloudSaveDeletionResult | null>("cloud_delete_save", {
+      saveId,
+    });
   },
 
   setCloudSavePinned(
     saveId: string,
     pinned: boolean,
   ): Promise<CloudSavePinnedResult | null> {
-    return invokeOr<CloudSavePinnedResult | null>(
-      "cloud_set_save_pinned",
-      { saveId, pinned },
-      null,
-    );
+    return invoke<CloudSavePinnedResult | null>("cloud_set_save_pinned", {
+      saveId,
+      pinned,
+    });
   },
 
   getCloudProfileSnapshot(): Promise<CloudProfileSnapshot | null> {

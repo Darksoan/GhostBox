@@ -105,7 +105,7 @@ type CloudSaveRow = {
   updated_at: string;
 };
 
-const MAX_CLOUD_SAVES_PER_GAME = 1;
+const MAX_CLOUD_SAVES_PER_GAME = 3;
 
 type UserProfileCloudRow = {
   steam_id: string;
@@ -1181,44 +1181,21 @@ async function handleCloudSavesList(request: Request, env: Env) {
   if (auth.response) return auth.response;
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId")?.trim();
-  const legacyRows = await (appId
-    ? env.SUBSCRIPTION_DB.prepare(
-        `SELECT id, app_id FROM (
-           SELECT id, app_id,
-             ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank,
-             COUNT(*) OVER (PARTITION BY app_id) AS save_count
-           FROM cloud_saves
-           WHERE steam_id = ? AND app_id = ?
-         ) WHERE save_rank = 1 AND save_count > ?`
-      ).bind(auth.session!.steamId, appId, MAX_CLOUD_SAVES_PER_GAME)
-    : env.SUBSCRIPTION_DB.prepare(
-        `SELECT id, app_id FROM (
-           SELECT id, app_id,
-             ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank,
-             COUNT(*) OVER (PARTITION BY app_id) AS save_count
-           FROM cloud_saves
-           WHERE steam_id = ?
-         ) WHERE save_rank = 1 AND save_count > ? LIMIT 100`
-      ).bind(auth.session!.steamId, MAX_CLOUD_SAVES_PER_GAME)
-  ).all<Pick<CloudSaveRow, "id" | "app_id">>();
 
-  await Promise.all(
-    (legacyRows.results || []).map((row) =>
-      pruneCloudSavesForGame(env, auth.session!.steamId, row.app_id, row.id)
-    )
-  );
-
+  // Listing is read-only. It must never prune: a GET that deletes backups
+  // means simply opening the backup modal destroys the user's history.
+  // Retention is enforced on upload and on pin changes only.
   const query = appId
     ? env.SUBSCRIPTION_DB.prepare(
          `SELECT * FROM (
-           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
            FROM cloud_saves
            WHERE steam_id = ? AND app_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 20`
       ).bind(auth.session!.steamId, appId, MAX_CLOUD_SAVES_PER_GAME)
     : env.SUBSCRIPTION_DB.prepare(
          `SELECT * FROM (
-           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC) AS save_rank
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
            FROM cloud_saves
            WHERE steam_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 100`
@@ -1266,7 +1243,9 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
     body: bytes,
   });
   if (!upload.ok) {
-    return jsonResponse({ error: "storage_upload_failed", detail: await upload.text().catch(() => "") }, env, 502);
+    const detail = await upload.text().catch(() => "");
+    console.error("Cloud save storage upload failed", { appId, status: upload.status, detail });
+    return jsonResponse({ error: "storage_upload_failed", detail }, env, 502);
   }
 
   await env.SUBSCRIPTION_DB.prepare(
@@ -1275,7 +1254,11 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(id, auth.session!.steamId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
 
-  await pruneCloudSavesForGame(env, auth.session!.steamId, appId, id);
+  // Retention is best-effort: the backup is already stored, so a prune failure
+  // must not turn a successful upload into a 500 for the user.
+  await pruneCloudSavesForGame(env, auth.session!.steamId, appId, id).catch((error) => {
+    console.error("Cloud save prune failed after upload", { appId, error: error instanceof Error ? error.message : String(error) });
+  });
 
   return jsonResponse({ save: publicCloudSave({
     id,
@@ -1311,7 +1294,9 @@ async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: s
     `UPDATE cloud_saves SET pinned = ?, updated_at = ? WHERE id = ? AND steam_id = ?`
   ).bind(pinned ? 1 : 0, nowIso(), normalizedSaveId, auth.session!.steamId).run();
 
-  await pruneCloudSavesForGame(env, auth.session!.steamId, row.app_id, normalizedSaveId);
+  await pruneCloudSavesForGame(env, auth.session!.steamId, row.app_id, normalizedSaveId).catch((error) => {
+    console.error("Cloud save prune failed after pin change", { appId: row.app_id, error: error instanceof Error ? error.message : String(error) });
+  });
 
   const updated = await env.SUBSCRIPTION_DB.prepare(
     `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
@@ -2202,6 +2187,7 @@ export default {
       return await route(request, env, context);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Internal error";
+      console.error("Unhandled worker error", { url: request.url, message, stack: error instanceof Error ? error.stack : undefined });
       return jsonResponse({ error: message }, env, 500);
     }
   },

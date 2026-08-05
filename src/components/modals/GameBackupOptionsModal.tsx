@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Cloud, Loader2 } from "lucide-react";
+import { Check, Cloud, Loader2, Pin, Trash2 } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import type { SteamProfile, UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
@@ -38,8 +38,11 @@ function formatBackupTimestamp(
 }
 
 function formatSaveSize(sizeBytes: number) {
-  const mb = Math.max(1, Math.round(sizeBytes / 1024 / 1024));
-  return `${mb} MB`;
+  // Most backups are a few KB (achievements + playtime), so rounding
+  // everything up to "1 MB" hid how small they really are.
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`;
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function GameBackupOptionsModal({
@@ -64,9 +67,9 @@ export function GameBackupOptionsModal({
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [selectedCloudSaveId, setSelectedCloudSaveId] = useState("");
   const [cloudLoading, setCloudLoading] = useState(false);
-  const [cloudBusyAction, setCloudBusyAction] = useState<"restore" | null>(
-    null,
-  );
+  const [cloudBusyAction, setCloudBusyAction] = useState<
+    "restore" | "backup" | "manage" | null
+  >(null);
   const [cloudError, setCloudError] = useState("");
   const [cloudMessage, setCloudMessage] = useState("");
   const [hasCloudSession, setHasCloudSession] = useState(false);
@@ -156,6 +159,95 @@ export function GameBackupOptionsModal({
       cancelled = true;
     };
   }, [game?.appId, open, steamProfile?.steamId]);
+
+  const handleCloudBackup = async () => {
+    if (!game || cloudBusyAction) return;
+    if (!hasCloudSession) {
+      setCloudError(
+        copy(
+          "Reconecte a Steam para fazer backup em nuvem neste dispositivo.",
+          "Reconnect Steam to back up to the cloud on this device.",
+        ),
+      );
+      return;
+    }
+    if (!isPremium) {
+      setSubscriptionModalOpen(true);
+      return;
+    }
+
+    setCloudError("");
+    setCloudMessage("");
+    setCloudBusyAction("backup");
+    try {
+      await ghostboxApi.backupGameToCloud(game);
+      const saves = await ghostboxApi.listCloudSaves(game.appId);
+      setCloudSaves(saves);
+      setSelectedCloudSaveId(saves[0]?.id ?? "");
+      setCloudMessage(copy("Backup em nuvem concluído.", "Cloud backup done."));
+    } catch (error) {
+      setCloudError(
+        error instanceof Error
+          ? error.message
+          : String(error) ||
+              copy("Falha ao fazer backup em nuvem.", "Cloud backup failed."),
+      );
+    } finally {
+      setCloudBusyAction(null);
+    }
+  };
+
+  const handleTogglePinned = async (save: CloudSave) => {
+    if (!game || cloudBusyAction) return;
+    setCloudError("");
+    setCloudMessage("");
+    setCloudBusyAction("manage");
+    try {
+      await ghostboxApi.setCloudSavePinned(save.id, !save.pinned);
+      setCloudSaves(await ghostboxApi.listCloudSaves(game.appId));
+    } catch (error) {
+      setCloudError(
+        error instanceof Error
+          ? error.message
+          : copy("Falha ao fixar a versão.", "Could not pin the version."),
+      );
+    } finally {
+      setCloudBusyAction(null);
+    }
+  };
+
+  const handleDeleteSave = async (save: CloudSave) => {
+    if (!game || cloudBusyAction) return;
+
+    const confirmed = window.confirm(
+      copy(
+        `Excluir permanentemente o backup de ${formatBackupTimestamp(save.updatedAt, language)}? Esta ação não pode ser desfeita.`,
+        `Permanently delete the backup from ${formatBackupTimestamp(save.updatedAt, language)}? This cannot be undone.`,
+      ),
+    );
+    if (!confirmed) return;
+
+    setCloudError("");
+    setCloudMessage("");
+    setCloudBusyAction("manage");
+    try {
+      await ghostboxApi.deleteCloudSave(save.id);
+      const saves = await ghostboxApi.listCloudSaves(game.appId);
+      setCloudSaves(saves);
+      setSelectedCloudSaveId((current) =>
+        saves.some((item) => item.id === current) ? current : (saves[0]?.id ?? ""),
+      );
+      setCloudMessage(copy("Versão excluída.", "Version deleted."));
+    } catch (error) {
+      setCloudError(
+        error instanceof Error
+          ? error.message
+          : copy("Falha ao excluir a versão.", "Could not delete the version."),
+      );
+    } finally {
+      setCloudBusyAction(null);
+    }
+  };
 
   const handleCloudRestore = async () => {
     if (!game || !selectedCloudSaveId || cloudBusyAction) return;
@@ -365,6 +457,24 @@ export function GameBackupOptionsModal({
                 <button
                   type="button"
                   className="button button--outline modal__backup-action-button"
+                  onClick={() => void handleCloudBackup()}
+                  disabled={
+                    !cloudStatusReady ||
+                    cloudLoading ||
+                    cloudBusyAction !== null ||
+                    !steamProfile?.steamId ||
+                    !hasCloudSession
+                  }
+                >
+                  {cloudBusyAction === "backup" && (
+                    <Loader2 size={14} strokeWidth={2.15} aria-hidden="true" />
+                  )}
+                  {copy("Fazer backup", "Back up now")}
+                </button>
+
+                <button
+                  type="button"
+                  className="button button--outline modal__backup-action-button"
                   onClick={() => void handleCloudRestore()}
                   disabled={
                     !cloudStatusReady ||
@@ -394,29 +504,53 @@ export function GameBackupOptionsModal({
                   </div>
                 ) : cloudSaves.length > 0 ? (
                   cloudSaves.map((save) => (
-                    <button
-                      key={save.id}
-                      type="button"
-                      className={`modal__cloud-save-version ${selectedCloudSaveId === save.id ? "modal__cloud-save-version--active" : ""}`}
-                      onClick={() => setSelectedCloudSaveId(save.id)}
-                      aria-pressed={selectedCloudSaveId === save.id}
-                    >
-                      <strong>
-                        {formatBackupTimestamp(save.updatedAt, language)}
-                      </strong>
-                      <span>
-                        {`${formatSaveSize(save.sizeBytes)}${save.deviceName ? ` · ${save.deviceName}` : ""}`}
-                      </span>
-                    </button>
+                    <div key={save.id} className="modal__cloud-save-version-row">
+                      <button
+                        type="button"
+                        className={`modal__cloud-save-version ${selectedCloudSaveId === save.id ? "modal__cloud-save-version--active" : ""}`}
+                        onClick={() => setSelectedCloudSaveId(save.id)}
+                        aria-pressed={selectedCloudSaveId === save.id}
+                      >
+                        <strong>
+                          {formatBackupTimestamp(save.updatedAt, language)}
+                        </strong>
+                        <span>
+                          {`${formatSaveSize(save.sizeBytes)}${save.deviceName ? ` · ${save.deviceName}` : ""}`}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`modal__cloud-save-icon-button ${save.pinned ? "modal__cloud-save-icon-button--active" : ""}`}
+                        onClick={() => void handleTogglePinned(save)}
+                        disabled={cloudBusyAction !== null}
+                        aria-pressed={save.pinned}
+                        title={
+                          save.pinned
+                            ? copy("Desafixar versão", "Unpin version")
+                            : copy(
+                                "Fixar versão (protege da limpeza automática)",
+                                "Pin version (protects it from automatic cleanup)",
+                              )
+                        }
+                      >
+                        <Pin size={14} strokeWidth={2.15} aria-hidden="true" />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="modal__cloud-save-icon-button"
+                        onClick={() => void handleDeleteSave(save)}
+                        disabled={cloudBusyAction !== null}
+                        title={copy("Excluir versão", "Delete version")}
+                      >
+                        <Trash2 size={14} strokeWidth={2.15} aria-hidden="true" />
+                      </button>
+                    </div>
                   ))
-                ) : (
+                ) : cloudError ? null : (
                   <div className="modal__cloud-save-empty">
-                    {cloudError
-                      ? null
-                      : copy(
-                          "Nenhuma versão disponível.",
-                          "No versions available.",
-                        )}
+                    {copy("Nenhuma versão disponível.", "No versions available.")}
                   </div>
                 )}
                 {cloudMessage && (

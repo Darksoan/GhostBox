@@ -1389,8 +1389,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (notifications.backupSuccessEnabled) {
           showToast(title, message, "success");
         }
-      } catch {
+      } catch (error) {
         // Auto-restore is best-effort: never block adding or launching a game.
+        // Still log it — a silent catch here hid expired cloud sessions.
+        console.warn("Cloud auto-restore failed", appId, error);
       } finally {
         autoRestoreInFlightAppIdsRef.current.delete(appId);
       }

@@ -2728,6 +2728,15 @@ p {
   background: transparent;
 }
 
+.home-recommended__banner-logo {
+  display: block;
+  width: min(42%, 360px);
+  max-height: clamp(40px, 7vw, 78px);
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 1px 6px color-mix(in srgb, var(--black) 60%, transparent));
+}
+
 .home-recommended__banner-title {
   display: -webkit-box;
   overflow: hidden;
@@ -2739,16 +2748,6 @@ p {
   text-shadow: 0 1px 6px color-mix(in srgb, var(--black) 60%, transparent);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-
-.home-recommended__banner-developer {
-  overflow: hidden;
-  color: color-mix(in srgb, var(--white) 82%, transparent);
-  font-size: var(--type-size-fluid-meta);
-  font-weight: var(--weight-medium);
-  text-shadow: 0 1px 4px color-mix(in srgb, var(--black) 50%, transparent);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .home-recommended__banner-placeholder {
@@ -2764,62 +2763,6 @@ p {
   &--developer {
     width: min(28%, 180px);
     height: 14px;
-  }
-}
-
-.home-recommended__pagination {
-  position: absolute;
-  inset-inline-end: var(--space-6);
-  inset-block-end: var(--space-6);
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--overlay-subtle);
-  box-shadow: var(--glass-ring), var(--shadow-1);
-}
-
-.home-recommended__page {
-  position: relative;
-  display: grid;
-  width: var(--space-10);
-  height: var(--space-10);
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-
-  span {
-    display: block;
-    width: var(--space-3);
-    height: var(--space-3);
-    border-radius: var(--radius-circle);
-    background: var(--text-tertiary);
-  }
-
-  &--active span {
-    width: var(--space-4);
-    height: var(--space-4);
-    background: var(--text-primary);
-  }
-
-  &:focus-visible {
-    outline: var(--space-1) solid var(--focus-ring-color);
-    outline-offset: var(--space-1);
-    border-radius: var(--radius-circle);
-  }
-
-  &:active {
-    background: var(--surface-active);
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .home-recommended__page:not(.home-recommended__page--active):hover span {
-    background: var(--text-secondary);
   }
 }
 
@@ -12791,6 +12734,44 @@ html.no-backdrop-blur {
     white-space: nowrap;
   }
 
+}
+
+.modal__cloud-save-version-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.modal__cloud-save-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-sm);
+  background: var(--surface-canvas);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+
+  &:hover:not(:disabled) {
+    background: var(--surface);
+    color: var(--text-primary);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &--active {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+  }
 }
 
 .backdrop--collection,
