@@ -33,18 +33,28 @@ Não criar token duplicado para resolver um caso isolado. Se papel visual se rep
 
 ## Cor e superfície
 
+Rampa neutra de superfície — cinco degraus, `--n-0` até `--n-4`, limitados a `#000000`–`#202020`. Passos calculados por luminância relativa (não por distância hex linear), para que cada degrau tenha contraste semelhante ao anterior:
+
+- `--n-0`: `#000000`
+- `--n-1`: `#0b0b0b`
+- `--n-2`: `#141414`
+- `--n-3`: `#1a1a1a`
+- `--n-4`: `#202020`
+
+Cada degrau tem contraste ~1.06–1.07:1 em relação ao vizinho — bem abaixo do mínimo WCAG de 3:1 para elementos não textuais. É baixo contraste por design, não por acidente. Consequência direta: **espaçamento é o separador primário, contraste de rampa é secundário.** Onde duas superfícies encostam sem gap, usar salto de dois degraus (~1.13:1), nunca um.
+
+Rampa de borda (`--b-0`, mais `--n-5` até `--n-7`) é independente da rampa de superfície e fica fora do teto `#202020` — bordas não precisam (nem devem) ficar quase pretas.
+
 Paleta estrutural atual:
 
-- `--surface-canvas`: `#0d0d0d`, fundo principal do app.
-- `--surface-sidebar`: `#101010`, fundo da sidebar.
-- `--surface-titlebar`: `#0d0d0d`, fundo da titlebar.
-- `--sidebar-option-hover`: `#1a1a1a`, hover de opções da sidebar.
-- `--sidebar-option-selected`: `#2a2a2a`, opção selecionada da sidebar.
-- `--surface-dropdown-menu`: `#1a1a1a`, painel/menu dos dropdowns.
-- `--settings-dropdown-menu`: `#252525`, painel/menu dos dropdowns da aba Ajustes.
-- `--settings-dropdown-trigger-hover`: `#252525`, hover e estado aberto do trigger em Ajustes.
+- `--surface-canvas`: `#000000`, fundo principal do app.
+- `--surface-panel` / `--surface-sidebar`: `#0b0b0b`.
+- `--surface-raised`: `#141414`, cards e áreas destacadas.
+- `--surface-popover`: `#1a1a1a`, menus e dropdowns.
+- `--surface-modal`: `#202020`, diálogos e confirmação — teto da rampa, nunca empata com popover.
+- `--sidebar-option-selected`, `--surface-option-active`, `--surface-popover-active`: `#202020`, estados ativos/selecionados no teto.
 
-Esses valores pertencem à rampa neutra (`--n-0` até `--n-4`) e devem continuar sendo consumidos por tokens semânticos. Não usar os hexadecimais diretamente em componentes.
+Esses valores pertencem à rampa neutra e devem continuar sendo consumidos por tokens semânticos. Não usar os hexadecimais diretamente em componentes.
 
 Hierarquia, da mais profunda à mais elevada:
 
@@ -54,11 +64,11 @@ Hierarquia, da mais profunda à mais elevada:
 4. `--surface-popover`: menus, dropdowns e popovers.
 5. `--surface-modal`: diálogos e fluxos de confirmação.
 
-Estados interativos devem subir um degrau ou usar tokens de estado (`--surface-hover`, `--surface-active`, `--surface-strong`). Não usar hover que apague separação entre painel e controle.
+Estados interativos devem subir um degrau (ou dois, se abutting sem gap) ou usar tokens de estado (`--surface-hover`, `--surface-active`, `--surface-strong`). Não usar hover que apague separação entre painel e controle.
 
-Surfaces e cards não usam borda visível por padrão. Separação deve vir de contraste entre superfícies, espaçamento, agrupamento e elevação sutil. Cada elemento deve manter tratamento visual próprio e contrastado em relação ao vizinho, sem transformar toda interface em uma coleção de caixas iguais.
+Surfaces e cards não usam borda visível por padrão. Separação vem primeiro de espaçamento e agrupamento, depois de contraste entre superfícies — um único degrau da rampa (~1.07:1) não é suficiente sozinho em monitores não-OLED com luz ambiente. Cada elemento deve manter tratamento visual próprio e contrastado em relação ao vizinho, sem transformar toda interface em uma coleção de caixas iguais.
 
-Bordas ficam reservadas para foco, controles que exigem delimitação, indicadores de status e estados de erro. Não adicionar bordas decorativas para compensar falta de contraste.
+Bordas ficam reservadas para foco, controles que exigem delimitação, indicadores de status e estados de erro. Não adicionar bordas decorativas para compensar falta de contraste — resolver com espaçamento ou salto de degrau, nunca com borda.
 
 Texto:
 
