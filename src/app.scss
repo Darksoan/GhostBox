@@ -2623,6 +2623,12 @@ p {
 .home-recommended__stage {
   position: relative;
   min-width: 0;
+  margin-inline: calc(
+    -1 * (var(--home-page-inline-padding) + var(--home-content-inline-inset))
+  );
+  width: calc(
+    100% + 2 * (var(--home-page-inline-padding) + var(--home-content-inline-inset))
+  );
 }
 
 .home-recommended__banner {
@@ -2634,7 +2640,7 @@ p {
   overflow: hidden;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   background: var(--surface-canvas);
   color: var(--text-primary);
   text-align: left;

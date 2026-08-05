@@ -107,4 +107,30 @@ describe("Home layout", () => {
       }),
     );
   });
+
+  it("makes the recommended banner span the full tab width", () => {
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const declarations = new Map<string, Map<string, string>>();
+
+    stylesheet.walkRules((rule) => {
+      const ruleDeclarations = new Map<string, string>();
+      rule.walkDecls((declaration) => {
+        ruleDeclarations.set(declaration.prop, declaration.value);
+      });
+      const existing = declarations.get(rule.selector) ?? new Map<string, string>();
+      ruleDeclarations.forEach((value, prop) => existing.set(prop, value));
+      declarations.set(rule.selector, existing);
+    });
+
+    const stage = declarations.get(".home-recommended__stage");
+    expect(stage?.get("margin-inline")).toBe(
+      "calc(-1 * (var(--home-page-inline-padding) + var(--home-content-inline-inset)))"
+    );
+    expect(stage?.get("width")).toBe(
+      "calc(100% + 2 * (var(--home-page-inline-padding) + var(--home-content-inline-inset)))"
+    );
+
+    const banner = declarations.get(".home-recommended__banner");
+    expect(banner?.get("border-radius")).toBe("0");
+  });
 });
