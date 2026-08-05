@@ -3146,10 +3146,6 @@ html.no-backdrop-blur .profile-page {
       grid-template-columns: 1fr;
     }
 
-    &__showcase-stat + .profile-page__showcase-stat {
-      border-left: 0;
-      border-top: 1px solid var(--border-subtle);
-    }
 
     &__activity-card,
     &__activity-card--skeleton {

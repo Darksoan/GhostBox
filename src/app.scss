@@ -5798,9 +5798,8 @@ p {
     flex-direction: column;
     gap: var(--space-3);
     padding: var(--space-5);
-    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--surface-sunken);
+    background: var(--surface-raised);
   }
 
   span {
@@ -7640,9 +7639,8 @@ input[type="search"]::-ms-reveal {
 
 .notification-group {
   overflow: hidden;
-  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--surface-tertiary);
+  background: var(--surface-raised);
 
   &__trigger {
     display: flex;
@@ -8446,9 +8444,8 @@ input[type="search"]::-ms-reveal {
 
 .notification-item {
   padding: var(--space-6);
-  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface-solid);
+  background: var(--surface-raised);
   color: var(--text-primary);
 
   &--danger {
@@ -9095,9 +9092,8 @@ input[type="search"]::-ms-reveal {
 }
 
 .info-card {
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-subtle);
+  background: var(--surface-muted);
 }
 
 .settings-grid {
