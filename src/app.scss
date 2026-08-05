@@ -2823,6 +2823,56 @@ p {
   }
 }
 
+.home-recommended__nav {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  width: var(--space-14);
+  height: var(--space-14);
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-circle);
+  background-color: color-mix(in srgb, var(--black) 40%, transparent);
+  color: var(--text-primary);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--motion-fast) var(--ease),
+    background-color var(--motion-fast) var(--ease);
+  cursor: pointer;
+
+  &--prev {
+    inset-inline-start: var(--space-6);
+  }
+
+  &--next {
+    inset-inline-end: var(--space-6);
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-recommended__stage:hover .home-recommended__nav {
+    opacity: 1;
+  }
+
+  .home-recommended__nav:hover {
+    background-color: color-mix(in srgb, var(--black) 55%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-recommended__nav {
+    transition: none;
+  }
+}
+
 .home-explore {
   content-visibility: auto;
   contain-intrinsic-size: 200px;
