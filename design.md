@@ -47,6 +47,8 @@ Cada degrau tem contraste ~1.04:1 em relação ao vizinho, e o span inteiro (`#0
 
 Rampa de borda (`--b-0`, mais `--n-5` até `--n-7`) é independente da rampa de superfície e fica fora do teto `#202020` — bordas não precisam (nem devem) ficar quase pretas.
 
+Overlays de interação (`--surface-hover`, `--surface-active`, `--surface-strong`, `--surface-subtle`, `--surface-muted`) também ficam fora do teto — são tinta translúcida branca sobre a superfície de repouso, não fundo fixo, então acompanham qualquer degrau por baixo em vez de fixar um hex. Composto sobre `--n-4` (pior caso), passam de `#202020`; é esperado e correto, é feedback de interação escalando (hover < strong < active), não um novo tier de repouso.
+
 Dois tokens ficam fora da rampa de propósito:
 
 - `--surface-media-letterbox`: `var(--black)`. Não é tier de UI, é o vazio atrás da arte. O piso `#0f0f0f` desenharia uma caixa visível em volta de capas que já têm barras pretas.

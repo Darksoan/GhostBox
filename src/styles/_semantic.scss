@@ -66,9 +66,15 @@
   --sidebar-option-active: var(--sidebar-option-selected);
   --sidebar-option-active-hover: var(--sidebar-option-hover);
 
+  // Overlays de interação: tinta translúcida branca aplicada sobre a superfície
+  // de repouso, não fundo fixo. Fora do teto #202020 de propósito — são feedback
+  // de hover/active/seleção, mesma categoria de isenção da rampa de borda
+  // (--b-0/--n-5..--n-7). Compondo sobre --n-4 (pior caso, popover/modal já no
+  // teto): hover ≈ #292929, strong ≈ #2d2d2d, active ≈ #303030 — degrau visível
+  // e crescente (hover < strong < active), que é o comportamento esperado.
   --surface: var(--a-hover);
   --surface-subtle: rgba(255, 255, 255, 0.015);
-  --surface-muted: rgba(255, 255, 255, 0.04);
+  --surface-muted: var(--a-hover);
   --surface-hover: var(--a-hover);
   --surface-active: var(--a-active);
   --surface-strong: rgba(255, 255, 255, 0.06);
