@@ -206,11 +206,6 @@ export function PageRouter({
     }
 
     if (targetPage === "catalogue") {
-      const animateCatalogueFilterPlaceholders =
-        targetPage === "catalogue" &&
-        !catalogue.catalogueDatabase.games.length &&
-        !debouncedQuery.trim();
-
       return (
         <LazyCataloguePage
           games={catalogue.catalogueDatabase.games}
@@ -231,7 +226,6 @@ export function PageRouter({
           hasError={catalogue.hasCatalogueError}
           onRetry={catalogue.onCatalogueRetry}
           filters={catalogue.catalogueFilters}
-          animateFilterPlaceholders={animateCatalogueFilterPlaceholders}
           onFiltersChange={catalogue.handleCatalogueFiltersChange}
           onPageChange={catalogue.handleCataloguePageChange}
           onOpenGame={openGame}
@@ -239,7 +233,6 @@ export function PageRouter({
           addingGameId={appData.addingGameId}
           removingGameId={appData.removingGameId}
           onRemoveGame={appData.removeQueuedGame}
-          pulseLoading={catalogue.shouldPulseCatalogueLoading}
           scrollElementRef={contentRef}
         />
       );

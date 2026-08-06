@@ -28,7 +28,7 @@
     border: 0;
     background: color-mix(in srgb, var(--surface-canvas) 82%, transparent);
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     text-align: center;
   }
 
@@ -325,7 +325,7 @@
     align-items: flex-start;
     min-width: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     z-index: 1;
     overflow: visible;
   }
@@ -360,7 +360,7 @@
     color: var(--text-primary);
     font-size: var(--type-size-page);
     font-weight: var(--weight-medium);
-    line-height: 34px;
+    line-height: var(--type-line-page);
     text-overflow: ellipsis;
     white-space: nowrap;
     margin: 0;
@@ -384,7 +384,7 @@
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     line-height: 1;
@@ -437,7 +437,7 @@
   &__steam-id {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     letter-spacing: 0.04em;
     user-select: none;
     transition: opacity var(--motion-base) var(--ease);
@@ -536,7 +536,7 @@
   &__discord-id {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     letter-spacing: 0.04em;
     user-select: none;
   }
@@ -580,7 +580,7 @@
       max-width: 520px;
       overflow: hidden;
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -632,7 +632,7 @@
 
     span {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       font-size: var(--type-size-caption);
     }
   }
@@ -799,7 +799,7 @@
     border-radius: var(--radius-md);
     background: var(--surface-canvas);
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     box-shadow: none;
     transition:
       filter var(--motion-base) ease,
@@ -887,7 +887,7 @@
     place-items: center;
     background: var(--overlay-subtle);
     color: var(--text-secondary);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   }
 
   &__showcase-modal {
@@ -948,7 +948,7 @@
   &__showcase-modal-empty {
     margin: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-caption);
   }
 
@@ -1000,9 +1000,9 @@
 
     span {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       font-size: var(--type-size-body);
-      line-height: 1.25;
+      line-height: var(--type-line-body);
     }
   }
 
@@ -1053,9 +1053,9 @@
     span {
       overflow: hidden;
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       font-size: var(--type-size-compact);
-      line-height: 1.25;
+      line-height: var(--type-line-compact);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -1072,7 +1072,7 @@
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-canvas) 74%, transparent);
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-compact);
   }
 
@@ -1104,14 +1104,14 @@
     color: var(--text-primary);
     font-size: var(--type-size-body);
     font-weight: var(--weight-semibold);
-    line-height: 1.2;
+    line-height: var(--type-line-body);
   }
 
   &__activity-summary {
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-caption);
-    line-height: 1.3;
+    line-height: var(--type-line-caption);
     text-align: right;
     white-space: nowrap;
   }
@@ -1123,6 +1123,10 @@
     gap: var(--space-8);
     min-width: 0;
     margin-bottom: 2px;
+    // Mesmo inset direito dos cards de atividade logo abaixo (padding-right:
+    // var(--space-6)), pra régua e lista lerem como uma única coluna em vez de
+    // dois blocos soltos.
+    padding-right: var(--space-6);
   }
 
   &__activity-metrics {
@@ -1395,7 +1399,7 @@
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-medium);
-      line-height: 1.3;
+      line-height: var(--type-line-body);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -1414,9 +1418,9 @@
   &__activity-hours,
   &__activity-status {
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-caption);
-    line-height: 1.3;
+    line-height: var(--type-line-caption);
   }
 
   &__activity-hours {
@@ -1470,9 +1474,9 @@
   &__activity-progress-label,
   &__activity-progress-count {
     color: var(--text-primary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-caption);
-    line-height: 1.2;
+    line-height: var(--type-line-caption);
     white-space: nowrap;
     transition: color var(--motion-fast) var(--ease);
   }
@@ -1508,6 +1512,10 @@
     flex: 0 0 auto;
     align-items: center;
     gap: var(--space-3);
+    // Ícones em cor cheia, sempre. Chegou a existir aqui um `grayscale(1)` em
+    // repouso que só acendia no hover da linha; a arte da conquista é o que
+    // identifica o jogo de relance, e dessaturar custava mais do que o ganho de
+    // reduzir o peso visual da linha.
   }
 
   &__activity-icon {
@@ -1574,7 +1582,7 @@
       color: var(--text-primary);
       font-size: var(--type-size-compact);
       font-weight: var(--weight-medium);
-      line-height: 1.25;
+      line-height: var(--type-line-compact);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -1582,8 +1590,8 @@
     small {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      line-height: 1.3;
+      font-weight: var(--weight-medium);
+      line-height: var(--type-line-caption);
     }
   }
 
@@ -1597,7 +1605,7 @@
     background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -1766,13 +1774,13 @@
       min-width: 0;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-semibold);
-      line-height: 1.25;
+      font-weight: var(--weight-medium);
+      line-height: var(--type-line-body);
     }
 
     > span:not(.profile-page__top-game-stats) {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       font-size: var(--type-size-caption);
     }
   }
@@ -1841,7 +1849,7 @@
     overflow: hidden;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     letter-spacing: var(--ls-100);
     line-height: 1;
     text-overflow: ellipsis;
@@ -1863,8 +1871,8 @@
     overflow: hidden;
     color: var(--text-primary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    line-height: 1.2;
+    font-weight: var(--weight-medium);
+    line-height: var(--type-line-caption);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -1885,7 +1893,7 @@
     gap: var(--space-3);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     white-space: nowrap;
 
     svg {
@@ -1973,11 +1981,11 @@
   &__achievement-timeline-date {
     padding: var(--space-9) var(--space-5) 0 0;
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-secondary);
     text-align: right;
     white-space: nowrap;
-    line-height: 1.3;
+    line-height: var(--type-line-caption);
   }
 
   &__achievement-timeline-line {
@@ -2064,7 +2072,7 @@
 
     span {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       font-size: var(--type-size-caption);
     }
   }
@@ -2077,7 +2085,7 @@
     gap: var(--space-3);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     white-space: nowrap;
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-sm);
@@ -2091,7 +2099,7 @@
   &__achievement-timeline-item--first {
     .profile-page__achievement-timeline-date {
       color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     }
 
     .profile-page__achievement-timeline-dot {
@@ -2100,7 +2108,7 @@
 
     .profile-page__achievement-timeline-percent {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       background: var(--surface);
     }
   }
@@ -2167,7 +2175,7 @@
     span,
     small {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       font-size: var(--type-size-caption);
     }
   }
@@ -2185,7 +2193,7 @@
     gap: var(--space-3);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
   }
 
   &__recent-progress {
@@ -2227,7 +2235,7 @@
     gap: var(--space-4);
     min-height: 130px;
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-body);
   }
 
@@ -2328,7 +2336,7 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     cursor: pointer;
     transition: color var(--motion-fast) var(--ease);
 
@@ -2379,7 +2387,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-body);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     line-height: 1;
     position: relative;
     z-index: 2;
@@ -2397,7 +2405,7 @@
       /* Sem nudge de meio pixel: 18px centrados numa barra de 40px caem em
          pixel inteiro, e o `-0.5px` só borrava/desalinhava os ícones. */
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       opacity: 0.6;
       transition:
         color var(--motion-base) var(--ease),
@@ -2513,7 +2521,7 @@
     background-color: color-mix(in srgb, var(--white) 10%, transparent);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     text-align: center;
   }
 
@@ -2532,7 +2540,7 @@
     dt {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
@@ -2658,7 +2666,7 @@
     background: transparent;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     line-height: 1;
     cursor: pointer;
     transition:
@@ -2679,7 +2687,7 @@
 
     strong {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       flex: 0 0 auto;
     }
   }
@@ -2884,7 +2892,7 @@
     strong {
       color: var(--text-primary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
       line-height: 1;
     }
   }
@@ -2896,12 +2904,12 @@
     gap: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    line-height: 1.25;
+    font-weight: var(--weight-medium);
+    line-height: var(--type-line-caption);
 
     svg {
       color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     }
   }
 
@@ -2917,7 +2925,7 @@
       color: var(--text-primary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
-      line-height: 1.25;
+      line-height: var(--type-line-caption);
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
     }
@@ -2929,8 +2937,8 @@
     overflow: hidden;
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-semibold);
-    line-height: 1.25;
+    font-weight: var(--weight-medium);
+    line-height: var(--type-line-micro);
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1;
   }
@@ -2948,7 +2956,7 @@
 
   &__empty-text {
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-body);
   }
 
@@ -3219,14 +3227,14 @@ html.no-backdrop-blur .profile-page {
   &__overview-empty,
   &__achievement-timeline-percent {
     color: var(--text-secondary);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   }
 
   &__top-game-achievement-summary,
   &__recent-achievement-summary,
   &__achievement-timeline-content span {
     color: var(--text-secondary);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   }
 
   &__top-game-stat-value {
@@ -3250,7 +3258,7 @@ html.no-backdrop-blur .profile-page {
 
   &__details-list dt {
     color: var(--text-secondary);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
   }
 }
 

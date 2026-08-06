@@ -23,7 +23,7 @@
     color: var(--text-primary);
     font-size: var(--type-size-body-emphasis);
     font-weight: var(--weight-semibold);
-    line-height: 1.2;
+    line-height: var(--type-line-body-emphasis);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -41,8 +41,8 @@
     margin: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    line-height: 1.45;
+    font-weight: var(--weight-medium);
+    line-height: var(--type-line-caption);
   }
 
   &__summary-progress-text {
@@ -86,7 +86,7 @@
     gap: var(--space-6);
     padding: var(--space-16) var(--space-10);
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     font-size: var(--type-size-compact);
   }
 
@@ -207,15 +207,15 @@
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-medium);
-      line-height: 1.25;
+      line-height: var(--type-line-body);
     }
 
     p {
       margin: 0;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      line-height: 1.4;
+      font-weight: var(--weight-medium);
+      line-height: var(--type-line-caption);
     }
   }
 
@@ -224,8 +224,8 @@
     max-width: 220px;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    line-height: 1.35;
+    font-weight: var(--weight-medium);
+    line-height: var(--type-line-caption);
     text-align: right;
     white-space: nowrap;
 

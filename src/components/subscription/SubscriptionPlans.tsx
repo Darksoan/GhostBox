@@ -316,21 +316,21 @@ export function SubscriptionPlans({
         <span className="sr-only" role="status" aria-live="polite">{copy("Carregando dados da assinatura", "Loading subscription data")}</span>
         <header className="subscription-account__header">
           <div className="subscription-account__header-main">
-            <span className="subscription-account__brand-icon subscription-account__brand-icon--skeleton loading-wave" aria-hidden="true" />
+            <span className="subscription-account__brand-icon subscription-account__brand-icon--skeleton skeleton" aria-hidden="true" />
             <div>
-              <span className="subscription-account__line subscription-account__line--eyebrow loading-wave" />
-              <h3 className="subscription-account__line subscription-account__line--title loading-wave" />
-              <p className="subscription-account__line subscription-account__line--copy loading-wave" />
+              <span className="subscription-account__line subscription-account__line--eyebrow skeleton" />
+              <h3 className="subscription-account__line subscription-account__line--title skeleton" />
+              <p className="subscription-account__line subscription-account__line--copy skeleton" />
             </div>
           </div>
-          <span className="subscription-account__status-badge subscription-account__status-badge--skeleton loading-wave" />
+          <span className="subscription-account__status-badge subscription-account__status-badge--skeleton skeleton" />
         </header>
         <div className="subscription-account__summary-grid">
           {Array.from({ length: 3 }, (_, index) => (
             <article className="subscription-account__summary-card subscription-account__summary-card--skeleton" key={`subscription-summary-${index}`}>
-              <span className="subscription-account__summary-icon-skeleton loading-wave" />
-              <span className="subscription-account__line subscription-account__line--copy loading-wave" />
-              <strong className="subscription-account__line subscription-account__line--value loading-wave" />
+              <span className="subscription-account__summary-icon-skeleton skeleton" />
+              <span className="subscription-account__line subscription-account__line--copy skeleton" />
+              <strong className="subscription-account__line subscription-account__line--value skeleton" />
             </article>
           ))}
         </div>
@@ -462,6 +462,16 @@ export function SubscriptionPlans({
               <ul className="subscription-account__backup-list">
                 {recentBackups.map((game) => (
                   <li key={game.appId}>
+                    <img
+                      className="subscription-account__backup-thumb"
+                      src={`https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`}
+                      alt=""
+                      aria-hidden="true"
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.style.visibility = "hidden";
+                      }}
+                    />
                     <strong>{game.title}</strong>
                     {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
                   </li>

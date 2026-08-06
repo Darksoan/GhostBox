@@ -4,11 +4,6 @@ import { useSettings } from "../../context/settings";
 import type { Page } from "../../types";
 import type { Ref } from "react";
 
-function placeholderClassName(blockClassName: string, animate = true, pulse = false) {
-  if (!animate) return `${blockClassName} loading-plate`;
-  return `${blockClassName} ${pulse ? "loading-pulse-skeleton" : "loading-wave"}`;
-}
-
 export function EmptyState({
   query = "",
   title,
@@ -71,18 +66,18 @@ export function GameGridLoadingState({
           className={`game-card game-card--placeholder ${portrait ? "game-card--placeholder-portrait" : ""} ${libraryCoverFade ? "game-card--library-cover-fade" : ""}`}
           key={`game-card-loading-${index}`}
         >
-          <div className="game-card__cover game-card__cover--loaded loading-wave">
+          <div className="game-card__cover game-card__cover--loaded skeleton">
             {showAchievements && (
               <div className="game-card__placeholder-achievements">
-                <span className="loading-wave" />
-                <span className="loading-wave" />
+                <span className="skeleton" />
+                <span className="skeleton" />
               </div>
             )}
           </div>
           <div className="game-card__backdrop">
             <div className="game-card__content">
               <div className="game-card__title-container">
-                <div className="game-card__title-placeholder loading-wave" />
+                <div className="game-card__title-placeholder skeleton" />
               </div>
             </div>
           </div>
@@ -92,87 +87,47 @@ export function GameGridLoadingState({
   );
 }
 
-export function CatalogueListLoadingState({
-  animateListText = true,
-  pulseLoading = false,
-  count,
-}: {
-  animateListText?: boolean;
-  pulseLoading?: boolean;
-  count?: number;
-}) {
-  const loadingClassName = pulseLoading ? "loading-pulse-skeleton" : "loading-wave";
+/**
+ * Skeleton chapado: só as duas massas do item real (capa + corpo). Nada de
+ * barras de título ou chips — a lista carregada preenche esse espaço sozinha.
+ */
+export function CatalogueListLoadingState({ count }: { count?: number }) {
   const placeholderCount = count ?? cataloguePageSize;
 
   return (
-    <div className="catalogue-list">
+    <div className="catalogue-list catalogue-list--skeleton" aria-hidden="true">
       {Array.from({ length: placeholderCount }, (_, index) => (
         <article className="catalogue-list__item catalogue-list__item--skeleton" key={`catalogue-loading-${index}`}>
-          <div className={`catalogue-list__cover catalogue-list__cover--skeleton ${loadingClassName}`} />
-          <div className="catalogue-list__content">
-            <div className={placeholderClassName("catalogue-list__placeholder-title", animateListText, pulseLoading)} />
-            <div className="catalogue-list__genres" aria-hidden="true">
-              <span className={`catalogue-list__placeholder-chip ${loadingClassName}`} />
-              <span className={`catalogue-list__placeholder-chip ${loadingClassName}`} />
-              <span className={`catalogue-list__placeholder-chip catalogue-list__placeholder-chip--short ${loadingClassName}`} />
-            </div>
-          </div>
-          <div className="catalogue-list__actions" aria-hidden="true">
-            <span className="catalogue-list__placeholder-action-slot" />
-          </div>
+          <div className="catalogue-list__cover catalogue-list__cover--skeleton skeleton" />
         </article>
       ))}
     </div>
   );
 }
 
-export function CatalogueFilterSectionsLoadingState({
-  count = 5,
-  animateFilters = true,
-  pulseLoading = false,
-}: {
-  count?: number;
-  animateFilters?: boolean;
-  pulseLoading?: boolean;
-}) {
+export function CatalogueFilterSectionsLoadingState({ count = 5 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }, (_, index) => (
-        <section className="catalogue-filter-section catalogue-filter-section--skeleton" key={`filter-loading-${index}`} aria-hidden="true">
-          <button type="button" className="catalogue-filter-section__header" disabled aria-expanded="false">
-            <span className={placeholderClassName("catalogue-filter-section__chevron-placeholder", animateFilters, pulseLoading)} />
-            <span className={placeholderClassName("catalogue-filter-section__orb", animateFilters, pulseLoading)} />
-            <span className={placeholderClassName("catalogue-filter-section__header-title-placeholder", animateFilters, pulseLoading)} />
-            <span className={placeholderClassName("catalogue-filter-section__header-count-placeholder", animateFilters, pulseLoading)} />
-          </button>
-          <div className="catalogue-filter-section__content" data-collapsed="true" style={{ height: 0 }} />
-        </section>
+        <section className="catalogue-filter-section catalogue-filter-section--skeleton" key={`filter-loading-${index}`} aria-hidden="true" />
       ))}
     </>
   );
 }
 
-export function CatalogueLoadingState({
-  animateFilters = true,
-  animateListText = true,
-  pulseLoading = false,
-}: {
-  animateFilters?: boolean;
-  animateListText?: boolean;
-  pulseLoading?: boolean;
-}) {
+export function CatalogueLoadingState() {
   const { t } = useSettings();
 
   return (
     <section className="catalogue-page" aria-label={t("loading.catalogue")}>
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
-          <CatalogueListLoadingState animateListText={animateListText} pulseLoading={pulseLoading} />
+          <CatalogueListLoadingState />
         </div>
 
         <aside className="catalogue-filters catalogue-filters--placeholder" aria-label={t("loading.filters")}>
           <div className="catalogue-filters__sections">
-            <CatalogueFilterSectionsLoadingState animateFilters={animateFilters} pulseLoading={pulseLoading} />
+            <CatalogueFilterSectionsLoadingState />
           </div>
         </aside>
       </div>
@@ -204,14 +159,14 @@ export function AchievementsListLoadingState({ count = 8 }: { count?: number }) 
           key={`achievement-skeleton-${index}`}
         >
           <span className="game-achievements-page__icon-wrap">
-            <span className="game-achievements-page__icon game-achievements-page__icon--skeleton loading-wave" />
+            <span className="game-achievements-page__icon game-achievements-page__icon--skeleton skeleton" />
           </span>
           <div className="game-achievements-page__item-content">
-            <strong className="game-achievements-page__skeleton-title loading-wave" />
-            <p className="game-achievements-page__skeleton-desc loading-wave" />
+            <strong className="game-achievements-page__skeleton-title skeleton" />
+            <p className="game-achievements-page__skeleton-desc skeleton" />
           </div>
           <div className="game-achievements-page__item-meta">
-            <span className="game-achievements-page__skeleton-status loading-wave" />
+            <span className="game-achievements-page__skeleton-status skeleton" />
           </div>
         </li>
       ))}
@@ -237,17 +192,39 @@ export function SearchSuggestionsLoadingState({ count: _count = 3 }: { count?: n
 
 export function HomeCategoryCardSkeleton({
   variant = "tile",
+  showTitle = false,
+  showSummary = false,
 }: {
   variant?: "tile" | "portrait";
+  showTitle?: boolean;
+  showSummary?: boolean;
 }) {
+  // Mesma composição do card real: `showSummary` liga nome + descrição
+  // (Recomendados), `showTitle` liga só o nome (Top rated). Qualquer um dos
+  // dois precisa fechar na mesma altura do card carregado, senão a grade pula
+  // quando os dados chegam.
+  const showTitleBlock = showTitle || showSummary;
+
   return (
     <button
       type="button"
-      className={`home-category-card home-category-card--${variant} home-category-card--placeholder`}
+      className={`home-category-card home-category-card--${variant} home-category-card--placeholder${
+        showTitleBlock ? " home-category-card--with-title" : ""
+      }`}
       disabled
       aria-hidden="true"
     >
       <span className="home-category-card__cover home-category-card__cover--skeleton" />
+      {showTitleBlock ? (
+        <span className="home-category-card__metadata">
+          <span className="home-category-card__summary">
+            <span className="home-category-card__title home-category-card__text-skeleton home-category-card__text-skeleton--title skeleton" />
+            {showSummary ? (
+              <span className="home-category-card__description home-category-card__text-skeleton home-category-card__text-skeleton--description skeleton" />
+            ) : null}
+          </span>
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -270,19 +247,6 @@ export function HomeWishlistCardSkeleton() {
             <span className="home-wishlist-card__tag-skeleton" />
           </span>
         </span>
-      </span>
-    </div>
-  );
-}
-
-function HomeRecommendedBannerSkeleton() {
-  return (
-    <div className="home-recommended__banner home-recommended__banner--skeleton">
-      <span className="home-recommended__banner-cover home-recommended__banner-cover--skeleton loading-wave" />
-      <span className="home-recommended__banner-overlay" />
-      <span className="home-recommended__banner-meta">
-        <span className="home-recommended__banner-title home-recommended__banner-placeholder home-recommended__banner-placeholder--title loading-wave" />
-        <span className="home-recommended__banner-placeholder home-recommended__banner-placeholder--developer loading-wave" />
       </span>
     </div>
   );
@@ -322,9 +286,9 @@ function SectionHeaderSkeleton({ withSubtitle = false }: { withSubtitle?: boolea
   return (
     <div className="section-header">
       <div className="section-header__copy">
-        <span className="section-header__title home-section-title-placeholder loading-wave" />
+        <span className="section-header__title home-section-title-placeholder skeleton" />
         {withSubtitle ? (
-          <span className="section-header__subtitle home-section-title-placeholder loading-wave" />
+          <span className="section-header__subtitle home-section-title-placeholder skeleton" />
         ) : null}
       </div>
     </div>
@@ -336,8 +300,18 @@ export function HomePageLoadingState() {
     <section className="home-page" aria-hidden="true">
       <section className="home-recommended">
         <SectionHeaderSkeleton />
-        <div className="home-recommended__stage">
-          <HomeRecommendedBannerSkeleton />
+        <div className="home-recommended__rail">
+          <div className="home-recommended__carousel">
+            <div className="home-recommended__track">
+              {Array.from({ length: 3 }, (_, index) => (
+                <HomeCategoryCardSkeleton
+                  variant="tile"
+                  showSummary
+                  key={`home-recommended-${index}`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -345,7 +319,7 @@ export function HomePageLoadingState() {
         <SectionHeaderSkeleton />
         <div className="home-category__games">
           {Array.from({ length: 6 }, (_, index) => (
-            <HomeCategoryCardSkeleton variant="tile" key={`home-featured-${index}`} />
+            <HomeCategoryCardSkeleton variant="tile" showTitle key={`home-featured-${index}`} />
           ))}
         </div>
       </section>
@@ -357,7 +331,7 @@ export function HomePageLoadingState() {
             <div className="home-explore__track">
               {Array.from({ length: 5 }, (_, index) => (
                 <span
-                  className="home-explore-card home-explore-card--skeleton loading-wave"
+                  className="home-explore-card home-explore-card--skeleton skeleton"
                   key={`home-explore-${index}`}
                 />
               ))}
@@ -373,7 +347,7 @@ export function HomePageLoadingState() {
             <div className="home-calendar__track">
               {Array.from({ length: 3 }, (_, dayIndex) => (
                 <div className="home-calendar-day" key={`cal-day-${dayIndex}`}>
-                  <span className="home-calendar-day__title-placeholder loading-wave" />
+                  <span className="home-calendar-day__title-placeholder skeleton" />
                   <div className="home-calendar-day__games">
                     <span className="home-calendar-card home-calendar-card--skeleton" />
                     <span className="home-calendar-card home-calendar-card--skeleton" />
@@ -434,22 +408,22 @@ export function ProfilePageLoadingState() {
           <span className="profile-page__banner-image profile-page__banner-image--placeholder" />
         </div>
         <div className="profile-page__background-overlay">
-          <span className="profile-page__hero-action profile-page__hero-action--banner profile-page__hero-action--skeleton loading-wave" />
+          <span className="profile-page__hero-action profile-page__hero-action--banner profile-page__hero-action--skeleton skeleton" />
           <div className="profile-page__identity">
             <div className="profile-page__avatar-button">
               <span className="profile-page__avatar-skeleton" />
             </div>
             <div className="profile-page__identity-content">
               <div className="profile-page__display-name-row">
-                <span className="profile-page__name-placeholder loading-wave" />
-                <span className="profile-page__level profile-page__level--skeleton loading-wave" />
-                <span className="profile-page__hero-action profile-page__hero-action--skeleton loading-wave" />
+                <span className="profile-page__name-placeholder skeleton" />
+                <span className="profile-page__level profile-page__level--skeleton skeleton" />
+                <span className="profile-page__hero-action profile-page__hero-action--skeleton skeleton" />
               </div>
               <div className="profile-page__steam-id-row">
                 <div className="profile-page__steam-id-box profile-page__steam-id-box--skeleton">
                   <span className="profile-page__steam-id-icon profile-page__skeleton-block" />
-                  <span className="profile-page__meta-placeholder loading-wave" />
-                  <span className="profile-page__steam-id-toggle profile-page__steam-id-toggle--skeleton loading-wave" />
+                  <span className="profile-page__meta-placeholder skeleton" />
+                  <span className="profile-page__steam-id-toggle profile-page__steam-id-toggle--skeleton skeleton" />
                 </div>
               </div>
             </div>
@@ -464,12 +438,12 @@ export function ProfilePageLoadingState() {
               <span className="profile-page__tab-indicator profile-page__tab-indicator--skeleton" />
               {Array.from({ length: 4 }, (_, index) => (
                 <span
-                  className="profile-page__tab profile-page__tab-skeleton loading-wave"
+                  className="profile-page__tab profile-page__tab-skeleton skeleton"
                   key={`profile-tab-${index}`}
                 />
               ))}
             </div>
-            <span className="profile-page__sign-out-skeleton loading-wave" />
+            <span className="profile-page__sign-out-skeleton skeleton" />
           </div>
 
           <div className="profile-page__collection-content">
@@ -512,12 +486,12 @@ export function SettingsPageLoadingState() {
               <div className="settings-option settings-option--skeleton" key={`setting-row-${index}`}>
                 <div className="settings-option__copy">
                   <div className="settings-option__label">
-                    <strong className="settings-page__row-label-placeholder loading-wave" />
+                    <strong className="settings-page__row-label-placeholder skeleton" />
                   </div>
-                  <span className="settings-page__row-description-placeholder loading-wave" />
+                  <span className="settings-page__row-description-placeholder skeleton" />
                 </div>
                 <div className="settings-option__control">
-                  <span className="settings-page__row-control-placeholder loading-wave" />
+                  <span className="settings-page__row-control-placeholder skeleton" />
                 </div>
               </div>
             ))}
@@ -533,10 +507,10 @@ export function LibraryPageLoadingState() {
     <section className="content-section content-section--full content-section--library" aria-hidden="true">
       <div className="library-toolbar">
         <div className="library-toolbar__row">
-          <div className="library-toolbar__sort-placeholder loading-wave" />
+          <div className="library-toolbar__sort-placeholder skeleton" />
           <div className="library-toolbar__chips">
-            <span className="library-chip-placeholder loading-wave" />
-            <span className="library-chip-placeholder loading-wave" />
+            <span className="library-chip-placeholder skeleton" />
+            <span className="library-chip-placeholder skeleton" />
           </div>
         </div>
       </div>
@@ -551,14 +525,14 @@ export function FavoritesPageLoadingState() {
       <div className="favorites-grid">
         {Array.from({ length: 10 }, (_, index) => (
           <article className="favorites-grid__item favorites-grid__item--skeleton" key={`favorite-skeleton-${index}`}>
-            <div className="favorites-grid__cover favorites-grid__cover--skeleton loading-wave">
+            <div className="favorites-grid__cover favorites-grid__cover--skeleton skeleton">
               <div className="game-card__achievement-progress game-card__achievement-progress--skeleton">
                 <div className="game-card__achievement-progress-count">
-                  <span className="favorites-grid__metric-skeleton loading-wave" />
-                  <span className="favorites-grid__metric-skeleton favorites-grid__metric-skeleton--short loading-wave" />
+                  <span className="favorites-grid__metric-skeleton skeleton" />
+                  <span className="favorites-grid__metric-skeleton favorites-grid__metric-skeleton--short skeleton" />
                 </div>
                 <div className="game-card__achievement-progress-track">
-                  <span className="favorites-grid__progress-skeleton loading-wave" />
+                  <span className="favorites-grid__progress-skeleton skeleton" />
                 </div>
               </div>
             </div>

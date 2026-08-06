@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
@@ -17,7 +17,6 @@ import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import {
   useCachedImageSources,
   useLoadableImageCover,
-  useLoadableImageState,
 } from "../hooks/useCachedImageSources";
 import {
   readStoredPersonalCalendar,
@@ -32,7 +31,6 @@ import {
   gameHeaderOnlySources,
   gameHeroSources,
   gameHeroCapsuleSources,
-  gameLogoSources,
   layeredImageStyle,
   withoutHeaderImageSources,
 } from "../utils/image";
@@ -134,12 +132,20 @@ const homeFeaturedSteamGames: HomeGameSeed[] = [
 ];
 
 const homeCarouselGroupSize = 4;
-// Pills por card, dimensionado para as duas linhas que o card reserva. Sem teto,
-// um jogo da Steam traz 20+ tags e o card renderiza todas para o CSS recortar
-// quase todas — quais sobravam dependia do comprimento das strings, então dois
-// cards vizinhos nunca batiam.
-const homeMetadataCategoryLimit = 6;
+// Pills por card, dimensionado para a única linha que o card reserva (ver
+// `.home-category-card__genres` em app.scss). Sem teto, um jogo da Steam traz
+// 20+ tags e o card renderiza todas para o CSS recortar quase todas — quais
+// sobravam dependia do comprimento das strings, então dois cards vizinhos
+// nunca batiam.
+const homeMetadataCategoryLimit = 3;
 const homeRecommendedHeroPreloadLimit = 8;
+// Cards de recomendados visíveis por vez. Também é o piso para as setas
+// aparecerem: com pool menor ou igual a isto não há o que rolar.
+const homeRecommendedCardCount = 3;
+// Teto do texto da descrição curta. O card fecha em duas linhas via
+// `-webkit-line-clamp`; o corte aqui garante reticências mesmo quando o
+// navegador não aplica as do clamp (texto de uma linha só, muito longo).
+const homeShortDescriptionLimit = 150;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
 const homeRecommendedAppIdGroups = [
   ["1693980", "208650", "413150", "1714320"],
@@ -494,12 +500,18 @@ function HomeCategoryCard({
   game,
   variant = "tile",
   showMetadata = false,
+  showSummary = false,
+  showTitle = false,
+  language = "pt",
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
   variant?: HomeCategoryCardVariant;
   showMetadata?: boolean;
+  showSummary?: boolean;
+  showTitle?: boolean;
+  language?: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -529,13 +541,19 @@ function HomeCategoryCard({
     : variant === "portrait"
       ? "auto 106%"
       : "104.5% 104.5%";
+  // Nome e descrição curta são independentes: Recomendados mostra os dois
+  // juntos (`showSummary`), Top rated mostra só o nome (`showTitle`). Qualquer
+  // um dos dois liga o mesmo bloco de texto — e o mesmo respiro extra do card,
+  // já que um card com só o nome precisa da mesma folga que um com nome +
+  // descrição (é o mesmo empilhamento capa → texto → tags).
+  const showTitleBlock = showSummary || showTitle;
 
   return (
     <button
       type="button"
       className={`home-category-card home-category-card--${variant}${
         showMetadata ? " home-category-card--with-metadata" : ""
-      }`}
+      }${showTitleBlock ? " home-category-card--with-title" : ""}`}
       aria-label={game.title}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
@@ -558,6 +576,21 @@ function HomeCategoryCard({
       />
       {showMetadata ? (
         <span className="home-category-card__metadata" aria-hidden="true">
+          {showTitleBlock ? (
+            <span className="home-category-card__summary">
+              <span className="home-category-card__title">
+                {getDisplayGameTitle(
+                  game,
+                  language === "en" ? "Untitled game" : "Jogo sem título"
+                )}
+              </span>
+              {showSummary ? (
+                <span className="home-category-card__description">
+                  {getHomeShortDescription(game, language)}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           <span className="home-category-card__metadata-summary">
             <span className="home-category-card__genres">
               {metadataCategories.map((category) => (
@@ -580,6 +613,7 @@ function HomeCategorySection({
   variant = "tile",
   maxGames = 3,
   showMetadata = false,
+  showTitle = false,
   onOpenGame,
   onGameContextMenu,
 }: {
@@ -589,6 +623,7 @@ function HomeCategorySection({
   variant?: HomeCategoryCardVariant;
   maxGames?: number;
   showMetadata?: boolean;
+  showTitle?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -609,6 +644,7 @@ function HomeCategorySection({
               game={game}
               variant={variant}
               showMetadata={showMetadata}
+              showTitle={showTitle}
               onOpenGame={onOpenGame}
               onGameContextMenu={onGameContextMenu}
             />
@@ -625,7 +661,6 @@ function HomeCategorySection({
   );
 }
 
-/*
 function getPlainSteamText(value?: string) {
   if (!value) return "";
 
@@ -642,9 +677,7 @@ function getPlainSteamText(value?: string) {
     .replace(/\s+/g, " ")
     .trim();
 }
-*/
 
-/*
 function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
   const source =
     getPlainSteamText(game.shortDescription) ||
@@ -657,9 +690,10 @@ function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
       : "Destaque selecionado do catálogo GhostBox.";
   }
 
-  return source.length > 150 ? `${source.slice(0, 147).trim()}...` : source;
+  return source.length > homeShortDescriptionLimit
+    ? `${source.slice(0, homeShortDescriptionLimit - 3).trim()}...`
+    : source;
 }
-*/
 
 function normalizeHomeCategory(value: string) {
   const normalized = value.trim().replace(/\s+/g, " ");
@@ -1124,62 +1158,6 @@ function HomePersonalCalendar({
   );
 }
 
-function HomeRecommendedBanner({
-  game,
-  onOpenGame,
-  onGameContextMenu,
-}: {
-  game: GhostBoxGame;
-  onOpenGame: (game: GhostBoxGame) => void;
-  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-}) {
-  const fallbackHeroSources = useMemo(() => gameHeroSources(game), [game]);
-  const fallbackLogoSources = useMemo(() => gameLogoSources(game), [game]);
-  const cachedSources = useCachedImageSources(fallbackHeroSources);
-  const cachedLogoSources = useCachedImageSources(fallbackLogoSources);
-  const { source: heroSource, loaded } = useLoadableImageCover(cachedSources);
-  const { source: logoSource, loaded: logoLoaded } = useLoadableImageState(
-    cachedLogoSources,
-    { preferOrder: true },
-  );
-  const layeredSources = heroSource
-    ? [heroSource, ...fallbackHeroSources.filter((source) => source !== heroSource)]
-    : fallbackHeroSources;
-
-  return (
-    <button
-      type="button"
-      className="home-recommended__banner"
-      aria-label={game.title}
-      onClick={() => onOpenGame(game)}
-      onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
-        event.preventDefault();
-        onGameContextMenu(game, event.clientX, event.clientY);
-      }}
-    >
-      <span
-        className={`home-recommended__banner-cover${
-          loaded ? " home-recommended__banner-cover--loaded" : ""
-        }`}
-        style={layeredImageStyle(layeredSources, "", "cover", "cover")}
-        aria-hidden="true"
-      />
-      <span className="home-recommended__banner-overlay" aria-hidden="true" />
-      <span className="home-recommended__banner-meta" aria-hidden="true">
-        {logoLoaded && logoSource ? (
-          <img
-            className="home-recommended__banner-logo"
-            src={logoSource}
-            alt=""
-            decoding="async"
-          />
-        ) : null}
-      </span>
-    </button>
-  );
-}
-
 function HomeRecommendedHero({
   title,
   gameGroups,
@@ -1197,17 +1175,13 @@ function HomeRecommendedHero({
     () => gameGroups.filter((group) => group.length > 0),
     [gameGroups]
   );
-  const visibleGames = (availableGroups[0] ?? []).slice(
-    0,
-    homeCarouselGroupSize
+  const poolGames = useMemo(
+    () => (availableGroups[0] ?? []).slice(0, homeCarouselGroupSize),
+    [availableGroups]
   );
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  useEffect(() => {
-    setActiveIndex((currentIndex) =>
-      Math.min(currentIndex, Math.max(visibleGames.length - 1, 0))
-    );
-  }, [visibleGames.length]);
+  // O card mostra a short description, que só chega em `loadGameStoreDetails`.
+  // Sem enriquecer, os três cards cairiam no fallback de gêneros.
+  const enrichedGames = useEnrichedGameCards(poolGames, homeCarouselGroupSize);
 
   useEffect(() => {
     const cancelPreload = runWhenIdle(() => {
@@ -1217,50 +1191,31 @@ function HomeRecommendedHero({
     return cancelPreload;
   }, [availableGroups]);
 
-  const activeGame = visibleGames[activeIndex];
-  if (!activeGame) return null;
-
+  // Mesmo rail de "Explorar por categoria": as setas rolam o carrossel com
+  // `scroll-behavior: smooth` em vez de trocar os cards de uma vez, e somem nas
+  // pontas. `minItemsForControls` cai para o número de cards visíveis — o padrão
+  // (5) esconderia as setas com o pool atual de 4 jogos.
   return (
-    <section className="home-recommended" aria-label={title}>
-      <div className="home-recommended__stage">
-        <HomeRecommendedBanner
-          key={homeGameKey(activeGame)}
-          game={activeGame}
+    <Shelf
+      blockName="home-recommended"
+      title={title}
+      items={enrichedGames}
+      getKey={homeGameKey}
+      minItemsForControls={homeRecommendedCardCount}
+      prevLabel={language === "en" ? "Previous game" : "Jogo anterior"}
+      nextLabel={language === "en" ? "Next game" : "Próximo jogo"}
+      renderItem={(game) => (
+        <HomeCategoryCard
+          game={game}
+          variant="tile"
+          showMetadata
+          showSummary
+          language={language}
           onOpenGame={onOpenGame}
           onGameContextMenu={onGameContextMenu}
         />
-        {visibleGames.length > 1 ? (
-          <button
-            type="button"
-            className="home-recommended__nav home-recommended__nav--prev"
-            aria-label={
-              language === "en" ? "Previous game" : "Jogo anterior"
-            }
-            onClick={() =>
-              setActiveIndex(
-                (index) => (index - 1 + visibleGames.length) % visibleGames.length
-              )
-            }
-          >
-            <ChevronLeft aria-hidden="true" />
-          </button>
-        ) : null}
-        {visibleGames.length > 1 ? (
-          <button
-            type="button"
-            className="home-recommended__nav home-recommended__nav--next"
-            aria-label={
-              language === "en" ? "Next game" : "Próximo jogo"
-            }
-            onClick={() =>
-              setActiveIndex((index) => (index + 1) % visibleGames.length)
-            }
-          >
-            <ChevronRight aria-hidden="true" />
-          </button>
-        ) : null}
-      </div>
-    </section>
+      )}
+    />
   );
 }
 
@@ -2176,6 +2131,7 @@ export function HomePage({
         variant="tile"
         maxGames={6}
         showMetadata
+        showTitle
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

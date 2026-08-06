@@ -16,7 +16,6 @@ import {
 import {
   Check,
   ChevronDown,
-  ChevronLeft,
   Copy,
   Eye,
   EyeOff,
@@ -2030,7 +2029,7 @@ export function ProfilePage({
                             }
                           >
                             <span>{t(`profile.sort.${overviewSortBy}`)}</span>
-                            <ChevronLeft size={14} />
+                            <ChevronDown size={14} />
                           </button>
                           {overviewSortDropdownOpen ? (
                             <div

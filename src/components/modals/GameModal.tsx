@@ -342,10 +342,14 @@ const AchievementIcon = memo(function AchievementIcon({
     typeof achievement.globalPercent === "number" &&
     Number.isFinite(achievement.globalPercent) &&
     achievement.globalPercent <= 10;
-  const preferredSource = isUnlocked
-    ? achievement.icon || achievement.iconGray
-    : achievement.iconGray || achievement.icon;
+  // A arte real (colorida) é sempre a primeira escolha, mesmo bloqueada: o
+  // estado de bloqueio é comunicado por filtro CSS + ícone de cadeado, não
+  // trocando para o ícone cinza da Steam antes mesmo de tentar carregar —
+  // isso é o que produzia os círculos pretos idênticos e ilegíveis.
+  const preferredSource = achievement.icon || achievement.iconGray;
+  const alternateSource = achievement.iconGray || achievement.icon;
   const [source, setSource] = useState(preferredSource);
+  const [imageFailed, setImageFailed] = useState(!preferredSource);
   const [tooltipPosition, setTooltipPosition] = useState<{
     left: number;
     top: number;
@@ -356,13 +360,16 @@ const AchievementIcon = memo(function AchievementIcon({
     appearance.language === "en"
       ? "Global percentage unavailable"
       : "Percentual global indisponível";
+  const lockedLabel = appearance.language === "en" ? "Locked" : "Bloqueada";
   const ariaLabel =
-    typeof achievement.globalPercent === "number"
+    (typeof achievement.globalPercent === "number"
       ? `${achievement.title}, ${globalPercent} ${globalPercentLabel}`
-      : `${achievement.title}, ${fallbackPercentLabel}`;
+      : `${achievement.title}, ${fallbackPercentLabel}`) +
+    (isUnlocked ? "" : `, ${lockedLabel}`);
 
   useEffect(() => {
     setSource(preferredSource);
+    setImageFailed(!preferredSource);
   }, [preferredSource]);
 
   function showTooltip() {
@@ -432,18 +439,39 @@ const AchievementIcon = memo(function AchievementIcon({
         }
       }}
     >
-      <img
-        src={source}
-        alt=""
-        aria-hidden="true"
-        decoding="async"
-        loading="lazy"
-        onError={() => {
-          if (source !== achievement.iconGray) {
-            setSource(achievement.iconGray);
-          }
-        }}
-      />
+      {!imageFailed && (
+        <img
+          src={source}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          loading="lazy"
+          onError={() => {
+            if (source !== alternateSource && alternateSource) {
+              setSource(alternateSource);
+            } else {
+              setImageFailed(true);
+            }
+          }}
+        />
+      )}
+      {imageFailed && (
+        // Arte ausente ou quebrada: cai numa superfície da rampa com um ícone
+        // explícito em vez de deixar um retângulo escuro liso — que lê como
+        // "a imagem não carregou", não como "isso está bloqueado".
+        <span className="modal__achievement-fallback" aria-hidden="true">
+          {isUnlocked ? (
+            <Cup size={16} weight="Filled" strokeWidth={2.0} />
+          ) : (
+            <Lock size={16} strokeWidth={2.0} />
+          )}
+        </span>
+      )}
+      {!imageFailed && !isUnlocked && (
+        <span className="modal__achievement-lock-badge" aria-hidden="true">
+          <Lock size={14} strokeWidth={2.0} />
+        </span>
+      )}
       {tooltipPosition && typeof document !== "undefined"
         ? createPortal(tooltip, document.body)
         : null}
@@ -465,15 +493,15 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
     <div className="modal__details-loading" role="status" aria-hidden="true">
       <section className="modal__achievements-section modal__details-loading-section">
         <div className="modal__achievements-heading modal__sidebar-section-toggle modal__sidebar-section-toggle--skeleton">
-          <span className="modal__details-loading-icon loading-wave" />
-          <strong className="modal__details-loading-title loading-wave" />
-          <span className="modal__details-loading-chevron loading-wave" />
+          <span className="modal__details-loading-icon skeleton" />
+          <strong className="modal__details-loading-title skeleton" />
+          <span className="modal__details-loading-chevron skeleton" />
         </div>
         <div className="modal__sidebar-section-content modal__details-loading-content">
           <div className="modal__sidebar-section-panel modal__achievements-panel">
           <ul className="modal__achievements-grid">
             {Array.from({ length: 8 }, (_, index) => (
-              <li className="modal__achievement-item modal__achievement-item--skeleton loading-wave" key={`achievement-loading-${index}`} />
+              <li className="modal__achievement-item modal__achievement-item--skeleton skeleton" key={`achievement-loading-${index}`} />
             ))}
           </ul>
           </div>
@@ -482,21 +510,21 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
 
       <section className="modal__requirements-section modal__details-loading-section">
         <div className="modal__requirements-header modal__sidebar-section-toggle modal__sidebar-section-toggle--skeleton">
-          <span className="modal__details-loading-icon loading-wave" />
-          <strong className="modal__details-loading-title loading-wave" />
-          <span className="modal__details-loading-chevron loading-wave" />
+          <span className="modal__details-loading-icon skeleton" />
+          <strong className="modal__details-loading-title skeleton" />
+          <span className="modal__details-loading-chevron skeleton" />
         </div>
         <div className="modal__sidebar-section-content modal__details-loading-content">
           <div className="modal__sidebar-section-panel modal__requirements-panel">
           <div className="modal__requirements-tabs">
-            <span className="modal__requirements-tab modal__requirements-tab--skeleton loading-wave" />
-            <span className="modal__requirements-tab modal__requirements-tab--skeleton loading-wave" />
+            <span className="modal__requirements-tab modal__requirements-tab--skeleton skeleton" />
+            <span className="modal__requirements-tab modal__requirements-tab--skeleton skeleton" />
           </div>
           <div className="modal__requirements-content modal__requirements-content--skeleton">
             <ul>
               {Array.from({ length: 4 }, (_, index) => (
                 <li key={`requirement-loading-${index}`}>
-                  <span className="modal__details-loading-line loading-wave" />
+                  <span className="modal__details-loading-line skeleton" />
                 </li>
               ))}
             </ul>
@@ -507,14 +535,14 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
 
       <section className="modal__chips-section modal__details-loading-section">
         <div className="modal__chips-heading modal__sidebar-section-toggle modal__sidebar-section-toggle--skeleton">
-          <span className="modal__details-loading-icon loading-wave" />
-          <strong className="modal__details-loading-title loading-wave" />
-          <span className="modal__details-loading-chevron loading-wave" />
+          <span className="modal__details-loading-icon skeleton" />
+          <strong className="modal__details-loading-title skeleton" />
+          <span className="modal__details-loading-chevron skeleton" />
         </div>
         <div className="modal__sidebar-section-content modal__details-loading-content">
           <div className="modal__sidebar-section-panel modal__chips">
             {Array.from({ length: 6 }, (_, index) => (
-              <span className="modal__chip modal__chip--skeleton loading-wave" key={`chip-loading-${index}`} />
+              <span className="modal__chip modal__chip--skeleton skeleton" key={`chip-loading-${index}`} />
             ))}
           </div>
         </div>

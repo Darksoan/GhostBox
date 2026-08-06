@@ -677,10 +677,13 @@ export const ghostboxApi = {
     );
   },
 
-  getGameStoreDetails(gameId: string): Promise<GhostBoxGame | null> {
+  getGameStoreDetails(
+    gameId: string,
+    language?: "pt" | "en",
+  ): Promise<GhostBoxGame | null> {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_store_details",
-      { gameId, apiUrl: getGamesApiUrl() },
+      { gameId, apiUrl: getGamesApiUrl(), language },
       null,
     );
   },
@@ -697,10 +700,13 @@ export const ghostboxApi = {
     }
   },
 
-  getGameAchievementDetails(gameId: string): Promise<GhostBoxGame | null> {
+  getGameAchievementDetails(
+    gameId: string,
+    language?: "pt" | "en",
+  ): Promise<GhostBoxGame | null> {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_achievement_details",
-      { gameId, apiUrl: getGamesApiUrl() },
+      { gameId, apiUrl: getGamesApiUrl(), language },
       null,
     );
   },

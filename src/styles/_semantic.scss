@@ -9,26 +9,27 @@
 
   // --- Superfície (canvas → painel → card → elemento elevado) ---
   --surface-canvas: var(--n-0);
-  --surface-panel: var(--n-1);
+  --surface-panel: var(--n-2);
   --surface-raised: var(--n-2);
-  // Igual ao canvas: nada pode ficar abaixo do piso da rampa (#0f0f0f). Mantido
+  // Igual ao canvas: nada pode ficar abaixo do piso da rampa (#101010). Mantido
   // como papel nomeado para quem precisa declarar "afundado"; a distinção vem de
   // geometria (padding, inset), não de cor.
   --surface-sunken: var(--n-0);
-  --surface-sidebar: var(--n-1);
+  --surface-sidebar: var(--n-2);
   --surface-titlebar: var(--surface-canvas);
   --surface-titlebar-control: var(--n-3);
   --surface-titlebar-popover: var(--n-3);
 
   --surface-secondary: var(--surface-panel);
 
-  // Superfícies de opção: card acompanha o primeiro degrau acima do canvas;
-  // dropdown e hover sobem degraus reais da rampa.
-  --surface-option: var(--n-1);
-  --surface-option-hover: var(--n-2);
-  --surface-option-active: var(--n-4);
+  // Superfícies de opção. Hover de conteúdo AFUNDA (--n-2 → --n-1): é a regra do
+  // protótipo — navegação clareia, conteúdo recua. Não "corrigir" para subir.
+  --surface-option: var(--n-2);
+  --surface-option-hover: var(--n-1);
+  --surface-option-active: var(--n-3);
   --library-box: var(--n-0);
-  --library-box-active: var(--surface-option);
+  // Pasta selecionada: afunda, mesma regra do hover de conteúdo.
+  --library-box-active: var(--n-1);
   --surface-popover: var(--n-3);
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
   --surface-tray: var(--surface-canvas);
@@ -37,27 +38,35 @@
   --surface-tray-item-focus: var(--n-4);
   --focus-ring-tray: inset 0 0 0 1px var(--border-interactive);
   // Dropdowns da aba Ajustes: mesmos tons do dropdown da aba Perfil.
-  --settings-dropdown-surface: var(--n-3);
-  --settings-dropdown-surface-hover: var(--n-4);
-  --settings-dropdown-menu: var(--n-4);
+  // Trigger em repouso afunda abaixo do painel; foco/ativo e menu sobem.
+  --settings-dropdown-surface: var(--n-1);
+  --settings-dropdown-surface-hover: var(--n-3);
+  --settings-dropdown-menu: var(--n-3);
   --settings-dropdown-trigger-hover: var(--settings-dropdown-menu);
-  // Painel/menu dos dropdowns: um degrau acima do trigger para destacar a lista.
   --surface-dropdown-menu: var(--n-3);
-  // Toggles: trilho derivado dos tokens existentes — desligado é borda
-  // apagada, ligado é a cor mais clara do app.
-  --toggle-track: color-mix(in srgb, var(--border-hover) 38%, var(--n-0));
+  // Hover de opção dentro de qualquer menu de dropdown. Sobe muito acima do menu
+  // (#222222) de propósito: é o único realce dentro de um popover já elevado.
+  --dropdown-option-hover: var(--n-6b);
+  // Toggles: trilho desligado afunda; ligado é a cor mais clara do app. O botão
+  // inverte o trilho — escuro sobre trilho claro, claro sobre trilho escuro.
+  --toggle-track: var(--n-1);
   --toggle-track-on: var(--text-strong);
-  // Card de explorar da home: um degrau acima do canvas, sem virar --surface-card.
-  --surface-explore-card: var(--n-1);
+  --toggle-thumb: var(--n-5);
+  --toggle-thumb-on: var(--n-1);
+  // Card de explorar da home: acompanha o papel de card.
+  --surface-explore-card: var(--n-2);
   // Fundo atrás de capa/arte com proporção fixa. Fora da rampa de propósito: não
   // é um tier de UI, é o vazio atrás da arte. Preto absoluto evita halo quando a
-  // capa já tem barras pretas — o piso da rampa (#0f0f0f) desenharia uma caixa.
+  // capa já tem barras pretas — o piso da rampa (#101010) desenharia uma caixa.
   --surface-media-letterbox: var(--black);
-  // Pill sobre container clicável. O par existe porque o container sobe um
-  // degrau no hover; sem subir junto, a pill cairia para 1 degrau de distância
-  // (~1.04:1) e sumiria dentro do card.
-  --pill-bg: var(--n-3);
-  --pill-bg-hover: var(--n-4);
+  // Barra de controles do player de vídeo (trailer do jogo). Mesmo preto
+  // translúcido que as setas de navegação da galeria já usam sobre mídia —
+  // nomeado porque o player de vídeo precisa dele em mais de um lugar
+  // (fundo da barra + scrim atrás do indicador de buffering).
+  --surface-video-controls: color-mix(in srgb, var(--black) 55%, transparent);
+  // Pill sobre container clicável. Tom fixo: o card muda no hover, a pill não —
+  // a pill é rótulo, não alvo, e piscar junto com o card lia como segundo botão.
+  --pill-bg: var(--n-4);
   // Altura de uma pill. É token porque quem limita a lista a N linhas precisa
   // calcular com o valor real — o bug anterior era um `max-height` chutado que
   // não era múltiplo desta altura, deixando folga morta e vazando meia linha.
@@ -65,11 +74,12 @@
   --surface-modal: var(--n-4);
   // Dropdown da aba Perfil (ordenação da atividade): fundo próprio, quase preto.
   --profile-dropdown-surface: var(--n-1);
-  --profile-dropdown-surface-hover: var(--n-2);
+  --profile-dropdown-surface-hover: var(--n-3);
   --profile-dropdown-menu: var(--surface-dropdown-menu);
-  --profile-dropdown-option-hover: var(--n-4);
-  --sidebar-option-hover: var(--n-2);
-  --sidebar-option-selected: var(--n-4);
+  --profile-dropdown-option-hover: var(--dropdown-option-hover);
+  // Sidebar: navegação CLAREIA (oposto do conteúdo). Regra do protótipo.
+  --sidebar-option-hover: var(--n-3);
+  --sidebar-option-selected: var(--n-5);
   --sidebar-selector: var(--sidebar-option-hover);
   --sidebar-option-active: var(--sidebar-option-selected);
   --sidebar-option-active-hover: var(--sidebar-option-hover);
@@ -77,8 +87,8 @@
   // Overlays de interação: tinta translúcida branca aplicada sobre a superfície
   // de repouso, não fundo fixo. Fora do teto #202020 de propósito — são feedback
   // de hover/active/seleção, mesma categoria de isenção da rampa de borda
-  // (--b-0/--n-5..--n-7). Compondo sobre --n-4 (pior caso, popover/modal já no
-  // teto): hover ≈ #292929, strong ≈ #2d2d2d, active ≈ #303030 — degrau visível
+  // (--b-0/--n-5..--n-7). Compondo sobre --n-4 (pior caso, modal já no teto
+  // #252525): hover ≈ #2e2e2e, strong ≈ #313131, active ≈ #343434 — degrau visível
   // e crescente (hover < strong < active), que é o comportamento esperado.
   --surface: var(--a-hover);
   --surface-subtle: rgba(255, 255, 255, 0.015);
@@ -86,6 +96,11 @@
   --surface-hover: var(--a-hover);
   --surface-active: var(--a-active);
   --surface-strong: rgba(255, 255, 255, 0.06);
+
+  // Preenchimento de placeholder de carregamento. Fill opaco (e não --surface-hover)
+  // porque é um estado estático: reusar a tinta de hover colidia com o hover real
+  // do elemento por baixo. O protótipo desenha skeleton em #222222.
+  --skeleton-fill: var(--n-3);
 
   // --- Borda (quatro pesos com diferença perceptível) ---
   --border-subtle: var(--b-0);
@@ -192,12 +207,15 @@
   --type-size-fluid-showcase: clamp(30px, 5vw, 48px);
 
   // --- Peso de fonte ---
-  --weight-regular: 500;
+  // Dois pesos, dois papéis, e são os únicos arquivos de fonte carregados
+  // (ver main.tsx). Semibold é título e controle clicável; medium é todo o
+  // resto — corpo, descrição, meta, pill, badge. Não existe 400 no bundle:
+  // pedir "regular" cairia no fallback sintético do sistema.
   --weight-medium: 500;
   --weight-semibold: 600;
 
   // --- Família ---
-  --font-sans: "Open Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
 
   // --- Foco ---
   --focus-ring-color: var(--n-10);

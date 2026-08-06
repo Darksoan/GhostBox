@@ -1,4 +1,4 @@
-import { ChevronLeft, Folder, Heart } from "lucide-react";
+import { ChevronDown, Folder, Heart } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
@@ -243,7 +243,7 @@ export function LibraryPage({
               onClick={() => setSortDropdownOpen((current) => !current)}
             >
               <span>{sortLabel}</span>
-              <ChevronLeft size={14} />
+              <ChevronDown size={14} />
             </button>
             {sortDropdownOpen && (
               <div

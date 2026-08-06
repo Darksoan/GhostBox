@@ -1,3 +1,5 @@
+import { getCurrentAppearanceLanguage } from "./context/settings";
+import type { AppearanceSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
 import type { SteamGameReviewsResult, SteamRecommendedTag } from "./lib/ghostboxApi.types";
 import type { SteamWishlistItem } from "./types";
@@ -221,9 +223,12 @@ export async function loadGameDetails(
 }
 
 export async function loadGameStoreDetails(
-  gameId: string
+  gameId: string,
+  // Sem idioma explícito, cai no idioma atual da UI — quem chama sem passar
+  // nada (a maioria dos call sites, via gameCache) continua correto.
+  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage()
 ): Promise<GhostBoxGame | null> {
-  return ghostboxApi.getGameStoreDetails(gameId);
+  return ghostboxApi.getGameStoreDetails(gameId, language);
 }
 
 export async function ingestRemoteGameByAppId(appId: string): Promise<void> {
@@ -247,9 +252,10 @@ export async function loadSteamSimilarAppIds(appId: string): Promise<string[]> {
 }
 
 export async function loadGameAchievementDetails(
-  gameId: string
+  gameId: string,
+  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage()
 ): Promise<GhostBoxGame | null> {
-  return ghostboxApi.getGameAchievementDetails(gameId);
+  return ghostboxApi.getGameAchievementDetails(gameId, language);
 }
 
 export async function loadGameReviews(

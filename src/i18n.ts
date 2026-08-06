@@ -129,6 +129,18 @@ const translations: Record<Language, TranslationTree> = {
       lockedAria:
         "Conquistas e tempo de jogo bloqueados. Faça login para visualizar.",
     },
+    video: {
+      player: "Player de vídeo",
+      play: "Reproduzir",
+      pause: "Pausar",
+      mute: "Silenciar",
+      unmute: "Ativar som",
+      volume: "Volume",
+      progress: "Progresso do vídeo",
+      fullscreenEnter: "Tela cheia",
+      fullscreenExit: "Sair da tela cheia",
+      buffering: "Carregando vídeo",
+    },
     home: {
       pageAria: "Jogos recomendados e categorias da página inicial",
       recommended: "Recomendados",
@@ -487,6 +499,18 @@ const translations: Record<Language, TranslationTree> = {
       lockedAchievements: "Sign in to view achievements",
       lockedAria:
         "Achievements and playtime locked. Sign in to view.",
+    },
+    video: {
+      player: "Video player",
+      play: "Play",
+      pause: "Pause",
+      mute: "Mute",
+      unmute: "Unmute",
+      volume: "Volume",
+      progress: "Video progress",
+      fullscreenEnter: "Fullscreen",
+      fullscreenExit: "Exit fullscreen",
+      buffering: "Buffering",
     },
     home: {
       pageAria: "Recommended games and home categories",

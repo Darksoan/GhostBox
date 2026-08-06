@@ -505,7 +505,22 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
     }
 }
 
-fn steam_store_details_cache_path(app: &tauri::AppHandle, app_id: &str) -> Option<PathBuf> {
+// Idiomas que a Steam aceita no parâmetro `l=`/`lang=` das rotas de detalhes.
+// "portuguese" continua sendo o fallback: era o valor fixo de antes, então
+// qualquer chamador que ainda não informa idioma preserva o comportamento
+// atual em vez de trocar silenciosamente para inglês.
+fn steam_ui_language(language: Option<&str>) -> &'static str {
+    match language {
+        Some("en") => "english",
+        _ => "portuguese",
+    }
+}
+
+fn steam_store_details_cache_path(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    language: &str,
+) -> Option<PathBuf> {
     if !app_id.chars().all(|character| character.is_ascii_digit()) {
         return None;
     }
@@ -516,11 +531,18 @@ fn steam_store_details_cache_path(app: &tauri::AppHandle, app_id: &str) -> Optio
         .ok()?
         .join("cache")
         .join("steam-store-details");
-    Some(directory.join(format!("{app_id}.json")))
+    // O idioma faz parte do nome do arquivo: descrição, requisitos e gêneros
+    // vêm localizados pela Steam, então um cache compartilhado entre pt/en
+    // serviria o texto do idioma errado depois de trocar a preferência na UI.
+    Some(directory.join(format!("{app_id}-{language}.json")))
 }
 
-fn read_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str) -> Option<Value> {
-    let path = steam_store_details_cache_path(app, app_id)?;
+fn read_cached_steam_store_details(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    language: &str,
+) -> Option<Value> {
+    let path = steam_store_details_cache_path(app, app_id, language)?;
     let contents = fs::read_to_string(path).ok()?;
     let cached = serde_json::from_str::<Value>(&contents).ok()?;
     if cached.get("version").and_then(|value| value.as_u64())
@@ -531,8 +553,12 @@ fn read_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str) -> Opti
     cached.get("data").cloned()
 }
 
-fn cached_steam_store_details_is_fresh(app: &tauri::AppHandle, app_id: &str) -> bool {
-    let Some(path) = steam_store_details_cache_path(app, app_id) else {
+fn cached_steam_store_details_is_fresh(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    language: &str,
+) -> bool {
+    let Some(path) = steam_store_details_cache_path(app, app_id, language) else {
         return false;
     };
     let Ok(contents) = fs::read_to_string(path) else {
@@ -555,9 +581,17 @@ pub(crate) fn read_cached_steam_store_title(
     app: &tauri::AppHandle,
     app_id: &str,
 ) -> Option<String> {
-    let details = read_cached_steam_store_details(app, app_id)?;
-    let title = text(details.get("name"));
-    (!title.is_empty()).then_some(title)
+    // O título não depende do idioma pedido pela UI no momento da chamada;
+    // aceita qualquer variante já cacheada em vez de exigir uma específica.
+    for language in ["portuguese", "english"] {
+        if let Some(details) = read_cached_steam_store_details(app, app_id, language) {
+            let title = text(details.get("name"));
+            if !title.is_empty() {
+                return Some(title);
+            }
+        }
+    }
+    None
 }
 
 fn read_string_after_binary_key(section: &[u8], key: &[u8]) -> Option<String> {
@@ -572,11 +606,16 @@ fn read_string_after_binary_key(section: &[u8], key: &[u8]) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-fn write_cached_steam_store_details(app: &tauri::AppHandle, app_id: &str, details: &Value) {
+fn write_cached_steam_store_details(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    language: &str,
+    details: &Value,
+) {
     let Ok(_guard) = STEAM_STORE_DETAILS_CACHE_WRITE_LOCK.lock() else {
         return;
     };
-    let Some(path) = steam_store_details_cache_path(app, app_id) else {
+    let Some(path) = steam_store_details_cache_path(app, app_id, language) else {
         return;
     };
     if let Some(parent) = path.parent() {
@@ -658,7 +697,7 @@ fn merge_cached_steam_store_details(previous: Option<&Value>, next: &Value) -> V
     Value::Object(merged)
 }
 
-fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
+fn steam_details_proxy_url(app_id: &str, language: &str) -> Option<reqwest::Url> {
     if !app_id.chars().all(|character| character.is_ascii_digit()) {
         return None;
     }
@@ -678,14 +717,12 @@ fn steam_details_proxy_url(app_id: &str) -> Option<reqwest::Url> {
 
     let base_path = url.path().trim_end_matches('/');
     url.set_path(&format!("{base_path}/v2/games/{app_id}/details"));
-    url.query_pairs_mut()
-        .clear()
-        .append_pair("lang", "portuguese");
+    url.query_pairs_mut().clear().append_pair("lang", language);
     Some(url)
 }
 
-async fn fetch_steam_details_proxy(app_id: &str) -> Option<Value> {
-    let url = steam_details_proxy_url(app_id)?;
+async fn fetch_steam_details_proxy(app_id: &str, language: &str) -> Option<Value> {
+    let url = steam_details_proxy_url(app_id, language)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .build()
@@ -709,10 +746,10 @@ async fn fetch_steam_details_proxy(app_id: &str) -> Option<Value> {
     Some(details)
 }
 
-async fn fetch_steam_store_details(app_id: &str) -> Option<Value> {
+async fn fetch_steam_store_details(app_id: &str, language: &str) -> Option<Value> {
     let url = format!(
-        "https://store.steampowered.com/api/appdetails?appids={}&l=portuguese",
-        app_id
+        "https://store.steampowered.com/api/appdetails?appids={}&l={}",
+        app_id, language
     );
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
@@ -957,12 +994,20 @@ async fn fetch_steam_achievements(
     app: &tauri::AppHandle,
     app_id: &str,
     steam_path: &str,
+    ui_language: Option<&str>,
 ) -> AchievementFetchResult {
     let proxy_url = crate::settings::load_steam_stats_proxy_url();
     if !proxy_url.is_empty() {
-        // Prefer pt-BR, then European Portuguese, then English schema.
+        // Tenta primeiro o idioma da UI; os demais ficam como fallback caso o
+        // schema não exista naquele idioma (comportamento antigo preservado
+        // para quem está em português).
+        let languages: &[&str] = if ui_language == Some("en") {
+            &["english", "brazilian", "portuguese"]
+        } else {
+            &["brazilian", "portuguese", "english"]
+        };
         let mut last_result = AchievementFetchResult::default();
-        for language in ["brazilian", "portuguese", "english"] {
+        for &language in languages {
             let result =
                 fetch_steam_achievements_from_proxy(&proxy_url, app_id, language).await;
             if !result.achievements.is_empty() {
@@ -1693,11 +1738,16 @@ pub async fn database_get_game_store_details(
     app: tauri::AppHandle,
     game_id: String,
     api_url: Option<String>,
+    language: Option<String>,
 ) -> Result<Option<serde_json::Value>, String> {
     let app_id: String = game_id.chars().filter(char::is_ascii_digit).collect();
     if app_id.is_empty() {
         return Ok(None);
     }
+    // Vem da preferência de idioma da UI (`appearance.language`, "pt"/"en");
+    // sem isso a descrição, os requisitos e os gêneros vinham sempre em
+    // português da Steam, ignorando o idioma escolhido no app.
+    let steam_language = steam_ui_language(language.as_deref());
 
     let mut game = fetch_remote_game(&app, game_id, api_url)
         .await
@@ -1705,21 +1755,21 @@ pub async fn database_get_game_store_details(
         .flatten()
         .unwrap_or_else(|| steam_app_fallback_game(&app_id));
 
-    let latest_cached_details = read_cached_steam_store_details(&app, &app_id);
+    let latest_cached_details = read_cached_steam_store_details(&app, &app_id, steam_language);
     if let Some(cached_details) = latest_cached_details.as_ref() {
         merge_normalized_steam_details(&mut game, cached_details);
-        if cached_steam_store_details_is_fresh(&app, &app_id)
+        if cached_steam_store_details_is_fresh(&app, &app_id, steam_language)
             && steam_details_have_about(cached_details)
         {
             return Ok(Some(game));
         }
     }
 
-    if let Some(proxy_details) = fetch_steam_details_proxy(&app_id).await {
+    if let Some(proxy_details) = fetch_steam_details_proxy(&app_id, steam_language).await {
         let merged_details =
             merge_cached_steam_store_details(latest_cached_details.as_ref(), &proxy_details);
         merge_normalized_steam_details(&mut game, &merged_details);
-        write_cached_steam_store_details(&app, &app_id, &merged_details);
+        write_cached_steam_store_details(&app, &app_id, steam_language, &merged_details);
         if steam_details_have_about(&merged_details) {
             return Ok(Some(game));
         }
@@ -1727,12 +1777,12 @@ pub async fn database_get_game_store_details(
 
     // The details proxy can be online while omitting the description fields. Only
     // fall back to Steam's JSON endpoint when the data required by the UI is absent.
-    if let Some(store_data) = fetch_steam_store_details(&app_id).await {
+    if let Some(store_data) = fetch_steam_store_details(&app_id, steam_language).await {
         let store_details = steam_store_details_from_store_data(&store_data);
         merge_steam_store_details(&mut game, &store_data);
         let merged_details =
             merge_cached_steam_store_details(latest_cached_details.as_ref(), &store_details);
-        write_cached_steam_store_details(&app, &app_id, &merged_details);
+        write_cached_steam_store_details(&app, &app_id, steam_language, &merged_details);
     }
 
     Ok(Some(game))
@@ -1743,6 +1793,7 @@ pub async fn database_get_game_achievement_details(
     app: tauri::AppHandle,
     game_id: String,
     api_url: Option<String>,
+    language: Option<String>,
 ) -> Result<Option<serde_json::Value>, String> {
     let app_id: String = game_id.chars().filter(char::is_ascii_digit).collect();
     if app_id.is_empty() {
@@ -1779,7 +1830,8 @@ pub async fn database_get_game_achievement_details(
         && now.saturating_sub(previous_fetch_time) > 24 * 60 * 60;
 
     if achievement_list.is_empty() || should_refetch_for_percentages {
-        let achievement_result = fetch_steam_achievements(&app, &app_id, steam_path).await;
+        let achievement_result =
+            fetch_steam_achievements(&app, &app_id, steam_path, language.as_deref()).await;
         if let Some(object) = game.as_object_mut() {
             object.insert(
                 "achievementMetadata".to_string(),

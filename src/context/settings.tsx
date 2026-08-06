@@ -133,18 +133,30 @@ const notificationsStorageKey = "ghostbox-notifications";
 const legacyEdenNotificationsStorageKey = "eden-notifications";
 const legacyNotificationsStorageKey = "piratebox-notifications";
 
+function readStoredAppearance(): AppearanceSettings {
+  try {
+    const saved =
+      localStorage.getItem(appearanceStorageKey) ??
+      localStorage.getItem(legacyEdenAppearanceStorageKey) ??
+      localStorage.getItem(legacyAppearanceStorageKey);
+    return saved ? normalizeAppearance(JSON.parse(saved)) : defaultAppearance;
+  } catch {
+    return defaultAppearance;
+  }
+}
+
+/**
+ * Lê o idioma atual fora do ciclo de vida do React. A camada de dados e o
+ * cache de jogos precisam saber em que idioma pedir conteúdo à Steam
+ * (descrição, requisitos, gêneros) mesmo rodando fora de um componente —
+ * por isso não dá para depender de `useSettings`.
+ */
+export function getCurrentAppearanceLanguage(): AppearanceSettings["language"] {
+  return readStoredAppearance().language;
+}
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
-    try {
-      const saved =
-        localStorage.getItem(appearanceStorageKey) ??
-        localStorage.getItem(legacyEdenAppearanceStorageKey) ??
-        localStorage.getItem(legacyAppearanceStorageKey);
-      return saved ? normalizeAppearance(JSON.parse(saved)) : defaultAppearance;
-    } catch {
-      return defaultAppearance;
-    }
-  });
+  const [appearance, setAppearance] = useState<AppearanceSettings>(readStoredAppearance);
 
   const [notifications, setNotifications] = useState<NotificationSettings>(() => {
     try {

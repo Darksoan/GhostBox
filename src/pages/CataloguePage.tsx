@@ -362,7 +362,6 @@ interface CataloguePageProps {
   hasError?: boolean;
   onRetry?: () => void;
   filters: CatalogueFilters;
-  animateFilterPlaceholders: boolean;
   onFiltersChange: (filters: CatalogueFilters) => void;
   onPageChange: (page: number) => void;
   onOpenGame: (game: GhostBoxGame) => void;
@@ -370,7 +369,6 @@ interface CataloguePageProps {
   addingGameId: string | null;
   removingGameId: string | null;
   onRemoveGame: (game: GhostBoxGame) => void;
-  pulseLoading: boolean;
   scrollElementRef?: RefObject<HTMLElement | null>;
 }
 
@@ -389,7 +387,6 @@ export function CataloguePage({
   hasError = false,
   onRetry,
   filters,
-  animateFilterPlaceholders,
   onFiltersChange,
   onPageChange,
   onOpenGame,
@@ -397,7 +394,6 @@ export function CataloguePage({
   addingGameId,
   removingGameId,
   onRemoveGame,
-  pulseLoading,
   scrollElementRef,
 }: CataloguePageProps) {
   const { t } = useSettings();
@@ -606,12 +602,7 @@ export function CataloguePage({
   });
 
   if (initialLoading) {
-    return (
-      <CatalogueLoadingState
-        animateFilters={animateFilterPlaceholders}
-        pulseLoading={pulseLoading}
-      />
-    );
+    return <CatalogueLoadingState />;
   }
 
   return (
@@ -628,10 +619,7 @@ export function CataloguePage({
           ) : refreshing ? (
             <PageSpinnerLoadingState label={t("loading.catalogue")} />
           ) : loading ? (
-            <CatalogueListLoadingState
-              animateListText={pulseLoading}
-              pulseLoading={pulseLoading}
-            />
+            <CatalogueListLoadingState />
           ) : visibleGames.length > 0 ? (
             <div className="catalogue-page__list-container">
               <CatalogueList
