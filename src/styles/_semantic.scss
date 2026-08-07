@@ -77,6 +77,11 @@
   // exista sem estourar o teto da rampa. Usado quando o modal é dominado por
   // arte e a moldura precisa sumir (detalhes de download).
   --surface-modal-canvas: var(--n-1);
+  // Controle dentro desse modal. SOBE no hover — regra de navegação, não de
+  // conteúdo: o hover de conteúdo afunda para #151515, que aqui é o corpo, e o
+  // botão sumiria justo ao ser apontado.
+  --surface-modal-control: var(--n-3);
+  --surface-modal-control-hover: var(--n-5);
   // Dropdown da aba Perfil (ordenação da atividade): fundo próprio, quase preto.
   --profile-dropdown-surface: var(--n-1);
   --profile-dropdown-surface-hover: var(--n-3);

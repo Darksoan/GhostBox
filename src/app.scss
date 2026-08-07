@@ -8178,16 +8178,16 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-9) var(--space-9);
 
     /* Só o botão do rodapé: `__danger` também veste o confirmar do diálogo
-       aninhado, que fica sobre `--surface-modal` e já tem contraste próprio.
-       Aqui o repouso acompanha os demais blocos, e o hover precisa SUBIR — o
-       hover padrão de conteúdo afunda para #151515, que é o corpo deste modal,
-       e o botão sumiria justo ao ser apontado. */
+       aninhado, que fica sobre `--surface-modal` e mantém o vermelho no hover —
+       lá é o ponto de confirmação destrutiva, aqui é só a porta de entrada
+       dela, e o texto continua branco nos dois estados. */
     .download-details-modal__danger {
-      background: var(--surface-raised);
+      background: var(--surface-modal-control);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        background: var(--surface-option-active);
+        background: var(--surface-modal-control-hover);
+        color: var(--text-primary);
       }
     }
   }
