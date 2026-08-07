@@ -235,14 +235,15 @@ function DownloadCard({
       </span>
 
       <div className="download-card__content">
-        <span className="download-card__title-row">
-          <strong className="download-card__title">{task.title}</strong>
-          {/* Só aparece quando o download já terminou: durante o progresso a
-              barra ocupa esse lugar e a data não interessa ainda. */}
-          {showsProgress ? null : (
-            <span className="download-card__date">{downloadedAt}</span>
-          )}
-        </span>
+        {/* Só aparece com o download terminado: durante o progresso a barra
+            ocupa esse espaço e a data ainda não interessa. Ancorada no card
+            (o `__content` não é `relative`), então vai para o canto superior
+            direito sem que a largura do título a desloque. */}
+        {showsProgress ? null : (
+          <span className="download-card__date">{downloadedAt}</span>
+        )}
+
+        <strong className="download-card__title">{task.title}</strong>
 
         {showsProgress ? (
           <span

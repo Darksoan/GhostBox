@@ -7794,20 +7794,6 @@ input[type="search"]::-ms-reveal {
     text-align: left;
   }
 
-  /* Título e data dividem a linha do topo: a data só existe quando o download
-     já terminou, então ela ocupa o canto que a barra deixa livre nesse
-     estado, em vez de brigar por espaço com o tamanho baixado embaixo. */
-  &__title-row {
-    display: flex;
-    /* `flex-start`, não `baseline`: o título é maior que a data, e alinhar
-       pela linha de base empurrava a data para o meio da altura do título em
-       vez de encostar no topo do card, perto do canto superior direito. */
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-5);
-    min-width: 0;
-  }
-
   &__title {
     overflow: hidden;
     color: var(--text-primary);
@@ -7818,17 +7804,23 @@ input[type="search"]::-ms-reveal {
     white-space: nowrap;
   }
 
+  /* Ancorada no card, não na coluna de conteúdo — `__content` não é
+     `relative`, então o canto é o do card inteiro. Assim a data não desloca
+     com a largura do título nem entra no `gap` do grid de conteúdo.
+     `z-index` acima do `__open`, que cobre o card todo; `pointer-events: none`
+     para não roubar o clique que abre os detalhes. */
   &__date {
-    flex: 0 0 auto;
-    /* Compensa o `line-height` maior do título ao lado: sem isto o
-       `flex-start` ainda deixava a data alguns pixels abaixo do topo real do
-       texto do título. */
-    padding-top: 2px;
+    position: absolute;
+    top: var(--space-5);
+    right: var(--space-6);
+    z-index: 2;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-semibold);
     font-variant-numeric: tabular-nums;
+    line-height: var(--type-line-caption);
     white-space: nowrap;
+    pointer-events: none;
   }
 
   /* Atravessa a coluna inteira: barra que para no meio lê como widget solto,
@@ -8301,10 +8293,11 @@ input[type="search"]::-ms-reveal {
     padding: var(--space-6) 0 0 var(--space-6);
   }
 
-  .download-card__controls {
-    grid-column: 2;
-    align-self: end;
-    padding-right: var(--space-6);
+  /* Empilhado, o topo do card é a capa: a data ancorada ali cairia sobre a
+     arte. Volta ao fluxo, como primeira linha do conteúdo — continua acima do
+     nome do jogo, que é o que o layout pede. */
+  .download-card__date {
+    position: static;
   }
 }
 
