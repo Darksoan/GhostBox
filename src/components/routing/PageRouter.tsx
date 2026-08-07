@@ -324,7 +324,7 @@ export function PageRouter({
           onOpenGame={openGame}
           activeSessionAppIds={appData.activeSessionAppIds}
           onOpenGameAchievements={(game) => openAchievements(game)}
-          onSignOut={() => void appData.handleSteamSignOut()}
+          onConnectSteam={() => void appData.handleConnectSteam()}
         />
       );
     }

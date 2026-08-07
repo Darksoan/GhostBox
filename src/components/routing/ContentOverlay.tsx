@@ -200,7 +200,6 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             isSessionActive={isSessionActive}
             isFavorite={isFavorite}
             userCollections={appData.userCollections}
-            steamProfile={appData.steamProfile}
             onClose={closeGame}
             onQueueGame={appData.queueGame}
             onRemoveGame={appData.removeQueuedGame}

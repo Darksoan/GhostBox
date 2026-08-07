@@ -1102,9 +1102,6 @@ function HomeCalendarGameCardComponent({
         style={layeredImageStyle(layeredSources, "")}
         aria-hidden="true"
       />
-      <span className="home-calendar-card__content" aria-hidden="true">
-        <strong>{game.title}</strong>
-      </span>
     </button>
   );
 }

@@ -2,6 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
   AppStatus,
@@ -46,6 +47,7 @@ import type {
   CloudSaveDeletionResult,
   CloudSavePinnedResult,
   CloudSessionResult,
+  AccountMeResult,
   SubscriptionCheckoutResult,
   SubscriptionPortalFlow,
   SubscriptionPortalResult,
@@ -58,8 +60,6 @@ function noopUnsubscribe() {
 }
 
 const defaultGamesApiUrl = "https://piratebox-catalogue.hella.workers.dev";
-const defaultSubscriptionsApiUrl =
-  "https://ghostbox-subscriptions.hella.workers.dev";
 const defaultFeedbackApiUrl =
   "https://ghostbox-feedback.hella.workers.dev/feedback";
 const defaultUpdatesApiUrl =
@@ -94,13 +94,6 @@ function getGamesApiUrl() {
   ).replace(/\/+$/, "");
 }
 
-function getSubscriptionsApiUrl() {
-  return (
-    import.meta.env.VITE_GHOSTBOX_SUBSCRIPTIONS_API_URL?.trim() ||
-    defaultSubscriptionsApiUrl
-  ).replace(/\/+$/, "");
-}
-
 function getFeedbackApiUrl() {
   return (
     import.meta.env.VITE_GHOSTBOX_FEEDBACK_API_URL?.trim() ||
@@ -120,45 +113,34 @@ const PREMIUM_CACHE_KEY = "ghostbox:premium-status";
 const PREMIUM_STATUS_TTL_MS = 5 * 60 * 1000;
 
 type DiscordLinkCacheEntry = {
-  steamId: string;
   status: DiscordLinkStatus;
   cachedAt: number;
 };
 
 type PremiumCacheEntry = {
-  steamId: string;
   isPremium: boolean;
   currentPeriodEnd?: string | null;
   cachedAt: number;
 };
 
 let memoryDiscordLinkCache: DiscordLinkCacheEntry | null = null;
-const discordLinkInFlight = new Map<
-  string,
-  Promise<DiscordLinkStatus | null>
->();
+let discordLinkInFlight: Promise<DiscordLinkStatus | null> | null = null;
 let memoryPremiumCache: PremiumCacheEntry | null = null;
-const premiumInFlight = new Map<string, Promise<boolean>>();
+let premiumInFlight: Promise<boolean> | null = null;
 
-function readDiscordLinkLocalCache(steamId: string): DiscordLinkStatus | null {
+function readDiscordLinkLocalCache(): DiscordLinkStatus | null {
   try {
     const raw = localStorage.getItem(DISCORD_LINK_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DiscordLinkCacheEntry;
-    if (!parsed?.steamId || parsed.steamId !== steamId || !parsed.status)
-      return null;
-    return parsed.status;
+    return parsed?.status ?? null;
   } catch {
     return null;
   }
 }
 
-function writeDiscordLinkCache(steamId: string, status: DiscordLinkStatus) {
-  const entry: DiscordLinkCacheEntry = {
-    steamId,
-    status,
-    cachedAt: Date.now(),
-  };
+function writeDiscordLinkCache(status: DiscordLinkStatus) {
+  const entry: DiscordLinkCacheEntry = { status, cachedAt: Date.now() };
   memoryDiscordLinkCache = entry;
   try {
     localStorage.setItem(DISCORD_LINK_CACHE_KEY, JSON.stringify(entry));
@@ -167,18 +149,16 @@ function writeDiscordLinkCache(steamId: string, status: DiscordLinkStatus) {
   }
 }
 
-function readPremiumLocalCache(steamId: string): boolean | null {
-  return readPremiumLocalCacheEntry(steamId)?.isPremium ?? null;
+function readPremiumLocalCache(): boolean | null {
+  return readPremiumLocalCacheEntry()?.isPremium ?? null;
 }
 
-function readPremiumLocalCacheEntry(steamId: string): PremiumCacheEntry | null {
+function readPremiumLocalCacheEntry(): PremiumCacheEntry | null {
   try {
     const raw = localStorage.getItem(PREMIUM_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PremiumCacheEntry;
-    if (!parsed?.steamId || parsed.steamId !== steamId) return null;
     return {
-      steamId,
       isPremium: parsed.isPremium === true,
       currentPeriodEnd: parsed.currentPeriodEnd ?? null,
       cachedAt: Number.isFinite(parsed.cachedAt) ? parsed.cachedAt : 0,
@@ -188,9 +168,8 @@ function readPremiumLocalCacheEntry(steamId: string): PremiumCacheEntry | null {
   }
 }
 
-function writePremiumCache(steamId: string, isPremium: boolean, currentPeriodEnd?: string | null) {
+function writePremiumCache(isPremium: boolean, currentPeriodEnd?: string | null) {
   const entry: PremiumCacheEntry = {
-    steamId,
     isPremium,
     currentPeriodEnd: currentPeriodEnd ?? null,
     cachedAt: Date.now(),
@@ -198,6 +177,20 @@ function writePremiumCache(steamId: string, isPremium: boolean, currentPeriodEnd
   memoryPremiumCache = entry;
   try {
     localStorage.setItem(PREMIUM_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // ignore
+  }
+}
+
+/** Clears cached subscription/Discord state — call on account logout. */
+function clearAccountCaches() {
+  memoryDiscordLinkCache = null;
+  memoryPremiumCache = null;
+  discordLinkInFlight = null;
+  premiumInFlight = null;
+  try {
+    localStorage.removeItem(DISCORD_LINK_CACHE_KEY);
+    localStorage.removeItem(PREMIUM_CACHE_KEY);
   } catch {
     // ignore
   }
@@ -259,229 +252,125 @@ export const ghostboxApi = {
     }
   },
 
-  getDiscordLinkUrl(steamId: string): string {
-    const url = new URL(`${getSubscriptionsApiUrl()}/discord/link`);
-    url.searchParams.set("steamId", steamId);
-    return url.toString();
+  /** Opens the browser for Discord OAuth; the returned URL already carries a
+   * signed, per-account state token minted by the worker. */
+  async getDiscordLinkUrl(): Promise<string | null> {
+    try {
+      const result = await invoke<{ url: string }>("discord_link_start", {});
+      return result?.url ?? null;
+    } catch {
+      return null;
+    }
   },
 
   /** Synchronous hydrate for UI — memory then localStorage. */
-  getCachedDiscordLinkStatus(steamId: string): DiscordLinkStatus | null {
-    const id = steamId.trim();
-    if (!id) return null;
-    if (memoryDiscordLinkCache?.steamId === id)
-      return memoryDiscordLinkCache.status;
-    const local = readDiscordLinkLocalCache(id);
-    if (local) {
-      memoryDiscordLinkCache = {
-        steamId: id,
-        status: local,
-        cachedAt: Date.now(),
-      };
-    }
+  getCachedDiscordLinkStatus(): DiscordLinkStatus | null {
+    if (memoryDiscordLinkCache) return memoryDiscordLinkCache.status;
+    const local = readDiscordLinkLocalCache();
+    if (local) memoryDiscordLinkCache = { status: local, cachedAt: Date.now() };
     return local;
   },
 
   cacheDiscordLinkStatus(status: DiscordLinkStatus | null | undefined) {
-    const steamId = status?.steamId?.trim();
-    if (!steamId || !status) return;
-    writeDiscordLinkCache(steamId, status);
+    if (!status) return;
+    writeDiscordLinkCache(status);
   },
 
-  getCachedIsPremium(steamId: string): boolean | null {
-    const id = steamId.trim();
-    if (!id) return null;
-    if (memoryPremiumCache?.steamId === id) return memoryPremiumCache.isPremium;
-    const local = readPremiumLocalCache(id);
-    if (local !== null) {
-      memoryPremiumCache = {
-        steamId: id,
-        isPremium: local,
-        cachedAt: Date.now(),
-      };
-    }
+  getCachedIsPremium(): boolean | null {
+    if (memoryPremiumCache) return memoryPremiumCache.isPremium;
+    const local = readPremiumLocalCache();
+    if (local !== null) memoryPremiumCache = { isPremium: local, cachedAt: Date.now() };
     return local;
   },
 
-  getFreshCachedPremiumStatus(steamId: string): PremiumCacheEntry | null {
-    const id = steamId.trim();
-    if (!id) return null;
-    const cached = memoryPremiumCache?.steamId === id ? memoryPremiumCache : readPremiumLocalCacheEntry(id);
+  getFreshCachedPremiumStatus(): PremiumCacheEntry | null {
+    const cached = memoryPremiumCache ?? readPremiumLocalCacheEntry();
     if (!cached || Date.now() - cached.cachedAt > PREMIUM_STATUS_TTL_MS) return null;
     memoryPremiumCache = cached;
     return cached;
   },
 
-  cacheIsPremium(steamId: string, isPremium: boolean) {
-    const id = steamId.trim();
-    if (!id) return;
-    writePremiumCache(id, isPremium);
+  cacheIsPremium(isPremium: boolean) {
+    writePremiumCache(isPremium);
   },
 
-  async getDiscordLinkStatus(
-    steamId: string,
-  ): Promise<DiscordLinkStatus | null> {
-    const id = steamId.trim();
-    if (!id) return null;
+  clearAccountCaches,
 
-    const inFlight = discordLinkInFlight.get(id);
-    if (inFlight) return inFlight;
+  async getDiscordLinkStatus(): Promise<DiscordLinkStatus | null> {
+    if (discordLinkInFlight) return discordLinkInFlight;
 
     const promise = (async (): Promise<DiscordLinkStatus | null> => {
-      const url = new URL(`${getSubscriptionsApiUrl()}/discord/link-status`);
-      url.searchParams.set("steamId", id);
-
       try {
-        const response = await fetch(url, {
-          headers: { accept: "application/json" },
-        });
-        if (!response.ok) {
-          return ghostboxApi.getCachedDiscordLinkStatus(id);
-        }
-        const status = (await response.json()) as DiscordLinkStatus;
-        writeDiscordLinkCache(id, status);
+        const status = await invoke<DiscordLinkStatus>("discord_link_status", {});
+        writeDiscordLinkCache(status);
         return status;
       } catch {
-        return ghostboxApi.getCachedDiscordLinkStatus(id);
+        return ghostboxApi.getCachedDiscordLinkStatus();
       } finally {
-        discordLinkInFlight.delete(id);
+        discordLinkInFlight = null;
       }
     })();
 
-    discordLinkInFlight.set(id, promise);
+    discordLinkInFlight = promise;
     return promise;
   },
 
-  async getSubscriptionStatus(
-    steamId: string,
-  ): Promise<SubscriptionStatusResult | null> {
-    const id = steamId.trim();
-    if (!id) return null;
-
-    if ("__TAURI_INTERNALS__" in window) {
-      try {
-        const status = await invoke<SubscriptionStatusResult>(
-          "subscription_get_status",
-          { steamId: id },
-        );
-        if (status.discordLink) {
-          writeDiscordLinkCache(id, status.discordLink);
-        }
-        writePremiumCache(id, resolveIsPremium(status), status.subscription?.currentPeriodEnd ?? null);
-        return status;
-      } catch {
-        return null;
-      }
-    }
-
-    const url = new URL(`${getSubscriptionsApiUrl()}/subscription/status`);
-    url.searchParams.set("steamId", id);
-
+  async getSubscriptionStatus(): Promise<SubscriptionStatusResult | null> {
     try {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 10_000);
-      const response = await fetch(url, {
-        headers: { accept: "application/json" },
-        signal: controller.signal,
-      }).finally(() => window.clearTimeout(timeout));
-      if (!response.ok) return null;
-      const status = (await response.json()) as SubscriptionStatusResult;
+      const status = await invoke<SubscriptionStatusResult>("subscription_get_status", {});
       if (status.discordLink) {
-        writeDiscordLinkCache(id, status.discordLink);
+        writeDiscordLinkCache(status.discordLink);
       }
-      writePremiumCache(id, resolveIsPremium(status), status.subscription?.currentPeriodEnd ?? null);
+      writePremiumCache(resolveIsPremium(status), status.subscription?.currentPeriodEnd ?? null);
       return status;
     } catch {
       return null;
     }
   },
 
-  async isPremiumUser(steamId: string): Promise<boolean> {
-    const id = steamId.trim();
-    if (!id) return false;
-
-    const cached = ghostboxApi.getFreshCachedPremiumStatus(id);
+  async isPremiumUser(): Promise<boolean> {
+    const cached = ghostboxApi.getFreshCachedPremiumStatus();
     if (cached) return cached.isPremium;
 
-    const inFlight = premiumInFlight.get(id);
-    if (inFlight) return inFlight;
+    if (premiumInFlight) return premiumInFlight;
 
     const promise = (async (): Promise<boolean> => {
       try {
-        const status = await ghostboxApi.getSubscriptionStatus(id);
+        const status = await ghostboxApi.getSubscriptionStatus();
         const premium = resolveIsPremium(status);
-        writePremiumCache(id, premium, status?.subscription?.currentPeriodEnd ?? null);
+        writePremiumCache(premium, status?.subscription?.currentPeriodEnd ?? null);
         return premium;
       } catch {
-        return ghostboxApi.getCachedIsPremium(id) === true;
+        return ghostboxApi.getCachedIsPremium() === true;
       } finally {
-        premiumInFlight.delete(id);
+        premiumInFlight = null;
       }
     })();
 
-    premiumInFlight.set(id, promise);
+    premiumInFlight = promise;
     return promise;
   },
 
   async createSubscriptionCheckout(
-    steamId: string,
     planId: SubscriptionPlanId,
   ): Promise<SubscriptionCheckoutResult | null> {
-    if ("__TAURI_INTERNALS__" in window) {
-      try {
-        return await invoke<SubscriptionCheckoutResult>(
-          "subscription_create_checkout",
-          { steamId, planId },
-        );
-      } catch {
-        return null;
-      }
+    try {
+      return await invoke<SubscriptionCheckoutResult>("subscription_create_checkout", { planId });
+    } catch {
+      return null;
     }
-
-    const response = await fetch(
-      `${getSubscriptionsApiUrl()}/subscription/checkouts`,
-      {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ steamId, planId }),
-      },
-    );
-    if (!response.ok) return null;
-    return (await response.json()) as SubscriptionCheckoutResult;
   },
 
   async createSubscriptionPortalSession(
-    steamId: string,
     flow: SubscriptionPortalFlow = "manage",
   ): Promise<SubscriptionPortalResult | null> {
-    const id = steamId.trim();
-    if (!id) return null;
-
     try {
-      const response = await fetch(
-        `${getSubscriptionsApiUrl()}/subscription/portal`,
-        {
-          method: "POST",
-          headers: {
-            accept: "application/json",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ steamId: id, flow }),
-        },
-      );
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(payload?.error || "Could not open billing portal.");
-      }
-      return (await response.json()) as SubscriptionPortalResult;
+      return await invoke<SubscriptionPortalResult>("subscription_create_portal_session", { flow });
     } catch (error) {
       if (error instanceof Error) throw error;
-      throw new Error("Could not open billing portal.");
+      throw new Error(
+        typeof error === "string" ? error : "Could not open billing portal.",
+      );
     }
   },
 
@@ -1032,24 +921,79 @@ export const ghostboxApi = {
     return invokeOr<SteamProfile>("steam_save_profile", { profile }, profile);
   },
 
-  async signInWithSteam(): Promise<SteamProfile> {
-    const profile = await invoke<SteamProfile>("steam_sign_in", {});
+  /** Links Steam to the currently signed-in GhostBox account. Requires an
+   * active account session — it no longer signs anyone in on its own. */
+  async connectSteamAccount(): Promise<SteamProfile> {
+    const profile = await invoke<SteamProfile>("steam_connect_account", {});
     if (!profile?.steamId) {
       throw new Error("Steam profile is invalid");
     }
     return profile;
   },
 
-  signOutSteam(): Promise<void> {
-    return invokeOr<void>("steam_sign_out", {}, undefined);
+  /** Disconnects Steam without touching the GhostBox account session. */
+  disconnectSteamAccount(): Promise<void> {
+    return invokeOr<void>("steam_disconnect_account", {}, undefined);
   },
 
   getCloudSession(): Promise<CloudSessionResult | null> {
     return invokeOr<CloudSessionResult | null>("cloud_get_session", {}, null);
   },
 
-  signOutCloud(): Promise<void> {
-    return invokeOr<void>("cloud_sign_out", {}, undefined);
+  /**
+   * Ends the GhostBox account session entirely (all connections go with it).
+   * The Steam session and the account-scoped localStorage go too: without
+   * that, the next account to sign in on this device inherits the previous
+   * user's Steam profile, library, collections and cloud-sync bookkeeping.
+   */
+  async signOutCloud(): Promise<void> {
+    await invokeOr<void>("steam_disconnect_account", {}, undefined);
+    await invokeOr<void>("cloud_sign_out", {}, undefined);
+    clearAccountCaches();
+    clearStoredAccountData();
+  },
+
+  async registerAccount(
+    email: string,
+    username: string,
+    password: string,
+    displayName?: string,
+  ): Promise<CloudSessionResult> {
+    return invoke<CloudSessionResult>("cloud_register", {
+      email,
+      username,
+      password,
+      displayName: displayName || null,
+    });
+  },
+
+  async loginAccount(identifier: string, password: string): Promise<CloudSessionResult> {
+    return invoke<CloudSessionResult>("cloud_login", { identifier, password });
+  },
+
+  async requestPasswordReset(identifier: string): Promise<void> {
+    await invoke<void>("cloud_request_password_reset", { identifier });
+  },
+
+  async resendVerificationEmail(): Promise<{ ok: boolean; emailVerified: boolean }> {
+    return invoke("cloud_resend_verification", {});
+  },
+
+  async changeAccountPassword(currentPassword: string, newPassword: string): Promise<void> {
+    await invoke<void>("cloud_change_password", { currentPassword, newPassword });
+  },
+
+  /**
+   * Resolves to `null` only when the worker actually rejected the session.
+   * Network failures reject instead of resolving, so callers can tell "your
+   * session is gone" apart from "we could not reach the worker".
+   */
+  async getAccount(): Promise<AccountMeResult | null> {
+    return invoke<AccountMeResult | null>("cloud_get_account", {});
+  },
+
+  async disconnectConnection(provider: "steam" | "discord"): Promise<void> {
+    await invoke<void>("cloud_disconnect_connection", { provider });
   },
 
   // Cloud save calls propagate errors on purpose: the Rust side already

@@ -1,0 +1,152 @@
+.account-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel);
+}
+
+.account-section__header h2 {
+  margin: 0;
+  font-size: var(--type-size-body);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.account-section__info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-section__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.account-section__label {
+  min-width: 90px;
+  font-size: var(--type-size-caption);
+  color: var(--text-muted);
+}
+
+.account-section__value {
+  font-size: var(--type-size-compact);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.account-section__badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
+  color: var(--text-faint);
+  font-size: var(--type-size-micro);
+}
+
+.account-section__badge--verified {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.account-section__password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 320px;
+}
+
+.account-section__input {
+  background: var(--surface-modal-control);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--type-size-compact);
+  font-family: var(--font-sans);
+  padding: 9px 11px;
+  outline: none;
+
+  &:focus {
+    border-color: var(--border-interactive);
+  }
+}
+
+.account-section__error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--type-size-micro);
+}
+
+.account-section__saved {
+  margin: 0;
+  font-size: var(--type-size-micro);
+  color: var(--success);
+}
+
+.account-section__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-section__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-modal-control);
+  color: var(--text-primary);
+  font-size: var(--type-size-caption);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.account-section__button--primary {
+  background: var(--text-strong);
+  color: var(--surface-canvas);
+  border-color: var(--text-strong);
+
+  &:hover:not(:disabled) {
+    opacity: 0.88;
+    background: var(--text-strong);
+  }
+}
+
+.account-section__button--danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+
+  &:hover:not(:disabled) {
+    background: var(--danger-soft);
+  }
+}
+
+.account-section__spinner {
+  animation: account-section-spin 0.8s linear infinite;
+}
+
+@keyframes account-section-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

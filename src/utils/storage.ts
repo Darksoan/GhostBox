@@ -717,6 +717,37 @@ export function writeStoredAutoRestoredCloudSaves(value: Record<string, string>)
   }
 }
 
+/**
+ * Wipes everything derived from the signed-in account (Steam profile, library
+ * curation, cloud-sync bookkeeping, Steam-derived caches) so the next account
+ * to sign in on this device does not inherit the previous one's data. Device
+ * preferences that are not account-scoped — startup page, sort orders,
+ * downloads directory, notification cursor — deliberately survive.
+ */
+export function clearStoredAccountData() {
+  if (typeof window === "undefined") return;
+
+  const accountScopedKeys = [
+    favoriteGamesStorageKey,
+    userCollectionsStorageKey,
+    steamProfileStorageKey,
+    cloudProfileUpdatedAtStorageKey,
+    profileHistoryGamesStorageKey,
+    autoRestoredCloudSavesStorageKey,
+    personalCalendarStorageKey,
+    steamWishlistRecommendationsStorageKey,
+    steamWishlistReviewCacheStorageKey,
+  ];
+
+  for (const key of accountScopedKeys) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Sign-out still proceeds if localStorage is unavailable.
+    }
+  }
+}
+
 export function readStoredLibrarySortBy(): LibrarySortBy {
   if (typeof window === "undefined") return "title";
 

@@ -3202,7 +3202,7 @@ p {
   display: block;
   width: 100%;
   aspect-ratio: 460 / 215;
-  overflow: hidden;
+  overflow: visible;
   border-radius: var(--radius-sm);
   background: var(--surface-secondary);
   color: var(--text-primary);
@@ -3213,22 +3213,46 @@ p {
   transition: background var(--motion-base) var(--ease);
   @include media-depth(sm);
 
-  &:hover,
-  &:focus-visible {
+  &:not(.home-calendar-card--empty):hover,
+  &:not(.home-calendar-card--empty):focus-visible {
+    z-index: 1;
     background: var(--surface-secondary);
+  }
+
+  &:not(.home-calendar-card--empty):hover .home-calendar-card__cover,
+  &:not(.home-calendar-card--empty):focus-visible .home-calendar-card__cover {
+    --home-calendar-cover-scale: 0.5125;
   }
 }
 
 .home-calendar-card__cover {
+  /*
+   * The whole cover box zooms on hover, but it is prerendered at 200% and only
+   * ever scaled DOWN: rest = scale(0.5) (exactly the card box), hover = 0.5125
+   * (102.5%). Never upscales the rasterized paint, so no blur; it is a pure
+   * transform, so no per-frame relayout, so no jitter.
+   * Lengths that must survive the 0.5 scale are doubled below.
+   */
+  --home-calendar-cover-scale: 0.5;
   position: absolute;
-  inset: -1px;
-  border-radius: 0;
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: 200%;
+  height: 200%;
+  overflow: hidden;
+  border-radius: calc(var(--radius-sm) * 2);
   background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
   opacity: 0;
-  transition: opacity var(--motion-base) ease;
+  transform: translate3d(-50%, -50%, 0) scale(var(--home-calendar-cover-scale));
+  transform-origin: center;
+  will-change: transform;
+  transition:
+    transform var(--motion-base) var(--ease),
+    opacity var(--motion-base) ease;
 
   &--loaded {
     opacity: 1;
@@ -3238,49 +3262,6 @@ p {
   &::after {
     @include home-cover-depth-overlay;
   }
-}
-
-.home-calendar-card__content {
-  position: absolute;
-  inset: auto 0 0;
-  z-index: 2;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-2);
-  align-items: flex-start;
-  padding: var(--space-10) var(--space-6) var(--space-5);
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    color-mix(in srgb, var(--surface-sunken) 28%, transparent) 48%,
-    color-mix(in srgb, var(--surface-sunken) 58%, transparent) 100%
-  );
-  border: 0;
-  text-align: left;
-  opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity var(--motion-base) ease,
-    transform var(--motion-base) ease;
-  pointer-events: none;
-
-  strong {
-    max-width: 100%;
-    overflow: hidden;
-    color: var(--text-primary);
-    font-size: var(--type-size-fluid-meta);
-    font-weight: var(--weight-medium);
-    line-height: 1.18;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.home-calendar-card:hover .home-calendar-card__content,
-.home-calendar-card:focus-visible .home-calendar-card__content {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .home-calendar-card--empty {
@@ -3296,11 +3277,6 @@ p {
   background:
     radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--icon-default) 24%, transparent), transparent 42%),
     linear-gradient(135deg, var(--surface-canvas), var(--surface-subtle));
-
-  .home-calendar-card__content {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 @media (max-width: 720px) {
@@ -10229,6 +10205,11 @@ input[type="search"]::-ms-reveal {
   /* Pins the library portrait hover zoom at its rest size. */
   .game-card__cover {
     --pb-background-size-current: var(--pb-background-size) !important;
+  }
+
+  /* Pins the personal-calendar cover box at its rest (100%) size. */
+  .home-calendar-card__cover {
+    --home-calendar-cover-scale: 0.5 !important;
   }
 
   .profile-page__tab-indicator {

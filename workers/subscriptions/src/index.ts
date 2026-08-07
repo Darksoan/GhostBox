@@ -1,3 +1,28 @@
+import {
+  clientIp,
+  firebaseDeleteAccount,
+  firebaseExchangeRefreshToken,
+  firebaseLookup,
+  firebaseSendEmailVerification,
+  firebaseSendPasswordReset,
+  firebaseSignIn,
+  firebaseSignUp,
+  firebaseUpdatePassword,
+  getAccountByEmail,
+  getAccountByUserId,
+  getAccountByUsername,
+  insertAccount,
+  mapFirebaseError,
+  normalizeEmail,
+  normalizeUsername,
+  publicAccount,
+  recordAuthAttempt,
+  tooManyAuthAttempts,
+  touchAccountVerified,
+  validPassword,
+  type AccountRow,
+} from "./auth";
+
 type Env = {
   SUBSCRIPTION_DB: D1Database;
   CHECKOUT_RETURN_URL?: string;
@@ -18,6 +43,7 @@ type Env = {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   CLOUD_SAVE_BUCKET?: string;
   PROFILE_IMAGE_BUCKET?: string;
+  FIREBASE_API_KEY?: string;
 };
 
 type PlanId = "monthly" | "quarterly";
@@ -35,7 +61,8 @@ type PaymentRow = {
   id: string;
   checkout_reference: string;
   checkout_id: string | null;
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   plan_id: PlanId;
   amount_cents: number;
   currency: string;
@@ -53,7 +80,8 @@ type PaymentRow = {
 };
 
 type SubscriptionRow = {
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   plan_id: PlanId;
   status: SubscriptionStatus;
   current_period_start: string | null;
@@ -70,7 +98,8 @@ type SubscriptionRow = {
 type StripePortalFlow = "manage" | "payment_method_update";
 
 type DiscordLinkRow = {
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   discord_user_id: string;
   discord_username: string | null;
   discord_global_name: string | null;
@@ -86,13 +115,23 @@ type DiscordTokenResponse = {
 };
 
 type CloudSession = {
-  steamId: string;
+  userId: string;
+  steamId?: string | null;
   exp: number;
+};
+
+type UserConnectionRow = {
+  user_id: string;
+  provider: string;
+  provider_id: string;
+  metadata_json: string | null;
+  linked_at: string;
 };
 
 type CloudSaveRow = {
   id: string;
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   app_id: string;
   game_title: string;
   storage_path: string;
@@ -108,7 +147,8 @@ type CloudSaveRow = {
 const MAX_CLOUD_SAVES_PER_GAME = 3;
 
 type UserProfileCloudRow = {
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   display_name: string | null;
   avatar_url: string | null;
   banner_url: string | null;
@@ -120,14 +160,16 @@ type UserProfileCloudRow = {
 
 type UserCollectionCloudRow = {
   id: string;
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   name: string;
   sort_order: number;
   updated_at: string;
 };
 
 type UserCollectionGameCloudRow = {
-  steam_id: string;
+  steam_id: string | null;
+  user_id: string | null;
   collection_id: string;
   game_id: string;
   sort_order: number;
@@ -225,6 +267,10 @@ function planIdFromStripe(value: unknown, fallback: PlanId = "monthly"): PlanId 
 
 function validSteamId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9]{15,20}$/.test(value);
+}
+
+function validUserId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128;
 }
 
 function base64Url(bytes: Uint8Array) {
@@ -329,7 +375,7 @@ async function verifyCloudToken(env: Env, request: Request): Promise<CloudSessio
   if (!timingSafeEqual(signature, expected)) return null;
   try {
     const decoded = JSON.parse(new TextDecoder().decode(base64UrlDecode(payload))) as CloudSession;
-    if (!validSteamId(decoded.steamId) || decoded.exp < Math.floor(Date.now() / 1000)) return null;
+    if (!validUserId(decoded.userId) || decoded.exp < Math.floor(Date.now() / 1000)) return null;
     return decoded;
   } catch {
     return null;
@@ -344,13 +390,13 @@ function getDiscordStateSecret(env: Env) {
   return env.DISCORD_OAUTH_STATE_SECRET || env.DISCORD_CLIENT_SECRET;
 }
 
-async function createDiscordState(env: Env, steamId: string) {
+async function createDiscordState(env: Env, userId: string) {
   const secret = getDiscordStateSecret(env);
   if (!secret) throw new Error("DISCORD_OAUTH_STATE_SECRET is not configured");
 
   const expiresAt = Math.floor(Date.now() / 1000) + 10 * 60;
   const nonce = base64Url(crypto.getRandomValues(new Uint8Array(16)));
-  const payload = `${steamId}.${expiresAt}.${nonce}`;
+  const payload = `${userId}.${expiresAt}.${nonce}`;
   return `${payload}.${await hmacSha256(secret, payload)}`;
 }
 
@@ -361,15 +407,15 @@ async function verifyDiscordState(env: Env, state: string | null) {
   const parts = state.split(".");
   if (parts.length !== 4) return null;
 
-  const [steamId, expiresAtValue, nonce, signature] = parts;
-  if (!validSteamId(steamId) || !nonce) return null;
+  const [userId, expiresAtValue, nonce, signature] = parts;
+  if (!validUserId(userId) || !nonce) return null;
 
   const expiresAt = Number(expiresAtValue);
   if (!Number.isFinite(expiresAt) || expiresAt < Math.floor(Date.now() / 1000)) return null;
 
-  const payload = `${steamId}.${expiresAtValue}.${nonce}`;
+  const payload = `${userId}.${expiresAtValue}.${nonce}`;
   const expected = await hmacSha256(secret, payload);
-  return timingSafeEqual(signature, expected) ? steamId : null;
+  return timingSafeEqual(signature, expected) ? userId : null;
 }
 
 function jsonResponse(value: unknown, env: Env, status = 200) {
@@ -378,7 +424,7 @@ function jsonResponse(value: unknown, env: Env, status = 200) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
-      "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       "access-control-allow-headers": "content-type, authorization",
       "cache-control": "no-store",
     },
@@ -414,7 +460,7 @@ async function handleCloudProfileImageUpload(request: Request, env: Env, kind: "
 
   const storage = requireSupabase(env);
   const bucket = profileImageBucket(env);
-  const storagePath = `${auth.session!.steamId}/${kind}.webp`;
+  const storagePath = `${auth.session!.userId}/${kind}.webp`;
   const upload = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(bucket)}/${storagePath}`, {
     method: "POST",
     headers: {
@@ -439,7 +485,7 @@ async function handleCloudProfileImageDelete(request: Request, env: Env) {
   const response = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
     method: "DELETE",
     headers: { authorization: `Bearer ${storage.key}`, apikey: storage.key, "content-type": "application/json" },
-    body: JSON.stringify({ prefixes: [`${auth.session!.steamId}/banner.webp`] }),
+    body: JSON.stringify({ prefixes: [`${auth.session!.userId}/banner.webp`] }),
   });
   if (!response.ok) return jsonResponse({ error: "profile_image_delete_failed" }, env, 502);
   return jsonResponse({ ok: true }, env);
@@ -449,6 +495,7 @@ function publicCloudSave(row: CloudSaveRow) {
   return {
     id: row.id,
     steamId: row.steam_id,
+    userId: row.user_id,
     appId: row.app_id,
     gameTitle: row.game_title,
     sizeBytes: row.size_bytes,
@@ -461,14 +508,32 @@ function publicCloudSave(row: CloudSaveRow) {
   };
 }
 
-async function requirePremiumSession(request: Request, env: Env) {
+async function getLinkedSteamId(env: Env, userId: string): Promise<string | null> {
+  const row = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT provider_id FROM user_connections WHERE user_id = ? AND provider = 'steam' LIMIT 1`
+  ).bind(userId).first<{ provider_id: string }>();
+  return row?.provider_id || null;
+}
+
+async function requireSession(request: Request, env: Env) {
   const session = await verifyCloudToken(env, request);
   if (!session) return { response: jsonResponse({ error: "unauthorized" }, env, 401) };
-  const subscription = await getSubscription(env, session.steamId);
+  // steamId is resolved per request instead of being baked into the token:
+  // Steam is linked (and unlinked) long after the token was signed, so a
+  // token-embedded value would be stale for up to its 7-day lifetime and
+  // would tag new rows with a Steam account the user already disconnected.
+  session.steamId = await getLinkedSteamId(env, session.userId);
+  return { session };
+}
+
+async function requirePremiumSession(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return { response: auth.response };
+  const subscription = await getSubscription(env, auth.session!.userId);
   if (!isActiveSubscription(subscription)) {
     return { response: jsonResponse({ error: "premium_required" }, env, 402) };
   }
-  return { session };
+  return { session: auth.session };
 }
 
 function publicPayment(row: PaymentRow, origin?: string) {
@@ -478,6 +543,7 @@ function publicPayment(row: PaymentRow, origin?: string) {
     checkoutReference: row.checkout_reference,
     checkoutId: row.checkout_id || row.stripe_checkout_session_id,
     steamId: row.steam_id,
+    userId: row.user_id,
     planId: row.plan_id,
     amountCents: row.amount_cents,
     currency: row.currency,
@@ -593,9 +659,8 @@ type DiscordRoleSyncResult = {
   reason?: string;
 };
 
-function publicDiscordLink(steamId: string, row: DiscordLinkRow | null, roleSync?: DiscordRoleSyncResult | null) {
+function publicDiscordLink(row: DiscordLinkRow | null, roleSync?: DiscordRoleSyncResult | null) {
   return {
-    steamId,
     linked: Boolean(row),
     discordUserId: row?.discord_user_id ?? null,
     discordUsername: row?.discord_username ?? null,
@@ -640,13 +705,13 @@ async function discordRoleRequest(env: Env, discordUserId: string, grant: boolea
   };
 }
 
-async function syncPremiumRoleForSteam(env: Env, steamId: string, grant: boolean): Promise<DiscordRoleSyncResult> {
-  const link = await getDiscordLink(env, steamId);
-  if (!link) return { ok: false, skipped: true, reason: "Steam account has no Discord link" };
+async function syncPremiumRoleForUser(env: Env, userId: string, grant: boolean): Promise<DiscordRoleSyncResult> {
+  const link = await getDiscordLink(env, userId);
+  if (!link) return { ok: false, skipped: true, reason: "Account has no Discord link" };
 
   const result = await discordRoleRequest(env, link.discord_user_id, grant);
   if (!result.ok && !result.skipped) {
-    console.warn("Discord Premium role sync failed", { steamId, discordUserId: link.discord_user_id, grant, reason: result.reason });
+    console.warn("Discord Premium role sync failed", { userId, discordUserId: link.discord_user_id, grant, reason: result.reason });
   }
   return result;
 }
@@ -703,33 +768,6 @@ async function validateSteamOpenId(callbackUrl: string) {
   return text.includes("is_valid:true") ? steamId : null;
 }
 
-async function handleSteamAuth(request: Request, env: Env) {
-  const body = await readJson(request);
-  const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : "";
-  const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
-  const avatarUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl.trim() : "";
-  const steamId = await validateSteamOpenId(callbackUrl);
-  if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
-
-  await ensureUser(env, steamId);
-  const subscription = await getSubscription(env, steamId);
-  const token = await signCloudToken(env, {
-    steamId,
-    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-  });
-
-  return jsonResponse({
-    token,
-    user: {
-      steamId,
-      displayName: displayName || null,
-      avatarUrl: avatarUrl || null,
-      isPremium: isActiveSubscription(subscription),
-    },
-    subscription: publicSubscription(subscription),
-  }, env);
-}
-
 async function ensureUser(env: Env, steamId: string) {
   const now = nowIso();
   await env.SUBSCRIPTION_DB.prepare(
@@ -745,18 +783,18 @@ async function getPaymentByCheckout(env: Env, checkoutId: string) {
   ).bind(checkoutId, checkoutId, checkoutId).first<PaymentRow>();
 }
 
-async function getSubscription(env: Env, steamId: string) {
+async function getSubscription(env: Env, userId: string) {
   const row = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM subscriptions WHERE steam_id = ? LIMIT 1`
-  ).bind(steamId).first<SubscriptionRow>();
+    `SELECT * FROM subscriptions WHERE user_id = ? LIMIT 1`
+  ).bind(userId).first<SubscriptionRow>();
 
   if (row?.status === "active" && row.current_period_end && new Date(row.current_period_end).getTime() <= Date.now()) {
     const updatedAt = nowIso();
     await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE steam_id = ?`
-    ).bind(updatedAt, steamId).run();
-    await syncPremiumRoleForSteam(env, steamId, false).catch((error) => {
-      console.warn("Discord Premium role revoke failed", { steamId, error: error instanceof Error ? error.message : String(error) });
+      `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE user_id = ?`
+    ).bind(updatedAt, userId).run();
+    await syncPremiumRoleForUser(env, userId, false).catch((error) => {
+      console.warn("Discord Premium role revoke failed", { userId, error: error instanceof Error ? error.message : String(error) });
     });
     return { ...row, status: "expired" as SubscriptionStatus, updated_at: updatedAt };
   }
@@ -764,48 +802,56 @@ async function getSubscription(env: Env, steamId: string) {
   return row;
 }
 
-async function getDiscordLink(env: Env, steamId: string) {
+async function getDiscordLink(env: Env, userId: string) {
   return env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM discord_links WHERE steam_id = ? LIMIT 1`
-  ).bind(steamId).first<DiscordLinkRow>();
+    `SELECT * FROM discord_links WHERE user_id = ? LIMIT 1`
+  ).bind(userId).first<DiscordLinkRow>();
 }
 
 async function syncDiscordPremiumRoles(env: Env) {
   const now = nowIso();
   const expired = await env.SUBSCRIPTION_DB.prepare(
     `SELECT * FROM subscriptions
-     WHERE status = 'active' AND current_period_end IS NOT NULL AND current_period_end <= ?
+     WHERE status = 'active' AND user_id IS NOT NULL
+       AND current_period_end IS NOT NULL AND current_period_end <= ?
      LIMIT 100`
   ).bind(now).all<SubscriptionRow>();
 
   let granted = 0;
   let revoked = 0;
   let skipped = 0;
-  const failures: Array<{ steamId: string; action: "grant" | "revoke"; reason: string }> = [];
+  const failures: Array<{ userId: string; action: "grant" | "revoke"; reason: string }> = [];
 
   for (const subscription of expired.results || []) {
+    if (!subscription.user_id) continue;
     await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE steam_id = ?`
-    ).bind(now, subscription.steam_id).run();
+      `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE user_id = ?`
+    ).bind(now, subscription.user_id).run();
 
-    const result = await syncPremiumRoleForSteam(env, subscription.steam_id, false);
+    const result = await syncPremiumRoleForUser(env, subscription.user_id, false);
     if (result.ok) revoked += 1;
     else if (result.skipped) skipped += 1;
-    else failures.push({ steamId: subscription.steam_id, action: "revoke", reason: result.reason || "Unknown Discord error" });
+    else failures.push({ userId: subscription.user_id, action: "revoke", reason: result.reason || "Unknown Discord error" });
   }
 
   const active = await env.SUBSCRIPTION_DB.prepare(
     `SELECT * FROM subscriptions
-     WHERE status = 'active' AND current_period_end IS NOT NULL AND current_period_end > ?
+     WHERE status = 'active' AND user_id IS NOT NULL
+       AND current_period_end IS NOT NULL AND current_period_end > ?
      LIMIT 100`
   ).bind(now).all<SubscriptionRow>();
 
   for (const subscription of active.results || []) {
-    const result = await syncPremiumRoleForSteam(env, subscription.steam_id, true);
+    if (!subscription.user_id) continue;
+    const result = await syncPremiumRoleForUser(env, subscription.user_id, true);
     if (result.ok) granted += 1;
     else if (result.skipped) skipped += 1;
-    else failures.push({ steamId: subscription.steam_id, action: "grant", reason: result.reason || "Unknown Discord error" });
+    else failures.push({ userId: subscription.user_id, action: "grant", reason: result.reason || "Unknown Discord error" });
   }
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `DELETE FROM auth_attempts WHERE created_at < ?`
+  ).bind(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()).run();
 
   return {
     granted,
@@ -824,35 +870,32 @@ async function handleDiscordSync(request: Request, env: Env) {
 }
 
 async function handleDiscordLinkStatus(request: Request, env: Env, context?: ExecutionContext) {
-  const steamId = new URL(request.url).searchParams.get("steamId");
-  if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
 
-  // Fast path: D1 only. Role sync talks to Discord and was blocking the UI.
   const [subscription, link] = await Promise.all([
-    getSubscription(env, steamId),
-    getDiscordLink(env, steamId),
+    getSubscription(env, userId),
+    getDiscordLink(env, userId),
   ]);
 
   if (link && context) {
     context.waitUntil(
-      syncPremiumRoleForSteam(env, steamId, isActiveSubscription(subscription)).catch((error) => {
+      syncPremiumRoleForUser(env, userId, isActiveSubscription(subscription)).catch((error) => {
         console.warn("Background Discord role sync failed", error);
       })
     );
   }
 
-  return jsonResponse(publicDiscordLink(steamId, link, null), env);
+  return jsonResponse(publicDiscordLink(link, null), env);
 }
 
 async function handleDiscordLinkStart(request: Request, env: Env) {
-  const url = new URL(request.url);
-  const steamId = url.searchParams.get("steamId");
-  if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
   if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
     return jsonResponse({ error: "Discord OAuth is not configured" }, env, 500);
   }
-
-  await ensureUser(env, steamId);
 
   const authorizeUrl = new URL("https://discord.com/oauth2/authorize");
   authorizeUrl.searchParams.set("client_id", env.DISCORD_CLIENT_ID);
@@ -860,17 +903,20 @@ async function handleDiscordLinkStart(request: Request, env: Env) {
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("scope", "identify");
   authorizeUrl.searchParams.set("prompt", "consent");
-  authorizeUrl.searchParams.set("state", await createDiscordState(env, steamId));
+  authorizeUrl.searchParams.set("state", await createDiscordState(env, auth.session!.userId));
 
-  return Response.redirect(authorizeUrl.toString(), 302);
+  // Returned as JSON (not a redirect): the caller opens this URL in the
+  // system browser itself, since a browser navigation can't carry our
+  // Authorization header the way this authenticated fetch call can.
+  return jsonResponse({ url: authorizeUrl.toString() }, env);
 }
 
 async function handleDiscordCallback(request: Request, env: Env) {
   const url = new URL(request.url);
-  const steamId = await verifyDiscordState(env, url.searchParams.get("state"));
+  const userId = await verifyDiscordState(env, url.searchParams.get("state"));
   const code = url.searchParams.get("code");
 
-  if (!steamId || !code) {
+  if (!userId || !code) {
     return htmlResponse("Vínculo não concluído", "A autorização do Discord expirou ou foi recusada. Volte ao GhostBox e tente novamente.", 400);
   }
   if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) {
@@ -904,21 +950,30 @@ async function handleDiscordCallback(request: Request, env: Env) {
   const now = nowIso();
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO discord_links (
-       steam_id, discord_user_id, discord_username, discord_global_name, linked_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(steam_id) DO UPDATE SET
+       steam_id, user_id, discord_user_id, discord_username, discord_global_name, linked_at, updated_at
+     ) VALUES (NULL, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
        discord_user_id = excluded.discord_user_id,
        discord_username = excluded.discord_username,
        discord_global_name = excluded.discord_global_name,
        linked_at = excluded.linked_at,
        updated_at = excluded.updated_at`
-  ).bind(steamId, user.id, user.username ?? null, user.global_name ?? null, now, now).run();
+  ).bind(userId, user.id, user.username ?? null, user.global_name ?? null, now, now).run();
 
-  const subscription = await getSubscription(env, steamId);
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
+     VALUES (?, 'discord', ?, ?, ?)
+     ON CONFLICT(user_id, provider) DO UPDATE SET
+       provider_id = excluded.provider_id,
+       metadata_json = excluded.metadata_json,
+       linked_at = excluded.linked_at`
+  ).bind(userId, user.id, JSON.stringify({ username: user.username ?? null, globalName: user.global_name ?? null }), now).run();
+
+  const subscription = await getSubscription(env, userId);
   let roleSynced = false;
   if (isActiveSubscription(subscription)) {
-    const result = await syncPremiumRoleForSteam(env, steamId, true).catch((error) => {
-      console.warn("Discord Premium role grant after link failed", { steamId, discordUserId: user.id, error: error instanceof Error ? error.message : String(error) });
+    const result = await syncPremiumRoleForUser(env, userId, true).catch((error) => {
+      console.warn("Discord Premium role grant after link failed", { userId, discordUserId: user.id, error: error instanceof Error ? error.message : String(error) });
       return null;
     });
     roleSynced = result?.ok === true;
@@ -927,8 +982,8 @@ async function handleDiscordCallback(request: Request, env: Env) {
   return htmlResponse(
     "Discord vinculado",
     roleSynced
-      ? "Sua conta Discord foi vinculada à Steam usada no GhostBox e o cargo Premium foi sincronizado. Você já pode voltar ao app."
-      : "Sua conta Discord foi vinculada à Steam usada no GhostBox. Entre no servidor pelo convite e volte ao app para sincronizar o cargo Premium."
+      ? "Sua conta Discord foi vinculada ao GhostBox e o cargo Premium foi sincronizado. Você já pode voltar ao app."
+      : "Sua conta Discord foi vinculada ao GhostBox. Entre no servidor pelo convite e volte ao app para sincronizar o cargo Premium."
   );
 }
 
@@ -963,29 +1018,35 @@ async function stripeRequest(
   return payload;
 }
 
-async function saveStripeCustomerId(env: Env, steamId: string, customerId: string) {
+function stripeMetadataString(payload: Record<string, unknown>, key: string): string | null {
+  const metadata = payload.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+async function saveStripeCustomerId(env: Env, userId: string, customerId: string, steamId?: string | null) {
   const now = nowIso();
-  await ensureUser(env, steamId);
-  const existing = await getSubscription(env, steamId);
+  const existing = await getSubscription(env, userId);
   if (existing) {
     await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE subscriptions SET stripe_customer_id = ?, updated_at = ? WHERE steam_id = ?`
-    ).bind(customerId, now, steamId).run();
+      `UPDATE subscriptions SET stripe_customer_id = ?, updated_at = ? WHERE user_id = ?`
+    ).bind(customerId, now, userId).run();
     return;
   }
 
-  // Premium portal can open for users who only have a Stripe customer record
-  // after checkout migration; seed a free row so the id persists.
+  // Premium portal can open for accounts that only have a Stripe customer
+  // record after checkout migration; seed a free row so the id persists.
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO subscriptions (
-       steam_id, plan_id, status, current_period_start, current_period_end,
+       steam_id, user_id, plan_id, status, current_period_start, current_period_end,
        last_payment_id, stripe_customer_id, created_at, updated_at
-     ) VALUES (?, 'monthly', 'free', NULL, NULL, NULL, ?, ?, ?)`
-  ).bind(steamId, customerId, now, now).run();
+     ) VALUES (?, ?, 'monthly', 'free', NULL, NULL, NULL, ?, ?, ?)`
+  ).bind(steamId || null, userId, customerId, now, now).run();
 }
 
-async function findStripeCustomerIdBySteam(env: Env, steamId: string) {
-  const query = `metadata['steam_id']:'${steamId}'`;
+async function findStripeCustomerIdByUser(env: Env, userId: string) {
+  const query = `metadata['user_id']:'${userId}'`;
   const payload = await stripeRequest(
     env,
     `/customers/search?query=${encodeURIComponent(query)}&limit=1`
@@ -995,28 +1056,34 @@ async function findStripeCustomerIdBySteam(env: Env, steamId: string) {
   return customerId;
 }
 
-async function createStripeCustomerForSteam(env: Env, steamId: string) {
+async function createStripeCustomerForUser(env: Env, userId: string, steamId?: string | null) {
   const body = new URLSearchParams();
-  body.set("metadata[steam_id]", steamId);
-  body.set("description", `GhostBox Premium · Steam ${steamId}`);
+  body.set("metadata[user_id]", userId);
+  if (steamId) body.set("metadata[steam_id]", steamId);
+  body.set("description", `GhostBox Premium · ${userId}`);
   const customer = await stripeRequest(env, "/customers", { method: "POST", body });
   const customerId = typeof customer.id === "string" ? customer.id : null;
   if (!customerId) throw new Error("Stripe did not return a customer id");
   return customerId;
 }
 
-async function resolveStripeCustomerId(env: Env, steamId: string, subscription: SubscriptionRow | null) {
+async function resolveStripeCustomerId(
+  env: Env,
+  userId: string,
+  subscription: SubscriptionRow | null,
+  steamId?: string | null
+) {
   const stored = subscription?.stripe_customer_id?.trim();
   if (stored) return stored;
 
-  const searched = await findStripeCustomerIdBySteam(env, steamId).catch(() => null);
+  const searched = await findStripeCustomerIdByUser(env, userId).catch(() => null);
   if (searched) {
-    await saveStripeCustomerId(env, steamId, searched);
+    await saveStripeCustomerId(env, userId, searched, steamId);
     return searched;
   }
 
-  const created = await createStripeCustomerForSteam(env, steamId);
-  await saveStripeCustomerId(env, steamId, created);
+  const created = await createStripeCustomerForUser(env, userId, steamId);
+  await saveStripeCustomerId(env, userId, created, steamId);
   return created;
 }
 
@@ -1040,17 +1107,16 @@ async function handleCreateBillingPortal(request: Request, env: Env) {
     );
   }
 
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+
   const body = await readJson(request);
-  const steamId = typeof body?.steamId === "string" ? body.steamId.trim() : "";
   const flowRaw = typeof body?.flow === "string" ? body.flow.trim() : "manage";
   const flow: StripePortalFlow =
     flowRaw === "payment_method_update" ? "payment_method_update" : "manage";
 
-  if (!validSteamId(steamId)) {
-    return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
-  }
-
-  const subscription = await getSubscription(env, steamId);
+  const subscription = await getSubscription(env, userId);
   if (!isActiveSubscription(subscription)) {
     return jsonResponse(
       { error: "An active Premium subscription is required to manage billing." },
@@ -1059,7 +1125,7 @@ async function handleCreateBillingPortal(request: Request, env: Env) {
     );
   }
 
-  const customerId = await resolveStripeCustomerId(env, steamId, subscription);
+  const customerId = await resolveStripeCustomerId(env, userId, subscription, auth.session!.steamId);
   const params = new URLSearchParams();
   params.set("customer", customerId);
   params.set("return_url", stripePortalReturnUrl(env, request));
@@ -1081,18 +1147,18 @@ async function handleCreateBillingPortal(request: Request, env: Env) {
 
 async function handleCreateCheckout(request: Request, env: Env) {
   const origin = new URL(request.url).origin;
-  const body = await readJson(request);
-  const steamId = body?.steamId;
-  const planId = body?.planId;
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+  const steamId = auth.session!.steamId || null;
 
-  if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+  const body = await readJson(request);
+  const planId = body?.planId;
   if (planId !== "monthly" && planId !== "quarterly") return jsonResponse({ error: "Invalid plan" }, env, 400);
 
   const plan = plans[planId];
-  await ensureUser(env, steamId);
-
-  const subscription = await getSubscription(env, steamId);
-  const customerId = await resolveStripeCustomerId(env, steamId, subscription);
+  const subscription = await getSubscription(env, userId);
+  const customerId = await resolveStripeCustomerId(env, userId, subscription, steamId);
 
   const params = new URLSearchParams();
   params.set("mode", "subscription");
@@ -1105,10 +1171,14 @@ async function handleCreateCheckout(request: Request, env: Env) {
   params.set("line_items[0][price_data][recurring][interval_count]", planId === "quarterly" ? "3" : "1");
   params.set("line_items[0][price_data][unit_amount]", String(plan.amountCents));
   params.set("line_items[0][quantity]", "1");
-  params.set("metadata[steam_id]", steamId);
+  params.set("metadata[user_id]", userId);
   params.set("metadata[plan_id]", planId);
-  params.set("subscription_data[metadata][steam_id]", steamId);
+  params.set("subscription_data[metadata][user_id]", userId);
   params.set("subscription_data[metadata][plan_id]", planId);
+  if (steamId) {
+    params.set("metadata[steam_id]", steamId);
+    params.set("subscription_data[metadata][steam_id]", steamId);
+  }
 
   const session = await stripeRequest(env, "/checkout/sessions", {
     method: "POST",
@@ -1122,23 +1192,22 @@ async function handleCreateCheckout(request: Request, env: Env) {
   }
 
   const paymentId = crypto.randomUUID();
-  const reference = `ghostbox-${steamId}-${planId}-${paymentId}`;
-  const status = "pending";
+  const reference = `ghostbox-${userId}-${planId}-${paymentId}`;
   const createdAt = nowIso();
 
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO payments (
-       id, checkout_reference, checkout_id, steam_id, plan_id, amount_cents, currency,
+       id, checkout_reference, checkout_id, steam_id, user_id, plan_id, amount_cents, currency,
        status, hosted_checkout_url, stripe_checkout_session_id, provider, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, 'BRL', ?, ?, ?, 'stripe', ?, ?)`
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BRL', 'pending', ?, ?, 'stripe', ?, ?)`
   ).bind(
     paymentId,
     reference,
     sessionId,
     steamId,
+    userId,
     planId,
     plan.amountCents,
-    status,
     sessionUrl,
     sessionId,
     createdAt,
@@ -1149,36 +1218,37 @@ async function handleCreateCheckout(request: Request, env: Env) {
   return jsonResponse({ payment: payment ? publicPayment(payment, origin) : null }, env, 201);
 }
 
-async function handleStatus(request: Request, env: Env, context?: ExecutionContext) {
-  const url = new URL(request.url);
-  const origin = url.origin;
-  const steamId = url.searchParams.get("steamId");
-  if (!validSteamId(steamId)) return jsonResponse({ error: "Invalid Steam ID" }, env, 400);
+async function handleStatus(request: Request, env: Env) {
+  const origin = new URL(request.url).origin;
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
 
   const [subscription, latestPaymentRow, discordLink] = await Promise.all([
-    getSubscription(env, steamId),
+    getSubscription(env, userId),
     env.SUBSCRIPTION_DB.prepare(
-      `SELECT * FROM payments WHERE steam_id = ? ORDER BY created_at DESC LIMIT 1`
-    ).bind(steamId).first<PaymentRow>(),
-    getDiscordLink(env, steamId),
+      `SELECT * FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`
+    ).bind(userId).first<PaymentRow>(),
+    getDiscordLink(env, userId),
   ]);
   const latestPayment = isActiveSubscription(subscription) && !subscription?.last_payment_id
     ? null
     : await reconcilePaymentWithSubscription(env, latestPaymentRow, subscription);
-  void context;
 
   return jsonResponse({
-    steamId,
+    userId,
+    steamId: auth.session!.steamId || null,
     subscription: publicSubscription(subscription),
     latestPayment: latestPayment ? publicPayment(latestPayment, origin) : null,
     paymentMethod: null,
-    discordLink: publicDiscordLink(steamId, discordLink, null),
+    discordLink: publicDiscordLink(discordLink, null),
   }, env);
 }
 
 async function handleCloudSavesList(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
   const url = new URL(request.url);
   const appId = url.searchParams.get("appId")?.trim();
 
@@ -1190,16 +1260,16 @@ async function handleCloudSavesList(request: Request, env: Env) {
          `SELECT * FROM (
            SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
            FROM cloud_saves
-           WHERE steam_id = ? AND app_id = ?
+           WHERE user_id = ? AND app_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 20`
-      ).bind(auth.session!.steamId, appId, MAX_CLOUD_SAVES_PER_GAME)
+      ).bind(userId, appId, MAX_CLOUD_SAVES_PER_GAME)
     : env.SUBSCRIPTION_DB.prepare(
          `SELECT * FROM (
            SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
            FROM cloud_saves
-           WHERE steam_id = ?
+           WHERE user_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 100`
-      ).bind(auth.session!.steamId, MAX_CLOUD_SAVES_PER_GAME);
+      ).bind(userId, MAX_CLOUD_SAVES_PER_GAME);
   const rows = await query.all<CloudSaveRow>();
   return jsonResponse({ saves: (rows.results || []).map(publicCloudSave) }, env);
 }
@@ -1207,6 +1277,8 @@ async function handleCloudSavesList(request: Request, env: Env) {
 async function handleCloudSaveUpload(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+  const steamId = auth.session!.steamId || null;
   const appId = request.headers.get("x-ghostbox-app-id")?.trim() || "";
   const gameTitle = request.headers.get("x-ghostbox-game-title")?.trim() || appId;
   const sha256 = request.headers.get("x-ghostbox-sha256")?.trim().toLowerCase() || "";
@@ -1231,7 +1303,7 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
   const id = crypto.randomUUID();
   const now = nowIso();
   const storage = requireSupabase(env);
-  const storagePath = `${auth.session!.steamId}/${appId}/${id}.zip`;
+  const storagePath = `${userId}/${appId}/${id}.zip`;
   const upload = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}/${storagePath}`, {
     method: "POST",
     headers: {
@@ -1250,19 +1322,20 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
 
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO cloud_saves (
-       id, steam_id, app_id, game_title, storage_path, size_bytes, sha256, manifest_json, device_name, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(id, auth.session!.steamId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
+       id, steam_id, user_id, app_id, game_title, storage_path, size_bytes, sha256, manifest_json, device_name, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, steamId, userId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
 
   // Retention is best-effort: the backup is already stored, so a prune failure
   // must not turn a successful upload into a 500 for the user.
-  await pruneCloudSavesForGame(env, auth.session!.steamId, appId, id).catch((error) => {
+  await pruneCloudSavesForGame(env, userId, appId, id).catch((error) => {
     console.error("Cloud save prune failed after upload", { appId, error: error instanceof Error ? error.message : String(error) });
   });
 
   return jsonResponse({ save: publicCloudSave({
     id,
-    steam_id: auth.session!.steamId,
+    steam_id: steamId,
+    user_id: userId,
     app_id: appId,
     game_title: gameTitle,
     storage_path: storagePath,
@@ -1279,6 +1352,7 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
 async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: string) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
   const normalizedSaveId = saveId.trim();
   if (!normalizedSaveId) return jsonResponse({ error: "invalid_save_id" }, env, 400);
 
@@ -1286,21 +1360,21 @@ async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: s
   const pinned = payload?.pinned === true;
 
   const row = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
-  ).bind(normalizedSaveId, auth.session!.steamId).first<CloudSaveRow>();
+    `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
+  ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
   if (!row) return jsonResponse({ error: "not_found" }, env, 404);
 
   await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE cloud_saves SET pinned = ?, updated_at = ? WHERE id = ? AND steam_id = ?`
-  ).bind(pinned ? 1 : 0, nowIso(), normalizedSaveId, auth.session!.steamId).run();
+    `UPDATE cloud_saves SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+  ).bind(pinned ? 1 : 0, nowIso(), normalizedSaveId, userId).run();
 
-  await pruneCloudSavesForGame(env, auth.session!.steamId, row.app_id, normalizedSaveId).catch((error) => {
+  await pruneCloudSavesForGame(env, userId, row.app_id, normalizedSaveId).catch((error) => {
     console.error("Cloud save prune failed after pin change", { appId: row.app_id, error: error instanceof Error ? error.message : String(error) });
   });
 
   const updated = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
-  ).bind(normalizedSaveId, auth.session!.steamId).first<CloudSaveRow>();
+    `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
+  ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
 
   return jsonResponse({ save: publicCloudSave(updated || { ...row, pinned: pinned ? 1 : 0 }) }, env);
 }
@@ -1318,13 +1392,13 @@ async function deleteCloudSaveObject(env: Env, storagePath: string) {
   });
 }
 
-async function pruneCloudSavesForGame(env: Env, steamId: string, appId: string, protectedSaveId: string) {
+async function pruneCloudSavesForGame(env: Env, userId: string, appId: string, protectedSaveId: string) {
   const rows = await env.SUBSCRIPTION_DB.prepare(
     `SELECT * FROM cloud_saves
-     WHERE steam_id = ? AND app_id = ?
+     WHERE user_id = ? AND app_id = ?
      ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, pinned DESC, updated_at DESC
      LIMIT 100`
-  ).bind(steamId, appId, protectedSaveId).all<CloudSaveRow>();
+  ).bind(userId, appId, protectedSaveId).all<CloudSaveRow>();
   const stale = (rows.results || []).slice(MAX_CLOUD_SAVES_PER_GAME);
 
   for (const row of stale) {
@@ -1337,8 +1411,8 @@ async function handleCloudSaveDownload(request: Request, env: Env, saveId: strin
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
   const row = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
-  ).bind(saveId, auth.session!.steamId).first<CloudSaveRow>();
+    `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
+  ).bind(saveId, auth.session!.userId).first<CloudSaveRow>();
   if (!row) return jsonResponse({ error: "not_found" }, env, 404);
 
   const storage = requireSupabase(env);
@@ -1364,20 +1438,21 @@ async function handleCloudSaveDownload(request: Request, env: Env, saveId: strin
 async function handleCloudSaveDelete(request: Request, env: Env, saveId: string) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
   const normalizedSaveId = saveId.trim();
   if (!normalizedSaveId) return jsonResponse({ error: "invalid_save_id" }, env, 400);
 
   const row = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM cloud_saves WHERE id = ? AND steam_id = ? LIMIT 1`
-  ).bind(normalizedSaveId, auth.session!.steamId).first<CloudSaveRow>();
+    `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
+  ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
   if (!row) return jsonResponse({ error: "not_found" }, env, 404);
 
   await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
   await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
 
   const remaining = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT COUNT(*) AS count FROM cloud_saves WHERE steam_id = ? AND app_id = ?`
-  ).bind(auth.session!.steamId, row.app_id).first<{ count: number }>();
+    `SELECT COUNT(*) AS count FROM cloud_saves WHERE user_id = ? AND app_id = ?`
+  ).bind(userId, row.app_id).first<{ count: number }>();
 
   return jsonResponse({
     success: true,
@@ -1531,19 +1606,19 @@ function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
   };
 }
 
-async function loadCloudProfileSnapshot(env: Env, steamId: string) {
+async function loadCloudProfileSnapshot(env: Env, userId: string) {
   const profile = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_profile_cloud WHERE steam_id = ? LIMIT 1`
-  ).bind(steamId).first<UserProfileCloudRow>();
+    `SELECT * FROM user_profile_cloud WHERE user_id = ? LIMIT 1`
+  ).bind(userId).first<UserProfileCloudRow>();
 
   const collectionsResult = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_collections_cloud WHERE steam_id = ? ORDER BY sort_order ASC, name ASC`
-  ).bind(steamId).all<UserCollectionCloudRow>();
+    `SELECT * FROM user_collections_cloud WHERE user_id = ? ORDER BY sort_order ASC, name ASC`
+  ).bind(userId).all<UserCollectionCloudRow>();
   const collections = collectionsResult.results || [];
 
   const gamesResult = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_collection_games_cloud WHERE steam_id = ? ORDER BY sort_order ASC`
-  ).bind(steamId).all<UserCollectionGameCloudRow>();
+    `SELECT * FROM user_collection_games_cloud WHERE user_id = ? ORDER BY sort_order ASC`
+  ).bind(userId).all<UserCollectionGameCloudRow>();
   const gamesByCollection = new Map<string, string[]>();
   for (const row of gamesResult.results || []) {
     const list = gamesByCollection.get(row.collection_id) || [];
@@ -1552,8 +1627,8 @@ async function loadCloudProfileSnapshot(env: Env, steamId: string) {
   }
 
   const favoritesResult = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT game_id FROM user_favorite_games_cloud WHERE steam_id = ? ORDER BY sort_order ASC`
-  ).bind(steamId).all<UserFavoriteGameCloudRow>();
+    `SELECT game_id FROM user_favorite_games_cloud WHERE user_id = ? ORDER BY sort_order ASC`
+  ).bind(userId).all<UserFavoriteGameCloudRow>();
   const favoriteGameIds = (favoritesResult.results || []).map((row) => row.game_id);
 
   if (!profile && collections.length === 0 && favoriteGameIds.length === 0) return null;
@@ -1586,7 +1661,7 @@ async function handleCloudProfileGet(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
 
-  const snapshot = await loadCloudProfileSnapshot(env, auth.session!.steamId);
+  const snapshot = await loadCloudProfileSnapshot(env, auth.session!.userId);
   return jsonResponse({ profile: snapshot }, env);
 }
 
@@ -1620,16 +1695,18 @@ async function handleCloudProfilePut(request: Request, env: Env) {
     return jsonResponse({ error: parsed.error }, env, 400);
   }
 
-  const steamId = auth.session!.steamId;
+  const userId = auth.session!.userId;
+  const steamId = auth.session!.steamId || null;
   const { snapshot } = parsed;
   const now = snapshot.updatedAt;
 
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO user_profile_cloud (
-       steam_id, display_name, avatar_url, banner_url,
+       steam_id, user_id, display_name, avatar_url, banner_url,
        banner_position_x, banner_position_y, banner_position_scale, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(steam_id) DO UPDATE SET
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       steam_id = COALESCE(excluded.steam_id, user_profile_cloud.steam_id),
        display_name = excluded.display_name,
        avatar_url = excluded.avatar_url,
        banner_url = excluded.banner_url,
@@ -1639,6 +1716,7 @@ async function handleCloudProfilePut(request: Request, env: Env) {
        updated_at = excluded.updated_at`
   ).bind(
     steamId,
+    userId,
     snapshot.displayName,
     snapshot.avatarUrl,
     snapshot.bannerUrl,
@@ -1650,38 +1728,93 @@ async function handleCloudProfilePut(request: Request, env: Env) {
 
   const collectionStatements: D1PreparedStatement[] = [
     env.SUBSCRIPTION_DB.prepare(
-      `DELETE FROM user_favorite_games_cloud WHERE steam_id = ?`
-    ).bind(steamId),
+      `DELETE FROM user_favorite_games_cloud WHERE user_id = ?`
+    ).bind(userId),
     env.SUBSCRIPTION_DB.prepare(
-      `DELETE FROM user_collection_games_cloud WHERE steam_id = ?`
-    ).bind(steamId),
+      `DELETE FROM user_collection_games_cloud WHERE user_id = ?`
+    ).bind(userId),
     env.SUBSCRIPTION_DB.prepare(
-      `DELETE FROM user_collections_cloud WHERE steam_id = ?`
-    ).bind(steamId),
+      `DELETE FROM user_collections_cloud WHERE user_id = ?`
+    ).bind(userId),
   ];
   for (const [collectionIndex, collection] of snapshot.collections.entries()) {
     collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
-      `INSERT INTO user_collections_cloud (id, steam_id, name, sort_order, updated_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).bind(collection.id, steamId, collection.name, collectionIndex, now));
+      `INSERT INTO user_collections_cloud (id, steam_id, user_id, name, sort_order, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(collection.id, steamId, userId, collection.name, collectionIndex, now));
 
     for (const [gameIndex, gameId] of collection.gameIds.entries()) {
       collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
-        `INSERT INTO user_collection_games_cloud (steam_id, collection_id, game_id, sort_order)
-         VALUES (?, ?, ?, ?)`
-      ).bind(steamId, collection.id, gameId, gameIndex));
+        `INSERT INTO user_collection_games_cloud (steam_id, user_id, collection_id, game_id, sort_order)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(steamId, userId, collection.id, gameId, gameIndex));
     }
   }
   for (const [gameIndex, gameId] of snapshot.favoriteGameIds.entries()) {
     collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
-      `INSERT INTO user_favorite_games_cloud (steam_id, game_id, sort_order)
-       VALUES (?, ?, ?)`
-    ).bind(steamId, gameId, gameIndex));
+      `INSERT INTO user_favorite_games_cloud (steam_id, user_id, game_id, sort_order)
+       VALUES (?, ?, ?, ?)`
+    ).bind(steamId, userId, gameId, gameIndex));
   }
   await runD1Batch(env.SUBSCRIPTION_DB, collectionStatements);
 
-  const profile = await loadCloudProfileSnapshot(env, steamId);
+  const profile = await loadCloudProfileSnapshot(env, userId);
   return jsonResponse({ profile }, env);
+}
+
+type UpsertSubscriptionInput = {
+  userId?: string | null;
+  steamId?: string | null;
+  planId: PlanId;
+  status: SubscriptionStatus;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  lastPaymentId?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeSubscriptionStatus?: string | null;
+  cancelAtPeriodEnd?: boolean;
+};
+
+async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
+  const conflictColumn = input.userId ? "user_id" : "steam_id";
+  const conflictValue = input.userId || input.steamId;
+  if (!conflictValue) return;
+  const now = nowIso();
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO subscriptions (
+       steam_id, user_id, plan_id, status, current_period_start, current_period_end,
+       last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status,
+       cancel_at_period_end, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(${conflictColumn}) DO UPDATE SET
+       steam_id = COALESCE(excluded.steam_id, subscriptions.steam_id),
+       user_id = COALESCE(excluded.user_id, subscriptions.user_id),
+       plan_id = excluded.plan_id,
+       status = excluded.status,
+       current_period_start = COALESCE(excluded.current_period_start, subscriptions.current_period_start),
+       current_period_end = COALESCE(excluded.current_period_end, subscriptions.current_period_end),
+       last_payment_id = COALESCE(excluded.last_payment_id, subscriptions.last_payment_id),
+       stripe_customer_id = COALESCE(excluded.stripe_customer_id, subscriptions.stripe_customer_id),
+       stripe_subscription_id = COALESCE(excluded.stripe_subscription_id, subscriptions.stripe_subscription_id),
+       stripe_subscription_status = COALESCE(excluded.stripe_subscription_status, subscriptions.stripe_subscription_status),
+       cancel_at_period_end = excluded.cancel_at_period_end,
+       updated_at = excluded.updated_at`
+  ).bind(
+    input.steamId || null,
+    input.userId || null,
+    input.planId,
+    input.status,
+    input.currentPeriodStart || null,
+    input.currentPeriodEnd || null,
+    input.lastPaymentId || null,
+    input.stripeCustomerId || null,
+    input.stripeSubscriptionId || null,
+    input.stripeSubscriptionStatus || null,
+    input.cancelAtPeriodEnd ? 1 : 0,
+    now,
+    now
+  ).run();
 }
 
 async function handleRefreshPayment(request: Request, env: Env) {
@@ -1711,39 +1844,23 @@ async function handleRefreshPayment(request: Request, env: Env) {
           const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
           const stripeStatus = subInfo.status;
           const isPremium = stripeSubscriptionIsPremium(stripeStatus);
-          const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, nowIso());
-          const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, nowIso());
 
-          await env.SUBSCRIPTION_DB.prepare(
-            `INSERT INTO subscriptions (
-                steam_id, plan_id, status, current_period_start, current_period_end,
-                last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(steam_id) DO UPDATE SET
-                plan_id = excluded.plan_id,
-                status = excluded.status,
-                current_period_start = excluded.current_period_start,
-                current_period_end = excluded.current_period_end,
-                last_payment_id = excluded.last_payment_id,
-                stripe_customer_id = excluded.stripe_customer_id,
-                stripe_subscription_id = excluded.stripe_subscription_id,
-               stripe_subscription_status = excluded.stripe_subscription_status,
-               updated_at = excluded.updated_at`
-          ).bind(
-            payment.steam_id,
-            payment.plan_id,
-            isPremium ? "active" : "expired",
-            currentPeriodStart,
-            currentPeriodEnd,
-            payment.id,
-            session.customer,
-            subscriptionId,
-            typeof stripeStatus === "string" ? stripeStatus : null,
-            now,
-            now
-          ).run();
+          await upsertSubscription(env, {
+            userId: payment.user_id,
+            steamId: payment.steam_id,
+            planId: payment.plan_id,
+            status: isPremium ? "active" : "expired",
+            currentPeriodStart: stripePeriodDate(subInfo.current_period_start, nowIso()),
+            currentPeriodEnd: stripePeriodDate(subInfo.current_period_end, nowIso()),
+            lastPaymentId: payment.id,
+            stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
+            stripeSubscriptionId: typeof subscriptionId === "string" ? subscriptionId : null,
+            stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
+          });
 
-          await syncPremiumRoleForSteam(env, payment.steam_id, isPremium).catch(() => undefined);
+          if (payment.user_id) {
+            await syncPremiumRoleForUser(env, payment.user_id, isPremium).catch(() => undefined);
+          }
         }
       }
     } catch (err) {
@@ -1752,7 +1869,7 @@ async function handleRefreshPayment(request: Request, env: Env) {
   }
 
   const updatedPayment = await getPaymentByCheckout(env, checkoutId);
-  const subscription = await getSubscription(env, payment.steam_id);
+  const subscription = payment.user_id ? await getSubscription(env, payment.user_id) : null;
 
   return jsonResponse({
     payment: updatedPayment ? publicPayment(updatedPayment, origin) : null,
@@ -1798,13 +1915,14 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
   }
 
   if (eventType === "checkout.session.completed") {
-    const steamId = data.metadata?.steam_id;
+    const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+    const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
     const planId = planIdFromStripe(data.metadata?.plan_id);
     const customerId = data.customer;
     const subscriptionId = data.subscription;
     const sessionId = data.id;
 
-    if (validSteamId(steamId) && typeof subscriptionId === "string" && typeof sessionId === "string") {
+    if ((userId || steamId) && typeof subscriptionId === "string" && typeof sessionId === "string") {
       try {
         const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
         const stripeStatus = subInfo.status;
@@ -1812,53 +1930,28 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
         const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, nowIso());
         const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, nowIso());
 
-        const now = nowIso();
         const paymentRow = await env.SUBSCRIPTION_DB.prepare(
           `SELECT id FROM payments WHERE stripe_checkout_session_id = ? LIMIT 1`
         ).bind(sessionId).first<{ id: string }>();
 
-        await env.SUBSCRIPTION_DB.prepare(
-          `INSERT INTO subscriptions (
-             steam_id, plan_id, status, current_period_start, current_period_end,
-             last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(steam_id) DO UPDATE SET
-             plan_id = excluded.plan_id,
-             status = excluded.status,
-             current_period_start = excluded.current_period_start,
-             current_period_end = excluded.current_period_end,
-             last_payment_id = excluded.last_payment_id,
-             stripe_customer_id = excluded.stripe_customer_id,
-             stripe_subscription_id = excluded.stripe_subscription_id,
-             stripe_subscription_status = excluded.stripe_subscription_status,
-             updated_at = excluded.updated_at`
-        ).bind(
+        await upsertSubscription(env, {
+          userId,
           steamId,
           planId,
-          isPremium ? "active" : "expired",
+          status: isPremium ? "active" : "expired",
           currentPeriodStart,
           currentPeriodEnd,
-          paymentRow?.id || null,
-          typeof customerId === "string" ? customerId : null,
-          subscriptionId,
-          typeof stripeStatus === "string" ? stripeStatus : null,
-          now,
-          now
-        ).run();
-
-        await env.SUBSCRIPTION_DB.prepare(
-          `UPDATE payments SET
-             status = 'paid',
-             provider = 'stripe',
-             stripe_subscription_id = ?,
-             confirmed_at = ?,
-             updated_at = ?
-           WHERE stripe_checkout_session_id = ?`
-        ).bind(subscriptionId, now, now, sessionId).run();
-
-        await syncPremiumRoleForSteam(env, steamId, isPremium).catch((error) => {
-          console.warn("Discord Premium role grant failed in webhook", error);
+          lastPaymentId: paymentRow?.id || null,
+          stripeCustomerId: typeof customerId === "string" ? customerId : null,
+          stripeSubscriptionId: subscriptionId,
+          stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
         });
+
+        if (userId) {
+          await syncPremiumRoleForUser(env, userId, isPremium).catch((error) => {
+            console.warn("Discord Premium role grant failed in webhook", error);
+          });
+        }
       } catch (err) {
         console.error("Failed to process checkout.session.completed", err);
       }
@@ -1868,81 +1961,66 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
     const status = data.status;
     const currentPeriodStart = stripePeriodDate(data.current_period_start);
     const currentPeriodEnd = stripePeriodDate(data.current_period_end);
-    const cancelAtPeriodEnd = data.cancel_at_period_end ? 1 : 0;
-    const steamId = data.metadata?.steam_id;
+    const cancelAtPeriodEnd = Boolean(data.cancel_at_period_end);
+    const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+    const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
     const planId = planIdFromStripe(data.metadata?.plan_id);
 
-    if (validSteamId(steamId) && typeof subscriptionId === "string") {
-      const now = nowIso();
+    if ((userId || steamId) && typeof subscriptionId === "string") {
       const isPremium = stripeSubscriptionIsPremium(status);
-      const subStatus = isPremium ? "active" : "expired";
 
-      await env.SUBSCRIPTION_DB.prepare(
-        `INSERT INTO subscriptions (
-           steam_id, plan_id, status, current_period_start, current_period_end,
-           stripe_subscription_id, stripe_subscription_status, cancel_at_period_end, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(steam_id) DO UPDATE SET
-           plan_id = COALESCE(excluded.plan_id, plan_id),
-           status = excluded.status,
-           current_period_start = COALESCE(excluded.current_period_start, current_period_start),
-           current_period_end = COALESCE(excluded.current_period_end, current_period_end),
-           stripe_subscription_id = excluded.stripe_subscription_id,
-           stripe_subscription_status = excluded.stripe_subscription_status,
-           cancel_at_period_end = excluded.cancel_at_period_end,
-           updated_at = excluded.updated_at`
-      ).bind(
+      await upsertSubscription(env, {
+        userId,
         steamId,
         planId,
-        subStatus,
+        status: isPremium ? "active" : "expired",
         currentPeriodStart,
         currentPeriodEnd,
-        subscriptionId,
-        status,
+        stripeSubscriptionId: subscriptionId,
+        stripeSubscriptionStatus: typeof status === "string" ? status : null,
         cancelAtPeriodEnd,
-        now,
-        now
-      ).run();
-
-      await syncPremiumRoleForSteam(env, steamId, isPremium).catch((error) => {
-        console.warn("Discord Premium role sync failed in subscription hook", error);
       });
+
+      if (userId) {
+        await syncPremiumRoleForUser(env, userId, isPremium).catch((error) => {
+          console.warn("Discord Premium role sync failed in subscription hook", error);
+        });
+      }
     }
   } else if (eventType === "customer.subscription.deleted") {
     const subscriptionId = data.id;
-    const steamId = data.metadata?.steam_id;
     const now = nowIso();
+    let userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+    let steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
 
-    if (validSteamId(steamId)) {
+    if (!userId && !steamId && typeof subscriptionId === "string") {
+      const subRow = await env.SUBSCRIPTION_DB.prepare(
+        `SELECT user_id, steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+      ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null }>();
+      userId = subRow?.user_id || null;
+      steamId = subRow?.steam_id || null;
+    }
+
+    if (userId) {
       await env.SUBSCRIPTION_DB.prepare(
         `UPDATE subscriptions SET
            status = 'expired',
            stripe_subscription_status = 'canceled',
            updated_at = ?
-         WHERE steam_id = ?`
-      ).bind(now, steamId).run();
+         WHERE user_id = ?`
+      ).bind(now, userId).run();
 
-      await syncPremiumRoleForSteam(env, steamId, false).catch((error) => {
+      await syncPremiumRoleForUser(env, userId, false).catch((error) => {
         console.warn("Discord Premium role revoke failed in webhook", error);
       });
-    } else if (typeof subscriptionId === "string") {
-      const subRow = await env.SUBSCRIPTION_DB.prepare(
-        `SELECT steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
-      ).bind(subscriptionId).first<{ steam_id: string }>();
-
-      if (subRow) {
-        await env.SUBSCRIPTION_DB.prepare(
-          `UPDATE subscriptions SET
-             status = 'expired',
-             stripe_subscription_status = 'canceled',
-             updated_at = ?
-           WHERE steam_id = ?`
-        ).bind(now, subRow.steam_id).run();
-
-        await syncPremiumRoleForSteam(env, subRow.steam_id, false).catch((error) => {
-          console.warn("Discord Premium role revoke failed in webhook", error);
-        });
-      }
+    } else if (steamId) {
+      await env.SUBSCRIPTION_DB.prepare(
+        `UPDATE subscriptions SET
+           status = 'expired',
+           stripe_subscription_status = 'canceled',
+           updated_at = ?
+         WHERE steam_id = ? AND user_id IS NULL`
+      ).bind(now, steamId).run();
     }
   } else if (eventType === "invoice.payment_succeeded") {
     const subscriptionId = data.subscription;
@@ -1954,25 +2032,28 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
 
     if (typeof subscriptionId === "string") {
       const existing = await env.SUBSCRIPTION_DB.prepare(
-        `SELECT steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
-      ).bind(subscriptionId).first<{ steam_id: string; plan_id: PlanId }>();
+        `SELECT user_id, steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+      ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
       const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
-      const steamId = existing?.steam_id || (typeof subInfo.metadata?.steam_id === "string" ? subInfo.metadata.steam_id : null);
-      const planId = planIdFromStripe(subInfo.metadata?.plan_id, existing?.plan_id || "monthly");
+      const userId = existing?.user_id || stripeMetadataString(subInfo, "user_id");
+      const steamIdMeta = stripeMetadataString(subInfo, "steam_id");
+      const steamId = existing?.steam_id || (validSteamId(steamIdMeta) ? steamIdMeta : null);
+      const planId = planIdFromStripe(stripeMetadataString(subInfo, "plan_id"), existing?.plan_id || "monthly");
 
-      if (steamId && validSteamId(steamId)) {
+      if (userId || steamId) {
         const paymentId = crypto.randomUUID();
         const reference = `stripe-invoice-${invoiceId}`;
 
         await env.SUBSCRIPTION_DB.prepare(
           `INSERT OR IGNORE INTO payments (
-             id, checkout_reference, steam_id, plan_id, amount_cents, currency,
+             id, checkout_reference, steam_id, user_id, plan_id, amount_cents, currency,
              status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at, confirmed_at
-           ) VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, 'stripe', ?, ?, ?)`
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, 'stripe', ?, ?, ?)`
         ).bind(
           paymentId,
           reference,
           steamId,
+          userId,
           planId,
           amountPaid,
           currency,
@@ -1989,44 +2070,26 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
         ).bind(invoiceId, reference).first<{ id: string }>();
         const stripeStatus = subInfo.status;
         const isPremium = stripeSubscriptionIsPremium(stripeStatus);
-        const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, now);
-        const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, now);
-        const customerId = typeof subInfo.customer === "string" ? subInfo.customer : null;
 
-        await env.SUBSCRIPTION_DB.prepare(
-          `INSERT INTO subscriptions (
-             steam_id, plan_id, status, current_period_start, current_period_end,
-             last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status, cancel_at_period_end, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(steam_id) DO UPDATE SET
-             plan_id = excluded.plan_id,
-             status = excluded.status,
-             current_period_start = excluded.current_period_start,
-             current_period_end = excluded.current_period_end,
-             last_payment_id = excluded.last_payment_id,
-             stripe_customer_id = COALESCE(excluded.stripe_customer_id, stripe_customer_id),
-             stripe_subscription_id = excluded.stripe_subscription_id,
-             stripe_subscription_status = excluded.stripe_subscription_status,
-             cancel_at_period_end = excluded.cancel_at_period_end,
-             updated_at = excluded.updated_at`
-        ).bind(
+        await upsertSubscription(env, {
+          userId,
           steamId,
           planId,
-          isPremium ? "active" : "expired",
-          currentPeriodStart,
-          currentPeriodEnd,
-          paymentRow?.id || null,
-          customerId,
-          subscriptionId,
-          typeof stripeStatus === "string" ? stripeStatus : null,
-          subInfo.cancel_at_period_end ? 1 : 0,
-          now,
-          now
-        ).run();
-
-        await syncPremiumRoleForSteam(env, steamId, isPremium).catch((error) => {
-          console.warn("Discord Premium role sync failed on paid invoice hook", error);
+          status: isPremium ? "active" : "expired",
+          currentPeriodStart: stripePeriodDate(subInfo.current_period_start, now),
+          currentPeriodEnd: stripePeriodDate(subInfo.current_period_end, now),
+          lastPaymentId: paymentRow?.id || null,
+          stripeCustomerId: typeof subInfo.customer === "string" ? subInfo.customer : null,
+          stripeSubscriptionId: subscriptionId,
+          stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
+          cancelAtPeriodEnd: Boolean(subInfo.cancel_at_period_end),
         });
+
+        if (userId) {
+          await syncPremiumRoleForUser(env, userId, isPremium).catch((error) => {
+            console.warn("Discord Premium role sync failed on paid invoice hook", error);
+          });
+        }
       }
     }
   } else if (eventType === "invoice.payment_failed") {
@@ -2043,20 +2106,21 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
 
     if (typeof subscriptionId === "string") {
       const subRow = await env.SUBSCRIPTION_DB.prepare(
-        `SELECT steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
-      ).bind(subscriptionId).first<{ steam_id: string; plan_id: PlanId }>();
+        `SELECT user_id, steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+      ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
 
       if (subRow) {
         if (invoiceId) {
           await env.SUBSCRIPTION_DB.prepare(
             `INSERT OR IGNORE INTO payments (
-               id, checkout_reference, steam_id, plan_id, amount_cents, currency,
+               id, checkout_reference, steam_id, user_id, plan_id, amount_cents, currency,
                status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, 'stripe', ?, ?)`
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, 'stripe', ?, ?)`
           ).bind(
             crypto.randomUUID(),
             `stripe-invoice-${invoiceId}`,
             subRow.steam_id,
+            subRow.user_id,
             subRow.plan_id || "monthly",
             amountDue,
             currency,
@@ -2073,13 +2137,19 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
           const status = subInfo.status;
           const isPremium = stripeSubscriptionIsPremium(status);
           if (!isPremium) {
-            await env.SUBSCRIPTION_DB.prepare(
-              `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ? WHERE steam_id = ?`
-            ).bind(status, now, subRow.steam_id).run();
+            if (subRow.user_id) {
+              await env.SUBSCRIPTION_DB.prepare(
+                `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ? WHERE user_id = ?`
+              ).bind(status, now, subRow.user_id).run();
 
-            await syncPremiumRoleForSteam(env, subRow.steam_id, false).catch((error) => {
-              console.warn("Discord Premium role revoke failed on failed invoice hook", error);
-            });
+              await syncPremiumRoleForUser(env, subRow.user_id, false).catch((error) => {
+                console.warn("Discord Premium role revoke failed on failed invoice hook", error);
+              });
+            } else if (subRow.steam_id) {
+              await env.SUBSCRIPTION_DB.prepare(
+                `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ? WHERE steam_id = ? AND user_id IS NULL`
+              ).bind(status, now, subRow.steam_id).run();
+            }
           }
         } catch (err) {
           console.error("Failed to query stripe subscription in invoice.payment_failed", err);
@@ -2104,6 +2174,392 @@ async function handleReturn(env: Env) {
   );
 }
 
+// ---- Account auth: register / login / password reset / verification ----
+
+function accountResponsePayload(account: AccountRow, token: string, firebaseRefreshToken: string) {
+  return { token, firebaseRefreshToken, account: publicAccount(account) };
+}
+
+async function handleRegister(request: Request, env: Env) {
+  const ip = clientIp(request);
+  if (await tooManyAuthAttempts(env, ip, "register", 8, 3600)) {
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
+
+  const body = await readJson(request);
+  const email = normalizeEmail(body?.email);
+  const username = normalizeUsername(body?.username);
+  const password = body?.password;
+  const displayName = typeof body?.displayName === "string" ? body.displayName.trim().slice(0, 60) : null;
+
+  // Form-validation failures deliberately do NOT count against the rate
+  // limit: a user fumbling the signup form (short password, taken username)
+  // would otherwise lock themselves out for an hour. Only attempts that
+  // actually reach Firebase are counted.
+  if (!email) return jsonResponse({ error: "invalid_email" }, env, 400);
+  if (!username) return jsonResponse({ error: "invalid_username" }, env, 400);
+  if (!validPassword(password)) return jsonResponse({ error: "weak_password" }, env, 400);
+
+  const existingUsername = await getAccountByUsername(env, username);
+  if (existingUsername) return jsonResponse({ error: "username_taken" }, env, 409);
+  const existingEmail = await getAccountByEmail(env, email);
+  if (existingEmail) return jsonResponse({ error: "email_already_registered" }, env, 409);
+
+  await recordAuthAttempt(env, ip, "register");
+
+  let firebaseSession;
+  try {
+    firebaseSession = await firebaseSignUp(env, email, password);
+  } catch (error) {
+    const mapped = mapFirebaseError(error);
+    // EMAIL_EXISTS with no accounts row (checked above) means a previous
+    // signup created the Firebase credential and then failed to write D1 —
+    // and its rollback delete failed too. That account is otherwise
+    // unreachable forever: login 404s and signup 409s. Adopt it here, but
+    // only for whoever can produce the password.
+    if (mapped.code === "email_already_registered") {
+      const recovered = await firebaseSignIn(env, email, password).catch(() => null);
+      if (!recovered) {
+        return jsonResponse({ error: "email_already_registered" }, env, 409);
+      }
+      const strayAccount = await getAccountByUserId(env, recovered.localId);
+      if (strayAccount) {
+        return jsonResponse({ error: "email_already_registered" }, env, 409);
+      }
+      console.warn("Register: adopting orphaned Firebase credential", { userId: recovered.localId });
+      firebaseSession = recovered;
+    } else {
+      return jsonResponse({ error: mapped.code }, env, mapped.status === 500 ? 500 : 400);
+    }
+  }
+
+  try {
+    await insertAccount(env, {
+      userId: firebaseSession.localId,
+      email,
+      username,
+      displayName: displayName || username,
+    });
+  } catch (error) {
+    // Username/email race lost to a concurrent request: undo the Firebase signup.
+    await firebaseDeleteAccount(env, firebaseSession.idToken).catch(() => undefined);
+    console.warn("Register: account insert failed", { error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: "username_taken" }, env, 409);
+  }
+
+  await firebaseSendEmailVerification(env, firebaseSession.idToken).catch((error) => {
+    console.warn("Register: verification email failed", { userId: firebaseSession.localId, error: error instanceof Error ? error.message : String(error) });
+  });
+
+  const token = await signCloudToken(env, {
+    userId: firebaseSession.localId,
+    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  });
+
+  const account = await getAccountByUserId(env, firebaseSession.localId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 500);
+
+  return jsonResponse(accountResponsePayload(account, token, firebaseSession.refreshToken), env, 201);
+}
+
+async function handleLogin(request: Request, env: Env) {
+  const ip = clientIp(request);
+  if (await tooManyAuthAttempts(env, ip, "login", 15, 900)) {
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
+
+  const body = await readJson(request);
+  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
+  const password = body?.password;
+  if (!identifier || !validPassword(password)) {
+    return jsonResponse({ error: "invalid_credentials" }, env, 400);
+  }
+
+  // Counted from here on: a wrong password or an unknown user is exactly the
+  // brute-force pattern the limit exists for, so both must burn quota.
+  await recordAuthAttempt(env, ip, "login");
+
+  let email = normalizeEmail(identifier);
+  if (!email) {
+    const username = normalizeUsername(identifier);
+    const account = username ? await getAccountByUsername(env, username) : null;
+    if (!account) return jsonResponse({ error: "invalid_credentials" }, env, 401);
+    email = account.email;
+  }
+
+  let firebaseSession;
+  try {
+    firebaseSession = await firebaseSignIn(env, email, password);
+  } catch (error) {
+    const mapped = mapFirebaseError(error);
+    return jsonResponse({ error: mapped.code }, env, mapped.status === 500 ? 500 : 401);
+  }
+
+  const lookup = await firebaseLookup(env, firebaseSession.idToken).catch(() => null);
+  if (lookup) {
+    await touchAccountVerified(env, firebaseSession.localId, lookup.emailVerified);
+  }
+
+  const token = await signCloudToken(env, {
+    userId: firebaseSession.localId,
+    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  });
+
+  const account = await getAccountByUserId(env, firebaseSession.localId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
+
+  return jsonResponse(accountResponsePayload(account, token, firebaseSession.refreshToken), env);
+}
+
+async function handlePasswordReset(request: Request, env: Env) {
+  const ip = clientIp(request);
+  if (await tooManyAuthAttempts(env, ip, "password_reset", 8, 3600)) {
+    return jsonResponse({ ok: true }, env);
+  }
+  await recordAuthAttempt(env, ip, "password_reset");
+
+  const body = await readJson(request);
+  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
+
+  let email = normalizeEmail(identifier);
+  if (!email) {
+    const username = normalizeUsername(identifier);
+    const account = username ? await getAccountByUsername(env, username) : null;
+    email = account?.email || null;
+  }
+
+  if (email) {
+    await firebaseSendPasswordReset(env, email).catch((error) => {
+      console.warn("Password reset email failed", { error: error instanceof Error ? error.message : String(error) });
+    });
+  }
+
+  // Always 200: never reveal whether the identifier matched an account.
+  return jsonResponse({ ok: true }, env);
+}
+
+async function handleResendVerification(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+
+  const body = await readJson(request);
+  const refreshToken = typeof body?.firebaseRefreshToken === "string" ? body.firebaseRefreshToken : "";
+  if (!refreshToken) return jsonResponse({ error: "missing_refresh_token" }, env, 400);
+
+  let exchanged;
+  try {
+    exchanged = await firebaseExchangeRefreshToken(env, refreshToken);
+  } catch {
+    return jsonResponse({ error: "session_expired" }, env, 401);
+  }
+  if (exchanged.userId !== auth.session!.userId) {
+    return jsonResponse({ error: "session_mismatch" }, env, 401);
+  }
+
+  const lookup = await firebaseLookup(env, exchanged.idToken);
+  await touchAccountVerified(env, auth.session!.userId, lookup.emailVerified);
+
+  if (!lookup.emailVerified) {
+    await firebaseSendEmailVerification(env, exchanged.idToken).catch((error) => {
+      console.warn("Resend verification failed", { error: error instanceof Error ? error.message : String(error) });
+    });
+  }
+
+  return jsonResponse({ ok: true, emailVerified: lookup.emailVerified, firebaseRefreshToken: exchanged.refreshToken }, env);
+}
+
+async function handleChangePassword(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+
+  const body = await readJson(request);
+  const currentPassword = body?.currentPassword;
+  const newPassword = body?.newPassword;
+  if (!validPassword(currentPassword) || !validPassword(newPassword)) {
+    return jsonResponse({ error: "weak_password" }, env, 400);
+  }
+
+  const account = await getAccountByUserId(env, auth.session!.userId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
+
+  let reauth;
+  try {
+    reauth = await firebaseSignIn(env, account.email, currentPassword);
+  } catch {
+    return jsonResponse({ error: "invalid_credentials" }, env, 401);
+  }
+
+  try {
+    await firebaseUpdatePassword(env, reauth.idToken, newPassword);
+  } catch (error) {
+    const mapped = mapFirebaseError(error);
+    return jsonResponse({ error: mapped.code }, env, 400);
+  }
+
+  return jsonResponse({ ok: true }, env);
+}
+
+async function handleMe(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+
+  const account = await getAccountByUserId(env, userId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
+
+  const [subscription, connections] = await Promise.all([
+    getSubscription(env, userId),
+    env.SUBSCRIPTION_DB.prepare(
+      `SELECT provider, provider_id, metadata_json, linked_at FROM user_connections WHERE user_id = ?`
+    ).bind(userId).all<UserConnectionRow>(),
+  ]);
+
+  return jsonResponse({
+    account: publicAccount(account),
+    subscription: publicSubscription(subscription),
+    connections: (connections.results || []).map((row) => ({
+      provider: row.provider,
+      providerId: row.provider_id,
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
+      linkedAt: row.linked_at,
+    })),
+  }, env);
+}
+
+// Every table that carries both a steam_id and a user_id. Claiming a Steam
+// account backfills user_id across them; disconnecting clears steam_id back
+// out, so a stale Steam id never outlives the connection that produced it.
+const STEAM_LINKED_TABLES = [
+  "subscriptions",
+  "payments",
+  "discord_links",
+  "cloud_saves",
+  "user_profile_cloud",
+  "user_collections_cloud",
+  "user_collection_games_cloud",
+  "user_favorite_games_cloud",
+];
+
+async function handleClaimSteam(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+
+  const body = await readJson(request);
+  const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : "";
+  const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
+  const avatarUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl.trim() : "";
+
+  const steamId = await validateSteamOpenId(callbackUrl);
+  if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
+
+  const existingLink = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = ? LIMIT 1`
+  ).bind(steamId).first<{ user_id: string }>();
+
+  if (existingLink && existingLink.user_id !== userId) {
+    return jsonResponse({ error: "steam_already_linked" }, env, 409);
+  }
+
+  await ensureUser(env, steamId);
+
+  if (!existingLink) {
+    const now = nowIso();
+    await env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
+       VALUES (?, 'steam', ?, ?, ?)`
+    ).bind(userId, steamId, JSON.stringify({ displayName: displayName || null, avatarUrl: avatarUrl || null }), now).run();
+
+    for (const table of STEAM_LINKED_TABLES) {
+      try {
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE ${table} SET user_id = ? WHERE steam_id = ? AND user_id IS NULL`
+        ).bind(userId, steamId).run();
+      } catch (error) {
+        // A UNIQUE(user_id) collision means this account already has its own
+        // row in that table; keep the account's row and leave the legacy one
+        // orphaned rather than failing the whole claim.
+        console.warn("Claim: failed to migrate table", { table, steamId, userId, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+
+    const claimedDiscord = await getDiscordLink(env, userId);
+    if (claimedDiscord) {
+      await env.SUBSCRIPTION_DB.prepare(
+        `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
+         VALUES (?, 'discord', ?, ?, ?)
+         ON CONFLICT(user_id, provider) DO UPDATE SET
+           provider_id = excluded.provider_id,
+           metadata_json = excluded.metadata_json`
+      ).bind(
+        userId,
+        claimedDiscord.discord_user_id,
+        JSON.stringify({ username: claimedDiscord.discord_username, globalName: claimedDiscord.discord_global_name }),
+        claimedDiscord.linked_at
+      ).run();
+    }
+
+    const claimedSubscription = await getSubscription(env, userId);
+    const stripeCustomerId = claimedSubscription?.stripe_customer_id?.trim();
+    if (stripeCustomerId && env.STRIPE_SECRET_KEY?.trim()) {
+      const params = new URLSearchParams();
+      params.set("metadata[user_id]", userId);
+      params.set("metadata[steam_id]", steamId);
+      await stripeRequest(env, `/customers/${encodeURIComponent(stripeCustomerId)}`, { method: "POST", body: params }).catch((error) => {
+        console.warn("Claim: failed to update Stripe customer metadata", { stripeCustomerId, error: error instanceof Error ? error.message : String(error) });
+      });
+    }
+  }
+
+  return jsonResponse({ steamId, claimed: true }, env);
+}
+
+async function handleDisconnectProvider(request: Request, env: Env, provider: "steam" | "discord") {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+
+  if (provider === "discord") {
+    // Order matters: the role revoke reads discord_links, so it has to run
+    // before the row goes away. Dropping the row is what actually unlinks —
+    // leaving it behind keeps the cron granting Premium roles to an account
+    // that shows "disconnected", and its UNIQUE(discord_user_id) blocks the
+    // same Discord account from ever linking anywhere else.
+    await syncPremiumRoleForUser(env, userId, false).catch((error) => {
+      console.warn("Discord Premium role revoke failed on disconnect", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_links WHERE user_id = ?`).bind(userId).run();
+  }
+
+  if (provider === "steam") {
+    // Deleting the connection row alone left the old steam_id stamped across
+    // the account's rows, so the account kept claiming a Steam id it was no
+    // longer linked to. Rows stay with the account (keyed by user_id); only
+    // the Steam stamp goes.
+    for (const table of STEAM_LINKED_TABLES) {
+      try {
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE ${table} SET steam_id = NULL WHERE user_id = ?`
+        ).bind(userId).run();
+      } catch (error) {
+        console.warn("Disconnect: failed to clear steam_id", {
+          table,
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `DELETE FROM user_connections WHERE user_id = ? AND provider = ?`
+  ).bind(userId, provider).run();
+  return jsonResponse({ ok: true }, env);
+}
+
 async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "OPTIONS") return jsonResponse({}, env);
 
@@ -2111,9 +2567,17 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "GET" && url.pathname === "/health") {
     return jsonResponse({ ok: true, service: "ghostbox-subscriptions" }, env);
   }
-  if (request.method === "POST" && url.pathname === "/auth/steam") {
-    return handleSteamAuth(request, env);
-  }
+
+  if (request.method === "POST" && url.pathname === "/auth/register") return handleRegister(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/login") return handleLogin(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/password-reset") return handlePasswordReset(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/resend-verification") return handleResendVerification(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/change-password") return handleChangePassword(request, env);
+  if (request.method === "GET" && url.pathname === "/auth/me") return handleMe(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/claim-steam") return handleClaimSteam(request, env);
+  if (request.method === "DELETE" && url.pathname === "/auth/connections/steam") return handleDisconnectProvider(request, env, "steam");
+  if (request.method === "DELETE" && url.pathname === "/auth/connections/discord") return handleDisconnectProvider(request, env, "discord");
+
   if (request.method === "GET" && url.pathname === "/cloud-saves") {
     return handleCloudSavesList(request, env);
   }
@@ -2154,12 +2618,12 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
     return handleCreateBillingPortal(request, env);
   }
   if (request.method === "GET" && url.pathname === "/subscription/status") {
-    return handleStatus(request, env, context);
+    return handleStatus(request, env);
   }
   if (request.method === "GET" && url.pathname === "/discord/link-status") {
     return handleDiscordLinkStatus(request, env, context);
   }
-  if (request.method === "GET" && url.pathname === "/discord/link") {
+  if (request.method === "POST" && url.pathname === "/discord/link") {
     return handleDiscordLinkStart(request, env);
   }
   if (request.method === "GET" && url.pathname === "/discord/callback") {

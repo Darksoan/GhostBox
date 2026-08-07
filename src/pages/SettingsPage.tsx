@@ -7,12 +7,15 @@ import {
   FolderCog,
   Code2,
   Gauge,
+  Link2,
   SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
+import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
+import { AccountSection } from "../features/settings/AccountSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
@@ -179,6 +182,11 @@ export const settingsTabs: SettingsTab[] = [
     ],
   },
   {
+    id: "connections",
+    icon: Link2,
+    options: [],
+  },
+  {
     id: "subscription",
     icon: Crown,
     options: [],
@@ -341,8 +349,15 @@ export function SettingsPage({
 
   return (
     <section className="settings-page settings-page--tabs" aria-label={t("nav.settings")}>
-      <article className={`settings-panel${activeTab.id === "subscription" ? " settings-panel--bare" : ""}`}>
+      <article
+        className={`settings-panel${
+          activeTab.id === "subscription" || activeTab.id === "connections"
+            ? " settings-panel--bare"
+            : ""
+        }`}
+      >
         <div className="settings-panel__body">
+          {activeTab.id === "general" && <AccountSection />}
           {options.length > 0 && (
             <div className="settings-options">
               {options.map((option, index) => (
@@ -354,6 +369,7 @@ export function SettingsPage({
               ))}
             </div>
           )}
+          {activeTab.id === "connections" && <ConnectionsPanel />}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans
               surface="settings"

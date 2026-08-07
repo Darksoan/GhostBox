@@ -1032,8 +1032,12 @@ fn begin_steam_sign_in() -> Result<SteamSignInGuard, String> {
     Ok(SteamSignInGuard)
 }
 
-async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     use tauri_plugin_opener::OpenerExt;
+
+    // Connecting Steam links it to the caller's GhostBox account; it no
+    // longer signs anyone in on its own.
+    crate::cloud_save::session_token(app)?;
 
     let _guard = begin_steam_sign_in()?;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
@@ -1104,9 +1108,9 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
 
     let display_name = text_value(profile.get("displayName"));
     let success_message = if display_name.is_empty() {
-        "Connected.".to_string()
+        "Steam account connected.".to_string()
     } else {
-        format!("Connected as {display_name}.")
+        format!("Steam account connected as {display_name}.")
     };
     write_http_response(
         &mut stream,
@@ -1115,7 +1119,7 @@ async fn sign_in_with_steam(app: &tauri::AppHandle) -> Result<serde_json::Value,
     );
 
     let cloud_session =
-        crate::cloud_save::cloud_authenticate_steam_callback(app, callback.as_str(), &profile)
+        crate::cloud_save::cloud_claim_steam_callback(app, callback.as_str(), &profile)
             .await
             .ok();
     if cloud_session.is_none() && !validate_steam_openid(&callback).await? {
@@ -1679,13 +1683,17 @@ pub fn steam_save_profile(
 }
 
 #[tauri::command]
-pub async fn steam_sign_in(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    sign_in_with_steam(&app).await
+pub async fn steam_connect_account(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    connect_steam_account(&app).await
 }
 
+/// Disconnects Steam from the current GhostBox account. Unlike signing out
+/// of GhostBox entirely, this must not touch `cloud-session.bin` — the
+/// account session stays active, only the Steam connection (and the local
+/// profile cache used to unlock metrics) goes away.
 #[tauri::command]
-pub fn steam_sign_out(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = crate::cloud_save::cloud_sign_out(app.clone());
+pub async fn steam_disconnect_account(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = crate::cloud_save::cloud_disconnect_connection(app.clone(), "steam".to_string()).await;
     remove_data_file(&app, STEAM_PROFILE_FILE)
 }
 

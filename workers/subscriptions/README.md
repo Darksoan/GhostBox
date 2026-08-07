@@ -5,19 +5,28 @@ Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Str
 ## Endpoints
 
 - `GET /health`
-- `POST /subscription/checkouts`
-- `POST /subscription/portal` — Stripe Customer Portal (`{ steamId, flow?: "manage" | "payment_method_update" }`)
-- `GET /subscription/status?steamId=...`
+- `POST /auth/register` — `{ email, username, password, displayName? }`
+- `POST /auth/login` — `{ identifier, password }` (identifier = email or username)
+- `POST /auth/password-reset` — `{ identifier }`, always 200
+- `POST /auth/resend-verification` — Bearer, `{ firebaseRefreshToken }`
+- `POST /auth/change-password` — Bearer, `{ currentPassword, newPassword }`
+- `GET /auth/me` — Bearer
+- `POST /auth/claim-steam` — Bearer, `{ callbackUrl, displayName?, avatarUrl? }`, absorbs a legacy Steam-only account's data into the caller's account
+- `DELETE /auth/connections/steam` / `DELETE /auth/connections/discord` — Bearer
+- `POST /subscription/checkouts` — Bearer, `{ planId }`
+- `POST /subscription/portal` — Bearer, `{ flow?: "manage" | "payment_method_update" }`
+- `GET /subscription/status` — Bearer
 - `POST /subscription/refresh?checkoutId=...`
-- `GET /discord/link?steamId=...`
+- `POST /discord/link` — Bearer, returns `{ url }` to open in the system browser
 - `GET /discord/callback`
-- `GET /discord/link-status?steamId=...`
+- `GET /discord/link-status` — Bearer
 - `POST /discord/sync-premium`
 - `POST /stripe/webhook` — Stripe webhook endpoint
-- `POST /auth/steam`
-- `GET /cloud-saves?appId=...`
-- `POST /cloud-saves`
-- `GET /cloud-saves/:id/download`
+- `GET /cloud-saves?appId=...` — Bearer + premium
+- `POST /cloud-saves` — Bearer + premium
+- `GET /cloud-saves/:id/download` — Bearer + premium
+
+Identity is the Firebase uid (`user_id`), issued by `/auth/register` or `/auth/login` and wrapped in the same 7-day HMAC session token used everywhere else (`Authorization: Bearer <token>`). Steam and Discord are optional connections (`user_connections` table), linked after login — Steam via `/auth/claim-steam`, Discord via `/discord/link`. `/auth/claim-steam` migrates a pre-existing Steam-only account's subscription, cloud saves, profile and Discord link onto the new account the first time that Steam ID is connected.
 
 ## Secrets
 
@@ -32,7 +41,10 @@ npx wrangler secret put DISCORD_SYNC_TOKEN --config workers/subscriptions/wrangl
 npx wrangler secret put CLOUD_SESSION_SECRET --config workers/subscriptions/wrangler.toml
 npx wrangler secret put SUPABASE_URL --config workers/subscriptions/wrangler.toml
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/subscriptions/wrangler.toml
+npx wrangler secret put FIREBASE_API_KEY --config workers/subscriptions/wrangler.toml
 ```
+
+`FIREBASE_API_KEY` is the Web API key of the Firebase project (Project settings → General → Web API Key). The worker talks to Firebase Auth over its public REST API only (Identity Toolkit + Secure Token) — no service account/Admin SDK key is needed. Email templates (verification, password reset) are configured in the Firebase console under Authentication → Templates.
 
 Optional variables/secrets:
 

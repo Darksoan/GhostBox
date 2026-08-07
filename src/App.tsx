@@ -108,23 +108,16 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   useEffect(() => {
     let cancelled = false;
-    const steamId = appData.steamProfile?.steamId;
 
-    if (!steamId) {
-      setIsPremium(false);
-      setSubscriptionPeriodEnd(null);
-      return;
-    }
-
-    const cachedPremium = ghostboxApi.getCachedIsPremium(steamId);
+    const cachedPremium = ghostboxApi.getCachedIsPremium();
     if (cachedPremium !== null) setIsPremium(cachedPremium);
-    const freshPremium = ghostboxApi.getFreshCachedPremiumStatus(steamId);
+    const freshPremium = ghostboxApi.getFreshCachedPremiumStatus();
     if (freshPremium?.currentPeriodEnd) {
       setSubscriptionPeriodEnd(freshPremium.isPremium ? freshPremium.currentPeriodEnd : null);
     }
 
     const refreshSubscriptionStatus = () =>
-      void ghostboxApi.getSubscriptionStatus(steamId).then((status: SubscriptionStatusResult | null) => {
+      void ghostboxApi.getSubscriptionStatus().then((status: SubscriptionStatusResult | null) => {
         if (cancelled) return;
         const subscription = status?.subscription;
         const active = subscription?.isPremium === true || subscription?.status === "active";
@@ -136,7 +129,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       });
 
     const refreshSubscriptionStatusIfStale = () => {
-      if (ghostboxApi.getFreshCachedPremiumStatus(steamId)) return;
+      if (ghostboxApi.getFreshCachedPremiumStatus()) return;
       refreshSubscriptionStatus();
     };
 
@@ -149,7 +142,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       window.removeEventListener("focus", refreshSubscriptionStatusIfStale);
       window.clearInterval(refreshInterval);
     };
-  }, [appData.steamProfile?.steamId]);
+  }, []);
 
   useEffect(() => {
     if (isPremium) setSubscriptionModalOpen(false);
@@ -270,13 +263,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   );
 
   const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {
-    const steamId = appData.steamProfile?.steamId?.trim();
     const copy = (pt: string, en: string) => appearance.language === "en" ? en : pt;
-    if (!steamId || subscriptionPortalFlow) return;
+    if (subscriptionPortalFlow) return;
 
     setSubscriptionPortalFlow(flow);
     try {
-      const session = await ghostboxApi.createSubscriptionPortalSession(steamId, flow);
+      const session = await ghostboxApi.createSubscriptionPortalSession(flow);
       if (!session?.url) {
         throw new Error(copy("Não foi possível abrir o portal de cobrança.", "Could not open the billing portal."));
       }
@@ -292,7 +284,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     } finally {
       setSubscriptionPortalFlow(null);
     }
-  }, [appData.steamProfile?.steamId, appearance.language, showToast, subscriptionPortalFlow]);
+  }, [appearance.language, showToast, subscriptionPortalFlow]);
 
   const openGameAndIngestFallback = useCallback((game: GhostBoxGame) => {
     openGame(game);
@@ -339,7 +331,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           activeCollectionId={shell.activeProfileCollectionId}
           steamProfile={appData.steamProfile}
           isCloudProfileRestoring={appData.isCloudProfileRestoring}
-          isSteamSigningIn={appData.isSteamSigningIn}
           favoriteGames={appData.favoriteGames}
           addedLibraryGames={appData.addedLibraryGames}
           userCollections={appData.userCollections}
@@ -347,7 +338,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           onBack={handleBack}
           onOpenProfile={() => handleNavigate("profile")}
           onOpenGame={openGame}
-          onSteamSignIn={() => void appData.handleSteamSignIn()}
           onRestartSteam={appData.handleRestartSteam}
           onCreateCollection={appData.openCreateUserCollectionModal}
           onRemoveFavorite={appData.toggleFavoriteGame}

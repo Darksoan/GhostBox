@@ -1,5 +1,7 @@
+use crate::cloud_save::session_token;
 use crate::settings::{decrypt_secret_for_current_user, encrypt_secret_for_current_user};
 use crate::settings::{read_binary_file, write_binary_file};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 const SUBSCRIPTION_STATUS_CACHE_FILE: &str = "subscription-status-cache.bin";
@@ -36,7 +38,10 @@ pub(crate) struct SubscriptionPayment {
     id: String,
     checkout_reference: String,
     checkout_id: Option<String>,
-    steam_id: String,
+    #[serde(default)]
+    steam_id: Option<String>,
+    #[serde(default)]
+    user_id: Option<String>,
     plan_id: String,
     amount_cents: u64,
     currency: String,
@@ -54,12 +59,28 @@ pub(crate) struct SubscriptionPayment {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct DiscordLinkStatus {
+    linked: bool,
+    discord_user_id: Option<String>,
+    discord_username: Option<String>,
+    discord_global_name: Option<String>,
+    linked_at: Option<String>,
+    #[serde(default)]
+    premium_role: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SubscriptionStatusResponse {
-    steam_id: String,
+    user_id: String,
+    #[serde(default)]
+    steam_id: Option<String>,
     subscription: SubscriptionInfo,
     latest_payment: Option<SubscriptionPayment>,
     #[serde(default)]
     payment_method: Option<SubscriptionPaymentMethod>,
+    #[serde(default)]
+    discord_link: Option<DiscordLinkStatus>,
     #[serde(default)]
     cached: bool,
 }
@@ -72,6 +93,15 @@ pub(crate) struct SubscriptionCheckoutResponse {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct SubscriptionPortalResponse {
+    url: String,
+    flow: String,
+    #[serde(default)]
+    customer_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SubscriptionRefreshResponse {
     payment: SubscriptionPayment,
     subscription: SubscriptionInfo,
@@ -79,8 +109,16 @@ pub(crate) struct SubscriptionRefreshResponse {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct DiscordLinkStartResponse {
+    url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SubscriptionStatusCache {
-    steam_id: String,
+    user_id: String,
+    #[serde(default)]
+    steam_id: Option<String>,
     subscription: SubscriptionInfo,
     latest_payment: Option<SubscriptionPayment>,
     #[serde(default)]
@@ -112,13 +150,9 @@ fn subscription_api_url() -> String {
     DEFAULT_SUBSCRIPTION_API_URL.to_string()
 }
 
-fn valid_steam_id(value: &str) -> bool {
-    let length = value.len();
-    (15..=20).contains(&length) && value.chars().all(|character| character.is_ascii_digit())
-}
-
 fn cache_status(app: &tauri::AppHandle, status: &SubscriptionStatusResponse) -> Result<(), String> {
     let cache = SubscriptionStatusCache {
+        user_id: status.user_id.clone(),
         steam_id: status.steam_id.clone(),
         subscription: status.subscription.clone(),
         latest_payment: status.latest_payment.clone(),
@@ -130,14 +164,11 @@ fn cache_status(app: &tauri::AppHandle, status: &SubscriptionStatusResponse) -> 
     write_binary_file(app, SUBSCRIPTION_STATUS_CACHE_FILE, &encrypted)
 }
 
-fn load_cached_status(
-    app: &tauri::AppHandle,
-    steam_id: &str,
-) -> Option<SubscriptionStatusResponse> {
+fn load_cached_status(app: &tauri::AppHandle, user_id: &str) -> Option<SubscriptionStatusResponse> {
     let bytes = read_binary_file(app, SUBSCRIPTION_STATUS_CACHE_FILE).ok()?;
     let payload = decrypt_secret_for_current_user(&bytes).ok()?;
     let cache = serde_json::from_str::<SubscriptionStatusCache>(&payload).ok()?;
-    if cache.steam_id != steam_id {
+    if cache.user_id != user_id {
         return None;
     }
     let mut subscription = cache.subscription;
@@ -154,10 +185,12 @@ fn load_cached_status(
     }
 
     Some(SubscriptionStatusResponse {
+        user_id: cache.user_id,
         steam_id: cache.steam_id,
         payment_method: cache.payment_method,
         subscription,
         latest_payment: cache.latest_payment,
+        discord_link: None,
         cached: true,
     })
 }
@@ -171,9 +204,7 @@ fn normalize_response_error(value: &serde_json::Value, fallback: String) -> Stri
         .to_string()
 }
 
-async fn json_request<T>(
-    request: reqwest::RequestBuilder,
-) -> Result<T, String>
+async fn json_request<T>(request: reqwest::RequestBuilder) -> Result<T, String>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -194,42 +225,35 @@ where
 #[tauri::command]
 pub async fn subscription_get_status(
     app: tauri::AppHandle,
-    steam_id: String,
 ) -> Result<SubscriptionStatusResponse, String> {
-    let steam_id = steam_id.trim().to_string();
-    if !valid_steam_id(&steam_id) {
-        return Err("Steam ID inválido.".to_string());
-    }
-
+    let token = session_token(&app)?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
         .build()
         .map_err(|error| error.to_string())?;
-    let url = format!(
-        "{}/subscription/status?steamId={}",
-        subscription_api_url(),
-        steam_id
-    );
-    match json_request::<SubscriptionStatusResponse>(client.get(url)).await {
+    let url = format!("{}/subscription/status", subscription_api_url());
+    match json_request::<SubscriptionStatusResponse>(client.get(url).bearer_auth(&token)).await {
         Ok(mut status) => {
             status.cached = false;
             let _ = cache_status(&app, &status);
             Ok(status)
         }
-        Err(error) => load_cached_status(&app, &steam_id).ok_or(error),
+        Err(error) => {
+            // The token itself decodes the userId, so a cached lookup only
+            // needs it as a cache key, not another auth check.
+            let user_id = decode_session_user_id(&token).unwrap_or_default();
+            load_cached_status(&app, &user_id).ok_or(error)
+        }
     }
 }
 
 #[tauri::command]
 pub async fn subscription_create_checkout(
-    steam_id: String,
+    app: tauri::AppHandle,
     plan_id: String,
 ) -> Result<SubscriptionCheckoutResponse, String> {
-    let steam_id = steam_id.trim().to_string();
+    let token = session_token(&app)?;
     let plan_id = plan_id.trim().to_string();
-    if !valid_steam_id(&steam_id) {
-        return Err("Faça login com a Steam antes de assinar.".to_string());
-    }
     if plan_id != "monthly" && plan_id != "quarterly" {
         return Err("Plano de assinatura inválido.".to_string());
     }
@@ -240,10 +264,32 @@ pub async fn subscription_create_checkout(
         .map_err(|error| error.to_string())?;
     let url = format!("{}/subscription/checkouts", subscription_api_url());
     json_request::<SubscriptionCheckoutResponse>(
-        client.post(url).json(&serde_json::json!({
-            "steamId": steam_id,
-            "planId": plan_id,
-        })),
+        client
+            .post(url)
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "planId": plan_id })),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn subscription_create_portal_session(
+    app: tauri::AppHandle,
+    flow: Option<String>,
+) -> Result<SubscriptionPortalResponse, String> {
+    let token = session_token(&app)?;
+    let flow = flow.unwrap_or_else(|| "manage".to_string());
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let url = format!("{}/subscription/portal", subscription_api_url());
+    json_request::<SubscriptionPortalResponse>(
+        client
+            .post(url)
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "flow": flow })),
     )
     .await
 }
@@ -268,13 +314,59 @@ pub async fn subscription_refresh_status(
         checkout_id
     );
     let refresh = json_request::<SubscriptionRefreshResponse>(client.post(url)).await?;
-    let status = SubscriptionStatusResponse {
-        steam_id: refresh.payment.steam_id.clone(),
-        subscription: refresh.subscription.clone(),
-        latest_payment: Some(refresh.payment.clone()),
-        payment_method: None,
-        cached: false,
-    };
-    let _ = cache_status(&app, &status);
+    if let Some(user_id) = refresh.payment.user_id.clone() {
+        let status = SubscriptionStatusResponse {
+            user_id,
+            steam_id: refresh.payment.steam_id.clone(),
+            subscription: refresh.subscription.clone(),
+            latest_payment: Some(refresh.payment.clone()),
+            payment_method: None,
+            discord_link: None,
+            cached: false,
+        };
+        let _ = cache_status(&app, &status);
+    }
     Ok(refresh)
+}
+
+#[tauri::command]
+pub async fn discord_link_start(app: tauri::AppHandle) -> Result<DiscordLinkStartResponse, String> {
+    let token = session_token(&app)?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let url = format!("{}/discord/link", subscription_api_url());
+    json_request::<DiscordLinkStartResponse>(client.post(url).bearer_auth(token)).await
+}
+
+#[tauri::command]
+pub async fn discord_link_status(app: tauri::AppHandle) -> Result<DiscordLinkStatus, String> {
+    let token = session_token(&app)?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let url = format!("{}/discord/link-status", subscription_api_url());
+    json_request::<DiscordLinkStatus>(client.get(url).bearer_auth(token)).await
+}
+
+/// The session token's payload is `base64url(json).signature` — decode just
+/// enough to read `userId` for cache lookups, without re-verifying the HMAC
+/// (the worker already did that; this is only a local cache key).
+fn decode_session_user_id(token: &str) -> Option<String> {
+    let payload = token.split('.').next()?;
+    let padded_len = (payload.len() + 3) / 4 * 4;
+    let mut padded = payload.replace('-', "+").replace('_', "/");
+    while padded.len() < padded_len {
+        padded.push('=');
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(padded)
+        .ok()?;
+    let value = serde_json::from_slice::<serde_json::Value>(&bytes).ok()?;
+    value
+        .get("userId")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }

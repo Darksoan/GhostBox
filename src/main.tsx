@@ -7,6 +7,8 @@ import App from "./App";
 import { SettingsProvider } from "./context/settings";
 import { OverlayProvider } from "./context/OverlayContext";
 import { AppDataProvider } from "./context/AppDataContext";
+import { AuthProvider } from "./context/AuthContext";
+import { AuthGate } from "./features/auth/AuthGate";
 import { queryClient } from "./lib/queryClient";
 import { TrayMenu } from "./components/tray/TrayMenu";
 
@@ -22,11 +24,15 @@ function renderApp() {
       ) : (
         <QueryClientProvider client={queryClient}>
           <SettingsProvider>
-            <OverlayProvider>
-              <AppDataProvider>
-                <App />
-              </AppDataProvider>
-            </OverlayProvider>
+            <AuthProvider>
+              <OverlayProvider>
+                <AuthGate>
+                  <AppDataProvider>
+                    <App />
+                  </AppDataProvider>
+                </AuthGate>
+              </OverlayProvider>
+            </AuthProvider>
           </SettingsProvider>
         </QueryClientProvider>
       )}

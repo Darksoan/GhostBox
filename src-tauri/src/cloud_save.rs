@@ -62,16 +62,23 @@ fn load_cloud_session(app: &tauri::AppHandle) -> Option<serde_json::Value> {
     serde_json::from_str(&payload).ok()
 }
 
-pub(crate) async fn cloud_authenticate_steam_callback(
+/// Links a Steam OpenID callback to the caller's already-authenticated
+/// GhostBox account, absorbing any legacy Steam-only account's premium
+/// subscription, cloud saves and profile into it. Requires an active
+/// GhostBox session — connecting Steam is a settings action now, not a way
+/// to sign in.
+pub(crate) async fn cloud_claim_steam_callback(
     app: &tauri::AppHandle,
     callback_url: &str,
     profile: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    let token = session_token(app)?;
     let response = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|error| error.to_string())?
-        .post(format!("{}/auth/steam", cloud_api_url()))
+        .post(format!("{}/auth/claim-steam", cloud_api_url()))
+        .bearer_auth(token)
         .json(&serde_json::json!({
             "callbackUrl": callback_url,
             "displayName": text_value(profile.get("displayName")),
@@ -84,12 +91,22 @@ pub(crate) async fn cloud_authenticate_steam_callback(
     let status = response.status();
     let body = response.text().await.map_err(|error| error.to_string())?;
     if !status.is_success() {
-        return Err(format!("Cloud auth failed: {body}"));
+        return Err(format_auth_api_error(&body, status.as_u16()));
     }
-    let session =
+    let claim =
         serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())?;
-    save_cloud_session(app, &session)?;
-    Ok(session)
+
+    // Merge the claimed steamId into the existing GhostBox session instead of
+    // replacing it: claim-steam only links an existing account, it doesn't
+    // issue a new session.
+    if let Some(mut session) = load_cloud_session(app) {
+        if let (Some(object), Some(steam_id)) = (session.as_object_mut(), claim.get("steamId")) {
+            object.insert("steamId".to_string(), steam_id.clone());
+        }
+        save_cloud_session(app, &session)?;
+        return Ok(session);
+    }
+    Ok(claim)
 }
 
 #[tauri::command]
@@ -102,7 +119,7 @@ pub fn cloud_sign_out(app: tauri::AppHandle) -> Result<(), String> {
     remove_data_file(&app, CLOUD_SESSION_FILE)
 }
 
-fn session_token(app: &tauri::AppHandle) -> Result<String, String> {
+pub(crate) fn session_token(app: &tauri::AppHandle) -> Result<String, String> {
     load_cloud_session(app)
         .and_then(|session| {
             session
@@ -111,7 +128,19 @@ fn session_token(app: &tauri::AppHandle) -> Result<String, String> {
                 .map(str::to_string)
         })
         .filter(|token| !token.trim().is_empty())
-        .ok_or_else(|| "Faça login com a Steam antes de usar backup em nuvem.".to_string())
+        .ok_or_else(|| "Faça login antes de usar backup em nuvem.".to_string())
+}
+
+fn firebase_refresh_token(app: &tauri::AppHandle) -> Result<String, String> {
+    load_cloud_session(app)
+        .and_then(|session| {
+            session
+                .get("firebaseRefreshToken")
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+        })
+        .filter(|token| !token.trim().is_empty())
+        .ok_or_else(|| "Sessão inválida. Faça login novamente.".to_string())
 }
 
 fn zip_directory(source: &std::path::Path, destination: &std::path::Path) -> Result<(), String> {
@@ -302,7 +331,7 @@ fn format_cloud_api_error(body: &str, status: u16) -> String {
         return match code {
             "premium_required" => "Backup em nuvem requer GhostBox Premium.".to_string(),
             "unauthorized" | "invalid_token" => {
-                "Sessão de nuvem inválida. Reconecte a Steam.".to_string()
+                "Sessão expirada. Faça login novamente.".to_string()
             }
             "backup_too_large" => "Backup em nuvem excede o limite de 50 MB.".to_string(),
             "empty_backup" => "Nenhum save encontrado para backup em nuvem.".to_string(),
@@ -620,4 +649,205 @@ pub async fn cloud_delete_profile_banner(
         return Err(format_cloud_api_error(&body, status.as_u16()));
     }
     serde_json::from_str(&body).map_err(|error| error.to_string())
+}
+
+fn format_auth_api_error(body: &str, status: u16) -> String {
+    let trimmed = body.trim();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        let code = value
+            .get("error")
+            .and_then(|item| item.as_str())
+            .unwrap_or_default();
+        return match code {
+            "invalid_email" => "E-mail inválido.".to_string(),
+            "invalid_username" => {
+                "Nome de usuário inválido. Use de 3 a 20 letras, números ou _.".to_string()
+            }
+            "weak_password" => "Senha muito curta. Use ao menos 8 caracteres.".to_string(),
+            "username_taken" => "Esse nome de usuário já está em uso.".to_string(),
+            "email_already_registered" => "Já existe uma conta com esse e-mail.".to_string(),
+            "invalid_credentials" => "Usuário/e-mail ou senha incorretos.".to_string(),
+            "too_many_attempts" => {
+                "Muitas tentativas. Aguarde antes de tentar novamente.".to_string()
+            }
+            "account_disabled" => "Esta conta foi desativada.".to_string(),
+            "account_not_found" => "Conta não encontrada.".to_string(),
+            "unauthorized" | "session_expired" | "session_mismatch" => {
+                "Sessão expirada. Faça login novamente.".to_string()
+            }
+            "steam_already_linked" => {
+                "Esta conta Steam já está conectada a outro usuário GhostBox.".to_string()
+            }
+            "invalid_steam_login" => "Não foi possível validar o login da Steam.".to_string(),
+            "missing_refresh_token" => "Sessão inválida. Faça login novamente.".to_string(),
+            other if !other.is_empty() => format!("Erro de autenticação ({other})."),
+            _ => format!("Erro de autenticação (HTTP {status})."),
+        };
+    }
+    if trimmed.is_empty() {
+        format!("Erro de autenticação (HTTP {status}).")
+    } else {
+        trimmed.to_string()
+    }
+}
+
+async fn auth_json_request(request: reqwest::RequestBuilder) -> Result<serde_json::Value, String> {
+    let response = request.send().await.map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(format_auth_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body).map_err(|error| error.to_string())
+}
+
+fn auth_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn cloud_register(
+    app: tauri::AppHandle,
+    email: String,
+    username: String,
+    password: String,
+    display_name: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let session = auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/register", cloud_api_url()))
+            .json(&serde_json::json!({
+                "email": email,
+                "username": username,
+                "password": password,
+                "displayName": display_name,
+            })),
+    )
+    .await?;
+    save_cloud_session(&app, &session)?;
+    Ok(session)
+}
+
+#[tauri::command]
+pub async fn cloud_login(
+    app: tauri::AppHandle,
+    identifier: String,
+    password: String,
+) -> Result<serde_json::Value, String> {
+    let session = auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/login", cloud_api_url()))
+            .json(&serde_json::json!({
+                "identifier": identifier,
+                "password": password,
+            })),
+    )
+    .await?;
+    save_cloud_session(&app, &session)?;
+    Ok(session)
+}
+
+#[tauri::command]
+pub async fn cloud_request_password_reset(identifier: String) -> Result<(), String> {
+    auth_json_request(
+        auth_client(15)?
+            .post(format!("{}/auth/password-reset", cloud_api_url()))
+            .json(&serde_json::json!({ "identifier": identifier })),
+    )
+    .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cloud_resend_verification(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
+    let refresh_token = firebase_refresh_token(&app)?;
+    let result = auth_json_request(
+        auth_client(15)?
+            .post(format!("{}/auth/resend-verification", cloud_api_url()))
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "firebaseRefreshToken": refresh_token })),
+    )
+    .await?;
+
+    if let Some(new_refresh_token) = result.get("firebaseRefreshToken").and_then(|v| v.as_str()) {
+        if let Some(mut session) = load_cloud_session(&app) {
+            if let Some(object) = session.as_object_mut() {
+                object.insert(
+                    "firebaseRefreshToken".to_string(),
+                    serde_json::json!(new_refresh_token),
+                );
+            }
+            let _ = save_cloud_session(&app, &session);
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn cloud_change_password(
+    app: tauri::AppHandle,
+    current_password: String,
+    new_password: String,
+) -> Result<(), String> {
+    let token = session_token(&app)?;
+    auth_json_request(
+        auth_client(15)?
+            .post(format!("{}/auth/change-password", cloud_api_url()))
+            .bearer_auth(token)
+            .json(&serde_json::json!({
+                "currentPassword": current_password,
+                "newPassword": new_password,
+            })),
+    )
+    .await?;
+    Ok(())
+}
+
+/// `Ok(None)` means the worker rejected the session (it is genuinely dead and
+/// the caller should sign out). `Err` means the request never got an answer —
+/// offline, DNS failure, worker down — and the caller must keep the stored
+/// session rather than logging the user out over a network blip.
+#[tauri::command]
+pub async fn cloud_get_account(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let token = session_token(&app)?;
+    let response = auth_client(15)?
+        .get(format!("{}/auth/me", cloud_api_url()))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if status.as_u16() == 401 || status.as_u16() == 404 {
+        return Ok(None);
+    }
+    if !status.is_success() {
+        return Err(format_auth_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body)
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn cloud_disconnect_connection(
+    app: tauri::AppHandle,
+    provider: String,
+) -> Result<(), String> {
+    if provider != "steam" && provider != "discord" {
+        return Err("Conexão inválida.".to_string());
+    }
+    let token = session_token(&app)?;
+    auth_json_request(
+        auth_client(15)?
+            .delete(format!("{}/auth/connections/{}", cloud_api_url(), provider))
+            .bearer_auth(token),
+    )
+    .await?;
+    Ok(())
 }

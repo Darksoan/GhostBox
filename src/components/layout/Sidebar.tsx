@@ -20,6 +20,7 @@ import { useGameContextMenu } from "../../hooks/useGameContextMenu";
 import { preloadGameIconUrls, useGameIconUrl } from "../../hooks/useGameIconUrl";
 import { settingsNavigationTabs, settingsTabLabelKeys, type SettingsTabId } from "../../features/settings/settingsTabsShared";
 import { useSettings } from "../../context/settings";
+import { useAuth } from "../../context/AuthContext";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
 import { ghostboxApi } from "../../lib/ghostboxApi";
@@ -48,7 +49,6 @@ interface SidebarProps {
   activeCollectionId?: string;
   steamProfile: SteamProfile | null;
   isCloudProfileRestoring?: boolean;
-  isSteamSigningIn: boolean;
   favoriteGames: GhostBoxGame[];
   addedLibraryGames: GhostBoxGame[];
   userCollections: UserCollection[];
@@ -56,7 +56,6 @@ interface SidebarProps {
   onBack: () => void;
   onOpenProfile: () => void;
   onOpenGame: (game: GhostBoxGame) => void;
-  onSteamSignIn: () => void;
   onRestartSteam: () => void;
   onCreateCollection: () => void;
   onRemoveFavorite: (game: GhostBoxGame) => void;
@@ -80,7 +79,6 @@ export const Sidebar = memo(function Sidebar({
   activeCollectionId,
   steamProfile,
   isCloudProfileRestoring = false,
-  isSteamSigningIn,
   favoriteGames,
   addedLibraryGames,
   userCollections,
@@ -88,7 +86,6 @@ export const Sidebar = memo(function Sidebar({
   onBack,
   onOpenProfile,
   onOpenGame,
-  onSteamSignIn,
   onRestartSteam,
   onCreateCollection,
   onRemoveFavorite: _onRemoveFavorite,
@@ -220,10 +217,8 @@ export const Sidebar = memo(function Sidebar({
         <SidebarProfile
           profile={steamProfile}
           isCloudProfileRestoring={isCloudProfileRestoring}
-          isSigningIn={isSteamSigningIn}
           isActive={activePage === "profile"}
           onOpenProfile={onOpenProfile}
-          onSignIn={onSteamSignIn}
         />
 
         {!isSettingsPage && (
@@ -527,21 +522,18 @@ const SidebarGameItem = memo(function SidebarGameItem({ game }: SidebarGameItemP
 interface SidebarProfileProps {
   profile: SteamProfile | null;
   isCloudProfileRestoring: boolean;
-  isSigningIn: boolean;
   isActive: boolean;
   onOpenProfile: () => void;
-  onSignIn: () => void;
 }
 
 const SidebarProfile = memo(function SidebarProfile({
   profile,
   isCloudProfileRestoring,
-  isSigningIn,
   isActive,
   onOpenProfile,
-  onSignIn,
 }: SidebarProfileProps) {
   const { appearance } = useSettings();
+  const { account } = useAuth();
   const avatarSources = useCachedImageSources(
     profile?.avatarUrl ? [profile.avatarUrl] : []
   );
@@ -587,15 +579,6 @@ const SidebarProfile = memo(function SidebarProfile({
     };
   }, [profile?.steamId]);
 
-  const handleClick = () => {
-    if (profile) {
-      onOpenProfile();
-      return;
-    }
-
-    onSignIn();
-  };
-
   const levelLabel =
     steamLevel === null
       ? appearance.language === "en"
@@ -610,10 +593,9 @@ const SidebarProfile = memo(function SidebarProfile({
       <button
         type="button"
         className={`sidebar-profile__button ${isActive ? "sidebar-profile__button--active" : ""}`}
-        onClick={handleClick}
+        onClick={onOpenProfile}
         onMouseEnter={() => profile && preloadProfileImages(profile)}
         onFocus={() => profile && preloadProfileImages(profile)}
-        disabled={isSigningIn}
       >
         <div className="sidebar-profile__button-content">
           <span className="sidebar-profile__avatar" aria-hidden="true">
@@ -636,11 +618,7 @@ const SidebarProfile = memo(function SidebarProfile({
           <span className="sidebar-profile__button-information">
             <span className="sidebar-profile__title-row">
               <span className="sidebar-profile__button-title">
-                {profile
-                  ? profile.displayName
-                  : isSigningIn
-                    ? "Entrando..."
-                    : "Entrar com Steam"}
+                {profile?.displayName || account?.displayName || account?.username || ""}
               </span>
               {profile ? (
                 <span

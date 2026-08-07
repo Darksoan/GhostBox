@@ -31,6 +31,7 @@ import { Cup, CupStar } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
 import type { SteamAccountStats, SteamProfile, UserCollection } from "../types";
 import { GameGrid } from "../components/ui/GameCard";
+import { isSteamConnected } from "../lib/steamProfile";
 import {
   ContextMenu,
 } from "../components/ui/ContextMenu";
@@ -57,6 +58,7 @@ import {
   profileBannerPlaceholderSource,
 } from "../utils/image";
 import { useSettings } from "../context/settings";
+import { useAuth } from "../context/AuthContext";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
 import {
@@ -514,7 +516,7 @@ interface ProfilePageProps {
     game: GhostBoxGame,
     achievementId?: string
   ) => void;
-  onSignOut?: () => void;
+  onConnectSteam?: () => void;
   scrollElementRef?: RefObject<HTMLElement | null>;
 }
 
@@ -635,10 +637,11 @@ export function ProfilePage({
   onOpenGame,
   activeSessionAppIds = new Set(),
   onOpenGameAchievements,
-  onSignOut,
+  onConnectSteam,
   scrollElementRef,
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
+  const { account, logout } = useAuth();
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
     useState("overview");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -670,10 +673,9 @@ export function ProfilePage({
   const [isSteamIdVisible, setIsSteamIdVisible] = useState(false);
   const [isSteamIdCopied, setIsSteamIdCopied] = useState(false);
   const steamIdCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(() => {
-    const steamId = steamProfile?.steamId?.trim();
-    return steamId ? ghostboxApi.getCachedDiscordLinkStatus(steamId) : null;
-  });
+  const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(() =>
+    ghostboxApi.getCachedDiscordLinkStatus(),
+  );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
 
   const activeCollectionId =
@@ -1648,19 +1650,14 @@ export function ProfilePage({
   }, [profileImageKey]);
 
   useEffect(() => {
-    const steamId = steamProfile?.steamId?.trim();
-    if (!steamId) {
-      setDiscordLink(null);
-      return;
-    }
     let cancelled = false;
-    const cached = ghostboxApi.getCachedDiscordLinkStatus(steamId);
+    const cached = ghostboxApi.getCachedDiscordLinkStatus();
     if (cached) setDiscordLink(cached);
-    ghostboxApi.getDiscordLinkStatus(steamId).then((status) => {
+    ghostboxApi.getDiscordLinkStatus().then((status) => {
       if (!cancelled) setDiscordLink(status);
     });
     return () => { cancelled = true; };
-  }, [steamProfile?.steamId]);
+  }, []);
 
   useEffect(() => {
     const steamId = steamProfile?.steamId?.trim();
@@ -1753,7 +1750,13 @@ export function ProfilePage({
         transform: `scale(${bannerPosition.scale ?? 1})`,
       };
 
-  if (!steamProfile) return null;
+  // Steam and Discord are optional enhancements, not a gate: the profile is
+  // the GhostBox account's, so it renders on its own and the Steam-derived
+  // parts (level, Steam ID, library, achievements) simply stay out until a
+  // Steam account is connected.
+  const profileDisplayName =
+    steamProfile?.displayName || account?.displayName || account?.username || "";
+  const steamConnected = isSteamConnected(steamProfile);
 
   return (
     <section className="profile-page">
@@ -1794,7 +1797,7 @@ export function ProfilePage({
               ) : avatarSource ? (
                 <img
                   src={avatarSource}
-                  alt={steamProfile.displayName}
+                  alt={profileDisplayName}
                   width={120}
                   height={120}
                   decoding="async"
@@ -1808,33 +1811,35 @@ export function ProfilePage({
             <div className="profile-page__identity-content">
               <div className="profile-page__display-name-row">
                 <h2 className="profile-page__display-name">
-                  {steamProfile.displayName}
+                  {profileDisplayName}
                 </h2>
-                <span
-                  className="profile-page__level"
-                  title={
-                    steamLevel === null
-                      ? appearance.language === "en"
-                        ? "Steam level unavailable"
-                        : "Nível Steam indisponível"
-                      : appearance.language === "en"
-                        ? `Level ${steamLevel}`
-                        : `Nível ${steamLevel}`
-                  }
-                  aria-label={
-                    steamLevel === null
-                      ? appearance.language === "en"
-                        ? "Steam level unavailable"
-                        : "Nível Steam indisponível"
-                      : appearance.language === "en"
-                        ? `Level ${steamLevel}`
-                        : `Nível ${steamLevel}`
-                  }
-                >
-                  <span className="profile-page__level-value">
-                    {steamLevel ?? ""}
+                {steamConnected && (
+                  <span
+                    className="profile-page__level"
+                    title={
+                      steamLevel === null
+                        ? appearance.language === "en"
+                          ? "Steam level unavailable"
+                          : "Nível Steam indisponível"
+                        : appearance.language === "en"
+                          ? `Level ${steamLevel}`
+                          : `Nível ${steamLevel}`
+                    }
+                    aria-label={
+                      steamLevel === null
+                        ? appearance.language === "en"
+                          ? "Steam level unavailable"
+                          : "Nível Steam indisponível"
+                        : appearance.language === "en"
+                          ? `Level ${steamLevel}`
+                          : `Nível ${steamLevel}`
+                    }
+                  >
+                    <span className="profile-page__level-value">
+                      {steamLevel ?? ""}
+                    </span>
                   </span>
-                </span>
+                )}
                 <button
                   type="button"
                   className="profile-page__hero-action"
@@ -1845,44 +1850,55 @@ export function ProfilePage({
                 </button>
               </div>
               <div className="profile-page__steam-id-row">
-                <div className="profile-page__steam-id-box">
-                  <img src={steamIcon} alt="" className="profile-page__steam-id-icon" aria-hidden="true" />
-                  <span
-                    className={`profile-page__steam-id${
-                      isSteamIdVisible
-                        ? " profile-page__steam-id--revealed"
-                        : " profile-page__steam-id--hidden"
-                    }`}
-                    key={isSteamIdVisible ? "visible" : "masked"}
-                  >
-                    {isSteamIdVisible ? steamProfile.steamId : "•••••••••"}
-                  </span>
-                  <button
-                    type="button"
-                    className="profile-page__steam-id-toggle"
-                    onClick={() => setIsSteamIdVisible((v) => !v)}
-                    aria-label={isSteamIdVisible ? t("profile.hideSteamId") : t("profile.showSteamId")}
-                  >
-                    {isSteamIdVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-                  </button>
-                  {isSteamIdVisible && (
+                {steamConnected && steamProfile ? (
+                  <div className="profile-page__steam-id-box">
+                    <img src={steamIcon} alt="" className="profile-page__steam-id-icon" aria-hidden="true" />
+                    <span
+                      className={`profile-page__steam-id${
+                        isSteamIdVisible
+                          ? " profile-page__steam-id--revealed"
+                          : " profile-page__steam-id--hidden"
+                      }`}
+                      key={isSteamIdVisible ? "visible" : "masked"}
+                    >
+                      {isSteamIdVisible ? steamProfile.steamId : "•••••••••"}
+                    </span>
                     <button
                       type="button"
-                      className={`profile-page__steam-id-toggle profile-page__steam-id-copy${
-                        isSteamIdCopied ? " profile-page__steam-id-copy--copied" : ""
-                      }`}
-                      onClick={handleCopySteamId}
-                      aria-label={isSteamIdCopied ? t("profile.steamIdCopied") : t("profile.copySteamId")}
+                      className="profile-page__steam-id-toggle"
+                      onClick={() => setIsSteamIdVisible((v) => !v)}
+                      aria-label={isSteamIdVisible ? t("profile.hideSteamId") : t("profile.showSteamId")}
                     >
-                      <span className="profile-page__steam-id-copy-icon profile-page__steam-id-copy-icon--copy">
-                        <Copy size={14} />
-                      </span>
-                      <span className="profile-page__steam-id-copy-icon profile-page__steam-id-copy-icon--check">
-                        <Check size={14} />
-                      </span>
+                      {isSteamIdVisible ? <Eye size={14} /> : <EyeOff size={14} />}
                     </button>
-                  )}
-                </div>
+                    {isSteamIdVisible && (
+                      <button
+                        type="button"
+                        className={`profile-page__steam-id-toggle profile-page__steam-id-copy${
+                          isSteamIdCopied ? " profile-page__steam-id-copy--copied" : ""
+                        }`}
+                        onClick={handleCopySteamId}
+                        aria-label={isSteamIdCopied ? t("profile.steamIdCopied") : t("profile.copySteamId")}
+                      >
+                        <span className="profile-page__steam-id-copy-icon profile-page__steam-id-copy-icon--copy">
+                          <Copy size={14} />
+                        </span>
+                        <span className="profile-page__steam-id-copy-icon profile-page__steam-id-copy-icon--check">
+                          <Check size={14} />
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                ) : onConnectSteam ? (
+                  <button
+                    type="button"
+                    className="profile-page__connect-chip"
+                    onClick={onConnectSteam}
+                  >
+                    <img src={steamIcon} alt="" className="profile-page__steam-id-icon" aria-hidden="true" />
+                    {appearance.language === "en" ? "Connect Steam" : "Conectar Steam"}
+                  </button>
+                ) : null}
                 {discordLink?.linked && (
                   <div className="profile-page__discord-box">
                     <svg role="img" viewBox="0 -28.5 256 256" className="profile-page__discord-icon" aria-hidden="true">
@@ -1960,21 +1976,18 @@ export function ProfilePage({
                   );
                 })}
               </div>
-              {onSignOut ? (
-                <button
-                  type="button"
-                  className="profile-page__sign-out"
-                  onClick={onSignOut}
-                  aria-label={
-                    appearance.language === "en"
-                      ? "Sign out of Steam"
-                      : "Sair da conta Steam"
-                  }
-                  title={appearance.language === "en" ? "Sign out" : "Sair"}
-                >
-                  <LogOut size={16} strokeWidth={2.15} aria-hidden="true" />
-                </button>
-              ) : null}
+              {/* Signs out of the GhostBox account entirely, back to the
+                  email/password screen — not just the Steam connection.
+                  Unlinking Steam on its own lives in Settings > Connections. */}
+              <button
+                type="button"
+                className="profile-page__sign-out"
+                onClick={() => void logout()}
+                aria-label={t("settings.general.account.signOut")}
+                title={t("settings.general.account.signOut")}
+              >
+                <LogOut size={16} strokeWidth={2.15} aria-hidden="true" />
+              </button>
             </div>
 
           <div className="profile-page__collection-content">

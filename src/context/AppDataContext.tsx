@@ -37,7 +37,11 @@ import {
   haveCollectionGamesChanged,
   rehydrateUserCollectionGames,
 } from "../lib/collectionGames";
-import { formatSteamLoginError, mergeSteamProfile } from "../lib/steamProfile";
+import {
+  formatSteamLoginError,
+  isSteamConnected,
+  mergeSteamProfile,
+} from "../lib/steamProfile";
 import {
   createBackupToastFromRecord,
   getLatestChangedBackupRecord,
@@ -80,6 +84,7 @@ import {
 import { showAchievementDesktopNotification } from "../lib/trayNotifications";
 import { useOverlay } from "./OverlayContext";
 import { useSettings } from "./settings";
+import { useAuth } from "./AuthContext";
 import type { BackupToastPayload } from "../lib/backupNotifications";
 
 type InitialLoadStep =
@@ -276,8 +281,8 @@ interface AppDataContextValue {
   deleteCollection: (collectionId: string) => void;
   createUserCollection: (name: string) => void;
   openCreateUserCollectionModal: () => void;
-  handleSteamSignIn: () => Promise<void>;
-  handleSteamSignOut: () => Promise<void>;
+  handleConnectSteam: () => Promise<void>;
+  handleDisconnectSteam: () => Promise<void>;
   handleRestartSteam: () => Promise<void>;
   handleUpdateProfile: (
     displayName: string,
@@ -304,6 +309,8 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { showToast, setCollectionModalOpen } = useOverlay();
   const { appearance, notifications } = useSettings();
+  const { account } = useAuth();
+  const accountUserId = account?.userId ?? null;
 
   const [favoriteGames, setFavoriteGames] = useState<GhostBoxGame[]>(() =>
     readStoredFavoriteGames(),
@@ -384,7 +391,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   >(() => readStoredProfileHistoryGames());
   const profileHistoryGamesRef = useRef<GhostBoxGame[]>(profileHistoryGames);
   const cloudProfileBootstrappedRef = useRef(false);
-  const cloudProfileRestoredSteamIdRef = useRef<string | null>(null);
+  // The cloud profile is keyed by the GhostBox account, not by Steam, so the
+  // "already restored" marker is the account id. Steam is only a source of
+  // metrics and library data on top of it.
+  const cloudProfileRestoredUserIdRef = useRef<string | null>(null);
+  const accountUserIdRef = useRef<string | null>(accountUserId);
   const cloudProfileFavoriteGameIdsRef = useRef<string[]>([]);
   const [cloudProfileRestoreRetryTick, setCloudProfileRestoreRetryTick] =
     useState(0);
@@ -513,6 +524,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     backupSettingsRef.current = backupSettings;
   }, [backupSettings]);
+
+  useEffect(() => {
+    accountUserIdRef.current = accountUserId;
+  }, [accountUserId]);
 
   useEffect(() => {
     steamProfileRef.current = steamProfile;
@@ -648,13 +663,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const hasPremiumCloudProfileAccess = useCallback(async () => {
-    const profile = steamProfileRef.current;
-    if (!profile?.steamId) return false;
-
     const session = await ghostboxApi.getCloudSession();
     if (!session?.token) return false;
 
-    return ghostboxApi.isPremiumUser(profile.steamId);
+    return ghostboxApi.isPremiumUser();
   }, []);
 
   const pushCloudProfileSnapshot = useCallback(async () => {
@@ -666,8 +678,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cloudProfilePendingUploadRef.current = true;
       return;
     }
+    // Account, not Steam: the worker keys the snapshot by user_id, so an
+    // account with no Steam connected still has a profile worth syncing.
+    if (!accountUserIdRef.current) return;
     const profile = steamProfileRef.current;
-    if (!profile?.steamId) return;
 
     cloudProfileSyncInFlightRef.current = true;
     try {
@@ -676,7 +690,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const updatedAt =
         cloudProfileLocalUpdatedAtRef.current || markCloudProfileLocalUpdated();
       let cloudProfile = profile;
-      if (/^data:/i.test(cloudProfile.avatarUrl || "")) {
+      if (cloudProfile && /^data:/i.test(cloudProfile.avatarUrl || "")) {
         const uploaded = await ghostboxApi.uploadProfileImage(
           cloudProfile.avatarUrl || "",
           "avatar",
@@ -684,7 +698,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (!uploaded) return;
         cloudProfile = { ...cloudProfile, avatarUrl: uploaded };
       }
-      if (/^data:/i.test(cloudProfile.bannerUrl || "")) {
+      if (cloudProfile && /^data:/i.test(cloudProfile.bannerUrl || "")) {
         const uploaded = await ghostboxApi.uploadProfileImage(
           cloudProfile.bannerUrl || "",
           "banner",
@@ -722,7 +736,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       skipCloudProfileUploadCountRef.current -= 1;
       return;
     }
-    if (!steamProfileRef.current?.steamId) return;
+    if (!accountUserIdRef.current) return;
     if (cloudProfileRestoreInFlightRef.current) {
       cloudProfilePendingUploadRef.current = true;
       return;
@@ -739,11 +753,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const restoreCloudProfileFromRemote = useCallback(async (): Promise<boolean> => {
     if (cloudProfileRestoreInFlightRef.current) return false;
-    const currentProfile = steamProfileRef.current;
-    if (!currentProfile?.steamId) {
+    const accountId = accountUserIdRef.current;
+    if (!accountId) {
       setIsCloudProfileRestoring(false);
       return false;
     }
+    const currentProfile = steamProfileRef.current;
 
     cloudProfileRestoreInFlightRef.current = true;
     let shouldFlushPendingUpload = false;
@@ -753,7 +768,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       const remote = await ghostboxApi.getCloudProfileSnapshot();
       if (!remote) {
-        cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+        cloudProfileRestoredUserIdRef.current = accountId;
         cloudProfilePendingUploadRef.current = true;
         shouldFlushPendingUpload = true;
         return true;
@@ -761,7 +776,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       const localUpdatedAt = cloudProfileLocalUpdatedAtRef.current;
       const localHasData =
-        Boolean(currentProfile.bannerUrl) ||
+        Boolean(currentProfile?.bannerUrl) ||
         favoriteGamesRef.current.length > 0 ||
         userCollectionsRef.current.length > 0;
 
@@ -770,11 +785,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         !isCloudSnapshotNewer(remote.updatedAt, localUpdatedAt)
       ) {
         if (isCloudSnapshotNewer(localUpdatedAt, remote.updatedAt)) {
-          cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
           cloudProfilePendingUploadRef.current = true;
           shouldFlushPendingUpload = true;
         }
-        cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+        cloudProfileRestoredUserIdRef.current = accountId;
         return true;
       }
 
@@ -820,7 +834,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cloudProfileLocalUpdatedAtRef.current = remote.updatedAt;
       writeStoredCloudProfileUpdatedAt(remote.updatedAt);
       cloudProfilePendingUploadRef.current = false;
-      cloudProfileRestoredSteamIdRef.current = currentProfile.steamId;
+      cloudProfileRestoredUserIdRef.current = accountId;
       return true;
     } catch {
       return false;
@@ -996,8 +1010,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [scheduleCloudProfileSync, userCollections]);
 
   useEffect(() => {
-    const steamId = steamProfile?.steamId?.trim();
-    if (!steamId) {
+    const userId = accountUserId?.trim();
+    if (!userId) {
       setIsCloudProfileRestoring(false);
       if (cloudProfileRestoreRetryTimerRef.current !== null) {
         window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
@@ -1005,12 +1019,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
-    if (cloudProfileRestoredSteamIdRef.current === steamId) return;
+    if (cloudProfileRestoredUserIdRef.current === userId) return;
     void restoreCloudProfileFromRemote().then((restored) => {
       if (
         restored ||
-        steamProfileRef.current?.steamId !== steamId ||
-        cloudProfileRestoredSteamIdRef.current === steamId
+        accountUserIdRef.current !== userId ||
+        cloudProfileRestoredUserIdRef.current === userId
       ) {
         return;
       }
@@ -1030,7 +1044,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cloudProfileRestoreRetryTimerRef.current = null;
       }
     };
-  }, [cloudProfileRestoreRetryTick, restoreCloudProfileFromRemote, steamProfile?.steamId]);
+  }, [accountUserId, cloudProfileRestoreRetryTick, restoreCloudProfileFromRemote]);
 
   useEffect(() => {
     setUserCollections((current) => {
@@ -1835,24 +1849,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setCollectionModalOpen(true);
   }, [setCollectionModalOpen]);
 
-  const handleSteamSignIn = useCallback(async () => {
+  const handleConnectSteam = useCallback(async () => {
     if (isSteamSigningIn) return;
-    if (steamProfile) {
-      const session = await ghostboxApi.getCloudSession();
-      if (session?.token) return;
-    }
+    // Must test the steamId, not the object: after a cloud-profile restore
+    // there is a profile with an empty steamId, and bailing on that made the
+    // "Connect Steam" button a no-op for account-only users.
+    if (isSteamConnected(steamProfile)) return;
 
     const requestId = ++steamProfileRequestSequenceRef.current;
     setIsSteamSigningIn(true);
     showToast(
       appearance.language === "en" ? "Waiting for Steam" : "Aguardando Steam",
       appearance.language === "en"
-        ? "Complete the login in your browser."
-        : "Conclua o login no navegador aberto.",
+        ? "Complete the connection in your browser."
+        : "Conclua a conexão no navegador aberto.",
     );
 
     try {
-      const profile = await ghostboxApi.signInWithSteam();
+      const profile = await ghostboxApi.connectSteamAccount();
       if (steamProfileRequestSequenceRef.current !== requestId) return;
 
       setIsCloudProfileRestoring(true);
@@ -1862,9 +1876,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       void syncPlaytimesFromSteam(profile?.steamId);
       void restoreCloudProfileFromRemote();
       showToast(
-        appearance.language === "en" ? "Login complete" : "Login concluído",
+        appearance.language === "en" ? "Steam connected" : "Steam conectada",
         appearance.language === "en"
-          ? `Signed in as ${profile.displayName}.`
+          ? `Connected as ${profile.displayName}.`
           : `Conectado como ${profile.displayName}.`,
       );
     } catch (error) {
@@ -1872,8 +1886,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       showToast(
         appearance.language === "en"
-          ? "Steam login failed"
-          : "Login com Steam falhou",
+          ? "Steam connection failed"
+          : "Conexão com a Steam falhou",
         formatSteamLoginError(error, appearance.language),
         "error",
       );
@@ -1891,18 +1905,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     syncPlaytimesFromSteam,
   ]);
 
-  const handleSteamSignOut = useCallback(async () => {
+  // Disconnecting Steam only drops the Steam connection and its local profile
+  // cache — the GhostBox account session stays alive, and so does its cloud
+  // profile. The cloud bookkeeping (updatedAt, restored marker, unresolved
+  // favorites) is account-scoped now and deliberately survives: wiping the
+  // local updatedAt here would let the next upload overwrite the account's
+  // cloud snapshot with the freshly emptied local state. Signing out of the
+  // account is what clears all of it, via clearStoredAccountData().
+  const handleDisconnectSteam = useCallback(async () => {
     ++steamProfileRequestSequenceRef.current;
-    await ghostboxApi.signOutSteam();
-    await ghostboxApi.signOutCloud().catch(() => undefined);
+    await ghostboxApi.disconnectSteamAccount();
     setSteamProfile(null);
     writeStoredSteamProfile(null);
-    writeStoredCloudProfileUpdatedAt(null);
-    cloudProfileLocalUpdatedAtRef.current = null;
-    cloudProfileRestoredSteamIdRef.current = null;
-    cloudProfileFavoriteGameIdsRef.current = [];
-    cloudProfilePendingUploadRef.current = false;
-    skipCloudProfileUploadCountRef.current = 0;
+
+    // Achievement history is pure Steam data. Leaving it behind kept the
+    // profile reporting games, achievements, completion and playtime for an
+    // account that is no longer connected. Favorites, collections and the
+    // scanned local library are the user's own and stay — the Steam stats
+    // merged into them fall away on their own once steamAccountStats is
+    // cleared and addedLibraryGames is rebuilt from the scan.
+    setProfileHistoryGames([]);
+    writeStoredProfileHistoryGames([]);
+    profileHistoryGamesRef.current = [];
+
     if (cloudProfileRestoreRetryTimerRef.current !== null) {
       window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
       cloudProfileRestoreRetryTimerRef.current = null;
@@ -1929,11 +1954,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       bannerUrl: string,
       bannerPosition: NonNullable<SteamProfile["bannerPosition"]>,
     ) => {
-      if (!steamProfile) return;
+      // Steam is optional, and the profile being edited is the GhostBox
+      // account's. With no Steam connected there is nothing to spread from, so
+      // start from an empty shell — bailing out here left the edit and cover
+      // buttons silently dead for account-only users.
+      const currentProfile: SteamProfile = steamProfile ?? {
+        steamId: "",
+        displayName: "",
+        avatarUrl: "",
+        profileUrl: "",
+      };
 
-      const previousBannerUrl = steamProfile.bannerUrl;
+      const previousBannerUrl = currentProfile.bannerUrl;
       const optimisticProfile: SteamProfile = {
-        ...steamProfile,
+        ...currentProfile,
         displayName,
         avatarUrl,
         bannerUrl,
@@ -1978,7 +2012,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
 
       const nextProfile: SteamProfile = {
-        ...steamProfile,
+        ...currentProfile,
         displayName,
         avatarUrl: persistedAvatarUrl,
         bannerUrl: persistedBannerUrl,
@@ -2158,8 +2192,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteCollection,
       createUserCollection,
       openCreateUserCollectionModal,
-      handleSteamSignIn,
-      handleSteamSignOut,
+      handleConnectSteam,
+      handleDisconnectSteam,
       handleRestartSteam,
       handleUpdateProfile,
       setBackupSettings,
@@ -2209,8 +2243,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteCollection,
       createUserCollection,
       openCreateUserCollectionModal,
-      handleSteamSignIn,
-      handleSteamSignOut,
+      handleConnectSteam,
+      handleDisconnectSteam,
       handleRestartSteam,
       handleUpdateProfile,
       handleStartupSettingsChange,

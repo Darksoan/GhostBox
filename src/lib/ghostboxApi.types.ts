@@ -272,7 +272,6 @@ export type SteamPathSelectionResult =
     };
 
 export type DiscordLinkStatus = {
-  steamId: string;
   linked: boolean;
   discordUserId: string | null;
   discordUsername: string | null;
@@ -292,7 +291,8 @@ export type SubscriptionPaymentMethod = {
 };
 
 export type SubscriptionStatusResult = {
-  steamId: string;
+  userId: string;
+  steamId: string | null;
   subscription: {
     status: "free" | "active" | "expired";
     isPremium: boolean;
@@ -314,7 +314,8 @@ export type SubscriptionPayment = {
   id: string;
   checkoutReference: string;
   checkoutId: string | null;
-  steamId: string;
+  steamId: string | null;
+  userId: string | null;
   planId: SubscriptionPlanId;
   amountCents: number;
   currency: string;
@@ -342,15 +343,32 @@ export type SubscriptionPortalResult = {
   customerId?: string;
 };
 
+export type GhostBoxAccount = {
+  userId: string;
+  email: string;
+  username: string;
+  displayName: string | null;
+  emailVerified: boolean;
+};
+
+export type AccountConnection = {
+  provider: "steam" | "discord" | string;
+  providerId: string;
+  metadata: unknown | null;
+  linkedAt: string;
+};
+
+export type AccountMeResult = {
+  account: GhostBoxAccount;
+  subscription: SubscriptionStatusResult["subscription"];
+  connections: AccountConnection[];
+};
+
 export type CloudSessionResult = {
   token: string;
-  user: {
-    steamId: string;
-    displayName: string | null;
-    avatarUrl: string | null;
-    isPremium: boolean;
-  };
-  subscription: SubscriptionStatusResult["subscription"];
+  firebaseRefreshToken: string;
+  account: GhostBoxAccount;
+  steamId?: string | null;
 };
 
 export type CloudSave = {

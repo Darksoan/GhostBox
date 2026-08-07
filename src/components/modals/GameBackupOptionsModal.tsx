@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Cloud, Loader2, Pin, Trash2 } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
-import type { SteamProfile, UserCollection } from "../../types";
+import type { UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
 import { useOverlay } from "../../context/OverlayContext";
 import { ghostboxApi } from "../../lib/ghostboxApi";
@@ -14,7 +14,6 @@ interface BackupOptionsModalProps {
   gameId: string;
   game: GhostBoxGame | null;
   gameTitle: string;
-  steamProfile: SteamProfile | null;
   userCollections: UserCollection[];
   onClose: () => void;
   onAddGameToCollection: (collectionId: string) => void | Promise<void>;
@@ -50,7 +49,6 @@ export function GameBackupOptionsModal({
   gameId,
   game,
   gameTitle,
-  steamProfile,
   userCollections,
   onClose,
   onAddGameToCollection,
@@ -87,7 +85,7 @@ export function GameBackupOptionsModal({
     [gameId, userCollections],
   );
   const collectionCount = currentCollectionIds.size;
-  const showCloudPanel = Boolean(steamProfile?.steamId && game?.appId);
+  const showCloudPanel = Boolean(game?.appId);
 
   useEffect(() => {
     if (!open) return;
@@ -105,7 +103,7 @@ export function GameBackupOptionsModal({
     setCloudStatusReady(false);
     setCloudBusyAction(null);
 
-    if (!steamProfile?.steamId || !game?.appId) {
+    if (!game?.appId) {
       setCloudLoading(false);
       setCloudSaves([]);
       setSelectedCloudSaveId("");
@@ -118,17 +116,14 @@ export function GameBackupOptionsModal({
     setCloudLoading(true);
 
     void Promise.all([
-      ghostboxApi.getSubscriptionStatus(steamProfile.steamId),
+      ghostboxApi.getSubscriptionStatus(),
       ghostboxApi.getCloudSession(),
       ghostboxApi.listCloudSaves(game.appId),
     ])
       .then(([status, session, saves]) => {
         if (cancelled) return;
         setIsPremium(status?.subscription.isPremium === true);
-        setHasCloudSession(
-          session?.user.steamId === steamProfile.steamId &&
-            Boolean(session.token),
-        );
+        setHasCloudSession(Boolean(session?.token));
         setCloudSaves(saves);
         setSelectedCloudSaveId((current) => {
           if (current && saves.some((save) => save.id === current)) return current;
@@ -158,15 +153,15 @@ export function GameBackupOptionsModal({
     return () => {
       cancelled = true;
     };
-  }, [game?.appId, open, steamProfile?.steamId]);
+  }, [game?.appId, open]);
 
   const handleCloudBackup = async () => {
     if (!game || cloudBusyAction) return;
     if (!hasCloudSession) {
       setCloudError(
         copy(
-          "Reconecte a Steam para fazer backup em nuvem neste dispositivo.",
-          "Reconnect Steam to back up to the cloud on this device.",
+          "Faça login novamente para fazer backup em nuvem neste dispositivo.",
+          "Sign in again to back up to the cloud on this device.",
         ),
       );
       return;
@@ -254,8 +249,8 @@ export function GameBackupOptionsModal({
     if (!hasCloudSession) {
       setCloudError(
         copy(
-          "Reconecte a Steam para restaurar backups em nuvem neste dispositivo.",
-          "Reconnect Steam to restore cloud backups on this device.",
+          "Faça login novamente para restaurar backups em nuvem neste dispositivo.",
+          "Sign in again to restore cloud backups on this device.",
         ),
       );
       return;
@@ -306,32 +301,30 @@ export function GameBackupOptionsModal({
     }
   };
 
+  // Cloud saves are keyed by the GhostBox account (user_id) on the worker, so
+  // Steam is irrelevant here — it only feeds profile metrics and the personal
+  // library. The requirements are an account session plus Premium.
   const cloudStatusText = !cloudStatusReady || cloudLoading
     ? copy("Carregando status do backup…", "Loading backup status…")
-    : !steamProfile?.steamId
+    : !isPremium
       ? copy(
-          "Entre com a Steam para vincular backups em nuvem à sua conta.",
-          "Sign in with Steam to link cloud saves to your account.",
+          "Backup em nuvem está disponível para contas Premium.",
+          "Cloud backup is available for Premium accounts.",
         )
-      : !isPremium
+      : !hasCloudSession
         ? copy(
-            "Backup em nuvem está disponível para contas Premium.",
-            "Cloud backup is available for Premium accounts.",
+            "Faça login novamente para ativar o backup em nuvem neste dispositivo.",
+            "Sign in again to activate cloud backup on this device.",
           )
-        : !hasCloudSession
+        : cloudSaves[0]
           ? copy(
-              "Reconecte a Steam para ativar o backup em nuvem neste dispositivo.",
-              "Reconnect Steam to activate cloud backup on this device.",
+              `Último backup: ${formatBackupTimestamp(cloudSaves[0].updatedAt, language)}`,
+              `Latest backup: ${formatBackupTimestamp(cloudSaves[0].updatedAt, language)}`,
             )
-          : cloudSaves[0]
-            ? copy(
-                `Último backup: ${formatBackupTimestamp(cloudSaves[0].updatedAt, language)}`,
-                `Latest backup: ${formatBackupTimestamp(cloudSaves[0].updatedAt, language)}`,
-              )
-            : copy(
-                "Nenhum backup em nuvem ainda.",
-                "No cloud backup yet.",
-              );
+          : copy(
+              "Nenhum backup em nuvem ainda.",
+              "No cloud backup yet.",
+            );
 
   const collectionSummary = !userCollections.length
     ? copy("Crie uma coleção primeiro.", "Create a collection first.")
@@ -462,7 +455,6 @@ export function GameBackupOptionsModal({
                     !cloudStatusReady ||
                     cloudLoading ||
                     cloudBusyAction !== null ||
-                    !steamProfile?.steamId ||
                     !hasCloudSession
                   }
                 >
@@ -481,7 +473,6 @@ export function GameBackupOptionsModal({
                     cloudLoading ||
                     cloudBusyAction !== null ||
                     !selectedCloudSaveId ||
-                    !steamProfile?.steamId ||
                     !hasCloudSession
                   }
                 >

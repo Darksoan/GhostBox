@@ -5,6 +5,19 @@ export function isCustomProfileAvatar(avatarUrl: string) {
   return /^data:image\//i.test(avatarUrl);
 }
 
+/**
+ * The single source of truth for "is Steam linked?".
+ *
+ * A non-null SteamProfile does NOT mean Steam is connected: restoring the
+ * account's cloud profile produces one carrying only the display name, avatar
+ * and banner, with an empty steamId. Truthiness checks on the object made
+ * Settings claim Steam was connected while the profile page offered to
+ * connect it. The steamId is the connection; the object is just the profile.
+ */
+export function isSteamConnected(profile: SteamProfile | null | undefined) {
+  return Boolean(profile?.steamId?.trim());
+}
+
 export function mergeSteamProfile(
   nativeProfile: SteamProfile | null,
   currentProfile: SteamProfile | null

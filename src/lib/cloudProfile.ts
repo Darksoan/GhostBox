@@ -252,18 +252,23 @@ export function applyCloudProfileToLocal(input: {
     };
   }
 
-  const current = input.currentProfile;
-  const steamProfile = current
-    ? {
-        ...current,
-        displayName:
-          expanded.steamProfile.displayName?.trim() || current.displayName,
-        avatarUrl: expanded.steamProfile.avatarUrl ?? "",
-        bannerUrl: expanded.steamProfile.bannerUrl ?? "",
-        bannerPosition:
-          expanded.steamProfile.bannerPosition ?? undefined,
-      }
-    : null;
+  // The cloud profile belongs to the GhostBox account, not to Steam, so a
+  // user with no Steam connected still gets their avatar/banner/display name
+  // back. Returning null here used to drop them on the floor.
+  const current: SteamProfile = input.currentProfile ?? {
+    steamId: "",
+    displayName: "",
+    avatarUrl: "",
+    profileUrl: "",
+  };
+  const steamProfile: SteamProfile = {
+    ...current,
+    displayName:
+      expanded.steamProfile.displayName?.trim() || current.displayName,
+    avatarUrl: expanded.steamProfile.avatarUrl ?? "",
+    bannerUrl: expanded.steamProfile.bannerUrl ?? "",
+    bannerPosition: expanded.steamProfile.bannerPosition ?? undefined,
+  };
 
   const userCollections: UserCollection[] = expanded.userCollections.map(
     (collection) => ({

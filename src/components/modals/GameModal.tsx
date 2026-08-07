@@ -26,7 +26,7 @@ import type {
   GameRequirements,
   SteamAchievement,
 } from "../../data";
-import type { SteamProfile, UserCollection } from "../../types";
+import type { UserCollection } from "../../types";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { mergeGameDetailsPreservingAchievements } from "../../lib/profileHistoryGames";
 import {
@@ -766,7 +766,6 @@ interface GameModalProps {
   isSessionActive?: boolean;
   isFavorite: boolean;
   userCollections: UserCollection[];
-  steamProfile: SteamProfile | null;
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
@@ -796,7 +795,6 @@ export function GameModal({
   isSessionActive = false,
   isFavorite,
   userCollections,
-  steamProfile,
   onClose,
   onQueueGame,
   onRemoveGame,
@@ -1707,7 +1705,6 @@ export function GameModal({
             gameId={displayGame?.id ?? ""}
             game={displayGame}
             gameTitle={displayGame?.title ?? ""}
-            steamProfile={steamProfile}
             userCollections={userCollections}
             onClose={() => setIsBackupOptionsOpen(false)}
             onAddGameToCollection={(collectionId) => {

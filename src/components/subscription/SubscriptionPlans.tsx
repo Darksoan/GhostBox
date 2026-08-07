@@ -175,11 +175,10 @@ export function SubscriptionPlans({
   const { appearance, t } = useSettings();
   const { showToast } = useOverlay();
   const appData = useAppData();
-  const { isSteamSigningIn, handleSteamSignIn } = appData;
   const steamProfile = steamProfileProp ?? appData.steamProfile;
   const [discordLinkStatus, setDiscordLinkStatus] = useState<DiscordLinkStatus | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
-  const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings" && Boolean(steamProfile?.steamId));
+  const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<PaidSubscriptionPlanId>("monthly");
   const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
@@ -191,12 +190,11 @@ export function SubscriptionPlans({
   const isSettingsSurface = surface === "settings";
 
   async function openBillingPortal(flow: SubscriptionPortalFlow) {
-    const steamId = steamProfile?.steamId?.trim();
-    if (!steamId || portalFlow) return;
+    if (portalFlow) return;
 
     setPortalFlow(flow);
     try {
-      const session = await ghostboxApi.createSubscriptionPortalSession(steamId, flow);
+      const session = await ghostboxApi.createSubscriptionPortalSession(flow);
       if (!session?.url) {
         throw new Error(
           copy(
@@ -224,8 +222,8 @@ export function SubscriptionPlans({
     }
   }
 
-  function refreshDiscordLinkStatus(steamId: string) {
-    void ghostboxApi.getDiscordLinkStatus(steamId).then((status) => {
+  function refreshDiscordLinkStatus() {
+    void ghostboxApi.getDiscordLinkStatus().then((status) => {
       setDiscordLinkStatus(status);
     });
   }
@@ -239,10 +237,10 @@ export function SubscriptionPlans({
       });
   }
 
-  function refreshSubscriptionStatus(steamId: string) {
+  function refreshSubscriptionStatus() {
     const requestId = ++subscriptionRequestIdRef.current;
     setSubscriptionLoading(true);
-    void ghostboxApi.getSubscriptionStatus(steamId)
+    void ghostboxApi.getSubscriptionStatus()
       .then((status) => {
         if (requestId !== subscriptionRequestIdRef.current) return;
         setSubscriptionStatus(status);
@@ -256,21 +254,11 @@ export function SubscriptionPlans({
   }
 
   useEffect(() => {
-    const steamId = steamProfile?.steamId;
-    if (!steamId) {
-      subscriptionRequestIdRef.current += 1;
-      setDiscordLinkStatus(null);
-      setSubscriptionStatus(null);
-      setSubscriptionLoading(false);
-      setCloudSaves([]);
-      return;
-    }
-
     setSubscriptionStatus(null);
 
     const refreshSubscriptionData = () => {
-      refreshDiscordLinkStatus(steamId);
-      refreshSubscriptionStatus(steamId);
+      refreshDiscordLinkStatus();
+      refreshSubscriptionStatus();
     };
     refreshSubscriptionData();
 
@@ -281,7 +269,7 @@ export function SubscriptionPlans({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [steamProfile?.steamId, surface]);
+  }, [surface]);
 
   const isPremium = subscriptionStatus?.subscription.isPremium === true;
   const payment = visiblePayment(latestPayment(subscriptionStatus?.latestPayment), subscriptionStatus?.subscription);
@@ -610,12 +598,9 @@ export function SubscriptionPlans({
 
   async function handleSubscribe(planId: SubscriptionPlanId) {
     if (planId === "free") return;
-    if (!steamProfile?.steamId) {
-      void handleSteamSignIn();
-      return;
-    }
     if (!discordLinkStatus?.linked) {
-      void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
+      const discordUrl = await ghostboxApi.getDiscordLinkUrl();
+      if (discordUrl) void ghostboxApi.openExternalUrl(discordUrl);
       showToast(
         t("subscription.discordLink.openedTitle"),
         t("subscription.discordLink.openedMessage")
@@ -624,7 +609,7 @@ export function SubscriptionPlans({
     }
     setCheckoutPlan(planId);
     try {
-      const checkout = await ghostboxApi.createSubscriptionCheckout(steamProfile.steamId, planId);
+      const checkout = await ghostboxApi.createSubscriptionCheckout(planId);
       const payment = checkout?.payment;
       if (payment?.hostedCheckoutUrl) {
         await ghostboxApi.openExternalUrl(payment.hostedCheckoutUrl);
@@ -801,21 +786,17 @@ export function SubscriptionPlans({
                 type="button"
                 className="subscription-plans__discord-action"
                 onClick={() => {
-                  if (!steamProfile?.steamId) {
-                    void handleSteamSignIn();
-                    return;
-                  }
-                  void ghostboxApi.openExternalUrl(ghostboxApi.getDiscordLinkUrl(steamProfile.steamId));
-                  window.setTimeout(() => refreshDiscordLinkStatus(steamProfile.steamId), 3000);
+                  void ghostboxApi.getDiscordLinkUrl().then((url) => {
+                    if (!url) return;
+                    void ghostboxApi.openExternalUrl(url);
+                    window.setTimeout(() => refreshDiscordLinkStatus(), 3000);
+                  });
                 }}
-                disabled={isSteamSigningIn}
               >
-                {steamProfile?.steamId ? <Link size={14} strokeWidth={2.15} aria-hidden="true" /> : <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />}
-                {steamProfile?.steamId
-                  ? discordLinkStatus?.linked
-                    ? t("subscription.discordLink.relink")
-                    : t("subscription.discordLink.link")
-                  : t("subscription.discordLink.signInSteam")}
+                <Link size={14} strokeWidth={2.15} aria-hidden="true" />
+                {discordLinkStatus?.linked
+                  ? t("subscription.discordLink.relink")
+                  : t("subscription.discordLink.link")}
               </button>
               {discordLinkStatus?.linked && (
                 <span className="subscription-plans__discord-status">
