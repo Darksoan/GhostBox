@@ -1138,6 +1138,20 @@ pub fn steam_get_profile(app: tauri::AppHandle) -> Option<serde_json::Value> {
     load_steam_profile(&app)
 }
 
+#[tauri::command]
+pub async fn steam_restore_account(
+    app: tauri::AppHandle,
+    steam_id: String,
+) -> Result<serde_json::Value, String> {
+    let steam_id = steam_id.trim();
+    if steam_id.is_empty() || !steam_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("Steam ID is required".to_string());
+    }
+
+    let profile = fetch_steam_profile(steam_id).await?;
+    save_steam_profile(&app, profile)
+}
+
 /// Layer Steam GetOwnedGames totals into the playtime snapshot. This is
 /// authoritative for any appid it covers — a real Steam license — so it
 /// always overwrites that appid's entry, but it never touches entries for
@@ -1173,7 +1187,11 @@ fn seed_playtimes_from_steam_owned_games(
             entry["lastTimePlayed"] =
                 serde_json::json!(playtime::unix_seconds_to_iso(game.rtime_last_played));
         }
-        snapshot.insert(app_id, entry);
+        let merged = snapshot
+            .get(&app_id)
+            .map(|existing| merge_playtime_entries(existing, &entry))
+            .unwrap_or(entry);
+        snapshot.insert(app_id, merged);
     }
 
     let value = serde_json::Value::Object(snapshot);
@@ -1233,7 +1251,11 @@ fn seed_playtimes_from_steam_local_config(
             entry["lastTimePlayed"] =
                 serde_json::json!(playtime::unix_seconds_to_iso(local.last_played));
         }
-        snapshot.insert(app_id.clone(), entry);
+        let merged = snapshot
+            .get(app_id)
+            .map(|existing| merge_playtime_entries(existing, &entry))
+            .unwrap_or(entry);
+        snapshot.insert(app_id.clone(), merged);
         changed = true;
     }
 
@@ -1694,6 +1716,46 @@ pub async fn steam_connect_account(app: tauri::AppHandle) -> Result<serde_json::
 #[tauri::command]
 pub async fn steam_disconnect_account(app: tauri::AppHandle) -> Result<(), String> {
     let _ = crate::cloud_save::cloud_disconnect_connection(app.clone(), "steam".to_string()).await;
+    remove_data_file(&app, STEAM_PROFILE_FILE)
+}
+
+fn playtime_entry_timestamp(entry: &serde_json::Value) -> i64 {
+    entry
+        .get("lastTimePlayed")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.timestamp_millis())
+        .unwrap_or(0)
+}
+
+fn merge_playtime_entries(
+    existing: &serde_json::Value,
+    incoming: &serde_json::Value,
+) -> serde_json::Value {
+    let existing_time = playtime_entry_timestamp(existing);
+    let incoming_time = playtime_entry_timestamp(incoming);
+    let mut merged = if incoming_time >= existing_time {
+        incoming.clone()
+    } else {
+        existing.clone()
+    };
+
+    let max_playtime = existing
+        .get("playTimeInMilliseconds")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0)
+        .max(
+            incoming
+                .get("playTimeInMilliseconds")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+        );
+    merged["playTimeInMilliseconds"] = serde_json::json!(max_playtime);
+    merged
+}
+
+#[tauri::command]
+pub fn steam_clear_local_profile(app: tauri::AppHandle) -> Result<(), String> {
     remove_data_file(&app, STEAM_PROFILE_FILE)
 }
 

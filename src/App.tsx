@@ -20,6 +20,7 @@ import {
 import { type SettingsTabId } from "./features/settings/settingsTabsShared";
 import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
 import { ingestRemoteGameByAppId, type GhostBoxGame } from "./data";
+import ghostIconSource from "../Icons/ghost-solid.png";
 import "./app.scss";
 
 const PREMIUM_STATUS_REFRESH_MS = 5 * 60 * 1000;
@@ -43,7 +44,7 @@ function AppSplash({ progress }: { progress: number }) {
       role="progressbar"
     >
       <div className="app-splash__content">
-        <img className="app-splash__icon" src="/ghost-solid.png" alt="GhostBox" />
+        <img className="app-splash__icon" src={ghostIconSource} alt="GhostBox" />
         <div
           className="app-splash__spinner"
           style={spinnerStyle}

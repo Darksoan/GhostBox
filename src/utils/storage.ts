@@ -5,11 +5,17 @@ import type {
   SteamAchievement,
 } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
-import type { StartupPage, UserCollection, SteamProfile } from "../types";
+import type {
+  StartupPage,
+  SteamAccountStats,
+  UserCollection,
+  SteamProfile,
+} from "../types";
 import {
   favoriteGamesStorageKey,
   userCollectionsStorageKey,
   steamProfileStorageKey,
+  steamAccountStatsStorageKey,
   cloudProfileUpdatedAtStorageKey,
   startupPageStorageKey,
   profileHistoryGamesStorageKey,
@@ -441,6 +447,37 @@ export function writeStoredProfileHistoryGames(games: GhostBoxGame[]) {
   }
 }
 
+export function readStoredSteamAccountStats(): SteamAccountStats | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(steamAccountStatsStorageKey) ?? "null",
+    ) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const stats = parsed as Partial<SteamAccountStats>;
+    return typeof stats.steamId === "string" && Number.isFinite(stats.fetchedAt)
+      ? (stats as SteamAccountStats)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredSteamAccountStats(stats: SteamAccountStats | null) {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (stats) {
+      window.localStorage.setItem(steamAccountStatsStorageKey, JSON.stringify(stats));
+    } else {
+      window.localStorage.removeItem(steamAccountStatsStorageKey);
+    }
+  } catch {
+    // Cached metrics remain available in memory when localStorage is unavailable.
+  }
+}
+
 export function writeStoredShowSteamGames(value: boolean) {
   if (typeof window === "undefined") return;
 
@@ -731,6 +768,7 @@ export function clearStoredAccountData() {
     favoriteGamesStorageKey,
     userCollectionsStorageKey,
     steamProfileStorageKey,
+    steamAccountStatsStorageKey,
     cloudProfileUpdatedAtStorageKey,
     profileHistoryGamesStorageKey,
     autoRestoredCloudSavesStorageKey,

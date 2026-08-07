@@ -58,6 +58,7 @@ import {
   readStoredProfileHistoryGames,
   readStoredUserCollections,
   readStoredSteamProfile,
+  readStoredSteamAccountStats,
   readStoredStartupPage,
   readStoredCloudProfileUpdatedAt,
   readStoredAutoRestoredCloudSaves,
@@ -66,6 +67,7 @@ import {
   writeStoredProfileHistoryGames,
   writeStoredUserCollections,
   writeStoredSteamProfile,
+  writeStoredSteamAccountStats,
   writeStoredStartupPage,
   writeStoredShowSteamGames,
   writeStoredCloudProfileUpdatedAt,
@@ -309,7 +311,7 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { showToast, setCollectionModalOpen } = useOverlay();
   const { appearance, notifications } = useSettings();
-  const { account } = useAuth();
+  const { account, linkedSteamId } = useAuth();
   const accountUserId = account?.userId ?? null;
 
   const [favoriteGames, setFavoriteGames] = useState<GhostBoxGame[]>(() =>
@@ -359,7 +361,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     writeStoredShowSteamGames(false);
   }, []);
   const [steamAccountStats, setSteamAccountStats] =
-    useState<SteamAccountStats | null>(null);
+    useState<SteamAccountStats | null>(() => readStoredSteamAccountStats());
   const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
   const backupSettingsRef = useRef<BackupSettings | null>(
     defaultBackupSettings,
@@ -437,13 +439,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const refreshSteamOwnedLibraryGames = useCallback(
     async (steamId?: string | null) => {
       const id = steamId?.trim();
-      if (!id) {
-        setSteamAccountStats(null);
-        return;
-      }
+      if (!id) return;
 
       const stats = await ghostboxApi.getSteamAccountStats(id).catch(() => null);
-      if (stats) setSteamAccountStats(stats);
+      if (
+        stats &&
+        (!steamAccountStatsRef.current ||
+          stats.steamId !== steamAccountStatsRef.current.steamId ||
+          stats.fetchedAt >= steamAccountStatsRef.current.fetchedAt)
+      ) {
+        steamAccountStatsRef.current = stats;
+        setSteamAccountStats(stats);
+        writeStoredSteamAccountStats(stats);
+      }
     },
     [],
   );
@@ -531,9 +539,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     steamProfileRef.current = steamProfile;
-    if (!steamProfile?.steamId) {
+    const steamId = steamProfile?.steamId?.trim();
+    if (
+      steamId &&
+      steamAccountStatsRef.current?.steamId !== steamId
+    ) {
       setSteamAccountStats(null);
       steamAccountStatsRef.current = null;
+      writeStoredSteamAccountStats(null);
     }
   }, [steamProfile]);
 
@@ -549,8 +562,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let pollTimer: number | undefined;
     const applyStats = (stats: SteamAccountStats) => {
       if (cancelled) return;
+      const current = steamAccountStatsRef.current;
+      if (
+        current?.steamId === stats.steamId &&
+        current.fetchedAt > stats.fetchedAt
+      ) {
+        return;
+      }
       steamAccountStatsRef.current = stats;
       setSteamAccountStats(stats);
+      writeStoredSteamAccountStats(stats);
     };
 
     const schedulePoll = (
@@ -1129,6 +1150,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [markInitialLoadStepComplete]);
+
+  useEffect(() => {
+    const steamId = linkedSteamId?.trim();
+    if (!steamId) return;
+
+    let cancelled = false;
+    const restoreLinkedAccount = async () => {
+      const current = steamProfileRef.current;
+      if (current?.steamId === steamId) {
+        void syncPlaytimesFromSteam(steamId);
+        return;
+      }
+
+      const requestId = ++steamProfileRequestSequenceRef.current;
+      try {
+        const profile = await ghostboxApi.restoreSteamAccount(steamId);
+        if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
+        steamProfileRef.current = profile;
+        setSteamProfile(profile);
+        writeStoredSteamProfile(profile);
+        void syncPlaytimesFromSteam(steamId);
+      } catch (error) {
+        console.warn("Failed to restore linked Steam account", error);
+      }
+    };
+
+    void restoreLinkedAccount();
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedSteamId, syncPlaytimesFromSteam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1918,15 +1970,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setSteamProfile(null);
     writeStoredSteamProfile(null);
 
-    // Achievement history is pure Steam data. Leaving it behind kept the
-    // profile reporting games, achievements, completion and playtime for an
-    // account that is no longer connected. Favorites, collections and the
-    // scanned local library are the user's own and stay — the Steam stats
-    // merged into them fall away on their own once steamAccountStats is
-    // cleared and addedLibraryGames is rebuilt from the scan.
-    setProfileHistoryGames([]);
-    writeStoredProfileHistoryGames([]);
-    profileHistoryGamesRef.current = [];
+    // Game history and last fetched metrics remain account-scoped and usable
+    // offline. A later Steam connection replaces them only with newer data.
 
     if (cloudProfileRestoreRetryTimerRef.current !== null) {
       window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);

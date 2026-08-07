@@ -870,6 +870,10 @@ export const ghostboxApi = {
     return invokeOr<SteamProfile | null>("steam_get_profile", {}, null);
   },
 
+  restoreSteamAccount(steamId: string): Promise<SteamProfile> {
+    return invoke<SteamProfile>("steam_restore_account", { steamId });
+  },
+
   getSteamAccountStats(steamId: string): Promise<SteamAccountStats | null> {
     return invokeOr<SteamAccountStats | null>(
       "steam_get_account_stats",
@@ -947,7 +951,7 @@ export const ghostboxApi = {
    * user's Steam profile, library, collections and cloud-sync bookkeeping.
    */
   async signOutCloud(): Promise<void> {
-    await invokeOr<void>("steam_disconnect_account", {}, undefined);
+    await invokeOr<void>("steam_clear_local_profile", {}, undefined);
     await invokeOr<void>("cloud_sign_out", {}, undefined);
     clearAccountCaches();
     clearStoredAccountData();

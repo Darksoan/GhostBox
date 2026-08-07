@@ -24,6 +24,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import { isSteamConnected } from "../../lib/steamProfile";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
 import { Grid } from "reicon-react";
 
@@ -620,7 +621,7 @@ const SidebarProfile = memo(function SidebarProfile({
               <span className="sidebar-profile__button-title">
                 {profile?.displayName || account?.displayName || account?.username || ""}
               </span>
-              {profile ? (
+              {isSteamConnected(profile) ? (
                 <span
                   className="sidebar-profile__level"
                   title={levelLabel}

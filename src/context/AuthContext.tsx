@@ -15,6 +15,7 @@ export type AuthStatus = "loading" | "anonymous" | "authenticated";
 interface AuthContextValue {
   status: AuthStatus;
   account: GhostBoxAccount | null;
+  linkedSteamId: string | null;
   register: (
     email: string,
     username: string,
@@ -34,6 +35,21 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [account, setAccount] = useState<GhostBoxAccount | null>(null);
+  const [linkedSteamId, setLinkedSteamId] = useState<string | null>(null);
+
+  const applyAccount = useCallback(
+    (me: Awaited<ReturnType<typeof ghostboxApi.getAccount>>) => {
+      if (!me?.account) return false;
+      setAccount(me.account);
+      setLinkedSteamId(
+        me.connections.find((connection) => connection.provider === "steam")
+          ?.providerId ?? null,
+      );
+      setStatus("authenticated");
+      return true;
+    },
+    [],
+  );
 
   const refreshAccount = useCallback(async () => {
     let me: Awaited<ReturnType<typeof ghostboxApi.getAccount>>;
@@ -45,18 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // of the whole app over a network blip.
       return;
     }
-    if (me?.account) {
-      setAccount(me.account);
-      setStatus("authenticated");
-      return;
-    }
+    if (applyAccount(me)) return;
     // null means the worker itself rejected the token (expired/revoked) —
     // drop it so the gate reverts to the login screen instead of a stuck
     // "authenticated" state pointing at a dead session.
     setAccount(null);
+    setLinkedSteamId(null);
     setStatus("anonymous");
     await ghostboxApi.signOutCloud();
-  }, []);
+  }, [applyAccount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,10 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (cancelled) return;
-      if (me?.account) {
-        setAccount(me.account);
-      } else {
+      if (!applyAccount(me)) {
         setAccount(null);
+        setLinkedSteamId(null);
         setStatus("anonymous");
         await ghostboxApi.signOutCloud();
       }
@@ -90,12 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyAccount]);
 
   const register = useCallback(
     async (email: string, username: string, password: string, displayName?: string) => {
       const session = await ghostboxApi.registerAccount(email, username, password, displayName);
       setAccount(session.account);
+      setLinkedSteamId(null);
       setStatus("authenticated");
     },
     []
@@ -105,13 +118,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const session = await ghostboxApi.loginAccount(identifier, password);
     setAccount(session.account);
     setStatus("authenticated");
-  }, []);
+    try {
+      applyAccount(await ghostboxApi.getAccount());
+    } catch {
+      // Offline login keeps locally persisted Steam data available.
+    }
+  }, [applyAccount]);
 
   const logout = useCallback(async () => {
     // Flip to anonymous first: signOutCloud wipes the account-scoped
     // localStorage, and AppDataProvider (still mounted until the gate closes)
     // has in-flight Steam fetches that would write those keys straight back.
     setAccount(null);
+    setLinkedSteamId(null);
     setStatus("anonymous");
     await ghostboxApi.signOutCloud();
   }, []);
@@ -136,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       account,
+      linkedSteamId,
       register,
       login,
       logout,
@@ -147,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       status,
       account,
+      linkedSteamId,
       register,
       login,
       logout,

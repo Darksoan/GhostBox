@@ -8,6 +8,7 @@ export const searchDebounceMs = 300;
 export const favoriteGamesStorageKey = "ghostbox:favorites:v1";
 export const userCollectionsStorageKey = "ghostbox:user-collections:v1";
 export const steamProfileStorageKey = "ghostbox:steam-profile:v1";
+export const steamAccountStatsStorageKey = "ghostbox:steam-account-stats:v1";
 export const cloudProfileUpdatedAtStorageKey = "ghostbox:cloud-profile-updated-at:v1";
 export const startupPageStorageKey = "ghostbox:startup-page:v1";
 export const imageSourceCacheKey = "ghostbox:image-source-cache:v1";
