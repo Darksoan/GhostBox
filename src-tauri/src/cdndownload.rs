@@ -267,6 +267,48 @@ pub fn cdndownload_cancel_game(app_id: String) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Mantem o indice de validacao de chunks do depot no lugar durante o comando
+/// `downloadDepot` e o recolhe ao fim da iteracao.
+///
+/// E um guard, e nao duas chamadas soltas, porque o laco de depots sai por
+/// varios caminhos — cancelamento, worker morto, erro de depot. O worker grava o
+/// indice num `finally`, entao ele existe em todos esses casos e recolher
+/// tambem precisa acontecer em todos eles.
+struct ChunkIndexGuard<'a> {
+    downloads_root: &'a Path,
+    install_dir: &'a Path,
+    app_id: &'a str,
+    depot_id: u32,
+}
+
+impl<'a> ChunkIndexGuard<'a> {
+    fn new(
+        downloads_root: &'a Path,
+        install_dir: &'a Path,
+        app_id: &'a str,
+        depot_id: u32,
+    ) -> Self {
+        crate::chunk_index::swap_in(downloads_root, install_dir, app_id, depot_id);
+        Self {
+            downloads_root,
+            install_dir,
+            app_id,
+            depot_id,
+        }
+    }
+}
+
+impl Drop for ChunkIndexGuard<'_> {
+    fn drop(&mut self) {
+        crate::chunk_index::swap_out(
+            self.downloads_root,
+            self.install_dir,
+            self.app_id,
+            self.depot_id,
+        );
+    }
+}
+
 /// Barreira do delete: o alvo tem que estar ESTRITAMENTE dentro da raiz de
 /// downloads. Recebe caminhos ja canonicalizados, para que `..` tenha sido
 /// resolvido antes da comparacao.
@@ -301,6 +343,7 @@ pub fn cdndownload_delete_output_dir(
         // Cancelado antes de o destino ser resolvido: nao ha pasta a remover,
         // mas um ACF de tentativa anterior ainda pode estar apontando para nada.
         let _ = crate::steam_appmanifest::remove_appmanifest(root_path, app_id);
+        crate::chunk_index::remove_app_stash(root_path, app_id);
         return Ok(true);
     }
     let output_path = Path::new(output_dir);
@@ -317,6 +360,7 @@ pub fn cdndownload_delete_output_dir(
         // Removida por fora (ou nunca criada): o resultado desejado ja vale.
         // Ainda assim o ACF orfao precisa sair.
         let _ = crate::steam_appmanifest::remove_appmanifest(&canonical_root, app_id);
+        crate::chunk_index::remove_app_stash(&canonical_root, app_id);
         return Ok(true);
     }
     if !output_path.is_dir() {
@@ -329,6 +373,8 @@ pub fn cdndownload_delete_output_dir(
     // Sem os arquivos, o ACF apontaria para uma instalacao inexistente e o Steam
     // mostraria o jogo instalado ate a proxima verificacao.
     let _ = crate::steam_appmanifest::remove_appmanifest(&canonical_root, app_id);
+    // O indice descreve chunks que nao existem mais; guardado, so acumularia.
+    crate::chunk_index::remove_app_stash(&canonical_root, app_id);
     Ok(true)
 }
 
@@ -471,6 +517,11 @@ pub async fn cdndownload_download_game(
 
     let mut completed_depot_bytes = 0u64;
 
+    // Execucao anterior pode ter morrido antes de recolher o indice de chunks.
+    // Ele fica no `install_dir` sem dizer de qual depot e — mas o `ManifestId`
+    // dentro do arquivo diz, e os pares vieram de `resolve_depots`.
+    crate::chunk_index::adopt_orphan(&library_root, &install_path, &app_id, &depots);
+
     for ((depot_id, manifest_id), depot_size) in depots.iter().zip(depot_sizes.iter()) {
         if take_download_cancelled(&app_id) {
             clear_active_download_process(&app_id);
@@ -480,6 +531,12 @@ pub async fn cdndownload_download_game(
                 "AppId": app_id,
             }));
         }
+
+        // O worker le e escreve o indice num caminho fixo dentro do `OutputDir`,
+        // e o indice so vale para um manifest. Com os depots dividindo o mesmo
+        // destino, cada um destruia o do anterior; o guard poe o indice certo
+        // antes do comando e o recolhe ao fim da iteracao, por qualquer saida.
+        let _chunk_index = ChunkIndexGuard::new(&library_root, &install_path, &app_id, *depot_id);
 
         // Destino unico para todos os depots. Depots do mesmo app tem caminhos
         // relativos disjuntos; onde colidem, vence quem grava por ultimo — o

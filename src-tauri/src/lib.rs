@@ -33,6 +33,7 @@ mod backup;
 mod catalogue;
 mod catalogue_cache;
 mod cdndownload;
+mod chunk_index;
 mod cloud_save;
 mod ghostbox_library;
 mod image_cache;
