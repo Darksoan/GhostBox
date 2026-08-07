@@ -1689,7 +1689,7 @@ pub fn steam_sign_out(app: tauri::AppHandle) -> Result<(), String> {
     remove_data_file(&app, STEAM_PROFILE_FILE)
 }
 
-fn parse_vdf_string_value(line: &str, key: &str) -> Option<String> {
+pub(crate) fn parse_vdf_string_value(line: &str, key: &str) -> Option<String> {
     let mut parts = line.split('"').filter(|part| !part.trim().is_empty());
     let found_key = parts.next()?.trim();
     let value = parts.next()?.trim();
@@ -1700,7 +1700,7 @@ fn parse_vdf_string_value(line: &str, key: &str) -> Option<String> {
     }
 }
 
-fn read_steam_library_paths(steam_path: &str) -> Vec<String> {
+pub(crate) fn read_steam_library_paths(steam_path: &str) -> Vec<String> {
     let mut paths = vec![steam_path.to_string()];
     let libraryfolders_path =
         steamapps_path(std::path::Path::new(steam_path)).join("libraryfolders.vdf");

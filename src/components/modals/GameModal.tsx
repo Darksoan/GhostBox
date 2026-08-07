@@ -565,6 +565,7 @@ interface ModalActionsProps {
   game: GhostBoxGame;
   onPlay: (game: GhostBoxGame) => void;
   onRemove: (game: GhostBoxGame) => void;
+  onDownload: (game: GhostBoxGame) => void;
   onQueue: (game: GhostBoxGame) => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onOpenBackupOptions: () => void;
@@ -584,6 +585,7 @@ const ModalActions = memo(function ModalActions({
   game,
   onPlay,
   onRemove,
+  onDownload,
   onQueue,
   onToggleFavorite,
   onOpenBackupOptions,
@@ -621,6 +623,18 @@ const ModalActions = memo(function ModalActions({
                 : language === "en"
                   ? "Play"
                   : "Jogar"}
+          </span>
+        </button>
+      )}
+      {isInstalled && !isDownloaded && (
+        <button
+          type="button"
+          className="button button--primary modal__download-button"
+          onClick={() => onDownload(game)}
+        >
+          <Download size={20} strokeWidth={2.0} />
+          <span className="button__label modal__action-label">
+            {language === "en" ? "Download" : "Baixar"}
           </span>
         </button>
       )}
@@ -756,6 +770,7 @@ interface GameModalProps {
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
+  onDownloadGame: (game: GhostBoxGame) => void | Promise<void>;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onAddGameToCollection: (
     game: GhostBoxGame,
@@ -785,6 +800,7 @@ export function GameModal({
   onClose,
   onQueueGame,
   onRemoveGame,
+  onDownloadGame,
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
@@ -1462,6 +1478,7 @@ export function GameModal({
                   game={displayGame}
                   onPlay={onPlayGame}
                   onRemove={onRemoveGame}
+                  onDownload={onDownloadGame}
                   onQueue={onQueueGame}
                   onToggleFavorite={onToggleFavorite}
                   onOpenBackupOptions={handleOpenBackupOptions}

@@ -3,6 +3,9 @@ import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import type { GhostBoxGame } from "../../data";
+import { enqueueDownload } from "../../lib/downloadManager";
+import { ghostboxApi } from "../../lib/ghostboxApi";
+import { readStoredDownloadsDir, writeStoredDownloadsDir } from "../../utils/storage";
 import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
@@ -205,6 +208,19 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             onAddGameToCollection={appData.addGameToUserCollection}
             onRemoveGameFromCollection={appData.removeGameFromCollection}
             onPlayGame={appData.handlePlayGame}
+            onDownloadGame={async () => {
+              if (!getGameAppId(mergedGame)) return;
+              let downloadsRoot = readStoredDownloadsDir();
+              if (!downloadsRoot) {
+                downloadsRoot = await ghostboxApi.getDefaultDownloadsDir();
+                if (!downloadsRoot) return;
+                writeStoredDownloadsDir(downloadsRoot);
+              }
+              /* O destino final e `<root>\steamapps\common\<installdir>`, e so o
+                 Rust sabe o `installdir` — ele resolve o appinfo e devolve o
+                 caminho no evento `depot-plan`. Aqui so a raiz e conhecida. */
+              enqueueDownload(mergedGame, downloadsRoot);
+            }}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })
             }

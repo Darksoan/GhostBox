@@ -783,6 +783,76 @@ export const ghostboxApi = {
     );
   },
 
+  /**
+   * `downloadsRoot` é a RAIZ escolhida pelo usuário, não o destino final. O Rust
+   * resolve `installdir` no appinfo e monta `<root>\steamapps\common\<installdir>`,
+   * devolvendo o caminho no evento `depot-plan` e no resultado.
+   */
+  downloadDepotGame(
+    appId: string,
+    downloadsRoot: string,
+    gameTitle?: string,
+    steamPath?: string,
+    parallelChunks?: number,
+  ): Promise<Record<string, unknown>> {
+    return invokeOr<Record<string, unknown>>(
+      "cdndownload_download_game",
+      { appId, downloadsRoot, gameTitle, steamPath, parallelChunks },
+      { Type: "error", Message: "Não foi possível iniciar o download." },
+    );
+  },
+
+  cancelDepotGame(appId: string): Promise<boolean> {
+    return invokeOr<boolean>("cdndownload_cancel_game", { appId }, false);
+  },
+
+  deleteDownloadOutputDir(
+    appId: string,
+    downloadsRoot: string,
+    outputDir: string,
+  ): Promise<boolean> {
+    return invoke<boolean>("cdndownload_delete_output_dir", {
+      appId,
+      downloadsRoot,
+      outputDir,
+    });
+  },
+
+  getDefaultDownloadsDir(): Promise<string> {
+    return invokeOr<string>("cdndownload_default_dir", {}, "");
+  },
+
+  async selectDownloadsDir(): Promise<string | null> {
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Selecione a pasta de downloads",
+    });
+
+    return typeof selectedPath === "string" ? selectedPath : null;
+  },
+
+  onDownloadProgress(
+    callback: (payload: Record<string, unknown>) => void,
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<Record<string, unknown>>("download-progress", (event) => {
+      callback(event.payload);
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
   removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",

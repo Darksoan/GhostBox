@@ -52,3 +52,7 @@ src/app.css
 
 # Superpowers brainstorming session mockups (local scratch)
 .superpowers/
+
+# .NET intermediate build cache do sidecar. O binario em bin/Debug/net8.0/ e
+# versionado de proposito (ver sidecars/README.md); obj/ e so cache local.
+sidecars/steamkit-poc/obj/

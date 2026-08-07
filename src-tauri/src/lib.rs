@@ -32,6 +32,7 @@ mod achievement_monitor;
 mod backup;
 mod catalogue;
 mod catalogue_cache;
+mod cdndownload;
 mod cloud_save;
 mod ghostbox_library;
 mod image_cache;
@@ -42,6 +43,8 @@ mod playtime;
 mod settings;
 mod steam;
 mod steam_appcache;
+mod steam_appinfo;
+mod steam_appmanifest;
 mod steam_assets;
 mod steam_localconfig;
 mod subscription;
@@ -1408,6 +1411,10 @@ pub fn run() {
             luatools::luatools_remove_game,
             luatools_bootstrap::luatools_dependencies_status,
             luatools_bootstrap::luatools_dependencies_ensure,
+            cdndownload::cdndownload_download_game,
+            cdndownload::cdndownload_cancel_game,
+            cdndownload::cdndownload_delete_output_dir,
+            cdndownload::cdndownload_default_dir,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
             window_lifecycle::tray_set_library_games,
@@ -1423,6 +1430,7 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                cdndownload::shutdown_download_worker();
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });
