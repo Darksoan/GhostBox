@@ -6,7 +6,6 @@ import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCac
 import { deleteDownloadTaskFiles, type DownloadTask } from "../../lib/downloadManager";
 import { formatBytes } from "../../utils/formatBytes";
 import { layeredImageStyle } from "../../utils/image";
-import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 const emptyImageSources: string[] = [];
 
@@ -141,16 +140,6 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
             </span>
             <h3 id="download-details-title">{task.title}</h3>
           </div>
-          <button
-            type="button"
-            className="download-details-modal__close"
-            onClick={onClose}
-            aria-label={t("downloads.details.close")}
-            disabled={deleting || confirmOpen}
-            autoFocus
-          >
-            <ModalCloseIcon />
-          </button>
         </header>
 
         <div className="download-details-modal__content">
@@ -195,6 +184,15 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
         </div>
 
         <footer className="download-details-modal__actions">
+          <button
+            type="button"
+            className="button button--outline"
+            onClick={onClose}
+            disabled={deleting}
+            autoFocus
+          >
+            {t("downloads.details.close")}
+          </button>
           <button
             type="button"
             className="button download-details-modal__danger"
