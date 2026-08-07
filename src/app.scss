@@ -3065,6 +3065,22 @@ p {
   overflow: hidden;
 }
 
+/* Segunda leva de pills (categorias que sobraram de `.home-category-card__genres`),
+   fixa em grade 2x2 — duas colunas, altura fechada de 2 pills. */
+.home-category-card__tags {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: var(--pill-height);
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  overflow: hidden;
+
+  .home-category-card__genre {
+    width: 100%;
+  }
+}
+
 /* `flex: 0 0 auto` mantém a largura natural para a pill quebrar limpa para a
    linha de baixo. Rótulo longo demais é contido por `max-width` + reticências. */
 .home-category-card__genre {
@@ -7857,7 +7873,7 @@ input[type="search"]::-ms-reveal {
   }
 
   &--completed &__meta-item:first-child {
-    color: var(--text-primary);
+    color: var(--success);
   }
 
   &--error &__meta-item:first-child {

@@ -145,16 +145,6 @@ function DownloadCard({
             : "",
         ]
   ).filter(Boolean);
-  const steamNotice =
-    task.status !== "completed"
-      ? ""
-      : task.steamIntegration?.status === "library-not-registered"
-        ? (task.steamIntegration.message ?? t("downloads.steam.steamRunning"))
-        : task.steamIntegration?.status === "manifest-failed"
-          ? (task.steamIntegration.message ?? t("downloads.steam.manifestFailed"))
-          : task.steamIntegration?.requiresSteamRestart
-            ? t("downloads.steam.restartRequired")
-            : "";
   const canPause = task.status === "downloading" || task.status === "queued";
   const canResume = task.status === "paused";
   const canCancel = task.status === "downloading" || task.status === "queued" || task.status === "paused";
@@ -278,13 +268,6 @@ function DownloadCard({
           <span className="download-card__error">
             {task.errorMessage ?? t("downloads.genericError")}
           </span>
-        ) : null}
-
-        {/* Baixou, mas a Steam ainda não vê a instalação — o motivo mais comum
-            é o cliente estar aberto na hora de registrar a biblioteca. Sem esse
-            aviso o download parece concluído e o jogo simplesmente não aparece. */}
-        {steamNotice ? (
-          <span className="download-card__error">{steamNotice}</span>
         ) : null}
       </div>
 

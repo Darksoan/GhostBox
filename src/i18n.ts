@@ -100,12 +100,6 @@ const translations: Record<Language, TranslationTree> = {
         writingManifest: "Registrando na Steam",
         registeringLibrary: "Registrando biblioteca",
       },
-      steam: {
-        restartRequired: "Reinicie a Steam para o jogo aparecer como instalado.",
-        steamRunning:
-          "Feche a Steam e baixe de novo para concluir o registro da biblioteca.",
-        manifestFailed: "Os arquivos foram baixados, mas a Steam ainda não reconhece a instalação.",
-      },
     },
     loading: {
       catalogue: "Carregando catálogo",
@@ -544,11 +538,6 @@ const translations: Record<Language, TranslationTree> = {
         copyingDepotcache: "Copying manifests",
         writingManifest: "Registering with Steam",
         registeringLibrary: "Registering library",
-      },
-      steam: {
-        restartRequired: "Restart Steam for the game to show as installed.",
-        steamRunning: "Close Steam and download again to finish registering the library.",
-        manifestFailed: "Files downloaded, but Steam does not recognise the install yet.",
       },
     },
     loading: {
