@@ -7952,10 +7952,11 @@ input[type="search"]::-ms-reveal {
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-lg);
-  /* Painel (#1a1a1a), não o teto de modal (#252525): o hero ocupa metade da
-     altura, e uma moldura clara em volta da arte lia como passe-partout. Mais
-     escuro, a arte é o objeto e a caixa some. */
-  background: var(--surface-panel);
+  /* Fundo (#151515), não superfície: o hero ocupa metade da altura e uma
+     moldura clara em volta da arte lia como passe-partout. Um degrau abaixo do
+     painel também abre espaço para os blocos internos SUBIREM, em vez de
+     afundarem contra o teto da rampa. */
+  background: var(--surface-modal-canvas);
   color: var(--text-primary);
 
   &__hero {
@@ -7994,14 +7995,14 @@ input[type="search"]::-ms-reveal {
     background:
       linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--surface-panel) 55%, transparent) 0%,
+        color-mix(in srgb, var(--surface-modal-canvas) 55%, transparent) 0%,
         transparent 34%
       ),
       linear-gradient(
         to bottom,
         transparent 40%,
-        color-mix(in srgb, var(--surface-panel) 86%, transparent) 80%,
-        var(--surface-panel) 100%
+        color-mix(in srgb, var(--surface-modal-canvas) 86%, transparent) 80%,
+        var(--surface-modal-canvas) 100%
       );
   }
 
@@ -8114,9 +8115,9 @@ input[type="search"]::-ms-reveal {
       gap: var(--space-3);
       padding: var(--space-6);
       border-radius: var(--radius-md);
-      /* Piso da rampa sobre o painel: sem borda, é o degrau de superfície que
-         desenha o recuo. `--surface-option` empatava com o corpo novo. */
-      background: var(--surface-canvas);
+      /* Sobem sobre o fundo do modal: sem borda, o degrau de superfície é o
+         que separa o bloco do corpo. */
+      background: var(--surface-raised);
     }
 
     dt {
@@ -8142,7 +8143,7 @@ input[type="search"]::-ms-reveal {
     min-width: 0;
     padding: var(--space-6);
     border-radius: var(--radius-md);
-    background: var(--surface-canvas);
+    background: var(--surface-raised);
 
     span {
       color: var(--text-secondary);
@@ -8176,10 +8177,13 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-4);
     padding: 0 var(--space-9) var(--space-9);
 
-    /* Só o botão do rodapé afunda: `__danger` também veste o confirmar do
-       diálogo aninhado, que fica sobre `--surface-modal` e já tem contraste. */
+    /* Só o botão do rodapé: `__danger` também veste o confirmar do diálogo
+       aninhado, que fica sobre `--surface-modal` e já tem contraste próprio.
+       Aqui o repouso acompanha os demais blocos, e o hover precisa SUBIR — o
+       hover padrão de conteúdo afunda para #151515, que é o corpo deste modal,
+       e o botão sumiria justo ao ser apontado. */
     .download-details-modal__danger {
-      background: var(--surface-canvas);
+      background: var(--surface-raised);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {

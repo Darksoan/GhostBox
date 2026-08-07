@@ -72,6 +72,11 @@
   // não era múltiplo desta altura, deixando folga morta e vazando meia linha.
   --pill-height: 26px;
   --surface-modal: var(--n-4);
+  // Modal cujo corpo é fundo, não superfície: os blocos internos é que sobem
+  // para --surface-raised. Um degrau abaixo do painel para que essa subida
+  // exista sem estourar o teto da rampa. Usado quando o modal é dominado por
+  // arte e a moldura precisa sumir (detalhes de download).
+  --surface-modal-canvas: var(--n-1);
   // Dropdown da aba Perfil (ordenação da atividade): fundo próprio, quase preto.
   --profile-dropdown-surface: var(--n-1);
   --profile-dropdown-surface-hover: var(--n-3);
