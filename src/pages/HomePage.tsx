@@ -138,6 +138,9 @@ const homeCarouselGroupSize = 4;
 // sobravam dependia do comprimento das strings, então dois cards vizinhos
 // nunca batiam.
 const homeMetadataCategoryLimit = 3;
+// Segunda leva de pills (uma linha com 2), só usada nos cards de "Top rated" —
+// continua a lista de categorias de onde a primeira parou.
+const homeSecondaryPillLimit = 2;
 const homeRecommendedHeroPreloadLimit = 8;
 // Cards de recomendados visíveis por vez. Também é o piso para as setas
 // aparecerem: com pool menor ou igual a isto não há o que rolar.
@@ -486,14 +489,14 @@ async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>())
   return getUniquePersonalCalendarPool(games);
 }
 
-function getHomeMetadataCategories(game: GhostBoxGame) {
+function getHomeMetadataCategoryPool(game: GhostBoxGame) {
   return Array.from(
     new Set(
       [...game.genres, ...game.tags]
         .map(normalizeHomeCategory)
         .filter(Boolean)
     )
-  ).slice(0, homeMetadataCategoryLimit);
+  );
 }
 
 function HomeCategoryCard({
@@ -502,6 +505,7 @@ function HomeCategoryCard({
   showMetadata = false,
   showSummary = false,
   showTitle = false,
+  showSecondaryPills = false,
   language = "pt",
   onOpenGame,
   onGameContextMenu,
@@ -511,6 +515,7 @@ function HomeCategoryCard({
   showMetadata?: boolean;
   showSummary?: boolean;
   showTitle?: boolean;
+  showSecondaryPills?: boolean;
   language?: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
@@ -534,7 +539,17 @@ function HomeCategoryCard({
     : coverSource
       ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
       : fallbackCoverSources;
-  const metadataCategories = getHomeMetadataCategories(game);
+  const metadataCategoryPool = getHomeMetadataCategoryPool(game);
+  const metadataCategories = metadataCategoryPool.slice(
+    0,
+    homeMetadataCategoryLimit
+  );
+  const secondaryCategories = showSecondaryPills
+    ? metadataCategoryPool.slice(
+        homeMetadataCategoryLimit,
+        homeMetadataCategoryLimit + homeSecondaryPillLimit
+      )
+    : [];
   const coverImageSize = variant === "portrait" ? "auto 100%" : "100% 100%";
   const hoverCoverImageSize = showMetadata
     ? coverImageSize
@@ -599,6 +614,15 @@ function HomeCategoryCard({
                 </span>
               ))}
             </span>
+            {showSecondaryPills && secondaryCategories.length > 0 ? (
+              <span className="home-category-card__tags">
+                {secondaryCategories.map((category) => (
+                  <span className="home-category-card__genre" key={category}>
+                    {category}
+                  </span>
+                ))}
+              </span>
+            ) : null}
           </span>
         </span>
       ) : null}
@@ -614,6 +638,7 @@ function HomeCategorySection({
   maxGames = 3,
   showMetadata = false,
   showTitle = false,
+  showSecondaryPills = false,
   onOpenGame,
   onGameContextMenu,
 }: {
@@ -624,6 +649,7 @@ function HomeCategorySection({
   maxGames?: number;
   showMetadata?: boolean;
   showTitle?: boolean;
+  showSecondaryPills?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -645,6 +671,7 @@ function HomeCategorySection({
               variant={variant}
               showMetadata={showMetadata}
               showTitle={showTitle}
+              showSecondaryPills={showSecondaryPills}
               onOpenGame={onOpenGame}
               onGameContextMenu={onGameContextMenu}
             />
@@ -2131,7 +2158,7 @@ export function HomePage({
         variant="tile"
         maxGames={6}
         showMetadata
-        showTitle
+        showSecondaryPills
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

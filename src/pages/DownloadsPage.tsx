@@ -1,11 +1,11 @@
-import { Pause, Play, X } from "lucide-react";
+import { FolderOpen, LoaderCircle, Pause, Play, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { DownloadDetailsModal } from "../components/modals/DownloadDetailsModal";
+import { useOverlay } from "../context/OverlayContext";
 import { useSettings } from "../context/settings";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import {
-  clearFinishedDownloadTasks,
   downloadTasksChangedEvent,
   pauseDownloadTask,
   readDownloadTasks,
@@ -13,10 +13,12 @@ import {
   resumeDownloadTask,
   type DownloadTask,
 } from "../lib/downloadManager";
+import { ghostboxApi } from "../lib/ghostboxApi";
 import { formatBytes, formatSpeed } from "../utils/formatBytes";
 import { layeredImageStyle } from "../utils/image";
 
 const emptyImageSources: string[] = [];
+const minLaunchSpinnerMs = 700;
 
 const statusRank: Record<DownloadTask["status"], number> = {
   downloading: 0,
@@ -75,12 +77,20 @@ function DownloadCard({
   onPause,
   onResume,
   onOpen,
+  onOpenFolder,
+  onUninstall,
+  onLaunch,
+  launching,
 }: {
   task: DownloadTask;
   queuePosition: number | null;
   onPause: (id: string) => void;
   onResume: (id: string) => void;
   onOpen: (id: string) => void;
+  onOpenFolder: (task: DownloadTask) => void;
+  onUninstall: (id: string) => void;
+  onLaunch: (task: DownloadTask) => void;
+  launching: boolean;
 }) {
   const { appearance, t } = useSettings();
   const progressPercent =
@@ -102,9 +112,9 @@ function DownloadCard({
         ? t("downloads.statusDownloading")
         : task.status === "paused"
           ? t("downloads.statusPaused")
-          : task.status === "completed"
-            ? t("downloads.statusCompleted")
-            : t("downloads.statusError");
+          : task.status === "error"
+            ? t("downloads.statusError")
+            : "";
   const downloadedAt = formatDownloadTimestamp(task.startedAt ?? task.queuedAt, appearance.language);
   // Retomar passa por "queued" antes de "downloading", então os três estados precisam
   // do mesmo esqueleto: sem isso a linha de progresso pisca a cada pause/resume.
@@ -134,7 +144,7 @@ function DownloadCard({
           showsLiveSpeed ? formatSpeed(task.speedBytesPerSecond) : "",
         ]
       : [
-          statusLabel,
+          task.status === "error" ? statusLabel : "",
           task.status === "completed"
             ? t("downloads.totalDownloaded", {
                 size: formatBytes(task.totalBytesDownloaded ?? 0),
@@ -235,12 +245,65 @@ function DownloadCard({
       </span>
 
       <div className="download-card__content">
-        {/* Só aparece com o download terminado: durante o progresso a barra
-            ocupa esse espaço e a data ainda não interessa. Ancorada no card
-            (o `__content` não é `relative`), então vai para o canto superior
-            direito sem que a largura do título a desloque. */}
+        {/* Após o download, data e atalhos ocupam juntos o canto direito. */}
         {showsProgress ? null : (
-          <span className="download-card__date">{downloadedAt}</span>
+          <div className="download-card__finished">
+            <span className="download-card__date">{downloadedAt}</span>
+            {task.status === "completed" ? (
+              <span className="download-card__quick-actions">
+                <span className="download-card__quick-action-wrap">
+                  <button
+                    type="button"
+                    className="download-card__quick-action"
+                    onClick={() => onOpenFolder(task)}
+                    aria-label={t("downloads.openFolder")}
+                  >
+                    <FolderOpen size={15} strokeWidth={2} />
+                  </button>
+                  <span className="download-card__quick-action-tooltip" role="tooltip">
+                    {t("downloads.openFolder")}
+                  </span>
+                </span>
+                <span className="download-card__quick-action-wrap">
+                  <button
+                    type="button"
+                    className="download-card__quick-action download-card__quick-action--danger"
+                    onClick={() => onUninstall(task.id)}
+                    aria-label={t("downloads.uninstall")}
+                  >
+                    <Trash2 size={15} strokeWidth={2} />
+                  </button>
+                  <span className="download-card__quick-action-tooltip" role="tooltip">
+                    {t("downloads.uninstall")}
+                  </span>
+                </span>
+                <span className="download-card__quick-action-wrap">
+                  <button
+                    type="button"
+                    className="download-card__quick-action"
+                    onClick={() => onLaunch(task)}
+                    disabled={launching}
+                    aria-busy={launching}
+                    aria-label={t("downloads.launch")}
+                  >
+                    {launching ? (
+                      <LoaderCircle
+                        className="download-card__launch-spinner"
+                        size={15}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Play size={15} strokeWidth={2} />
+                    )}
+                  </button>
+                  <span className="download-card__quick-action-tooltip" role="tooltip">
+                    {t("downloads.launch")}
+                  </span>
+                </span>
+              </span>
+            ) : null}
+          </div>
         )}
 
         <strong className="download-card__title">{task.title}</strong>
@@ -279,8 +342,11 @@ function DownloadCard({
 
 export function DownloadsPage() {
   const { t } = useSettings();
+  const { showToast } = useOverlay();
   const [tasks, setTasks] = useState<DownloadTask[]>(() => readDownloadTasks());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [confirmDeleteOnOpen, setConfirmDeleteOnOpen] = useState(false);
+  const [launchingTaskId, setLaunchingTaskId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     setTasks(readDownloadTasks());
@@ -292,11 +358,52 @@ export function DownloadsPage() {
     return () => window.removeEventListener(downloadTasksChangedEvent, refresh);
   }, [refresh]);
 
+  const openDetails = useCallback((id: string) => {
+    setConfirmDeleteOnOpen(false);
+    setSelectedTaskId(id);
+  }, []);
+
+  const openUninstall = useCallback((id: string) => {
+    setConfirmDeleteOnOpen(true);
+    setSelectedTaskId(id);
+  }, []);
+
+  const closeDetails = useCallback(() => {
+    setSelectedTaskId(null);
+    setConfirmDeleteOnOpen(false);
+  }, []);
+
+  const openDownloadFolder = useCallback(async (task: DownloadTask) => {
+    try {
+      await ghostboxApi.revealDownloadFolder(task.outputDir);
+    } catch {
+      showToast(t("downloads.openFolder"), t("downloads.openFolderError"), "error");
+    }
+  }, [showToast, t]);
+
+  const launchDownload = useCallback(async (task: DownloadTask) => {
+    if (launchingTaskId) return;
+    setLaunchingTaskId(task.id);
+    try {
+      await Promise.all([
+        ghostboxApi.launchDownloadedGame(
+          task.appId,
+          task.title,
+          task.downloadsRoot,
+          task.outputDir,
+          task.installDir,
+        ),
+        new Promise((resolve) => window.setTimeout(resolve, minLaunchSpinnerMs)),
+      ]);
+    } catch {
+      showToast(t("downloads.launch"), t("downloads.launchError"), "error");
+    } finally {
+      setLaunchingTaskId(null);
+    }
+  }, [launchingTaskId, showToast, t]);
+
   const sortedTasks = sortTasks(tasks);
   const queuedTasks = sortedTasks.filter((task) => task.status === "queued");
-  const hasFinishedTasks = tasks.some(
-    (task) => task.status === "completed" || task.status === "error",
-  );
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
 
   return (
@@ -314,7 +421,11 @@ export function DownloadsPage() {
               }
               onPause={pauseDownloadTask}
               onResume={resumeDownloadTask}
-              onOpen={setSelectedTaskId}
+              onOpen={openDetails}
+              onOpenFolder={(task) => void openDownloadFolder(task)}
+              onUninstall={openUninstall}
+              onLaunch={(task) => void launchDownload(task)}
+              launching={launchingTaskId === task.id}
             />
           ))}
         </div>
@@ -325,19 +436,12 @@ export function DownloadsPage() {
         />
       )}
 
-      {hasFinishedTasks && (
-        <div className="downloads-page__footer">
-          <button
-            type="button"
-            className="downloads-page__clear"
-            onClick={() => clearFinishedDownloadTasks()}
-          >
-            {t("downloads.clear")}
-          </button>
-        </div>
-      )}
-
-      <DownloadDetailsModal task={selectedTask} onClose={() => setSelectedTaskId(null)} />
+      <DownloadDetailsModal
+        task={selectedTask}
+        onClose={closeDetails}
+        confirmDeleteOnOpen={confirmDeleteOnOpen}
+        confirmationOnly={confirmDeleteOnOpen}
+      />
     </section>
   );
 }

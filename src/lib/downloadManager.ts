@@ -651,12 +651,6 @@ export function cancelDownloadTask(id: string) {
   void deleteDownloadTaskFiles(id).catch(() => undefined);
 }
 
-export function clearFinishedDownloadTasks() {
-  ensureLiveTasksHydrated();
-  writeHistoryTasks([]);
-  notifyChanged(true);
-}
-
 function eventAppId(payload: Record<string, unknown>): string {
   return typeof payload.AppId === "string" ? payload.AppId : String(payload.AppId ?? "");
 }

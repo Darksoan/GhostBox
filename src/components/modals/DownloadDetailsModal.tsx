@@ -1,4 +1,4 @@
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSettings } from "../../context/settings";
@@ -64,9 +64,16 @@ function taskProgressPercent(task: DownloadTask): number {
 interface DownloadDetailsModalProps {
   task: DownloadTask | null;
   onClose: () => void;
+  confirmDeleteOnOpen?: boolean;
+  confirmationOnly?: boolean;
 }
 
-export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProps) {
+export function DownloadDetailsModal({
+  task,
+  onClose,
+  confirmDeleteOnOpen = false,
+  confirmationOnly = false,
+}: DownloadDetailsModalProps) {
   const { appearance, t } = useSettings();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -86,15 +93,23 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
   );
 
   useEffect(() => {
+    setConfirmOpen(Boolean(task && confirmDeleteOnOpen));
+    setError("");
+  }, [confirmDeleteOnOpen, task?.id]);
+
+  useEffect(() => {
     if (!task) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || deleting) return;
-      if (confirmOpen) setConfirmOpen(false);
+      if (confirmOpen) {
+        setConfirmOpen(false);
+        if (confirmationOnly) onClose();
+      }
       else onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [confirmOpen, deleting, onClose, task]);
+  }, [confirmOpen, confirmationOnly, deleting, onClose, task]);
 
   if (!task || typeof document === "undefined") return null;
 
@@ -108,14 +123,55 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
     setError("");
     try {
       await deleteDownloadTaskFiles(task.id);
+      setConfirmOpen(false);
       onClose();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : t("downloads.details.deleteError"));
-      setConfirmOpen(false);
+      if (!confirmationOnly) setConfirmOpen(false);
     } finally {
       setDeleting(false);
     }
   };
+
+  const closeConfirmation = () => {
+    setConfirmOpen(false);
+    if (confirmationOnly) onClose();
+  };
+
+  const confirmationModal = (
+    <section
+      className="confirm-modal"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="download-delete-confirm-title"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <header className="confirm-modal__header">
+        <h3 id="download-delete-confirm-title">{actionLabel}</h3>
+      </header>
+      <div className="confirm-modal__content">
+        <p>{t("downloads.details.confirmDelete", { title: task.title })}</p>
+        {error && <p className="download-details-modal__error" role="alert">{error}</p>}
+      </div>
+      <div className="confirm-modal__actions">
+        <button type="button" className="button button--outline" onClick={closeConfirmation} disabled={deleting} autoFocus>
+          {t("downloads.details.keepFiles")}
+        </button>
+        <button type="button" className="button download-details-modal__danger confirm-modal__confirm" onClick={() => void handleDelete()} disabled={deleting}>
+          {deleting ? t("downloads.details.removing") : actionLabel}
+        </button>
+      </div>
+    </section>
+  );
+
+  if (confirmationOnly) {
+    return createPortal(
+      <div className="backdrop backdrop--download-details" onClick={deleting ? undefined : onClose}>
+        {confirmOpen ? confirmationModal : null}
+      </div>,
+      document.body,
+    );
+  }
 
   return createPortal(
     <div className="backdrop backdrop--download-details" onClick={deleting ? undefined : onClose}>
@@ -206,29 +262,7 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
 
         {confirmOpen && (
           <div className="download-details-modal__confirm-backdrop" onClick={deleting ? undefined : () => setConfirmOpen(false)}>
-            <section
-              className="confirm-modal"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="download-delete-confirm-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="confirm-modal__header">
-                <h3 id="download-delete-confirm-title">{actionLabel}</h3>
-                <AlertTriangle size={19} aria-hidden="true" />
-              </header>
-              <div className="confirm-modal__content">
-                <p>{t("downloads.details.confirmDelete", { title: task.title })}</p>
-              </div>
-              <div className="confirm-modal__actions">
-                <button type="button" className="button button--outline" onClick={() => setConfirmOpen(false)} disabled={deleting} autoFocus>
-                  {t("downloads.details.keepFiles")}
-                </button>
-                <button type="button" className="button download-details-modal__danger confirm-modal__confirm" onClick={() => void handleDelete()} disabled={deleting}>
-                  {deleting ? t("downloads.details.removing") : actionLabel}
-                </button>
-              </div>
-            </section>
+            {confirmationModal}
           </div>
         )}
       </section>

@@ -2403,14 +2403,16 @@ p {
   font-weight: var(--weight-medium);
   text-align: center;
   background: var(--surface-option);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   transition:
     color var(--motion-fast) ease,
     opacity var(--motion-fast) ease,
     background var(--motion-fast) ease;
 
-  &:hover {
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
     background: var(--surface-option-hover);
+    color: var(--text-primary);
   }
 
   &:active {
@@ -2434,7 +2436,6 @@ p {
 
   &--primary {
     background: var(--surface-option);
-    color: var(--text-primary);
 
     &:hover {
       background: var(--surface-option-hover);
@@ -2451,7 +2452,6 @@ p {
 
   &--dark {
     background: var(--surface-option);
-    color: var(--text-primary);
 
     &:hover {
       background: var(--surface-option-hover);
@@ -2460,7 +2460,6 @@ p {
 
   &--save {
     background: var(--surface-option);
-    color: var(--text-primary);
 
     &:hover {
       background: var(--surface-option-hover);
@@ -2659,6 +2658,19 @@ p {
 .home-recommended__track .home-category-card {
   flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3);
   scroll-snap-align: start;
+}
+
+.home-recommended__track .home-category-card__cover {
+  aspect-ratio: 16 / 7.8;
+}
+
+.home-recommended__track .home-category-card__metadata {
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-6) var(--space-8);
+}
+
+.home-recommended__track .home-category-card__summary {
+  gap: var(--space-6);
 }
 
 /* Mesma seta do rail de "Explorar por categoria": sem pílula escura por cima da
@@ -3066,7 +3078,7 @@ p {
 }
 
 /* Segunda leva de pills (categorias que sobraram de `.home-category-card__genres`),
-   fixa em grade 2x2 — duas colunas, altura fechada de 2 pills. */
+   fixa em uma linha de 2 colunas. */
 .home-category-card__tags {
   width: 100%;
   display: grid;
@@ -6959,13 +6971,13 @@ input[type="search"]::-ms-reveal {
 .catalogue-list__item {
   --catalogue-list-fade-color: color-mix(in srgb, black 20%, var(--background) 80%);
   content-visibility: auto;
-  contain-intrinsic-size: auto 92px;
+  contain-intrinsic-size: auto 84px;
   display: grid;
   grid-template-columns: 196px minmax(0, 1fr) 88px;
   align-items: center;
   gap: var(--space-8);
   width: 100%;
-  min-height: 92px;
+  min-height: 84px;
   padding: 0;
   padding-right: var(--space-6);
   position: relative;
@@ -7050,6 +7062,7 @@ input[type="search"]::-ms-reveal {
   flex-direction: column;
   gap: var(--space-4);
   padding-right: 0;
+  transform: translateY(2px);
 
   strong {
     display: block;
@@ -7636,7 +7649,7 @@ input[type="search"]::-ms-reveal {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: 0 var(--space-10) var(--space-12);
+  padding: 0 var(--space-10) var(--space-6);
   gap: var(--space-8);
   min-height: 100%;
   height: auto;
@@ -7652,44 +7665,10 @@ input[type="search"]::-ms-reveal {
     }
   }
 
-  &__clear {
-    flex: 0 0 auto;
-    min-height: 34px;
-    padding: 0 var(--space-8);
-    border: none;
-    border-radius: var(--radius-pill);
-    background: var(--surface-option);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    line-height: var(--type-line-compact);
-    transition:
-      background var(--motion-fast) ease,
-      color var(--motion-fast) ease;
-
-    &:hover:not(:disabled),
-    &:focus-visible:not(:disabled) {
-      background: var(--surface-option-hover);
-      color: var(--text-primary);
-    }
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.55;
-    }
-  }
-
   &__list {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
-  }
-
-  &__footer {
-    display: flex;
-    justify-content: center;
-    padding-top: var(--space-2);
   }
 
   &__empty.empty-state {
@@ -7715,9 +7694,9 @@ input[type="search"]::-ms-reveal {
   align-items: center;
   column-gap: var(--space-8);
   min-width: 0;
-  min-height: 92px;
+  min-height: 84px;
   padding: 0 var(--space-6) 0 0;
-  overflow: hidden;
+  overflow: visible;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
@@ -7755,7 +7734,7 @@ input[type="search"]::-ms-reveal {
     display: block;
     width: var(--download-cover-width);
     align-self: stretch;
-    min-height: 92px;
+    min-height: 84px;
     padding: 0;
     background: transparent;
   }
@@ -7764,7 +7743,7 @@ input[type="search"]::-ms-reveal {
     display: block;
     width: 100%;
     height: 100%;
-    min-height: 92px;
+    min-height: 84px;
     border: 0;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     /* Piso da rampa enquanto a arte não pinta: o antigo `--surface-solid` saiu
@@ -7794,6 +7773,10 @@ input[type="search"]::-ms-reveal {
     text-align: left;
   }
 
+  &--completed &__content {
+    padding-right: 132px;
+  }
+
   &__title {
     overflow: hidden;
     color: var(--text-primary);
@@ -7804,16 +7787,18 @@ input[type="search"]::-ms-reveal {
     white-space: nowrap;
   }
 
-  /* Ancorada no card, não na coluna de conteúdo — `__content` não é
-     `relative`, então o canto é o do card inteiro. Assim a data não desloca
-     com a largura do título nem entra no `gap` do grid de conteúdo.
-     `z-index` acima do `__open`, que cobre o card todo; `pointer-events: none`
-     para não roubar o clique que abre os detalhes. */
-  &__date {
+  &__finished {
     position: absolute;
     top: var(--space-5);
     right: var(--space-6);
     z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-8);
+  }
+
+  &__date {
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-semibold);
@@ -7821,6 +7806,34 @@ input[type="search"]::-ms-reveal {
     line-height: var(--type-line-caption);
     white-space: nowrap;
     pointer-events: none;
+  }
+
+  &__quick-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    overflow: visible;
+  }
+
+  &__quick-action-wrap {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &__quick-actions {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--motion-fast) var(--ease);
+    }
+
+    &:hover &__quick-actions,
+    &:focus-within &__quick-actions,
+    &__quick-actions:focus-within {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   /* Atravessa a coluna inteira: barra que para no meio lê como widget solto,
@@ -7864,10 +7877,6 @@ input[type="search"]::-ms-reveal {
     white-space: nowrap;
   }
 
-  &--completed &__meta-item:first-child {
-    color: var(--success);
-  }
-
   &--error &__meta-item:first-child {
     color: var(--danger);
   }
@@ -7896,7 +7905,8 @@ input[type="search"]::-ms-reveal {
   /* Sem caixa: os controles ficam sobre a superfície do card e só o ícone
      responde ao hover. A caixa escura competia com a capa e com a barra. */
   &__remove,
-  &__icon-button {
+  &__icon-button,
+  &__quick-action {
     display: grid;
     width: 26px;
     height: 26px;
@@ -7922,9 +7932,48 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  /* Mesmo balão elevado e sem seta usado nos controles da titlebar. */
+  &__quick-action-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    z-index: var(--z-modal);
+    padding: var(--space-3) var(--space-5);
+    border: none;
+    border-radius: var(--radius-lg);
+    background: var(--surface-titlebar-popover);
+    color: var(--text-secondary);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(-4px) scale(0.96);
+    transform-origin: top center;
+    transition:
+      opacity var(--motion-fast) var(--ease),
+      visibility var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease);
+  }
+
+  &__quick-action-wrap:hover &__quick-action-tooltip,
+  &__quick-action-wrap:focus-within &__quick-action-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+
   &__icon-button--danger:hover,
-  &__icon-button--danger:focus-visible {
+  &__icon-button--danger:focus-visible,
+  &__quick-action--danger:hover,
+  &__quick-action--danger:focus-visible {
     color: var(--danger);
+  }
+
+  &__launch-spinner {
+    animation: spin 0.8s linear infinite;
   }
 
   &__depot-caption {
@@ -8164,6 +8213,7 @@ input[type="search"]::-ms-reveal {
        entrada dela, e o texto continua branco nos dois estados. */
     .download-details-modal__danger {
       background: var(--surface-modal-control);
+      color: var(--text-secondary);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
@@ -8207,7 +8257,7 @@ input[type="search"]::-ms-reveal {
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
       background: var(--surface-option-hover);
-      color: var(--danger);
+      color: var(--danger-hover);
     }
 
     &:disabled {
@@ -8226,10 +8276,58 @@ input[type="search"]::-ms-reveal {
     padding: var(--space-8);
     background: var(--overlay-confirm);
 
-    .confirm-modal__header svg {
-      color: var(--danger);
+    .confirm-modal {
+      background: var(--surface-modal);
+    }
+
+    .confirm-modal__actions .button {
+      border: 0;
+      background: var(--surface-modal-control);
+      color: var(--text-secondary);
+
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        background: var(--surface-modal-control-hover);
+        color: var(--text-primary);
+      }
+    }
+
+    .confirm-modal__actions .confirm-modal__confirm {
+      color: var(--text-primary);
+    }
+
+    .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
+    .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
+      color: var(--danger-hover);
+    }
+
+  }
+}
+
+.backdrop--download-details > .confirm-modal {
+  background: var(--surface-modal);
+
+  .confirm-modal__actions .button {
+    border: 0;
+    background: var(--surface-modal-control);
+    color: var(--text-secondary);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-modal-control-hover);
+      color: var(--text-primary);
     }
   }
+
+  .confirm-modal__actions .confirm-modal__confirm {
+    color: var(--text-primary);
+  }
+
+  .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
+  .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
+    color: var(--danger-hover);
+  }
+
 }
 
 @keyframes download-cover-in {
@@ -8293,11 +8391,15 @@ input[type="search"]::-ms-reveal {
     padding: var(--space-6) 0 0 var(--space-6);
   }
 
-  /* Empilhado, o topo do card é a capa: a data ancorada ali cairia sobre a
-     arte. Volta ao fluxo, como primeira linha do conteúdo — continua acima do
-     nome do jogo, que é o que o layout pede. */
-  .download-card__date {
+  /* Empilhado, o topo do card é a capa: data e ações voltam ao fluxo para não
+     cair sobre a arte. */
+  .download-card__finished {
     position: static;
+    align-items: flex-start;
+  }
+
+  .download-card--completed .download-card__content {
+    padding-right: 0;
   }
 }
 
@@ -10717,6 +10819,15 @@ html.no-backdrop-blur {
   border-radius: var(--radius-lg);
   background: var(--surface-modal);
 
+  .collection-modal__actions .button {
+    background: var(--surface-modal-control);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-modal-control-hover);
+    }
+  }
+
   .collection-modal__content {
     gap: var(--space-9);
   }
@@ -12379,14 +12490,17 @@ html.no-backdrop-blur {
     min-height: 36px;
     border-color: var(--border-hover);
     background: var(--surface-option);
+    color: var(--text-secondary);
     transition:
       background var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease);
+      border-color var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
 
     &:hover,
     &:focus-visible {
       border-color: var(--border-hover);
       background: var(--surface-option-hover);
+      color: var(--text-primary);
     }
   }
 
@@ -12923,7 +13037,7 @@ html.no-backdrop-blur {
         min-height: 4px;
         padding: 0;
         border: 0;
-        border-radius: 0 0 8px 8px;
+        border-radius: 0 0 var(--radius-sm) var(--radius-sm);
         background: color-mix(in srgb, var(--white) 10%, transparent);
         overflow: hidden;
         backdrop-filter: none;
@@ -12989,7 +13103,7 @@ html.no-backdrop-blur {
     border: none;
     border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--black) 72%, transparent);
-    color: var(--text-primary);
+    color: var(--text-secondary);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     transition:
@@ -13841,7 +13955,7 @@ button,
   }
 
   .notification-game__cover {
-    border-radius: 8px 0 0 8px;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   }
 }
 

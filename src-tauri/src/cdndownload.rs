@@ -309,20 +309,93 @@ impl Drop for ChunkIndexGuard<'_> {
     }
 }
 
-/// Barreira do delete: o alvo tem que estar ESTRITAMENTE dentro da raiz de
-/// downloads. Recebe caminhos ja canonicalizados, para que `..` tenha sido
-/// resolvido antes da comparacao.
+/// Barreira para operacoes em uma instalacao: o alvo tem que estar ESTRITAMENTE
+/// dentro da raiz de downloads. Recebe caminhos ja canonicalizados, para que
+/// `..` tenha sido resolvido antes da comparacao.
 fn ensure_inside_downloads_root(
     canonical_root: &Path,
     canonical_output: &Path,
 ) -> Result<(), String> {
     if canonical_output == canonical_root {
-        return Err("Refusing to delete the downloads root itself.".to_string());
+        return Err("The output folder cannot be the downloads root itself.".to_string());
     }
     if !canonical_output.starts_with(canonical_root) {
         return Err("Download output folder resolves outside the downloads root.".to_string());
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn cdndownload_launch_game(
+    app: tauri::AppHandle,
+    app_id: String,
+    title: String,
+    downloads_root: String,
+    output_dir: String,
+    install_dir: Option<String>,
+) -> Result<String, String> {
+    let app_id = app_id.trim();
+    if app_id.is_empty() || !app_id.chars().all(|character| character.is_ascii_digit()) {
+        return Err("Download launch requires a valid app ID.".to_string());
+    }
+
+    let root_path = Path::new(downloads_root.trim());
+    let output_path = Path::new(output_dir.trim());
+    if downloads_root.trim().is_empty() || output_dir.trim().is_empty() {
+        return Err("Download launch requires an installation folder.".to_string());
+    }
+
+    let canonical_root = root_path
+        .canonicalize()
+        .map_err(|error| format!("Downloads root is unavailable: {error}"))?;
+    let canonical_output = output_path
+        .canonicalize()
+        .map_err(|error| format!("Installation folder is unavailable: {error}"))?;
+    if !canonical_output.is_dir() {
+        return Err("Download output path is not a directory.".to_string());
+    }
+    ensure_inside_downloads_root(&canonical_root, &canonical_output)?;
+
+    let game = serde_json::json!({
+        "id": format!("steam-{app_id}"),
+        "appId": app_id,
+        "title": title.trim(),
+        "installDir": install_dir.unwrap_or_default(),
+        "installPath": canonical_output.to_string_lossy(),
+    });
+    let executable = crate::playtime::find_likely_game_executable(&game)
+        .ok_or_else(|| "No game executable was found in the installation folder.".to_string())?;
+    let canonical_executable = executable
+        .canonicalize()
+        .map_err(|error| format!("Game executable is unavailable: {error}"))?;
+    if !canonical_executable.starts_with(&canonical_output)
+        || !canonical_executable.is_file()
+        || !canonical_executable
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    {
+        return Err("Detected executable is outside the installation folder.".to_string());
+    }
+
+    let working_dir = canonical_executable
+        .parent()
+        .ok_or_else(|| "Game executable has no parent folder.".to_string())?;
+    std::process::Command::new(&canonical_executable)
+        .current_dir(working_dir)
+        .spawn()
+        .map_err(|error| format!("Could not launch game executable: {error}"))?;
+
+    if crate::playtime::mark_process_fallback_started(app_id) {
+        crate::playtime::monitor_game_process(
+            app,
+            game,
+            app_id.to_string(),
+            canonical_executable.clone(),
+        );
+    }
+
+    Ok(canonical_executable.to_string_lossy().into_owned())
 }
 
 #[tauri::command]

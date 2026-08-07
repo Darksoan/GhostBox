@@ -1415,6 +1415,7 @@ pub fn run() {
             cdndownload::cdndownload_download_game,
             cdndownload::cdndownload_cancel_game,
             cdndownload::cdndownload_delete_output_dir,
+            cdndownload::cdndownload_launch_game,
             cdndownload::cdndownload_default_dir,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,

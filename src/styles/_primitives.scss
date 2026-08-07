@@ -49,6 +49,7 @@
   --red-500: #ef4444;
   --red-400: #f87171;
   --red-600: #c43c3c;
+  --red-hover: #ff5050;
   --green-500: #35d07f;
   --green-400: #5cff8a;
 
@@ -98,12 +99,12 @@
   --ls-700: -0.02em;
   --ls-800: -0.03em;
 
-  // --- Raio (inalterado por decisão de design) ---
-  --radius-xs: 1px;
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-panel: 6px;
+  // --- Raio (padrao unico para elementos da interface) ---
+  --radius-xs: 5px;
+  --radius-sm: 5px;
+  --radius-md: 5px;
+  --radius-lg: 5px;
+  --radius-panel: 5px;
   --radius-pill: 999px;
   --radius-circle: 50%;
 
