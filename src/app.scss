@@ -7952,7 +7952,10 @@ input[type="search"]::-ms-reveal {
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--surface-modal);
+  /* Painel (#1a1a1a), não o teto de modal (#252525): o hero ocupa metade da
+     altura, e uma moldura clara em volta da arte lia como passe-partout. Mais
+     escuro, a arte é o objeto e a caixa some. */
+  background: var(--surface-panel);
   color: var(--text-primary);
 
   &__hero {
@@ -7991,14 +7994,14 @@ input[type="search"]::-ms-reveal {
     background:
       linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--surface-modal) 55%, transparent) 0%,
+        color-mix(in srgb, var(--surface-panel) 55%, transparent) 0%,
         transparent 34%
       ),
       linear-gradient(
         to bottom,
         transparent 40%,
-        color-mix(in srgb, var(--surface-modal) 86%, transparent) 80%,
-        var(--surface-modal) 100%
+        color-mix(in srgb, var(--surface-panel) 86%, transparent) 80%,
+        var(--surface-panel) 100%
       );
   }
 
@@ -8011,14 +8014,6 @@ input[type="search"]::-ms-reveal {
     display: grid;
     gap: var(--space-2);
 
-    span {
-      color: var(--text-secondary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      text-transform: uppercase;
-      letter-spacing: var(--ls-100);
-    }
-
     h3 {
       margin: 0;
       overflow: hidden;
@@ -8028,6 +8023,45 @@ input[type="search"]::-ms-reveal {
       line-height: var(--type-line-page);
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+  }
+
+  /* Único ponto saturado do modal. O estado é o que a pessoa vem conferir e
+     estava escrito em cinza; o ponto carrega a cor, o texto continua sóbrio. */
+  &__state {
+    display: inline-flex;
+    /* Item de grid é blockificado e esticaria a linha inteira; a marca de estado
+       tem que ter a largura do próprio texto. */
+    justify-self: start;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-semibold);
+    line-height: var(--type-line-caption);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-100);
+
+    i {
+      width: 6px;
+      height: 6px;
+      flex: 0 0 auto;
+      border-radius: var(--radius-pill);
+      background: var(--text-primary);
+    }
+
+    &--done i {
+      background: var(--success);
+    }
+
+    &--error i {
+      background: var(--danger);
+    }
+
+    /* Baixando/na fila/pausado: o ponto pulsa devagar, para separar "em
+       andamento" de "parado" sem precisar de mais uma linha de texto. */
+    &--active i {
+      animation: download-state-pulse 1.8s var(--ease) infinite;
     }
   }
 
@@ -8066,24 +8100,30 @@ input[type="search"]::-ms-reveal {
     overflow-y: auto;
   }
 
+  /* `auto-fit` em vez de três colunas fixas: o terceiro fato troca de papel
+     conforme o estado e some em telas estreitas sem deixar coluna órfã. */
   &__facts {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: var(--space-4);
     margin: 0;
 
     div {
       display: grid;
+      align-content: start;
       gap: var(--space-3);
       padding: var(--space-6);
       border-radius: var(--radius-md);
-      background: var(--surface-option);
+      /* Piso da rampa sobre o painel: sem borda, é o degrau de superfície que
+         desenha o recuo. `--surface-option` empatava com o corpo novo. */
+      background: var(--surface-canvas);
     }
 
     dt {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
+      line-height: var(--type-line-caption);
     }
 
     dd {
@@ -8091,6 +8131,8 @@ input[type="search"]::-ms-reveal {
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-medium);
+      line-height: var(--type-line-body);
+      font-variant-numeric: tabular-nums;
     }
   }
 
@@ -8100,21 +8142,24 @@ input[type="search"]::-ms-reveal {
     min-width: 0;
     padding: var(--space-6);
     border-radius: var(--radius-md);
-    background: var(--surface-option);
+    background: var(--surface-canvas);
 
     span {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
+      line-height: var(--type-line-caption);
     }
 
     strong {
-      overflow: hidden;
+      min-width: 0;
       color: var(--text-primary);
       font-size: var(--type-size-compact);
       font-weight: var(--weight-medium);
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: var(--type-line-compact);
+      /* Quebra em qualquer ponto: o caminho é a string mais longa do modal e
+         serve para ser lida ou copiada inteira. Truncar tornava-a decorativa. */
+      overflow-wrap: anywhere;
     }
   }
 
@@ -8130,6 +8175,17 @@ input[type="search"]::-ms-reveal {
     justify-content: flex-end;
     gap: var(--space-4);
     padding: 0 var(--space-9) var(--space-9);
+
+    /* Só o botão do rodapé afunda: `__danger` também veste o confirmar do
+       diálogo aninhado, que fica sobre `--surface-modal` e já tem contraste. */
+    .download-details-modal__danger {
+      background: var(--surface-canvas);
+
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        background: var(--surface-option-active);
+      }
+    }
   }
 
   /* Vale para "Cancelar download" e para o confirmar do diálogo: os dois usam
@@ -8187,6 +8243,24 @@ input[type="search"]::-ms-reveal {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes download-state-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* O ponto continua marcando o estado pela cor; só o batimento sai. */
+  .download-details-modal__state--active i {
+    animation: none;
   }
 }
 

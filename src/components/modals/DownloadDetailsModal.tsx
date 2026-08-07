@@ -46,6 +46,22 @@ function taskAllocatedBytes(task: DownloadTask): number {
     .find((value) => typeof value === "number" && value > 0) ?? 0;
 }
 
+/**
+ * Marca de estado do download. É o único ponto saturado do modal: o estado é a
+ * informação que a pessoa vem conferir, e antes ele era o elemento mais discreto
+ * da tela — um texto cinza em caixa alta acima do título.
+ */
+function taskStateTone(status: DownloadTask["status"]): string {
+  if (status === "error") return "error";
+  if (status === "completed") return "done";
+  return "active";
+}
+
+function taskProgressPercent(task: DownloadTask): number {
+  if (task.bytesTotal <= 0) return 0;
+  return Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100));
+}
+
 interface DownloadDetailsModalProps {
   task: DownloadTask | null;
   onClose: () => void;
@@ -119,7 +135,10 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
           />
           <span className="download-details-modal__hero-shade" aria-hidden="true" />
           <div className="download-details-modal__hero-copy">
-            <span>{t(taskStatusKey(task.status))}</span>
+            <span className={`download-details-modal__state download-details-modal__state--${taskStateTone(task.status)}`}>
+              <i aria-hidden="true" />
+              {t(taskStatusKey(task.status))}
+            </span>
             <h3 id="download-details-title">{task.title}</h3>
           </div>
           <button
@@ -140,19 +159,36 @@ export function DownloadDetailsModal({ task, onClose }: DownloadDetailsModalProp
               <dt>{t("downloads.details.allocated")}</dt>
               <dd>{formatBytes(taskAllocatedBytes(task))}</dd>
             </div>
+            {/* Data e hora eram dois blocos para o mesmo instante — três colunas
+                existiam porque havia três vagas, não porque havia três fatos. */}
             <div>
-              <dt>{t("downloads.details.date")}</dt>
-              <dd>{new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(timestamp)}</dd>
+              <dt>{t("downloads.details.downloadedAt")}</dt>
+              <dd>
+                {new Intl.DateTimeFormat(locale, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(timestamp)}
+              </dd>
             </div>
+            {/* A vaga liberada passa a carregar o que a tela não dizia: quanto
+                falta, enquanto baixa; e se a Steam já enxerga o jogo, depois. */}
             <div>
-              <dt>{t("downloads.details.time")}</dt>
-              <dd>{new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(timestamp)}</dd>
+              <dt>{isActive ? t("downloads.details.progress") : t("downloads.details.steam")}</dt>
+              <dd>
+                {isActive
+                  ? `${taskProgressPercent(task)}%`
+                  : task.steamIntegration?.status === "ok"
+                    ? t("downloads.details.steamReady")
+                    : t("downloads.details.steamPending")}
+              </dd>
             </div>
           </dl>
 
           <div className="download-details-modal__path">
             <span>{t("downloads.details.destination")}</span>
-            <strong title={task.outputDir}>{task.outputDir}</strong>
+            {/* Sem truncar: é o caminho que a pessoa vai colar em algum lugar, e
+                um caminho com reticências não serve para nada. */}
+            <strong>{task.outputDir || t("downloads.details.destinationPending")}</strong>
           </div>
 
           {error && <p className="download-details-modal__error" role="alert">{error}</p>}
