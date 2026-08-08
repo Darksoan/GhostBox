@@ -1,4 +1,3 @@
-import { ChevronDown } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
@@ -21,8 +20,8 @@ import {
 import {
   readStoredPersonalCalendar,
   writeStoredPersonalCalendar,
-  readStoredSteamWishlistRecommendations,
-  writeStoredSteamWishlistRecommendations,
+  readStoredSteamWishlistCycle,
+  writeStoredSteamWishlistCycle,
   readStoredSteamWishlistReview,
   writeStoredSteamWishlistReview,
   type StoredPersonalCalendar,
@@ -32,7 +31,6 @@ import {
   gameHeroSources,
   gameHeroCapsuleSources,
   layeredImageStyle,
-  withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
 import { createSeedGame, type GameSeed } from "../utils/gameSeed";
@@ -47,6 +45,14 @@ import {
   personalCalendarGameKey,
   pickPersonalCalendarGames,
 } from "../utils/personalCalendar";
+import {
+  createWishlistCycle,
+  getWishlistCycleIndex,
+  getWishlistCycleStart,
+  homeWishlistCycleHistoryLimit,
+  isStoredWishlistCycleFresh,
+  pickWishlistCycleGames,
+} from "../utils/wishlistCycle";
 
 type HomeGameSeed = GameSeed;
 
@@ -58,11 +64,6 @@ type HomeExploreCategory = {
   filterValue: string;
   games: GhostBoxGame[];
   score: number;
-};
-
-type HomeWishlistRecommendation = {
-  sourceGame: GhostBoxGame;
-  recommendedGame: GhostBoxGame;
 };
 
 const topReviewedSteamGames: HomeGameSeed[] = [
@@ -168,10 +169,11 @@ const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 15;
 const homePersonalCalendarEnrichmentLimit = 6;
 const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
 const homeCalendarCoverLoadMargin = "360px 720px";
-const homeWishlistDetailsBatchSize = 8;
-const homeWishlistRecommendationSourceLimit = 10;
-const homeWishlistRecommendationAlgorithmVersion = "steam-morelike-v1";
+const homeWishlistCycleSourceCount = 6;
+const homeWishlistSimilarPoolLimit = 16;
+const homeWishlistCycleGameCount = 4;
 const homeWishlistCacheRefreshMs = 7 * 24 * 60 * 60 * 1000;
+const homeWishlistRetryMs = 30 * 60 * 1000;
 
 function homeGameAppId(game: GhostBoxGame) {
   return game.appId || game.id.replace(/^steam-/, "");
@@ -218,18 +220,6 @@ function normalizeSteamReviewText(text: string) {
     .filter(Boolean)
     .join(" ")
     .trim();
-}
-
-function createWishlistFallbackGames(
-  appIds: string[],
-  titleByAppId = new Map<string, string>()
-) {
-  return appIds.map((appId, index) =>
-    createSeedGame(
-      { appId, title: titleByAppId.get(appId) || `Steam App ${appId}` },
-      index
-    )
-  );
 }
 
 function createWishlistFallbackGame(appId: string, index = 0, title?: string) {
@@ -299,74 +289,6 @@ function homeWishlistCoverSources(game: GhostBoxGame) {
   return gameHeaderOnlySources(game);
 }
 
-function isStoredSteamWishlistRecommendationsFresh(
-  steamId: string | undefined,
-  recommendations: ReturnType<typeof readStoredSteamWishlistRecommendations>
-) {
-  return Boolean(
-    steamId &&
-      recommendations?.steamId === steamId &&
-      recommendations.algorithmVersion === homeWishlistRecommendationAlgorithmVersion &&
-      Date.parse(recommendations.expiresAt) > Date.now()
-  );
-}
-
-function pickWishlistRecommendationCandidate(
-  sourceGame: GhostBoxGame,
-  candidates: GhostBoxGame[],
-  excludedAppIds: Set<string>,
-  userRecommendedTags: string[] = []
-) {
-  const sourceAppId = homeGameAppId(sourceGame);
-  const sourceTraits = getWishlistRecommendationTraits(sourceGame);
-  const userTraits = new Set(
-    userRecommendedTags.map(normalizeWishlistRecommendationTrait).filter(Boolean)
-  );
-
-  return candidates
-    .flatMap((candidate, index) => {
-      const candidateAppId = homeGameAppId(candidate);
-      if (!candidateAppId || candidateAppId === sourceAppId || excludedAppIds.has(candidateAppId)) {
-        return [];
-      }
-
-      const candidateTraits = getWishlistRecommendationTraits(candidate);
-      let sourceMatchScore = 0;
-      let userMatchScore = 0;
-      candidateTraits.forEach((trait) => {
-        if (sourceTraits.has(trait)) sourceMatchScore += 1;
-        if (userTraits.has(trait)) userMatchScore += 1;
-      });
-
-      const popularity = Math.log10(
-        (candidate.recommendations ?? candidate.steamReviewCount ?? candidate.popularityScore ?? 0) + 1
-      );
-      const quality = candidate.steamPositiveRatio ?? candidate.rating ?? 0;
-      const score = sourceMatchScore * 1000 + userMatchScore * 15 + quality * 10 + popularity;
-
-      return [{ candidate, score, sourceMatchScore, index }];
-    })
-    .sort(
-      (left, right) =>
-        right.sourceMatchScore - left.sourceMatchScore ||
-        right.score - left.score ||
-        left.index - right.index
-    )[0]
-    ?.candidate;
-}
-
-function normalizeWishlistRecommendationTrait(value: string) {
-  return normalizeHomeCategory(value).toLowerCase();
-}
-
-function getWishlistRecommendationTraits(game: GhostBoxGame) {
-  return new Set(
-    [...game.tags, ...game.genres]
-      .map(normalizeWishlistRecommendationTrait)
-      .filter(Boolean)
-  );
-}
-
 function getSteamRecommendedTagName(tag: unknown) {
   if (!tag || typeof tag !== "object" || Array.isArray(tag)) return "";
   const record = tag as Record<string, unknown>;
@@ -382,72 +304,6 @@ function normalizeSteamRecommendedTags(tags: unknown[]) {
         .filter(Boolean)
     ),
   ];
-}
-
-async function loadWishlistRecommendationForGame(
-  sourceGame: GhostBoxGame,
-  excludedAppIds: Set<string>,
-  userRecommendedTags: string[] = []
-) {
-  const similarAppIds = await loadSteamSimilarAppIds(homeGameAppId(sourceGame)).catch(() => []);
-  if (similarAppIds.length > 0) {
-    const similarGames = (
-      await Promise.all(
-        similarAppIds.slice(0, 8).map((appId) =>
-          loadGameStoreDetails(appId).catch(() => null)
-        )
-      )
-    ).filter((game): game is GhostBoxGame => Boolean(game));
-    const similarCandidate = pickWishlistRecommendationCandidate(
-      sourceGame,
-      similarGames,
-      excludedAppIds,
-      userRecommendedTags
-    );
-    if (similarCandidate) return similarCandidate;
-  }
-
-  const tagFilters = sourceGame.tags.filter(Boolean).slice(0, 3);
-  const genreFilters = sourceGame.genres.filter(Boolean).slice(0, 3);
-  const publisherFilters = sourceGame.publishers?.filter(Boolean).slice(0, 1) ?? [];
-  const requests = [
-    ...tagFilters.map((tag) => ({ tags: [tag] })),
-    ...genreFilters.map((genre) => ({ genres: [genre] })),
-    publisherFilters.length
-      ? { publishers: publisherFilters }
-      : null,
-  ].filter(Boolean) as Array<NonNullable<Parameters<typeof loadGames>[0]>["filters"]>;
-
-  for (const filters of requests) {
-    const result = await loadGames({
-      query: "",
-      limit: 10,
-      sort: "popular",
-      filters,
-    });
-    const candidate = pickWishlistRecommendationCandidate(
-      sourceGame,
-      result.games,
-      excludedAppIds,
-      userRecommendedTags
-    );
-    if (candidate) return candidate;
-  }
-
-  const popularResult = await loadGames({
-    query: "",
-    limit: 30,
-    sort: "popular",
-  });
-  const popularCandidate = pickWishlistRecommendationCandidate(
-    sourceGame,
-    popularResult.games,
-    excludedAppIds,
-    userRecommendedTags
-  );
-  if (popularCandidate) return popularCandidate;
-
-  return null;
 }
 
 async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>()) {
@@ -1386,180 +1242,32 @@ function HomeWishlistPlayerReview({
 }
 
 function HomeWishlistCardComponent({
-  recommendation,
+  game,
   language,
   onOpenGame,
   onGameContextMenu,
 }: {
-  recommendation: HomeWishlistRecommendation;
+  game: GhostBoxGame;
   language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const { recommendedGame } = recommendation;
-  const coverSources = homeWishlistCoverSources(recommendedGame);
+  const coverSources = homeWishlistCoverSources(game);
   const sources = useCachedImageSources(coverSources);
   const { source: imageSource, loaded } = useLoadableImageCover(sources);
-  const screenshots = useMemo(
-    () => withoutHeaderImageSources(recommendedGame.screenshots ?? []).slice(0, 6),
-    [recommendedGame.screenshots]
-  );
-  const coverRef = useRef<HTMLSpanElement | null>(null);
-  const [isHovered, setIsHovered] = useState(false);
-  const [screenshotIndex, setScreenshotIndex] = useState<number | null>(null);
-  const [readyScreenshotIndexes, setReadyScreenshotIndexes] = useState<Set<number>>(
-    () => new Set()
-  );
-  const screenshotTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const readyScreenshotIndexesRef = useRef(readyScreenshotIndexes);
-  readyScreenshotIndexesRef.current = readyScreenshotIndexes;
-
-  const markScreenshotReady = useCallback((index: number) => {
-    setReadyScreenshotIndexes((current) => {
-      if (current.has(index)) return current;
-      const next = new Set(current);
-      next.add(index);
-      return next;
-    });
-  }, []);
-
-  // Decode screenshots as soon as the card is near the viewport so hover swaps
-  // to a fully-decoded bitmap instead of a progressive soft paint.
-  useEffect(() => {
-    if (!screenshots.length) {
-      setReadyScreenshotIndexes(new Set());
-      return;
-    }
-
-    let cancelled = false;
-    const node = coverRef.current;
-    let started = false;
-    const controllers: AbortController[] = [];
-
-    const decodeSource = (source: string, index: number) => {
-      const img = new Image();
-      img.decoding = "async";
-      img.src = source;
-      const finish = async () => {
-        try {
-          if (typeof img.decode === "function") {
-            await img.decode();
-          }
-        } catch {
-          // decode() can reject on abort/unsupported; complete still usable.
-        }
-        if (!cancelled && img.complete && img.naturalWidth > 0) {
-          markScreenshotReady(index);
-        }
-      };
-      if (img.complete) {
-        void finish();
-        return;
-      }
-      img.addEventListener("load", () => void finish(), { once: true });
-    };
-
-    const startPreload = () => {
-      if (started || cancelled) return;
-      started = true;
-      screenshots.forEach((source, index) => decodeSource(source, index));
-    };
-
-    if (!node || typeof IntersectionObserver === "undefined") {
-      startPreload();
-      return () => {
-        cancelled = true;
-        controllers.forEach((controller) => controller.abort());
-      };
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          startPreload();
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "480px 0px", threshold: 0.01 }
-    );
-    observer.observe(node);
-
-    return () => {
-      cancelled = true;
-      observer.disconnect();
-      controllers.forEach((controller) => controller.abort());
-    };
-  }, [markScreenshotReady, screenshots]);
-
-  useEffect(() => {
-    if (!isHovered || screenshots.length === 0) {
-      if (screenshotTimerRef.current) {
-        clearInterval(screenshotTimerRef.current);
-        screenshotTimerRef.current = null;
-      }
-      setScreenshotIndex(null);
-      return;
-    }
-
-    const pickFirstReady = () => {
-      const ready = readyScreenshotIndexesRef.current;
-      for (let index = 0; index < screenshots.length; index += 1) {
-        if (ready.has(index)) return index;
-      }
-      return null;
-    };
-
-    // Prefer a decoded frame immediately — never flash a half-decoded bitmap.
-    setScreenshotIndex(pickFirstReady());
-
-    screenshotTimerRef.current = setInterval(() => {
-      setScreenshotIndex((current) => {
-        const ready = readyScreenshotIndexesRef.current;
-        if (ready.size === 0) return pickFirstReady();
-
-        const start = current === null ? -1 : current;
-        for (let step = 1; step <= screenshots.length; step += 1) {
-          const next = (start + step) % screenshots.length;
-          if (ready.has(next)) return next;
-        }
-        return current;
-      });
-    }, 1400);
-
-    return () => {
-      if (screenshotTimerRef.current) {
-        clearInterval(screenshotTimerRef.current);
-        screenshotTimerRef.current = null;
-      }
-    };
-  }, [isHovered, screenshots]);
-
-  // If the first ready screenshot arrives while already hovering, activate it.
-  useEffect(() => {
-    if (!isHovered || screenshotIndex !== null || readyScreenshotIndexes.size === 0) {
-      return;
-    }
-    for (let index = 0; index < screenshots.length; index += 1) {
-      if (readyScreenshotIndexes.has(index)) {
-        setScreenshotIndex(index);
-        return;
-      }
-    }
-  }, [isHovered, readyScreenshotIndexes, screenshotIndex, screenshots.length]);
-
   const recommendedTitle = getDisplayGameTitle(
-    recommendedGame,
+    game,
     language === "en" ? "Steam recommendation" : "Recomendação da Steam"
   );
-  const tags = [...recommendedGame.tags, ...recommendedGame.genres]
+  const tags = [...game.tags, ...game.genres]
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 3);
 
-  const handleClick = () => onOpenGame(recommendedGame);
+  const handleClick = () => onOpenGame(game);
   const handleContextMenu = (event: React.MouseEvent) => {
     if (!onGameContextMenu) return;
     event.preventDefault();
-    onGameContextMenu(recommendedGame, event.clientX, event.clientY);
+    onGameContextMenu(game, event.clientX, event.clientY);
   };
 
   return (
@@ -1583,10 +1291,7 @@ function HomeWishlistCardComponent({
       </span>
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span
-          ref={coverRef}
           className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : ""}`}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
         >
           {imageSource && (
             <img
@@ -1596,28 +1301,9 @@ function HomeWishlistCardComponent({
               decoding="async"
             />
           )}
-          {/* Keep screenshots mounted (hidden) so they decode before hover. */}
-          {screenshots.map((source, index) => (
-            <img
-              key={source}
-              className={`home-wishlist-card__screenshot${
-                isHovered &&
-                index === screenshotIndex &&
-                readyScreenshotIndexes.has(index)
-                  ? " home-wishlist-card__screenshot--active"
-                  : ""
-              }`}
-              src={source}
-              alt=""
-              draggable={false}
-              decoding="async"
-              fetchPriority="low"
-              onLoad={() => markScreenshotReady(index)}
-            />
-          ))}
         </span>
         <span className="home-wishlist-card__details">
-          <HomeWishlistPlayerReview game={recommendedGame} language={language} />
+          <HomeWishlistPlayerReview game={game} language={language} />
           {tags.length > 0 && (
             <span className="home-wishlist-card__tags">
               {tags.map((tag) => (
@@ -1638,7 +1324,7 @@ const HomeWishlistCard = memo(HomeWishlistCardComponent);
 function HomeWishlistRecommendations({
   title,
   subtitle,
-  recommendations,
+  games,
   loading,
   language,
   onOpenGame,
@@ -1646,53 +1332,31 @@ function HomeWishlistRecommendations({
 }: {
   title: string;
   subtitle?: string;
-  recommendations: HomeWishlistRecommendation[];
+  games: GhostBoxGame[];
   loading: boolean;
   language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleRecommendations = expanded
-    ? recommendations
-    : recommendations.slice(0, 3);
-  const hiddenCount = Math.max(0, recommendations.length - visibleRecommendations.length);
-
-  useEffect(() => {
-    setExpanded(false);
-  }, [recommendations.length]);
-
-  if (!recommendations.length && !loading) return null;
+  if (!games.length && !loading) return null;
 
   return (
     <section className="home-wishlist" aria-label={title}>
       <SectionHeader title={title} subtitle={subtitle} />
       <div className="home-wishlist__list">
-        {loading && recommendations.length === 0
-          ? Array.from({ length: 3 }, (_, index) => (
+        {loading && games.length === 0
+          ? Array.from({ length: homeWishlistCycleGameCount }, (_, index) => (
               <HomeWishlistCardSkeleton key={`wishlist-skeleton-${index}`} />
             ))
-          : visibleRecommendations.map((recommendation) => (
+          : games.map((game) => (
               <HomeWishlistCard
-                key={`${homeGameAppId(recommendation.sourceGame)}-${homeGameAppId(
-                  recommendation.recommendedGame
-                )}`}
-                recommendation={recommendation}
+                key={homeGameAppId(game)}
+                game={game}
                 language={language}
                 onOpenGame={onOpenGame}
                 onGameContextMenu={onGameContextMenu}
               />
             ))}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            className="home-wishlist__more"
-            onClick={() => setExpanded(true)}
-            aria-label={language === "en" ? "Show more" : "Ver mais"}
-          >
-            <ChevronDown size={15} strokeWidth={2.25} aria-hidden="true" />
-          </button>
-        )}
       </div>
     </section>
   );
@@ -1732,7 +1396,7 @@ export function HomePage({
   );
   const [personalCalendarGames, setPersonalCalendarGames] = useState<GhostBoxGame[]>([]);
   const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
-  const [wishlistRecommendations, setWishlistRecommendations] = useState<HomeWishlistRecommendation[]>([]);
+  const [wishlistRecommendations, setWishlistRecommendations] = useState<GhostBoxGame[]>([]);
   const [isLoadingWishlistRecommendations, setIsLoadingWishlistRecommendations] = useState(false);
   const [homeContextMenu, setHomeContextMenu] = useState<{
     game: GhostBoxGame;
@@ -1946,8 +1610,32 @@ export function HomePage({
 
   useEffect(() => {
     let cancelled = false;
+    let refreshTimeout: number | undefined;
+    let retryAt = 0;
+    let inFlight: Promise<void> | null = null;
 
-    async function loadWishlistRecommendations() {
+    function scheduleWishlistCycleRefresh(cycle: { expiresAt: string } | null) {
+      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
+      if (!cycle) return;
+
+      retryAt = 0;
+      const delay = Date.parse(cycle.expiresAt) - Date.now() + 500;
+      refreshTimeout = window.setTimeout(
+        () => void runWishlistCycle(),
+        Math.max(1000, delay)
+      );
+    }
+
+    function scheduleWishlistCycleRetry() {
+      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
+      retryAt = Date.now() + homeWishlistRetryMs;
+      refreshTimeout = window.setTimeout(
+        () => void runWishlistCycle(),
+        homeWishlistRetryMs
+      );
+    }
+
+    async function loadWishlistCycle() {
       if (!steamProfile?.steamId) {
         setWishlistRecommendations([]);
         return;
@@ -1955,64 +1643,28 @@ export function HomePage({
       setIsLoadingWishlistRecommendations(true);
 
       try {
-        const storedWishlistRecommendations = readStoredSteamWishlistRecommendations();
-        const hasFreshStoredWishlistRecommendations =
-          isStoredSteamWishlistRecommendationsFresh(
-            steamProfile.steamId,
-            storedWishlistRecommendations
-          );
-        const freshStoredWishlistRecommendations = hasFreshStoredWishlistRecommendations
-          ? storedWishlistRecommendations
-          : null;
-        let didUseStoredWishlistRecommendations = false;
+        const storedCycle = readStoredSteamWishlistCycle();
+        const hasFreshStoredCycle = isStoredWishlistCycleFresh(
+          storedCycle,
+          steamProfile.steamId,
+          homeWishlistCycleGameCount
+        );
+        let retainedGames: GhostBoxGame[] = [];
 
-        if (freshStoredWishlistRecommendations) {
-          const cachedPairs = (freshStoredWishlistRecommendations.recommendationPairs ?? [])
-            .filter(
-              (pair) =>
-                pair.sourceAppId &&
-                pair.recommendedAppId &&
-                !libraryGameAppIds.has(pair.recommendedAppId)
+        if (hasFreshStoredCycle) {
+          const cachedAppIds = storedCycle.gameIds.filter(
+            (appId) => appId && !libraryGameAppIds.has(appId)
           );
-          if (cachedPairs.length > 0) {
-            const cachedRecommendations = await Promise.all(
-              cachedPairs.map(async (pair, index) => ({
-                sourceGame: await loadWishlistDisplayGame(
-                  pair.sourceAppId,
-                  index,
-                  pair.sourceTitle
-                ),
-                recommendedGame: await loadWishlistDisplayGame(
-                  pair.recommendedAppId,
-                  index,
-                  pair.recommendedTitle
-                ),
-              }))
-            );
-            if (cancelled) return;
-            setWishlistRecommendations(cachedRecommendations);
-            didUseStoredWishlistRecommendations = cachedRecommendations.length > 0;
-          } else {
-            const cachedAppIds = freshStoredWishlistRecommendations.gameIds.filter(
-              (appId) => appId && !libraryGameAppIds.has(appId)
-            );
-            if (cachedAppIds.length > 1) {
-              const sourceGame = await loadWishlistDisplayGame(cachedAppIds[0], 0);
-              const cachedRecommendations = await Promise.all(
-                cachedAppIds.slice(1).map(async (appId, index) => ({
-                  sourceGame,
-                  recommendedGame: await loadWishlistDisplayGame(appId, index + 1),
-                }))
-              );
-              if (cancelled) return;
-              setWishlistRecommendations(cachedRecommendations);
-              didUseStoredWishlistRecommendations = cachedRecommendations.length > 0;
-            }
+          retainedGames = await Promise.all(
+            cachedAppIds.map((appId, index) => loadWishlistDisplayGame(appId, index))
+          );
+          if (cancelled) return;
+          setWishlistRecommendations(retainedGames);
+
+          if (retainedGames.length === homeWishlistCycleGameCount) {
+            scheduleWishlistCycleRefresh(storedCycle);
+            return;
           }
-        }
-
-        if (hasFreshStoredWishlistRecommendations && didUseStoredWishlistRecommendations) {
-          return;
         }
 
         const wishlistItems = await loadSteamWishlist(steamProfile.steamId);
@@ -2027,84 +1679,150 @@ export function HomePage({
         );
 
         if (newAppIds.length === 0) {
-          setWishlistRecommendations([]);
+          setWishlistRecommendations(retainedGames);
+          scheduleWishlistCycleRetry();
           return;
         }
 
-        const userRecommendedTags = normalizeSteamRecommendedTags(
-          await loadSteamRecommendedTagsForUser(steamProfile.steamId).catch(() => [])
+        const cycleStart = hasFreshStoredCycle
+          ? new Date(storedCycle.cycleStart)
+          : getWishlistCycleStart();
+        const sourceOffset = getWishlistCycleIndex(cycleStart) % newAppIds.length;
+        const sourceAppIds = Array.from(
+          { length: Math.min(homeWishlistCycleSourceCount, newAppIds.length) },
+          (_, index) => newAppIds[(sourceOffset + index) % newAppIds.length]
         );
+        const sourceGames = await Promise.all(
+          sourceAppIds.map(async (appId, index) => {
+            const fallback = createWishlistFallbackGame(
+              appId,
+              index,
+              wishlistTitleByAppId.get(appId)
+            );
+            return (await loadGameStoreDetails(appId).catch(() => null)) ?? fallback;
+          })
+        );
+        if (cancelled) return;
 
-        let wishlistGames = createWishlistFallbackGames(newAppIds, wishlistTitleByAppId);
-
-        for (
-          let offset = 0;
-          offset < Math.min(newAppIds.length, homeWishlistRecommendationSourceLimit);
-          offset += homeWishlistDetailsBatchSize
-        ) {
-          const batchAppIds = newAppIds.slice(
-            offset,
-            Math.min(offset + homeWishlistDetailsBatchSize, homeWishlistRecommendationSourceLimit)
-          );
-          const detailedGames = await Promise.all(
-            batchAppIds.map(async (appId, index) => {
-              const game = await loadGameStoreDetails(appId).catch(() => null);
-              return game ?? wishlistGames[offset + index];
-            })
-          );
-
-          if (cancelled) return;
-          wishlistGames = [...wishlistGames];
-          detailedGames.forEach((game, index) => {
-            wishlistGames[offset + index] = game;
-          });
+        const similarBySource = await Promise.all(
+          sourceGames.map((game) =>
+            loadSteamSimilarAppIds(homeGameAppId(game)).catch(() => [])
+          )
+        );
+        const similarAppIds: string[] = [];
+        const seenSimilarAppIds = new Set<string>();
+        for (let round = 0; similarAppIds.length < homeWishlistSimilarPoolLimit; round += 1) {
+          let foundInRound = false;
+          for (const appIds of similarBySource) {
+            const appId = appIds[round];
+            if (!appId) continue;
+            foundInRound = true;
+            if (seenSimilarAppIds.has(appId)) continue;
+            seenSimilarAppIds.add(appId);
+            similarAppIds.push(appId);
+            if (similarAppIds.length === homeWishlistSimilarPoolLimit) break;
+          }
+          if (!foundInRound) break;
         }
+        const similarGames = (
+          await Promise.all(
+            similarAppIds.map((appId) =>
+              loadGameStoreDetails(appId).catch(() => null)
+            )
+          )
+        ).filter((game): game is GhostBoxGame => Boolean(game));
+        if (cancelled) return;
 
-        const excludedAppIds = new Set([...newAppIds, ...libraryGameAppIds]);
-        const nextRecommendations: HomeWishlistRecommendation[] = [];
-
-        for (const sourceGame of wishlistGames.slice(0, homeWishlistRecommendationSourceLimit)) {
-          const recommendedGame = await loadWishlistRecommendationForGame(
-            sourceGame,
-            excludedAppIds,
-            userRecommendedTags
-          );
-          if (cancelled) return;
-          if (!recommendedGame) continue;
-
-          excludedAppIds.add(homeGameAppId(recommendedGame));
-          nextRecommendations.push({ sourceGame, recommendedGame });
-          setWishlistRecommendations([...nextRecommendations]);
-        }
-
-        writeStoredSteamWishlistRecommendations({
-          steamId: steamProfile.steamId,
-          expiresAt: new Date(Date.now() + homeWishlistCacheRefreshMs).toISOString(),
-          algorithmVersion: homeWishlistRecommendationAlgorithmVersion,
-          gameIds: nextRecommendations.map(({ recommendedGame }) =>
-            homeGameAppId(recommendedGame)
-          ),
-          recommendationPairs: nextRecommendations.map(
-            ({ sourceGame, recommendedGame }) => ({
-              sourceAppId: homeGameAppId(sourceGame),
-              sourceTitle: getDisplayGameTitle(sourceGame, ""),
-              recommendedAppId: homeGameAppId(recommendedGame),
-              recommendedTitle: getDisplayGameTitle(recommendedGame, ""),
-            })
-          ),
+        const excludedAppIds = new Set([
+          ...newAppIds,
+          ...libraryGameAppIds,
+          ...(storedCycle?.history ?? []).flat(),
+          ...retainedGames.map(homeGameAppId),
+        ]);
+        const sourceTraits = sourceGames.flatMap((game) => [...game.tags, ...game.genres]);
+        const missingGameCount = homeWishlistCycleGameCount - retainedGames.length;
+        let replacementGames = pickWishlistCycleGames(similarGames, {
+          gameCount: missingGameCount,
+          sourceTraits,
+          excludedAppIds,
         });
+
+        if (replacementGames.length < missingGameCount) {
+          const [popularResult, recommendedTags] = await Promise.all([
+            loadGames({ query: "", limit: 30, sort: "popular" }).catch(() => ({ games: [] })),
+            loadSteamRecommendedTagsForUser(steamProfile.steamId).catch(() => []),
+          ]);
+          if (cancelled) return;
+          replacementGames = pickWishlistCycleGames(
+            [...similarGames, ...popularResult.games],
+            {
+              gameCount: missingGameCount,
+              sourceTraits,
+              userTraits: normalizeSteamRecommendedTags(recommendedTags),
+              excludedAppIds,
+            }
+          );
+        }
+
+        const selectedGames = [...retainedGames, ...replacementGames];
+        if (selectedGames.length < homeWishlistCycleGameCount) {
+          setWishlistRecommendations(selectedGames);
+          scheduleWishlistCycleRetry();
+          return;
+        }
+
+        const nextCycle = createWishlistCycle({
+          steamId: steamProfile.steamId,
+          selectedGames,
+          storedCycle,
+          cycleStart,
+          refreshMs: homeWishlistCacheRefreshMs,
+          historyLimit: homeWishlistCycleHistoryLimit,
+        });
+        if (cancelled) return;
+        setWishlistRecommendations(selectedGames);
+        writeStoredSteamWishlistCycle(nextCycle);
+        scheduleWishlistCycleRefresh(nextCycle);
+      } catch {
+        if (!cancelled) scheduleWishlistCycleRetry();
       } finally {
         if (!cancelled) setIsLoadingWishlistRecommendations(false);
       }
     }
 
+    function runWishlistCycle() {
+      if (!inFlight) {
+        inFlight = loadWishlistCycle().finally(() => {
+          inFlight = null;
+        });
+      }
+      return inFlight;
+    }
+
     const cancelIdleWishlistLoad = runWhenIdle(() => {
-      void loadWishlistRecommendations();
+      void runWishlistCycle();
     }, 2200);
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      const cycle = readStoredSteamWishlistCycle();
+      const hasUsableCycle = isStoredWishlistCycleFresh(
+        cycle,
+        steamProfile?.steamId,
+        homeWishlistCycleGameCount
+      ) && cycle.gameIds.every((appId) => !libraryGameAppIds.has(appId));
+      if (!hasUsableCycle && Date.now() >= retryAt) {
+        void runWishlistCycle();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
       cancelIdleWishlistLoad();
+      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [steamProfile?.steamId, libraryGameAppIds]);
 
@@ -2172,7 +1890,7 @@ export function HomePage({
       <HomeWishlistRecommendations
         title={t("home.steamWishlist")}
         subtitle={t("home.steamWishlistSubtitle")}
-        recommendations={wishlistRecommendations}
+         games={wishlistRecommendations}
         loading={isLoadingWishlistRecommendations}
         language={appearance.language}
         onOpenGame={onOpenGame}

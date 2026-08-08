@@ -243,7 +243,6 @@ export function HomeWishlistCardSkeleton() {
             <span className="home-wishlist-card__tag-skeleton" />
             <span className="home-wishlist-card__tag-skeleton" />
             <span className="home-wishlist-card__tag-skeleton" />
-            <span className="home-wishlist-card__tag-skeleton" />
           </span>
         </span>
       </span>
@@ -361,7 +360,7 @@ export function HomePageLoadingState() {
       <section className="home-wishlist">
         <SectionHeaderSkeleton withSubtitle />
         <div className="home-wishlist__list">
-          {Array.from({ length: 3 }, (_, index) => (
+          {Array.from({ length: 4 }, (_, index) => (
             <HomeWishlistCardSkeleton key={`wishlist-${index}`} />
           ))}
         </div>

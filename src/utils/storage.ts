@@ -44,17 +44,13 @@ export type StoredPersonalCalendar = {
   monthGameIds: Record<string, string[]>;
 };
 
-export type StoredSteamWishlistRecommendations = {
+export type StoredSteamWishlistCycle = {
   steamId: string;
+  cycleStart: string;
   expiresAt: string;
-  algorithmVersion?: string;
+  algorithmVersion: string;
   gameIds: string[];
-  recommendationPairs?: Array<{
-    sourceAppId: string;
-    sourceTitle?: string;
-    recommendedAppId: string;
-    recommendedTitle?: string;
-  }>;
+  history: string[][];
 };
 
 export type StoredSteamWishlistReview = {
@@ -140,40 +136,34 @@ function normalizeStoredPersonalCalendar(
   return { algorithmVersion, weekStart, cycleStart, expiresAt, gameIds, monthGameIds };
 }
 
-function normalizeStoredSteamWishlistRecommendations(
-  value: unknown
-): StoredSteamWishlistRecommendations | null {
+function normalizeStoredSteamWishlistCycle(value: unknown): StoredSteamWishlistCycle | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
   const wishlist = value as Record<string, unknown>;
   const steamId = storedString(wishlist.steamId);
+  const cycleStart = storedString(wishlist.cycleStart);
   const expiresAt = storedString(wishlist.expiresAt);
-  const algorithmVersion = storedString(wishlist.algorithmVersion) || undefined;
+  const algorithmVersion = storedString(wishlist.algorithmVersion);
   const gameIds = storedStringArray(wishlist.gameIds);
-  const recommendationPairs = Array.isArray(wishlist.recommendationPairs)
-    ? wishlist.recommendationPairs.flatMap((pair) => {
-        if (!pair || typeof pair !== "object" || Array.isArray(pair)) return [];
-        const record = pair as Record<string, unknown>;
-        const sourceAppId = storedString(record.sourceAppId);
-        const sourceTitle = storedString(record.sourceTitle) || undefined;
-        const recommendedAppId = storedString(record.recommendedAppId);
-        const recommendedTitle = storedString(record.recommendedTitle) || undefined;
-        return sourceAppId && recommendedAppId
-          ? [{ sourceAppId, sourceTitle, recommendedAppId, recommendedTitle }]
-          : [];
-      })
+  const history = Array.isArray(wishlist.history)
+    ? wishlist.history
+        .slice(0, 4)
+        .map((entry) => storedStringArray(entry))
+        .filter((entry) => entry.length > 0)
     : [];
 
   if (
     !steamId ||
+    !cycleStart ||
     !expiresAt ||
+    !Number.isFinite(Date.parse(cycleStart)) ||
     !Number.isFinite(Date.parse(expiresAt)) ||
-    (gameIds.length === 0 && recommendationPairs.length === 0)
+    gameIds.length === 0
   ) {
     return null;
   }
 
-  return { steamId, expiresAt, algorithmVersion, gameIds, recommendationPairs };
+  return { steamId, algorithmVersion, cycleStart, expiresAt, gameIds, history };
 }
 
 function normalizeStoredSteamReviewAuthor(value: unknown): SteamGameReview["author"] | null {
@@ -517,7 +507,7 @@ export function writeStoredPersonalCalendar(
   }
 }
 
-export function readStoredSteamWishlistRecommendations(): StoredSteamWishlistRecommendations | null {
+export function readStoredSteamWishlistCycle(): StoredSteamWishlistCycle | null {
   if (typeof window === "undefined") return null;
 
   try {
@@ -525,14 +515,14 @@ export function readStoredSteamWishlistRecommendations(): StoredSteamWishlistRec
       window.localStorage.getItem(steamWishlistRecommendationsStorageKey) ?? "null"
     ) as unknown;
 
-    return normalizeStoredSteamWishlistRecommendations(parsed);
+    return normalizeStoredSteamWishlistCycle(parsed);
   } catch {
     return null;
   }
 }
 
-export function writeStoredSteamWishlistRecommendations(
-  wishlist: StoredSteamWishlistRecommendations
+export function writeStoredSteamWishlistCycle(
+  wishlist: StoredSteamWishlistCycle
 ) {
   if (typeof window === "undefined") return;
 
@@ -542,7 +532,7 @@ export function writeStoredSteamWishlistRecommendations(
       JSON.stringify(wishlist)
     );
   } catch {
-    // Wishlist recommendations can be regenerated if localStorage is unavailable.
+    // Wishlist cycle can be regenerated if localStorage is unavailable.
   }
 }
 
