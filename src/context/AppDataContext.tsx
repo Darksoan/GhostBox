@@ -49,6 +49,7 @@ import {
   showDesktopBackupNotification,
 } from "../lib/backupNotifications";
 import { isHiddenLibraryGame } from "../utils/filters";
+import { readDownloadTasks } from "../lib/downloadManager";
 import { preloadGamePortraitSources } from "../utils/image";
 import { normalizeSteamGameTitles } from "../utils/steamTitles";
 
@@ -1093,8 +1094,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [profileHistoryGames]);
 
   useEffect(() => {
+    const completedDownloadAppIds = new Set(
+      readDownloadTasks()
+        .filter((task) => task.status === "completed")
+        .map((task) => task.appId),
+    );
+
     void ghostboxApi.setTrayLibraryGames(
-      addedLibraryGames.filter((game) => game.librarySource !== "steam-owned"),
+      addedLibraryGames.map((game) => ({
+        ...game,
+        trayInstalled:
+          game.librarySource === "steam-installed" ||
+          game.librarySource === "plugin" ||
+          game.librarySource === "registered" ||
+          completedDownloadAppIds.has(game.appId),
+      })),
     );
   }, [addedLibraryGames]);
 

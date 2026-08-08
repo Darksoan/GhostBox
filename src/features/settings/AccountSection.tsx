@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Copy, Loader2 } from "lucide-react";
+import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
+import ghostLogo from "../../../Icons/ghost-solid.png";
 import "./AccountSection.scss";
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -12,122 +14,128 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export function AccountSection() {
   const { t } = useSettings();
-  const { account, logout, changePassword } = useAuth();
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { account, logout, resendVerificationEmail } = useAuth();
+  const { steamProfile } = useAppData();
+  const [usernameCopied, setUsernameCopied] = useState(false);
+  const [sendingVerification, setSendingVerification] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!usernameCopied) return;
+    const timeout = window.setTimeout(() => setUsernameCopied(false), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [usernameCopied]);
+
+  // The badge stays in its "sent" state long enough to read, then offers the
+  // resend again — the worker throttles repeats on its own side.
+  useEffect(() => {
+    if (!verificationSent) return;
+    const timeout = window.setTimeout(() => setVerificationSent(false), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [verificationSent]);
 
   if (!account) return null;
 
-  function resetForm() {
-    setChangingPassword(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setError("");
+  async function onCopyUsernameClick() {
+    if (!account) return;
+    await navigator.clipboard.writeText(account.username);
+    setUsernameCopied(true);
   }
 
-  async function handleSave(event: FormEvent) {
-    event.preventDefault();
-    if (saving) return;
-    setSaving(true);
+  async function onVerifyEmailClick() {
+    if (sendingVerification || verificationSent) return;
+    setSendingVerification(true);
     setError("");
     try {
-      await changePassword(currentPassword, newPassword);
-      setSaved(true);
-      resetForm();
+      await resendVerificationEmail();
+      setVerificationSent(true);
     } catch (submitError) {
-      setError(errorMessage(submitError, t("auth.errors.auth_error")));
+      setError(errorMessage(submitError, t("settings.general.account.verifyEmailError")));
     } finally {
-      setSaving(false);
+      setSendingVerification(false);
     }
   }
 
   return (
     <section className="account-section">
-      <header className="account-section__header">
-        <h2>{t("settings.general.account.title")}</h2>
-      </header>
+      <div className="account-section__top">
+        <div className="account-section__main">
+          <header className="account-section__header">
+            <h2>{t("settings.general.account.title")}</h2>
+          </header>
 
-      <div className="account-section__info">
-        <div className="account-section__row">
-          <span className="account-section__label">{t("settings.general.account.email")}</span>
-          <span className="account-section__value">{account.email}</span>
-          <span
-            className={`account-section__badge${
-              account.emailVerified ? " account-section__badge--verified" : ""
-            }`}
-          >
-            {account.emailVerified
-              ? t("settings.general.account.verified")
-              : t("settings.general.account.unverified")}
-          </span>
+          <div className="account-section__info">
+            <div className="account-section__row">
+              <span className="account-section__label">{t("settings.general.account.email")}</span>
+              <span className="account-section__value">{account.email}</span>
+              {!account.emailVerified && (
+                <button
+                  type="button"
+                  className={`account-section__badge${
+                    verificationSent ? " account-section__badge--sent" : ""
+                  }`}
+                  onClick={() => void onVerifyEmailClick()}
+                  disabled={sendingVerification || verificationSent}
+                >
+                  {sendingVerification ? (
+                    <Loader2 size={11} className="account-section__spinner" aria-hidden="true" />
+                  ) : verificationSent ? (
+                    <Check size={11} aria-hidden="true" />
+                  ) : null}
+                  {sendingVerification
+                    ? t("settings.general.account.verifyEmailSending")
+                    : verificationSent
+                      ? t("settings.general.account.verifyEmailSent")
+                      : t("settings.general.account.verifyEmail")}
+                </button>
+              )}
+            </div>
+            <div className="account-section__row">
+              <span className="account-section__label">{t("settings.general.account.username")}</span>
+              <span className="account-section__value">{account.username}</span>
+              <button
+                type="button"
+                className={`account-section__copy${
+                  usernameCopied ? " account-section__copy--copied" : ""
+                }`}
+                onClick={() => void onCopyUsernameClick()}
+                aria-label={
+                  usernameCopied
+                    ? t("settings.general.account.usernameCopied")
+                    : t("settings.general.account.copyUsername")
+                }
+              >
+                <span className="account-section__copy-icon account-section__copy-icon--copy">
+                  <Copy size={12} aria-hidden="true" />
+                </span>
+                <span className="account-section__copy-icon account-section__copy-icon--check">
+                  <Check size={12} aria-hidden="true" />
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="account-section__row">
-          <span className="account-section__label">{t("settings.general.account.username")}</span>
-          <span className="account-section__value">{account.username}</span>
-        </div>
+
+        <img
+          className="account-section__avatar"
+          src={steamProfile?.avatarUrl || ghostLogo}
+          alt=""
+          aria-hidden="true"
+        />
       </div>
 
-      {changingPassword ? (
-        <form className="account-section__password-form" onSubmit={handleSave}>
-          <input
-            className="account-section__input"
-            type="password"
-            autoComplete="current-password"
-            placeholder={t("settings.general.account.currentPassword")}
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            required
-          />
-          <input
-            className="account-section__input"
-            type="password"
-            autoComplete="new-password"
-            placeholder={t("settings.general.account.newPassword")}
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            minLength={8}
-            required
-          />
-          {error && <p className="account-section__error">{error}</p>}
-          <div className="account-section__actions">
-            <button type="submit" className="account-section__button account-section__button--primary" disabled={saving}>
-              {saving ? <Loader2 size={14} className="account-section__spinner" aria-hidden="true" /> : null}
-              {saving ? t("settings.general.account.saving") : t("settings.general.account.save")}
-            </button>
-            <button type="button" className="account-section__button" onClick={resetForm}>
-              {t("feedback.cancel")}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="account-section__actions">
-          <button
-            type="button"
-            className="account-section__button"
-            onClick={() => {
-              setSaved(false);
-              setChangingPassword(true);
-            }}
-          >
-            {t("settings.general.account.changePassword")}
-          </button>
-          <button
-            type="button"
-            className="account-section__button account-section__button--danger"
-            onClick={() => void logout()}
-          >
-            {t("settings.general.account.signOut")}
-          </button>
-        </div>
-      )}
+      {error && <p className="account-section__error">{error}</p>}
 
-      {saved && !changingPassword && (
-        <p className="account-section__saved">{t("settings.general.account.saved")}</p>
-      )}
+      <div className="account-section__actions">
+        <button
+          type="button"
+          className="account-section__button account-section__button--danger"
+          onClick={() => void logout()}
+        >
+          {t("settings.general.account.signOut")}
+        </button>
+      </div>
     </section>
   );
 }

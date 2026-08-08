@@ -70,6 +70,7 @@ export type GhostBoxGame = {
     | "ghostbox"
     | "plugin"
     | "registered";
+  trayInstalled?: boolean;
   title: string;
   subtitle: string;
   status: GameStatus;

@@ -20,18 +20,33 @@ export function useDiscordLink() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refresh]);
+
   const connect = useCallback(async () => {
     setBusy(true);
     try {
       const url = await ghostboxApi.getDiscordLinkUrl();
       if (url) {
         await ghostboxApi.openExternalUrl(url);
-        window.setTimeout(refresh, 3000);
+
+        // The browser hand-off means we don't know when the user finishes
+        // (or abandons) the OAuth flow, so poll for a while instead of a
+        // single fixed-delay check.
+        const deadline = Date.now() + 120_000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => window.setTimeout(resolve, 3000));
+          const next = await ghostboxApi.getDiscordLinkStatus();
+          setStatus(next);
+          if (next?.linked) break;
+        }
       }
     } finally {
       setBusy(false);
     }
-  }, [refresh]);
+  }, []);
 
   const disconnect = useCallback(async () => {
     setBusy(true);

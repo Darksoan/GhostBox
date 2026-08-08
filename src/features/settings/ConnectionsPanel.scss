@@ -36,7 +36,7 @@
   gap: 16px;
   padding: 16px;
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-panel);
 }
 
@@ -70,32 +70,80 @@
   }
 }
 
-.connection-card__hint {
-  color: var(--text-faint) !important;
-}
-
 .connection-card__connected {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--type-size-caption);
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .connection-card__connected-name {
-  font-size: var(--type-size-caption);
-  font-weight: 600;
   color: var(--text-primary);
 }
 
-.connection-card__connected-badge {
+/* Mirrors the profile page's Steam ID copy button: same 24px target, same
+   vertical slide between the copy and check glyphs. */
+.connection-card__copy {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--success-soft);
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--motion-fast) ease;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--text-primary);
+  }
+}
+
+.connection-card__copy--copied {
   color: var(--success);
-  font-size: var(--type-size-micro);
+
+  &:hover,
+  &:focus-visible {
+    color: var(--success);
+  }
+}
+
+.connection-card__copy-icon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--motion-slow) var(--ease),
+              opacity var(--motion-slow) var(--ease);
+}
+
+.connection-card__copy-icon--copy {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.connection-card__copy-icon--check {
+  transform: translateY(100%);
+  opacity: 0;
+}
+
+.connection-card__copy--copied .connection-card__copy-icon--copy {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.connection-card__copy--copied .connection-card__copy-icon--check {
+  transform: translateY(0);
+  opacity: 1;
 }
 
 .connection-card__actions {
@@ -105,7 +153,9 @@
 .connection-card__button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-width: 148px;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
@@ -130,7 +180,7 @@
 .connection-card__button--primary {
   background: var(--text-strong);
   color: var(--surface-canvas);
-  border-color: var(--text-strong);
+  border-color: transparent;
 
   &:hover:not(:disabled) {
     opacity: 0.88;
@@ -139,11 +189,12 @@
 }
 
 .connection-card__button--danger {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: transparent;
+  color: var(--text-primary);
+  border-color: transparent;
+  background: var(--surface-modal-control);
 
   &:hover:not(:disabled) {
+    color: var(--danger);
     background: var(--danger-soft);
   }
 }

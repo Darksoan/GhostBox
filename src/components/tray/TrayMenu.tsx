@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { BookOpen, ExternalLink, Grid2X2, Home, Power, Play, User } from "lucide-react";
+import { Download, ExternalLink, Home, Layers, Power, Play, UserRound } from "lucide-react";
+import { Grid } from "reicon-react";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { useSettings } from "../../context/settings";
 import type { GhostBoxGame } from "../../data";
@@ -8,12 +9,13 @@ import "../../app.scss";
 
 type TrayGameItemProps = {
   game: GhostBoxGame;
+  installed: boolean;
   launching: boolean;
   disabled: boolean;
-  onLaunch: (game: GhostBoxGame) => void;
+  onSelect: (game: GhostBoxGame) => void;
 };
 
-function TrayGameItem({ game, launching, disabled, onLaunch }: TrayGameItemProps) {
+function TrayGameItem({ game, installed, launching, disabled, onSelect }: TrayGameItemProps) {
   const { url: iconUrl, loading: iconLoading } = useGameIconUrl(game);
   const { appearance } = useSettings();
   const isEnglish = appearance.language === "en";
@@ -22,7 +24,7 @@ function TrayGameItem({ game, launching, disabled, onLaunch }: TrayGameItemProps
     <button
       type="button"
       className="tray-menu__item tray-menu__game"
-      onClick={() => onLaunch(game)}
+      onClick={() => onSelect(game)}
       disabled={disabled}
     >
       {iconUrl ? (
@@ -31,7 +33,7 @@ function TrayGameItem({ game, launching, disabled, onLaunch }: TrayGameItemProps
         <span className="tray-menu__game-icon tray-menu__game-icon--skeleton" aria-hidden="true" />
       ) : (
         <span className="tray-menu__game-icon tray-menu__game-icon--fallback" aria-hidden="true">
-          <Play size={11} strokeWidth={2.25} />
+          {installed ? <Play size={11} strokeWidth={2.25} /> : <Download size={11} strokeWidth={2.25} />}
         </span>
       )}
       <span className="tray-menu__item-label">{game.title}</span>
@@ -74,6 +76,10 @@ export function TrayMenu() {
     }
   };
 
+  const handleInstall = () => {
+    void ghostboxApi.navigateFromTray("library");
+  };
+
   const navItems = [
     {
       page: "home" as const,
@@ -83,17 +89,17 @@ export function TrayMenu() {
     {
       page: "catalogue" as const,
       label: isEnglish ? "Catalogue" : "Catálogo",
-      icon: Grid2X2,
+      icon: Grid,
     },
     {
       page: "library" as const,
       label: isEnglish ? "Library" : "Biblioteca",
-      icon: BookOpen,
+      icon: Layers,
     },
     {
       page: "profile" as const,
       label: isEnglish ? "Profile" : "Perfil",
-      icon: User,
+      icon: UserRound,
     },
   ];
 
@@ -105,15 +111,19 @@ export function TrayMenu() {
             <div className="tray-menu__section-title">{isEnglish ? "My games" : "Meus jogos"}</div>
 
             <div className="tray-menu__game-list">
-              {games.map((game) => (
-                <TrayGameItem
-                  key={game.appId}
-                  game={game}
-                  launching={launchingAppId === game.appId}
-                  disabled={Boolean(launchingAppId)}
-                  onLaunch={(selectedGame) => void handleLaunch(selectedGame)}
-                />
-              ))}
+              {games.map((game) => {
+                const installed = game.trayInstalled !== false;
+                return (
+                  <TrayGameItem
+                    key={game.appId}
+                    game={game}
+                    installed={installed}
+                    launching={launchingAppId === game.appId}
+                    disabled={Boolean(launchingAppId)}
+                    onSelect={installed ? (selectedGame) => void handleLaunch(selectedGame) : handleInstall}
+                  />
+                );
+              })}
             </div>
           </section>
         )}

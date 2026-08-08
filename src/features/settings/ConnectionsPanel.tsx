@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, Link2, Loader2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2 } from "lucide-react";
 import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
 import { useDiscordLink } from "./useDiscordLink";
 import { isSteamConnected } from "../../lib/steamProfile";
-import steamIcon from "../../../Icons/steam-colored.svg";
+import steamIcon from "../../../Icons/steam-glyph.svg";
 import discordIcon from "../../../Icons/discord.svg";
 import "./ConnectionsPanel.scss";
 
@@ -15,12 +15,24 @@ export function ConnectionsPanel() {
   const discord = useDiscordLink();
   const [confirmingSteamDisconnect, setConfirmingSteamDisconnect] = useState(false);
   const [disconnectingSteam, setDisconnectingSteam] = useState(false);
+  const [steamIdCopied, setSteamIdCopied] = useState(false);
 
   useEffect(() => {
     if (!confirmingSteamDisconnect) return;
     const timeout = window.setTimeout(() => setConfirmingSteamDisconnect(false), 4000);
     return () => window.clearTimeout(timeout);
   }, [confirmingSteamDisconnect]);
+
+  useEffect(() => {
+    if (!steamIdCopied) return;
+    const timeout = window.setTimeout(() => setSteamIdCopied(false), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [steamIdCopied]);
+
+  async function onCopySteamIdClick(steamId: string) {
+    await navigator.clipboard.writeText(steamId);
+    setSteamIdCopied(true);
+  }
 
   async function onDisconnectSteamClick() {
     if (!confirmingSteamDisconnect) {
@@ -48,18 +60,38 @@ export function ConnectionsPanel() {
           <img className="connection-card__icon" src={steamIcon} alt="" aria-hidden="true" />
           <div className="connection-card__body">
             <h3>{t("settings.connections.steam.title")}</h3>
-            <p>{t("settings.connections.steam.description")}</p>
+            {!steamConnected && <p>{t("settings.connections.steam.description")}</p>}
             {steamConnected && steamProfile ? (
               <div className="connection-card__connected">
-                <span className="connection-card__connected-name">{steamProfile.displayName}</span>
-                <span className="connection-card__connected-badge">
-                  <Check size={12} strokeWidth={2.5} aria-hidden="true" />
-                  {steamProfile.steamId}
+                <span>
+                  {t("settings.connections.steam.connectedAsPrefix")}
+                  <span className="connection-card__connected-name">{steamProfile.displayName}</span>
+                  {t("settings.connections.steam.connectedAsSuffix")}
                 </span>
+                <button
+                  type="button"
+                  className={`connection-card__copy${steamIdCopied ? " connection-card__copy--copied" : ""}`}
+                  onClick={() => void onCopySteamIdClick(steamProfile.steamId)}
+                  aria-label={
+                    steamIdCopied
+                      ? t("settings.connections.steam.copiedId")
+                      : t("settings.connections.steam.copyId")
+                  }
+                  title={
+                    steamIdCopied
+                      ? t("settings.connections.steam.copiedId")
+                      : t("settings.connections.steam.copyId")
+                  }
+                >
+                  <span className="connection-card__copy-icon connection-card__copy-icon--copy">
+                    <Copy size={14} aria-hidden="true" />
+                  </span>
+                  <span className="connection-card__copy-icon connection-card__copy-icon--check">
+                    <Check size={14} aria-hidden="true" />
+                  </span>
+                </button>
               </div>
-            ) : (
-              <p className="connection-card__hint">{t("settings.connections.steam.unlocks")}</p>
-            )}
+            ) : null}
           </div>
           <div className="connection-card__actions">
             {steamConnected ? (
@@ -104,16 +136,18 @@ export function ConnectionsPanel() {
           <img className="connection-card__icon" src={discordIcon} alt="" aria-hidden="true" />
           <div className="connection-card__body">
             <h3>{t("settings.connections.discord.title")}</h3>
-            <p>{t("settings.connections.discord.description")}</p>
+            {!discord.status?.linked && <p>{t("settings.connections.discord.description")}</p>}
             {discord.status?.linked ? (
               <div className="connection-card__connected">
-                <span className="connection-card__connected-name">
-                  {discord.status.discordGlobalName || discord.status.discordUsername}
+                <span>
+                  {t("settings.connections.discord.connectedAsPrefix")}
+                  <span className="connection-card__connected-name">
+                    {discord.status.discordGlobalName || discord.status.discordUsername}
+                  </span>
+                  {t("settings.connections.discord.connectedAsSuffix")}
                 </span>
               </div>
-            ) : (
-              <p className="connection-card__hint">{t("settings.connections.discord.notConnected")}</p>
-            )}
+            ) : null}
           </div>
           <div className="connection-card__actions">
             {discord.status?.linked ? (

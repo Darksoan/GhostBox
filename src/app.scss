@@ -1413,6 +1413,11 @@ p {
     background-color: var(--surface-canvas);
     color: var(--text-primary);
 
+    &--empty {
+      background-color: var(--surface-modal-control);
+      color: var(--text-muted);
+    }
+
     img {
       display: block;
       width: 100%;
@@ -9885,14 +9890,13 @@ input[type="search"]::-ms-reveal {
   .settings-dropdown__trigger {
     width: 100%;
     min-width: 0;
-    min-height: 34px;
-    height: 34px;
+    min-height: 32px;
     padding: 0 var(--space-6);
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--library-box);
-    color: var(--text-secondary);
-    font-size: var(--type-size-body);
+    background: var(--profile-dropdown-surface);
+    color: var(--text-primary);
+    font-size: var(--type-size-compact);
     font-weight: var(--weight-medium);
     gap: var(--space-4);
 
@@ -9904,13 +9908,13 @@ input[type="search"]::-ms-reveal {
 
     svg {
       position: static;
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
 
     &:hover,
     &:focus-visible {
       border: 0;
-      background: var(--library-box-active);
+      background: var(--profile-dropdown-surface-hover);
       color: var(--text-primary);
 
       svg {
@@ -9920,29 +9924,35 @@ input[type="search"]::-ms-reveal {
   }
 
   .settings-dropdown--open .settings-dropdown__trigger {
-    background: var(--library-box-active);
+    border: 0;
+    background: var(--profile-dropdown-surface-hover);
+    color: var(--text-primary);
   }
 
   .settings-dropdown__menu {
+    min-width: 100%;
+    right: 0;
+    left: auto;
     border: 0;
     border-radius: var(--radius-lg);
-    background: var(--library-box);
+    background: var(--profile-dropdown-menu);
+    padding: 0;
   }
 
   .settings-dropdown__option {
     min-height: 32px;
     border-radius: var(--radius-lg);
-    background: var(--library-box);
-    font-size: var(--type-size-body);
+    background: transparent;
+    font-size: var(--type-size-compact);
     font-weight: var(--weight-medium);
 
     &:hover,
     &:focus-visible {
-      background: var(--dropdown-option-hover);
+      background: var(--profile-dropdown-option-hover);
     }
 
     &--active {
-      background: var(--library-box-active);
+      background: var(--profile-dropdown-surface);
     }
   }
 

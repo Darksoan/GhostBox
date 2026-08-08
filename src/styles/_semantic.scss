@@ -32,10 +32,10 @@
   --library-box-active: var(--n-1);
   --surface-popover: var(--n-3);
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
-  --surface-tray: var(--surface-canvas);
-  --surface-tray-item: var(--surface-popover);
-  --surface-tray-item-hover: var(--n-2);
-  --surface-tray-item-focus: var(--n-4);
+  --surface-tray: var(--n-1);
+  --surface-tray-item: transparent;
+  --surface-tray-item-hover: var(--n-3);
+  --surface-tray-item-focus: var(--n-3);
   --focus-ring-tray: inset 0 0 0 1px var(--border-interactive);
   // Dropdowns da aba Ajustes: mesmos tons do dropdown da aba Perfil.
   // Trigger em repouso afunda abaixo do painel; foco/ativo e menu sobem.
@@ -151,6 +151,15 @@
 
   // --- Marca (cores próprias de serviços, fora da rampa) ---
   --discord-brand: #5865f2;
+  --steam-brand-surface: linear-gradient(
+    180deg,
+    rgba(5, 24, 57, 0.7) 0%,
+    rgba(10, 27, 72, 0.7) 41%,
+    rgba(19, 46, 98, 0.7) 58%,
+    rgba(20, 75, 126, 0.7) 74%,
+    rgba(19, 100, 151, 0.7) 87%,
+    rgba(19, 135, 184, 0.7) 100%
+  );
 
   // Spinner desenhado sobre botão claro (o par --light usa --border/--text-strong).
   // Tom fixo, não é superfície da rampa — desenhado sobre botão claro.

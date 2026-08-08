@@ -135,4 +135,6 @@
   --z-popover: 1100;
   --z-toast: 1200;
   --z-tooltip: 1300;
+  // Tela de carregamento inicial — acima de tudo (herdado do HTML estático).
+  --z-splash: 10000;
 }

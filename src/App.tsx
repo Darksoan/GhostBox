@@ -8,6 +8,7 @@ import { useContentOverlayState } from "./components/routing/ContentOverlay";
 import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellState } from "./hooks/useAppShellState";
 import { useAppData } from "./context/AppDataContext";
+import { useAuth } from "./context/AuthContext";
 import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
 import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
@@ -56,6 +57,7 @@ function AppSplash({ progress }: { progress: number }) {
 }
 
 function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
+  const { status, openAuthModal } = useAuth();
   const {
     openGame,
     openAchievements,
@@ -337,9 +339,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           userCollections={appData.userCollections}
           onNavigate={handleNavigate}
           onBack={handleBack}
-          onOpenProfile={() => handleNavigate("profile")}
+          onOpenProfile={() =>
+            status === "authenticated"
+              ? handleNavigate("profile")
+              : openAuthModal()
+          }
           onOpenGame={openGame}
-          onRestartSteam={appData.handleRestartSteam}
           onCreateCollection={appData.openCreateUserCollectionModal}
           onRemoveFavorite={appData.toggleFavoriteGame}
           onDeleteCollection={appData.deleteCollection}

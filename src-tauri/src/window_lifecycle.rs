@@ -275,13 +275,15 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| match event {
             TrayIconEvent::Click {
                 position,
+                button,
                 button_state,
                 ..
             } if matches!(button_state, tauri::tray::MouseButtonState::Down) => {
-                show_tray_menu(tray.app_handle(), position);
-            }
-            TrayIconEvent::DoubleClick { position, .. } => {
-                show_tray_menu(tray.app_handle(), position);
+                match button {
+                    tauri::tray::MouseButton::Right => show_tray_menu(tray.app_handle(), position),
+                    tauri::tray::MouseButton::Left => show_main_window(tray.app_handle()),
+                    _ => {}
+                }
             }
             _ => {}
         });

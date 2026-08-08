@@ -4,25 +4,18 @@ import { AuthScreen } from "./AuthScreen";
 import "./AuthScreen.scss";
 
 /**
- * Everything below this point (AppDataProvider, App, PageRouter) only mounts
- * once there is an authenticated GhostBox account — there is no logged-out
- * browsing mode. Kept as a sibling component (not an early return inside
- * App) so App's own hooks never run before an account exists.
+ * The app below stays mounted at all times. When there is no account the login
+ * modal only opens on demand (e.g. the sidebar profile action) sitting on top
+ * of the app with a subtle backdrop; clicking outside the card dismisses it and
+ * the app keeps navigating.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { status } = useAuth();
+  const { status, isAuthModalOpen } = useAuth();
 
-  if (status === "loading") {
-    return (
-      <div className="auth-screen">
-        <div className="auth-screen__brand">GhostBox</div>
-      </div>
-    );
-  }
-
-  if (status !== "authenticated") {
-    return <AuthScreen />;
-  }
-
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {status !== "authenticated" && isAuthModalOpen ? <AuthScreen /> : null}
+    </>
+  );
 }

@@ -16,6 +16,9 @@ interface AuthContextValue {
   status: AuthStatus;
   account: GhostBoxAccount | null;
   linkedSteamId: string | null;
+  isAuthModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
   register: (
     email: string,
     username: string,
@@ -36,6 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [account, setAccount] = useState<GhostBoxAccount | null>(null);
   const [linkedSteamId, setLinkedSteamId] = useState<string | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
+  const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
 
   const applyAccount = useCallback(
     (me: Awaited<ReturnType<typeof ghostboxApi.getAccount>>) => {
@@ -156,6 +163,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       account,
       linkedSteamId,
+      isAuthModalOpen,
+      openAuthModal,
+      closeAuthModal,
       register,
       login,
       logout,
@@ -168,6 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       account,
       linkedSteamId,
+      isAuthModalOpen,
+      openAuthModal,
+      closeAuthModal,
       register,
       login,
       logout,

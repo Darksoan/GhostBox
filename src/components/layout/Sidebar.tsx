@@ -6,7 +6,6 @@ import {
   Home,
   Layers,
   Pencil,
-  RefreshCw,
   Settings,
   Trash,
   UserRound,
@@ -41,10 +40,6 @@ const sidebarFooterNavigation: { id: Page; icon: LucideIcon; labelKey: string }[
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 
-const sidebarExtraNavigation: { id: string; icon: LucideIcon; labelKey: string }[] = [
-  { id: "restart-steam", labelKey: "sidebar.restartSteam", icon: RefreshCw },
-];
-
 interface SidebarProps {
   activePage: Page;
   activeCollectionId?: string;
@@ -57,7 +52,6 @@ interface SidebarProps {
   onBack: () => void;
   onOpenProfile: () => void;
   onOpenGame: (game: GhostBoxGame) => void;
-  onRestartSteam: () => void;
   onCreateCollection: () => void;
   onRemoveFavorite: (game: GhostBoxGame) => void;
   onDeleteCollection?: (collectionId: string) => void;
@@ -87,7 +81,6 @@ export const Sidebar = memo(function Sidebar({
   onBack,
   onOpenProfile,
   onOpenGame,
-  onRestartSteam,
   onCreateCollection,
   onRemoveFavorite: _onRemoveFavorite,
   onDeleteCollection,
@@ -240,18 +233,6 @@ export const Sidebar = memo(function Sidebar({
                     {id === "downloads" && activeDownloadCount > 0 && (
                       <strong>{activeDownloadCount > 99 ? "99+" : activeDownloadCount}</strong>
                     )}
-                  </button>
-                </li>
-              ))}
-              {sidebarExtraNavigation.map(({ id, labelKey, icon: Icon }) => (
-                <li key={id} className="sidebar__menu-item sidebar__mode-panel">
-                  <button
-                    type="button"
-                    className="sidebar__menu-item-button"
-                    onClick={() => onRestartSteam()}
-                  >
-                    <Icon size={19} strokeWidth={2} />
-                    <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
               ))}
@@ -612,14 +593,17 @@ const SidebarProfile = memo(function SidebarProfile({
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <UserRound size={24} />
+              <span className="sidebar-profile__avatar sidebar-profile__avatar--empty">
+                <UserRound size={24} />
+              </span>
             )}
           </span>
 
           <span className="sidebar-profile__button-information">
             <span className="sidebar-profile__title-row">
               <span className="sidebar-profile__button-title">
-                {profile?.displayName || account?.displayName || account?.username || ""}
+                {profile?.displayName || account?.displayName || account?.username ||
+                  (appearance.language === "en" ? "Log in" : "Faça login")}
               </span>
               {isSteamConnected(profile) ? (
                 <span

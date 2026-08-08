@@ -26,11 +26,11 @@ function renderApp() {
           <SettingsProvider>
             <AuthProvider>
               <OverlayProvider>
-                <AuthGate>
-                  <AppDataProvider>
+                <AppDataProvider>
+                  <AuthGate>
                     <App />
-                  </AppDataProvider>
-                </AuthGate>
+                  </AuthGate>
+                </AppDataProvider>
               </OverlayProvider>
             </AuthProvider>
           </SettingsProvider>

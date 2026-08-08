@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
+import ghostLogo from "../../../Icons/ghost-solid.png";
 import "./AuthScreen.scss";
 
 type View = "login" | "register" | "forgot";
@@ -12,8 +13,17 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function AuthTitle({ text }: { text: string }) {
+  return (
+    <h1 className="auth-form__title">
+      <img className="auth-form__title-icon" src={ghostLogo} alt="" />
+      {text}
+    </h1>
+  );
+}
+
 export function AuthScreen() {
-  const { login, register, requestPasswordReset } = useAuth();
+  const { login, register, requestPasswordReset, closeAuthModal } = useAuth();
   const { t } = useSettings();
   const [view, setView] = useState<View>("login");
   const [submitting, setSubmitting] = useState(false);
@@ -30,12 +40,45 @@ export function AuthScreen() {
 
   const [forgotIdentifier, setForgotIdentifier] = useState("");
 
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardHeight, setCardHeight] = useState<number | null>(null);
+
   function switchView(next: View) {
     setView(next);
     setError("");
     setNotice("");
     setShowPassword(false);
   }
+
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const form = card?.querySelector(".auth-form") as HTMLElement | null;
+    if (!card || !form) return;
+
+    const styles = window.getComputedStyle(card);
+    const verticalSpace =
+      parseFloat(styles.paddingTop) +
+      parseFloat(styles.paddingBottom) +
+      parseFloat(styles.borderTopWidth) +
+      parseFloat(styles.borderBottomWidth);
+
+    setCardHeight(Math.ceil(form.getBoundingClientRect().height + verticalSpace));
+  }, [view, error, notice, submitting]);
+
+  const handleBackdropClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.target === event.currentTarget) closeAuthModal();
+    },
+    [closeAuthModal],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeAuthModal();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeAuthModal]);
 
   async function handleLoginSubmit(event: FormEvent) {
     event.preventDefault();
@@ -44,6 +87,7 @@ export function AuthScreen() {
     setSubmitting(true);
     try {
       await login(loginIdentifier.trim(), loginPassword);
+      closeAuthModal();
     } catch (submitError) {
       setError(errorMessage(submitError, t("auth.errors.auth_error")));
     } finally {
@@ -58,6 +102,7 @@ export function AuthScreen() {
     setSubmitting(true);
     try {
       await register(registerEmail.trim(), registerUsername.trim(), registerPassword);
+      closeAuthModal();
     } catch (submitError) {
       setError(errorMessage(submitError, t("auth.errors.auth_error")));
     } finally {
@@ -82,13 +127,15 @@ export function AuthScreen() {
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-screen__card">
-        <div className="auth-screen__brand">GhostBox</div>
-
+    <div className="auth-screen" onMouseDown={handleBackdropClick}>
+      <div
+        ref={cardRef}
+        className="auth-screen__card"
+        style={cardHeight !== null ? { height: `${cardHeight}px` } : undefined}
+      >
         {view === "login" && (
-          <form className="auth-form" onSubmit={handleLoginSubmit}>
-            <h1 className="auth-form__title">{t("auth.login.title")}</h1>
+          <form key={view} className="auth-form" onSubmit={handleLoginSubmit}>
+            <AuthTitle text={t("auth.login.title")} />
             <p className="auth-form__subtitle">{t("auth.login.subtitle")}</p>
 
             <label className="auth-field">
@@ -153,8 +200,8 @@ export function AuthScreen() {
         )}
 
         {view === "register" && (
-          <form className="auth-form" onSubmit={handleRegisterSubmit}>
-            <h1 className="auth-form__title">{t("auth.register.title")}</h1>
+          <form key={view} className="auth-form" onSubmit={handleRegisterSubmit}>
+            <AuthTitle text={t("auth.register.title")} />
             <p className="auth-form__subtitle">{t("auth.register.subtitle")}</p>
 
             <label className="auth-field">
@@ -228,8 +275,8 @@ export function AuthScreen() {
         )}
 
         {view === "forgot" && (
-          <form className="auth-form" onSubmit={handleForgotSubmit}>
-            <h1 className="auth-form__title">{t("auth.forgotPassword.title")}</h1>
+          <form key={view} className="auth-form" onSubmit={handleForgotSubmit}>
+            <AuthTitle text={t("auth.forgotPassword.title")} />
             <p className="auth-form__subtitle">{t("auth.forgotPassword.subtitle")}</p>
 
             <label className="auth-field">

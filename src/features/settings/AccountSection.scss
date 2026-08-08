@@ -2,16 +2,30 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px;
+  padding: 20px;
   margin-bottom: 20px;
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
+  border: 0;
   border-radius: var(--radius-panel);
+}
+
+.account-section__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-section__main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
 }
 
 .account-section__header h2 {
   margin: 0;
-  font-size: var(--type-size-body);
+  font-size: var(--type-size-body-emphasis);
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -19,61 +33,124 @@
 .account-section__info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .account-section__row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .account-section__label {
-  min-width: 90px;
   font-size: var(--type-size-caption);
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .account-section__value {
-  font-size: var(--type-size-compact);
-  color: var(--text-primary);
-  font-weight: 600;
+  font-size: var(--type-size-caption);
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .account-section__badge {
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-hover);
-  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--text-strong);
+  color: var(--surface-canvas);
   font-size: var(--type-size-micro);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--motion-fast) ease, background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+
+  &:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
 }
 
-.account-section__badge--verified {
+.account-section__badge--sent {
   background: var(--success-soft);
   color: var(--success);
 }
 
-.account-section__password-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 320px;
+.account-section__avatar {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
-.account-section__input {
-  background: var(--surface-modal-control);
-  border: 1px solid var(--border-default);
+.account-section__copy {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--type-size-compact);
-  font-family: var(--font-sans);
-  padding: 9px 11px;
-  outline: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--motion-fast) ease;
 
-  &:focus {
-    border-color: var(--border-interactive);
+  &:hover,
+  &:focus-visible {
+    color: var(--text-primary);
   }
+}
+
+.account-section__copy--copied {
+  color: var(--success);
+
+  &:hover,
+  &:focus-visible {
+    color: var(--success);
+  }
+}
+
+.account-section__copy-icon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--motion-slow) var(--ease),
+              opacity var(--motion-slow) var(--ease);
+}
+
+.account-section__copy-icon--copy {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.account-section__copy-icon--check {
+  transform: translateY(100%);
+  opacity: 0;
+}
+
+.account-section__copy--copied .account-section__copy-icon--copy {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.account-section__copy--copied .account-section__copy-icon--check {
+  transform: translateY(0);
+  opacity: 1;
 }
 
 .account-section__error {
@@ -83,12 +160,6 @@
   background: var(--danger-soft);
   color: var(--danger);
   font-size: var(--type-size-micro);
-}
-
-.account-section__saved {
-  margin: 0;
-  font-size: var(--type-size-micro);
-  color: var(--success);
 }
 
 .account-section__actions {
@@ -117,17 +188,6 @@
   &:disabled {
     opacity: 0.6;
     cursor: default;
-  }
-}
-
-.account-section__button--primary {
-  background: var(--text-strong);
-  color: var(--surface-canvas);
-  border-color: var(--text-strong);
-
-  &:hover:not(:disabled) {
-    opacity: 0.88;
-    background: var(--text-strong);
   }
 }
 
