@@ -1,4 +1,4 @@
-import { ChevronRight, Check } from "lucide-react";
+import { Check, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -15,6 +15,7 @@ import type { GhostBoxGame } from "../data";
 import type {
   CatalogueFilters,
   CatalogueFilterKey,
+  CatalogueSort,
 } from "../types";
 import {
   filterCategoryColors,
@@ -39,7 +40,6 @@ import {
   CatalogueLoadingState,
   CatalogueListLoadingState,
   EmptyState,
-  PageSpinnerLoadingState,
 } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
@@ -242,6 +242,7 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
     () => visibleValues.slice(0, maxVisibleFilterOptions),
     [visibleValues]
   );
+  const hiddenValueCount = Math.max(0, visibleValues.length - renderedValues.length);
   const yearValues = useMemo(
     () => (filterKey === "years" ? sortYearValues(values) : []),
     [filterKey, values]
@@ -333,6 +334,14 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
                   </span>
                 )}
               </div>
+              {hiddenValueCount > 0 && (
+                <span className="catalogue-filter-section__hint">
+                  {t("catalogue.filters.showing", {
+                    visible: renderedValues.length,
+                    total: visibleValues.length,
+                  })}
+                </span>
+              )}
             </>
           )}
         </div>
@@ -360,10 +369,14 @@ interface CataloguePageProps {
   chunkOffset: number;
   matched: number;
   hasError?: boolean;
+  hasRefreshError?: boolean;
+  hasFacetsError?: boolean;
   onRetry?: () => void;
   filters: CatalogueFilters;
   onFiltersChange: (filters: CatalogueFilters) => void;
   onPageChange: (page: number) => void;
+  sort: CatalogueSort;
+  onSortChange: (sort: CatalogueSort) => void;
   onOpenGame: (game: GhostBoxGame) => void;
   addedGameAppIds: Set<string>;
   addingGameId: string | null;
@@ -385,10 +398,14 @@ export function CataloguePage({
   chunkOffset,
   matched,
   hasError = false,
+  hasRefreshError = false,
+  hasFacetsError = false,
   onRetry,
   filters,
   onFiltersChange,
   onPageChange,
+  sort,
+  onSortChange,
   onOpenGame,
   addedGameAppIds,
   addingGameId,
@@ -397,6 +414,7 @@ export function CataloguePage({
   scrollElementRef,
 }: CataloguePageProps) {
   const { t } = useSettings();
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
     x: number;
@@ -419,6 +437,7 @@ export function CataloguePage({
 
   const filterSections = useMemo(() => {
     if (filtersLoading && !facets) return [];
+    if (hasFacetsError && !facets) return [];
 
     const genres = limitFilterValues(
       facets?.genres?.length
@@ -471,13 +490,18 @@ export function CataloguePage({
       },
       { key: "years" as const, title: t("catalogue.filters.years"), values: years },
     ].filter((section) => section.values.length > 0);
-  }, [facets, filters, filtersLoading, games, t]);
+  }, [facets, filters, filtersLoading, games, hasFacetsError, t]);
 
   const totalPages = Math.max(1, Math.ceil(matched / cataloguePageSize));
   // Só limita a página pedida quando já existe uma contagem real. Durante um
   // refetch `matched` pode zerar e o clamp jogaria a página para 1 e de volta,
   // disparando dois scrolls suaves.
-  const currentPage = matched > 0 ? Math.min(page, totalPages) : page;
+  const isPageTransitioning = page !== displayedPage;
+  const currentPage = isPageTransitioning
+    ? displayedPage
+    : matched > 0
+      ? Math.min(page, totalPages)
+      : page;
 
   useEffect(() => {
     scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -511,6 +535,7 @@ export function CataloguePage({
     hoverPreviewRetention.cancelClear();
     hoverPreviewIntent.cancel();
     setHoveredGame(null);
+    setContextMenu(null);
   }, [displayedPage, hoverPreviewIntent, hoverPreviewRetention, visibleGamesCacheKey]);
 
   useEffect(
@@ -600,6 +625,16 @@ export function CataloguePage({
     directFavoriteAction: contextMenu?.mode !== "collection",
     onlyCollectionActions: contextMenu?.mode === "collection",
   });
+  const emptyStateTitle = hasSearchQuery
+    ? t("header.searchNoResultsTitle")
+    : hasActiveFilters
+      ? t("catalogue.noResultsTitle")
+      : undefined;
+  const emptyStateDescription = hasSearchQuery
+    ? t("header.searchNoResultsAppIdHint")
+    : hasActiveFilters
+      ? t("catalogue.noResultsDescription")
+      : undefined;
 
   if (initialLoading) {
     return <CatalogueLoadingState />;
@@ -609,6 +644,68 @@ export function CataloguePage({
     <section className="catalogue-page">
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
+          <div className="catalogue-page__toolbar">
+            <div className="catalogue-page__summary">
+              <strong>{t("catalogue.resultsCount", { count: matched })}</strong>
+              {selectedFilterCount > 0 && (
+                <span>
+                  {t("catalogue.filters.selected", { count: selectedFilterCount })}
+                </span>
+              )}
+              {refreshing && (
+                <span className="catalogue-page__refreshing" role="status">
+                  {t("loading.catalogue")}
+                </span>
+              )}
+            </div>
+            <div className="catalogue-page__toolbar-actions">
+              <label className="catalogue-page__sort">
+                <span className="sr-only">{t("catalogue.sort.label")}</span>
+                <select
+                  value={sort}
+                  aria-label={t("catalogue.sort.label")}
+                  onChange={(event) =>
+                    onSortChange(event.currentTarget.value as CatalogueSort)
+                  }
+                >
+                  <option value="popular">{t("catalogue.sort.popular")}</option>
+                  <option value="recentlyAdded">
+                    {t("catalogue.sort.recentlyAdded")}
+                  </option>
+                </select>
+              </label>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="catalogue-page__clear-filters"
+                  onClick={clearAllFilters}
+                >
+                  {t("catalogue.filters.clearAll")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="catalogue-page__filters-toggle"
+                aria-expanded={isFiltersOpen}
+                aria-controls="catalogue-filters-panel"
+                onClick={() => setIsFiltersOpen((open) => !open)}
+              >
+                <SlidersHorizontal size={16} aria-hidden="true" />
+                {t("catalogue.filters.label")}
+                {selectedFilterCount > 0 && <span>{selectedFilterCount}</span>}
+              </button>
+            </div>
+          </div>
+          {hasRefreshError && (
+            <div className="catalogue-page__notice" role="alert">
+              <span>{t("catalogue.refreshError")}</span>
+              {onRetry && (
+                <button type="button" onClick={onRetry}>
+                  {t("catalogue.errorRetry")}
+                </button>
+              )}
+            </div>
+          )}
           {hasError ? (
             <EmptyState
               title={t("catalogue.errorTitle")}
@@ -616,8 +713,6 @@ export function CataloguePage({
               actionLabel={onRetry ? t("catalogue.errorRetry") : undefined}
               onAction={onRetry}
             />
-          ) : refreshing ? (
-            <PageSpinnerLoadingState label={t("loading.catalogue")} />
           ) : loading ? (
             <CatalogueListLoadingState />
           ) : visibleGames.length > 0 ? (
@@ -635,18 +730,9 @@ export function CataloguePage({
             </div>
           ) : (
             <EmptyState
-              query={
-                query ||
-                (selectedFilterCount
-                  ? t("catalogue.filters.selected", {
-                      count: selectedFilterCount,
-                    })
-                  : "")
-              }
-              title={hasSearchQuery ? t("header.searchNoResultsTitle") : undefined}
-              description={
-                hasSearchQuery ? t("header.searchNoResultsAppIdHint") : undefined
-              }
+              query={query}
+              title={emptyStateTitle}
+              description={emptyStateDescription}
               actionLabel={
                 hasActiveFilters ? t("catalogue.filters.clearAll") : undefined
               }
@@ -665,14 +751,41 @@ export function CataloguePage({
           )}
         </div>
 
+        {isFiltersOpen && (
+          <button
+            type="button"
+            className="catalogue-filters-backdrop"
+            aria-label={t("catalogue.filters.label")}
+            onClick={() => setIsFiltersOpen(false)}
+          />
+        )}
         <aside
-          className="catalogue-filters"
+          id="catalogue-filters-panel"
+          className={`catalogue-filters ${isFiltersOpen ? "catalogue-filters--open" : ""}`}
           aria-label={t("catalogue.filters.label")}
           onPointerEnter={handlePreviewPointerEnter}
           onPointerLeave={handlePreviewPointerLeave}
         >
+          <div className="catalogue-filters__mobile-header">
+            <strong>{t("catalogue.filters.label")}</strong>
+            <button
+              type="button"
+              aria-label={t("catalogue.filters.label")}
+              onClick={() => setIsFiltersOpen(false)}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
           <div className="catalogue-filters__sections">
             {filtersLoading && !filterSections.length && <CatalogueFilterSectionsLoadingState />}
+            {hasFacetsError && !filterSections.length && (
+              <EmptyState
+                title={t("catalogue.filters.label")}
+                description={t("catalogue.facetsError")}
+                actionLabel={onRetry ? t("catalogue.errorRetry") : undefined}
+                onAction={onRetry}
+              />
+            )}
             {filterSections.map((section) => (
               <CatalogueFilterSection
                 key={section.key}

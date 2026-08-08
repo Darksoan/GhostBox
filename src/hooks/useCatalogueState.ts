@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GameDatabaseResult } from "../data";
-import type { CatalogueFilters } from "../types";
+import type { CatalogueFilters, CatalogueSort } from "../types";
 import {
   catalogueChunkPageCount,
   catalogueChunkSize,
@@ -20,7 +20,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   const [cataloguePage, setCataloguePage] = useState(1);
   const [catalogueFilters, setCatalogueFilters] =
     useState<CatalogueFilters>(emptyCatalogueFilters);
-  const catalogueSort = "popular" as const;
+  const [catalogueSort, setCatalogueSort] = useState<CatalogueSort>("popular");
   // Fixed for the lifetime of the hook. Recomputing per render would reshuffle
   // the pool mid-navigation and make pages repeat or skip games.
   const [catalogueRotationSeedValue] = useState(() => catalogueRotationSeed());
@@ -54,6 +54,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   }, [
     catalogueFilters,
     catalogueRotationSeedValue,
+    catalogueSort,
     effectiveCataloguePage,
     normalizedQuery,
   ]);
@@ -121,13 +122,18 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     []
   );
 
+  const handleCatalogueSortChange = useCallback((sort: CatalogueSort) => {
+    setCatalogueSort(sort);
+    setCataloguePage(1);
+  }, []);
+
   const handleCataloguePageChange = useCallback((page: number) => {
     setCataloguePage(page);
   }, []);
 
   const handleCatalogueRetry = useCallback(() => {
-    void catalogueQuery.refetch();
-  }, [catalogueQuery]);
+    void Promise.all([catalogueQuery.refetch(), facetsQuery.refetch()]);
+  }, [catalogueQuery, facetsQuery]);
 
   return {
     catalogueDatabase: catalogueQuery.data ?? emptyGameDatabase,
@@ -138,6 +144,8 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     shouldShowCatalogueLoading,
     isCatalogueRefreshing,
     hasCatalogueError: catalogueQuery.isError && !hasAnyCatalogueData,
+    hasCatalogueRefreshError: catalogueQuery.isRefetchError,
+    hasCatalogueFacetsError: facetsQuery.isError && !facetsQuery.data && !lastCatalogueFacets,
     onCatalogueRetry: handleCatalogueRetry,
     shouldPulseCatalogueLoading:
       (isCatalogueRefreshing || !hasAnyCatalogueData) &&
@@ -148,6 +156,7 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     catalogueFilters,
     catalogueSort,
     handleCatalogueFiltersChange,
+    handleCatalogueSortChange,
     handleCataloguePageChange,
   };
 }

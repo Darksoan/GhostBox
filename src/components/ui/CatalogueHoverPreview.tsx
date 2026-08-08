@@ -36,6 +36,11 @@ export function CatalogueHoverPreview({
   const [isVisible, setIsVisible] = useState(false);
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasVisibleRef = useRef(false);
+  const previewRef = useRef<HTMLElement | null>(null);
+
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   useEffect(() => {
     if (game) {
@@ -73,6 +78,14 @@ export function CatalogueHoverPreview({
       }
     };
   }, [game]);
+
+  useEffect(() => {
+    if (isVisible || typeof document === "undefined") return;
+    const activeElement = document.activeElement;
+    if (activeElement && previewRef.current?.contains(activeElement)) {
+      (activeElement as HTMLElement).blur();
+    }
+  }, [isVisible]);
 
   const screenshotSources = useMemo(
     () =>
@@ -127,7 +140,13 @@ export function CatalogueHoverPreview({
   }, [cachedScreenshotSources]);
 
   useEffect(() => {
-    if (cachedScreenshotSources.length <= 1 || isAutoplayPaused) return;
+    if (
+      cachedScreenshotSources.length <= 1 ||
+      isAutoplayPaused ||
+      prefersReducedMotion
+    ) {
+      return;
+    }
 
     const intervalId = window.setInterval(() => {
       setActiveScreenshotSource((currentSource) =>
@@ -140,7 +159,7 @@ export function CatalogueHoverPreview({
     }, AUTOPLAY_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [cachedScreenshotSources, isAutoplayPaused, screenshotKey]);
+  }, [cachedScreenshotSources, isAutoplayPaused, prefersReducedMotion, screenshotKey]);
 
   const navigateScreenshot = (direction: "previous" | "next") => {
     setActiveScreenshotSource((currentSource) =>
@@ -217,6 +236,7 @@ export function CatalogueHoverPreview({
 
   return (
     <section
+      ref={previewRef}
       className={`catalogue-hover-preview ${
         isVisible ? "catalogue-hover-preview--visible" : "catalogue-hover-preview--hidden"
       }`}
@@ -225,6 +245,7 @@ export function CatalogueHoverPreview({
           ? `Preview of ${displayedGame.title}`
           : `Preview de ${displayedGame.title}`
       }
+      aria-hidden={!isVisible}
       onPointerEnter={handlePreviewPointerEnter}
       onPointerLeave={handlePreviewPointerLeave}
       onFocusCapture={handlePreviewFocus}
@@ -243,9 +264,10 @@ export function CatalogueHoverPreview({
                 src={source}
                 alt={isActive ? screenshotAlt(index) : ""}
                 aria-hidden={!isActive}
-                loading="eager"
+                loading={index === 0 ? "eager" : "lazy"}
                 decoding="async"
                 fetchPriority={index === 0 ? "high" : "low"}
+                tabIndex={-1}
                 onLoad={(event) => {
                   void markScreenshotReady(source, event.currentTarget);
                 }}
@@ -264,6 +286,7 @@ export function CatalogueHoverPreview({
               type="button"
               aria-label={t("catalogue.preview.previousScreenshot")}
               disabled={readyScreenshotCount < 2}
+              tabIndex={isVisible ? 0 : -1}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -277,6 +300,7 @@ export function CatalogueHoverPreview({
               type="button"
               aria-label={t("catalogue.preview.nextScreenshot")}
               disabled={readyScreenshotCount < 2}
+              tabIndex={isVisible ? 0 : -1}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();

@@ -225,7 +225,7 @@ export function PageRouter({
           filtersLoading={
             catalogue.isLoadingCatalogueFacets && !catalogue.catalogueFacets
           }
-          refreshing={catalogue.shouldPulseCatalogueLoading}
+          refreshing={catalogue.isCatalogueRefreshing}
           loading={catalogue.shouldShowCatalogueLoading}
           initialLoading={catalogue.isInitialCatalogueLoading}
           query={debouncedQuery}
@@ -234,10 +234,14 @@ export function PageRouter({
           chunkOffset={catalogue.catalogueChunkOffset}
           matched={catalogue.catalogueDatabase.matched}
           hasError={catalogue.hasCatalogueError}
+          hasRefreshError={catalogue.hasCatalogueRefreshError}
+          hasFacetsError={catalogue.hasCatalogueFacetsError}
           onRetry={catalogue.onCatalogueRetry}
           filters={catalogue.catalogueFilters}
           onFiltersChange={catalogue.handleCatalogueFiltersChange}
           onPageChange={catalogue.handleCataloguePageChange}
+          sort={catalogue.catalogueSort}
+          onSortChange={catalogue.handleCatalogueSortChange}
           onOpenGame={openGame}
           addedGameAppIds={appData.addedLibraryGameAppIds}
           addingGameId={appData.addingGameId}

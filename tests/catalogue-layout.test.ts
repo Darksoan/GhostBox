@@ -27,6 +27,30 @@ describe("Catalogue filter search layout", () => {
     expect(interactiveBackgrounds).toEqual(["var(--surface-option-hover)"]);
   });
 
+  it("keeps catalogue cards keyboard-operable with a native primary button", () => {
+    const source = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
+
+    expect(source).toContain('className="catalogue-list__main"');
+    expect(source).toContain('type="button"');
+    expect(source).not.toContain('role="button"');
+  });
+
+  it("keeps a dedicated action column at the narrow catalogue breakpoint", () => {
+    const css = compile("src/app.scss").css;
+
+    expect(css).toContain("grid-template-columns: 140px minmax(0, 1fr) 48px");
+    expect(css).toContain(".catalogue-list__main");
+  });
+
+  it("renders accessible pagination semantics", () => {
+    const source = readFileSync("src/components/ui/PaginationControls.tsx", "utf8");
+
+    expect(source).toContain('aria-current={p === page ? "page" : undefined}');
+    expect(source).toContain("catalogue.pagination.previous");
+    expect(source).toContain("catalogue.pagination.next");
+    expect(source).toContain("<span");
+  });
+
   it("does not render a client-side recommendation section", () => {
     const source = readFileSync("src/pages/CataloguePage.tsx", "utf8");
     expect(source).not.toContain("useCatalogueRecommendations");

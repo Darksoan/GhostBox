@@ -165,49 +165,53 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       ref={itemRef}
       className={`catalogue-list__item ${isAdding ? "catalogue-list__item--adding" : ""}`}
       data-catalogue-game-id={game.id}
-      role="button"
-      aria-busy={isAdding}
-      onClick={() => onOpenGame(game)}
-      onFocus={() => {
-        onPreloadGame(game);
-        onHoverGame(game, { immediate: true });
-      }}
-      onBlur={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!nextTarget || !event.currentTarget.contains(nextTarget as Node)) {
-          onHoverGame(null);
-        }
-      }}
-      onPointerEnter={() => {
-        onPreloadGame(game);
-        onHoverGame(game);
-      }}
-      onPointerLeave={() => onHoverGame(null)}
+      aria-busy={isAdding || isRemoving}
       onContextMenu={(event) => {
         if (!onGameContextMenu) return;
         event.preventDefault();
         onGameContextMenu(game, event.clientX, event.clientY);
       }}
     >
-      <div
-        className={`catalogue-list__cover ${displayedCoverSources.length ? "catalogue-list__cover--loaded" : ""}`}
-        style={layeredImageStyle(displayedCoverSources, "")}
-      />
-      <div className="catalogue-list__content">
-        <strong>{game.title}</strong>
+      <button
+        type="button"
+        className="catalogue-list__main"
+        aria-label={game.title}
+        onClick={() => onOpenGame(game)}
+        onFocus={() => {
+          onPreloadGame(game);
+          onHoverGame(game, { immediate: true });
+        }}
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (!nextTarget || !event.currentTarget.contains(nextTarget as Node)) {
+            onHoverGame(null);
+          }
+        }}
+        onPointerEnter={() => {
+          onPreloadGame(game);
+          onHoverGame(game);
+        }}
+        onPointerLeave={() => onHoverGame(null)}
+      >
         <div
-          className="catalogue-list__genres"
-          ref={genresRef}
-          style={{ visibility: genresMeasured ? "visible" : "hidden" }}
-        >
-          {/* index no key: o backend pode repetir tags e a colisão quebra a lista */}
-          {renderedGenreLabels.map((tag, index) => (
-            <span className="catalogue-list__genre-chip" key={`${tag}-${index}`}>
-              {tag}
-            </span>
-          ))}
+          className={`catalogue-list__cover ${displayedCoverSources.length ? "catalogue-list__cover--loaded" : ""}`}
+          style={layeredImageStyle(displayedCoverSources, "")}
+        />
+        <div className="catalogue-list__content">
+          <strong>{game.title}</strong>
+          <div
+            className="catalogue-list__genres"
+            ref={genresRef}
+            style={{ visibility: genresMeasured ? "visible" : "hidden" }}
+          >
+            {renderedGenreLabels.map((tag, index) => (
+              <span className="catalogue-list__genre-chip" key={`${tag}-${index}`}>
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      </button>
       {isAdded && (
         <div className="catalogue-list__actions">
           <button
@@ -218,6 +222,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
               onRemoveGame?.(game);
             }}
             disabled={!onRemoveGame || isRemoving}
+            aria-busy={isRemoving}
             aria-label={
               isEnglish ? `Remove ${game.title}` : `Remover ${game.title}`
             }

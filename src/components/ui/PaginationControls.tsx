@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo } from "react";
+import { useSettings } from "../../context/settings";
 
 interface PaginationControlsProps {
   page: number;
@@ -8,6 +9,7 @@ interface PaginationControlsProps {
 }
 
 export function PaginationControls({ page, totalPages, onPageChange }: PaginationControlsProps) {
+  const { t } = useSettings();
   const pages = useMemo(() => {
     const result: (number | string)[] = [];
     const range = 3;
@@ -35,27 +37,39 @@ export function PaginationControls({ page, totalPages, onPageChange }: Paginatio
   }, [page, totalPages]);
 
   return (
-    <div className="pagination-controls">
+    <nav className="pagination-controls" aria-label={t("catalogue.pagination.label")}>
       <button
         type="button"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
         className="pagination-controls__arrow"
+        aria-label={t("catalogue.pagination.previous")}
       >
-        <ChevronLeft size={16} />
+        <ChevronLeft size={16} aria-hidden="true" />
       </button>
 
       <div className="pagination-controls__numbers">
         {pages.map((p, i) => (
-          <button
-            key={`${p}-${i}`}
-            type="button"
-            className={`pagination-controls__page ${p === page ? "pagination-controls__page--active" : ""} ${typeof p !== "number" ? "pagination-controls__page--ellipsis" : ""}`}
-            disabled={typeof p !== "number"}
-            onClick={() => typeof p === "number" && onPageChange(p)}
-          >
-            {p}
-          </button>
+          typeof p === "number" ? (
+            <button
+              key={`${p}-${i}`}
+              type="button"
+              className={`pagination-controls__page ${p === page ? "pagination-controls__page--active" : ""}`}
+              aria-current={p === page ? "page" : undefined}
+              aria-label={`${t("catalogue.pagination.page")} ${p}`}
+              onClick={() => onPageChange(p)}
+            >
+              {p}
+            </button>
+          ) : (
+            <span
+              key={`${p}-${i}`}
+              className="pagination-controls__page pagination-controls__page--ellipsis"
+              aria-hidden="true"
+            >
+              {p}
+            </span>
+          )
         ))}
       </div>
 
@@ -64,9 +78,10 @@ export function PaginationControls({ page, totalPages, onPageChange }: Paginatio
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
         className="pagination-controls__arrow"
+        aria-label={t("catalogue.pagination.next")}
       >
-        <ChevronRight size={16} />
+        <ChevronRight size={16} aria-hidden="true" />
       </button>
-    </div>
+    </nav>
   );
 }
