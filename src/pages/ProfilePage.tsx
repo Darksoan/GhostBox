@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   startTransition,
@@ -9,8 +8,6 @@ import {
   memo,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
   type RefObject,
 } from "react";
 import {
@@ -20,7 +17,6 @@ import {
   Eye,
   EyeOff,
   Camera,
-  Folder,
   Layers,
   LogOut,
   Pencil,
@@ -242,6 +238,8 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
                 <span
                   key={achievement.key}
                   className="profile-page__activity-icon"
+                  role="img"
+                  tabIndex={0}
                   aria-label={achievement.title}
                 >
                   <img
@@ -320,167 +318,6 @@ function ProfileAchievementGameIcon({ game }: { game: GhostBoxGame }) {
       className="profile-page__achievement-game-icon profile-page__achievement-game-icon--skeleton"
       aria-hidden="true"
     />
-  );
-}
-
-function ProfileAchievementCardRow({ children }: { children: ReactNode }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLSpanElement>(null);
-  const dragRef = useRef<{
-    startClientX: number;
-    startScrollLeft: number;
-    maxScroll: number;
-    thumbTravel: number;
-  } | null>(null);
-  const [isScrollable, setIsScrollable] = useState(false);
-  const [isDraggingScrollbar, setIsDraggingScrollbar] = useState(false);
-  const [scrollbarStyle, setScrollbarStyle] = useState<CSSProperties>({
-    "--achievement-scrollbar-thumb-width": "100%",
-    "--achievement-scrollbar-thumb-x": "0px",
-  } as CSSProperties);
-
-  const updateScrollbar = useCallback(() => {
-    const row = rowRef.current;
-    if (!row) return;
-
-    const maxScroll = row.scrollWidth - row.clientWidth;
-    const nextIsScrollable = maxScroll > 1;
-    setIsScrollable(nextIsScrollable);
-
-    if (!nextIsScrollable) {
-      setScrollbarStyle({
-        "--achievement-scrollbar-thumb-width": "100%",
-        "--achievement-scrollbar-thumb-x": "0px",
-      } as CSSProperties);
-      return;
-    }
-
-    const trackWidth = row.clientWidth;
-    const thumbWidth = Math.max((row.clientWidth / row.scrollWidth) * trackWidth, 32);
-    const thumbX = (row.scrollLeft / maxScroll) * (trackWidth - thumbWidth);
-
-    setScrollbarStyle({
-      "--achievement-scrollbar-thumb-width": `${thumbWidth}px`,
-      "--achievement-scrollbar-thumb-x": `${thumbX}px`,
-    } as CSSProperties);
-  }, []);
-
-  const scrollToScrollbarPosition = useCallback((clientX: number) => {
-    const row = rowRef.current;
-    const track = trackRef.current;
-    if (!row || !track) return;
-
-    const maxScroll = row.scrollWidth - row.clientWidth;
-    if (maxScroll <= 1) return;
-
-    const trackRect = track.getBoundingClientRect();
-    const thumbWidth = Math.max((row.clientWidth / row.scrollWidth) * trackRect.width, 32);
-    const thumbTravel = trackRect.width - thumbWidth;
-    if (thumbTravel <= 0) return;
-
-    const targetX = Math.min(
-      thumbTravel,
-      Math.max(0, clientX - trackRect.left - thumbWidth / 2)
-    );
-    row.scrollLeft = (targetX / thumbTravel) * maxScroll;
-  }, []);
-
-  const handleTrackPointerDown = useCallback((event: ReactPointerEvent<HTMLSpanElement>) => {
-    event.preventDefault();
-    scrollToScrollbarPosition(event.clientX);
-  }, [scrollToScrollbarPosition]);
-
-  const handleThumbPointerDown = useCallback((event: ReactPointerEvent<HTMLSpanElement>) => {
-    const row = rowRef.current;
-    const track = trackRef.current;
-    if (!row || !track) return;
-
-    const maxScroll = row.scrollWidth - row.clientWidth;
-    if (maxScroll <= 1) return;
-
-    const trackWidth = track.getBoundingClientRect().width;
-    const thumbWidth = Math.max((row.clientWidth / row.scrollWidth) * trackWidth, 32);
-    const thumbTravel = trackWidth - thumbWidth;
-    if (thumbTravel <= 0) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    dragRef.current = {
-      startClientX: event.clientX,
-      startScrollLeft: row.scrollLeft,
-      maxScroll,
-      thumbTravel,
-    };
-    setIsDraggingScrollbar(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isDraggingScrollbar) return;
-
-    function handlePointerMove(event: PointerEvent) {
-      const row = rowRef.current;
-      const drag = dragRef.current;
-      if (!row || !drag) return;
-
-      const deltaX = event.clientX - drag.startClientX;
-      row.scrollLeft = drag.startScrollLeft +
-        (deltaX / drag.thumbTravel) * drag.maxScroll;
-    }
-
-    function handlePointerUp() {
-      dragRef.current = null;
-      setIsDraggingScrollbar(false);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, [isDraggingScrollbar]);
-
-  useLayoutEffect(() => {
-    updateScrollbar();
-
-    const row = rowRef.current;
-    if (!row) return;
-
-    const resizeObserver = new ResizeObserver(updateScrollbar);
-    resizeObserver.observe(row);
-
-    return () => resizeObserver.disconnect();
-  }, [children, updateScrollbar]);
-
-  return (
-    <div
-      className={`profile-page__achievement-card-shell${
-        isScrollable ? " profile-page__achievement-card-shell--scrollable" : ""
-      }${
-        isDraggingScrollbar ? " profile-page__achievement-card-shell--scrolling" : ""
-      }`}
-      style={scrollbarStyle}
-    >
-      <div
-        ref={rowRef}
-        className="profile-page__achievement-card-row"
-        onScroll={updateScrollbar}
-      >
-        {children}
-      </div>
-      <span
-        ref={trackRef}
-        className="profile-page__achievement-card-scrollbar"
-        aria-hidden="true"
-        onPointerDown={handleTrackPointerDown}
-      >
-        <span
-          className="profile-page__achievement-card-scrollbar-thumb"
-          onPointerDown={handleThumbPointerDown}
-        />
-      </span>
-    </div>
   );
 }
 
@@ -670,6 +507,7 @@ export function ProfilePage({
   const [overviewSortDropdownOpen, setOverviewSortDropdownOpen] = useState(false);
   const overviewSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const loadMoreGamesRef = useRef<HTMLDivElement | null>(null);
+  const achievementGamesRef = useRef<HTMLDivElement | null>(null);
   const [isSteamIdVisible, setIsSteamIdVisible] = useState(false);
   const [isSteamIdCopied, setIsSteamIdCopied] = useState(false);
   const steamIdCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -706,9 +544,12 @@ export function ProfilePage({
   const handleAchievementTabPageChange = useCallback(
     (page: number) => {
       setAchievementTabPage(page);
-      scrollContentToTop();
+      achievementGamesRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     },
-    [scrollContentToTop]
+    []
   );
 
   const [gameContextMenu, setGameContextMenu] = useState<{
@@ -1171,7 +1012,6 @@ export function ProfilePage({
     (collectionId: string): GhostBoxGame[] => {
       if (collectionId === "overview") return enrichedAddedLibraryGames.slice(0, 12);
       if (collectionId === "library") return enrichedAddedLibraryGames.slice(0, 12);
-      if (collectionId === "favorites") return enrichedFavoriteGames.slice(0, 12);
       if (collectionId === "achievements") return profileAchievementGames.slice(0, 12);
       const collection = userCollectionById.get(collectionId);
       if (!collection) return [];
@@ -1185,7 +1025,6 @@ export function ProfilePage({
     },
     [
       enrichedAddedLibraryGames,
-      enrichedFavoriteGames,
       gamesById,
       profileAchievementGames,
       userCollectionById,
@@ -1229,16 +1068,6 @@ export function ProfilePage({
       }
       return result;
     }
-    if (activeCollection.id === "favorites") {
-      const result: GhostBoxGame[] = [];
-      for (const game of enrichedFavoriteGames) {
-        if (seen.has(game.id)) continue;
-        seen.add(game.id);
-        result.push(game);
-      }
-      return result;
-    }
-
     const collection = userCollectionById.get(activeCollection.id);
     if (!collection) return [];
 
@@ -1257,7 +1086,6 @@ export function ProfilePage({
   }, [
     activeCollection.id,
     enrichedAddedLibraryGames,
-    enrichedFavoriteGames,
     gamesById,
     userCollectionById,
   ]);
@@ -1320,10 +1148,6 @@ export function ProfilePage({
       startIndex + profileAchievementPageSize,
     );
   }, [achievementTabGames, currentAchievementTabPage]);
-
-  useEffect(() => {
-    setAchievementTabPage(1);
-  }, [achievementTabGames]);
 
   useEffect(() => {
     if (achievementTabPage > achievementTabTotalPages) {
@@ -1747,7 +1571,7 @@ export function ProfilePage({
     ? undefined
     : {
         objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
-        transform: `scale(${bannerPosition.scale ?? 1})`,
+        transform: `scale(${bannerPosition.scale})`,
       };
 
   // Steam and Discord are optional enhancements, not a gate: the profile is
@@ -1757,11 +1581,19 @@ export function ProfilePage({
   const profileDisplayName =
     steamProfile?.displayName || account?.displayName || account?.username || "";
   const steamConnected = isSteamConnected(steamProfile);
+  const steamLevelLabel =
+    steamLevel === null
+      ? appearance.language === "en"
+        ? "Steam level unavailable"
+        : "Nível Steam indisponível"
+      : appearance.language === "en"
+        ? `Level ${steamLevel}`
+        : `Nível ${steamLevel}`;
 
   return (
     <section className="profile-page">
       <header
-        className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}${isBannerPlaceholder ? " profile-page__content-box--placeholder" : " profile-page__content-box--cover"}`}
+        className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}${isBannerPlaceholder ? " profile-page__content-box--placeholder" : ""}`}
       >
         {bannerImageSource && (
           <div
@@ -1791,7 +1623,12 @@ export function ProfilePage({
             </span>
           </button>
           <div className="profile-page__identity">
-            <div className="profile-page__avatar-button">
+            <button
+              type="button"
+              className="profile-page__avatar-button"
+              onClick={() => setIsEditModalOpen(true)}
+              aria-label={t("profile.editProfile")}
+            >
               {shouldHoldSteamAvatar ? (
                 <span className="profile-page__avatar-skeleton" />
               ) : avatarSource ? (
@@ -1806,7 +1643,7 @@ export function ProfilePage({
               ) : (
                 <ShieldUser size={44} />
               )}
-            </div>
+            </button>
 
             <div className="profile-page__identity-content">
               <div className="profile-page__display-name-row">
@@ -1816,24 +1653,8 @@ export function ProfilePage({
                 {steamConnected && (
                   <span
                     className="profile-page__level"
-                    title={
-                      steamLevel === null
-                        ? appearance.language === "en"
-                          ? "Steam level unavailable"
-                          : "Nível Steam indisponível"
-                        : appearance.language === "en"
-                          ? `Level ${steamLevel}`
-                          : `Nível ${steamLevel}`
-                    }
-                    aria-label={
-                      steamLevel === null
-                        ? appearance.language === "en"
-                          ? "Steam level unavailable"
-                          : "Nível Steam indisponível"
-                        : appearance.language === "en"
-                          ? `Level ${steamLevel}`
-                          : `Nível ${steamLevel}`
-                    }
+                    title={steamLevelLabel}
+                    aria-label={steamLevelLabel}
                   >
                     <span className="profile-page__level-value">
                       {steamLevel ?? ""}
@@ -1901,7 +1722,7 @@ export function ProfilePage({
                 ) : null}
                 {discordLink?.linked && (
                   <div className="profile-page__discord-box">
-                    <svg role="img" viewBox="0 -28.5 256 256" className="profile-page__discord-icon" aria-hidden="true">
+                    <svg viewBox="0 -28.5 256 256" className="profile-page__discord-icon" aria-hidden="true">
                       <path d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"/>
                     </svg>
                     <span className="profile-page__discord-id">
@@ -1922,23 +1743,27 @@ export function ProfilePage({
               className="profile-page__tabs"
               aria-label={t("sidebar.collections")}
             >
-              <div className="profile-page__collection-tabs">
+              <div
+                className="profile-page__collection-tabs"
+                role="tablist"
+                aria-label={t("sidebar.collections")}
+              >
                 {profileCollections.map((collection) => {
                   const TabIcon =
                     collection.id === "overview"
                       ? User
-                      : collection.id === "library"
-                        ? Layers
-                        : collection.id === "achievements"
-                          ? Cup
-                          : Folder;
+                      : Layers;
 
                   return (
                     <button
                       key={collection.id}
                       data-tab-id={collection.id}
+                      id={`profile-tab-${collection.id}`}
                       type="button"
+                      role="tab"
                       aria-label={collection.name}
+                      aria-selected={activeTabId === collection.id}
+                      aria-controls="profile-tab-panel"
                       className={`profile-page__tab ${
                         activeTabId === collection.id
                           ? "profile-page__tab--active"
@@ -1991,7 +1816,13 @@ export function ProfilePage({
             </div>
 
           <div className="profile-page__collection-content">
-            <div className="profile-page__tab-panel">
+            <div
+              id="profile-tab-panel"
+              className="profile-page__tab-panel"
+              role="tabpanel"
+              aria-label={activeCollection.name}
+              tabIndex={0}
+            >
             {isOverviewActive ? (
               <div
                 className="profile-page__overview"
@@ -2016,10 +1847,6 @@ export function ProfilePage({
                           <span className="profile-page__activity-metric">
                             <strong>{steamMetricNumberFormatter.format(steamOverviewMetrics.achievements)}</strong>
                             <span>{t("profile.unlockedAchievements")}</span>
-                          </span>
-                          <span className="profile-page__activity-metric">
-                            <strong>{steamOverviewMetrics.completion}%</strong>
-                            <span>{t("profile.completionPerGame")}</span>
                           </span>
                           <span className="profile-page__activity-metric">
                             <strong>{formatCompactPlaytime(steamOverviewMetrics.playtime)}</strong>
@@ -2110,10 +1937,11 @@ export function ProfilePage({
               </div>
             ) : isAchievementsActive ? (
               achievementTabGames.length > 0 ? (
-                <div
-                  className="profile-page__achievement-games"
-                  aria-label={t("achievements.title")}
-                >
+                  <div
+                    ref={achievementGamesRef}
+                    className="profile-page__achievement-games"
+                    aria-label={t("achievements.title")}
+                  >
                   {pagedAchievementTabGames.map((game) => {
                     const achievementTotal = getAchievementTotal(game);
                     const achievementUnlocked = getUnlockedAchievementCount(game);
@@ -2178,7 +2006,8 @@ export function ProfilePage({
                           </div>
                         </div>
 
-                        <ProfileAchievementCardRow>
+                        <div className="profile-page__achievement-card-shell">
+                          <div className="profile-page__achievement-card-row">
                           {visibleAchievements.map((achievement) => {
                             const unlocked = isAchievementUnlocked(achievement);
                             const icon = achievementShowcaseIcon(achievement, unlocked);
@@ -2222,7 +2051,8 @@ export function ProfilePage({
                               </button>
                             );
                           })}
-                        </ProfileAchievementCardRow>
+                          </div>
+                        </div>
                         {hasMoreAchievements ? (
                           <button
                             type="button"

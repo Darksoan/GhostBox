@@ -2665,17 +2665,31 @@ p {
   scroll-snap-align: start;
 }
 
+/* Capa no aspecto padrão da grade (460/215): a altura extra do card de
+   recomendados vem do bloco de texto, não da arte. */
 .home-recommended__track .home-category-card__cover {
-  aspect-ratio: 16 / 7.8;
+  aspect-ratio: 460 / 215;
 }
 
-.home-recommended__track .home-category-card__metadata {
+/* Espaçamento uniforme: o mesmo passo entre todos os elementos do card
+   (capa → título → descrição → pills), incluindo a folga vertical do padding.
+   O seletor repete o modificador `--with-title` porque a regra-base do
+   modificador (mais abaixo no arquivo) empataria em especificidade e venceria
+   pela ordem. */
+.home-recommended__track .home-category-card--with-title .home-category-card__metadata {
   gap: var(--space-8);
   padding: var(--space-8) var(--space-6) var(--space-8);
 }
 
 .home-recommended__track .home-category-card__summary {
-  gap: var(--space-6);
+  gap: var(--space-8);
+}
+
+/* Três linhas em vez de duas: é o que sustenta a altura maior do card com a
+   capa no aspecto padrão. Altura fechada, mesmo contrato da regra-base. */
+.home-recommended__track .home-category-card__description {
+  height: calc(var(--type-line-compact) * 3);
+  -webkit-line-clamp: 3;
 }
 
 /* Mesma seta do rail de "Explorar por categoria": sem pílula escura por cima da
