@@ -44,9 +44,10 @@
   --settings-dropdown-menu: var(--n-3);
   --settings-dropdown-trigger-hover: var(--settings-dropdown-menu);
   --surface-dropdown-menu: var(--n-3);
-  // Hover de opção dentro de qualquer menu de dropdown. Sobe muito acima do menu
-  // (#222222) de propósito: é o único realce dentro de um popover já elevado.
-  --dropdown-option-hover: var(--n-6b);
+  // Hover de opção dentro de qualquer menu de dropdown. Sobe acima do menu
+  // (#222222) para #303030, mesmo degrau de --sidebar-option-active — todo
+  // dropdown do app usa este par (menu #222222 / opção em destaque #303030).
+  --dropdown-option-hover: var(--n-5);
   // Toggles: trilho desligado afunda; ligado é a cor mais clara do app. O botão
   // inverte o trilho — escuro sobre trilho claro, claro sobre trilho escuro.
   --toggle-track: var(--n-1);
@@ -79,17 +80,24 @@
   // Controle dentro de modal: repouso #151515, hover #222222.
   --surface-modal-control: var(--n-1);
   --surface-modal-control-hover: var(--n-3);
-  // Dropdown da aba Perfil (ordenação da atividade): trigger afunda no hover, menu e opção sobem.
+  // Dropdown da aba Perfil (ordenação da atividade): mesmo par de qualquer
+  // dropdown do app — trigger aberto/hover e menu em #222222, opção em
+  // destaque em #303030.
   --profile-dropdown-surface: var(--n-2);
-  --profile-dropdown-surface-hover: var(--n-1);
-  --profile-dropdown-menu: var(--n-1);
-  --profile-dropdown-option-hover: var(--n-2);
+  --profile-dropdown-surface-hover: var(--n-3);
+  --profile-dropdown-menu: var(--n-3);
+  --profile-dropdown-option-hover: var(--n-5);
   // Sidebar: navegação CLAREIA (oposto do conteúdo). Regra do protótipo.
   --sidebar-option-hover: var(--n-3);
   --sidebar-option-selected: var(--n-5);
   --sidebar-selector: var(--sidebar-option-hover);
   --sidebar-option-active: var(--sidebar-option-selected);
   --sidebar-option-active-hover: var(--sidebar-option-hover);
+
+  // Hover neutro de controles fora da sidebar (paginação, checkbox de filtro).
+  // Mesmo degrau de --sidebar-option-hover (#222222), nome próprio pra não
+  // acoplar paginação/filtro a uma mudança futura pensada só pra sidebar.
+  --control-hover: var(--n-3);
 
   // Overlays de interação: tinta translúcida branca aplicada sobre a superfície
   // de repouso, não fundo fixo. Fora do teto #202020 de propósito — são feedback

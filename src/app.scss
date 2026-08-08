@@ -2000,7 +2000,7 @@ p {
 
     &:hover,
     &:focus-visible {
-      background: var(--sidebar-option-active-hover);
+      background: var(--sidebar-option-active);
       color: var(--text-primary);
 
       svg {
@@ -2612,6 +2612,15 @@ p {
   overflow-y: visible;
 }
 
+/* Títulos de seção só na Home, um degrau abaixo do padrão global (section →
+   body-emphasis) e com cor mais fraca — essas seções (Top rated, Recommended)
+   são navegação de rolagem, não âncora de página como em outras abas. */
+.home-page .section-header__title {
+  color: var(--text-primary);
+  font-size: var(--type-size-body-emphasis);
+  line-height: var(--type-line-body-emphasis);
+}
+
 .home-page .section-header__subtitle {
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
@@ -3097,19 +3106,19 @@ p {
 }
 
 /* Segunda leva de pills (categorias que sobraram de `.home-category-card__genres`),
-   fixa em uma linha de 2 colunas. */
+   fixa em uma linha. `flex` (não `grid`) para a pill fechar na largura do
+   próprio texto — grid de colunas iguais esticava a pill até a coluna
+   inteira, sobrando espaço vazio dentro dela quando o rótulo era curto. */
 .home-category-card__tags {
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: var(--pill-height);
+  display: flex;
+  height: var(--pill-height);
+  min-width: 0;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: var(--space-2);
   margin-top: var(--space-2);
   overflow: hidden;
-
-  .home-category-card__genre {
-    width: 100%;
-  }
 }
 
 /* `flex: 0 0 auto` mantém a largura natural para a pill quebrar limpa para a
@@ -3125,6 +3134,28 @@ p {
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Recomendados (nome + descrição): a linha de pills ocupa a largura inteira do
+   card. Com `flex: 0 0 auto` ela fechava na soma dos rótulos e sobrava buraco à
+   direita em jogos de tag curta, enquanto jogos de tag longa preenchiam tudo —
+   os cards vizinhos não batiam. `flex: 1 1 auto` mantém a quebra pela largura
+   natural (o basis continua sendo o conteúdo) e só depois estica o que ficou na
+   linha para dividir a sobra. Vale para Recomendados (`--with-summary`) e para
+   Top rated (`--pill-rows`, duas linhas de pills). */
+.home-category-card--with-summary .home-category-card__genre,
+.home-category-card--pill-rows .home-category-card__genre {
+  flex: 1 1 auto;
+}
+
+/* Top rated: a contagem de pills por linha é decidida no TSX (3 + 3), não pelo
+   que coube. Sem `nowrap`, rótulo longo empurrava a terceira pill para uma
+   segunda linha que o `overflow: hidden` comia — daí cards parando em 4 pills no
+   total. Com `nowrap` as pills da linha encolhem (o `text-overflow: ellipsis` da
+   própria pill segura o rótulo) em vez de sumirem. */
+.home-category-card--pill-rows .home-category-card__genres,
+.home-category-card--pill-rows .home-category-card__tags {
+  flex-wrap: nowrap;
 }
 
 /* A pill NÃO acompanha o card no hover/foco — mesmo comportamento do catálogo.
@@ -3397,23 +3428,6 @@ p {
   line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.home-wishlist-card__reason {
-  display: block;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--ls-200);
-  line-height: var(--type-line-compact);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-wishlist-card__reason-game {
-  color: var(--text-primary);
-  font-weight: var(--weight-medium);
 }
 
 .home-wishlist-card__media {
@@ -3713,11 +3727,6 @@ p {
   &--title {
     width: min(42%, 190px);
     height: 20px;
-  }
-
-  &--reason {
-    width: min(70%, 430px);
-    height: 13px;
   }
 
   &--review {
@@ -5779,12 +5788,6 @@ p {
   &--open {
     z-index: var(--z-sticky);
 
-    .settings-dropdown__trigger {
-      border-color: var(--border-hover);
-      background: var(--background-dark);
-      color: var(--text-primary);
-    }
-
     .settings-dropdown__trigger svg {
       color: var(--text-primary);
       transform: rotate(90deg);
@@ -5821,9 +5824,10 @@ p {
   }
 
   &:hover,
-  &:focus-visible {
+  &:focus-visible,
+  .settings-dropdown--open & {
     border-color: var(--border-hover);
-    background: var(--background-dark);
+    background: var(--sidebar-option-hover);
     color: var(--text-primary);
   }
 
@@ -5921,7 +5925,7 @@ p {
   }
 
   &--active {
-    background: var(--sidebar-selector);
+    background: var(--sidebar-option-active);
     color: var(--text-primary);
   }
 }
@@ -5985,7 +5989,7 @@ p {
 }
 
 .settings-page .settings-dropdown--settings-page .settings-dropdown__option--active {
-  background: var(--settings-dropdown-surface);
+  background: var(--sidebar-option-active);
 }
 
 @keyframes settings-dropdown-open {
@@ -6045,7 +6049,7 @@ p {
   z-index: 9999;
   min-width: 180px;
   padding: var(--space-2);
-  background: var(--surface-secondary);
+  background: var(--sidebar-option-hover);
   border: 0;
   border-radius: var(--radius-md);
   animation: context-menu-in 0.1s cubic-bezier(0.2, 0, 0, 1);
@@ -6103,7 +6107,7 @@ p {
     padding: var(--space-2);
     border: 0;
     border-radius: var(--radius-md);
-    background: var(--surface-secondary);
+    background: var(--sidebar-option-hover);
     overflow: hidden;
     list-style: none;
     pointer-events: none;
@@ -6153,7 +6157,7 @@ p {
     }
 
     &:hover {
-      background: var(--sidebar-selector);
+      background: var(--sidebar-option-active);
       color: var(--text-primary);
 
       svg {
@@ -6292,7 +6296,6 @@ p {
     }
   }
 
-  &__sort select,
   &__clear-filters,
   &__filters-toggle {
     min-height: 32px;
@@ -6306,19 +6309,53 @@ p {
     font-weight: var(--weight-medium);
   }
 
-  &__sort select:hover,
   &__clear-filters:hover,
   &__filters-toggle:hover,
-  &__sort select:focus-visible,
   &__clear-filters:focus-visible,
   &__filters-toggle:focus-visible {
-    background: var(--sidebar-selector);
+    background: var(--control-hover);
     color: var(--text-primary);
   }
 
-  &__sort select {
-    max-width: 190px;
-    outline: none;
+  /* Ordenação usa o dropdown compartilhado (`.settings-dropdown`), não um
+     `<select>` nativo: o menu nativo é desenhado pelo sistema e ignorava
+     inteiramente a rampa de superfície do app. */
+  &__sort {
+    width: auto;
+    min-width: 190px;
+
+    .settings-dropdown__trigger {
+      min-height: 32px;
+      padding: 0 var(--space-4);
+      border: 0;
+      border-radius: var(--radius-md);
+      background: var(--surface-secondary);
+      color: var(--text-secondary);
+
+      span {
+        padding-right: var(--space-9);
+        padding-left: 0;
+        text-align: left;
+      }
+    }
+
+    .settings-dropdown__trigger:hover,
+    .settings-dropdown__trigger:focus-visible,
+    &.settings-dropdown--open .settings-dropdown__trigger {
+      background: var(--control-hover);
+      color: var(--text-primary);
+    }
+
+    .settings-dropdown__menu {
+      border: 0;
+      border-radius: var(--radius-md);
+      background: var(--surface-dropdown-menu);
+    }
+
+    .settings-dropdown__option {
+      min-height: 32px;
+      border-radius: var(--radius-md);
+    }
   }
 
   &__filters-toggle {
@@ -6500,7 +6537,7 @@ p {
     transition: color var(--motion-fast) var(--ease);
 
     &[aria-expanded="true"] {
-      background: var(--surface-secondary);
+      background: var(--sidebar-option-hover);
     }
 
     strong {
@@ -6840,7 +6877,7 @@ p {
     flex-shrink: 0;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    background: var(--sidebar-selector);
+    background: var(--control-hover);
     color: var(--surface-canvas);
     transition:
       background var(--motion-fast) var(--ease),
@@ -6865,13 +6902,13 @@ p {
 
   &:has(input:checked) {
     border-color: transparent;
-    background: var(--sidebar-selector);
+    background: var(--control-hover);
     color: var(--text-primary);
   }
 
   &:has(input:checked):hover {
     border-color: transparent;
-    background: var(--sidebar-selector);
+    background: var(--control-hover);
     color: var(--text-primary);
   }
 }
@@ -7144,6 +7181,10 @@ input[type="search"]::-ms-reveal {
   display: grid;
   grid-column: 1 / 3;
   grid-template-columns: 196px minmax(0, 1fr);
+  /* O card externo tem `gap`, mas este grid interno recria as duas primeiras
+     colunas e sem gap próprio a capa do jogo encostava no título e nas pills.
+     Mesmo valor do card: a coluna de texto volta a alinhar com a de fora. */
+  gap: var(--space-8);
   align-items: center;
   align-self: stretch;
   min-width: 0;
@@ -7351,7 +7392,7 @@ input[type="search"]::-ms-reveal {
       color var(--motion-fast) var(--ease);
 
     &:hover:not(:disabled) {
-      background: var(--sidebar-selector);
+      background: var(--control-hover);
       color: var(--text-primary);
     }
 
@@ -7363,7 +7404,7 @@ input[type="search"]::-ms-reveal {
 
   &__page--active {
     border: none;
-    background: var(--sidebar-selector);
+    background: var(--control-hover);
     color: var(--text-primary);
     font-weight: var(--weight-medium);
   }
@@ -10117,7 +10158,7 @@ input[type="search"]::-ms-reveal {
     }
 
     &--active {
-      background: var(--profile-dropdown-surface);
+      background: var(--sidebar-option-active);
     }
   }
 
@@ -13806,7 +13847,7 @@ html.no-backdrop-blur {
     &:hover:not(:disabled):not(.pagination-controls__page--active):not(
         .pagination-controls__page--ellipsis
       ) {
-      background: var(--sidebar-selector);
+      background: var(--control-hover);
       color: var(--text-primary);
     }
 
@@ -13818,7 +13859,7 @@ html.no-backdrop-blur {
 
   &__page {
     &--active {
-      background: var(--sidebar-selector);
+      background: var(--control-hover);
       color: var(--text-primary);
       border: none;
       font-weight: var(--weight-medium);
@@ -14152,11 +14193,7 @@ button,
   .catalogue-page__sort {
     min-width: 0;
     flex: 1;
-
-    select {
-      width: 100%;
-      max-width: none;
-    }
+    width: 100%;
   }
 
   .catalogue-page__clear-filters {

@@ -138,9 +138,15 @@ const homeCarouselGroupSize = 4;
 // sobravam dependia do comprimento das strings, então dois cards vizinhos
 // nunca batiam.
 const homeMetadataCategoryLimit = 3;
-// Segunda leva de pills (uma linha com 2), só usada nos cards de "Top rated" —
-// continua a lista de categorias de onde a primeira parou.
-const homeSecondaryPillLimit = 2;
+// Cards de "Top rated" (`showSecondaryPills`) reservam duas linhas de pills.
+// Contagem fixa (não "manda candidatas demais e deixa o CSS recortar"): com o
+// recorte por overflow, quantas pills sobravam dependia do comprimento dos
+// rótulos, e jogos de tag curta paravam em 4 no total. Aqui cada linha renderiza
+// exatamente o que cabe na conta abaixo e o CSS estica/encolhe as pills para
+// fechar a largura (ver `.home-category-card--pill-rows` em app.scss), então o
+// card mostra sempre 3 + 2 = 5 pills quando o jogo tem categorias suficientes.
+const homeTopRatedPrimaryPillCount = 3;
+const homeTopRatedSecondaryPillCount = 2;
 const homeRecommendedHeroPreloadLimit = 8;
 // Cards de recomendados visíveis por vez. Também é o piso para as setas
 // aparecerem: com pool menor ou igual a isto não há o que rolar.
@@ -542,12 +548,12 @@ function HomeCategoryCard({
   const metadataCategoryPool = getHomeMetadataCategoryPool(game);
   const metadataCategories = metadataCategoryPool.slice(
     0,
-    homeMetadataCategoryLimit
+    showSecondaryPills ? homeTopRatedPrimaryPillCount : homeMetadataCategoryLimit
   );
   const secondaryCategories = showSecondaryPills
     ? metadataCategoryPool.slice(
-        homeMetadataCategoryLimit,
-        homeMetadataCategoryLimit + homeSecondaryPillLimit
+        homeTopRatedPrimaryPillCount,
+        homeTopRatedPrimaryPillCount + homeTopRatedSecondaryPillCount
       )
     : [];
   const coverImageSize = variant === "portrait" ? "auto 100%" : "100% 100%";
@@ -568,7 +574,9 @@ function HomeCategoryCard({
       type="button"
       className={`home-category-card home-category-card--${variant}${
         showMetadata ? " home-category-card--with-metadata" : ""
-      }${showTitleBlock ? " home-category-card--with-title" : ""}`}
+      }${showTitleBlock ? " home-category-card--with-title" : ""}${
+        showSummary ? " home-category-card--with-summary" : ""
+      }${showSecondaryPills ? " home-category-card--pill-rows" : ""}`}
       aria-label={game.title}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
@@ -1388,7 +1396,7 @@ function HomeWishlistCardComponent({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const { sourceGame, recommendedGame } = recommendation;
+  const { recommendedGame } = recommendation;
   const coverSources = homeWishlistCoverSources(recommendedGame);
   const sources = useCachedImageSources(coverSources);
   const { source: imageSource, loaded } = useLoadableImageCover(sources);
@@ -1539,18 +1547,10 @@ function HomeWishlistCardComponent({
     }
   }, [isHovered, readyScreenshotIndexes, screenshotIndex, screenshots.length]);
 
-  const sourceTitle = getDisplayGameTitle(sourceGame, "");
   const recommendedTitle = getDisplayGameTitle(
     recommendedGame,
     language === "en" ? "Steam recommendation" : "Recomendação da Steam"
   );
-  const reasonPrefix = language === "en" ? "Because" : "Já que";
-  const reasonSuffix =
-    language === "en" ? "is on your wishlist" : "está na sua lista de desejos";
-  const unresolvedReason =
-    language === "en"
-      ? "Based on your Steam wishlist"
-      : "Baseado na sua lista de desejos da Steam";
   const tags = [...recommendedGame.tags, ...recommendedGame.genres]
     .filter(Boolean)
     .slice(0, 4);
@@ -1580,15 +1580,6 @@ function HomeWishlistCardComponent({
         <strong className="home-wishlist-card__title">
           {recommendedTitle}
         </strong>
-        {sourceTitle ? (
-          <span className="home-wishlist-card__reason">
-            {reasonPrefix}{" "}
-            <span className="home-wishlist-card__reason-game">{sourceTitle}</span>{" "}
-            {reasonSuffix}
-          </span>
-        ) : (
-          <span className="home-wishlist-card__reason">{unresolvedReason}</span>
-        )}
       </span>
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span

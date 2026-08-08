@@ -1,4 +1,10 @@
-import { Check, ChevronRight, SlidersHorizontal, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import {
   memo,
   useCallback,
@@ -415,6 +421,8 @@ export function CataloguePage({
 }: CataloguePageProps) {
   const { t } = useSettings();
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
     x: number;
@@ -431,6 +439,38 @@ export function CataloguePage({
     () => createCatalogueHoverPreviewIntent<GhostBoxGame>(setHoveredGame),
     []
   );
+  const sortOptions = useMemo(
+    () =>
+      [
+        { value: "popular", label: t("catalogue.sort.popular") },
+        { value: "recentlyAdded", label: t("catalogue.sort.recentlyAdded") },
+      ] as { value: CatalogueSort; label: string }[],
+    [t]
+  );
+  const sortLabel =
+    sortOptions.find((option) => option.value === sort)?.label ?? "";
+
+  useEffect(() => {
+    if (!sortDropdownOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        sortDropdownRef.current &&
+        !sortDropdownRef.current.contains(event.target as Node)
+      ) {
+        setSortDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSortDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [sortDropdownOpen]);
+
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
   const hasSearchQuery = Boolean(query.trim());
@@ -659,21 +699,47 @@ export function CataloguePage({
               )}
             </div>
             <div className="catalogue-page__toolbar-actions">
-              <label className="catalogue-page__sort">
-                <span className="sr-only">{t("catalogue.sort.label")}</span>
-                <select
-                  value={sort}
+              <div
+                className={`settings-dropdown catalogue-page__sort ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
+                ref={sortDropdownRef}
+              >
+                <button
+                  type="button"
+                  className="settings-dropdown__trigger"
+                  aria-haspopup="listbox"
+                  aria-expanded={sortDropdownOpen}
                   aria-label={t("catalogue.sort.label")}
-                  onChange={(event) =>
-                    onSortChange(event.currentTarget.value as CatalogueSort)
-                  }
+                  onClick={() => setSortDropdownOpen((open) => !open)}
                 >
-                  <option value="popular">{t("catalogue.sort.popular")}</option>
-                  <option value="recentlyAdded">
-                    {t("catalogue.sort.recentlyAdded")}
-                  </option>
-                </select>
-              </label>
+                  <span>{sortLabel}</span>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </button>
+                {sortDropdownOpen && (
+                  <div
+                    className="settings-dropdown__menu"
+                    role="listbox"
+                    aria-label={t("catalogue.sort.label")}
+                  >
+                    {sortOptions
+                      .filter((option) => option.value !== sort)
+                      .map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="option"
+                          aria-selected={false}
+                          className="settings-dropdown__option"
+                          onClick={() => {
+                            onSortChange(option.value);
+                            setSortDropdownOpen(false);
+                          }}
+                        >
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
               {hasActiveFilters && (
                 <button
                   type="button"

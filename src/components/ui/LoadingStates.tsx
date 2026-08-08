@@ -234,7 +234,6 @@ export function HomeWishlistCardSkeleton() {
     <div className="home-wishlist-card home-wishlist-card--skeleton">
       <span className="home-wishlist-card__content">
         <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--title" />
-        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--reason" />
       </span>
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span className="home-wishlist-card__cover home-wishlist-card__cover--skeleton" />

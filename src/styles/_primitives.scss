@@ -16,10 +16,6 @@
   --b-0: #2a2a2a;
   --n-5: #303030;
   --n-6: #474747;
-  // Meio-degrau entre --n-6 e --n-7, mesma categoria de exceção do --b-0: existe
-  // só para o hover de opção de dropdown (o protótipo pede #606060 ali). Não usar
-  // como superfície nem borda — subir --n-6 para cá arrastaria --border-strong.
-  --n-6b: #606060;
   // Não vêm do protótipo (que não desenha borda nem texto terciário). Calculados
   // contra o teto de superfície de repouso #252525: 3.01:1 e 4.56:1. Não escurecer.
   --n-7: #6e6e6e;
