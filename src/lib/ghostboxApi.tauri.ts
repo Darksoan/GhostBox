@@ -5,6 +5,7 @@ import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
+  CustomExeResult,
   AppStatus,
   BackupDetails,
   BackupSettings,
@@ -672,6 +673,28 @@ export const ghostboxApi = {
     );
   },
 
+  setCustomExe(
+    game: GhostBoxGame,
+    customExePath: string,
+  ): Promise<CustomExeResult> {
+    return invokeOr<CustomExeResult>(
+      "ghostbox_library_set_custom_exe",
+      { game, customExePath },
+      { success: false, error: "Não foi possível associar o executável." },
+    );
+  },
+
+  async selectExeFile(): Promise<string | null> {
+    const selectedPath = await open({
+      directory: false,
+      multiple: false,
+      filters: [{ name: "Executáveis", extensions: ["exe"] }],
+      title: "Selecione o executável do jogo",
+    });
+
+    return typeof selectedPath === "string" ? selectedPath : null;
+  },
+
   /**
    * `downloadsRoot` é a RAIZ escolhida pelo usuário, não o destino final. O Rust
    * resolve `installdir` no appinfo e monta `<root>\steamapps\common\<installdir>`,
@@ -704,6 +727,20 @@ export const ghostboxApi = {
       appId,
       downloadsRoot,
       outputDir,
+    });
+  },
+
+  moveInstallDir(
+    appId: string,
+    oldDownloadsRoot: string,
+    oldOutputDir: string,
+    newDownloadsRoot: string,
+  ): Promise<string> {
+    return invoke<string>("cdndownload_move_install_dir", {
+      appId,
+      oldDownloadsRoot,
+      oldOutputDir,
+      newDownloadsRoot,
     });
   },
 

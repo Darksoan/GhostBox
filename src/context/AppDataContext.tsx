@@ -279,6 +279,10 @@ interface AppDataContextValue {
   queueGame: (game: GhostBoxGame) => Promise<void>;
   removeQueuedGame: (game: GhostBoxGame) => Promise<void>;
   handlePlayGame: (game: GhostBoxGame) => Promise<void>;
+  setCustomExeGame: (
+    game: GhostBoxGame,
+    customExePath: string,
+  ) => Promise<GhostBoxGame | null>;
   addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
   removeGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   deleteCollection: (collectionId: string) => void;
@@ -1107,6 +1111,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           game.librarySource === "steam-installed" ||
           game.librarySource === "plugin" ||
           game.librarySource === "registered" ||
+          Boolean(game.customExePath) ||
           completedDownloadAppIds.has(game.appId),
       })),
     );
@@ -1784,6 +1789,64 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [autoRestoreCloudBackup, refreshGamePlaytimes, showToast],
   );
 
+  // Override de launch: associa um .exe personalizado a um jogo e o persiste
+  // em disco. O bypass do fluxo LuaTools/Steam-register é intencional: este
+  // comando grava direto em `ghostbox-library.json`. Retorna o jogo atualizado
+  // ou null em falha (toast já mostrado).
+  const setCustomExeGame = useCallback(
+    async (game: GhostBoxGame, customExePath: string): Promise<GhostBoxGame | null> => {
+      const trimmed = customExePath.trim();
+      try {
+        const result = await ghostboxApi.setCustomExe(game, trimmed);
+        if (!result.success) {
+          showToast(
+            appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
+            result.error || (appearance.language === "en" ? "Unknown error." : "Erro desconhecido."),
+          );
+          return null;
+        }
+        const libraryGame = mergeGamePlaytime({
+          ...result.libraryGame,
+          librarySource: result.libraryGame.librarySource ?? "registered",
+          customExePath: trimmed || undefined,
+        });
+
+        setScannedLibraryGames((current) =>
+          upsertLibraryGameByAppId(current, libraryGame),
+        );
+        setAddedLibraryGames((current) =>
+          upsertLibraryGameByAppId(current, libraryGame),
+        );
+        setAddedLibraryGameAppIds((current) =>
+          new Set(current).add(libraryGame.appId),
+        );
+        showToast(
+          appearance.language === "en" ? "Executable set" : "Executável definido",
+          trimmed
+            ? appearance.language === "en"
+              ? `${libraryGame.title} will launch from ${trimmed}.`
+              : `${libraryGame.title} iniciará a partir de ${trimmed}.`
+            : appearance.language === "en"
+              ? `${libraryGame.title} will launch via Steam again.`
+              : `${libraryGame.title} voltará a iniciar pela Steam.`,
+        );
+        return libraryGame;
+      } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : (appearance.language === "en"
+            ? "Could not set the custom executable."
+            : "Não foi possível definir o executável personalizado.");
+        showToast(
+          appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
+          errorMessage,
+        );
+        return null;
+      }
+    },
+    [appearance.language, showToast],
+  );
+
   const addGameToUserCollection = useCallback(
     (game: GhostBoxGame, collectionId: string) => {
       setUserCollections((current) =>
@@ -2246,6 +2309,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       handlePlayGame,
+      setCustomExeGame,
       addGameToUserCollection,
       removeGameFromCollection,
       deleteCollection,
@@ -2297,6 +2361,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       handlePlayGame,
+      setCustomExeGame,
       addGameToUserCollection,
       removeGameFromCollection,
       deleteCollection,

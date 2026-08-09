@@ -451,6 +451,110 @@ pub fn cdndownload_delete_output_dir(
     Ok(true)
 }
 
+/// Copia recursiva de diretorio para outro volume (fallback quando
+/// `std::fs::rename` nao consegue cruzar unidade). Nao e a operacao normal de
+/// instalacao, so roda em "mover instalacao" entre discos diferentes.
+fn copy_dir_recursive(source: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(destination)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = destination.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &target)?;
+        } else {
+            std::fs::copy(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Move uma instalacao baixada pelo GhostBox CDN de uma raiz de downloads para
+/// outra. Espelha o layout `<root>\steamapps\common\<installDir>` e replica o
+/// ACF verbatim: o `installdir` no ACF e relativo, entao o mesmo conteudo serve
+/// em qualquer raiz. O indice de chunks do depot e limpo no destino antigo
+/// porque descreve chunks em um caminho que deixou de existir; o Steam re-cria
+/// na proxima verificacao se o usuario pedir Verify Integrity.
+#[tauri::command]
+pub fn cdndownload_move_install_dir(
+    app_id: String,
+    old_downloads_root: String,
+    old_output_dir: String,
+    new_downloads_root: String,
+) -> Result<String, String> {
+    let app_id = app_id.trim();
+    let old_root_str = old_downloads_root.trim();
+    let new_root_str = new_downloads_root.trim();
+    if app_id.is_empty() {
+        return Err("Move requires a valid app ID.".into());
+    }
+    if old_root_str.is_empty() || new_root_str.is_empty() {
+        return Err("Move requires both old and new downloads roots.".into());
+    }
+
+    let old_root = Path::new(old_root_str);
+    let new_root = Path::new(new_root_str);
+    let canonical_old_root = old_root
+        .canonicalize()
+        .map_err(|error| format!("Old downloads root is unavailable: {error}"))?;
+    let canonical_new_root = new_root
+        .canonicalize()
+        .map_err(|error| format!("New downloads root is unavailable: {error}"))?;
+    if canonical_new_root == canonical_old_root {
+        return Err("New location is the same as the current one.".into());
+    }
+
+    let old_output_path = Path::new(old_output_dir.trim());
+    if !old_output_path.is_dir() {
+        return Err("Installation folder is unavailable.".into());
+    }
+    let canonical_old_output = old_output_path
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    ensure_inside_downloads_root(&canonical_old_root, &canonical_old_output)?;
+
+    let install_dir = canonical_old_output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Could not resolve the install folder name.".to_string())?
+        .to_string();
+
+    let new_steamapps = crate::steam_appmanifest::steamapps_dir(&canonical_new_root);
+    let new_output_path =
+        crate::steam_appmanifest::install_dir_path(&canonical_new_root, &install_dir);
+
+    if new_output_path.exists() {
+        return Err(format!(
+            "Target folder already exists at {}. Move aborted to avoid clobbering data.",
+            new_output_path.display()
+        ));
+    }
+    std::fs::create_dir_all(&new_steamapps).map_err(|error| error.to_string())?;
+    if let Some(parent) = new_output_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    if std::fs::rename(&canonical_old_output, &new_output_path).is_err() {
+        copy_dir_recursive(&canonical_old_output, &new_output_path)
+            .map_err(|error| format!("Could not copy the installation folder: {error}"))?;
+        std::fs::remove_dir_all(&canonical_old_output)
+            .map_err(|error| format!("Old folder removed partially: {error}"))?;
+    }
+
+    let old_acf = crate::steam_appmanifest::appmanifest_path(&canonical_old_root, app_id);
+    let new_acf = crate::steam_appmanifest::appmanifest_path(&canonical_new_root, app_id);
+    if old_acf.is_file() {
+        if let Ok(contents) = std::fs::read_to_string(&old_acf) {
+            let _ = std::fs::write(&new_acf, contents);
+        }
+        let _ = std::fs::remove_file(&old_acf);
+    }
+
+    crate::chunk_index::remove_app_stash(&canonical_old_root, app_id);
+
+    Ok(new_output_path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub async fn cdndownload_download_game(
     app: tauri::AppHandle,

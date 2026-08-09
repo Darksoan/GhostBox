@@ -780,6 +780,10 @@ interface GameModalProps {
     collectionId: string
   ) => void | Promise<void>;
   onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
+  onSetCustomExe?: (
+    game: GhostBoxGame,
+    customExePath: string,
+  ) => Promise<GhostBoxGame | null>;
   onDetailsLoaded?: (game: GhostBoxGame) => void;
   onViewAchievements?: (game: GhostBoxGame) => void;
 }
@@ -803,6 +807,7 @@ export function GameModal({
   onAddGameToCollection,
   onRemoveGameFromCollection,
   onPlayGame,
+  onSetCustomExe,
   onDetailsLoaded,
   onViewAchievements,
 }: GameModalProps) {
@@ -1702,8 +1707,11 @@ export function GameModal({
         <Suspense fallback={null}>
           <LazyGameBackupOptionsModal
             open={Boolean(displayGame)}
+            appId={displayGame?.appId ?? ""}
             gameId={displayGame?.id ?? ""}
             gameTitle={displayGame?.title ?? ""}
+            game={displayGame}
+            customExePath={displayGame?.customExePath ?? ""}
             userCollections={userCollections}
             onClose={() => setIsBackupOptionsOpen(false)}
             onAddGameToCollection={(collectionId) => {
@@ -1713,6 +1721,10 @@ export function GameModal({
             onRemoveGameFromCollection={(collectionId) => {
               if (!displayGame) return;
               onRemoveGameFromCollection(displayGame, collectionId);
+            }}
+            onSetCustomExe={async (exePath) => {
+              if (!displayGame) return null;
+              return onSetCustomExe?.(displayGame, exePath) ?? null;
             }}
           />
         </Suspense>

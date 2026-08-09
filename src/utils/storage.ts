@@ -330,6 +330,18 @@ function normalizeStoredFavoriteGame(value: unknown): GhostBoxGame | null {
       : [],
     pcRequirements: storedRequirements(game.pcRequirements),
     databaseAddedAt: storedNumber(game.databaseAddedAt) || undefined,
+    librarySource:
+      (typeof game.librarySource === "string" &&
+        [
+          "steam-installed",
+          "steam-owned",
+          "ghostbox",
+          "plugin",
+          "registered",
+        ].includes(game.librarySource) &&
+        (game.librarySource as GhostBoxGame["librarySource"])) ||
+      undefined,
+    customExePath: storedString(game.customExePath) || undefined,
   };
 }
 

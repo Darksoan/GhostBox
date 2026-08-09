@@ -7,9 +7,14 @@ CARDS #101010 (HOVER: #121212)
 PILLS #151515 (ao hover do card, alterar para: #202020)
 Somente surfaces sem bordas decorativas
 Dropdowns: 
-Trigger #151515 (Sem mudança ao abrir/hover) 
+Trigger #151515 (Hover: #202020) 
 Menu: #151515 (Option hover: #1a1a1a) 
 
-Piso de elementos: 
-#0a0a0a <  #101010 < #121212 < #151515 (Quanto menor, é usado como surface, quanto maior, é
-utilizado para elementos acima da camada canvas/surface. 
+C=COR
+
+C0 #0a0a0a
+C1 #101010
+C2 #121212
+C3 #151515
+C4 #1a1a1a
+C5 #202020

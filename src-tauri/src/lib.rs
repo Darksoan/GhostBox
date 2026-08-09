@@ -1268,47 +1268,102 @@ pub(crate) fn launch_game_from_value(
         }));
     }
 
-    let url = format!("steam://rungameid/{app_id}");
-    match app.opener().open_url(url, None::<&str>) {
-        Ok(_) => {
-            playtime::register_pending_steam_game(game.clone());
-            let _ = playtime::record_game_launch_playtime(&app, &app_id);
-            if let Some(executable_path) = playtime::find_likely_game_executable(&game) {
-                #[cfg(windows)]
-                {
-                    let app_handle = app.clone();
-                    let fallback_game = game.clone();
-                    let fallback_app_id = app_id.clone();
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_secs(20));
-                        if playtime::mark_process_fallback_started(&fallback_app_id) {
-                            playtime::monitor_game_process(
-                                app_handle,
-                                fallback_game,
-                                fallback_app_id,
-                                executable_path,
-                            );
-                        }
-                    });
-                }
-                #[cfg(not(windows))]
-                playtime::monitor_game_process(
-                    app.clone(),
-                    game.clone(),
-                    app_id.clone(),
-                    executable_path,
-                );
-            }
-            Ok(serde_json::json!({
-                "success": true,
-                "appId": app_id
-            }))
+    // Override de executável: quando o usuário associou um .exe personalizado a
+    // este jogo, ignoramos `steam://rungameid` e abrimos o binário diretamente.
+    // O monitor de playtime continua funcionando porque marca o processo via
+    // `mark_process_fallback_started` + `monitor_game_process`.
+    let custom_exe = game
+        .get("customExePath")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+    if let Some(custom_exe_path) = custom_exe {
+        let exe_path = std::path::Path::new(&custom_exe_path);
+        if !exe_path.is_file() {
+            return Ok(serde_json::json!({
+                "success": false,
+                "appId": app_id,
+                "error": format!(
+                    "Executável personalizado não encontrado: {custom_exe_path}"
+                )
+            }));
         }
-        Err(error) => Ok(serde_json::json!({
-            "success": false,
-            "appId": app_id,
-            "error": error.to_string()
-        })),
+        let canonical_executable = exe_path
+            .canonicalize()
+            .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
+        let working_dir = canonical_executable
+            .parent()
+            .ok_or_else(|| "Custom executable has no parent folder.".to_string())?;
+        match std::process::Command::new(&canonical_executable)
+            .current_dir(working_dir)
+            .spawn()
+        {
+            Ok(_) => {
+                if playtime::mark_process_fallback_started(&app_id) {
+                    playtime::monitor_game_process(
+                        app.clone(),
+                        game.clone(),
+                        app_id.clone(),
+                        canonical_executable.clone(),
+                    );
+                }
+                let _ = playtime::record_game_launch_playtime(&app, &app_id);
+                Ok(serde_json::json!({
+                    "success": true,
+                    "appId": app_id,
+                    "launchMethod": "custom-exe"
+                }))
+            }
+            Err(error) => Ok(serde_json::json!({
+                "success": false,
+                "appId": app_id,
+                "error": format!("Could not launch custom executable: {error}")
+            })),
+        }
+    } else {
+        let url = format!("steam://rungameid/{app_id}");
+        match app.opener().open_url(url, None::<&str>) {
+            Ok(_) => {
+                playtime::register_pending_steam_game(game.clone());
+                let _ = playtime::record_game_launch_playtime(&app, &app_id);
+                if let Some(executable_path) = playtime::find_likely_game_executable(&game) {
+                    #[cfg(windows)]
+                    {
+                        let app_handle = app.clone();
+                        let fallback_game = game.clone();
+                        let fallback_app_id = app_id.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_secs(20));
+                            if playtime::mark_process_fallback_started(&fallback_app_id) {
+                                playtime::monitor_game_process(
+                                    app_handle,
+                                    fallback_game,
+                                    fallback_app_id,
+                                    executable_path,
+                                );
+                            }
+                        });
+                    }
+                    #[cfg(not(windows))]
+                    playtime::monitor_game_process(
+                        app.clone(),
+                        game.clone(),
+                        app_id.clone(),
+                        executable_path,
+                    );
+                }
+                Ok(serde_json::json!({
+                    "success": true,
+                    "appId": app_id
+                }))
+            }
+            Err(error) => Ok(serde_json::json!({
+                "success": false,
+                "appId": app_id,
+                "error": error.to_string()
+            })),
+        }
     }
 }
 
@@ -1420,6 +1475,7 @@ pub fn run() {
             game_launch,
             playtime::game_get_playtimes,
             ghostbox_library::ghostbox_library_register_steam_game,
+            ghostbox_library::ghostbox_library_set_custom_exe,
             luatools::luatools_add_game,
             luatools::luatools_remove_game,
             luatools_bootstrap::luatools_dependencies_status,
@@ -1427,6 +1483,7 @@ pub fn run() {
             cdndownload::cdndownload_download_game,
             cdndownload::cdndownload_cancel_game,
             cdndownload::cdndownload_delete_output_dir,
+            cdndownload::cdndownload_move_install_dir,
             cdndownload::cdndownload_launch_game,
             cdndownload::cdndownload_default_dir,
             window_lifecycle::window_minimize,

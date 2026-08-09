@@ -207,6 +207,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             onAddGameToCollection={appData.addGameToUserCollection}
             onRemoveGameFromCollection={appData.removeGameFromCollection}
             onPlayGame={appData.handlePlayGame}
+            onSetCustomExe={appData.setCustomExeGame}
             onDownloadGame={async () => {
               if (!getGameAppId(mergedGame)) return;
               let downloadsRoot = readStoredDownloadsDir();

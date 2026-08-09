@@ -560,6 +560,42 @@ export function removeDownloadTask(id: string) {
   }
 }
 
+/**
+ * Atualiza o registro persistido de uma instalacao apos o GhostBox mover os
+ * arquivos para outra raiz (comando `cdndownload_move_install_dir`). Sem isto,
+ * uma "Desinstalar" futura a partir de UI chamaria `deleteDownloadOutputDir` com
+ * o caminho antigo, que ja nao existe. So mexe em tarefas completas.
+ */
+export function updateInstallPathsForApp(
+  appId: string,
+  newDownloadsRoot: string,
+  newOutputDir: string,
+) {
+  ensureLiveTasksHydrated();
+  let touched = false;
+
+  const nextHistory = readHistoryTasks().map((task) => {
+    if (task.appId !== appId || task.status !== "completed") return task;
+    touched = true;
+    return { ...task, downloadsRoot: newDownloadsRoot, outputDir: newOutputDir };
+  });
+  if (touched) {
+    writeHistoryTasks(nextHistory);
+    notifyChanged(true);
+    return;
+  }
+
+  const liveMatch = liveTasks.find(
+    (task) => task.appId === appId && task.status === "completed",
+  );
+  if (liveMatch) {
+    updateLiveTask(appId, {
+      downloadsRoot: newDownloadsRoot,
+      outputDir: newOutputDir,
+    });
+  }
+}
+
 export function pauseDownloadTask(id: string) {
   ensureLiveTasksHydrated();
   const task = liveTasks.find((entry) => entry.id === id);

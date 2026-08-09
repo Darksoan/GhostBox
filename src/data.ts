@@ -71,6 +71,12 @@ export type GhostBoxGame = {
     | "plugin"
     | "registered";
   trayInstalled?: boolean;
+  /**
+   * Override de executável: quando presente, `game_launch` abre este .exe
+   * diretamente em vez de `steam://rungameid/<appId>`. Persistido em
+   * `ghostbox-library.json` (backend Rust). Vazio ausente = launch padrão.
+   */
+  customExePath?: string;
   title: string;
   subtitle: string;
   status: GameStatus;
@@ -188,6 +194,10 @@ export type AddGameResult =
       success: false;
       error: string;
     };
+
+export type CustomExeResult =
+  | { success: true; libraryGame: GhostBoxGame }
+  | { success: false; error: string };
 
 export type RemoveGameResult =
   | {

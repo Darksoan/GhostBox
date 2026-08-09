@@ -13306,6 +13306,258 @@ html.no-backdrop-blur {
   }
 }
 
+.game-settings-modal {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  width: min(800px, calc(100vw - 24px));
+  height: 520px;
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  text-rendering: geometricPrecision;
+}
+
+.game-settings-modal__rail {
+  display: flex;
+  flex: 0 0 48px;
+  flex-direction: column;
+  align-items: center;
+  width: 48px;
+  padding: 0 0 var(--space-3);
+  background: var(--surface-option-hover);
+}
+
+.game-settings-modal__rail-button {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__rail-button:hover:not(.game-settings-modal__rail-button--active),
+.game-settings-modal__rail-button:focus-visible:not(.game-settings-modal__rail-button--active) {
+  background: var(--sidebar-option-hover);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__rail-button--active,
+.game-settings-modal__rail-button--active:hover,
+.game-settings-modal__rail-button--active:focus-visible {
+  background: var(--sidebar-option-active);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__rail-button:focus-visible,
+.game-settings-modal__action-button:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+.game-settings-modal__body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  padding: var(--space-6) 28px var(--space-6) 23px;
+  overflow: hidden auto;
+}
+
+.game-settings-modal__rows {
+  display: grid;
+  gap: 15px;
+}
+
+.game-settings-modal__row {
+  display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: 0 var(--space-4) 0 var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--surface-option);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    opacity var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__row--disabled {
+  opacity: 0.45;
+}
+
+.game-settings-modal__row--disabled .game-settings-modal__action-button:disabled {
+  opacity: 1;
+}
+
+.game-settings-modal__row-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.game-settings-modal__row-copy strong,
+.game-settings-modal__row-copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-settings-modal__row-copy strong {
+  color: var(--text-primary);
+  font-size: var(--type-size-compact);
+  font-weight: var(--weight-medium);
+  line-height: var(--type-line-compact);
+}
+
+.game-settings-modal__row-copy span {
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-medium);
+  line-height: var(--type-line-caption);
+}
+
+.game-settings-modal__path {
+  max-width: 260px;
+}
+
+.game-settings-modal__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.game-settings-modal__action-button {
+  appearance: none;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--settings-dropdown-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--type-size-compact);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__action-button:hover:not(:disabled),
+.game-settings-modal__action-button:focus-visible:not(:disabled) {
+  background: var(--dropdown-option-hover);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__action-button svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.game-settings-modal__action-button--danger:hover:not(:disabled),
+.game-settings-modal__action-button--danger:focus-visible:not(:disabled) {
+  color: var(--danger-hover);
+}
+
+.game-settings-modal__action-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.game-settings-modal__feedback {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  line-height: var(--type-line-caption);
+}
+
+.game-settings-modal__feedback [role="alert"] {
+  color: var(--danger-hover);
+}
+
+.game-settings-modal__confirm {
+  position: absolute;
+  inset: var(--space-6) 28px var(--space-6) 23px;
+  width: auto;
+  max-height: none;
+  z-index: var(--z-raised);
+}
+
+.game-settings-modal__confirm-danger {
+  background: var(--settings-dropdown-surface);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__confirm-danger:hover:not(:disabled),
+.game-settings-modal__confirm-danger:focus-visible:not(:disabled) {
+  background: var(--dropdown-option-hover);
+  color: var(--danger-hover);
+}
+
+@media (max-width: 600px) {
+  .game-settings-modal {
+    width: calc(100vw - 24px);
+    height: auto;
+    min-height: 320px;
+  }
+
+  .game-settings-modal__body {
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
+  }
+
+  .game-settings-modal__row {
+    height: auto;
+    min-height: 48px;
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  }
+
+  .game-settings-modal__row-copy {
+    min-width: 0;
+  }
+
+  .game-settings-modal__path {
+    max-width: 130px;
+  }
+
+  .game-settings-modal__actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
 .modal__cloud-backup-card {
   align-items: flex-start;
 }
@@ -13324,10 +13576,24 @@ html.no-backdrop-blur {
   gap: var(--space-4);
 }
 
-.modal__cloud-backup-actions .modal__backup-action-button {
+.modal__install-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.modal__cloud-backup-actions .modal__backup-action-button,
+.modal__install-actions .modal__backup-action-button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.modal__install-actions svg {
+  animation: none;
+  transform: none;
 }
 
 .modal__cloud-backup-actions svg {

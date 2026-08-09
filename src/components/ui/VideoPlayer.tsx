@@ -284,7 +284,7 @@ export function VideoPlayer({
     // é quem responde a Espaço/Enter — clicar num botão/slider já foca o
     // próprio controle nativamente.
     if (target === videoRef.current || target === containerRef.current) {
-      containerRef.current?.focus();
+      containerRef.current?.focus({ preventScroll: true });
     }
   }
 
@@ -413,6 +413,7 @@ export function VideoPlayer({
           <button
             type="button"
             className="video-player__button"
+            onPointerDown={(event) => event.preventDefault()}
             onClick={togglePlay}
             aria-label={isPlaying ? t("video.pause") : t("video.play")}
           >
