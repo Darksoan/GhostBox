@@ -1105,7 +1105,7 @@ p {
     /* Collection rows rest muted; expand/active → strong */
     &.sidebar__collection-item {
       color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-medium);
 
       .sidebar__collection-icon,
       .sidebar__collection-chevron {
@@ -1267,17 +1267,21 @@ p {
     display: inline-flex;
     align-items: center;
     gap: var(--space-4);
-    /* Hug content — hover changes text only, not background */
-    width: max-content;
+    /* Fill the row so the selector background spans the full width like other
+       sidebar options. */
+    width: 100%;
     max-width: 100%;
     min-width: 0;
     min-height: 28px;
     padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
     @include mixins.ghost-button;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     text-align: left;
-    transition: color var(--motion-fast) var(--ease);
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
 
     svg,
     .sidebar__game-icon {
@@ -1298,7 +1302,7 @@ p {
 
     &:hover,
     &:focus-visible {
-      background: transparent;
+      background: var(--sidebar-option-selected);
       color: var(--text-primary);
     }
   }
@@ -1327,7 +1331,7 @@ p {
     padding: var(--space-4) var(--space-4);
     @include mixins.ghost-button;
     font-size: var(--type-size-body);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     line-height: 1;
     text-align: left;
     transition:
@@ -1394,13 +1398,13 @@ p {
     /* Selected: border + shared interactive surface */
     &--active {
       border-color: transparent;
-      background-color: var(--sidebar-selector);
+      background-color: var(--sidebar-option-selected);
       color: var(--text-primary);
     }
 
     &--active:hover:not(:disabled) {
       border-color: transparent;
-      background-color: var(--sidebar-selector);
+      background-color: var(--sidebar-option-selected);
     }
   }
 
@@ -2002,7 +2006,7 @@ p {
     padding: 0 var(--space-5);
     @include mixins.ghost-button;
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     line-height: 1;
     text-align: left;
     transition:
@@ -2108,7 +2112,7 @@ p {
       line-height: 1;
 
       &::placeholder {
-        font-weight: var(--weight-medium);
+        font-weight: var(--weight-semibold);
       }
     }
 

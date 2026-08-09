@@ -494,7 +494,7 @@ const SidebarGameItem = memo(function SidebarGameItem({ game }: SidebarGameItemP
       ) : iconLoading ? (
         <span className="sidebar__game-icon sidebar__game-icon--skeleton" aria-hidden="true" />
       ) : null}
-      <span className="sidebar__collection-game-title" title={game.title}>
+      <span className="sidebar__collection-game-title">
         {game.title}
       </span>
     </>
