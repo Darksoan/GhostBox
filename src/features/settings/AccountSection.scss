@@ -84,22 +84,14 @@
   color: var(--success);
 }
 
-.account-section__avatar {
-  flex: 0 0 auto;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
 .account-section__copy {
   position: relative;
   overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
@@ -151,6 +143,27 @@
 .account-section__copy--copied .account-section__copy-icon--check {
   transform: translateY(0);
   opacity: 1;
+}
+
+.account-section__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--motion-fast) ease, background var(--motion-fast) ease;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--danger);
+    background: var(--danger-soft);
+  }
 }
 
 .account-section__error {

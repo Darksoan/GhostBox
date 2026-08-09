@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, Loader2 } from "lucide-react";
-import { useAppData } from "../../context/AppDataContext";
+import { Check, Copy, Loader2, LogOut } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
-import ghostLogo from "../../../Icons/ghost-solid.png";
 import "./AccountSection.scss";
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -15,7 +13,6 @@ function errorMessage(error: unknown, fallback: string): string {
 export function AccountSection() {
   const { t } = useSettings();
   const { account, logout, resendVerificationEmail } = useAuth();
-  const { steamProfile } = useAppData();
   const [usernameCopied, setUsernameCopied] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
@@ -107,35 +104,27 @@ export function AccountSection() {
                 }
               >
                 <span className="account-section__copy-icon account-section__copy-icon--copy">
-                  <Copy size={12} aria-hidden="true" />
+                  <Copy size={15} strokeWidth={2.25} aria-hidden="true" />
                 </span>
                 <span className="account-section__copy-icon account-section__copy-icon--check">
-                  <Check size={12} aria-hidden="true" />
+                  <Check size={15} strokeWidth={2.5} aria-hidden="true" />
                 </span>
+              </button>
+              <button
+                type="button"
+                className="account-section__icon"
+                onClick={() => void logout()}
+                aria-label={t("settings.general.account.signOut")}
+                title={t("settings.general.account.signOut")}
+              >
+                <LogOut size={15} strokeWidth={2.25} aria-hidden="true" />
               </button>
             </div>
           </div>
         </div>
-
-        <img
-          className="account-section__avatar"
-          src={steamProfile?.avatarUrl || ghostLogo}
-          alt=""
-          aria-hidden="true"
-        />
       </div>
 
       {error && <p className="account-section__error">{error}</p>}
-
-      <div className="account-section__actions">
-        <button
-          type="button"
-          className="account-section__button account-section__button--danger"
-          onClick={() => void logout()}
-        >
-          {t("settings.general.account.signOut")}
-        </button>
-      </div>
     </section>
   );
 }

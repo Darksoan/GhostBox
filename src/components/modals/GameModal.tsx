@@ -1703,7 +1703,6 @@ export function GameModal({
           <LazyGameBackupOptionsModal
             open={Boolean(displayGame)}
             gameId={displayGame?.id ?? ""}
-            game={displayGame}
             gameTitle={displayGame?.title ?? ""}
             userCollections={userCollections}
             onClose={() => setIsBackupOptionsOpen(false)}

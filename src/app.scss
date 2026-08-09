@@ -12952,6 +12952,7 @@ html.no-backdrop-blur {
     min-width: 0;
     height: 34px;
     padding: 0 var(--space-6);
+    background: var(--surface-option-hover);
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
@@ -12965,7 +12966,7 @@ html.no-backdrop-blur {
     }
 
     &:hover {
-      background: var(--sidebar-selector);
+      background: var(--surface-option-active);
     }
 
     &:disabled {
@@ -12974,13 +12975,13 @@ html.no-backdrop-blur {
     }
 
     &:disabled:hover {
-      background: transparent;
+      background: var(--surface-option-hover);
       color: var(--text-secondary);
     }
 
     &--active,
     &--active:hover {
-      background: var(--sidebar-selector);
+      background: var(--surface-option-selected);
       color: var(--text-primary);
     }
 
@@ -13171,6 +13172,15 @@ html.no-backdrop-blur {
   &__gear-button {
     background: var(--surface-option);
 
+    &:hover:not(:disabled),
+    &:focus-visible {
+      background: var(--surface-option-hover);
+    }
+  }
+
+  &__add-button,
+  &__favorite-button,
+  &__gear-button {
     &:hover:not(:disabled),
     &:focus-visible {
       background: var(--surface-option-hover);

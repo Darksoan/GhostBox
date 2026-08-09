@@ -1,15 +1,17 @@
 // Rampa neutra + primitivos crus. Sem semântica — nada aqui sabe para que serve.
 // Ver plans/design-tokens-launcher.md para a tabela de contraste de cada degrau.
 :root {
-  // --- Rampa neutra de superfície (5 degraus, piso → teto) ---
+  // --- Rampa neutra de superfície — tokens C (COR): piso → teto ---
   // Degraus usam contrastes perceptualmente próximos e mantêm superfícies entre
-  // #0a0a0a e #1a1a1a. O piso é o canvas; o teto marca seleção/ativo. O preto
-  // absoluto (#000000) vive só em --black (letterbox de mídia), fora da rampa.
-  --n-0: #0a0a0a;
-  --n-1: #101010;
-  --n-2: #121212;
-  --n-3: #151515;
-  --n-4: #1a1a1a;
+  // #0a0a0a e #1a1a1a (C0–C4). O piso é o canvas; C4 é o teto estrutural. C5 é a
+  // seleção forte opaca acima do teto, fora da rampa por design. O preto absoluto
+  // (#000000) vive só em --black (letterbox de mídia), fora da rampa.
+  --c-0: #0a0a0a;
+  --c-1: #101010;
+  --c-2: #121212;
+  --c-3: #151515;
+  --c-4: #1a1a1a;
+  --c-5: #202020;
   // Rampa de borda: --b-0 é exclusivo de borda. --n-5/--n-6 ficam fora da rampa
   // de superfície e sustentam delimitadores funcionais.
   --b-0: #2a2a2a;
