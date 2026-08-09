@@ -331,7 +331,11 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       <main className="app-main">
         <Sidebar
           activePage={page}
-          activeCollectionId={shell.activeProfileCollectionId}
+          activeCollectionId={
+            page === "library"
+              ? (shell.activeLibraryCollectionId ?? undefined)
+              : shell.activeProfileCollectionId
+          }
           steamProfile={appData.steamProfile}
           isCloudProfileRestoring={appData.isCloudProfileRestoring}
           favoriteGames={appData.favoriteGames}
@@ -400,6 +404,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               activeSettingsTabId={shell.activeSettingsTabId}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
+              activeLibraryCollectionId={shell.activeLibraryCollectionId}
+              setActiveLibraryCollectionId={shell.setActiveLibraryCollectionId}
               isMainPage={shell.isMainPage}
               contentRef={contentRef}
               steamPathModalLoading={steamPathModalLoading}
@@ -418,9 +424,11 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
 function AppShell() {
   const appData = useAppData();
+  const { status } = useAuth();
+  const isAuthenticated = status === "authenticated";
 
   return (
-    <MetricsVisibilityProvider steamProfile={appData.steamProfile}>
+    <MetricsVisibilityProvider isAuthenticated={isAuthenticated}>
       <AppContent appData={appData} />
       {appData.isInitialLoading ? (
         <AppSplash progress={appData.initialLoadingProgress} />

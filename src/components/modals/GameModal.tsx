@@ -1320,9 +1320,17 @@ export function GameModal({
         const actions = aboutActionsRef.current;
         if (!sidebar || !currentShell) return;
 
-        const sidebarBottom = sidebar.getBoundingClientRect().bottom;
+        // O alvo é o fim VISÍVEL da sidebar (último card), não a caixa dela: a
+        // sidebar tem padding-bottom, e alinhar pela caixa deixava o botão
+        // pendurado abaixo do último card.
+        const lastSidebarChild = sidebar.lastElementChild;
+        const sidebarBottom =
+          lastSidebarChild instanceof HTMLElement
+            ? lastSidebarChild.getBoundingClientRect().bottom
+            : sidebar.getBoundingClientRect().bottom;
         const shellTop = currentShell.getBoundingClientRect().top;
         const actionsHeight = actions?.getBoundingClientRect().height ?? 36;
+        // `- 10` é o gap do flex da seção (--space-5) entre o shell e as ações.
         const nextHeight = Math.max(
           160,
           Math.floor(sidebarBottom - shellTop - actionsHeight - 10)

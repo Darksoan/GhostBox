@@ -5,28 +5,9 @@ import { useSettings } from "../../context/settings";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
 import { deleteDownloadTaskFiles, type DownloadTask } from "../../lib/downloadManager";
 import { formatBytes } from "../../utils/formatBytes";
-import { layeredImageStyle } from "../../utils/image";
+import { highDensityHeaderSources, layeredImageStyle } from "../../utils/image";
 
 const emptyImageSources: string[] = [];
-
-/**
- * O hero do modal tem ~640px de largura e recebia `header.jpg` (460px) esticado
- * sempre que o `header_2x` sem hash dava 404 — o que acontece em todo jogo já
- * migrado. Estas URLs sem hash servem de chave: o manifesto injeta a variante
- * com hash na frente de cada uma. `library_hero` entra como segunda opção
- * porque alguns jogos não publicam `header_2x`.
- */
-function highDensityHeaderSources(appId: string): string[] {
-  if (!appId) return [];
-  return [
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header_2x.jpg`,
-  ];
-}
 
 function taskStatusKey(status: DownloadTask["status"]): string {
   if (status === "downloading") return "downloads.statusDownloading";

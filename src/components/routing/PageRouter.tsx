@@ -105,6 +105,8 @@ interface PageRouterProps {
   activeSettingsTabId: string;
   activeProfileCollectionId?: string;
   setActiveProfileCollectionId: (id: string | undefined) => void;
+  activeLibraryCollectionId: string | null;
+  setActiveLibraryCollectionId: (id: string | null) => void;
   isMainPage: boolean;
   contentRef: RefObject<HTMLElement>;
   steamPathModalLoading: boolean;
@@ -119,6 +121,8 @@ export function PageRouter({
   activeSettingsTabId,
   activeProfileCollectionId,
   setActiveProfileCollectionId,
+  activeLibraryCollectionId,
+  setActiveLibraryCollectionId,
   isMainPage,
   contentRef,
   steamPathModalLoading,
@@ -262,10 +266,8 @@ export function PageRouter({
           onOpenGame={openGame}
           favoriteGameIds={appData.favoriteGameIds}
           userCollections={appData.userCollections}
-          activeCollectionId={activeProfileCollectionId ?? null}
-          onActiveCollectionChange={(id) =>
-            setActiveProfileCollectionId(id ?? undefined)
-          }
+          activeCollectionId={activeLibraryCollectionId}
+          onActiveCollectionChange={setActiveLibraryCollectionId}
           activeSessionAppIds={appData.activeSessionAppIds}
           isActive={targetPage === page}
         />

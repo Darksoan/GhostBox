@@ -31,9 +31,6 @@
   // acima do teto da rampa para dar contraste com a própria --surface-option-active
   // usada em hover. Fora da rampa de propósito.
   --surface-option-selected: var(--c-5);
-  --library-box: var(--c-0);
-  // Pasta selecionada: afunda, mesma regra do hover de conteúdo.
-  --library-box-active: var(--c-1);
   --surface-popover: var(--c-3);
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
   --surface-tray: var(--c-1);
@@ -85,8 +82,8 @@
   // moldura clara em volta da mídia.
   --surface-modal-canvas: var(--surface-canvas);
   // Controle dentro de modal: repouso no painel, hover dois degraus acima.
-  --surface-modal-control: var(--c-1);
-  --surface-modal-control-hover: var(--c-3);
+  --surface-modal-control: var(--c-3);
+  --surface-modal-control-hover: var(--c-4);
   // Dropdown da aba Perfil (ordenação da atividade): mesmo par de qualquer
   // dropdown do app — trigger aberto/hover e menu em degraus próximos, opção em
   // destaque no teto da rampa.
@@ -100,6 +97,9 @@
   --sidebar-selector: var(--sidebar-option-hover);
   --sidebar-option-active: var(--sidebar-option-selected);
   --sidebar-option-active-hover: var(--sidebar-option-hover);
+  // Card de conquista na aba Conquistas do perfil: hover no teto da rampa
+  // (#1a1a1a) para feedback visível sem clarear a paleta estrutural.
+  --achievement-card-hover: var(--c-4);
 
   // Hover neutro de controles fora da sidebar (paginação, checkbox de filtro).
   // Mesmo degrau de --sidebar-option-hover, nome próprio pra não

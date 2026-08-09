@@ -99,7 +99,7 @@ export function LibraryPage({
       : propActiveCollectionId === "library"
         ? null
         : propActiveCollectionId;
-  const hasFavorites = favoriteGames.length > 0;
+  const hasFavorites = favoriteGames.length > 0 || favoriteGameIds.size > 0;
   const favoritesOnly = hasFavorites && selectedCollectionId === "favorites";
   const activeCollectionId =
     selectedCollectionId &&
@@ -107,26 +107,48 @@ export function LibraryPage({
     userCollections.some((collection) => collection.id === selectedCollectionId)
       ? selectedCollectionId
       : null;
-  const changeActiveCollection = (collectionId: string | null) => {
-    setInternalActiveCollectionId(collectionId);
-    onActiveCollectionChange?.(collectionId);
-  };
+  const changeActiveCollection = useCallback(
+    (collectionId: string | null) => {
+      setInternalActiveCollectionId(collectionId);
+      onActiveCollectionChange?.(collectionId);
+    },
+    [onActiveCollectionChange],
+  );
+
+  // Coleção apagada enquanto filtrava: o id sobrevive no estado do shell, que
+  // também alimenta o perfil e o destaque da sidebar. Filtrar ignorando o id
+  // morto não bastava — a seleção precisa ser desfeita de fato.
+  useEffect(() => {
+    if (!selectedCollectionId || selectedCollectionId === "favorites") return;
+    if (!userCollections.length) return;
+    if (userCollections.some((c) => c.id === selectedCollectionId)) return;
+    changeActiveCollection(null);
+  }, [changeActiveCollection, selectedCollectionId, userCollections]);
 
   const baseLibraryGames = useMemo(() => {
+    // A biblioteca é a fonte do que esta aba mostra: favoritos e coleções
+    // FILTRAM o que já está aqui. Antes as duas listas eram somadas ao mapa
+    // antes do filtro, então ligar a chip trazia títulos que não estão na
+    // biblioteca — e desligá-la fazia esses títulos sumirem.
     const gamesByKey = new Map<string, GhostBoxGame>();
-    const addGames = (games: GhostBoxGame[]) => {
+    visibleGames.forEach((game) => {
+      gamesByKey.set(game.appId || game.id, game);
+    });
+
+    // A cópia guardada na coleção/favoritos só completa campos ausentes da
+    // entrada da biblioteca; nunca cria entrada nova.
+    const mergeDetails = (games: GhostBoxGame[]) => {
       games.forEach((game) => {
         const key = game.appId || game.id;
         const current = gamesByKey.get(key);
-        gamesByKey.set(key, current ? { ...game, ...current } : game);
+        if (current) gamesByKey.set(key, { ...game, ...current });
       });
     };
-    addGames(visibleGames);
 
     let filteredGames = visibleGames;
 
     if (favoritesOnly) {
-      addGames(favoriteGames);
+      mergeDetails(favoriteGames);
       const favoriteKeys = new Set<string>();
       favoriteGameIds.forEach((gameId) =>
         addLibraryGameKey(favoriteKeys, gameId),
@@ -143,7 +165,7 @@ export function LibraryPage({
       );
       if (collection) {
         const collectionGames = collection.games ?? [];
-        addGames(collectionGames);
+        mergeDetails(collectionGames);
         const collectionKeys = new Set<string>();
         collection.gameIds.forEach((gameId) =>
           addLibraryGameKey(collectionKeys, gameId),
@@ -286,7 +308,7 @@ export function LibraryPage({
                   );
                 }}
               >
-                <Heart size={15} strokeWidth={2.0} fill="none" />
+                <Heart size={14} strokeWidth={2.0} fill="none" />
                 <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
               </button>
             )}
@@ -309,7 +331,7 @@ export function LibraryPage({
                   );
                 }}
               >
-                <Folder size={15} strokeWidth={2.0} />
+                <Folder size={14} strokeWidth={2.0} />
                 <span>{collection.name}</span>
               </button>
             ))}

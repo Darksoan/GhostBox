@@ -1,4 +1,4 @@
-@use "./styles/primitives";
+﻿@use "./styles/primitives";
 @use "./styles/semantic";
 @use "./styles/mixins";
 
@@ -1530,10 +1530,13 @@ p {
     font-family: var(--font-sans);
   }
 
-  /* Optical nudge: Inter digits sit slightly low/right in the ring */
+  /* Sem correção manual: com `line-height: 1` a caixa de linha tem 1em e a
+     entrelinha negativa da Inter põe a baseline a ~0.864em do topo. Com cap
+     height de ~0.727em o miolo do dígito cai em ~0.500em — o centro exato da
+     caixa que o `place-items: center` alinha. O `translate(-0.6px, -1px)` que
+     estava aqui era o que tirava o número do centro. */
   &__level-value {
     display: block;
-    transform: translate(-0.6px, -1px);
   }
 }
 
@@ -2701,6 +2704,11 @@ p {
    modificador (mais abaixo no arquivo) empataria em especificidade e venceria
    pela ordem. */
 .home-recommended__track .home-category-card--with-title .home-category-card__metadata {
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-6) var(--space-8);
+}
+
+.home-recommended__track .home-category-card--with-review .home-category-card__metadata {
   gap: var(--space-8);
   padding: var(--space-8) var(--space-6) var(--space-8);
 }
@@ -7764,7 +7772,11 @@ input[type="search"]::-ms-reveal {
   align-items: center;
   column-gap: var(--space-8);
   min-width: 0;
-  min-height: 84px;
+  /* 92px é a altura que a capa de 196px pede em 460:215 — a mesma que as linhas
+     do catálogo e das notificações alcançam por causa do `aspect-ratio`. Aqui a
+     capa é fundo (`background-size: cover`) e não empurra a linha, então o piso
+     precisa ser declarado, senão o card fica uma faixa mais baixa que as demais. */
+  min-height: 92px;
   padding: 0 var(--space-6) 0 0;
   overflow: visible;
   border: 0;
@@ -7804,7 +7816,7 @@ input[type="search"]::-ms-reveal {
     display: block;
     width: var(--download-cover-width);
     align-self: stretch;
-    min-height: 84px;
+    min-height: 92px;
     padding: 0;
     background: transparent;
   }
@@ -7813,7 +7825,7 @@ input[type="search"]::-ms-reveal {
     display: block;
     width: 100%;
     height: 100%;
-    min-height: 84px;
+    min-height: 92px;
     border: 0;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     /* Piso da rampa enquanto a arte não pinta: o antigo `--surface-solid` saiu
@@ -10087,40 +10099,38 @@ border: 0;
   }
 }
 
+/* Vive lado a lado com o dropdown de ordenação na mesma barra: altura, raio e
+   tamanho de texto vêm de lá. Em repouso usava `--library-box` (--c-0), o mesmo
+   degrau do fundo da página — a chip não tinha superfície e o hover repetia a
+   cor de repouso, então nada respondia ao ponteiro. Hover e selecionado seguem
+   os tokens da sidebar (`--sidebar-option-hover` / `--sidebar-option-active`);
+   o repouso mantém superfície própria porque a chip fica sobre o canvas. */
 .library-chip {
   display: inline-flex;
-  min-height: 36px;
-  height: 36px;
+  min-height: 32px;
+  height: 32px;
   align-items: center;
   gap: var(--space-4);
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--library-box);
+  background: var(--surface-option);
   color: var(--text-secondary);
-  padding: 0 var(--space-7);
-  font-size: var(--type-size-body);
+  padding: 0 var(--space-6);
+  font-size: var(--type-size-compact);
   font-weight: var(--weight-medium);
   cursor: pointer;
   transition:
-    border-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease),
     background-color var(--motion-fast) var(--ease);
 
   svg {
     flex: 0 0 auto;
-    color: var(--text-secondary);
-    font-weight: var(--weight-medium);
-    transition: color var(--motion-fast) var(--ease);
+    color: currentcolor;
   }
 
   &:hover {
-    background: var(--library-box);
-    color: var(--text-secondary);
-
-    svg {
-      color: var(--text-secondary);
-    }
-
+    background: var(--sidebar-option-hover);
+    color: var(--text-primary);
   }
 
   &:focus-visible {
@@ -10129,20 +10139,12 @@ border: 0;
   }
 
   &.library-chip--active,
-  &[aria-pressed="true"] {
-    background: var(--library-box-active);
-    color: var(--text-primary);
-
-    svg {
-      color: var(--text-primary);
-    }
-  }
-
+  &[aria-pressed="true"],
   &.library-chip--active:hover,
   &.library-chip--active:focus-visible,
   &[aria-pressed="true"]:hover,
   &[aria-pressed="true"]:focus-visible {
-    background: var(--library-box-active);
+    background: var(--sidebar-option-active);
     color: var(--text-primary);
   }
 }
@@ -12529,11 +12531,6 @@ html.no-backdrop-blur {
     display: flex;
     justify-content: center;
     margin-top: -2px;
-    /* Respiro próprio abaixo do botão: o padding do `modal__details` pode ser
-       recortado quando o modal trava em `height: 100%` (<=1200px), e a altura
-       colapsada é medida contra o fim da sidebar. Como a medição usa a altura
-       total desta faixa (padding incluso), o espaço é reservado nos dois casos. */
-    padding-bottom: var(--space-14);
   }
 
   &__about-toggle {
@@ -13328,59 +13325,158 @@ html.no-backdrop-blur {
   box-sizing: border-box;
   position: relative;
   display: flex;
-  width: min(800px, calc(100vw - 24px));
-  height: 520px;
-  max-height: calc(100vh - 24px);
+  /* Teto de resolução do hero: mesmo raciocínio do modal de downloads — o
+     `header.jpg` da Steam entrega 460×215, então a arte não pede mais largura
+     do que isso comporta em tela de alta densidade. */
+  width: min(560px, calc(100vw - 24px));
+  height: auto;
+  max-height: min(760px, calc(100vh - 24px));
+  flex-direction: column;
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface-canvas);
+  background: var(--surface-modal-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
   text-rendering: geometricPrecision;
 }
 
-.game-settings-modal__rail {
-  display: flex;
-  flex: 0 0 48px;
-  flex-direction: column;
-  align-items: center;
-  width: 48px;
-  padding: 0 0 var(--space-3);
-  background: var(--surface-option-hover);
+.game-settings-modal__hero {
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 460 / 215;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: var(--surface-media-letterbox);
 }
 
-.game-settings-modal__rail-button {
+.game-settings-modal__hero-image,
+.game-settings-modal__hero-shade {
+  position: absolute;
+  inset: 0;
+}
+
+.game-settings-modal__hero-image {
+  background-position: center;
+  background-size: cover;
+  opacity: 0;
+  transition: opacity var(--motion-base) var(--ease);
+}
+
+.game-settings-modal__hero-image--loaded {
+  opacity: 1;
+}
+
+.game-settings-modal__hero-shade {
+  background: linear-gradient(
+    to bottom,
+    transparent 45%,
+    color-mix(in srgb, var(--surface-modal-canvas) 88%, transparent) 82%,
+    var(--surface-modal-canvas) 100%
+  );
+}
+
+.game-settings-modal__hero-title {
+  position: absolute;
+  right: var(--space-9);
+  bottom: var(--space-7);
+  left: var(--space-9);
+  z-index: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--type-size-page);
+  font-weight: var(--weight-semibold);
+  line-height: var(--type-line-page);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-settings-modal__close {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-6);
+  z-index: 2;
   appearance: none;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 40px;
-  flex: 0 0 40px;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--black) 42%, transparent);
+  color: var(--text-primary);
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 }
 
-.game-settings-modal__rail-button:hover:not(.game-settings-modal__rail-button--active),
-.game-settings-modal__rail-button:focus-visible:not(.game-settings-modal__rail-button--active) {
+.game-settings-modal__close:hover,
+.game-settings-modal__close:focus-visible {
+  background: color-mix(in srgb, var(--black) 60%, transparent);
+}
+
+.game-settings-modal__nav {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.game-settings-modal__nav-button {
+  appearance: none;
+  display: inline-flex;
+  box-sizing: border-box;
+  height: 32px;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-lg);
+  /* Mesma escada de estado dos itens da sidebar: repouso transparente, hover em
+     --sidebar-option-hover, selecionado em --sidebar-option-active. */
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__nav-button svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.game-settings-modal__nav-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-settings-modal__nav-button:hover:not(.game-settings-modal__nav-button--active),
+.game-settings-modal__nav-button:focus-visible:not(.game-settings-modal__nav-button--active) {
   background: var(--sidebar-option-hover);
   color: var(--text-primary);
 }
 
-.game-settings-modal__rail-button--active,
-.game-settings-modal__rail-button--active:hover,
-.game-settings-modal__rail-button--active:focus-visible {
+.game-settings-modal__nav-button--active,
+.game-settings-modal__nav-button--active:hover,
+.game-settings-modal__nav-button--active:focus-visible {
   background: var(--sidebar-option-active);
   color: var(--text-primary);
 }
 
-.game-settings-modal__rail-button:focus-visible,
+.game-settings-modal__nav-button--active .game-settings-modal__nav-count {
+  color: var(--text-secondary);
+}
+
+.game-settings-modal__nav-button:focus-visible,
+.game-settings-modal__close:focus-visible,
 .game-settings-modal__action-button:focus-visible {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
@@ -13392,71 +13488,112 @@ html.no-backdrop-blur {
   flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
-  padding: var(--space-6) 28px var(--space-6) 23px;
+  gap: var(--space-7);
+  padding: var(--space-8) var(--space-9);
   overflow: hidden auto;
 }
 
-.game-settings-modal__rows {
-  display: grid;
-  gap: 15px;
-}
-
-.game-settings-modal__row {
-  display: flex;
-  box-sizing: border-box;
-  min-width: 0;
-  height: 48px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-5);
-  padding: 0 var(--space-4) 0 var(--space-6);
-  border-radius: var(--radius-md);
-  background: var(--surface-option);
-  cursor: pointer;
-  transition:
-    background-color var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease),
-    opacity var(--motion-fast) var(--ease);
-}
-
-.game-settings-modal__row--disabled {
-  opacity: 0.45;
-}
-
-.game-settings-modal__row--disabled .game-settings-modal__action-button:disabled {
-  opacity: 1;
-}
-
-.game-settings-modal__row-copy {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-3);
-}
-
-.game-settings-modal__row-copy strong,
-.game-settings-modal__row-copy span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.game-settings-modal__row-copy strong {
-  color: var(--text-primary);
-  font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
-  line-height: var(--type-line-compact);
-}
-
-.game-settings-modal__row-copy span {
+.game-settings-modal__section-description {
+  margin: 0;
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
   font-weight: var(--weight-medium);
   line-height: var(--type-line-caption);
 }
 
+.game-settings-modal__rows {
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
+}
+
+.game-settings-modal__card {
+  display: grid;
+  box-sizing: border-box;
+  min-width: 0;
+  gap: var(--space-7);
+  padding: var(--space-8);
+  border-radius: var(--radius-md);
+  background: var(--surface-option);
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__card--disabled {
+  opacity: 0.45;
+}
+
+.game-settings-modal__card--disabled .game-settings-modal__action-button:disabled {
+  opacity: 1;
+}
+
+.game-settings-modal__card-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-7);
+}
+
+.game-settings-modal__card-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.game-settings-modal__card-copy strong {
+  color: var(--text-primary);
+  font-size: var(--type-size-compact);
+  font-weight: var(--weight-medium);
+  line-height: var(--type-line-compact);
+}
+
+.game-settings-modal__card-copy span {
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-medium);
+  line-height: var(--type-line-caption);
+}
+
+.game-settings-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-settings-modal__chip {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+}
+
+/* Caminho de disco em bloco próprio: quebra em qualquer caractere e cabe em duas
+   linhas, em vez de virar reticências no meio de um `C:\...` que o usuário
+   precisa conferir. */
 .game-settings-modal__path {
-  max-width: 260px;
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-sm);
+  background: var(--surface-canvas);
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-medium);
+  line-height: var(--type-line-caption);
+  word-break: break-all;
+  user-select: text;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .game-settings-modal__actions {
@@ -13478,7 +13615,9 @@ html.no-backdrop-blur {
   padding: 0 var(--space-5);
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--settings-dropdown-surface);
+  /* Mesma rampa da sidebar, um degrau acima do repouso transparente das abas:
+     o botão de ação vive dentro do card e precisa de superfície própria. */
+  background: var(--sidebar-option-hover);
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--type-size-compact);
@@ -13493,7 +13632,7 @@ html.no-backdrop-blur {
 
 .game-settings-modal__action-button:hover:not(:disabled),
 .game-settings-modal__action-button:focus-visible:not(:disabled) {
-  background: var(--dropdown-option-hover);
+  background: var(--sidebar-option-active);
   color: var(--text-primary);
 }
 
@@ -13527,47 +13666,40 @@ html.no-backdrop-blur {
 
 .game-settings-modal__confirm {
   position: absolute;
-  inset: var(--space-6) 28px var(--space-6) 23px;
+  inset: var(--space-8);
   width: auto;
   max-height: none;
   z-index: var(--z-raised);
 }
 
 .game-settings-modal__confirm-danger {
-  background: var(--settings-dropdown-surface);
+  background: var(--sidebar-option-hover);
   color: var(--text-primary);
 }
 
 .game-settings-modal__confirm-danger:hover:not(:disabled),
 .game-settings-modal__confirm-danger:focus-visible:not(:disabled) {
-  background: var(--dropdown-option-hover);
+  background: var(--sidebar-option-active);
   color: var(--danger-hover);
 }
 
 @media (max-width: 600px) {
   .game-settings-modal {
     width: calc(100vw - 24px);
-    height: auto;
     min-height: 320px;
   }
 
+  .game-settings-modal__nav-count {
+    display: none;
+  }
+
   .game-settings-modal__body {
-    padding-right: var(--space-4);
-    padding-left: var(--space-4);
+    padding: var(--space-6);
   }
 
-  .game-settings-modal__row {
-    height: auto;
-    min-height: 48px;
-    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  }
-
-  .game-settings-modal__row-copy {
-    min-width: 0;
-  }
-
-  .game-settings-modal__path {
-    max-width: 130px;
+  .game-settings-modal__card-head {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .game-settings-modal__actions {

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
@@ -1093,11 +1093,8 @@ function HomeRecommendedHero({
       prevLabel={language === "en" ? "Previous game" : "Jogo anterior"}
       nextLabel={language === "en" ? "Next game" : "Próximo jogo"}
       renderItem={(game) => (
-        <HomeCategoryCard
+        <HomeRecommendedCard
           game={game}
-          variant="tile"
-          showMetadata
-          showSummary
           language={language}
           onOpenGame={onOpenGame}
           onGameContextMenu={onGameContextMenu}
@@ -1106,6 +1103,49 @@ function HomeRecommendedHero({
     />
   );
 }
+
+function HomeRecommendedCard({
+  game,
+  language,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  game: GhostBoxGame;
+  language: "pt" | "en";
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  // Capa no mesmo aspecto do card de categoria (460/215); o bloco de
+  // metadata troca titulo + short description + pills por review do
+  // jogador, avatar e horas jogadas.
+  const fallbackCoverSources = useMemo(() => gameHeaderOnlySources(game), [game]);
+  const cachedSources = useCachedImageSources(fallbackCoverSources);
+  const { source: coverSource, loaded } = useLoadableImageCover(cachedSources);
+
+  return (
+    <button
+      type="button"
+      className="home-category-card home-category-card--tile home-category-card--with-metadata home-category-card--with-review"
+      aria-label={game.title}
+      onClick={() => onOpenGame(game)}
+      onContextMenu={(event) => {
+        if (!onGameContextMenu) return;
+        event.preventDefault();
+        onGameContextMenu(game, event.clientX, event.clientY);
+      }}
+    >
+      <span
+        className={`home-category-card__cover${loaded ? " home-category-card__cover--loaded" : ""}`}
+        style={layeredImageStyle(coverSource ? [coverSource] : fallbackCoverSources, "", "100% 100%", "100% 100%")}
+        aria-hidden="true"
+      />
+      <span className="home-category-card__metadata" aria-hidden="true">
+        <HomeWishlistPlayerReview game={game} language={language} />
+      </span>
+    </button>
+  );
+}
+
 
 function HomeWishlistPlayerReview({
   game,

@@ -13,6 +13,13 @@ export function useAppShellState(page: Page) {
     useState<SettingsTabId>("general");
   const [activeProfileCollectionId, setActiveProfileCollectionId] =
     useState<string>();
+  // Estado próprio da biblioteca. O perfil e a biblioteca falam vocabulários
+  // diferentes — o perfil entende "overview"/"library"/"achievements" e ids de
+  // coleção, a biblioteca entende null/"favorites" e ids —, então dividir o
+  // mesmo estado fazia um normalizar o valor do outro.
+  const [activeLibraryCollectionId, setActiveLibraryCollectionId] = useState<
+    string | null
+  >(null);
 
   const debouncedQuery = useDebouncedValue(query, searchDebounceMs);
   const trimmedQuery = query.trim();
@@ -95,6 +102,8 @@ export function useAppShellState(page: Page) {
     setActiveSettingsTabId,
     activeProfileCollectionId,
     setActiveProfileCollectionId,
+    activeLibraryCollectionId,
+    setActiveLibraryCollectionId,
     headerSearchSuggestions,
     hasNoHeaderSearchResults,
     shouldShowHeaderAppIdPrompt,

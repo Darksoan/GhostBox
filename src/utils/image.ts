@@ -100,6 +100,25 @@ export function gameCatalogueHeaderSources(game: GhostBoxGame) {
   ]);
 }
 
+/**
+ * Header em alta densidade (920×430) para heros largos de modal. O `header.jpg`
+ * da Steam tem 460px e é ampliado em qualquer hero acima disso — em tela a 150%
+ * um hero de 560px já pede 840 pixels físicos. Estas URLs sem hash servem de
+ * chave: o manifesto injeta a variante com hash na frente de cada uma.
+ * `library_hero` entra depois porque alguns jogos não publicam `header_2x`.
+ */
+export function highDensityHeaderSources(appId: string): string[] {
+  if (!appId) return [];
+  return [
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header_2x.jpg`,
+  ];
+}
+
 export function gameHeaderOnlySources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];

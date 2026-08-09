@@ -1,26 +1,25 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { SteamProfile } from "../types";
 
 const MetricsVisibilityContext = createContext<boolean>(false);
 
 interface MetricsVisibilityProviderProps {
-  steamProfile: SteamProfile | null;
+  isAuthenticated: boolean;
   children: ReactNode;
 }
 
 /**
- * Whether personal Steam metrics (playtime, achievements) can be shown.
+ * Whether personal metrics (playtime, achievements) can be shown.
  * Kept as a single stable boolean so consumers like `GameCard` (memoized,
  * rendered in large grids) only re-render on login/logout, not on every
  * playtime/session update that flows through `AppDataContext`.
  */
 export function MetricsVisibilityProvider({
-  steamProfile,
+  isAuthenticated,
   children,
 }: MetricsVisibilityProviderProps) {
   const areMetricsUnlocked = useMemo(
-    () => Boolean(steamProfile?.steamId),
-    [steamProfile?.steamId],
+    () => isAuthenticated,
+    [isAuthenticated],
   );
 
   return (

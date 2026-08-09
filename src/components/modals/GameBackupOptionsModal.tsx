@@ -1,16 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  ArrowDownToLine,
   Check,
   FolderInput,
   FolderOpen,
+  HardDrive,
   Loader2,
   Trash2,
+  X,
 } from "lucide-react";
+import { formatBytes } from "../../utils/formatBytes";
+import {
+  gameHeaderOnlySources,
+  highDensityHeaderSources,
+  layeredImageStyle,
+} from "../../utils/image";
 import type { GhostBoxGame } from "../../data";
 import type { UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
+import {
+  useCachedImageSources,
+  useLoadableImageCover,
+} from "../../hooks/useCachedImageSources";
 import {
   readDownloadTasks,
   removeDownloadTask,
@@ -18,6 +29,8 @@ import {
   type DownloadTask,
 } from "../../lib/downloadManager";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+
+const emptyImageSources: string[] = [];
 
 interface BackupOptionsModalProps {
   open: boolean;
@@ -71,6 +84,20 @@ export function GameBackupOptionsModal({
     useState<SettingsSection>("organization");
   const language = appearance.language;
   const copy = (pt: string, en: string) => (language === "en" ? en : pt);
+  // O `header_2x` vem primeiro: `gameHeaderOnlySources` começa no `header.jpg`
+  // de 460px, que seria ampliado no hero de 560px.
+  const headerSources = useMemo(
+    () =>
+      game
+        ? [...highDensityHeaderSources(appId), ...gameHeaderOnlySources(game)]
+        : emptyImageSources,
+    [appId, game],
+  );
+  const cachedHeaderSources = useCachedImageSources(headerSources);
+  const { source: heroSource, loaded: heroLoaded } = useLoadableImageCover(
+    cachedHeaderSources,
+    { preferOrder: true },
+  );
   const currentCollectionIds = useMemo(
     () =>
       new Set(
@@ -122,6 +149,40 @@ export function GameBackupOptionsModal({
             `Em ${collectionCount} coleções.`,
             `In ${collectionCount} collections.`,
           );
+
+  const activeCollections = userCollections.filter((collection) =>
+    currentCollectionIds.has(collection.id),
+  );
+
+  // Linha de apoio da instalação: tamanho e data só entram quando a task tem o
+  // dado; sem eles a frase vira um fato neutro em vez de "0 B · Invalid Date".
+  const installFacts = [
+    installTask?.bytesTotal ? formatBytes(installTask.bytesTotal) : "",
+    installTask?.finishedAt
+      ? new Date(installTask.finishedAt).toLocaleDateString(
+          language === "en" ? "en-US" : "pt-BR",
+          { day: "2-digit", month: "short", year: "numeric" },
+        )
+      : "",
+  ].filter(Boolean);
+  const installSummary = installFacts.length
+    ? installFacts.join(" · ")
+    : copy("Arquivos prontos no disco.", "Files ready on disk.");
+
+  const sectionDescription: Record<SettingsSection, string> = {
+    organization: copy(
+      "Onde este jogo aparece na sua biblioteca.",
+      "Where this game shows up in your library.",
+    ),
+    "custom-exe": copy(
+      "Escolha o arquivo que o botão Jogar abre.",
+      "Pick the file the Play button opens.",
+    ),
+    installation: copy(
+      "Onde os arquivos ficam no disco.",
+      "Where the files live on disk.",
+    ),
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -324,164 +385,233 @@ export function GameBackupOptionsModal({
             : `Ajustes de ${gameTitle}`}
         </h2>
 
-        <aside
-          className="game-settings-modal__rail"
-          aria-label={
-            appearance.language === "en" ? "Game settings" : "Ajustes do jogo"
-          }
-        >
+        <header className="game-settings-modal__hero">
+          <span
+            className={`game-settings-modal__hero-image${heroLoaded && heroSource ? " game-settings-modal__hero-image--loaded" : ""}`}
+            style={layeredImageStyle(
+              heroLoaded && heroSource ? [heroSource] : emptyImageSources,
+              "",
+            )}
+            aria-hidden="true"
+          />
+          <span className="game-settings-modal__hero-shade" aria-hidden="true" />
           <button
             type="button"
-            className={`game-settings-modal__rail-button ${activeSection === "organization" ? "game-settings-modal__rail-button--active" : ""}`}
-            onClick={() => setActiveSection("organization")}
-            aria-label={appearance.language === "en" ? "Collections" : "Coleções"}
-            aria-current={activeSection === "organization" ? "page" : undefined}
+            className="game-settings-modal__close"
+            onClick={onClose}
+            aria-label={copy("Fechar", "Close")}
           >
-            <FolderOpen size={16} strokeWidth={1.8} aria-hidden="true" />
+            <X size={16} strokeWidth={2} aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className={`game-settings-modal__rail-button ${activeSection === "custom-exe" ? "game-settings-modal__rail-button--active" : ""}`}
-            onClick={() => setActiveSection("custom-exe")}
-            aria-label={
-              appearance.language === "en"
-                ? "Custom executable"
-                : "Executável personalizado"
-            }
-            aria-current={activeSection === "custom-exe" ? "page" : undefined}
-          >
-            <FolderInput size={16} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`game-settings-modal__rail-button ${activeSection === "installation" ? "game-settings-modal__rail-button--active" : ""}`}
-            onClick={() => setActiveSection("installation")}
-            aria-label={appearance.language === "en" ? "Installation" : "Instalação"}
-            aria-current={activeSection === "installation" ? "page" : undefined}
-          >
-            <ArrowDownToLine size={16} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-        </aside>
+          <h3 className="game-settings-modal__hero-title">{gameTitle}</h3>
+        </header>
 
         <div className="game-settings-modal__body">
+          <nav className="game-settings-modal__nav">
+            <button
+              type="button"
+              className={`game-settings-modal__nav-button ${activeSection === "organization" ? "game-settings-modal__nav-button--active" : ""}`}
+              onClick={() => setActiveSection("organization")}
+              aria-current={activeSection === "organization" ? "page" : undefined}
+            >
+              <FolderOpen size={15} strokeWidth={1.8} aria-hidden="true" />
+              {copy("Coleções", "Collections")}
+              {collectionCount > 0 && (
+                <span className="game-settings-modal__nav-count">
+                  {collectionCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={`game-settings-modal__nav-button ${activeSection === "custom-exe" ? "game-settings-modal__nav-button--active" : ""}`}
+              onClick={() => setActiveSection("custom-exe")}
+              aria-current={activeSection === "custom-exe" ? "page" : undefined}
+            >
+              <FolderInput size={15} strokeWidth={1.8} aria-hidden="true" />
+              {copy("Executável", "Executable")}
+            </button>
+            <button
+              type="button"
+              className={`game-settings-modal__nav-button ${activeSection === "installation" ? "game-settings-modal__nav-button--active" : ""}`}
+              onClick={() => setActiveSection("installation")}
+              aria-current={activeSection === "installation" ? "page" : undefined}
+            >
+              <HardDrive size={15} strokeWidth={1.8} aria-hidden="true" />
+              {copy("Instalação", "Installation")}
+            </button>
+          </nav>
+
+          <p className="game-settings-modal__section-description">
+            {sectionDescription[activeSection]}
+          </p>
+
           <div className="game-settings-modal__rows">
             {activeSection === "organization" && (
             <section
-              className={`game-settings-modal__row ${!userCollections.length ? "game-settings-modal__row--disabled" : ""}`}
+              className={`game-settings-modal__card ${!userCollections.length ? "game-settings-modal__card--disabled" : ""}`}
             >
-              <div className="game-settings-modal__row-copy">
-                <strong>
-                  {appearance.language === "en" ? "Collections" : "Coleções"}
-                </strong>
-                <span>{collectionSummary}</span>
+              <div className="game-settings-modal__card-head">
+                <div className="game-settings-modal__card-copy">
+                  <strong>
+                    {userCollections.length
+                      ? collectionSummary
+                      : copy("Nenhuma coleção criada", "No collections yet")}
+                  </strong>
+                  <span>
+                    {userCollections.length
+                      ? copy(
+                          "Um jogo pode estar em várias coleções ao mesmo tempo.",
+                          "A game can sit in several collections at once.",
+                        )
+                      : copy(
+                          "Crie uma na barra lateral para organizar a biblioteca.",
+                          "Create one in the sidebar to organize your library.",
+                        )}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="game-settings-modal__action-button"
+                  onClick={() => {
+                    setDraftCollectionIds(currentCollectionIds);
+                    setIsCollectionPickerOpen(true);
+                  }}
+                  disabled={!userCollections.length}
+                >
+                  {copy("Gerenciar", "Manage")}
+                </button>
               </div>
-              <button
-                type="button"
-                className="game-settings-modal__action-button"
-                onClick={() => {
-                  setDraftCollectionIds(currentCollectionIds);
-                  setIsCollectionPickerOpen(true);
-                }}
-                disabled={!userCollections.length}
-              >
-                {appearance.language === "en" ? "Manage" : "Gerenciar"}
-              </button>
+
+              {activeCollections.length > 0 && (
+                <ul className="game-settings-modal__chips">
+                  {activeCollections.map((collection) => (
+                    <li
+                      key={collection.id}
+                      className="game-settings-modal__chip"
+                    >
+                      {collection.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
             )}
 
             {activeSection === "custom-exe" && (
             <section
-              className={`game-settings-modal__row ${customExeBusy || !game || !onSetCustomExe ? "game-settings-modal__row--disabled" : ""}`}
+              className={`game-settings-modal__card ${customExeBusy || !game || !onSetCustomExe ? "game-settings-modal__card--disabled" : ""}`}
             >
-              <div className="game-settings-modal__row-copy">
-                <strong>
-                  {appearance.language === "en"
-                    ? "Custom executable"
-                    : "Executável personalizado"}
-                </strong>
-                <span
-                  className="game-settings-modal__path"
-                  title={customExePath || undefined}
-                >
-                  {customExePath
-                    ? customExePath
-                    : appearance.language === "en"
-                      ? "Launching via Steam."
-                      : "Iniciando pela Steam."}
-                </span>
-              </div>
-              <div className="game-settings-modal__actions">
-                <button
-                  type="button"
-                  className="game-settings-modal__action-button"
-                  onClick={() => void chooseCustomExe()}
-                  disabled={customExeBusy || !game || !onSetCustomExe}
-                >
-                  {customExeBusy && (
-                    <Loader2 size={14} strokeWidth={2} aria-hidden="true" />
-                  )}
-                  {appearance.language === "en"
-                    ? customExePath
-                      ? "Change"
-                      : "Choose .exe"
-                    : customExePath
-                      ? "Trocar"
-                      : "Escolher .exe"}
-                </button>
-                {customExePath && (
+              <div className="game-settings-modal__card-head">
+                <div className="game-settings-modal__card-copy">
+                  <strong>
+                    {customExePath
+                      ? copy("Executável personalizado", "Custom executable")
+                      : copy("Iniciando pela Steam", "Launching via Steam")}
+                  </strong>
+                  <span>
+                    {customExePath
+                      ? copy(
+                          "O botão Jogar abre este arquivo.",
+                          "The Play button opens this file.",
+                        )
+                      : copy(
+                          "O botão Jogar entrega a inicialização para a Steam.",
+                          "The Play button hands off to Steam.",
+                        )}
+                  </span>
+                </div>
+                <div className="game-settings-modal__actions">
                   <button
                     type="button"
-                    className="game-settings-modal__action-button game-settings-modal__action-button--danger"
-                    onClick={() => void clearCustomExe()}
-                    disabled={customExeBusy}
+                    className="game-settings-modal__action-button"
+                    onClick={() => void chooseCustomExe()}
+                    disabled={customExeBusy || !game || !onSetCustomExe}
                   >
-                    {appearance.language === "en" ? "Reset" : "Remover"}
+                    {customExeBusy && (
+                      <Loader2 size={14} strokeWidth={2} aria-hidden="true" />
+                    )}
+                    {customExePath
+                      ? copy("Trocar", "Change")
+                      : copy("Escolher .exe", "Choose .exe")}
                   </button>
-                )}
+                  {customExePath && (
+                    <button
+                      type="button"
+                      className="game-settings-modal__action-button game-settings-modal__action-button--danger"
+                      onClick={() => void clearCustomExe()}
+                      disabled={customExeBusy}
+                    >
+                      {copy("Remover", "Reset")}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {customExePath && (
+                <p
+                  className="game-settings-modal__path"
+                  title={customExePath}
+                >
+                  {customExePath}
+                </p>
+              )}
             </section>
             )}
 
             {activeSection === "installation" && (
             <section
-              className={`game-settings-modal__row ${!installTask || moveBusy || uninstallBusy ? "game-settings-modal__row--disabled" : ""}`}
+              className={`game-settings-modal__card ${!installTask || moveBusy || uninstallBusy ? "game-settings-modal__card--disabled" : ""}`}
             >
-              <div className="game-settings-modal__row-copy">
-                <strong>
-                  {appearance.language === "en"
-                    ? "Installation"
-                    : "Instalação"}
-                </strong>
-                <span
+              <div className="game-settings-modal__card-head">
+                <div className="game-settings-modal__card-copy">
+                  <strong>
+                    {installTask
+                      ? copy("Instalado neste PC", "Installed on this PC")
+                      : copy(
+                          "Nenhuma instalação local",
+                          "No local installation",
+                        )}
+                  </strong>
+                  <span>
+                    {installTask
+                      ? installSummary
+                      : copy(
+                          "Baixe o jogo para mover ou desinstalar por aqui.",
+                          "Download the game to move or uninstall it here.",
+                        )}
+                  </span>
+                </div>
+                <div className="game-settings-modal__actions">
+                  <button
+                    type="button"
+                    className="game-settings-modal__action-button"
+                    onClick={() => void startMove()}
+                    disabled={!installTask || moveBusy || uninstallBusy}
+                  >
+                    <FolderInput size={14} strokeWidth={2} aria-hidden="true" />
+                    {copy("Mover", "Move")}
+                  </button>
+                  <button
+                    type="button"
+                    className="game-settings-modal__action-button game-settings-modal__action-button--danger"
+                    onClick={() => setConfirmUninstallOpen(true)}
+                    disabled={!installTask || moveBusy || uninstallBusy}
+                  >
+                    <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
+                    {copy("Desinstalar", "Uninstall")}
+                  </button>
+                </div>
+              </div>
+
+              {installTask?.outputDir && (
+                <p
                   className="game-settings-modal__path"
-                  title={installTask?.outputDir || undefined}
+                  title={installTask.outputDir}
                 >
-                  {installTask?.outputDir ||
-                    (appearance.language === "en"
-                      ? "No local installation."
-                      : "Nenhuma instalação local.")}
-                </span>
-              </div>
-              <div className="game-settings-modal__actions">
-                <button
-                  type="button"
-                  className="game-settings-modal__action-button"
-                  onClick={() => void startMove()}
-                  disabled={!installTask || moveBusy || uninstallBusy}
-                >
-                  <FolderInput size={14} strokeWidth={2} aria-hidden="true" />
-                  {appearance.language === "en" ? "Move" : "Mover"}
-                </button>
-                <button
-                  type="button"
-                  className="game-settings-modal__action-button game-settings-modal__action-button--danger"
-                  onClick={() => setConfirmUninstallOpen(true)}
-                  disabled={!installTask || moveBusy || uninstallBusy}
-                >
-                  <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
-                  {appearance.language === "en" ? "Uninstall" : "Desinstalar"}
-                </button>
-              </div>
+                  {installTask.outputDir}
+                </p>
+              )}
             </section>
             )}
           </div>

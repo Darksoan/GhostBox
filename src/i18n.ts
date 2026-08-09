@@ -200,10 +200,10 @@ const translations: Record<Language, TranslationTree> = {
       empty: "Este jogo não possui conquistas.",
     },
     metrics: {
-      locked: "Conecte sua conta Steam para visualizar",
-      lockedAchievements: "Conecte sua conta Steam para ver as conquistas",
+      locked: "Conecte-se ao app para visualizar",
+      lockedAchievements: "Conecte-se ao app para ver as conquistas",
       lockedAria:
-        "Conquistas e tempo de jogo bloqueados. Conecte sua conta Steam para visualizar.",
+        "Conquistas e tempo de jogo bloqueados. Conecte-se ao app para visualizar.",
     },
     video: {
       player: "Player de vídeo",
@@ -351,6 +351,8 @@ const translations: Record<Language, TranslationTree> = {
         passwordLabel: "Senha",
         passwordPlaceholder: "Crie uma senha",
         passwordHint: "Mínimo de 8 caracteres.",
+        confirmPasswordLabel: "Confirmar senha",
+        confirmPasswordPlaceholder: "Repita a senha",
         submit: "Criar conta",
         submitting: "Criando conta...",
         haveAccount: "Já tem conta?",
@@ -371,6 +373,7 @@ const translations: Record<Language, TranslationTree> = {
         invalid_username: "Usuário inválido. Use de 3 a 20 letras, números ou _.",
         weak_password: "Senha muito curta. Use ao menos 8 caracteres.",
         username_taken: "Esse usuário já está em uso.",
+        password_mismatch: "As senhas não conferem.",
         email_already_registered: "Já existe uma conta com esse e-mail.",
         invalid_credentials: "Usuário/e-mail ou senha incorretos.",
         too_many_attempts: "Muitas tentativas. Aguarde antes de tentar novamente.",
@@ -771,10 +774,10 @@ const translations: Record<Language, TranslationTree> = {
       empty: "This game has no achievements.",
     },
     metrics: {
-      locked: "Connect your Steam account to view",
-      lockedAchievements: "Connect your Steam account to view achievements",
+      locked: "Log in to the app to view",
+      lockedAchievements: "Log in to the app to view achievements",
       lockedAria:
-        "Achievements and playtime locked. Connect your Steam account to view.",
+        "Achievements and playtime locked. Log in to the app to view.",
     },
     video: {
       player: "Video player",
@@ -921,6 +924,8 @@ const translations: Record<Language, TranslationTree> = {
         passwordLabel: "Password",
         passwordPlaceholder: "Create a password",
         passwordHint: "At least 8 characters.",
+        confirmPasswordLabel: "Confirm password",
+        confirmPasswordPlaceholder: "Repeat the password",
         submit: "Create account",
         submitting: "Creating account...",
         haveAccount: "Already have an account?",
@@ -941,6 +946,7 @@ const translations: Record<Language, TranslationTree> = {
         invalid_username: "Invalid username. Use 3 to 20 letters, numbers or _.",
         weak_password: "Password too short. Use at least 8 characters.",
         username_taken: "That username is already taken.",
+        password_mismatch: "Passwords do not match.",
         email_already_registered: "An account with that email already exists.",
         invalid_credentials: "Incorrect username/email or password.",
         too_many_attempts: "Too many attempts. Wait before trying again.",

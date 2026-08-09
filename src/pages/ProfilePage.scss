@@ -362,9 +362,10 @@
     white-space: nowrap;
   }
 
+  /* Mesma regra da sidebar: `line-height: 1` + `place-items: center` já centram
+     o dígito na Inter; o `translate` manual é que descentralizava. */
   &__level-value {
     display: block;
-    transform: translate(-0.6px, -1px);
   }
 
   &__steam-id-row {
@@ -1580,7 +1581,7 @@
 
     &:hover,
     &:focus-visible {
-      background: var(--sidebar-option-active-hover);
+      background: var(--achievement-card-hover);
       outline: 0;
     }
   }

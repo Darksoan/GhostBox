@@ -37,6 +37,7 @@ export function AuthScreen() {
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  const [registerConfirm, setRegisterConfirm] = useState("");
 
   const [forgotIdentifier, setForgotIdentifier] = useState("");
 
@@ -101,6 +102,11 @@ export function AuthScreen() {
     setError("");
     setSubmitting(true);
     try {
+      if (registerPassword !== registerConfirm) {
+        setError(errorMessage(null, t("auth.errors.password_mismatch")));
+        setSubmitting(false);
+        return;
+      }
       await register(registerEmail.trim(), registerUsername.trim(), registerPassword);
       closeAuthModal();
     } catch (submitError) {
@@ -256,6 +262,30 @@ export function AuthScreen() {
                 </button>
               </div>
               <span className="auth-field__hint">{t("auth.register.passwordHint")}</span>
+            </label>
+
+            <label className="auth-field">
+              <span className="auth-field__label">{t("auth.register.confirmPasswordLabel")}</span>
+              <div className="auth-field__password">
+                <input
+                  className="auth-field__input"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={registerConfirm}
+                  onChange={(event) => setRegisterConfirm(event.target.value)}
+                  placeholder={t("auth.register.confirmPasswordPlaceholder")}
+                  minLength={8}
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-field__toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </label>
 
             {error && <p className="auth-form__error">{error}</p>}
