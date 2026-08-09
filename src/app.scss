@@ -3181,11 +3181,20 @@ p {
   background: var(--pill-bg);
 }
 
-/* A pill NÃO acompanha o card no hover/foco — mesmo comportamento do catálogo.
-   Só o card muda de degrau; a pill fica em --pill-bg em todos os estados. */
+/* A pill ACOMPANHA o card no hover/foco — mesmo comportamento do catálogo:
+   quando o card muda de degrau, a pill sobe do --c-3 para --c-4 (#1a1a1a).
+   A pill é não-interativa (cursor herdado, sem :hover próprio distinto da
+   tag-chip), então o repique lê como elevação do rótulo junto ao card, não
+   como segundo botão. A regra `--pill-rows .home-category-card__genre:hover`
+   acima (repouso) perde por especificidade aqui dentro de card:hover. */
 @media (hover: hover) and (pointer: fine) {
   .home-category-card--with-metadata:hover {
     background: var(--surface-option-hover);
+  }
+
+  .home-category-card--with-metadata:hover .home-category-card__genre,
+  .home-category-card--with-metadata:focus-visible .home-category-card__genre {
+    background: var(--pill-bg-hover);
   }
 }
 
@@ -7152,7 +7161,7 @@ input[type="search"]::-ms-reveal {
 .catalogue-list__item:focus-within .catalogue-list__genre-chip,
 .catalogue-list__item--hovered .catalogue-list__genre-chip {
   border-color: transparent;
-  background: var(--surface-strong);
+  background: var(--pill-bg-hover);
 }
 
 .catalogue-list__actions {
@@ -12520,6 +12529,11 @@ html.no-backdrop-blur {
     display: flex;
     justify-content: center;
     margin-top: -2px;
+    /* Respiro próprio abaixo do botão: o padding do `modal__details` pode ser
+       recortado quando o modal trava em `height: 100%` (<=1200px), e a altura
+       colapsada é medida contra o fim da sidebar. Como a medição usa a altura
+       total desta faixa (padding incluso), o espaço é reservado nos dois casos. */
+    padding-bottom: var(--space-14);
   }
 
   &__about-toggle {

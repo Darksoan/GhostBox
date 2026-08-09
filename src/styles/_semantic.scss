@@ -67,9 +67,14 @@
   // nomeado porque o player de vídeo precisa dele em mais de um lugar
   // (fundo da barra + scrim atrás do indicador de buffering).
   --surface-video-controls: color-mix(in srgb, var(--black) 55%, transparent);
-  // Pill sobre container clicável. Tom fixo: o card muda no hover, a pill não —
-  // a pill é rótulo, não alvo, e piscar junto com o card lia como segundo botão.
+  // Pill sobre container clicável. Tom fixo de repouso; a pill é rótulo, não
+  // alvo. No hover do card-container ela sobe um degrau (mesmo efeito que o
+  // catálogo) — ver --pill-bg-hover.
   --pill-bg: var(--c-3);
+  // Hover do card-container: a pill escala junto, escalar controlado pelo token
+  // estrutural --c-4 (#1a1a1a), teto da rampa de superfície — bate com o efeito
+  // visual do catálogo (que usa --surface-strong sobre --surface-secondary).
+  --pill-bg-hover: var(--c-4);
   // Altura de uma pill. É token porque quem limita a lista a N linhas precisa
   // calcular com o valor real — o bug anterior era um `max-height` chutado que
   // não era múltiplo desta altura, deixando folga morta e vazando meia linha.
