@@ -3,12 +3,13 @@
 :root {
   // --- Rampa neutra de superfície (5 degraus, piso → teto) ---
   // Degraus usam contrastes perceptualmente próximos e mantêm superfícies entre
-  // #000000 e #202020. Degraus 5+ ficam fora da rampa de superfície.
-  --n-0: #000000;
-  --n-1: #0b0b0b;
-  --n-2: #141414;
-  --n-3: #1a1a1a;
-  --n-4: #202020;
+  // #0a0a0a e #1a1a1a. O piso é o canvas; o teto marca seleção/ativo. O preto
+  // absoluto (#000000) vive só em --black (letterbox de mídia), fora da rampa.
+  --n-0: #0a0a0a;
+  --n-1: #101010;
+  --n-2: #121212;
+  --n-3: #151515;
+  --n-4: #1a1a1a;
   // Rampa de borda: --b-0 é exclusivo de borda. --n-5/--n-6 ficam fora da rampa
   // de superfície e sustentam delimitadores funcionais.
   --b-0: #2a2a2a;

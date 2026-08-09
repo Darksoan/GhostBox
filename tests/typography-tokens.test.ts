@@ -34,11 +34,11 @@ describe("Typography tokens", () => {
   it("uses the contrast-equalized surface ramp", () => {
     const tokens = collectTokens();
 
-    expect(tokens.get("--n-0")).toBe("#000000");
-    expect(tokens.get("--n-1")).toBe("#0b0b0b");
-    expect(tokens.get("--n-2")).toBe("#141414");
-    expect(tokens.get("--n-3")).toBe("#1a1a1a");
-    expect(tokens.get("--n-4")).toBe("#202020");
+    expect(tokens.get("--n-0")).toBe("#0a0a0a");
+    expect(tokens.get("--n-1")).toBe("#101010");
+    expect(tokens.get("--n-2")).toBe("#121212");
+    expect(tokens.get("--n-3")).toBe("#151515");
+    expect(tokens.get("--n-4")).toBe("#1a1a1a");
     expect(tokens.has("--n-000")).toBe(false);
   });
 
@@ -49,12 +49,22 @@ describe("Typography tokens", () => {
 
     for (const name of tokens.keys()) {
       if (!surfaceRole.test(name)) continue;
+      if (name === "--settings-dropdown-surface-hover") continue;
       const resolved = resolveToken(name, tokens);
       if (!/^#[0-9a-f]{6}$/i.test(resolved)) continue;
       expect(parseInt(resolved.slice(1), 16), `${name} = ${resolved}`).toBeLessThanOrEqual(
-        0x202020,
+        0x1a1a1a,
       );
     }
+  });
+
+  it("keeps the Settings dropdown on its dedicated surface states", () => {
+    const tokens = collectTokens();
+
+    expect(resolveToken("--settings-dropdown-surface", tokens)).toBe("#151515");
+    expect(resolveToken("--settings-dropdown-surface-hover", tokens)).toBe("#202020");
+    expect(resolveToken("--settings-dropdown-menu", tokens)).toBe("#151515");
+    expect(resolveToken("--dropdown-option-hover", tokens)).toBe("#1a1a1a");
   });
 
   it("keeps text tokens unchanged", () => {

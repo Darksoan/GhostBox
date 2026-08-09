@@ -4,7 +4,30 @@ import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
 describe("Catalogue filter search layout", () => {
-  it("keeps the filter searchbar at the #202020 token on hover", () => {
+  it("keeps the catalogue sort trigger secondary on hover and open", () => {
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    let baseColor: string | undefined;
+    const catalogueOverrideColors: string[] = [];
+
+    stylesheet.walkRules((rule) => {
+      if (rule.selector === ".settings-dropdown__trigger") {
+        rule.walkDecls("color", (declaration) => {
+          baseColor = declaration.value;
+        });
+      }
+
+      if (rule.selector.includes(".catalogue-page__sort")) {
+        rule.walkDecls("color", (declaration) => {
+          catalogueOverrideColors.push(declaration.value);
+        });
+      }
+    });
+
+    expect(baseColor).toBe("var(--text-secondary)");
+    expect(catalogueOverrideColors).not.toContain("var(--text-primary)");
+  });
+
+  it("keeps the filter searchbar at the surface-option-hover token on hover", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     let defaultBackground: string | undefined;
     const interactiveBackgrounds: string[] = [];

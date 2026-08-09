@@ -1,12 +1,15 @@
-SIDEBAR #1A1A1A
-SIDEBAR OPTION ACTIVE #303030
-HOVER SIDEBAR #222222
-CANVAS #101010
-SKELETON HEADER #222222
-CARDS #1A1A1A
-PILLS #252525
+SIDEBAR #101010
+SIDEBAR OPTION ACTIVE #1a1a1a
+HOVER SIDEBAR #151515
+CANVAS #0a0a0a
+SKELETON HEADER #151515
+CARDS #101010 (HOVER: #121212)
+PILLS #151515 (ao hover do card, alterar para: #202020)
 Somente surfaces sem bordas decorativas
+Dropdowns: 
+Trigger #151515 (Sem mudança ao abrir/hover) 
+Menu: #151515 (Option hover: #1a1a1a) 
 
 Piso de elementos: 
-#101010 <  #1A1A1A < #151515 < #222222 < #252525 < #303030 (Quanto menor, é usado como surface, quanto maior, é
+#0a0a0a <  #101010 < #121212 < #151515 (Quanto menor, é usado como surface, quanto maior, é
 utilizado para elementos acima da camada canvas/surface. 
