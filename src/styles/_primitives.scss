@@ -1,23 +1,20 @@
 // Rampa neutra + primitivos crus. Sem semântica — nada aqui sabe para que serve.
 // Ver plans/design-tokens-launcher.md para a tabela de contraste de cada degrau.
 :root {
-  // --- Rampa neutra (13 degraus, canvas → ênfase máxima) ---
-  // Degraus 0-6 vêm do protótipo Figma "Design (GhostBox)" (XL3FhngXWYV35Erzsaip7l),
-  // verificados por amostragem de pixel do export. Degraus 7+ mantêm contraste de
-  // papel: borda interativa ≥3:1, texto terciário ≥4.5:1.
-  --n-0: #101010;
-  --n-1: #151515;
-  --n-2: #1a1a1a;
-  --n-3: #222222;
-  --n-4: #252525;
-  // Rampa de borda: --b-0 é exclusivo de borda. --n-5/--n-6 servem os dois papéis
-  // — o protótipo usa esses degraus como superfície (sidebar ativo, opção ativa
-  // de dropdown) e não desenha borda nenhuma.
+  // --- Rampa neutra de superfície (5 degraus, piso → teto) ---
+  // Degraus usam contrastes perceptualmente próximos e mantêm superfícies entre
+  // #000000 e #202020. Degraus 5+ ficam fora da rampa de superfície.
+  --n-0: #000000;
+  --n-1: #0b0b0b;
+  --n-2: #141414;
+  --n-3: #1a1a1a;
+  --n-4: #202020;
+  // Rampa de borda: --b-0 é exclusivo de borda. --n-5/--n-6 ficam fora da rampa
+  // de superfície e sustentam delimitadores funcionais.
   --b-0: #2a2a2a;
   --n-5: #303030;
   --n-6: #474747;
-  // Não vêm do protótipo (que não desenha borda nem texto terciário). Calculados
-  // contra o teto de superfície de repouso #252525: 3.01:1 e 4.56:1. Não escurecer.
+  // Não fazem parte da rampa de superfície. Mantêm contraste para bordas e texto.
   --n-7: #6e6e6e;
   --n-8: #8c8c8c;
   --n-9: #a3a3a3;

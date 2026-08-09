@@ -712,7 +712,10 @@ p {
     overflow-y: auto;
     scrollbar-gutter: stable;
     background: transparent;
-    padding-bottom: var(--space-12);
+    /* O respiro do fim da aba é `--page-bottom-space`, aplicado na raiz de cada
+       página. O scroller não soma nada por cima: senão o total muda de aba pra
+       aba conforme quem declara o quê. */
+    padding-bottom: 0;
     scroll-behavior: auto;
 
     .game-card__cover::before,
@@ -740,7 +743,7 @@ p {
 
 
 .page--backup {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 100%;
   height: auto;
   max-width: none;
@@ -752,7 +755,7 @@ p {
 }
 
 .page--game-achievements {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 100%;
   max-width: none;
   background: var(--background-dark);
@@ -772,11 +775,19 @@ p {
   width: 100%;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  /* `flex-shrink: 0`: `min-height: 100%` substitui o mínimo automático do flex
+     (`min-height: auto`), então sem isto o item encolhe até a altura do
+     scrollport e o conteúdo mais alto TRANSBORDA em vez de esticar a raiz. O
+     `padding-bottom` da página ficava acima do conteúdo, fora da tela, e o
+     último elemento encostava na borda inferior da janela. Vale pra toda a
+     cadeia: `.page-stack`, `.page-stack__base`, `.page` e a raiz de cada aba. */
+  flex: 1 0 auto;
   min-height: 100%;
   height: auto;
   overflow: visible;
-  padding: 0 var(--space-6) var(--space-6) 0;
+  /* Sem respiro próprio: quem declara o fim da aba é a raiz da página, com
+     `--page-bottom-space`. */
+  padding: 0 var(--space-6) 0 0;
 }
 
 /* Precisa vir DEPOIS de `.page`: mesma especificidade, e o shorthand `padding`
@@ -810,7 +821,7 @@ p {
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   width: 100%;
   min-height: 100%;
 }
@@ -818,7 +829,7 @@ p {
 .page-stack__base {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   width: 100%;
   min-height: 100%;
   /* Sem `contain` aqui: o conteúdo transborda para o scroller
@@ -840,7 +851,7 @@ p {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   width: 100%;
   min-height: 100%;
   background: var(--background-dark);
@@ -2596,7 +2607,7 @@ p {
   --home-section-heading-gap: var(--space-6);
 
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   flex-direction: column;
   gap: var(--home-section-gap);
   width: 100%;
@@ -2755,7 +2766,11 @@ p {
 
 .home-explore {
   content-visibility: auto;
-  contain-intrinsic-size: 200px;
+  /* Palavra-chave `auto`: o tamanho medido fica lembrado quando a seção volta a
+     ser pulada. Sem ela o placeholder encolhe de novo, o `scrollHeight` do
+     scroller compartilhado cai, e o fim da aba (com `--page-bottom-space`) vira
+     inalcançável — o último elemento encosta na borda da janela. */
+  contain-intrinsic-size: auto 200px;
   @include mixins.section-column;
   gap: var(--home-section-heading-gap);
   padding-inline: var(--home-content-inline-inset);
@@ -3158,6 +3173,10 @@ p {
   flex-wrap: nowrap;
 }
 
+.home-category-card--pill-rows .home-category-card__genre:hover {
+  background: var(--pill-bg);
+}
+
 /* A pill NÃO acompanha o card no hover/foco — mesmo comportamento do catálogo.
    Só o card muda de degrau; a pill fica em --pill-bg em todos os estados. */
 @media (hover: hover) and (pointer: fine) {
@@ -3189,7 +3208,7 @@ p {
 
 .home-calendar {
   content-visibility: auto;
-  contain-intrinsic-size: 320px;
+  contain-intrinsic-size: auto 320px;
   --home-calendar-gap: clamp(12px, 1.4vw, 18px);
   --home-calendar-day-heading-space: 21px;
   @include mixins.section-column;
@@ -3336,7 +3355,9 @@ p {
 
 .home-wishlist {
   content-visibility: auto;
-  contain-intrinsic-size: 480px;
+  /* Última seção da Home: é ela que define o fim do scroll. Estimativa fixa
+     subdimensionava a altura real (~950px) e o respiro final não era alcançável. */
+  contain-intrinsic-size: auto 480px;
   display: flex;
   box-sizing: border-box;
   flex-direction: column;
@@ -3687,6 +3708,7 @@ p {
 .settings-page {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: var(--space-6);
   min-height: 100%;
   padding: 0 var(--space-10) var(--page-bottom-space);
@@ -7376,6 +7398,7 @@ input[type="search"]::-ms-reveal {
 .notifications-page {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   justify-content: flex-start;
   padding: 0 var(--space-10) var(--page-bottom-space);
   gap: var(--space-8);
@@ -7719,8 +7742,9 @@ input[type="search"]::-ms-reveal {
 .downloads-page {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   justify-content: flex-start;
-  padding: 0 var(--space-10) var(--space-6);
+  padding: 0 var(--space-10) var(--page-bottom-space);
   gap: var(--space-8);
   min-height: 100%;
   height: auto;
@@ -8475,7 +8499,7 @@ input[type="search"]::-ms-reveal {
 }
 
 .backup-page {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-height: 100%;
   width: 100%;
   display: flex;
@@ -12443,7 +12467,7 @@ html.no-backdrop-blur {
     min-width: 0;
     margin-bottom: 0;
     content-visibility: auto;
-    contain-intrinsic-size: 460px;
+    contain-intrinsic-size: auto 460px;
   }
 
   &__about-content-shell {
@@ -13994,8 +14018,7 @@ button,
   }
 
   .page {
-    padding: var(--space-6) var(--space-6)
-      var(--space-6) 0;
+    padding: var(--space-6) var(--space-6) 0 0;
   }
 
   .page--library {

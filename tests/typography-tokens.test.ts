@@ -23,7 +23,56 @@ function collectTokens(): Map<string, string> {
   return customProperties;
 }
 
+function resolveToken(name: string, tokens: Map<string, string>): string {
+  const value = tokens.get(name);
+  if (!value) throw new Error(`missing token ${name}`);
+  const variable = value.match(/^var\((--[^)]+)\)$/)?.[1];
+  return variable ? resolveToken(variable, tokens) : value;
+}
+
 describe("Typography tokens", () => {
+  it("uses the contrast-equalized surface ramp", () => {
+    const tokens = collectTokens();
+
+    expect(tokens.get("--n-0")).toBe("#000000");
+    expect(tokens.get("--n-1")).toBe("#0b0b0b");
+    expect(tokens.get("--n-2")).toBe("#141414");
+    expect(tokens.get("--n-3")).toBe("#1a1a1a");
+    expect(tokens.get("--n-4")).toBe("#202020");
+    expect(tokens.has("--n-000")).toBe(false);
+  });
+
+  it("keeps surface-role tokens inside the surface ramp", () => {
+    const tokens = collectTokens();
+    const surfaceRole =
+      /^--(surface|pill-bg|dropdown-option-hover|sidebar-option|settings-dropdown|profile-dropdown|library-box|toggle-(track|thumb)$|control-hover|skeleton-fill)/;
+
+    for (const name of tokens.keys()) {
+      if (!surfaceRole.test(name)) continue;
+      const resolved = resolveToken(name, tokens);
+      if (!/^#[0-9a-f]{6}$/i.test(resolved)) continue;
+      expect(parseInt(resolved.slice(1), 16), `${name} = ${resolved}`).toBeLessThanOrEqual(
+        0x202020,
+      );
+    }
+  });
+
+  it("keeps text tokens unchanged", () => {
+    const tokens = collectTokens();
+
+    expect(tokens.get("--text-primary")).toBe("var(--n-11)");
+    expect(tokens.get("--text-secondary")).toBe("var(--n-9)");
+    expect(tokens.get("--text-tertiary")).toBe("var(--n-8)");
+    expect(tokens.get("--text-strong")).toBe("var(--text-primary)");
+    expect(tokens.get("--text-muted")).toBe("var(--text-secondary)");
+    expect(tokens.get("--text-faint")).toBe("var(--text-tertiary)");
+    expect(tokens.get("--n-8")).toBe("#8c8c8c");
+    expect(tokens.get("--n-9")).toBe("#a3a3a3");
+    expect(tokens.get("--n-10")).toBe("#b8b8b8");
+    expect(tokens.get("--n-11")).toBe("#e9e9e9");
+    expect(tokens.get("--n-12")).toBe("#f2f2f2");
+  });
+
   it("maps every semantic size to the canonical ramp", () => {
     const tokens = collectTokens();
     const expected: Record<string, string> = {

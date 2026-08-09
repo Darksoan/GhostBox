@@ -4,6 +4,7 @@
   display: flex;
   width: 100%;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 0;
   min-height: 100%;
   background: var(--background-dark);
@@ -75,7 +76,7 @@
     display: flex;
     flex-direction: column;
     flex: 1;
-    padding: var(--space-10) var(--space-10) var(--space-12);
+    padding: var(--space-10) var(--space-10) var(--page-bottom-space);
   }
 
   &__loading {

@@ -33,46 +33,42 @@ Não criar token duplicado para resolver um caso isolado. Se papel visual se rep
 
 ## Cor e superfície
 
-Rampa neutra de superfície — sete degraus, `--n-0` até `--n-6`, limitados a `#101010`–`#474747`. Valores vêm do protótipo Figma **Design (GhostBox)** (`XL3FhngXWYV35Erzsaip7l`), verificados por amostragem de pixel do export, não transcritos de anotação:
+Rampa neutra de superfície — cinco degraus, `--n-0` até `--n-4`, limitados a `#000000`–`#202020`. Degraus usam contrastes perceptualmente próximos:
 
-- `--n-0`: `#101010` — canvas
-- `--n-1`: `#151515` — hover de conteúdo, trigger em repouso
-- `--n-2`: `#1a1a1a` — painel, sidebar, card
-- `--n-3`: `#222222` — sidebar hover, skeleton, menu de dropdown
-- `--n-4`: `#252525` — pills, modal (teto de superfície de repouso)
-- `--n-5`: `#303030` — sidebar selecionado
-- `--n-6`: `#474747` — opção ativa de dropdown
+- `--n-0`: `#000000` — piso técnico
+- `--n-1`: `#0b0b0b` — canvas
+- `--n-2`: `#141414` — painel, sidebar, card
+- `--n-3`: `#1a1a1a` — popovers, dropdowns, skeletons e controles
+- `--n-4`: `#202020` — seleção e estados ativos
 
-Os deltas são `+5, +5, +8, +3, +11, +23` — irregulares de propósito. A rampa não é uma progressão calculada; é o conjunto de tons que o protótipo usa, e cada degrau existe porque tem um papel. Não "corrigir" para passos hex iguais nem interpolar degraus intermediários.
+Rampa usa quantização por luminância relativa, não interpolação linear de hexadecimal. Contraste entre vizinhos continua abaixo de 3:1; **espaçamento é separador primário, contraste de rampa é secundário**. Onde duas superfícies encostam sem gap, usar salto de dois degraus, nunca borda decorativa.
 
-O contraste entre vizinhos no extremo escuro continua baixo (~1.04:1 entre `--n-0` e `--n-1`), muito abaixo do mínimo WCAG de 3:1 para elementos não textuais. É baixo contraste por design. Consequência direta: **espaçamento é o separador primário; contraste de rampa é secundário e não sustenta separação sozinho.** Onde duas superfícies encostam sem gap, usar salto de dois degraus, nunca um.
-
-`--b-0` (`#2a2a2a`) é exclusivo de borda. `--n-5` e `--n-6` servem os dois papéis — o protótipo usa esses tons como superfície e não desenha borda alguma.
+`--b-0` (`#2a2a2a`) e `--n-5` até `--n-7` ficam fora da rampa de superfícies para bordas e estados de foco. `--n-8` até `--n-12` permanecem reservados para texto e ícones.
 
 ### Direção de estado
 
 Regra do protótipo, e ela não é uniforme:
 
-- **Navegação clareia.** Item de sidebar sobe: `#1a1a1a` em repouso → `#222222` no hover → `#303030` selecionado.
-- **Conteúdo afunda.** Card, trigger de dropdown, pasta selecionada e trilho de toggle desligado recuam: `#1a1a1a` → `#151515`.
+- **Navegação clareia.** Item de sidebar sobe: `#141414` em repouso → `#1a1a1a` no hover → `#202020` selecionado.
+- **Conteúdo mantém hierarquia escura.** Cards partem de `#141414`; menus e controles sobem até `#202020`, sem usar degraus de borda ou texto.
 
 Não unificar os dois. A distinção é o que separa "onde estou navegando" de "o que estou tocando".
 
-Overlays de interação (`--surface-hover`, `--surface-active`, `--surface-strong`, `--surface-subtle`, `--surface-muted`) também ficam fora do teto — são tinta translúcida branca sobre a superfície de repouso, não fundo fixo, então acompanham qualquer degrau por baixo em vez de fixar um hex. Composto sobre `--n-4` (pior caso), passam de `#202020`; é esperado e correto, é feedback de interação escalando (hover < strong < active), não um novo tier de repouso.
+Overlays de interação (`--surface-hover`, `--surface-active`, `--surface-strong`, `--surface-subtle`, `--surface-muted`) ficam fora do teto — são tinta translúcida branca sobre a superfície de repouso, não fundo fixo. Acompanham degrau sob elas e não criam novo tier de repouso.
 
 Dois tokens ficam fora da rampa de propósito:
 
-- `--surface-media-letterbox`: `var(--black)`. Não é tier de UI, é o vazio atrás da arte. O piso `#101010` desenharia uma caixa visível em volta de capas que já têm barras pretas.
+- `--surface-media-letterbox`: `var(--black)`. Não é tier de UI, é o vazio atrás da arte. O piso `#000000` evita halo em capas que já têm barras pretas.
 - `--surface-sunken`: igual ao canvas. Nada pode ficar abaixo do piso, então o papel existe como nome, mas a distinção vem de geometria (padding, inset), não de cor.
 
 Paleta estrutural atual:
 
-- `--surface-canvas`: `#101010`, fundo principal do app.
-- `--surface-panel` / `--surface-sidebar` / `--surface-raised` / `--surface-option`: `#1a1a1a`, painéis, cards e áreas destacadas.
-- `--surface-popover`: `#222222`, menus e dropdowns.
-- `--surface-modal`: `#252525`, diálogos e confirmação — teto de repouso, nunca empata com popover.
-- `--sidebar-option-selected`: `#303030`. `--profile-dropdown-option-hover`: `#474747`.
-- `--surface-option-hover`, `--settings-dropdown-surface`, `--library-box-active`, `--toggle-track`: `#151515` — estados que afundam.
+- `--surface-canvas`: `#0b0b0b`, fundo principal do app.
+- `--surface-panel` / `--surface-sidebar` / `--surface-explore-card`: `#141414`, painéis e cards.
+- `--surface-raised` / `--surface-option-hover` / `--sidebar-option-hover`: `#1a1a1a`, áreas destacadas e hover.
+- `--surface-popover` / `--surface-titlebar-control` / `--surface-modal-control-hover`: `#202020`, menus e controles.
+- `--surface-option-active` / `--sidebar-option-selected` / `--profile-dropdown-option-hover`: `#202020`, estados selecionados.
+- `--surface-modal`: `#0b0b0b`, base de modal dominado por mídia; `--surface-modal-control`: `#141414`.
 
 Esses valores pertencem à rampa neutra e devem continuar sendo consumidos por tokens semânticos. Não usar os hexadecimais diretamente em componentes.
 
@@ -81,9 +77,10 @@ Hierarquia, da mais profunda à mais elevada:
 1. `--surface-canvas`: fundo de página e shell principal.
 2. `--surface-panel` / `--surface-raised`: painéis estruturais, áreas laterais, cards.
 3. `--surface-popover`: menus, dropdowns e popovers.
-4. `--surface-modal`: diálogos e fluxos de confirmação.
+4. `--surface-option-active` / `--surface-modal-control-hover`: estados ativos e chrome elevado.
+   Bases de modal dominadas por mídia continuam em `--surface-canvas` para evitar halo.
 
-Estados interativos seguem a direção da seção "Direção de estado": navegação sobe um degrau, conteúdo desce um. Onde não houver token de repouso definido, usar os tokens de estado (`--surface-hover`, `--surface-active`, `--surface-strong`). Não usar hover que apague separação entre painel e controle.
+Estados interativos seguem a direção da seção "Direção de estado": navegação sobe degraus até seleção, conteúdo usa próximo degrau sem sair da rampa. Onde não houver token de repouso definido, usar os tokens de estado (`--surface-hover`, `--surface-active`, `--surface-strong`). Não usar hover que apague separação entre painel e controle.
 
 Surfaces e cards não usam borda visível por padrão. Separação vem primeiro de espaçamento e agrupamento, depois de contraste entre superfícies — um único degrau da rampa (~1.07:1) não é suficiente sozinho em monitores não-OLED com luz ambiente. Cada elemento deve manter tratamento visual próprio e contrastado em relação ao vizinho, sem transformar toda interface em uma coleção de caixas iguais.
 

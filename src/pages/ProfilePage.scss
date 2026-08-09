@@ -6,6 +6,7 @@
 
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   min-height: 100%;
   background: transparent;
   color: var(--text-primary);
@@ -1434,7 +1435,7 @@
 
   &__achievement-game {
     content-visibility: auto;
-    contain-intrinsic-size: 0 320px;
+    contain-intrinsic-size: auto 320px;
     display: flex;
     flex-direction: column;
     gap: 0;
