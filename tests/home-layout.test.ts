@@ -148,6 +148,7 @@ describe("Home layout", () => {
     const css = compile("src/app.scss").css;
     const stylesheet = postcss.parse(css);
     const declarations = new Map<string, Map<string, string>>();
+    const selectorRules: Array<{ selector: string; text: string; rule: postcss.Rule }> = [];
 
     stylesheet.walkRules((rule) => {
       const ruleDeclarations = new Map<string, string>();
@@ -157,6 +158,7 @@ describe("Home layout", () => {
       const existing = declarations.get(rule.selector) ?? new Map<string, string>();
       ruleDeclarations.forEach((value, prop) => existing.set(prop, value));
       declarations.set(rule.selector, existing);
+      selectorRules.push({ selector: rule.selector, text: rule.toString(), rule });
     });
 
     // O rail não sangra mais até a borda da janela: alinha com as seções de
@@ -165,11 +167,18 @@ describe("Home layout", () => {
     expect(rail?.get("margin-inline")).toBeUndefined();
     expect(rail?.get("width")).toBeUndefined();
 
-    // Três cards por tela, largura derivada dos dois gaps entre eles.
-    const card = declarations.get(".home-recommended__track .home-category-card");
-    expect(card?.get("flex")).toBe(
-      "0 0 calc((100% - var(--home-category-gap) * 2) / 3)"
+    // Base: três cards por tela, largura derivada dos dois gaps entre eles.
+    // Janela larga (>=1400px): quatro cards, derivada de três gaps.
+    const cardRules = selectorRules.filter(
+      (rule) => rule.selector === ".home-recommended__track .home-category-card"
     );
+    const cardFlexValues = cardRules.map((rule) =>
+      rule.rule.nodes.find((node) => node.type === "decl" && node.prop === "flex")?.toString()
+    );
+    expect(cardFlexValues).toEqual([
+      "flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3)",
+      "flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4)",
+    ]);
 
     expect(css).not.toContain(".home-recommended__banner");
   });

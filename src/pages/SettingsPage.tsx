@@ -74,6 +74,7 @@ type DraftsState = Partial<Record<SettingsTabId, Record<string, DraftValue>>>;
 type CloudBackupGame = {
   appId: string;
   title: string;
+  achievementCount: number;
   lastBackupAt: string | null;
   lastBackupSuccess: boolean | null;
 };
@@ -341,6 +342,7 @@ export function SettingsPage({
       .map((game) => ({
         appId: game.appId,
         title: game.title,
+        achievementCount: game.achievements.unlocked,
         lastBackupAt: backupRecords[game.appId]?.lastBackupAt ?? null,
         lastBackupSuccess: typeof backupRecords[game.appId]?.lastBackupSuccess === "boolean" ? backupRecords[game.appId].lastBackupSuccess : null,
       }))

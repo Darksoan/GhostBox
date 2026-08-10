@@ -1560,7 +1560,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : await addGameViaLuaTools(game);
         if (!result.success) {
           const errorMessage = result.error || "Não foi possível adicionar o jogo à Biblioteca.";
-          showToast("Falha ao adicionar", errorMessage);
+          showToast("Falha ao adicionar", errorMessage, "error");
           pushAppNotification({
             id: `library:add:error:${game.appId}:${Date.now()}`,
             type: "library",
@@ -1634,6 +1634,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         showToast(
           "Falha ao adicionar",
           errorMessage,
+          "error",
         );
         pushAppNotification({
           id: `library:add:error:${game.appId}:${Date.now()}`,
@@ -1676,7 +1677,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const result = await removeGameViaLuaTools(game);
         if (!result.success) {
           const errorMessage = result.error || "Não foi possível remover o jogo.";
-          showToast("Falha ao remover", errorMessage);
+          showToast("Falha ao remover", errorMessage, "error");
           pushAppNotification({
             id: `library:remove:error:${game.appId}:${Date.now()}`,
             type: "library",
@@ -1761,6 +1762,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         showToast(
           "Falha ao remover",
           errorMessage,
+          "error",
         );
         pushAppNotification({
           id: `library:remove:error:${game.appId}:${Date.now()}`,
@@ -1815,6 +1817,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           showToast(
             "Falha ao iniciar",
             result.error ?? "Não foi possível iniciar o jogo.",
+            "error",
           );
         }
         if (result?.success) {
@@ -1846,6 +1849,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           showToast(
             appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
             result.error || (appearance.language === "en" ? "Unknown error." : "Erro desconhecido."),
+            "error",
           );
           return null;
         }
@@ -1884,6 +1888,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         showToast(
           appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
           errorMessage,
+          "error",
         );
         return null;
       }
@@ -1987,7 +1992,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...userCollections.map((c) => c.name.toLowerCase()),
       ]);
       if (reserved.has(trimmed.toLowerCase())) {
-        showToast("Coleção existente", `A coleção ${trimmed} já existe.`);
+        showToast("Coleção existente", `A coleção ${trimmed} já existe.`, "error");
         return;
       }
 
@@ -2110,6 +2115,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     showToast(
       "Falha ao abrir Steam",
       result?.error ?? "Não foi possível localizar ou abrir a Steam.",
+      "error",
     );
   }, [showToast]);
 
@@ -2173,7 +2179,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? rawMessage
           : "Não foi possível enviar as imagens para a nuvem.";
         setSteamProfile(steamProfile);
-        showToast("Falha ao salvar perfil", message);
+        showToast("Falha ao salvar perfil", message, "error");
         return;
       }
 
@@ -2245,13 +2251,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             `${scanResult.games.length} jogos instalados encontrados.`,
           );
         } else if (scanResult?.status === "missing") {
-          showToast("Steam não encontrada", scanResult.message);
+          showToast("Steam não encontrada", scanResult.message, "error");
         }
         return;
       }
 
       if (result?.status === "invalid") {
-        showToast("Caminho inválido", result.message);
+        showToast("Caminho inválido", result.message, "error");
       }
     } finally {
       setIsScanningSteamLibrary(false);

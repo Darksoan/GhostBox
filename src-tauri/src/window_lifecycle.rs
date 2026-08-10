@@ -388,8 +388,6 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.set_background_color(Some(WINDOW_BACKGROUND));
-        let _ = window.set_resizable(false);
-        let _ = window.set_maximizable(false);
 
         if let Some(icon) = ghostbox_icon() {
             let _ = window.set_icon(icon);

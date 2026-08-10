@@ -1355,9 +1355,6 @@
     background: var(--color-text);
     opacity: 0;
     pointer-events: none;
-    transition:
-      width var(--motion-base) var(--ease),
-      opacity var(--motion-fast) var(--ease);
   }
 
   &__tab--active &__tab-selector {
@@ -1649,7 +1646,7 @@
   }
 
   &__game-grid.game-grid--portrait {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
     grid-auto-rows: auto;
     gap: var(--space-7) var(--space-6);
     width: 100%;
@@ -1910,7 +1907,7 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__game-grid.game-grid--portrait {
-      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
       grid-auto-rows: auto;
       gap: var(--space-5);
     }

@@ -19,6 +19,7 @@ const GHOSTBOX_PLAYTIME_BACKUP_FILE: &str = "ghostbox-playtime.json";
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ProfileProgressSnapshot {
     pub has_achievements: bool,
+    pub achievement_count: Option<usize>,
     pub has_playtime: bool,
 }
 
@@ -832,6 +833,19 @@ fn read_ghostbox_achievements_backup_file(
     None
 }
 
+pub(crate) fn local_backup_achievement_count(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    title: &str,
+) -> Option<usize> {
+    read_ghostbox_achievements_backup_file(app, app_id, title, None)
+        .and_then(|file| {
+            file.get("unlocked")
+                .and_then(|value| value.as_array())
+                .map(Vec::len)
+        })
+}
+
 fn write_ghostbox_achievements_backup_file(
     app: &tauri::AppHandle,
     file: &serde_json::Value,
@@ -952,6 +966,10 @@ pub(crate) fn export_game_profile_progress(
         });
 
     if let Some(file) = achievements_file {
+        snapshot.achievement_count = file
+            .get("unlocked")
+            .and_then(|value| value.as_array())
+            .map(Vec::len);
         if write_ghostbox_achievements_backup_file(
             app,
             &file,
@@ -1028,6 +1046,10 @@ pub(crate) fn import_game_profile_progress(
         title,
         Some(backup_path.to_string_lossy().as_ref()),
     ) {
+        snapshot.achievement_count = file
+            .get("unlocked")
+            .and_then(|value| value.as_array())
+            .map(Vec::len);
         if write_ghostbox_achievements_backup_file(app, &file, None).is_ok() {
             snapshot.has_achievements = true;
         }
@@ -1395,6 +1417,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()

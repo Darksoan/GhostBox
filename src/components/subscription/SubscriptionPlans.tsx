@@ -1,5 +1,5 @@
 import { CalendarClock, Check, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
-import { CupStar, ServerUpdate, UserEdit } from "reicon-react";
+import { CupStar, ServerUpdate, Trophy, UserEdit } from "reicon-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
@@ -14,6 +14,7 @@ import type {
   SubscriptionStatusResult,
 } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
+import { loadGameStoreDetailsCached } from "../../utils/gameCache";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
@@ -26,6 +27,7 @@ type SubscriptionPlansProps = {
   cloudBackupGames?: Array<{
     appId: string;
     title: string;
+    achievementCount: number;
     lastBackupAt: string | null;
     lastBackupSuccess: boolean | null;
   }>;
@@ -35,6 +37,7 @@ type SubscriptionPlansProps = {
 type CloudBackupGameSummary = {
   appId: string;
   title: string;
+  achievementCount: number | null;
   lastBackupAt: string | null;
   lastBackupSuccess: boolean;
 };
@@ -180,6 +183,7 @@ export function SubscriptionPlans({
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
+  const [resolvedCloudGameTitles, setResolvedCloudGameTitles] = useState<Map<string, string>>(new Map());
   const [selectedPlanId, setSelectedPlanId] = useState<PaidSubscriptionPlanId>("monthly");
   const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
   const [portalFlow, setPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
@@ -271,6 +275,44 @@ export function SubscriptionPlans({
     };
   }, [surface]);
 
+  useEffect(() => {
+    const appIds = Array.from(new Set(cloudSaves
+      .filter((save) => {
+        const localTitle = cloudBackupGames.find((game) => game.appId === save.appId)?.title;
+        return isSteamTitlePlaceholder(save.gameTitle, save.appId)
+          && isSteamTitlePlaceholder(localTitle, save.appId)
+          && !resolvedCloudGameTitles.has(save.appId);
+      })
+      .map((save) => save.appId)));
+    if (appIds.length === 0) return;
+
+    let cancelled = false;
+    void Promise.all(appIds.map(async (appId) => {
+      const details = await loadGameStoreDetailsCached(`steam-${appId}`).catch(() => null);
+      const title = details?.title?.trim();
+      return {
+        appId,
+        title: title && !isSteamTitlePlaceholder(title, appId) ? title : null,
+      };
+    })).then((resolvedTitles) => {
+      if (cancelled) return;
+      setResolvedCloudGameTitles((current) => {
+        const next = new Map(current);
+        let changed = false;
+        for (const { appId, title } of resolvedTitles) {
+          if (!title || next.has(appId)) continue;
+          next.set(appId, title);
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudBackupGames, cloudSaves, resolvedCloudGameTitles]);
+
   const isPremium = subscriptionStatus?.subscription.isPremium === true;
   const payment = visiblePayment(latestPayment(subscriptionStatus?.latestPayment), subscriptionStatus?.subscription);
   const paymentStatus = payment && subscriptionStatus ? effectivePaymentStatus(payment, subscriptionStatus.subscription) : null;
@@ -279,13 +321,18 @@ export function SubscriptionPlans({
     for (const save of cloudSaves) {
       const current = byAppId.get(save.appId);
       const updatedAt = save.updatedAt || save.createdAt || null;
-      const localTitle = cloudBackupGames.find((game) => game.appId === save.appId)?.title;
+      const localGame = cloudBackupGames.find((game) => game.appId === save.appId);
+      const localTitle = localGame?.title;
       const remoteTitle = isSteamTitlePlaceholder(save.gameTitle, save.appId) ? null : save.gameTitle;
       const fallbackTitle = localTitle && !isSteamTitlePlaceholder(localTitle, save.appId) ? localTitle : null;
+      const profileProgress = save.manifest?.profileProgress;
+      const achievementCount = profileProgress?.achievementCount
+        ?? (profileProgress?.achievements ? localGame?.achievementCount : undefined);
       if (!current || (updatedAt && (!current.lastBackupAt || Date.parse(updatedAt) > Date.parse(current.lastBackupAt)))) {
         byAppId.set(save.appId, {
           appId: save.appId,
-          title: remoteTitle || fallbackTitle || localTitle || save.appId,
+          title: remoteTitle || fallbackTitle || resolvedCloudGameTitles.get(save.appId) || localTitle || save.appId,
+          achievementCount: typeof achievementCount === "number" ? achievementCount : null,
           lastBackupAt: updatedAt,
           lastBackupSuccess: true,
         });
@@ -374,19 +421,18 @@ export function SubscriptionPlans({
         }}
         aria-label={copy("Resumo da assinatura Premium", "Premium subscription summary")}
       >
-        <header className="subscription-account__header">
+        <header className="subscription-account__header subscription-account__header--active">
           <div className="subscription-account__header-main">
             <span className="subscription-account__brand-icon" aria-hidden="true" />
-            <div>
-              <span className="subscription-account__eyebrow">GhostBox Premium</span>
-              <h3>{copy("Assinatura ativa", "Active subscription")}</h3>
+            <div className="subscription-account__header-copy">
+              <h3 className="sr-only">{copy("Assinatura ativa", "Active subscription")}</h3>
+              <span className="subscription-account__eyebrow">
+                <span className="subscription-account__brand-name">GHOSTBOX</span>
+                <span className="subscription-account__premium-name">PREMIUM</span>
+              </span>
               <p>{planLabel}</p>
             </div>
           </div>
-          <span className="subscription-account__status-badge">
-            <span className="subscription-account__status-dot" aria-hidden="true" />
-            {copy("Ativa", "Active")}
-          </span>
         </header>
 
         <div className="subscription-account__summary-grid">
@@ -460,7 +506,20 @@ export function SubscriptionPlans({
                         event.currentTarget.style.visibility = "hidden";
                       }}
                     />
-                    <strong>{game.title}</strong>
+                    <div className="subscription-account__backup-title">
+                      <strong>{game.title}</strong>
+                      {game.achievementCount !== null ? (
+                        <span
+                          className="subscription-account__achievement-count"
+                          aria-label={`${game.achievementCount} ${game.achievementCount === 1
+                            ? copy("conquista salva no backup", "achievement saved in backup")
+                            : copy("conquistas salvas no backup", "achievements saved in backup")}`}
+                        >
+                          <Trophy size={15} weight="Filled" color="var(--text-tertiary, var(--text-secondary))" aria-hidden="true" />
+                          <span aria-hidden="true">{game.achievementCount}</span>
+                        </span>
+                      ) : null}
+                    </div>
                     {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
                   </li>
                 ))}

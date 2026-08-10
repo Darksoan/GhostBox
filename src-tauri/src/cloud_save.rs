@@ -282,6 +282,7 @@ pub async fn cloud_backup_game(
                     "source": "ludusavi",
                     "profileProgress": {
                         "achievements": profile_progress.has_achievements,
+                        "achievementCount": profile_progress.achievement_count,
                         "playtime": profile_progress.has_playtime,
                         "saves": ludusavi_error.is_none()
                     }
@@ -304,6 +305,7 @@ pub async fn cloud_backup_game(
                 "profileProgress".to_string(),
                 serde_json::json!({
                     "achievements": profile_progress.has_achievements,
+                    "achievementCount": profile_progress.achievement_count,
                     "playtime": profile_progress.has_playtime,
                     "saves": ludusavi_error.is_none()
                 }),
@@ -383,7 +385,58 @@ pub async fn cloud_list_saves(
     if !status.is_success() {
         return Err(format_cloud_api_error(&body, status.as_u16()));
     }
-    serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())
+    let mut parsed =
+        serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())?;
+    if let Some(saves) = parsed.get_mut("saves").and_then(|value| value.as_array_mut()) {
+        for save in saves {
+            if save
+                .pointer("/manifest/profileProgress/achievementCount")
+                .and_then(|value| value.as_u64())
+                .is_some()
+            {
+                continue;
+            }
+            let app_id = save
+                .get("appId")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let title = save
+                .get("gameTitle")
+                .and_then(|value| value.as_str())
+                .unwrap_or(&app_id)
+                .to_string();
+            let Some(count) = crate::local_backup_achievement_count(&app, &app_id, &title) else {
+                continue;
+            };
+            let Some(save_object) = save.as_object_mut() else {
+                continue;
+            };
+            let manifest = save_object
+                .entry("manifest")
+                .or_insert_with(|| serde_json::json!({}));
+            if !manifest.is_object() {
+                *manifest = serde_json::json!({});
+            }
+            let Some(manifest_object) = manifest.as_object_mut() else {
+                continue;
+            };
+            let profile_progress = manifest_object
+                .entry("profileProgress")
+                .or_insert_with(|| serde_json::json!({}));
+            if !profile_progress.is_object() {
+                *profile_progress = serde_json::json!({});
+            }
+            let Some(profile_progress_object) = profile_progress.as_object_mut() else {
+                continue;
+            };
+            profile_progress_object.insert(
+                "achievementCount".to_string(),
+                serde_json::json!(count),
+            );
+        }
+    }
+    Ok(parsed)
 }
 
 #[tauri::command]
@@ -459,6 +512,7 @@ pub async fn cloud_restore_save(
             "backupSizeBytes": bytes.len(),
             "profileProgress": {
                 "achievements": profile_progress.has_achievements,
+                "achievementCount": profile_progress.achievement_count,
                 "playtime": profile_progress.has_playtime,
                 "saves": ludusavi_error.is_none()
             },

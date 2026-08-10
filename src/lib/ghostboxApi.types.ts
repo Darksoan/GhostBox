@@ -373,6 +373,17 @@ export type CloudSessionResult = {
   steamId?: string | null;
 };
 
+export type CloudSaveManifest = {
+  backupFormat?: number;
+  source?: string;
+  profileProgress?: {
+    achievements?: boolean;
+    achievementCount?: number;
+    playtime?: boolean;
+    saves?: boolean;
+  };
+};
+
 export type CloudSave = {
   id: string;
   steamId: string;
@@ -380,7 +391,7 @@ export type CloudSave = {
   gameTitle: string;
   sizeBytes: number;
   sha256: string;
-  manifest: unknown | null;
+  manifest: CloudSaveManifest | null;
   deviceName: string | null;
   pinned?: boolean;
   createdAt: string;

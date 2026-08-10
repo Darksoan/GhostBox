@@ -4773,6 +4773,94 @@ p {
       font-weight: var(--weight-medium);
       line-height: var(--type-line-caption);
     }
+
+    &--active {
+      width: 100%;
+      min-height: 96px;
+      padding: 0 var(--space-4);
+      border: 0.5px solid transparent;
+      border-radius: var(--radius-sm);
+      background:
+        linear-gradient(var(--surface-panel), var(--surface-panel)) padding-box,
+        conic-gradient(
+          from var(--premium-border-angle),
+          transparent 0deg,
+          transparent 245deg,
+          color-mix(in srgb, var(--premium-gold) 10%, transparent) 282deg,
+          color-mix(in srgb, var(--premium-gold) 26%, var(--white) 2%) 320deg,
+          color-mix(in srgb, var(--premium-gold) 6%, transparent) 346deg,
+          transparent 360deg
+        ) border-box;
+      animation: subscription-premium-border-shine 7s linear infinite;
+
+      .subscription-account__header-main {
+        gap: 0;
+      }
+
+      .subscription-account__header-copy {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: var(--space-7);
+      }
+
+      .subscription-account__eyebrow {
+        display: inline-flex;
+        flex: 0 0 auto;
+        gap: var(--space-2);
+        margin: 0;
+        color: var(--text-primary);
+        font-size: var(--type-size-caption);
+        line-height: var(--type-line-caption);
+      }
+
+      .subscription-account__brand-name {
+        font-weight: var(--weight-medium);
+      }
+
+      .subscription-account__premium-name {
+        color: var(--premium-gold);
+        font-weight: var(--weight-semibold);
+      }
+
+      p {
+        @include mixins.truncate;
+        min-width: 0;
+        margin: 0;
+        color: var(--text-tertiary);
+        font-size: var(--type-size-micro);
+        line-height: var(--type-line-micro);
+      }
+
+      .subscription-account__brand-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 0;
+        background: transparent;
+
+        &::before {
+          width: 28px;
+          height: 28px;
+          background: var(--text-primary);
+        }
+      }
+
+      .subscription-account__status-badge {
+        min-width: 64px;
+        min-height: 20px;
+        gap: var(--space-3);
+        padding: 0 var(--space-4);
+        background: var(--surface-raised);
+        font-size: var(--type-size-caption);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .subscription-account__status-dot {
+        width: var(--space-3);
+        height: var(--space-3);
+      }
+    }
   }
 
   &__header-main {
@@ -4896,7 +4984,7 @@ p {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      background: var(--surface-popover);
+      background: var(--surface-option-active);
       color: var(--text-strong);
 
       svg:last-child {
@@ -5157,6 +5245,36 @@ p {
     border-radius: var(--radius-sm);
     background: var(--surface-popover);
     object-fit: cover;
+  }
+
+  &__backup-title {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-5);
+
+    strong {
+      min-width: 0;
+      flex: 0 1 auto;
+    }
+
+    .subscription-account__achievement-count {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--text-tertiary);
+      font-size: var(--type-size-compact);
+
+      svg {
+        flex: 0 0 auto;
+      }
+
+      span {
+        color: inherit;
+        font-size: inherit;
+      }
+    }
   }
 
   &__backup-status {
@@ -9879,7 +9997,7 @@ input[type="search"]::-ms-reveal {
     border-color: color-mix(in srgb, var(--danger) 35%, transparent);
 
     .toast__icon {
-      color: var(--text-primary);
+      color: var(--danger);
     }
 
     .toast__progress {
@@ -9888,12 +10006,14 @@ input[type="search"]::-ms-reveal {
   }
 
   &--success {
+    border-color: color-mix(in srgb, var(--success) 35%, transparent);
+
     .toast__icon {
-      color: var(--text-primary);
+      color: var(--success);
     }
 
     .toast__progress {
-      background: var(--text-strong);
+      background: var(--success);
     }
   }
 
@@ -10355,6 +10475,21 @@ html.no-backdrop-blur {
 @media (min-width: 1400px) {
   .content-section--library .game-grid.game-grid--dense:not(.game-grid--portrait) {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  /* Janela larga (maximizada): a Home ganha uma coluna por seção em vez de
+     esticar os cards — grades viram 4x4x6 no rail de recomendados, explorar e
+     categorias. As setas acompanham o inset de 36px, inalterado. */
+  .home-category__games {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .home-recommended__track .home-category-card {
+    flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+  }
+
+  .home-explore-card {
+    flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 5)) / 6);
   }
 }
 
@@ -10831,7 +10966,7 @@ html.no-backdrop-blur {
     grid-template-columns: 1fr;
   }
 
-  .subscription-account__header {
+  .subscription-account__header:not(.subscription-account__header--active) {
     align-items: flex-start;
     flex-direction: column;
   }

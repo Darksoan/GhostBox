@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   CreditCard,
   Crown,
   Download,
@@ -12,11 +13,12 @@ import {
   MessageSquareShare,
   Minus,
   Settings2,
+  Square,
   UserCog,
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect, useMemo, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useState, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GhostBoxGame } from "../../data";
@@ -370,6 +372,30 @@ export const Header = memo(function Header({
 
   const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
   const handleClose = useCallback(() => void ghostboxApi.close(), []);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  const handleToggleMaximize = useCallback(() => {
+    void getCurrentWindow().toggleMaximize();
+  }, []);
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let cancelled = false;
+
+    const refreshMaximizedState = () => {
+      void win.isMaximized().then((maximized) => {
+        if (!cancelled) setIsMaximized(maximized);
+      });
+    };
+
+    refreshMaximizedState();
+    const unlisten = win.onResized(refreshMaximizedState);
+
+    return () => {
+      cancelled = true;
+      void unlisten.then((dispose) => dispose());
+    };
+  }, []);
 
   const titlebarInteractiveSelector =
     "button, input, a, label, [role='button'], [role='menu'], [role='menuitem'], .header__search-shell, .header__subscription-menu, .header__window-controls";
@@ -394,7 +420,7 @@ export const Header = memo(function Header({
     titlebarDragRef.current = null;
   }, []);
 
-  const handleTitlebarPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+  const handleTitlebarPointerDown = useCallback(async (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     const target = event.target;
     if (target instanceof Element && target.closest(titlebarInteractiveSelector)) {
@@ -403,12 +429,31 @@ export const Header = memo(function Header({
 
     // Keep grab offset exact: sync screen coords + window origin (no startDragging jump).
     event.preventDefault();
+
+    const win = getCurrentWindow();
+    let originX = window.screenX;
+    let originY = window.screenY;
+
+    if (await win.isMaximized()) {
+      // Frameless convention: dragging from a maximized window restores it and
+      // keeps the grab point under the cursor, proportionally to where it sat
+      // in the maximized titlebar.
+      const grabRatioX = (event.screenX - window.screenX) / Math.max(1, window.outerWidth);
+      const grabOffsetY = event.screenY - window.screenY;
+      await win.unmaximize();
+      const scale = await win.scaleFactor();
+      const restoredSize = await win.outerSize();
+      originX = Math.round(event.screenX - grabRatioX * (restoredSize.width / scale));
+      originY = Math.round(event.screenY - grabOffsetY);
+      await win.setPosition(new LogicalPosition(originX, originY));
+    }
+
     titlebarDragRef.current = {
       pointerId: event.pointerId,
       startScreenX: event.screenX,
       startScreenY: event.screenY,
-      originX: window.screenX,
-      originY: window.screenY,
+      originX,
+      originY,
       lastScreenX: event.screenX,
       lastScreenY: event.screenY,
       frame: null,
@@ -441,6 +486,14 @@ export const Header = memo(function Header({
     [endTitlebarDrag]
   );
 
+  const handleTitlebarDoubleClick = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest(titlebarInteractiveSelector)) {
+      return;
+    }
+    handleToggleMaximize();
+  }, [handleToggleMaximize]);
+
   useEffect(() => {
     return () => {
       const drag = titlebarDragRef.current;
@@ -472,6 +525,7 @@ export const Header = memo(function Header({
       onPointerUp={handleTitlebarPointerUp}
       onPointerCancel={handleTitlebarPointerUp}
       onLostPointerCapture={handleTitlebarPointerUp}
+      onDoubleClick={handleTitlebarDoubleClick}
     >
       <div className="header__section header__section--left">
         <div className="header__navigation-controls">
@@ -788,6 +842,26 @@ export const Header = memo(function Header({
           onClick={handleMinimize}
         >
           <Minus size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="header__window-button"
+          aria-label={
+            appearance.language === "en"
+              ? isMaximized
+                ? "Restore"
+                : "Maximize"
+              : isMaximized
+                ? "Restaurar"
+                : "Maximizar"
+          }
+          onClick={handleToggleMaximize}
+        >
+          {isMaximized ? (
+            <Copy size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+          ) : (
+            <Square size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+          )}
         </button>
         <button
           type="button"
