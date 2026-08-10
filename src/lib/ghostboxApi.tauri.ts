@@ -1077,11 +1077,16 @@ export const ghostboxApi = {
     });
   },
 
+  /**
+   * Rejects when the request itself fails. A resolved `null` means the account
+   * genuinely has no cloud profile yet — callers upload the local state in that
+   * case, so swallowing errors here would overwrite the stored avatar/banner
+   * with whatever the device happens to hold.
+   */
   getCloudProfileSnapshot(): Promise<CloudProfileSnapshot | null> {
-    return invokeOr<CloudProfileResult | null>(
+    return invoke<CloudProfileResult | null>(
       "cloud_get_profile_snapshot",
       {},
-      null,
     ).then((result) => result?.profile ?? null);
   },
 

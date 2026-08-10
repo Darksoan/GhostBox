@@ -80,6 +80,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const {
     page,
     navigate,
+    purgePage,
     back,
     forward,
     canGoBack,
@@ -87,6 +88,14 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     contentRef,
     saveScrollPosition,
   } = useAppNavigation();
+
+  // The profile belongs to the signed-in account: signing out from inside it
+  // falls back to home, and its history entries go too so Back cannot return
+  // to someone else's profile.
+  useEffect(() => {
+    if (status === "authenticated") return;
+    purgePage("profile");
+  }, [purgePage, status]);
 
   const overlayForwardRef = useRef<OverlayForwardEntry | null>(null);
   const [canForwardOverlay, setCanForwardOverlay] = useState(false);
@@ -175,6 +184,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   const handleNavigate = useCallback(
     (newPage: typeof page, collectionId?: string) => {
+      // Single gate for every entry point into the profile — sidebar, tray,
+      // forward history.
+      if (newPage === "profile" && status !== "authenticated") {
+        openAuthModal();
+        return;
+      }
       saveScrollPosition();
       clearOverlayForward();
       closeContentOverlay();
@@ -184,8 +199,18 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         shell.setActiveProfileCollectionId(collectionId);
       }
     },
-    [clearOverlayForward, closeContentOverlay, navigate, saveScrollPosition, shell]
-  );  useEffect(() => {
+    [
+      clearOverlayForward,
+      closeContentOverlay,
+      navigate,
+      openAuthModal,
+      saveScrollPosition,
+      shell,
+      status,
+    ]
+  );
+
+  useEffect(() => {
     return ghostboxApi.onTrayNavigate(({ page }) => {
       handleNavigate(page);
     });
@@ -343,11 +368,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           userCollections={appData.userCollections}
           onNavigate={handleNavigate}
           onBack={handleBack}
-          onOpenProfile={() =>
-            status === "authenticated"
-              ? handleNavigate("profile")
-              : openAuthModal()
-          }
+          onOpenProfile={() => handleNavigate("profile")}
           onOpenGame={openGame}
           onCreateCollection={appData.openCreateUserCollectionModal}
           onRemoveFavorite={appData.toggleFavoriteGame}

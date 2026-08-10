@@ -122,6 +122,39 @@ export function useAppNavigation(initialPage: Page = "home") {
     return true;
   }, [publishHistoryFlags, setPage]);
 
+  /**
+   * Drops every history entry for `target` and leaves the cursor on the
+   * nearest surviving one, moving off the page if it is the current one. Used
+   * when a page stops being reachable mid-session (profile after signing out),
+   * so Back/Forward cannot walk back into it.
+   */
+  const purgePage = useCallback(
+    (target: Page, fallback: Page = "home") => {
+      const history = historyRef.current;
+      if (!history.includes(target)) return;
+
+      const removedBeforeCursor = history
+        .slice(0, historyIndexRef.current + 1)
+        .filter((entry) => entry === target).length;
+      const nextHistory = history.filter((entry) => entry !== target);
+      if (nextHistory.length === 0) nextHistory.push(fallback);
+
+      const wasOnTarget = pageRef.current === target;
+      historyRef.current = nextHistory;
+      historyIndexRef.current = Math.min(
+        Math.max(historyIndexRef.current - removedBeforeCursor, 0),
+        nextHistory.length - 1,
+      );
+      publishHistoryFlags();
+
+      if (!wasOnTarget) return;
+      const nextPage = nextHistory[historyIndexRef.current] ?? fallback;
+      pendingPageScrollRestoreRef.current = nextPage;
+      setPage(nextPage);
+    },
+    [publishHistoryFlags, setPage]
+  );
+
   const saveScrollPosition = useCallback(() => {
     const current = pageRef.current;
     if (contentRef.current) {
@@ -138,6 +171,7 @@ export function useAppNavigation(initialPage: Page = "home") {
     pageRef,
     setPage,
     navigate,
+    purgePage,
     back,
     forward,
     canGoBack: historyFlags.canGoBack,

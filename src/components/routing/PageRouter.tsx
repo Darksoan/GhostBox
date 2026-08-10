@@ -2,6 +2,7 @@ import { PagePlaceholder } from "../ui/LoadingStates";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useAppData } from "../../context/AppDataContext";
+import { useAuth } from "../../context/AuthContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { useCatalogueState } from "../../hooks/useCatalogueState";
@@ -132,6 +133,8 @@ export function PageRouter({
 }: PageRouterProps) {
   const { appearance } = useSettings();
   const appData = useAppData();
+  const { status } = useAuth();
+  const isAuthenticated = status === "authenticated";
   const {
     openGame,
     openAchievements,
@@ -154,6 +157,14 @@ export function PageRouter({
   if (!appearance.disablePageKeepAlive && !mountedPages.has(page)) {
     const nextMounted = new Set(mountedPages);
     nextMounted.add(page);
+    setMountedPages(nextMounted);
+  }
+
+  // Keep-alive would otherwise leave the profile mounted behind `hidden` after
+  // sign-out, still holding the previous account's games and achievements.
+  if (!isAuthenticated && mountedPages.has("profile")) {
+    const nextMounted = new Set(mountedPages);
+    nextMounted.delete("profile");
     setMountedPages(nextMounted);
   }
 
@@ -346,10 +357,12 @@ export function PageRouter({
     return null;
   }
 
-  const keepAlivePages = useMemo(
-    () => appearance.disablePageKeepAlive ? [page] : KEEP_ALIVE_PAGES.filter((p) => mountedPages.has(p)),
-    [appearance.disablePageKeepAlive, mountedPages, page],
-  );
+  const keepAlivePages = useMemo(() => {
+    const pages = appearance.disablePageKeepAlive
+      ? [page]
+      : KEEP_ALIVE_PAGES.filter((p) => mountedPages.has(p));
+    return isAuthenticated ? pages : pages.filter((p) => p !== "profile");
+  }, [appearance.disablePageKeepAlive, isAuthenticated, mountedPages, page]);
 
   return (
     <>

@@ -141,7 +141,9 @@ async function resolveCloudGames(
     const loaded = await Promise.all(
       missingIds
         .slice(index, index + batchSize)
-        .map((gameId) => loadGameDetailsCached(gameId)),
+        // A game that no longer resolves must not sink the whole restore:
+        // the caller also depends on this for the profile images.
+        .map((gameId) => loadGameDetailsCached(gameId).catch(() => null)),
     );
     for (const game of loaded) {
       if (game) gamesById.set(game.id, game);
@@ -538,8 +540,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     backupSettingsRef.current = backupSettings;
   }, [backupSettings]);
 
+  const previousAccountUserIdRef = useRef<string | null>(accountUserId);
+
   useEffect(() => {
+    const previousAccountUserId = previousAccountUserIdRef.current;
     accountUserIdRef.current = accountUserId;
+    previousAccountUserIdRef.current = accountUserId;
+    // First run (null -> id) is the app booting into a stored session: the
+    // local data belongs to that account and must survive.
+    if (!previousAccountUserId || previousAccountUserId === accountUserId) {
+      return;
+    }
+
+    // Signing out wipes the account-scoped localStorage, but this provider
+    // stays mounted the whole time. Without dropping the in-memory copy too,
+    // the next sign-in still sees the previous account's profile and cloud
+    // bookkeeping, so the restore concludes the local data is already current
+    // and never brings the avatar and banner back down.
+    skipCloudProfileUploadCountRef.current = 2;
+    steamProfileRef.current = null;
+    setSteamProfile(null);
+    setFavoriteGames([]);
+    setUserCollections([]);
+    setProfileHistoryGames([]);
+    steamAccountStatsRef.current = null;
+    setSteamAccountStats(null);
+    cloudProfileFavoriteGameIdsRef.current = [];
+    cloudProfileLocalUpdatedAtRef.current = null;
+    cloudProfilePendingUploadRef.current = false;
+    cloudProfileRestoredUserIdRef.current = null;
   }, [accountUserId]);
 
   useEffect(() => {
@@ -784,15 +813,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setIsCloudProfileRestoring(false);
       return false;
     }
-    const currentProfile = steamProfileRef.current;
-
     cloudProfileRestoreInFlightRef.current = true;
     let shouldFlushPendingUpload = false;
     try {
       if (!(await hasPremiumCloudProfileAccess())) return false;
       setIsCloudProfileRestoring(true);
 
-      const remote = await ghostboxApi.getCloudProfileSnapshot();
+      // A failed request is not an empty cloud profile. Returning false here
+      // keeps the account unmarked so the caller retries; treating the failure
+      // as "nothing stored" would mark it restored and upload the local state
+      // over the account's real avatar and banner.
+      let remote: Awaited<ReturnType<typeof ghostboxApi.getCloudProfileSnapshot>>;
+      try {
+        remote = await ghostboxApi.getCloudProfileSnapshot();
+      } catch {
+        return false;
+      }
       if (!remote) {
         cloudProfileRestoredUserIdRef.current = accountId;
         cloudProfilePendingUploadRef.current = true;
@@ -800,6 +836,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
+      // Read after the awaits: a Steam profile restored meanwhile carries the
+      // steamId that applyCloudProfileToLocal has to keep.
+      const currentProfile = steamProfileRef.current;
       const localUpdatedAt = cloudProfileLocalUpdatedAtRef.current;
       const localHasData =
         Boolean(currentProfile?.bannerUrl) ||
@@ -822,6 +861,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         currentProfile,
         snapshot: remote,
       });
+      skipCloudProfileUploadCountRef.current = 2;
+      // Avatar, banner and display name are applied before the game list is
+      // resolved: they are what the user looks for right after signing in, and
+      // resolving the cloud games needs a network round trip per unknown game.
+      if (applied.steamProfile) {
+        steamProfileRef.current = applied.steamProfile;
+        setSteamProfile(applied.steamProfile);
+        writeStoredSteamProfile(applied.steamProfile);
+        await ghostboxApi
+          .saveSteamProfile(applied.steamProfile)
+          .catch(() => undefined);
+      }
+
       const cloudGameIds = Array.from(
         new Set([
           ...applied.favoriteGameIds,
@@ -843,14 +895,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cloudProfileFavoriteGameIdsRef.current = applied.favoriteGameIds.filter(
         (gameId) => !gamesById.has(gameId),
       );
-      skipCloudProfileUploadCountRef.current = 2;
-      if (applied.steamProfile) {
-        setSteamProfile(applied.steamProfile);
-        writeStoredSteamProfile(applied.steamProfile);
-        await ghostboxApi
-          .saveSteamProfile(applied.steamProfile)
-          .catch(() => undefined);
-      }
       setFavoriteGames(favoriteGames);
       writeStoredFavoriteGames(favoriteGames);
       setUserCollections(

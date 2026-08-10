@@ -22,6 +22,17 @@ import {
   validPassword,
   type AccountRow,
 } from "./auth";
+import { base64Url, base64UrlDecode, hmacSha256, timingSafeEqual } from "./crypto";
+import {
+  STRIPE_API_VERSION,
+  planIdFromStripe,
+  stripeInvoiceSubscriptionId,
+  stripeMetadataString,
+  stripeSubscriptionIsPremium,
+  stripeSubscriptionPeriod,
+  verifyStripeWebhookSignature,
+  type PlanId,
+} from "./stripe";
 
 type Env = {
   SUBSCRIPTION_DB: D1Database;
@@ -44,9 +55,9 @@ type Env = {
   CLOUD_SAVE_BUCKET?: string;
   PROFILE_IMAGE_BUCKET?: string;
   FIREBASE_API_KEY?: string;
+  STRIPE_API_VERSION?: string;
 };
 
-type PlanId = "monthly" | "quarterly";
 type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "cancelled";
 type SubscriptionStatus = "free" | "active" | "expired";
 
@@ -91,6 +102,9 @@ type SubscriptionRow = {
   stripe_subscription_id?: string | null;
   stripe_subscription_status?: string | null;
   cancel_at_period_end?: number;
+  stripe_event_created?: number | null;
+  stripe_payment_method_json?: string | null;
+  stripe_payment_method_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -253,16 +267,26 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function stripeSubscriptionIsPremium(status: unknown) {
-  return status === "active" || status === "trialing";
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000);
 }
 
-function stripePeriodDate(value: unknown, fallback: string | null = null) {
-  return typeof value === "number" ? new Date(value * 1000).toISOString() : fallback;
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function planIdFromStripe(value: unknown, fallback: PlanId = "monthly"): PlanId {
-  return value === "quarterly" || value === "monthly" ? value : fallback;
+/**
+ * Billing period pulled off a Stripe subscription, or a hard failure.
+ *
+ * A missing period used to fall back to "now", which stored a subscription
+ * that `isActiveSubscription` rejects immediately — the user paid and got
+ * nothing, silently. Throwing instead surfaces it: inside the webhook it
+ * becomes a 500 and Stripe retries the event.
+ */
+function requireStripePeriod(subscription: unknown) {
+  const period = stripeSubscriptionPeriod(subscription);
+  if (!period.end) throw new Error("stripe_period_unresolved");
+  return { start: period.start || nowIso(), end: period.end };
 }
 
 function validSteamId(value: unknown): value is string {
@@ -271,84 +295,6 @@ function validSteamId(value: unknown): value is string {
 
 function validUserId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 128;
-}
-
-function base64Url(bytes: Uint8Array) {
-  let value = "";
-  for (const byte of bytes) value += String.fromCharCode(byte);
-  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function base64UrlDecode(value: string) {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function timingSafeEqual(left: string, right: string) {
-  if (left.length !== right.length) return false;
-  let mismatch = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return mismatch === 0;
-}
-
-async function hmacSha256(secret: string, value: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  return base64Url(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value))));
-}
-
-function hex(bytes: Uint8Array) {
-  let value = "";
-  for (const byte of bytes) {
-    value += byte.toString(16).padStart(2, "0");
-  }
-  return value;
-}
-
-async function hmacSha256Hex(secret: string, value: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  return hex(new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value))));
-}
-
-async function verifyStripeWebhookSignature(
-  signatureHeader: string | null,
-  payload: string,
-  secret: string
-): Promise<boolean> {
-  if (!signatureHeader || !secret) return false;
-  const parts = signatureHeader.split(",");
-  const tPart = parts.find((p) => p.startsWith("t="));
-  const v1Part = parts.find((p) => p.startsWith("v1="));
-  if (!tPart || !v1Part) return false;
-  const timestamp = tPart.split("=")[1];
-  const signature = v1Part.split("=")[1];
-  if (!timestamp || !signature) return false;
-
-  const now = Math.floor(Date.now() / 1000);
-  const diff = Math.abs(now - parseInt(timestamp, 10));
-  if (Number.isNaN(diff) || diff > 300) return false;
-
-  const signedPayload = `${timestamp}.${payload}`;
-  const expectedSignature = await hmacSha256Hex(secret, signedPayload);
-  return timingSafeEqual(signature, expectedSignature);
 }
 
 function getCloudSessionSecret(env: Env) {
@@ -621,6 +567,61 @@ function publicPaymentMethod(value: unknown) {
   return { type, brand, last4 };
 }
 
+const PAYMENT_METHOD_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+type PublicPaymentMethod = { type: string | null; brand: string | null; last4: string | null };
+
+/**
+ * Card on file, cached in D1.
+ *
+ * The subscription screen polls /subscription/status every 10 seconds, so
+ * asking Stripe on every request would burn rate limit for data that changes
+ * only when the user edits their billing details. The cache is cleared by
+ * `invalidateCachedPaymentMethod` whenever that can have happened.
+ */
+async function resolveCachedPaymentMethod(env: Env, subscription: SubscriptionRow | null) {
+  if (!subscription) return null;
+
+  const cachedAt = subscription.stripe_payment_method_updated_at
+    ? Date.parse(subscription.stripe_payment_method_updated_at)
+    : NaN;
+  if (Number.isFinite(cachedAt) && Date.now() - cachedAt < PAYMENT_METHOD_CACHE_TTL_MS) {
+    if (!subscription.stripe_payment_method_json) return null;
+    try {
+      return JSON.parse(subscription.stripe_payment_method_json) as PublicPaymentMethod;
+    } catch {
+      // fall through and re-resolve
+    }
+  }
+
+  const resolved = await resolveStripePaymentMethod(env, subscription);
+  const target = subscription.user_id
+    ? { column: "user_id", value: subscription.user_id }
+    : subscription.steam_id
+      ? { column: "steam_id", value: subscription.steam_id }
+      : null;
+  if (target) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE subscriptions SET stripe_payment_method_json = ?, stripe_payment_method_updated_at = ?
+       WHERE ${target.column} = ?`
+    ).bind(resolved ? JSON.stringify(resolved) : null, nowIso(), target.value).run().catch(() => undefined);
+  }
+  return resolved;
+}
+
+async function invalidateCachedPaymentMethod(env: Env, userId?: string | null, steamId?: string | null) {
+  const target = userId
+    ? { column: "user_id", value: userId }
+    : steamId
+      ? { column: "steam_id", value: steamId }
+      : null;
+  if (!target) return;
+  await env.SUBSCRIPTION_DB.prepare(
+    `UPDATE subscriptions SET stripe_payment_method_json = NULL, stripe_payment_method_updated_at = NULL
+     WHERE ${target.column} = ?`
+  ).bind(target.value).run().catch(() => undefined);
+}
+
 async function resolveStripePaymentMethod(env: Env, subscription: SubscriptionRow | null) {
   if (!subscription || !env.STRIPE_SECRET_KEY?.trim()) return null;
 
@@ -861,6 +862,27 @@ async function syncDiscordPremiumRoles(env: Env) {
   };
 }
 
+async function pruneStaleRecords(env: Env) {
+  const now = Date.now();
+  const results = await Promise.allSettled([
+    // Handled events are kept only long enough to cover Stripe's redelivery
+    // window; beyond that they are just an unbounded pile of payloads.
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM webhook_events WHERE processed_at IS NOT NULL AND created_at < ?`
+    ).bind(new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString()).run(),
+    // A Stripe checkout session dies after 24h; without this the abandoned
+    // payment row keeps the app showing "payment processing" forever.
+    env.SUBSCRIPTION_DB.prepare(
+      `UPDATE payments SET status = 'expired', updated_at = ?
+       WHERE status = 'pending' AND created_at < ?`
+    ).bind(nowIso(), new Date(now - 24 * 60 * 60 * 1000).toISOString()).run(),
+  ]);
+
+  for (const result of results) {
+    if (result.status === "rejected") console.warn("Retention sweep failed", result.reason);
+  }
+}
+
 async function handleDiscordSync(request: Request, env: Env) {
   if (!env.DISCORD_SYNC_TOKEN) return jsonResponse({ error: "Discord sync token is not configured" }, env, 404);
   const authorization = request.headers.get("authorization") || "";
@@ -987,42 +1009,71 @@ async function handleDiscordCallback(request: Request, env: Env) {
   );
 }
 
+const STRIPE_RETRY_DELAYS_MS = [250, 750];
+
 async function stripeRequest(
   env: Env,
   path: string,
-  init: { method?: string; body?: URLSearchParams } = {}
-) {
+  init: { method?: string; body?: URLSearchParams; idempotencyKey?: string } = {}
+): Promise<Record<string, any>> {
   const secret = env.STRIPE_SECRET_KEY?.trim();
   if (!secret) throw new Error("Stripe is not configured");
 
-  const response = await fetch(`https://api.stripe.com/v1${path}`, {
-    method: init.method || "GET",
-    headers: {
-      authorization: `Bearer ${secret}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: init.body,
-  });
+  const method = init.method || "GET";
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${secret}`,
+    "content-type": "application/x-www-form-urlencoded",
+    // Pinned rather than inherited from the account: a version bump in the
+    // Stripe dashboard would otherwise silently reshape these payloads.
+    "stripe-version": env.STRIPE_API_VERSION?.trim() || STRIPE_API_VERSION,
+  };
+  if (init.idempotencyKey) headers["idempotency-key"] = init.idempotencyKey;
 
-  const payload = await response.json<Record<string, unknown>>();
-  if (!response.ok) {
-    const error = payload.error && typeof payload.error === "object"
-      ? payload.error as Record<string, unknown>
-      : null;
+  // Only replay what is safe to replay: reads, and writes carrying an
+  // idempotency key (Stripe returns the original result for those instead of
+  // charging or creating twice).
+  const retryable = method === "GET" || Boolean(init.idempotencyKey);
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; ; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(`https://api.stripe.com/v1${path}`, {
+        method,
+        headers,
+        body: init.body,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!retryable || attempt >= STRIPE_RETRY_DELAYS_MS.length) throw lastError;
+      await sleep(STRIPE_RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+
+    const text = await response.text();
+    // Stripe answers 5xx (and some edge proxies answer 429) with HTML, so the
+    // body cannot be assumed to be JSON.
+    let payload: Record<string, any> = {};
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object") payload = parsed;
+    } catch {
+      payload = {};
+    }
+
+    if (response.ok) return payload;
+
+    const error = payload.error && typeof payload.error === "object" ? payload.error : null;
     const message =
       (typeof error?.message === "string" && error.message) ||
       (typeof payload.message === "string" && payload.message) ||
-      `Stripe request failed (${response.status})`;
-    throw new Error(message);
-  }
-  return payload;
-}
+      `Stripe request failed (${response.status}): ${text.slice(0, 200) || "empty body"}`;
+    lastError = new Error(message);
 
-function stripeMetadataString(payload: Record<string, unknown>, key: string): string | null {
-  const metadata = payload.metadata;
-  if (!metadata || typeof metadata !== "object") return null;
-  const value = (metadata as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
+    const transient = response.status === 429 || response.status >= 500;
+    if (!transient || !retryable || attempt >= STRIPE_RETRY_DELAYS_MS.length) throw lastError;
+    await sleep(STRIPE_RETRY_DELAYS_MS[attempt]);
+  }
 }
 
 async function saveStripeCustomerId(env: Env, userId: string, customerId: string, steamId?: string | null) {
@@ -1061,7 +1112,15 @@ async function createStripeCustomerForUser(env: Env, userId: string, steamId?: s
   body.set("metadata[user_id]", userId);
   if (steamId) body.set("metadata[steam_id]", steamId);
   body.set("description", `GhostBox Premium · ${userId}`);
-  const customer = await stripeRequest(env, "/customers", { method: "POST", body });
+  const customer = await stripeRequest(env, "/customers", {
+    method: "POST",
+    body,
+    // Derived from the account id, not random: concurrent calls (the status
+    // poll, the checkout button and the portal button can all land at once)
+    // then resolve to the same Stripe Customer instead of creating duplicates
+    // that could each carry their own subscription.
+    idempotencyKey: `ghostbox-customer-${userId}`,
+  });
   const customerId = typeof customer.id === "string" ? customer.id : null;
   if (!customerId) throw new Error("Stripe did not return a customer id");
   return customerId;
@@ -1083,6 +1142,12 @@ async function resolveStripeCustomerId(
   }
 
   const created = await createStripeCustomerForUser(env, userId, steamId);
+
+  // Re-read: a request that raced us may have stored a different id already,
+  // and two ids for one account means two billable customers.
+  const current = (await getSubscription(env, userId))?.stripe_customer_id?.trim();
+  if (current && current !== created) return current;
+
   await saveStripeCustomerId(env, userId, created, steamId);
   return created;
 }
@@ -1142,6 +1207,11 @@ async function handleCreateBillingPortal(request: Request, env: Env) {
     return jsonResponse({ error: "Stripe did not return a portal URL." }, env, 502);
   }
 
+  // The portal is where the card gets changed, and Stripe sends no webhook for
+  // a payment-method swap on its own — drop the cache so the next status read
+  // shows what the user just entered.
+  await invalidateCachedPaymentMethod(env, userId, auth.session!.steamId);
+
   return jsonResponse({ url, flow, customerId }, env);
 }
 
@@ -1156,9 +1226,24 @@ async function handleCreateCheckout(request: Request, env: Env) {
   const planId = body?.planId;
   if (planId !== "monthly" && planId !== "quarterly") return jsonResponse({ error: "Invalid plan" }, env, 400);
 
+  // Each attempt costs a Stripe API call and a payments row; cap both per IP
+  // and per account so a stuck client cannot spin them up without bound.
+  const ip = clientIp(request);
+  if (
+    (await tooManyAuthAttempts(env, ip, "checkout", 10, 3600)) ||
+    (await tooManyAuthAttempts(env, `user:${userId}`, "checkout", 10, 3600))
+  ) {
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
+  await recordAuthAttempt(env, ip, "checkout");
+  await recordAuthAttempt(env, `user:${userId}`, "checkout");
+
   const plan = plans[planId];
   const subscription = await getSubscription(env, userId);
   const customerId = await resolveStripeCustomerId(env, userId, subscription, steamId);
+
+  // Generated before the Stripe call so it can key the idempotent request.
+  const paymentId = crypto.randomUUID();
 
   const params = new URLSearchParams();
   params.set("mode", "subscription");
@@ -1183,6 +1268,7 @@ async function handleCreateCheckout(request: Request, env: Env) {
   const session = await stripeRequest(env, "/checkout/sessions", {
     method: "POST",
     body: params,
+    idempotencyKey: `ghostbox-checkout-${paymentId}`,
   });
 
   const sessionId = typeof session.id === "string" ? session.id : null;
@@ -1191,7 +1277,6 @@ async function handleCreateCheckout(request: Request, env: Env) {
     throw new Error("Stripe did not return a checkout session");
   }
 
-  const paymentId = crypto.randomUUID();
   const reference = `ghostbox-${userId}-${planId}-${paymentId}`;
   const createdAt = nowIso();
 
@@ -1235,12 +1320,18 @@ async function handleStatus(request: Request, env: Env) {
     ? null
     : await reconcilePaymentWithSubscription(env, latestPaymentRow, subscription);
 
+  // Only subscribers have a card worth showing, and only they see the panel
+  // that renders it.
+  const paymentMethod = isActiveSubscription(subscription)
+    ? await resolveCachedPaymentMethod(env, subscription).catch(() => null)
+    : null;
+
   return jsonResponse({
     userId,
     steamId: auth.session!.steamId || null,
     subscription: publicSubscription(subscription),
     latestPayment: latestPayment ? publicPayment(latestPayment, origin) : null,
-    paymentMethod: null,
+    paymentMethod,
     discordLink: publicDiscordLink(discordLink, null),
   }, env);
 }
@@ -1774,19 +1865,35 @@ type UpsertSubscriptionInput = {
   stripeSubscriptionId?: string | null;
   stripeSubscriptionStatus?: string | null;
   cancelAtPeriodEnd?: boolean;
+  /** Stripe `event.created`, in seconds. Guards against out-of-order webhooks. */
+  eventCreated?: number;
 };
 
 async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
   const conflictColumn = input.userId ? "user_id" : "steam_id";
   const conflictValue = input.userId || input.steamId;
   if (!conflictValue) return;
+
+  // Accounts created before the Firebase migration own a subscriptions row
+  // keyed only by steam_id. Inserting a fresh row for the same steam_id would
+  // hit the steam_id PRIMARY KEY, which ON CONFLICT(user_id) does not catch —
+  // the whole webhook would throw. Adopt the legacy row first so the upsert
+  // below lands on it.
+  if (input.userId && input.steamId) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE subscriptions SET user_id = ?, updated_at = ?
+       WHERE steam_id = ? AND user_id IS NULL`
+    ).bind(input.userId, nowIso(), input.steamId).run();
+  }
+
   const now = nowIso();
+  const eventCreated = input.eventCreated ?? nowSeconds();
   await env.SUBSCRIPTION_DB.prepare(
     `INSERT INTO subscriptions (
        steam_id, user_id, plan_id, status, current_period_start, current_period_end,
        last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status,
-       cancel_at_period_end, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       cancel_at_period_end, stripe_event_created, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(${conflictColumn}) DO UPDATE SET
        steam_id = COALESCE(excluded.steam_id, subscriptions.steam_id),
        user_id = COALESCE(excluded.user_id, subscriptions.user_id),
@@ -1799,7 +1906,9 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
        stripe_subscription_id = COALESCE(excluded.stripe_subscription_id, subscriptions.stripe_subscription_id),
        stripe_subscription_status = COALESCE(excluded.stripe_subscription_status, subscriptions.stripe_subscription_status),
        cancel_at_period_end = excluded.cancel_at_period_end,
-       updated_at = excluded.updated_at`
+       stripe_event_created = excluded.stripe_event_created,
+       updated_at = excluded.updated_at
+     WHERE COALESCE(subscriptions.stripe_event_created, 0) <= excluded.stripe_event_created`
   ).bind(
     input.steamId || null,
     input.userId || null,
@@ -1812,64 +1921,108 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
     input.stripeSubscriptionId || null,
     input.stripeSubscriptionStatus || null,
     input.cancelAtPeriodEnd ? 1 : 0,
+    eventCreated,
     now,
     now
   ).run();
 }
 
+/**
+ * Marks a subscription expired, but only when the event refers to the
+ * subscription currently on record. Someone who cancels and resubscribes has a
+ * new stripe_subscription_id; the old subscription's `deleted` event must not
+ * revoke the new one. Returns whether a row actually changed.
+ */
+async function expireSubscription(
+  env: Env,
+  target: { userId?: string | null; steamId?: string | null },
+  stripeSubscriptionId: string | null,
+  stripeStatus: string
+) {
+  const now = nowIso();
+  const statement = target.userId
+    ? env.SUBSCRIPTION_DB.prepare(
+        `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ?
+         WHERE user_id = ? AND (stripe_subscription_id = ? OR stripe_subscription_id IS NULL)`
+      ).bind(stripeStatus, now, target.userId, stripeSubscriptionId)
+    : env.SUBSCRIPTION_DB.prepare(
+        `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ?
+         WHERE steam_id = ? AND user_id IS NULL AND (stripe_subscription_id = ? OR stripe_subscription_id IS NULL)`
+      ).bind(stripeStatus, now, target.steamId, stripeSubscriptionId);
+
+  const result = await statement.run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 async function handleRefreshPayment(request: Request, env: Env) {
   const url = new URL(request.url);
   const origin = url.origin;
+
+  // This endpoint used to be unauthenticated, so anyone holding a checkout id
+  // could read back the owner's userId, steamId, Stripe ids and hosted
+  // checkout URL.
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const sessionUserId = auth.session!.userId;
+
   const checkoutId = url.searchParams.get("checkoutId") || url.searchParams.get("checkoutReference");
   if (!checkoutId) return jsonResponse({ error: "Missing checkoutId" }, env, 400);
 
   const payment = await getPaymentByCheckout(env, checkoutId);
-  if (!payment) return jsonResponse({ error: "Payment not found" }, env, 404);
+  // 404 rather than 403 for someone else's payment: a 403 would confirm the
+  // checkout id exists.
+  if (!payment || payment.user_id !== sessionUserId) {
+    return jsonResponse({ error: "Payment not found" }, env, 404);
+  }
 
   const now = nowIso();
 
   if (payment.stripe_checkout_session_id) {
-    try {
-      const session = await stripeRequest(env, `/checkout/sessions/${payment.stripe_checkout_session_id}`);
-      const paymentStatus = session.payment_status;
-      const status = paymentStatus === "paid" ? "paid" : payment.status;
+    const session = await stripeRequest(
+      env,
+      `/checkout/sessions/${encodeURIComponent(payment.stripe_checkout_session_id)}`
+    );
+    const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
 
-      if (status === "paid" && payment.status !== "paid") {
-        await env.SUBSCRIPTION_DB.prepare(
-          `UPDATE payments SET status = 'paid', provider = 'stripe', confirmed_at = ?, updated_at = ? WHERE id = ?`
-        ).bind(now, now, payment.id).run();
+    if (session.payment_status === "paid" && payment.status !== "paid") {
+      await env.SUBSCRIPTION_DB.prepare(
+        `UPDATE payments SET status = 'paid', provider = 'stripe', confirmed_at = ?, updated_at = ?,
+           stripe_subscription_id = COALESCE(stripe_subscription_id, ?)
+         WHERE id = ?`
+      ).bind(now, now, subscriptionId, payment.id).run();
 
-        const subscriptionId = session.subscription;
-        if (subscriptionId) {
-          const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
-          const stripeStatus = subInfo.status;
-          const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+      if (subscriptionId) {
+        const subInfo = await stripeRequest(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+        const stripeStatus = subInfo.status;
+        const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+        const period = stripeSubscriptionPeriod(subInfo);
+        if (isPremium && !period.end) {
+          return jsonResponse({ error: "stripe_period_unresolved" }, env, 502);
+        }
 
-          await upsertSubscription(env, {
-            userId: payment.user_id,
-            steamId: payment.steam_id,
-            planId: payment.plan_id,
-            status: isPremium ? "active" : "expired",
-            currentPeriodStart: stripePeriodDate(subInfo.current_period_start, nowIso()),
-            currentPeriodEnd: stripePeriodDate(subInfo.current_period_end, nowIso()),
-            lastPaymentId: payment.id,
-            stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
-            stripeSubscriptionId: typeof subscriptionId === "string" ? subscriptionId : null,
-            stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
-          });
+        await upsertSubscription(env, {
+          userId: payment.user_id,
+          steamId: payment.steam_id,
+          planId: payment.plan_id,
+          status: isPremium ? "active" : "expired",
+          currentPeriodStart: period.start,
+          currentPeriodEnd: period.end,
+          lastPaymentId: payment.id,
+          stripeCustomerId: typeof session.customer === "string" ? session.customer : null,
+          stripeSubscriptionId: subscriptionId,
+          stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
+          cancelAtPeriodEnd: Boolean(subInfo.cancel_at_period_end),
+        });
 
-          if (payment.user_id) {
-            await syncPremiumRoleForUser(env, payment.user_id, isPremium).catch(() => undefined);
-          }
+        if (payment.user_id) {
+          await syncPremiumRole(env, payment.user_id, isPremium);
         }
       }
-    } catch (err) {
-      console.error("Failed to refresh stripe checkout", err);
     }
   }
 
   const updatedPayment = await getPaymentByCheckout(env, checkoutId);
-  const subscription = payment.user_id ? await getSubscription(env, payment.user_id) : null;
+  const subscription = await getSubscription(env, sessionUserId);
 
   return jsonResponse({
     payment: updatedPayment ? publicPayment(updatedPayment, origin) : null,
@@ -1877,7 +2030,298 @@ async function handleRefreshPayment(request: Request, env: Env) {
   }, env);
 }
 
-async function handleStripeWebhook(request: Request, env: Env, context: ExecutionContext) {
+type StripeEventContext = {
+  eventType: string;
+  eventCreated: number;
+  data: Record<string, any>;
+};
+
+/**
+ * Discord role sync inside a webhook, made non-fatal.
+ *
+ * Billing state is the payload that must survive; a Discord outage must not
+ * turn a successful payment into a 500 and a retry loop. The 30-minute cron in
+ * `syncDiscordPremiumRoles` reconciles whatever this misses.
+ */
+async function syncPremiumRole(env: Env, userId: string, grant: boolean) {
+  try {
+    await syncPremiumRoleForUser(env, userId, grant);
+  } catch (error) {
+    console.warn("Discord Premium role sync failed in webhook", {
+      userId,
+      grant,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function processCheckoutSessionCompleted(env: Env, event: StripeEventContext) {
+  const { data, eventCreated } = event;
+  const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+  const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
+  const planId = planIdFromStripe(data.metadata?.plan_id);
+  const customerId = typeof data.customer === "string" ? data.customer : null;
+  const subscriptionId = typeof data.subscription === "string" ? data.subscription : null;
+  const sessionId = typeof data.id === "string" ? data.id : null;
+
+  if (!(userId || steamId) || !subscriptionId || !sessionId) return;
+
+  const subInfo = await stripeRequest(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  const stripeStatus = subInfo.status;
+  const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+  const period = requireStripePeriod(subInfo);
+  const now = nowIso();
+
+  // The payments row was left 'pending' by handleCreateCheckout; this is the
+  // moment it is actually paid. It used to stay pending until handleStatus
+  // lazily reconciled it, so the receipt in the app lagged behind the charge.
+  await env.SUBSCRIPTION_DB.prepare(
+    `UPDATE payments SET status = 'paid', confirmed_at = ?, updated_at = ?,
+       stripe_subscription_id = COALESCE(stripe_subscription_id, ?), provider = 'stripe'
+     WHERE stripe_checkout_session_id = ? AND status <> 'paid'`
+  ).bind(now, now, subscriptionId, sessionId).run();
+
+  const paymentRow = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT id FROM payments WHERE stripe_checkout_session_id = ? LIMIT 1`
+  ).bind(sessionId).first<{ id: string }>();
+
+  await upsertSubscription(env, {
+    userId,
+    steamId,
+    planId,
+    status: isPremium ? "active" : "expired",
+    currentPeriodStart: period.start,
+    currentPeriodEnd: period.end,
+    lastPaymentId: paymentRow?.id || null,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId,
+    stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
+    eventCreated,
+  });
+
+  if (userId) await syncPremiumRole(env, userId, isPremium);
+}
+
+async function processCheckoutSessionExpired(env: Env, event: StripeEventContext) {
+  const sessionId = typeof event.data.id === "string" ? event.data.id : null;
+  if (!sessionId) return;
+
+  // Without this an abandoned checkout stays 'pending' forever and the app
+  // keeps showing "payment processing" on the subscription screen.
+  await env.SUBSCRIPTION_DB.prepare(
+    `UPDATE payments SET status = 'expired', updated_at = ?
+     WHERE stripe_checkout_session_id = ? AND status = 'pending'`
+  ).bind(nowIso(), sessionId).run();
+}
+
+async function processSubscriptionUpserted(env: Env, event: StripeEventContext) {
+  const { data, eventCreated } = event;
+  const subscriptionId = typeof data.id === "string" ? data.id : null;
+  const status = data.status;
+  const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+  const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
+  const planId = planIdFromStripe(data.metadata?.plan_id);
+
+  if (!(userId || steamId) || !subscriptionId) return;
+
+  const isPremium = stripeSubscriptionIsPremium(status);
+  const period = stripeSubscriptionPeriod(data);
+  // An inactive subscription legitimately has no period to record; only an
+  // active one must never be stored without knowing when it ends.
+  if (isPremium && !period.end) throw new Error("stripe_period_unresolved");
+
+  await upsertSubscription(env, {
+    userId,
+    steamId,
+    planId,
+    status: isPremium ? "active" : "expired",
+    currentPeriodStart: period.start,
+    currentPeriodEnd: period.end,
+    stripeCustomerId: typeof data.customer === "string" ? data.customer : null,
+    stripeSubscriptionId: subscriptionId,
+    stripeSubscriptionStatus: typeof status === "string" ? status : null,
+    cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
+    eventCreated,
+  });
+
+  if (userId) await syncPremiumRole(env, userId, isPremium);
+}
+
+async function processSubscriptionDeleted(env: Env, event: StripeEventContext) {
+  const { data } = event;
+  const subscriptionId = typeof data.id === "string" ? data.id : null;
+  let userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+  let steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
+
+  if (!userId && !steamId && subscriptionId) {
+    const subRow = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT user_id, steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+    ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null }>();
+    userId = subRow?.user_id || null;
+    steamId = subRow?.steam_id || null;
+  }
+
+  if (!userId && !steamId) return;
+
+  const changed = await expireSubscription(env, { userId, steamId }, subscriptionId, "canceled");
+  // No row matched means this event belongs to a superseded subscription — the
+  // user already resubscribed and must keep their access.
+  if (changed && userId) await syncPremiumRole(env, userId, false);
+}
+
+async function processInvoicePaymentSucceeded(env: Env, event: StripeEventContext) {
+  const { data, eventCreated } = event;
+  const subscriptionId = stripeInvoiceSubscriptionId(data);
+  if (!subscriptionId) return;
+
+  const invoiceId = typeof data.id === "string" ? data.id : crypto.randomUUID();
+  const paymentIntentId = typeof data.payment_intent === "string" ? data.payment_intent : null;
+  const amountPaid = typeof data.amount_paid === "number" ? data.amount_paid : 0;
+  const currency = typeof data.currency === "string" ? data.currency.toUpperCase() : "BRL";
+  const now = nowIso();
+
+  const existing = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id, steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+  ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
+
+  const subInfo = await stripeRequest(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  const userId = existing?.user_id || stripeMetadataString(subInfo, "user_id");
+  const steamIdMeta = stripeMetadataString(subInfo, "steam_id");
+  const steamId = existing?.steam_id || (validSteamId(steamIdMeta) ? steamIdMeta : null);
+  const planId = planIdFromStripe(stripeMetadataString(subInfo, "plan_id"), existing?.plan_id || "monthly");
+
+  if (!userId && !steamId) return;
+
+  const paymentId = crypto.randomUUID();
+  const reference = `stripe-invoice-${invoiceId}`;
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT OR IGNORE INTO payments (
+       id, checkout_reference, steam_id, user_id, plan_id, amount_cents, currency,
+       status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at, confirmed_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, 'stripe', ?, ?, ?)`
+  ).bind(
+    paymentId,
+    reference,
+    steamId,
+    userId,
+    planId,
+    amountPaid,
+    currency,
+    invoiceId,
+    paymentIntentId,
+    subscriptionId,
+    now,
+    now,
+    now
+  ).run();
+
+  const paymentRow = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT id FROM payments WHERE stripe_invoice_id = ? OR checkout_reference = ? LIMIT 1`
+  ).bind(invoiceId, reference).first<{ id: string }>();
+  const stripeStatus = subInfo.status;
+  const isPremium = stripeSubscriptionIsPremium(stripeStatus);
+  const period = requireStripePeriod(subInfo);
+
+  await upsertSubscription(env, {
+    userId,
+    steamId,
+    planId,
+    status: isPremium ? "active" : "expired",
+    currentPeriodStart: period.start,
+    currentPeriodEnd: period.end,
+    lastPaymentId: paymentRow?.id || null,
+    stripeCustomerId: typeof subInfo.customer === "string" ? subInfo.customer : null,
+    stripeSubscriptionId: subscriptionId,
+    stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
+    cancelAtPeriodEnd: Boolean(subInfo.cancel_at_period_end),
+    eventCreated,
+  });
+
+  // A renewal can be paid with a different card than the one on file.
+  await invalidateCachedPaymentMethod(env, userId, steamId);
+
+  if (userId) await syncPremiumRole(env, userId, isPremium);
+}
+
+async function processInvoicePaymentFailed(env: Env, event: StripeEventContext) {
+  const { data } = event;
+  const subscriptionId = stripeInvoiceSubscriptionId(data);
+  if (!subscriptionId) return;
+
+  const invoiceId = typeof data.id === "string" ? data.id : null;
+  const paymentIntentId = typeof data.payment_intent === "string" ? data.payment_intent : null;
+  const amountDue = typeof data.amount_due === "number"
+    ? data.amount_due
+    : typeof data.amount_remaining === "number"
+      ? data.amount_remaining
+      : 0;
+  const currency = typeof data.currency === "string" ? data.currency.toUpperCase() : "BRL";
+  const now = nowIso();
+
+  const subRow = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id, steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+  ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
+  if (!subRow) return;
+
+  if (invoiceId) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `INSERT OR IGNORE INTO payments (
+         id, checkout_reference, steam_id, user_id, plan_id, amount_cents, currency,
+         status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, 'stripe', ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      `stripe-invoice-${invoiceId}`,
+      subRow.steam_id,
+      subRow.user_id,
+      subRow.plan_id || "monthly",
+      amountDue,
+      currency,
+      invoiceId,
+      paymentIntentId,
+      subscriptionId,
+      now,
+      now
+    ).run();
+  }
+
+  const subInfo = await stripeRequest(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  const status = typeof subInfo.status === "string" ? subInfo.status : "unpaid";
+  // Stripe retries a failed invoice for days while the subscription stays
+  // past_due; only revoke once Stripe itself gives up.
+  if (stripeSubscriptionIsPremium(status)) return;
+
+  const changed = await expireSubscription(
+    env,
+    { userId: subRow.user_id, steamId: subRow.steam_id },
+    subscriptionId,
+    status
+  );
+  if (changed && subRow.user_id) await syncPremiumRole(env, subRow.user_id, false);
+}
+
+async function processStripeEvent(env: Env, event: StripeEventContext) {
+  switch (event.eventType) {
+    case "checkout.session.completed":
+      return processCheckoutSessionCompleted(env, event);
+    case "checkout.session.expired":
+      return processCheckoutSessionExpired(env, event);
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+      return processSubscriptionUpserted(env, event);
+    case "customer.subscription.deleted":
+      return processSubscriptionDeleted(env, event);
+    case "invoice.payment_succeeded":
+      return processInvoicePaymentSucceeded(env, event);
+    case "invoice.payment_failed":
+      return processInvoicePaymentFailed(env, event);
+    default:
+      return undefined;
+  }
+}
+
+async function handleStripeWebhook(request: Request, env: Env) {
   const signature = request.headers.get("stripe-signature");
   const payload = await request.text();
 
@@ -1886,8 +2330,7 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
     return jsonResponse({ error: "Stripe webhook secret is not configured" }, env, 500);
   }
 
-  const isValid = await verifyStripeWebhookSignature(signature, payload, secret);
-  if (!isValid) {
+  if (!(await verifyStripeWebhookSignature(signature, payload, secret))) {
     return jsonResponse({ error: "Invalid signature" }, env, 400);
   }
 
@@ -1900,263 +2343,45 @@ async function handleStripeWebhook(request: Request, env: Env, context: Executio
 
   const eventId = typeof event.id === "string" ? event.id : crypto.randomUUID();
   const eventType = typeof event.type === "string" ? event.type : null;
+  const eventCreated = typeof event.created === "number" ? event.created : nowSeconds();
 
-  const duplicate = await env.SUBSCRIPTION_DB.prepare(
-    `INSERT OR IGNORE INTO webhook_events (id, event_type, payload) VALUES (?, ?, ?)`
-  ).bind(eventId, eventType, payload).run();
+  const inserted = await env.SUBSCRIPTION_DB.prepare(
+    `INSERT OR IGNORE INTO webhook_events (id, event_type, stripe_event_created, payload)
+     VALUES (?, ?, ?, ?)`
+  ).bind(eventId, eventType, eventCreated, payload).run();
 
-  if (duplicate.meta.changes === 0) {
-    return jsonResponse({ ok: true, note: "duplicate" }, env);
+  if ((inserted.meta.changes ?? 0) === 0) {
+    const seen = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT processed_at FROM webhook_events WHERE id = ? LIMIT 1`
+    ).bind(eventId).first<{ processed_at: string | null }>();
+    // Only a *processed* event is a true duplicate. A row with no processed_at
+    // is a previous attempt that failed, and this redelivery is the retry that
+    // recovers it — falling through is what keeps a paid checkout from being
+    // lost when Stripe or D1 hiccups mid-handler.
+    if (seen?.processed_at) {
+      return jsonResponse({ ok: true, note: "duplicate" }, env);
+    }
   }
 
   const data = event.data?.object as Record<string, any> | undefined;
-  if (!data) {
-    return jsonResponse({ ok: true }, env);
+
+  if (eventType && data) {
+    try {
+      await processStripeEvent(env, { eventType, eventCreated, data });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Stripe webhook processing failed", { eventId, eventType, message });
+      await env.SUBSCRIPTION_DB.prepare(
+        `UPDATE webhook_events SET attempts = attempts + 1, last_error = ? WHERE id = ?`
+      ).bind(message.slice(0, 500), eventId).run().catch(() => undefined);
+      // 5xx is the only way to ask Stripe to redeliver.
+      return jsonResponse({ error: "webhook_processing_failed" }, env, 500);
+    }
   }
 
-  if (eventType === "checkout.session.completed") {
-    const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
-    const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
-    const planId = planIdFromStripe(data.metadata?.plan_id);
-    const customerId = data.customer;
-    const subscriptionId = data.subscription;
-    const sessionId = data.id;
-
-    if ((userId || steamId) && typeof subscriptionId === "string" && typeof sessionId === "string") {
-      try {
-        const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
-        const stripeStatus = subInfo.status;
-        const isPremium = stripeSubscriptionIsPremium(stripeStatus);
-        const currentPeriodStart = stripePeriodDate(subInfo.current_period_start, nowIso());
-        const currentPeriodEnd = stripePeriodDate(subInfo.current_period_end, nowIso());
-
-        const paymentRow = await env.SUBSCRIPTION_DB.prepare(
-          `SELECT id FROM payments WHERE stripe_checkout_session_id = ? LIMIT 1`
-        ).bind(sessionId).first<{ id: string }>();
-
-        await upsertSubscription(env, {
-          userId,
-          steamId,
-          planId,
-          status: isPremium ? "active" : "expired",
-          currentPeriodStart,
-          currentPeriodEnd,
-          lastPaymentId: paymentRow?.id || null,
-          stripeCustomerId: typeof customerId === "string" ? customerId : null,
-          stripeSubscriptionId: subscriptionId,
-          stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
-        });
-
-        if (userId) {
-          await syncPremiumRoleForUser(env, userId, isPremium).catch((error) => {
-            console.warn("Discord Premium role grant failed in webhook", error);
-          });
-        }
-      } catch (err) {
-        console.error("Failed to process checkout.session.completed", err);
-      }
-    }
-  } else if (eventType === "customer.subscription.created" || eventType === "customer.subscription.updated") {
-    const subscriptionId = data.id;
-    const status = data.status;
-    const currentPeriodStart = stripePeriodDate(data.current_period_start);
-    const currentPeriodEnd = stripePeriodDate(data.current_period_end);
-    const cancelAtPeriodEnd = Boolean(data.cancel_at_period_end);
-    const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
-    const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
-    const planId = planIdFromStripe(data.metadata?.plan_id);
-
-    if ((userId || steamId) && typeof subscriptionId === "string") {
-      const isPremium = stripeSubscriptionIsPremium(status);
-
-      await upsertSubscription(env, {
-        userId,
-        steamId,
-        planId,
-        status: isPremium ? "active" : "expired",
-        currentPeriodStart,
-        currentPeriodEnd,
-        stripeSubscriptionId: subscriptionId,
-        stripeSubscriptionStatus: typeof status === "string" ? status : null,
-        cancelAtPeriodEnd,
-      });
-
-      if (userId) {
-        await syncPremiumRoleForUser(env, userId, isPremium).catch((error) => {
-          console.warn("Discord Premium role sync failed in subscription hook", error);
-        });
-      }
-    }
-  } else if (eventType === "customer.subscription.deleted") {
-    const subscriptionId = data.id;
-    const now = nowIso();
-    let userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
-    let steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
-
-    if (!userId && !steamId && typeof subscriptionId === "string") {
-      const subRow = await env.SUBSCRIPTION_DB.prepare(
-        `SELECT user_id, steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
-      ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null }>();
-      userId = subRow?.user_id || null;
-      steamId = subRow?.steam_id || null;
-    }
-
-    if (userId) {
-      await env.SUBSCRIPTION_DB.prepare(
-        `UPDATE subscriptions SET
-           status = 'expired',
-           stripe_subscription_status = 'canceled',
-           updated_at = ?
-         WHERE user_id = ?`
-      ).bind(now, userId).run();
-
-      await syncPremiumRoleForUser(env, userId, false).catch((error) => {
-        console.warn("Discord Premium role revoke failed in webhook", error);
-      });
-    } else if (steamId) {
-      await env.SUBSCRIPTION_DB.prepare(
-        `UPDATE subscriptions SET
-           status = 'expired',
-           stripe_subscription_status = 'canceled',
-           updated_at = ?
-         WHERE steam_id = ? AND user_id IS NULL`
-      ).bind(now, steamId).run();
-    }
-  } else if (eventType === "invoice.payment_succeeded") {
-    const subscriptionId = data.subscription;
-    const invoiceId = typeof data.id === "string" ? data.id : crypto.randomUUID();
-    const paymentIntentId = typeof data.payment_intent === "string" ? data.payment_intent : null;
-    const amountPaid = typeof data.amount_paid === "number" ? data.amount_paid : 0;
-    const currency = data.currency?.toUpperCase() || "BRL";
-    const now = nowIso();
-
-    if (typeof subscriptionId === "string") {
-      const existing = await env.SUBSCRIPTION_DB.prepare(
-        `SELECT user_id, steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
-      ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
-      const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
-      const userId = existing?.user_id || stripeMetadataString(subInfo, "user_id");
-      const steamIdMeta = stripeMetadataString(subInfo, "steam_id");
-      const steamId = existing?.steam_id || (validSteamId(steamIdMeta) ? steamIdMeta : null);
-      const planId = planIdFromStripe(stripeMetadataString(subInfo, "plan_id"), existing?.plan_id || "monthly");
-
-      if (userId || steamId) {
-        const paymentId = crypto.randomUUID();
-        const reference = `stripe-invoice-${invoiceId}`;
-
-        await env.SUBSCRIPTION_DB.prepare(
-          `INSERT OR IGNORE INTO payments (
-             id, checkout_reference, steam_id, user_id, plan_id, amount_cents, currency,
-             status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at, confirmed_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, 'stripe', ?, ?, ?)`
-        ).bind(
-          paymentId,
-          reference,
-          steamId,
-          userId,
-          planId,
-          amountPaid,
-          currency,
-          invoiceId,
-          paymentIntentId,
-          subscriptionId,
-          now,
-          now,
-          now
-        ).run();
-
-        const paymentRow = await env.SUBSCRIPTION_DB.prepare(
-          `SELECT id FROM payments WHERE stripe_invoice_id = ? OR checkout_reference = ? LIMIT 1`
-        ).bind(invoiceId, reference).first<{ id: string }>();
-        const stripeStatus = subInfo.status;
-        const isPremium = stripeSubscriptionIsPremium(stripeStatus);
-
-        await upsertSubscription(env, {
-          userId,
-          steamId,
-          planId,
-          status: isPremium ? "active" : "expired",
-          currentPeriodStart: stripePeriodDate(subInfo.current_period_start, now),
-          currentPeriodEnd: stripePeriodDate(subInfo.current_period_end, now),
-          lastPaymentId: paymentRow?.id || null,
-          stripeCustomerId: typeof subInfo.customer === "string" ? subInfo.customer : null,
-          stripeSubscriptionId: subscriptionId,
-          stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
-          cancelAtPeriodEnd: Boolean(subInfo.cancel_at_period_end),
-        });
-
-        if (userId) {
-          await syncPremiumRoleForUser(env, userId, isPremium).catch((error) => {
-            console.warn("Discord Premium role sync failed on paid invoice hook", error);
-          });
-        }
-      }
-    }
-  } else if (eventType === "invoice.payment_failed") {
-    const subscriptionId = data.subscription;
-    const invoiceId = typeof data.id === "string" ? data.id : null;
-    const paymentIntentId = typeof data.payment_intent === "string" ? data.payment_intent : null;
-    const amountDue = typeof data.amount_due === "number"
-      ? data.amount_due
-      : typeof data.amount_remaining === "number"
-        ? data.amount_remaining
-        : 0;
-    const currency = data.currency?.toUpperCase() || "BRL";
-    const now = nowIso();
-
-    if (typeof subscriptionId === "string") {
-      const subRow = await env.SUBSCRIPTION_DB.prepare(
-        `SELECT user_id, steam_id, plan_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
-      ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
-
-      if (subRow) {
-        if (invoiceId) {
-          await env.SUBSCRIPTION_DB.prepare(
-            `INSERT OR IGNORE INTO payments (
-               id, checkout_reference, steam_id, user_id, plan_id, amount_cents, currency,
-               status, stripe_invoice_id, stripe_payment_intent_id, stripe_subscription_id, provider, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, ?, 'stripe', ?, ?)`
-          ).bind(
-            crypto.randomUUID(),
-            `stripe-invoice-${invoiceId}`,
-            subRow.steam_id,
-            subRow.user_id,
-            subRow.plan_id || "monthly",
-            amountDue,
-            currency,
-            invoiceId,
-            paymentIntentId,
-            subscriptionId,
-            now,
-            now
-          ).run();
-        }
-
-        try {
-          const subInfo = await stripeRequest(env, `/subscriptions/${subscriptionId}`);
-          const status = subInfo.status;
-          const isPremium = stripeSubscriptionIsPremium(status);
-          if (!isPremium) {
-            if (subRow.user_id) {
-              await env.SUBSCRIPTION_DB.prepare(
-                `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ? WHERE user_id = ?`
-              ).bind(status, now, subRow.user_id).run();
-
-              await syncPremiumRoleForUser(env, subRow.user_id, false).catch((error) => {
-                console.warn("Discord Premium role revoke failed on failed invoice hook", error);
-              });
-            } else if (subRow.steam_id) {
-              await env.SUBSCRIPTION_DB.prepare(
-                `UPDATE subscriptions SET status = 'expired', stripe_subscription_status = ?, updated_at = ? WHERE steam_id = ? AND user_id IS NULL`
-              ).bind(status, now, subRow.steam_id).run();
-            }
-          }
-        } catch (err) {
-          console.error("Failed to query stripe subscription in invoice.payment_failed", err);
-        }
-      }
-    }
-  }
+  await env.SUBSCRIPTION_DB.prepare(
+    `UPDATE webhook_events SET processed_at = ? WHERE id = ?`
+  ).bind(nowIso(), eventId).run();
 
   return jsonResponse({ ok: true }, env);
 }
@@ -2639,7 +2864,7 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
     return handleReturn(env);
   }
   if (request.method === "POST" && url.pathname === "/stripe/webhook") {
-    return handleStripeWebhook(request, env, context);
+    return handleStripeWebhook(request, env);
   }
 
   return jsonResponse({ error: "Not found" }, env, 404);
@@ -2657,5 +2882,6 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: Env, _context: ExecutionContext) {
     await syncDiscordPremiumRoles(env);
+    await pruneStaleRecords(env);
   },
 };

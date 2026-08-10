@@ -304,16 +304,19 @@ pub async fn subscription_refresh_status(
         return Err("Checkout inválido.".to_string());
     }
 
+    let token = session_token(&app)?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|error| error.to_string())?;
-    let url = format!(
-        "{}/subscription/refresh?checkoutId={}",
-        subscription_api_url(),
-        checkout_id
-    );
-    let refresh = json_request::<SubscriptionRefreshResponse>(client.post(url)).await?;
+    let url = format!("{}/subscription/refresh", subscription_api_url());
+    let refresh = json_request::<SubscriptionRefreshResponse>(
+        client
+            .post(url)
+            .query(&[("checkoutId", checkout_id.as_str())])
+            .bearer_auth(token),
+    )
+    .await?;
     if let Some(user_id) = refresh.payment.user_id.clone() {
         let status = SubscriptionStatusResponse {
             user_id,

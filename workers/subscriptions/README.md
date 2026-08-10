@@ -16,7 +16,7 @@ Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Str
 - `POST /subscription/checkouts` — Bearer, `{ planId }`
 - `POST /subscription/portal` — Bearer, `{ flow?: "manage" | "payment_method_update" }`
 - `GET /subscription/status` — Bearer
-- `POST /subscription/refresh?checkoutId=...`
+- `POST /subscription/refresh?checkoutId=...` — Bearer; only the account that owns the checkout can read it (anything else answers 404). Fallback for a delayed webhook.
 - `POST /discord/link` — Bearer, returns `{ url }` to open in the system browser
 - `GET /discord/callback`
 - `GET /discord/link-status` — Bearer
@@ -55,6 +55,7 @@ Optional variables/secrets:
 - `DISCORD_PREMIUM_ROLE_ID` is the role ID assigned to active subscribers.
 - `ALLOWED_ORIGIN`
 - `CLOUD_SAVE_BUCKET` defaults to `cloud-saves` and must exist as a private Supabase Storage bucket.
+- `STRIPE_API_VERSION` overrides the version pinned in `src/stripe.ts`. Every Stripe call sends it explicitly, so the account's default version in the dashboard cannot reshape payloads underneath the worker. Bump it deliberately, and only after checking `stripeSubscriptionPeriod` / `stripeInvoiceSubscriptionId` against the new shape — `2025-03-31.basil` moved `current_period_*` onto subscription items and dropped `invoice.subscription` (both readers already handle either shape, and `test/stripe-shape.test.ts` covers them).
 
 The bot must be in the Discord server and have `Manage Roles`. Its highest role must be above the Premium role.
 
@@ -67,6 +68,29 @@ Create the database, update `database_id` in `wrangler.toml`, and apply migratio
 ```powershell
 npx wrangler d1 create ghostbox-subscriptions
 npx wrangler d1 migrations apply ghostbox-subscriptions --remote --config workers/subscriptions/wrangler.toml
+```
+
+## Webhook delivery
+
+`POST /stripe/webhook` is the only path that grants Premium. Its contract:
+
+- The event id is recorded before processing, but `processed_at` is written only after the handler succeeds. A redelivery of an event that was recorded and never processed is reprocessed, not skipped.
+- A handler failure answers **500** so Stripe redelivers. Never make it answer 200 on failure — that is how a paid checkout gets lost permanently.
+- Discord role sync is deliberately non-fatal; the 30-minute cron reconciles it.
+- Out-of-order events are dropped by the `stripe_event_created` watermark on `subscriptions`.
+
+To exercise it locally:
+
+```powershell
+npx wrangler dev --config workers/subscriptions/wrangler.toml
+stripe listen --forward-to localhost:8787/stripe/webhook
+stripe trigger checkout.session.completed
+```
+
+## Tests
+
+```powershell
+npm --prefix workers/subscriptions test
 ```
 
 ## Deploy
