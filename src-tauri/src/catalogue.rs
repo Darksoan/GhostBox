@@ -2045,6 +2045,40 @@ pub async fn cache_resolve_steam_library_asset(
     image_cache::resolve_steam_library_asset_url(&app, &app_id, &file_name).await
 }
 
+/// Resolve em um único IPC os hashes de capa SteamTool (portrait/library) para
+/// vários jogos de uma vez. Cada request é `{ appId, fileName }`; a resposta é
+/// um mapa `"appId|fileName" -> url resolvida`. Substitui o padrão de um
+/// `invoke(cache_resolve_steam_library_asset)` por card visível, multiplicando
+/// I/O síncrono e IPCs no primeiro paint da biblioteca.
+#[tauri::command]
+pub async fn cache_resolve_steam_library_assets_batch(
+    app: tauri::AppHandle,
+    requests: Vec<serde_json::Value>,
+) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    let mut out = HashMap::new();
+    for request in requests {
+        let app_id = request
+            .get("appId")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let file_name = request
+            .get("fileName")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if app_id.is_empty() || file_name.is_empty() {
+            continue;
+        }
+        let url = image_cache::resolve_steam_library_asset_url(&app, &app_id, &file_name).await;
+        out.insert(format!("{app_id}|{file_name}"), url);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

@@ -19,6 +19,14 @@ export function useFlipLayout<T extends HTMLElement>(
     const container = containerRef.current;
     if (!container) return;
 
+    // Quando a animação está desligada não há motivo para medir cada nó: o
+    // `getBoundingClientRect` em todo card força um reflow do layout inteiro
+    // e escala linear com a lista. Limpa o cache e sai antes de qualquer leitura.
+    if (!enabled || motionIsDisabled()) {
+      previousRectsRef.current = new Map();
+      return;
+    }
+
     const elements = Array.from(
       container.querySelectorAll<HTMLElement>("[data-layout-id]"),
     );
@@ -29,7 +37,7 @@ export function useFlipLayout<T extends HTMLElement>(
       if (id) nextRects.set(id, element.getBoundingClientRect());
     }
 
-    if (enabled && !motionIsDisabled() && previousRectsRef.current.size > 0) {
+    if (previousRectsRef.current.size > 0) {
       for (const element of elements) {
         const id = element.dataset.layoutId;
         if (!id) continue;

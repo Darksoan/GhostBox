@@ -211,12 +211,18 @@ fn prune_expired_entries(app: &AppHandle) {
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
         }
-        let expired = std::fs::read_to_string(&path)
+        // Usa o mtime do arquivo em vez de reabrir/parsear cada JSON: o `cached_at`
+        // é gravado no mesmo instante do mtime, então o resultado é equivalente e
+        // o custo decai de O(tamanho_do_cache) parses para uma syscall de metadados.
+        let modified = entry
+            .metadata()
             .ok()
-            .and_then(|contents| serde_json::from_str::<CatalogueCacheEntry>(&contents).ok())
-            .map(|cached| now.saturating_sub(cached.cached_at) > CATALOGUE_ENTRY_STALE_MAX_MS)
-            // An unreadable or malformed entry can never be served either.
-            .unwrap_or(true);
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        let expired =
+            modified == 0 || now.saturating_sub(modified) > CATALOGUE_ENTRY_STALE_MAX_MS;
         if expired {
             let _ = std::fs::remove_file(&path);
         }
@@ -274,7 +280,15 @@ pub async fn fetch_json_with_cache(
     let cache_key = cache_key_for_url(url.as_str());
 
     if !force_refresh {
-        if let Some(entry) = read_cache_entry(app, &cache_key) {
+        let app_clone = app.clone();
+        let key_clone = cache_key.clone();
+        let entry = tauri::async_runtime::spawn_blocking(move || {
+            read_cache_entry(&app_clone, &key_clone)
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some(entry) = entry {
             if is_fresh(&entry) && is_valid_catalogue_response(&url, &entry.body) {
                 return Ok((entry.body, entry.updated_at, true));
             }
@@ -283,11 +297,26 @@ pub async fn fetch_json_with_cache(
 
     match fetch_json_from_network(url.clone()).await {
         Ok((body, updated_at)) => {
-            let _ = write_cache_entry(app, &cache_key, updated_at.clone(), &body);
+            let app_clone = app.clone();
+            let key_clone = cache_key.clone();
+            let body_clone = body.clone();
+            let updated_at_clone = updated_at.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                write_cache_entry(&app_clone, &key_clone, updated_at_clone, &body_clone)
+            })
+            .await;
             Ok((body, updated_at, false))
         }
         Err(error) => {
-            if let Some(entry) = read_cache_entry(app, &cache_key) {
+            let app_clone = app.clone();
+            let key_clone = cache_key.clone();
+            let entry = tauri::async_runtime::spawn_blocking(move || {
+                read_cache_entry(&app_clone, &key_clone)
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(entry) = entry {
                 if is_usable_stale(&entry) && is_valid_catalogue_response(&url, &entry.body) {
                     return Ok((entry.body, entry.updated_at, true));
                 }
@@ -378,7 +407,12 @@ pub async fn refresh_warm_catalogue_endpoints(
         return None;
     }
 
-    prune_expired_entries(app);
+    {
+        let prune_app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || prune_expired_entries(&prune_app))
+            .await
+            .ok();
+    }
 
     let now = current_millis();
     let previous = read_meta(app);

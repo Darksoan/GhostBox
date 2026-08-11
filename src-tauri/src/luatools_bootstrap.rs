@@ -19,6 +19,32 @@ const OPENSTEAMTOOL_REPO: &str = "OpenSteam001/OpenSteamTool";
 const OPENSTEAMTOOL_FILES: &[&str] = &["OpenSteamTool.dll", "dwmapi.dll", "xinput1_4.dll"];
 const OPENSTEAMTOOL_CONFIG: &str = "opensteamtool.toml";
 
+/// Allowlist de hashes fixados de binários de terceiros. Quando um release
+/// (repo + tag + asset) está listado aqui, o GhostBox só instala o binário se o
+/// SHA-256 baixado casar exatamente com este valor — em vez de confiar no
+/// `digest` reportado pela própria API do GitHub (que sai da mesma resposta de
+/// rede que entrega o binário). Atualizar esta tabela a cada release oficial
+/// suportada. Entradas ausentes mantêm o comportamento atual (validação pelo
+/// digest do GitHub) como fallback.
+const TRUSTED_RELEASE_HASHES: &[TrustedReleaseHash] = &[];
+
+#[derive(Clone, Copy)]
+struct TrustedReleaseHash {
+    repo: &'static str,
+    tag: &'static str,
+    asset_name: &'static str,
+    sha256: &'static str,
+}
+
+fn pinned_expected_hash(repo: &str, tag: &str, asset_name: &str) -> Option<&'static str> {
+    TRUSTED_RELEASE_HASHES.iter().find_map(|entry| {
+        (entry.repo.eq_ignore_ascii_case(repo)
+            && entry.tag == tag
+            && entry.asset_name.eq_ignore_ascii_case(asset_name))
+        .then_some(entry.sha256)
+    })
+}
+
 static BOOTSTRAP_RUNNING: OnceLock<Mutex<bool>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -173,7 +199,12 @@ async fn fetch_latest_release(repo: &str) -> Result<GithubRelease, String> {
         .map_err(|error| error.to_string())
 }
 
-async fn download_asset(asset: GithubAsset, repo: &str, max_bytes: usize) -> Result<AssetDownload, String> {
+async fn download_asset(
+    asset: GithubAsset,
+    repo: &str,
+    tag: &str,
+    max_bytes: usize,
+) -> Result<AssetDownload, String> {
     validate_github_asset(&asset, repo, max_bytes)?;
     let bytes = reqwest::Client::builder()
         .timeout(Duration::from_secs(90))
@@ -196,7 +227,14 @@ async fn download_asset(asset: GithubAsset, repo: &str, max_bytes: usize) -> Res
 
     let bytes = bytes.to_vec();
     let sha256 = sha256_hex(&bytes);
-    if Some(sha256.as_str()) != expected_digest(&asset).as_deref() {
+    if let Some(pinned) = pinned_expected_hash(repo, tag, &asset.name) {
+        if sha256 != pinned.to_ascii_lowercase() {
+            return Err(format!(
+                "Asset {} não corresponde ao hash fixado pelo GhostBox; instalação recusada.",
+                asset.name
+            ));
+        }
+    } else if Some(sha256.as_str()) != expected_digest(&asset).as_deref() {
         return Err(format!("Falha ao validar SHA-256 de {}.", asset.name));
     }
 
@@ -658,7 +696,7 @@ async fn run_bootstrap(app: AppHandle) -> Value {
             let release = fetch_latest_release(LUATOOLS_REPO).await?;
             let asset = select_luatools_asset(&release)
                 .ok_or_else(|| "Release do LuaTools não contém pacote instalável.".to_string())?;
-            let download = download_asset(asset, LUATOOLS_REPO, MAX_LUATOOLS_PACKAGE_BYTES).await?;
+            let download = download_asset(asset, LUATOOLS_REPO, &release.tag_name, MAX_LUATOOLS_PACKAGE_BYTES).await?;
             install_luatools_package(&app, &download)?;
             state.lua_tools_version = Some(release.tag_name);
         }
@@ -668,7 +706,7 @@ async fn run_bootstrap(app: AppHandle) -> Value {
             let release = fetch_latest_release(OPENSTEAMTOOL_REPO).await?;
             let asset = select_opensteamtool_asset(&release)
                 .ok_or_else(|| "Release do BetterSteamTools não contém pacote Release.".to_string())?;
-            let download = download_asset(asset, OPENSTEAMTOOL_REPO, MAX_OPENSTEAMTOOL_PACKAGE_BYTES).await?;
+            let download = download_asset(asset, OPENSTEAMTOOL_REPO, &release.tag_name, MAX_OPENSTEAMTOOL_PACKAGE_BYTES).await?;
             install_opensteamtool(&app, &steam_path, &download, &mut state)?;
             state.open_steam_tool_version = Some(release.tag_name);
         }

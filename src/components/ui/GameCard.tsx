@@ -212,7 +212,54 @@ export function GameGrid({
   libraryCoverFade = false,
   animateLayout = false,
 }: GameGridProps) {
-  const layoutKey = visibleGames.map((game) => game.id).join("|");
+  // Windowing progressivo: sem virtualização total (que bateria com o layout
+  // CSS grid auto-fill + FLIP), renderizamos a lista em páginas acionadas por
+  // um sentinel IntersectionObserver. O custo de DOM/render no primeiro paint
+  // deixa de escalar com a biblioteca inteira — só com o viewport. Combinado
+  // com `content-visibility:auto` nos cards, os itens já renderizados mas fora
+  // da tela seguem baratos.
+  const INITIAL_PAGE = 48;
+  const PAGE_SIZE = 48;
+  const [renderCount, setRenderCount] = useState(() =>
+    Math.min(INITIAL_PAGE, visibleGames.length),
+  );
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const renderedGames = useMemo(
+    () => visibleGames.slice(0, renderCount),
+    [visibleGames, renderCount],
+  );
+
+  useEffect(() => {
+    setRenderCount(Math.min(INITIAL_PAGE, visibleGames.length));
+  }, [visibleGames]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    if (renderCount >= visibleGames.length) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setRenderCount(visibleGames.length);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setRenderCount((current) =>
+            Math.min(current + PAGE_SIZE, visibleGames.length),
+          );
+        }
+      },
+      { rootMargin: "800px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [renderCount, visibleGames.length]);
+
+  const layoutKey = useMemo(
+    () => renderedGames.map((game) => game.id).join("|"),
+    [renderedGames],
+  );
   const gridRef = useFlipLayout<HTMLDivElement>(layoutKey, animateLayout);
 
   return (
@@ -220,7 +267,7 @@ export function GameGrid({
       ref={gridRef}
       className={`game-grid ${dense ? "game-grid--dense" : ""} ${portrait ? "game-grid--portrait" : ""} ${className}`.trim()}
     >
-      {visibleGames.map((game) => (
+      {renderedGames.map((game) => (
         <GameCard
           key={game.id}
           game={game}
@@ -232,6 +279,9 @@ export function GameGrid({
           libraryCoverFade={libraryCoverFade}
         />
       ))}
+      {renderCount < visibleGames.length && (
+        <div ref={sentinelRef} className="game-grid__sentinel" aria-hidden="true" />
+      )}
     </div>
   );
 }

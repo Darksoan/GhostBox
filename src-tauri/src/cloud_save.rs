@@ -254,9 +254,17 @@ pub async fn cloud_backup_game(
             }));
         }
         let zip_path = temp_root.join("backup.zip");
-        zip_directory(&backup_dir, &zip_path)?;
-        let sha256 = sha256_file(&zip_path)?;
-        let bytes = std::fs::read(&zip_path).map_err(|error| error.to_string())?;
+        let zip_path_for_task = zip_path.clone();
+        let backup_dir_for_task = backup_dir.clone();
+        let (sha256, bytes) = tauri::async_runtime::spawn_blocking(move || {
+            zip_directory(&backup_dir_for_task, &zip_path_for_task)?;
+            let sha = sha256_file(&zip_path_for_task)?;
+            let bytes = std::fs::read(&zip_path_for_task)
+                .map_err(|error| error.to_string())?;
+            Ok::<_, String>((sha, bytes))
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         if bytes.is_empty() {
             return Err("Nenhum save encontrado para backup em nuvem.".to_string());
         }
@@ -477,17 +485,31 @@ pub async fn cloud_restore_save(
             return Err(String::from_utf8_lossy(&bytes).to_string());
         }
         let zip_path = temp_root.join("restore.zip");
-        std::fs::write(&zip_path, &bytes).map_err(|error| error.to_string())?;
-        let actual_sha256 = sha256_file(&zip_path)?;
+        let restore_dir = temp_root.join("restore");
+        let zip_path_for_task = zip_path.clone();
+        let bytes_for_task = bytes.clone();
+        let actual_sha256 = tauri::async_runtime::spawn_blocking(move || {
+            std::fs::write(&zip_path_for_task, &bytes_for_task)
+                .map_err(|error| error.to_string())?;
+            sha256_file(&zip_path_for_task)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         if expected_sha256
             .as_deref()
             .is_some_and(|expected| expected != actual_sha256)
         {
             return Err("Backup em nuvem corrompido: checksum inválido.".to_string());
         }
-        let restore_dir = temp_root.join("restore");
-        std::fs::create_dir_all(&restore_dir).map_err(|error| error.to_string())?;
-        unzip_to_directory(&zip_path, &restore_dir)?;
+        let zip_path_for_task = zip_path.clone();
+        let restore_dir_for_task = restore_dir.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            std::fs::create_dir_all(&restore_dir_for_task)
+                .map_err(|error| error.to_string())?;
+            unzip_to_directory(&zip_path_for_task, &restore_dir_for_task)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         let restore_path = restore_dir.to_string_lossy().to_string();
         // Restore saves when present; always restore profile progress (achievements + playtime).
         let ludusavi_error = match resolve_ludusavi_game_name(&app, &app_id, &title) {

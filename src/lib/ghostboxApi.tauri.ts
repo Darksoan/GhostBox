@@ -690,6 +690,17 @@ export const ghostboxApi = {
     );
   },
 
+  resolveSteamLibraryAssetsBatch(
+    requests: Array<{ appId: string; fileName: string }>,
+  ): Promise<Record<string, string>> {
+    if (!requests.length) return Promise.resolve({});
+    return invokeOr<Record<string, string>>(
+      "cache_resolve_steam_library_assets_batch",
+      { requests },
+      {},
+    );
+  },
+
   /**
    * Propaga a falha de propósito: engolir o erro aqui fazia o lote inteiro ser
    * marcado como resolvido sem manifesto, e as capas desses appIds sumiam pelo

@@ -3,6 +3,7 @@ use crate::ludusavi::resolved_game_title;
 use crate::util::{text_value, EmptyVecExt};
 use crate::{extract_app_id, resolve_steam_path, save_steam_path, steam_asset_url};
 use std::time::Duration;
+use tauri::Manager;
 
 const LUA_TOOLS_USER_AGENT: &str = "discord(dot)gg/luatools";
 const MAX_LUA_TOOLS_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
@@ -17,12 +18,6 @@ struct LuaToolsApi {
 }
 
 const DEFAULT_LUA_TOOLS_APIS: &[LuaToolsApi] = &[
-    LuaToolsApi {
-        name: "Ryuu",
-        url: "http://167.235.229.108/<appid>",
-        success_code: 200,
-        unavailable_code: 404,
-    },
     LuaToolsApi {
         name: "Sushi",
         url: "https://raw.githubusercontent.com/sushi-dev55-alt/sushitools-games-repo-alt/refs/heads/main/<appid>.zip",
@@ -39,7 +34,6 @@ fn validate_lua_tools_url(url: &str) -> bool {
     reqwest::Url::parse(url)
         .map(|url| {
             url.scheme() == "https"
-                || (url.scheme() == "http" && url.host_str() == Some("167.235.229.108"))
                 || (cfg!(test)
                     && url.scheme() == "http"
                     && url.host_str() == Some("127.0.0.1"))
@@ -133,6 +127,72 @@ async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), S
     download_lua_tools_package_from_apis(app_id, DEFAULT_LUA_TOOLS_APIS).await
 }
 
+fn package_hashes_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join("luatools-package-hashes.json"))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+/// Persiste o SHA-256 do pacote LuaTools por `app_id`. Se o hash mudou desde a
+/// última instalação, emite um evento `luatools-package-hash-changed` para a UI
+/// alertar — a fonte HTTPS é um repositório de terceiro, então uma mudança
+/// inesperada pode indicar comprometimento do repo.
+fn record_package_hash_and_warn(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    api_name: &str,
+    package_bytes: &[u8],
+) {
+    use tauri::Emitter;
+    let Some(path) = package_hashes_path(app) else {
+        return;
+    };
+    let next_hash = sha256_hex(package_bytes);
+    let mut map: serde_json::Value = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|contents| serde_json::from_str(&contents).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if !map.is_object() {
+        map = serde_json::json!({});
+    }
+    let previous = map
+        .get(app_id)
+        .and_then(|value| value.get("sha256"))
+        .and_then(|value| value.as_str())
+        .map(str::to_owned);
+    map[app_id] = serde_json::json!({
+        "sha256": next_hash,
+        "api": api_name,
+        "updatedAt": chrono::Utc::now().to_rfc3339(),
+    });
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(contents) = serde_json::to_string(&map) {
+        let _ = std::fs::write(&path, contents);
+    }
+    if let Some(previous_hash) = previous {
+        if previous_hash != next_hash {
+            let _ = app.emit(
+                "luatools-package-hash-changed",
+                serde_json::json!({
+                    "appId": app_id,
+                    "api": api_name,
+                    "previousSha256": previous_hash,
+                    "sha256": next_hash,
+                }),
+            );
+        }
+    }
+}
+
 fn zip_entry_file_name(name: &str) -> Option<String> {
     name.replace('\\', "/")
         .rsplit('/')
@@ -160,6 +220,45 @@ fn parse_lua_manifest_file_names(lua_content: &str) -> Vec<String> {
         }
     }
     names
+}
+
+const MAX_LUA_SCRIPT_BYTES: usize = 1024 * 1024;
+const LUA_SCRIPT_TOKENS: &[&str] = &[
+    "setManifestid",
+    "addManifest",
+    "addmanifestid",
+    "function",
+    "local ",
+    "if ",
+    "return",
+    "--",
+    "for ",
+    "while ",
+];
+
+fn validate_lua_script(app_id: &str, content: &str) -> Result<(), String> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Err(format!("Script Lua para {app_id} está vazio."));
+    }
+    if content.bytes().len() > MAX_LUA_SCRIPT_BYTES {
+        return Err(format!(
+            "Script Lua para {app_id} excede {MAX_LUA_SCRIPT_BYTES} bytes."
+        ));
+    }
+    if content.contains('\0') {
+        return Err(format!("Script Lua para {app_id} contém bytes nulos."));
+    }
+    let looks_like_lua = content
+        .lines()
+        .take(64)
+        .any(|line| LUA_SCRIPT_TOKENS.iter().any(|token| line.contains(token)));
+    if !looks_like_lua {
+        return Err(format!(
+            "Script Lua para {app_id} não parece um script SteamTool válido; gravação recusada."
+        ));
+    }
+    Ok(())
 }
 
 fn install_lua_tools_package(
@@ -231,6 +330,8 @@ fn install_lua_tools_package(
             manifest_files.push(name);
         }
     }
+
+    validate_lua_script(app_id, &processed_lua)?;
 
     let installed_path = lua_target_path.join(format!("{app_id}.lua"));
     std::fs::write(&installed_path, processed_lua).map_err(|error| error.to_string())?;
@@ -381,6 +482,7 @@ pub async fn luatools_add_game(
             }));
         }
     };
+    record_package_hash_and_warn(&app, &app_id, &api_name, &zip_bytes);
     let mut library_game = library_game_from_luatools_add(&app_id, &game, &title);
 
     match install_lua_tools_package(&app_id, &zip_bytes, &steam_path) {

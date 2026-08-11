@@ -12,6 +12,15 @@ const IMAGE_CACHE_CLEANUP_INTERVAL_MS: u64 = 6 * 60 * 60 * 1000;
 static CLEANUP_STARTED: OnceLock<()> = OnceLock::new();
 static IMAGE_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 static LIBRARY_ASSET_CACHE_WRITE_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+static LIBRARY_ASSET_CACHE_MEMO:
+    OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>> =
+    OnceLock::new();
+
+fn library_asset_cache_memo(
+) -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>
+{
+    LIBRARY_ASSET_CACHE_MEMO.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
 
 /// Um cliente com pool para todas as imagens. Antes cada capa construía um
 /// `reqwest::Client` novo — handshake TLS completo por imagem, sem reuso de
@@ -303,25 +312,55 @@ fn library_asset_cache_paths(app: &AppHandle) -> Vec<PathBuf> {
 }
 
 fn read_library_asset_cache_url(app: &AppHandle, app_id: &str, file_name: &str) -> Option<String> {
+    // Preserva o fallthrough entre os caminhos de cache (primário + legacy
+    // Eden/piratebox): o primeiro arquivo de cache que exista mas não contenha o
+    // appId não encerra a busca — só o que contém a URL retorna. Cada arquivo é
+    // memoizado por (path, mtime) para não reler/reparsear a cada capa.
     for path in library_asset_cache_paths(app) {
-        let Some(contents) = std::fs::read_to_string(path).ok() else {
+        if !path.is_file() {
+            continue;
+        }
+        let Some(cache) = read_library_asset_cache_value(&path) else {
             continue;
         };
-        let Some(cache) = serde_json::from_str::<serde_json::Value>(&contents).ok() else {
-            continue;
-        };
-        let Some(url) = cache
+        if let Some(url) = cache
             .get(app_id)
             .and_then(|entry| entry.get(file_name))
             .and_then(|value| value.as_str())
             .map(str::trim)
             .filter(|value| !value.is_empty())
-        else {
-            continue;
-        };
-        return Some(url.to_string());
+        {
+            return Some(url.to_string());
+        }
     }
     None
+}
+
+fn read_library_asset_cache_value(path: &Path) -> Option<serde_json::Value> {
+    let mtime = std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()?;
+    let mut guard = library_asset_cache_memo()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if let Some((memoed_mtime, value)) = guard.get(path) {
+        if memoed_mtime == &mtime {
+            if !value.is_null() {
+                return Some(value.clone());
+            }
+            return None;
+        }
+    }
+    let contents = std::fs::read_to_string(path).ok()?;
+    let parsed = serde_json::from_str::<serde_json::Value>(&contents)
+        .ok()
+        .filter(|value| value.is_object())?;
+    guard.insert(path.to_path_buf(), (mtime, parsed.clone()));
+    if parsed.is_null() {
+        None
+    } else {
+        Some(parsed)
+    }
 }
 
 fn write_library_asset_cache_url(app: &AppHandle, app_id: &str, file_name: &str, url: &str) {
@@ -334,6 +373,9 @@ fn write_library_asset_cache_url(app: &AppHandle, app_id: &str, file_name: &str,
     let _guard = LIBRARY_ASSET_CACHE_WRITE_LOCK
         .get_or_init(|| std::sync::Mutex::new(()))
         .lock();
+    if let Ok(mut memo) = library_asset_cache_memo().lock() {
+        memo.clear();
+    }
     let path = app_data_dir.join("steamcmd-library-asset-cache.json");
     let mut cache = std::fs::read_to_string(&path)
         .ok()

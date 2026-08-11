@@ -1314,6 +1314,28 @@ pub(crate) fn launch_game_from_value(
         let canonical_executable = exe_path
             .canonicalize()
             .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
+
+        // Containment: se o jogo tem `installPath`, o executável personalizado
+        // precisa estar dentro dele — mesmo padrão que `cdndownload_launch_game`
+        // já usa contra `canonical_output`. Sem isso, um path arbitrário vindo
+        // do `ghostbox-library.json` poderia apontar para qualquer binário local.
+        let install_path_raw = text_value(game.get("installPath"));
+        if !install_path_raw.is_empty() {
+            if let Ok(canonical_install) =
+                std::path::Path::new(install_path_raw.trim()).canonicalize()
+            {
+                if !canonical_executable.starts_with(&canonical_install) {
+                    return Ok(serde_json::json!({
+                        "success": false,
+                        "appId": app_id,
+                        "error":
+                            "O executável personalizado está fora da pasta de instalação do jogo."
+                                .to_string()
+                    }));
+                }
+            }
+        }
+
         let working_dir = canonical_executable
             .parent()
             .ok_or_else(|| "Custom executable has no parent folder.".to_string())?;
@@ -1453,6 +1475,7 @@ pub fn run() {
             catalogue::app_install_steamtools,
             catalogue::cache_get_image,
             catalogue::cache_resolve_steam_library_asset,
+            catalogue::cache_resolve_steam_library_assets_batch,
             steam_assets::steam_get_asset_manifests,
             steam_assets::steam_get_cached_asset_manifests,
             settings::app_get_startup_settings,
