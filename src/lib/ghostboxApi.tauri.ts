@@ -50,6 +50,7 @@ import type {
   CloudSessionResult,
   AccountMeResult,
   SubscriptionCheckoutResult,
+  SubscriptionRefreshResult,
   SubscriptionPortalFlow,
   SubscriptionPortalResult,
   SubscriptionPlanId,
@@ -111,6 +112,9 @@ function getUpdatesApiUrl() {
 
 const DISCORD_LINK_CACHE_KEY = "ghostbox:discord-link-status";
 const PREMIUM_CACHE_KEY = "ghostbox:premium-status";
+// Survives a restart on purpose: the user pays in an external browser, and the
+// app may well be closed and reopened before the checkout is reconciled.
+const PENDING_CHECKOUT_KEY = "ghostbox:pending-checkout";
 const PREMIUM_STATUS_TTL_MS = 5 * 60 * 1000;
 
 type DiscordLinkCacheEntry = {
@@ -148,10 +152,6 @@ function writeDiscordLinkCache(status: DiscordLinkStatus) {
   } catch {
     // ignore quota / private mode
   }
-}
-
-function readPremiumLocalCache(): boolean | null {
-  return readPremiumLocalCacheEntry()?.isPremium ?? null;
 }
 
 function readPremiumLocalCacheEntry(): PremiumCacheEntry | null {
@@ -192,6 +192,7 @@ function clearAccountCaches() {
   try {
     localStorage.removeItem(DISCORD_LINK_CACHE_KEY);
     localStorage.removeItem(PREMIUM_CACHE_KEY);
+    localStorage.removeItem(PENDING_CHECKOUT_KEY);
   } catch {
     // ignore
   }
@@ -279,9 +280,13 @@ export const ghostboxApi = {
 
   getCachedIsPremium(): boolean | null {
     if (memoryPremiumCache) return memoryPremiumCache.isPremium;
-    const local = readPremiumLocalCache();
-    if (local !== null) memoryPremiumCache = { isPremium: local, cachedAt: Date.now() };
-    return local;
+    // Carry the entry over as stored. Re-stamping cachedAt with Date.now()
+    // here made a week-old value look fresh to getFreshCachedPremiumStatus,
+    // which then skipped the revalidation on boot — an expired subscription
+    // kept rendering as Premium until the refresh interval happened to fire.
+    const local = readPremiumLocalCacheEntry();
+    if (local) memoryPremiumCache = local;
+    return local?.isPremium ?? null;
   },
 
   getFreshCachedPremiumStatus(): PremiumCacheEntry | null {
@@ -289,10 +294,6 @@ export const ghostboxApi = {
     if (!cached || Date.now() - cached.cachedAt > PREMIUM_STATUS_TTL_MS) return null;
     memoryPremiumCache = cached;
     return cached;
-  },
-
-  cacheIsPremium(isPremium: boolean) {
-    writePremiumCache(isPremium);
   },
 
   clearAccountCaches,
@@ -338,8 +339,14 @@ export const ghostboxApi = {
     const promise = (async (): Promise<boolean> => {
       try {
         const status = await ghostboxApi.getSubscriptionStatus();
+        // A null status means the read failed, not that the user is on the
+        // free plan. Writing `false` here used to overwrite a perfectly good
+        // cached entitlement, so a subscriber who lost connectivity was
+        // demoted locally.
+        if (!status) return ghostboxApi.getCachedIsPremium() === true;
+
         const premium = resolveIsPremium(status);
-        writePremiumCache(premium, status?.subscription?.currentPeriodEnd ?? null);
+        writePremiumCache(premium, status.subscription?.currentPeriodEnd ?? null);
         return premium;
       } catch {
         return ghostboxApi.getCachedIsPremium() === true;
@@ -355,9 +362,62 @@ export const ghostboxApi = {
   async createSubscriptionCheckout(
     planId: SubscriptionPlanId,
   ): Promise<SubscriptionCheckoutResult | null> {
+    // Rethrown rather than swallowed: the reason a checkout failed (rate
+    // limited, session expired, Stripe misconfigured) is exactly what the
+    // user needs to see, and returning null collapsed all of them into
+    // "try again in a moment".
     try {
       return await invoke<SubscriptionCheckoutResult>("subscription_create_checkout", { planId });
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error(
+        typeof error === "string" ? error : "Could not start the subscription checkout.",
+      );
+    }
+  },
+
+  /** Checkout the user was last sent to Stripe for, if it is still unconfirmed. */
+  getPendingCheckoutId(): string | null {
+    try {
+      return localStorage.getItem(PENDING_CHECKOUT_KEY);
     } catch {
+      return null;
+    }
+  },
+
+  setPendingCheckoutId(checkoutId: string | null) {
+    try {
+      if (checkoutId) localStorage.setItem(PENDING_CHECKOUT_KEY, checkoutId);
+      else localStorage.removeItem(PENDING_CHECKOUT_KEY);
+    } catch {
+      // ignore quota / private mode
+    }
+  },
+
+  /**
+   * Asks the worker to re-read a checkout straight from Stripe.
+   *
+   * The webhook is the normal path to Premium; this is the fallback for when
+   * it is delayed or was dropped, so the user who just paid does not sit on
+   * the plan picker waiting. Returns null when the check itself failed, which
+   * the caller should treat as "try again later", not as "not paid".
+   */
+  async refreshSubscriptionCheckout(
+    checkoutId: string,
+  ): Promise<SubscriptionRefreshResult | null> {
+    try {
+      const result = await invoke<SubscriptionRefreshResult>("subscription_refresh_status", {
+        checkoutId,
+      });
+      if (result?.subscription) {
+        writePremiumCache(
+          result.subscription.isPremium === true || result.subscription.status === "active",
+          result.subscription.currentPeriodEnd ?? null,
+        );
+      }
+      return result ?? null;
+    } catch (error) {
+      console.warn("Could not refresh pending checkout", error);
       return null;
     }
   },

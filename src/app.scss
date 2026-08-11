@@ -2634,9 +2634,11 @@ p {
    body-emphasis) e com cor mais fraca — essas seções (Top rated, Recommended)
    são navegação de rolagem, não âncora de página como em outras abas. */
 .home-page .section-header__title {
-  color: var(--text-primary);
-  font-size: var(--type-size-body-emphasis);
-  line-height: var(--type-line-body-emphasis);
+  color: var(--text-tertiary);
+  font-size: 15px;
+  line-height: var(--type-line-body);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .home-page .section-header__subtitle {
@@ -2710,7 +2712,7 @@ p {
 
 .home-recommended__track .home-category-card--with-review .home-category-card__metadata {
   gap: var(--space-8);
-  padding: var(--space-8) var(--space-6) var(--space-8);
+  padding: var(--space-10) var(--space-6) var(--space-10);
 }
 
 .home-recommended__track .home-category-card__summary {
@@ -3540,6 +3542,10 @@ p {
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+.home-category-card--with-review .home-wishlist-card__player-review {
+  gap: var(--space-8);
 }
 
 .home-wishlist-card__player-review-author {
@@ -10490,6 +10496,28 @@ html.no-backdrop-blur {
 
   .home-explore-card {
     flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 5)) / 6);
+  }
+
+  /* Janela larga: listas de linha única (catálogo, downloads, notificações)
+     ganham um teto de largura para o conteúdo não se espalhar por toda a área
+     útil — o espaço morto sai de dentro dos cards e vira gutter ao lado. */
+  .catalogue-page__results {
+    max-width: 1320px;
+  }
+
+  .catalogue-list__item {
+    grid-template-columns: 224px minmax(0, 1fr) 88px;
+    min-height: 104px;
+    contain-intrinsic-size: auto 104px;
+  }
+
+  .catalogue-list__main {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .downloads-page__list,
+  .notifications-feed {
+    max-width: 1320px;
   }
 }
 

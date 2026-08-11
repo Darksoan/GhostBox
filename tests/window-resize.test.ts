@@ -34,6 +34,10 @@ describe("Window resize and maximize support", () => {
     const cargo = readFileSync("src-tauri/Cargo.toml", "utf8");
     const lib = readFileSync("src-tauri/src/lib.rs", "utf8");
     expect(cargo).toContain("tauri-plugin-window-state");
-    expect(lib).toContain("tauri_plugin_window_state::Builder::new().build()");
+    expect(lib).toContain("tauri_plugin_window_state::Builder::new()");
+    expect(lib).toContain(".with_denylist(&[\"tray-menu\"])");
+    expect(lib).toContain("tauri_plugin_window_state::StateFlags::SIZE");
+    expect(lib).toContain("tauri_plugin_window_state::StateFlags::POSITION");
+    expect(lib).toContain("tauri_plugin_window_state::StateFlags::MAXIMIZED");
   });
 });

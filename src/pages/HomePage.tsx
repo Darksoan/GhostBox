@@ -132,7 +132,7 @@ const homeFeaturedSteamGames: HomeGameSeed[] = [
   { appId: "945360", title: "Among Us" },
 ];
 
-const homeCarouselGroupSize = 4;
+const homeCarouselGroupSize = 8;
 // Pills por card, dimensionado para a única linha que o card reserva (ver
 // `.home-category-card__genres` em app.scss). Sem teto, um jogo da Steam traz
 // 20+ tags e o card renderiza todas para o CSS recortar quase todas — quais
@@ -158,7 +158,16 @@ const homeRecommendedCardCount = 3;
 const homeShortDescriptionLimit = 150;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
 const homeRecommendedAppIdGroups = [
-  ["1693980", "208650", "413150", "1714320"],
+  [
+    "2050650",
+    "1030300",
+    "1449690",
+    "1817070",
+    "1693980",
+    "208650",
+    "413150",
+    "1714320",
+  ],
 ];
 const homePersonalCalendarDays = 3;
 const homePersonalCalendarGamesPerDay = 2;
@@ -1402,6 +1411,25 @@ function HomeWishlistRecommendations({
   );
 }
 
+function useWidescreen() {
+  const [isWidescreen, setIsWidescreen] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia?.("(min-width: 1400px)")?.matches ?? false
+      : false
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const media = window.matchMedia("(min-width: 1400px)");
+    const update = () => setIsWidescreen(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return isWidescreen;
+}
+
 export function HomePage({
   onOpenGame,
   libraryGameAppIds,
@@ -1417,6 +1445,8 @@ export function HomePage({
   steamProfile: SteamProfile | null;
 }) {
   const { appearance, t } = useSettings();
+  const isWidescreen = useWidescreen();
+  const homeFeaturedMaxGames = isWidescreen ? 8 : 6;
   const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
     () =>
       topReviewedSteamGames.map((game, index) =>
@@ -1902,7 +1932,7 @@ export function HomePage({
         games={featuredGames}
         className="home-category--featured"
         variant="tile"
-        maxGames={6}
+        maxGames={homeFeaturedMaxGames}
         showMetadata
         showSecondaryPills
         onOpenGame={onOpenGame}

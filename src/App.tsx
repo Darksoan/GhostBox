@@ -131,7 +131,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     const refreshSubscriptionStatus = () =>
       void ghostboxApi.getSubscriptionStatus().then((status: SubscriptionStatusResult | null) => {
         if (cancelled) return;
-        const subscription = status?.subscription;
+        // null means the status could not be read (offline, expired session),
+        // not that the subscription ended. Keep whatever we last knew instead
+        // of revoking the crown under a paying user.
+        if (!status) return;
+
+        const subscription = status.subscription;
         const active = subscription?.isPremium === true || subscription?.status === "active";
         const end = subscription?.currentPeriodEnd ?? null;
         const endTime = end ? Date.parse(end) : NaN;
@@ -140,9 +145,35 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         setSubscriptionPeriodEnd(active ? end : null);
       });
 
+    /**
+     * Confirms a checkout the user was sent to Stripe for.
+     *
+     * The webhook normally grants Premium within seconds, but if it is delayed
+     * or dropped the app would otherwise keep showing the plan picker to
+     * someone who already paid. Returns true when the checkout reached a final
+     * state, meaning the status is worth re-reading right away.
+     */
+    const reconcilePendingCheckout = async () => {
+      const pending = ghostboxApi.getPendingCheckoutId();
+      if (!pending) return false;
+
+      const result = await ghostboxApi.refreshSubscriptionCheckout(pending);
+      // null means the check itself failed — keep the id and retry on the next
+      // focus rather than dropping a real payment.
+      if (!result?.payment || result.payment.status === "pending") return false;
+
+      ghostboxApi.setPendingCheckoutId(null);
+      return true;
+    };
+
     const refreshSubscriptionStatusIfStale = () => {
-      if (ghostboxApi.getFreshCachedPremiumStatus()) return;
-      refreshSubscriptionStatus();
+      void (async () => {
+        const reconciled = await reconcilePendingCheckout();
+        if (cancelled) return;
+        // A just-confirmed checkout must bypass the cache TTL; otherwise the
+        // user waits up to five minutes to see what they paid for.
+        if (reconciled || !ghostboxApi.getFreshCachedPremiumStatus()) refreshSubscriptionStatus();
+      })();
     };
 
     refreshSubscriptionStatusIfStale();

@@ -1913,3 +1913,30 @@ html.no-backdrop-blur .profile-page {
     }
   }
 }
+
+@media (min-width: 1400px) {
+  .profile-page {
+    --profile-cover-height: clamp(300px, 20vw, 400px);
+
+    &__achievement-games {
+      width: min(100%, 1440px);
+      margin-right: auto;
+      margin-left: auto;
+    }
+
+    &__game-grid.game-grid--portrait {
+      width: min(100%, 1440px);
+      margin-right: 0;
+      margin-left: 0;
+    }
+
+    &__game-grid.game-grid--portrait {
+      grid-template-columns: repeat(auto-fit, minmax(176px, 210px));
+      justify-content: start;
+    }
+
+    &__overview-console {
+      width: min(100%, 1440px);
+    }
+  }
+}

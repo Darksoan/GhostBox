@@ -195,13 +195,37 @@ fn load_cached_status(app: &tauri::AppHandle, user_id: &str) -> Option<Subscript
     })
 }
 
-fn normalize_response_error(value: &serde_json::Value, fallback: String) -> String {
-    value
+/// Turns a worker error code into something worth showing the user.
+///
+/// The worker answers with stable snake_case codes; surfacing them raw meant a
+/// rate-limited or signed-out subscriber saw literally "too_many_attempts" in
+/// a toast. Anything unrecognised falls through unchanged — the billing
+/// endpoints also return full English sentences for configuration problems,
+/// which are more useful than a generic message.
+fn format_subscription_api_error(code: &str, status: reqwest::StatusCode) -> String {
+    match code {
+        "unauthorized" | "session_expired" => "Sessão expirada. Faça login novamente.".to_string(),
+        "too_many_attempts" => {
+            "Muitas tentativas de assinatura. Aguarde alguns minutos e tente novamente.".to_string()
+        }
+        "premium_required" => "Este recurso requer o GhostBox Premium.".to_string(),
+        "Invalid plan" | "invalid_plan" => "Plano de assinatura inválido.".to_string(),
+        "stripe_period_unresolved" => {
+            "Não foi possível confirmar o período da assinatura com a Stripe. Tente novamente em instantes.".to_string()
+        }
+        "Payment not found" | "payment_not_found" => "Pagamento não encontrado.".to_string(),
+        other if !other.is_empty() => other.to_string(),
+        _ => format!("Subscription API respondeu HTTP {status}"),
+    }
+}
+
+fn normalize_response_error(value: &serde_json::Value, status: reqwest::StatusCode) -> String {
+    let code = value
         .get("error")
         .and_then(|value| value.as_str())
         .or_else(|| value.get("message").and_then(|value| value.as_str()))
-        .unwrap_or(&fallback)
-        .to_string()
+        .unwrap_or_default();
+    format_subscription_api_error(code, status)
 }
 
 async fn json_request<T>(request: reqwest::RequestBuilder) -> Result<T, String>
@@ -214,10 +238,7 @@ where
     let value = serde_json::from_str::<serde_json::Value>(&text)
         .unwrap_or_else(|_| serde_json::json!({ "error": text }));
     if !status.is_success() {
-        return Err(normalize_response_error(
-            &value,
-            format!("Subscription API respondeu HTTP {status}"),
-        ));
+        return Err(normalize_response_error(&value, status));
     }
     serde_json::from_value::<T>(value).map_err(|error| error.to_string())
 }

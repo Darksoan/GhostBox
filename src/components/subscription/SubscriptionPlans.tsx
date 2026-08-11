@@ -228,7 +228,10 @@ export function SubscriptionPlans({
 
   function refreshDiscordLinkStatus() {
     void ghostboxApi.getDiscordLinkStatus().then((status) => {
-      setDiscordLinkStatus(status);
+      // Same reasoning as the subscription poll: a failed read returns null,
+      // and clearing the link would push an already-linked user back through
+      // the Discord gate on the subscribe button.
+      if (status) setDiscordLinkStatus(status);
     });
   }
 
@@ -247,9 +250,13 @@ export function SubscriptionPlans({
     void ghostboxApi.getSubscriptionStatus()
       .then((status) => {
         if (requestId !== subscriptionRequestIdRef.current) return;
+        // A failed poll (this runs every 10s) must not blank the panel — doing
+        // so showed the plan picker to someone who is already subscribed.
+        if (!status) return;
+
         setSubscriptionStatus(status);
-        if (status?.discordLink) setDiscordLinkStatus(status.discordLink);
-        if (status?.subscription.isPremium) refreshCloudSaves();
+        if (status.discordLink) setDiscordLinkStatus(status.discordLink);
+        if (status.subscription.isPremium) refreshCloudSaves();
         else setCloudSaves([]);
       })
       .finally(() => {
@@ -670,19 +677,31 @@ export function SubscriptionPlans({
     try {
       const checkout = await ghostboxApi.createSubscriptionCheckout(planId);
       const payment = checkout?.payment;
-      if (payment?.hostedCheckoutUrl) {
-        await ghostboxApi.openExternalUrl(payment.hostedCheckoutUrl);
-        showToast(
-          copy("Checkout aberto", "Checkout opened"),
-          copy("Finalize o pagamento na janela aberta e volte ao GhostBox para atualizar o status.", "Complete payment in the opened window and return to GhostBox to refresh status."),
-          "success"
+      if (!payment?.hostedCheckoutUrl) {
+        throw new Error(
+          copy("Tente novamente em instantes.", "Try again in a moment.")
         );
-        return;
       }
 
+      // Remembered so that, if the Stripe webhook is delayed or lost, the app
+      // can confirm this checkout directly instead of leaving a paying user
+      // looking at the plan picker.
+      ghostboxApi.setPendingCheckoutId(payment.checkoutId ?? payment.checkoutReference);
+
+      await ghostboxApi.openExternalUrl(payment.hostedCheckoutUrl);
+      showToast(
+        copy("Checkout aberto", "Checkout opened"),
+        copy("Finalize o pagamento na janela aberta e volte ao GhostBox para atualizar o status.", "Complete payment in the opened window and return to GhostBox to refresh status."),
+        "success"
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : copy("Tente novamente em instantes.", "Try again in a moment.");
       showToast(
         copy("Não foi possível criar o checkout", "Could not create checkout"),
-        copy("Tente novamente em instantes.", "Try again in a moment."),
+        message,
         "error"
       );
     } finally {

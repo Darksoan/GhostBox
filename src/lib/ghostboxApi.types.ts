@@ -337,6 +337,12 @@ export type SubscriptionCheckoutResult = {
   payment: SubscriptionPayment | null;
 };
 
+/** Result of re-reading a checkout straight from Stripe, bypassing the webhook. */
+export type SubscriptionRefreshResult = {
+  payment: SubscriptionPayment;
+  subscription: SubscriptionStatusResult["subscription"];
+};
+
 export type SubscriptionPortalFlow = "manage" | "payment_method_update";
 
 export type SubscriptionPortalResult = {
