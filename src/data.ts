@@ -288,6 +288,12 @@ export async function resolveSteamLibraryAsset(
   return ghostboxApi.resolveSteamLibraryAsset(appId, fileName);
 }
 
+export async function resolveSteamLibraryAssetsBatch(
+  requests: Array<{ appId: string; fileName: string }>
+): Promise<Record<string, string>> {
+  return ghostboxApi.resolveSteamLibraryAssetsBatch(requests);
+}
+
 export async function addGameViaLuaTools(
   game: GhostBoxGame
 ): Promise<AddGameResult> {

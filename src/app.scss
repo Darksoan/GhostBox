@@ -2635,7 +2635,7 @@ p {
    são navegação de rolagem, não âncora de página como em outras abas. */
 .home-page .section-header__title {
   color: var(--text-tertiary);
-  font-size: 15px;
+  font-size: var(--type-size-body-emphasis);
   line-height: var(--type-line-body);
   letter-spacing: 0.04em;
   text-transform: uppercase;

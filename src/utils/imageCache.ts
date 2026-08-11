@@ -1,4 +1,7 @@
-import { loadCachedImage, resolveSteamLibraryAsset } from "../data";
+import {
+  loadCachedImage,
+  resolveSteamLibraryAssetsBatch,
+} from "../data";
 import {
   imageSourceCacheKey,
   imageSourceCacheLimit,
@@ -16,6 +19,48 @@ const steamLibraryCoverSourceCache = new Map<string, string>();
 const steamLibraryCoverResolvePromises = new Map<string, Promise<string>>();
 const steamHeaderSourceCache = new Map<string, string>();
 const steamHeaderResolvePromises = new Map<string, Promise<string>>();
+
+// Vários GameCards resolvem capa/header no mesmo instante (primeiro paint da
+// grid); sem isso cada um disparava seu próprio invoke IPC. Enfileira os
+// pedidos feitos no mesmo tick e resolve todos em uma única chamada batched.
+type SteamAssetBatchRequest = {
+  appId: string;
+  fileName: string;
+  resolve: (source: string) => void;
+};
+let steamAssetBatchQueue: SteamAssetBatchRequest[] = [];
+let steamAssetBatchScheduled = false;
+
+function flushSteamAssetBatchQueue() {
+  const queue = steamAssetBatchQueue;
+  steamAssetBatchQueue = [];
+  steamAssetBatchScheduled = false;
+  if (!queue.length) return;
+
+  resolveSteamLibraryAssetsBatch(
+    queue.map(({ appId, fileName }) => ({ appId, fileName }))
+  )
+    .then((results) => {
+      for (const request of queue) {
+        request.resolve(
+          results[`${request.appId}|${request.fileName}`] ?? ""
+        );
+      }
+    })
+    .catch(() => {
+      for (const request of queue) request.resolve("");
+    });
+}
+
+function resolveSteamLibraryAssetBatched(appId: string, fileName: string) {
+  return new Promise<string>((resolve) => {
+    steamAssetBatchQueue.push({ appId, fileName, resolve });
+    if (!steamAssetBatchScheduled) {
+      steamAssetBatchScheduled = true;
+      queueMicrotask(flushSteamAssetBatchQueue);
+    }
+  });
+}
 // Sources that have actually finished loading at least once. Unlike
 // screenshotPreloadCache (which is set optimistically when a load starts and
 // removed on failure), this only holds sources we know decoded successfully,
@@ -299,7 +344,7 @@ export function resolveSteamLibraryCoverSource(appId: string) {
   const pending = steamLibraryCoverResolvePromises.get(appId);
   if (pending) return pending;
 
-  const promise = resolveSteamLibraryAsset(appId, "library_capsule.jpg")
+  const promise = resolveSteamLibraryAssetBatched(appId, "library_capsule.jpg")
     .then((source) => {
       if (/^https?:\/\//i.test(source)) {
         steamLibraryCoverSourceCache.set(appId, source);
@@ -325,7 +370,7 @@ export function resolveSteamHeaderSource(appId: string) {
   const pending = steamHeaderResolvePromises.get(appId);
   if (pending) return pending;
 
-  const promise = resolveSteamLibraryAsset(appId, "header.jpg")
+  const promise = resolveSteamLibraryAssetBatched(appId, "header.jpg")
     .then((source) => {
       if (/^https?:\/\//i.test(source)) {
         steamHeaderSourceCache.set(appId, source);
