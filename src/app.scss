@@ -3251,7 +3251,10 @@ p {
 
 .home-calendar__track {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Column count is set inline from the measured rail width so the rendered
+     day count and the grid always agree — a wrapped fourth day would sit
+     alone in an orphan row. */
+  grid-template-columns: repeat(var(--home-calendar-columns, 3), minmax(0, 1fr));
   gap: var(--home-calendar-gap);
   width: 100%;
   min-width: 0;
@@ -3846,75 +3849,263 @@ p {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Backdrop da tela de assinatura: trilhos de capas da biblioteca do usuário.
+//
+// Profundidade vem de duas fontes somadas, em propriedades diferentes de
+// propósito: `transform` carrega o marquee (animação contínua) e `translate`
+// carrega o parallax do ponteiro. São propriedades separadas no CSS moderno,
+// então uma não sobrescreve a outra — se as duas fossem `transform`, a animação
+// venceria e o parallax sumiria.
+// ---------------------------------------------------------------------------
+.subscription-backdrop {
+  --parallax-x: 0;
+  --parallax-y: 0;
+  // Amplitude do deslocamento por ponteiro. Cada trilho multiplica por um fator
+  // diferente para os planos não andarem juntos.
+  --parallax-depth: var(--space-9);
+
+  // Camada que corta: alinhada aos eixos e SEM rotação, senão o próprio recorte
+  // gira e expõe as quinas diagonais.
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+
+  // Camada que gira: maior que a área visível nos dois eixos, para que nenhuma
+  // quina do retângulo girado entre no campo de visão. Para cobrir um retângulo
+  // girado 8° basta ~115% de largura e ~135% de altura; o excedente aqui é só
+  // folga.
+  &__stage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 132%;
+    height: 155%;
+    gap: var(--space-4);
+    // O translate centraliza; o rotate inclina. Ordem importa.
+    transform: translate(-50%, -50%) rotate(-8deg);
+    transform-origin: center;
+  }
+
+  // Largura proporcional, não `max-content`: com `max-content` o trilho media a
+  // soma das capas e ficava mais estreito que o palco em telas largas, deixando
+  // faixas pretas nas laterais. Com 200% do palco, cada uma das duas cópias
+  // ocupa exatamente a largura do palco, em qualquer resolução.
+  &__rail {
+    display: flex;
+    flex: 0 0 auto;
+    width: 200%;
+    gap: 0;
+    animation: subscription-backdrop-drift linear infinite;
+    will-change: transform;
+  }
+
+  &__run {
+    display: flex;
+    flex: 0 0 auto;
+    width: 50%;
+    gap: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  // Trilhos alternam sentido e velocidade; o fator de parallax cresce do fundo
+  // para a frente.
+  &__rail--1 {
+    animation-duration: 92s;
+    translate: calc(var(--parallax-x) * var(--parallax-depth) * 0.4)
+      calc(var(--parallax-y) * var(--parallax-depth) * 0.25);
+    opacity: 0.5;
+  }
+
+  &__rail--2 {
+    animation-duration: 74s;
+    animation-direction: reverse;
+    translate: calc(var(--parallax-x) * var(--parallax-depth) * 0.75)
+      calc(var(--parallax-y) * var(--parallax-depth) * 0.45);
+    opacity: 0.72;
+  }
+
+  &__rail--3 {
+    animation-duration: 60s;
+    translate: calc(var(--parallax-x) * var(--parallax-depth) * 1.15)
+      calc(var(--parallax-y) * var(--parallax-depth) * 0.7);
+    opacity: 0.58;
+  }
+
+  &__tile {
+    // Dividem a largura do trilho por igual; a proporção 2/3 é a da capsule
+    // vertical da Steam (600x900) e define a altura.
+    flex: 1 1 0;
+    min-width: 0;
+    aspect-ratio: 2 / 3;
+    border-radius: var(--radius-md);
+    background: var(--surface-panel) center / cover no-repeat;
+    // Dessaturado: as capas entram como textura, a paleta da interface segue
+    // sendo a neutra do app.
+    filter: saturate(0.55) contrast(0.92);
+    opacity: 0;
+    transition: opacity var(--motion-emphasis) var(--ease);
+
+    &.is-loaded {
+      opacity: 1;
+    }
+  }
+
+  // Scrim: adensa no centro, onde vive o texto, e afina nas bordas para a arte
+  // aparecer. Todas as paradas são translúcidas de propósito — a versão
+  // anterior usava `--background` (opaco) em 0% e 100% e apagava as capas no
+  // topo e na base, dando a impressão de fundo que não cobre a tela.
+  &__scrim {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(
+        ellipse 68% 56% at 50% 50%,
+        var(--overlay-immersive) 26%,
+        transparent 82%
+      ),
+      linear-gradient(
+        to bottom,
+        var(--overlay-strong) 0%,
+        var(--overlay-medium) 34%,
+        var(--overlay-medium) 66%,
+        var(--overlay-strong) 100%
+      );
+  }
+
+  &--still &__rail {
+    animation: none;
+    translate: none;
+  }
+}
+
+// A aba de assinatura dentro de Ajustes: `.settings-page` aplica
+// `padding: 0 var(--space-10) var(--page-bottom-space)`, o que insere a seção
+// para dentro da área de conteúdo. O backdrop é posicionado contra a seção, e
+// por isso parava antes das bordas — sobrava faixa preta à esquerda e embaixo.
+// Só esta aba zera o padding; as demais continuam com o respiro padrão.
+.settings-page:has(.subscription-plans--settings) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+
+  .settings-panel,
+  .settings-panel__body {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+@keyframes subscription-backdrop-drift {
+  // Cada trilho tem duas cópias idênticas, então -50% fecha o loop sem salto.
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subscription-backdrop__rail {
+    animation: none;
+    translate: none;
+  }
+}
+
 .subscription-plans {
   display: grid;
   gap: var(--space-7);
   color: var(--text-primary);
 
   &--settings {
+    position: relative;
+    // Flex column: o grid de planos vira o elemento elástico e absorve a altura
+    // que sobra, então os cards crescem até preencher sem nunca estourar a
+    // viewport. `100%` (não `100vh`) porque o modal já reserva padding próprio —
+    // com `100vh` a soma passava da tela e nascia a barra de rolagem.
+    display: flex;
     flex: 1;
-    min-height: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: hidden;
     gap: 0;
-    padding: 0;
+    padding: var(--space-9) var(--space-10);
     background: transparent;
+    isolation: isolate;
 
+    // Todo o conteúdo sobe acima do backdrop de capas.
+    > *:not(.subscription-backdrop) {
+      position: relative;
+      z-index: 1;
+      flex: 0 0 auto;
+      width: 100%;
+      max-width: calc(var(--space-16) * 24);
+    }
+
+    // Header reduzido a marca + título. A descrição saiu: repetia o título e
+    // empilhava um terceiro bloco de texto centralizado no topo.
     .subscription-plans__header {
       display: grid;
       justify-items: center;
       text-align: center;
-      gap: var(--space-2) var(--space-8);
-      padding: 0 0 var(--space-6);
+      gap: var(--space-3);
+      padding: 0 0 var(--space-8);
 
       h3 {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-4);
-        margin-top: 40px;
-        font-size: var(--type-size-body-emphasis);
+        margin: 0;
+        font-size: var(--type-size-fluid-page);
         font-weight: var(--weight-semibold);
-        line-height: var(--type-line-body-emphasis);
-
-        svg {
-          width: 20px;
-          height: 20px;
-        }
+        line-height: 1.15;
+        letter-spacing: var(--ls-600);
       }
 
       .subscription-plans__eyebrow {
         justify-content: center;
-        font-size: var(--type-size-caption);
+        color: var(--text-tertiary);
+        font-size: var(--type-size-micro);
         font-weight: var(--weight-semibold);
-        letter-spacing: 0.08em;
+        letter-spacing: var(--ls-100);
+        text-transform: uppercase;
 
         &-icon {
-          width: 16px;
-          height: 16px;
+          width: 14px;
+          height: 14px;
         }
       }
-
-      p {
-        white-space: nowrap;
-        color: var(--text-secondary);
-        font-size: var(--type-size-compact);
-        font-weight: var(--weight-medium);
-        line-height: var(--type-line-compact);
-      }
     }
 
-    .subscription-plans__grid,
     .subscription-plans__steps {
-      gap: var(--space-5);
+      gap: var(--space-4);
     }
 
+    // Assimetria proposital: Premium é a oferta, Free é só referência de preço.
+    // A hierarquia vem da proporção, não de borda ou selo. `align-items: start`
+    // deixa o Free terminar no próprio conteúdo em vez de esticar até a altura
+    // do Premium — era daí que vinha o vão morto acima do botão "Current".
+    // O grid é o elemento elástico da coluna: cresce com a tela e leva os dois
+    // cards junto, com um piso para nunca achatar em telas baixas.
     .subscription-plans__grid {
-      align-self: center;
+      flex: 1 1 auto;
       width: 100%;
-      margin-top: clamp(var(--space-4), 2vh, calc(var(--space-9) + var(--space-1)));
+      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+      align-items: stretch;
+      gap: var(--space-6);
+      min-height: clamp(300px, 42vh, 440px);
+      max-height: calc(var(--space-16) * 11);
+      margin-top: var(--space-7);
     }
 
-    .subscription-plans__highlight-grid {
+    .subscription-plans__highlights {
       width: 100%;
-      margin-top: var(--space-7);
+      margin-top: var(--space-6);
     }
 
     .subscription-plans__step {
@@ -4095,43 +4286,115 @@ p {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-5);
+  }
 
-    &--billing-toggle {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+  // Controle segmentado de cobrança. Vive acima dos cards (não dentro do
+  // Premium) para valer pela seção inteira e não desbalancear o card.
+  &__billing {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-self: center;
+    width: fit-content;
+    min-width: calc(var(--space-16) * 2 + var(--space-12));
+    padding: var(--space-1);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+    backdrop-filter: blur(20px);
+
+    button {
+      position: relative;
+      z-index: 1;
+      min-height: calc(var(--space-8) * 2);
+      padding-inline: var(--space-8);
+      border: 0;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font: inherit;
+      font-size: var(--type-size-caption);
+      font-weight: var(--weight-semibold);
+      white-space: nowrap;
+      transition: color var(--motion-fast) var(--ease);
+
+      &.is-active {
+        color: var(--text-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--focus-ring-color);
+        outline-offset: 2px;
+      }
     }
   }
 
-  &__highlight-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-5);
+  &__billing-thumb {
+    position: absolute;
+    top: var(--space-1);
+    bottom: var(--space-1);
+    left: var(--space-1);
+    width: calc(50% - var(--space-1));
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    transition: transform var(--motion-base) var(--ease);
+
+    &--quarterly {
+      transform: translateX(100%);
+    }
   }
 
-  &__highlight-card {
+  // Benefícios como linhas enxutas — três caixas grandes competiam com os
+  // cards de plano e empurravam a página para baixo.
+  &__highlights {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__highlight {
     display: flex;
     align-items: flex-start;
-    padding: var(--space-9);
-    border: 0;
+    gap: var(--space-4);
+    padding: var(--space-6);
     border-radius: var(--radius-md);
-    background: var(--surface-panel);
+    background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
+    backdrop-filter: blur(20px);
+    transition: background var(--motion-fast) var(--ease);
 
-    h4 {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-4);
-      margin: 0 0 var(--space-3);
+    &:hover {
+      background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+    }
+
+    &:hover > svg {
       color: var(--text-primary);
-      font-size: var(--type-size-body);
+    }
+
+    > svg {
+      flex: 0 0 auto;
+      margin-top: 1px;
+      color: var(--text-tertiary);
+      transition: color var(--motion-fast) var(--ease);
+    }
+
+    strong {
+      display: block;
+      margin-bottom: var(--space-1);
+      color: var(--text-primary);
+      font-size: var(--type-size-caption);
       font-weight: var(--weight-semibold);
-      line-height: var(--type-line-body);
+      line-height: var(--type-line-caption);
     }
 
     p {
       margin: 0;
-      color: var(--text-secondary);
-      font-size: var(--type-size-compact);
+      color: var(--text-tertiary);
+      font-size: var(--type-size-caption);
       font-weight: var(--weight-medium);
-      line-height: var(--type-line-compact);
+      line-height: var(--type-line-caption);
     }
   }
 
@@ -4351,7 +4614,6 @@ p {
   grid-template-rows: auto 1fr auto;
   gap: var(--space-7);
   padding: var(--space-8) var(--space-7) var(--space-7);
-  border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-canvas);
   transition:
@@ -4370,7 +4632,6 @@ p {
     top: var(--plan-badge-offset);
     left: 50%;
     padding: var(--space-2) var(--space-5);
-    border: 0;
     border-radius: var(--radius-pill);
     background: var(--surface-popover);
     color: var(--text-primary);
@@ -4419,57 +4680,6 @@ p {
     font-weight: var(--weight-medium);
     line-height: var(--type-line-section);
     letter-spacing: var(--ls-600);
-  }
-
-  &__billing-toggle {
-    position: relative;
-    display: grid;
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0;
-    padding: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-  }
-
-  &__billing-toggle-thumb {
-    position: absolute;
-    top: var(--space-1);
-    bottom: var(--space-1);
-    left: var(--space-1);
-    width: calc(50% - var(--space-1));
-    border-radius: var(--radius-pill);
-    background: var(--surface-popover);
-    transition: transform var(--motion-base) var(--ease);
-
-    &--quarterly {
-      transform: translateX(100%);
-    }
-  }
-
-  &__billing-toggle button {
-    position: relative;
-    z-index: 1;
-    min-height: 28px;
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    transition: color var(--motion-fast) var(--ease);
-
-    &.is-active {
-      color: var(--text-primary);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring-color);
-      outline-offset: 2px;
-    }
   }
 
   &__benefits {
@@ -4586,91 +4796,103 @@ p {
   }
 }
 
-.subscription-plans--settings .subscription-plan-card {
-  grid-template-rows: auto auto auto;
-  min-height: calc(var(--space-16) * 7 + var(--space-9));
-  gap: var(--space-7);
-  padding: var(--space-9) var(--space-9) var(--space-9);
-  border-radius: var(--radius-md);
-  background: var(--surface-canvas);
-  transform: translateY(0);
-  transition:
-    background var(--motion-fast) var(--ease),
-    transform var(--motion-base) var(--ease);
-
-  &:hover:not(&--disabled) {
-    background: var(--surface-hover);
-    transform: translateY(-2px);
-  }
-
-  &--disabled {
-    opacity: 0.55;
-
-    &:hover {
-      background: var(--surface-canvas);
-      transform: none;
-    }
-  }
-
-  &--featured {
+// ATENÇÃO: seletores escritos por extenso, sem `&--mod &__elem`. Dentro de um
+// seletor composto o `&` reexpande a cadeia inteira e gera
+// `.a .card--featured .a .card__action`, que nunca casa. Foi o que manteve o
+// CTA dourado sem aplicar.
+.subscription-plans--settings {
+  // Os cards flutuam sobre as capas: superfície translúcida + blur deixa a arte
+  // passar por baixo sem que o texto perca contraste.
+  .subscription-plan-card {
     position: relative;
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    align-items: stretch;
     overflow: hidden;
-    background: var(--surface-raised);
-
-    &:hover {
-      background: var(--surface-hover);
-      transform: translateY(-2px);
-    }
-
-    &::before {
-      display: none;
-    }
-
-    /* Keep card content above the border ::before */
-    > * {
-      position: relative;
-      z-index: 1;
-    }
+    gap: var(--space-4);
+    padding: var(--space-10) var(--space-9);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--surface-canvas) 82%, transparent);
+    backdrop-filter: blur(20px);
+    transition: background var(--motion-fast) var(--ease);
   }
 
-  &__badge {
-    top: 10px;
-    right: 10px;
-    left: auto;
-    padding: var(--space-1) var(--space-4);
-    font-size: var(--type-size-micro);
-    transform: none;
+  .subscription-plan-card--disabled {
+    opacity: 0.72;
   }
 
-  &__top {
-    min-height: 120px;
-    padding-right: 0;
-    gap: var(--space-3);
+  .subscription-plan-card--featured {
+    background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  }
+
+  .subscription-plan-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
 
     h4 {
-      font-size: var(--type-size-body);
+      margin: 0;
+      color: var(--text-tertiary);
+      font-size: var(--type-size-micro);
       font-weight: var(--weight-semibold);
+      letter-spacing: var(--ls-100);
+      text-transform: uppercase;
+    }
+  }
+
+  .subscription-plan-card--featured .subscription-plan-card__head h4 {
+    color: var(--premium-gold);
+  }
+
+  // Nota de economia: peso de rótulo, não de card. Fica na paleta neutra — o
+  // dourado é gasto uma vez só, no CTA.
+  .subscription-plan-card__savings {
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-pill);
+    background: var(--surface-popover);
+    color: var(--text-secondary);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-100);
+    white-space: nowrap;
+  }
+
+  // Preço é o herói: valor e cadência dividem a mesma linha de base.
+  .subscription-plan-card__price {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin: 0;
+
+    strong {
+      color: var(--text-primary);
+      font-size: var(--type-size-page);
+      font-weight: var(--weight-semibold);
+      letter-spacing: var(--ls-600);
+      line-height: 1.1;
     }
 
     span {
+      color: var(--text-tertiary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-medium);
-    }
-
-    p {
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
-      line-height: var(--type-line-caption);
     }
   }
 
-  &__price {
-    font-size: var(--type-size-page);
+  .subscription-plan-card__desc {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
     font-weight: var(--weight-medium);
+    line-height: var(--type-line-caption);
   }
 
-  &__benefits {
-    gap: var(--space-5);
+  .subscription-plan-card__benefits {
+    gap: var(--space-2);
+    margin-top: var(--space-3);
 
     li {
       align-items: center;
@@ -4678,39 +4900,45 @@ p {
       font-size: var(--type-size-caption);
       font-weight: var(--weight-medium);
       line-height: var(--type-line-caption);
+    }
 
-      svg {
-        width: 16px;
-        height: 16px;
-      }
+    // Ícone ganha um disco: dá ritmo geométrico à lista em vez de glifos soltos.
+    li svg {
+      width: calc(var(--space-9) + var(--space-2));
+      height: calc(var(--space-9) + var(--space-2));
+      flex: 0 0 auto;
+      margin-top: 0;
+      padding: var(--space-3);
+      border-radius: var(--radius-pill);
+      background: var(--surface-popover);
+      color: var(--text-primary);
     }
   }
 
-  &__savings {
-    min-height: 28px;
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
-
-    strong {
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
-    }
-  }
-
-  &__action {
-    min-height: 32px;
+  .subscription-plan-card__action {
+    // Ancora o CTA no rodapé sem precisar de altura fixa no card.
+    margin-top: auto;
+    min-height: calc(var(--space-8) * 2 + var(--space-2));
     border-radius: var(--radius-md);
     font-size: var(--type-size-caption);
+    font-weight: var(--weight-semibold);
+    transition:
+      background var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease);
   }
 
-  &--featured &__action:not(:disabled) {
-    background: var(--surface-popover);
-    color: var(--text-primary);
+  .subscription-plan-card__action:not(:disabled):active {
+    transform: scale(0.985);
   }
 
-  &--featured &__action:not(:disabled):hover,
-  &--featured &__action:not(:disabled):focus-visible {
-    background: var(--surface-hover);
+  .subscription-plan-card--featured .subscription-plan-card__action:not(:disabled) {
+    background: var(--premium-gold);
+    color: var(--premium-gold-ink);
+  }
+
+  .subscription-plan-card--featured .subscription-plan-card__action:not(:disabled):hover,
+  .subscription-plan-card--featured .subscription-plan-card__action:not(:disabled):focus-visible {
+    background: var(--premium-gold-hover);
   }
 }
 
@@ -9993,9 +10221,8 @@ input[type="search"]::-ms-reveal {
   z-index: 10000;
   width: min(420px, calc(100vw - 32px));
   overflow: hidden;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--background-dark);
+  background: var(--surface-toast);
 
   &__content {
     display: grid;
@@ -10009,9 +10236,9 @@ input[type="search"]::-ms-reveal {
     color: var(--text-primary);
   }
 
+  // Estado vive no ícone e na barra de progresso. A borda tingida era decoração
+  // sobre informação que já estava dita duas vezes.
   &--error {
-    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-
     .toast__icon {
       color: var(--danger);
     }
@@ -10022,8 +10249,6 @@ input[type="search"]::-ms-reveal {
   }
 
   &--success {
-    border-color: color-mix(in srgb, var(--success) 35%, transparent);
-
     .toast__icon {
       color: var(--success);
     }
@@ -10508,6 +10733,28 @@ html.no-backdrop-blur {
     flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 5)) / 6);
   }
 
+  /* Janela larga: calendário acompanha quatro cápsulas por linha, como Top
+     rated/Recomendados, sem deixar o quarto espaço vazio à direita. */
+  .home-calendar {
+    --home-calendar-gap: var(--space-9);
+  }
+
+  /* Centraliza somente os containers; título continua alinhado ao restante da
+     Home, no inset padrão da seção. */
+  .home-calendar__rail {
+    align-self: center;
+    width: 100%;
+    max-width: 1320px;
+  }
+
+  .home-calendar__track {
+    column-gap: var(--space-9);
+  }
+
+  .home-calendar-day {
+    padding-inline: 0;
+  }
+
   /* Janela larga: listas de linha única (catálogo, downloads, notificações)
      ganham um teto de largura para o conteúdo não se espalhar por toda a área
      útil — o espaço morto sai de dentro dos cards e vira gutter ao lado. */
@@ -10875,16 +11122,23 @@ html.no-backdrop-blur {
 .subscription-modal {
   position: relative;
   z-index: 1002;
-  width: 100vw;
+  // `100%`, não `100vw`: com barra de rolagem vertical presente, 100vw inclui a
+  // largura dela e sobra conteúdo para o lado — era a barra horizontal na base
+  // da tela. O padding também zera: o conteúdo já tem o seu, e a soma com
+  // `height: 100vh` empurrava a página para além da tela.
+  width: 100%;
   height: 100vh;
+  // Flex container para a altura descer a cadeia: sem isto o `flex: 1` do
+  // .settings-panel não tem contra o que esticar e a seção nunca ocupa a tela.
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   border: 0;
   border-radius: 0;
   background: var(--background);
   color: var(--text-primary);
-  padding: var(--space-6) var(--space-6)
-    var(--space-6) 0;
+  padding: 0;
   animation: subscription-modal-enter var(--motion-base) var(--ease);
 
   &--closing {
@@ -10927,11 +11181,20 @@ html.no-backdrop-blur {
   margin: 0 auto;
 }
 
+// Este wrapper prendia tudo em `min(950px, 100vw - 48px)`. Como o backdrop de
+// capas é posicionado contra a seção que vive aqui dentro, ele herdava essa
+// caixa e nunca alcançava as bordas da tela. Agora o wrapper ocupa a largura
+// inteira e quem limita a leitura é o `max-width` do conteúdo, lá no
+// .subscription-plans--settings.
 .subscription-modal__settings-page {
-  width: min(950px, calc(100vw - 48px));
-  min-height: 100%;
-  margin: 0 auto;
-  padding-inline: 0;
+  display: flex;
+  width: 100%;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0;
+  margin: 0;
+  padding: 0;
 }
 
 @keyframes subscription-backdrop-enter {

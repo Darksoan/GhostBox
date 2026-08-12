@@ -7,6 +7,7 @@ import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { useCatalogueState } from "../../hooks/useCatalogueState";
 import type { CatalogueFilterKey, Page, SteamProfile } from "../../types";
+import { isAccountOnlyPage, resolveMountedPages } from "./pageMounting";
 import { emptyCatalogueFilters } from "../../constants/catalogue";
 import { ContentOverlay, useContentOverlayState } from "./ContentOverlay";
 import { CollectionModal } from "../modals/CollectionModal";
@@ -148,25 +149,27 @@ export function PageRouter({
   const { hasOverlay } = useContentOverlayState();
 
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
-  const [mountedPages, setMountedPages] = useState<Set<Page>>(
-    () => new Set<Page>([page]),
+  const [mountedPages, setMountedPages] = useState<Set<Page>>(() =>
+    resolveMountedPages({
+      current: new Set<Page>(),
+      page,
+      keepAliveDisabled: appearance.disablePageKeepAlive,
+      isAuthenticated,
+    }),
   );
 
   // Keep-alive mounting must align with `page` before paint. Adjusting during
   // render (React-supported) avoids a blank frame for a newly visited page.
-  if (!appearance.disablePageKeepAlive && !mountedPages.has(page)) {
-    const nextMounted = new Set(mountedPages);
-    nextMounted.add(page);
-    setMountedPages(nextMounted);
-  }
-
-  // Keep-alive would otherwise leave the profile mounted behind `hidden` after
-  // sign-out, still holding the previous account's games and achievements.
-  if (!isAuthenticated && mountedPages.has("profile")) {
-    const nextMounted = new Set(mountedPages);
-    nextMounted.delete("profile");
-    setMountedPages(nextMounted);
-  }
+  // Both rules — mount the current page, drop the signed-out profile — are
+  // resolved together: applied separately they undid each other's update while
+  // signing out from the profile, and the render loop crashed the app.
+  const nextMountedPages = resolveMountedPages({
+    current: mountedPages,
+    page,
+    keepAliveDisabled: appearance.disablePageKeepAlive,
+    isAuthenticated,
+  });
+  if (nextMountedPages !== mountedPages) setMountedPages(nextMountedPages);
 
   useEffect(() => {
     const timeoutHandles: number[] = [];
@@ -325,6 +328,11 @@ export function PageRouter({
     }
 
     if (targetPage === "profile") {
+      // A signed-out account has no profile to show. The app navigates away in
+      // the same commit; rendering nothing keeps this frame from touching the
+      // wiped profile data.
+      if (!isAuthenticated) return null;
+
       return (
         <LazyProfilePage
           steamProfile={appData.steamProfile}
@@ -360,9 +368,11 @@ export function PageRouter({
   const keepAlivePages = useMemo(() => {
     const pages = appearance.disablePageKeepAlive
       ? [page]
-      : KEEP_ALIVE_PAGES.filter((p) => mountedPages.has(p));
-    return isAuthenticated ? pages : pages.filter((p) => p !== "profile");
-  }, [appearance.disablePageKeepAlive, isAuthenticated, mountedPages, page]);
+      : KEEP_ALIVE_PAGES.filter((p) => nextMountedPages.has(p));
+    return isAuthenticated
+      ? pages
+      : pages.filter((p) => !isAccountOnlyPage(p));
+  }, [appearance.disablePageKeepAlive, isAuthenticated, nextMountedPages, page]);
 
   return (
     <>

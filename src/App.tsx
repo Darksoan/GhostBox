@@ -7,6 +7,7 @@ import { PageRouter } from "./components/routing/PageRouter";
 import { useContentOverlayState } from "./components/routing/ContentOverlay";
 import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellState } from "./hooks/useAppShellState";
+import { useAuthSessionToast } from "./hooks/useAuthSessionToast";
 import { useAppData } from "./context/AppDataContext";
 import { useAuth } from "./context/AuthContext";
 import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
@@ -89,10 +90,13 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     saveScrollPosition,
   } = useAppNavigation();
 
+  useAuthSessionToast();
+
   // The profile belongs to the signed-in account: signing out from inside it
   // falls back to home, and its history entries go too so Back cannot return
-  // to someone else's profile.
-  useEffect(() => {
+  // to someone else's profile. Layout effect, not effect: the fallback has to
+  // land before the browser paints, or signing out flashes an empty page.
+  useLayoutEffect(() => {
     if (status === "authenticated") return;
     purgePage("profile");
   }, [purgePage, status]);

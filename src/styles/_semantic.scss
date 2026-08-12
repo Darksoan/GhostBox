@@ -32,6 +32,10 @@
   // usada em hover. Fora da rampa de propósito.
   --surface-option-selected: var(--c-5);
   --surface-popover: var(--c-3);
+  // Toast: flutua sobre qualquer página, então não pode contar com a superfície
+  // de baixo. Mesmo degrau do popover — separação vem do salto de rampa sobre o
+  // canvas, não de borda.
+  --surface-toast: var(--c-3);
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
   --surface-tray: var(--c-1);
   --surface-tray-item: transparent;
@@ -181,6 +185,10 @@
 
   // --- Dourado (assinatura + conquista rara — nada mais usa isto) ---
   --premium-gold: var(--gold-500);
+  // Hover do CTA dourado e texto desenhado por cima dele. O dourado é claro o
+  // bastante para exigir tinta escura — mesma lógica do par --on-light acima.
+  --premium-gold-hover: var(--gold-400);
+  --premium-gold-ink: #070707;
   // Ângulo animado da borda do card de assinatura (ver @property em app.scss).
   --premium-border-angle: 0deg;
   --profile-banner-placeholder-bg: var(--black);

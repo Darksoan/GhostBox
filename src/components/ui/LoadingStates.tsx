@@ -343,7 +343,7 @@ export function HomePageLoadingState() {
         <div className="home-calendar__rail">
           <div className="home-calendar__carousel">
             <div className="home-calendar__track">
-              {Array.from({ length: 3 }, (_, dayIndex) => (
+              {Array.from({ length: 4 }, (_, dayIndex) => (
                 <div className="home-calendar-day" key={`cal-day-${dayIndex}`}>
                   <span className="home-calendar-day__title-placeholder skeleton" />
                   <div className="home-calendar-day__games">

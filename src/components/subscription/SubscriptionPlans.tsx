@@ -1,4 +1,4 @@
-import { CalendarClock, Check, CloudUpload, Cloudy, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
+import { CalendarClock, Check, CloudUpload, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
 import { CupStar, ServerUpdate, Trophy, UserEdit } from "reicon-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
@@ -17,6 +17,7 @@ import type { SteamProfile } from "../../types";
 import { loadGameStoreDetailsCached } from "../../utils/gameCache";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
+import { SubscriptionBackdrop } from "./SubscriptionBackdrop";
 import discordIcon from "../../../Icons/discord.svg";
 
 type SubscriptionPlanId = "free" | PaidSubscriptionPlanId;
@@ -712,21 +713,23 @@ export function SubscriptionPlans({
   return (
     <section
       className={`subscription-plans subscription-plans--${surface} settings-panel__animated-block`}
-      style={enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : undefined}
+      style={{
+        // Sobe para a raiz da seção: o eyebrow e a marca d'água do card Premium
+        // desenham o mesmo glifo via mask.
+        ["--subscription-ghost-icon" as string]: `url(${ghostIcon})`,
+        ...(enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : {}),
+      }}
       aria-label={t("subscription.title")}
     >
+      {isSettingsSurface && <SubscriptionBackdrop />}
       <header className="subscription-plans__header">
         <span className="subscription-plans__eyebrow">
-          <span
-            className="subscription-plans__eyebrow-icon"
-            style={{ ["--subscription-ghost-icon" as string]: `url(${ghostIcon})` }}
-            aria-hidden="true"
-          />
+          <span className="subscription-plans__eyebrow-icon" aria-hidden="true" />
           {"GhostBox "}
           <strong className="subscription-plans__eyebrow-premium">Premium</strong>
         </span>
-        <h3><Cloudy size={18} strokeWidth={2.15} aria-hidden="true" /> {t("subscription.title")}</h3>
-        {isSettingsSurface && (
+        <h3>{t("subscription.title")}</h3>
+        {!isSettingsSurface && (
           <p>
             {copy(
               "Tenha seu progresso, conquistas e perfil sempre com você.",
@@ -736,7 +739,34 @@ export function SubscriptionPlans({
         )}
       </header>
 
-      <div className="subscription-plans__grid subscription-plans__grid--billing-toggle">
+      <div
+        className="subscription-plans__billing"
+        role="group"
+        aria-label={copy("Escolha o período da assinatura", "Choose billing period")}
+      >
+        <span
+          className={`subscription-plans__billing-thumb subscription-plans__billing-thumb--${selectedPlanId}`}
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          className={selectedPlanId === "monthly" ? "is-active" : undefined}
+          aria-pressed={selectedPlanId === "monthly"}
+          onClick={() => setSelectedPlanId("monthly")}
+        >
+          {t("subscription.plans.monthly.title")}
+        </button>
+        <button
+          type="button"
+          className={selectedPlanId === "quarterly" ? "is-active" : undefined}
+          aria-pressed={selectedPlanId === "quarterly"}
+          onClick={() => setSelectedPlanId("quarterly")}
+        >
+          {t("subscription.plans.quarterly.title")}
+        </button>
+      </div>
+
+      <div className="subscription-plans__grid">
         {plans.map((plan) => (
           <article
             key={plan.id === "free" ? plan.id : "premium"}
@@ -746,38 +776,21 @@ export function SubscriptionPlans({
               plan.id !== "free" ? "subscription-plan-card--featured" : "",
             ].filter(Boolean).join(" ")}
           >
-            {plan.badge && <div className="subscription-plan-card__badge">{plan.badge}</div>}
-
-            <div className="subscription-plan-card__top">
+            <div className="subscription-plan-card__head">
               <h4>{plan.title}</h4>
-              {plan.id !== "free" && (
-                <div className="subscription-plan-card__billing-toggle" role="group" aria-label={copy("Escolha o período da assinatura", "Choose billing period")}>
-                  <span
-                    className={`subscription-plan-card__billing-toggle-thumb subscription-plan-card__billing-toggle-thumb--${selectedPlanId}`}
-                    aria-hidden="true"
-                  />
-                  <button
-                    type="button"
-                    className={selectedPlanId === "monthly" ? "is-active" : undefined}
-                    aria-pressed={selectedPlanId === "monthly"}
-                    onClick={() => setSelectedPlanId("monthly")}
-                  >
-                    {t("subscription.plans.monthly.title")}
-                  </button>
-                  <button
-                    type="button"
-                    className={selectedPlanId === "quarterly" ? "is-active" : undefined}
-                    aria-pressed={selectedPlanId === "quarterly"}
-                    onClick={() => setSelectedPlanId("quarterly")}
-                  >
-                    {t("subscription.plans.quarterly.title")}
-                  </button>
-                </div>
+              {plan.savings && (
+                <span className="subscription-plan-card__savings">
+                  {plan.savings.value}
+                </span>
               )}
-              <div className="subscription-plan-card__price">{plan.price}</div>
-              <span>{plan.cadence}</span>
-              <p>{plan.description}</p>
             </div>
+
+            <p className="subscription-plan-card__price">
+              <strong>{plan.price}</strong>
+              <span>{plan.cadence}</span>
+            </p>
+
+            <p className="subscription-plan-card__desc">{plan.description}</p>
 
             <ul className="subscription-plan-card__benefits">
               {benefits[plan.id].map((benefitKey) => (
@@ -790,18 +803,6 @@ export function SubscriptionPlans({
                 </li>
               ))}
             </ul>
-
-            <div
-              className={`subscription-plan-card__savings${plan.savings ? "" : " subscription-plan-card__savings--empty"}`}
-              aria-hidden={plan.savings ? undefined : "true"}
-            >
-              {plan.savings && (
-                <>
-                  <span>{plan.savings.label}</span>
-                  <strong>{plan.savings.value}</strong>
-                </>
-              )}
-            </div>
 
             <button
               type="button"
@@ -816,19 +817,20 @@ export function SubscriptionPlans({
       </div>
 
       {isSettingsSurface && (
-        <div className="subscription-plans__highlight-grid" aria-label={copy("Benefícios Premium", "Premium benefits")}>
+        <ul className="subscription-plans__highlights" aria-label={copy("Benefícios Premium", "Premium benefits")}>
           {highlightCards.map((card) => {
             const Icon = card.icon;
             return (
-              <article key={card.title} className="subscription-plans__highlight-card">
+              <li key={card.title} className="subscription-plans__highlight">
+                <Icon size={16} strokeWidth={2.15} aria-hidden="true" />
                 <div>
-                  <h4><Icon size={22} strokeWidth={2.15} /> {card.title}</h4>
+                  <strong>{card.title}</strong>
                   <p>{card.description}</p>
                 </div>
-              </article>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
 
       {!isSettingsSurface && (

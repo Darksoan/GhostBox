@@ -387,6 +387,13 @@ const translations: Record<Language, TranslationTree> = {
         resent: "E-mail reenviado.",
         verified: "E-mail confirmado.",
       },
+      toast: {
+        signedInTitle: "Sessão iniciada",
+        signedInMessage: "Bem-vindo de volta, {name}.",
+        signedInMessageGeneric: "Sua conta GhostBox está conectada.",
+        signedOutTitle: "Sessão encerrada",
+        signedOutMessage: "Você saiu da conta neste dispositivo.",
+      },
     },
     settings: {
       tabs: {
@@ -959,6 +966,13 @@ const translations: Record<Language, TranslationTree> = {
         resend: "Resend email",
         resent: "Email resent.",
         verified: "Email confirmed.",
+      },
+      toast: {
+        signedInTitle: "Signed in",
+        signedInMessage: "Welcome back, {name}.",
+        signedInMessageGeneric: "Your GhostBox account is connected.",
+        signedOutTitle: "Signed out",
+        signedOutMessage: "You left your account on this device.",
       },
     },
     settings: {

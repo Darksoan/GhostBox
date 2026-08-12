@@ -1230,9 +1230,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await ghostboxApi.restoreSteamAccount(steamId);
         if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
-        steamProfileRef.current = profile;
-        setSteamProfile(profile);
-        writeStoredSteamProfile(profile);
+        // The Steam summary carries no banner and only the Steam avatar, and
+        // this restore races the cloud-profile restore on sign-in. Writing it
+        // raw overwrote the account's avatar and banner — in state, in
+        // localStorage and, through steam_restore_account, on disk. Merge, then
+        // push the merged profile back so the stored copy keeps them too.
+        const merged =
+          mergeSteamProfile(profile, steamProfileRef.current) ?? profile;
+        steamProfileRef.current = merged;
+        setSteamProfile(merged);
+        writeStoredSteamProfile(merged);
+        if (merged !== profile) {
+          void ghostboxApi.saveSteamProfile(merged).catch(() => undefined);
+        }
         void syncPlaytimesFromSteam(steamId);
       } catch (error) {
         console.warn("Failed to restore linked Steam account", error);

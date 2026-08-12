@@ -10,10 +10,10 @@ import {
   Heart,
   Info,
   LoaderCircle,
+  Maximize2,
   MessageSquareShare,
   Minus,
   Settings2,
-  Square,
   UserCog,
   Search,
   X,
@@ -205,6 +205,9 @@ export const Header = memo(function Header({
     lastScreenY: number;
     frame: number | null;
   } | null>(null);
+  // Bumped on every release so a pointerdown still awaiting window queries can
+  // tell that its gesture is already over and skip arming the drag.
+  const titlebarGestureRef = useRef(0);
   const showDropdown =
     (page !== "catalogue" || allowSearchDropdown) &&
     focused &&
@@ -411,9 +414,9 @@ export const Header = memo(function Header({
 
   const endTitlebarDrag = useCallback((pointerId?: number) => {
     const drag = titlebarDragRef.current;
-    if (!drag) return;
-    if (pointerId != null && drag.pointerId !== pointerId) return;
-    if (drag.frame != null) {
+    if (drag && pointerId != null && drag.pointerId !== pointerId) return;
+    titlebarGestureRef.current += 1;
+    if (drag?.frame != null) {
       window.cancelAnimationFrame(drag.frame);
       drag.frame = null;
     }
@@ -430,11 +433,23 @@ export const Header = memo(function Header({
     // Keep grab offset exact: sync screen coords + window origin (no startDragging jump).
     event.preventDefault();
 
+    // Capture now, while the synthetic event still has a currentTarget: the awaits
+    // below outlive the dispatch, and without capture the release can land on
+    // another element and leave the window stuck to the cursor.
+    const header = event.currentTarget;
+    try {
+      header.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort; move/up still work on the header.
+    }
+
+    const gestureId = ++titlebarGestureRef.current;
     const win = getCurrentWindow();
     let originX = window.screenX;
     let originY = window.screenY;
 
     if (await win.isMaximized()) {
+      if (titlebarGestureRef.current !== gestureId) return;
       // Frameless convention: dragging from a maximized window restores it and
       // keeps the grab point under the cursor, proportionally to where it sat
       // in the maximized titlebar.
@@ -448,6 +463,9 @@ export const Header = memo(function Header({
       await win.setPosition(new LogicalPosition(originX, originY));
     }
 
+    // Released while the window queries were in flight: no drag to arm.
+    if (titlebarGestureRef.current !== gestureId) return;
+
     titlebarDragRef.current = {
       pointerId: event.pointerId,
       startScreenX: event.screenX,
@@ -458,25 +476,25 @@ export const Header = memo(function Header({
       lastScreenY: event.screenY,
       frame: null,
     };
-
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture is best-effort; move/up still work on the header.
-    }
   }, []);
 
   const handleTitlebarPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const drag = titlebarDragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
+      // No button held anymore: the release was swallowed (alt-tab, native menu,
+      // lost capture). Drop the drag instead of following the cursor.
+      if (event.buttons === 0) {
+        endTitlebarDrag(event.pointerId);
+        return;
+      }
 
       drag.lastScreenX = event.screenX;
       drag.lastScreenY = event.screenY;
       if (drag.frame != null) return;
       drag.frame = window.requestAnimationFrame(flushTitlebarDrag);
     },
-    [flushTitlebarDrag]
+    [endTitlebarDrag, flushTitlebarDrag]
   );
 
   const handleTitlebarPointerUp = useCallback(
@@ -495,12 +513,21 @@ export const Header = memo(function Header({
   }, [handleToggleMaximize]);
 
   useEffect(() => {
+    const stop = () => endTitlebarDrag();
+    // Focus loss (alt-tab, tray click, OS dialog) never delivers pointerup.
+    window.addEventListener("blur", stop);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+
     return () => {
+      window.removeEventListener("blur", stop);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
       const drag = titlebarDragRef.current;
       if (drag?.frame != null) window.cancelAnimationFrame(drag.frame);
       titlebarDragRef.current = null;
     };
-  }, []);
+  }, [endTitlebarDrag]);
 
   const updateStatusText =
     updatePhase === "error"
@@ -860,7 +887,7 @@ export const Header = memo(function Header({
           {isMaximized ? (
             <Copy size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
           ) : (
-            <Square size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+            <Maximize2 size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
           )}
         </button>
         <button

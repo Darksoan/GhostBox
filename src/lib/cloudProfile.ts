@@ -265,7 +265,11 @@ export function applyCloudProfileToLocal(input: {
     ...current,
     displayName:
       expanded.steamProfile.displayName?.trim() || current.displayName,
-    avatarUrl: expanded.steamProfile.avatarUrl ?? "",
+    // A snapshot with no avatar is an account that never synced one (or that
+    // predates avatar syncing), not an account that asked for a blank picture,
+    // so the local one survives. The banner stays authoritative: clearing it on
+    // one device has to clear it on the others.
+    avatarUrl: expanded.steamProfile.avatarUrl ?? current.avatarUrl ?? "",
     bannerUrl: expanded.steamProfile.bannerUrl ?? "",
     bannerPosition: expanded.steamProfile.bannerPosition ?? undefined,
   };

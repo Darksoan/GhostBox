@@ -1,8 +1,20 @@
 import type { Language } from "../i18n";
 import type { SteamProfile } from "../types";
 
+/** Storage path the worker uploads avatars and banners to. */
+const UPLOADED_PROFILE_IMAGE_PATH = "/storage/v1/object/public/profile-images/";
+
+/**
+ * A custom image is either still inline (picked, not uploaded yet) or already
+ * living in the account's profile-images bucket. Matching only `data:` treated
+ * every uploaded avatar as a Steam one, so the Steam summary won on merge and
+ * the account's picture was lost on the next sign-in.
+ */
 export function isCustomProfileAvatar(avatarUrl: string) {
-  return /^data:image\//i.test(avatarUrl);
+  return (
+    /^data:image\//i.test(avatarUrl) ||
+    avatarUrl.includes(UPLOADED_PROFILE_IMAGE_PATH)
+  );
 }
 
 /**
@@ -23,7 +35,13 @@ export function mergeSteamProfile(
   currentProfile: SteamProfile | null
 ): SteamProfile | null {
   if (!nativeProfile) return currentProfile;
-  if (!currentProfile || currentProfile.steamId !== nativeProfile.steamId) {
+  // An empty steamId is not "another account": it is the shell the cloud
+  // restore builds for the GhostBox account, carrying the avatar, banner and
+  // display name. Only a different *linked* Steam account replaces the profile.
+  const isSameAccount =
+    !currentProfile?.steamId?.trim() ||
+    currentProfile.steamId === nativeProfile.steamId;
+  if (!currentProfile || !isSameAccount) {
     return nativeProfile;
   }
 
