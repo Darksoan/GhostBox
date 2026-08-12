@@ -5034,39 +5034,23 @@ p {
       line-height: var(--type-line-caption);
     }
 
+    /* Sem card: o topo do painel é só a marca, centrada, igual ao header da aba
+       de assinaturas. O card com borda dourada duplicava a moldura do painel
+       logo abaixo e empurrava o resumo para fora da dobra. */
     &--active {
       width: 100%;
-      min-height: 96px;
-      padding: 0 var(--space-4);
-      border: 0.5px solid transparent;
-      border-radius: var(--radius-sm);
-      background:
-        linear-gradient(var(--surface-panel), var(--surface-panel)) padding-box,
-        conic-gradient(
-          from var(--premium-border-angle),
-          transparent 0deg,
-          transparent 245deg,
-          color-mix(in srgb, var(--premium-gold) 10%, transparent) 282deg,
-          color-mix(in srgb, var(--premium-gold) 26%, var(--white) 2%) 320deg,
-          color-mix(in srgb, var(--premium-gold) 6%, transparent) 346deg,
-          transparent 360deg
-        ) border-box;
-      animation: subscription-premium-border-shine 7s linear infinite;
-
-      .subscription-account__header-main {
-        gap: 0;
-      }
-
-      .subscription-account__header-copy {
-        display: flex;
-        min-width: 0;
-        align-items: center;
-        gap: var(--space-7);
-      }
+      min-height: 0;
+      justify-content: center;
+      padding: 0 0 var(--space-6);
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      animation: none;
 
       .subscription-account__eyebrow {
         display: inline-flex;
         flex: 0 0 auto;
+        align-items: center;
         gap: var(--space-2);
         margin: 0;
         color: var(--text-primary);
@@ -5093,14 +5077,14 @@ p {
       }
 
       .subscription-account__brand-icon {
-        width: 28px;
-        height: 28px;
+        width: 20px;
+        height: 20px;
         border-radius: 0;
         background: transparent;
 
         &::before {
-          width: 28px;
-          height: 28px;
+          width: 20px;
+          height: 20px;
           background: var(--text-primary);
         }
       }
@@ -5751,7 +5735,6 @@ p {
   width: auto;
   min-width: 0;
   flex: 1;
-  border-right: 0;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 
@@ -5767,22 +5750,19 @@ p {
   justify-content: center;
   width: 40px;
   min-height: 40px;
-  border: 1px solid var(--border-default);
-  border-left: 0;
+  border: 0;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--surface-sunken);
+  background: var(--c-3);
   color: var(--text-secondary);
   font-weight: var(--weight-semibold);
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease),
-    border-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 
   &:hover,
   &:focus-visible {
-    background: var(--background);
-    border-color: var(--border-strong);
+    background: var(--c-4);
     color: var(--text-primary);
   }
 
@@ -6122,11 +6102,19 @@ p {
     padding-left: var(--space-8);
   }
 
+  /* Rótulo e chevron sobem para `--text-primary` no hover/foco/aberto: o
+     gatilho é controle, e a troca de superfície sozinha lia como estado morto. */
   &:hover,
   &:focus-visible,
   .settings-dropdown--open & {
     background: var(--surface-dropdown-menu);
-    color: var(--text-secondary);
+    color: var(--text-primary);
+  }
+
+  &:hover svg,
+  &:focus-visible svg,
+  .settings-dropdown--open & svg {
+    color: var(--text-primary);
   }
 
   svg {
@@ -6289,9 +6277,12 @@ p {
   height: 40px;
   min-height: 40px;
   padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--border);
+  /* Sem borda: o campo se define pela superfície `--c-3` (#151515), um degrau
+     acima da linha de ajustes. A borda antiga só desenhava um retângulo solto no
+     meio da linha, sem separar nada. */
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
+  background: var(--c-3);
   color: var(--text-primary);
   cursor: default;
   font-family: inherit;
@@ -6300,22 +6291,17 @@ p {
   outline: none;
   text-overflow: ellipsis;
   transition:
-    border-color var(--motion-base) var(--ease),
     background-color var(--motion-base) var(--ease),
-    color var(--motion-base) var(--ease),
-    box-shadow var(--motion-base) var(--ease);
+    color var(--motion-base) var(--ease);
 
   &:hover {
-    border-color: var(--border-strong);
-    background: var(--background);
+    background: var(--c-4);
   }
 
   &:focus,
   &:focus-visible {
     outline: none;
-    border-color: var(--border-hover);
-    background: var(--background);
-    box-shadow: var(--shadow-inset-hairline);
+    background: var(--c-4);
   }
 
   &--clickable {
@@ -6596,6 +6582,34 @@ p {
     color: var(--text-primary);
   }
 
+  &__view-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 36px;
+    padding: 0 var(--space-5);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--surface-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    white-space: nowrap;
+  }
+
+  &__view-toggle:hover,
+  &__view-toggle:focus-visible {
+    background: var(--control-hover);
+    color: var(--text-primary);
+  }
+
+  &__view-toggle-icon {
+    display: inline-flex;
+    animation: catalogue-view-swap var(--motion-base) var(--ease);
+  }
+
   /* Ordenação usa o dropdown compartilhado (`.settings-dropdown`), não um
      `<select>` nativo: o menu nativo é desenhado pelo sistema e ignorava
      inteiramente a rampa de superfície do app. */
@@ -6604,8 +6618,8 @@ p {
     min-width: 190px;
 
     .settings-dropdown__trigger {
-      min-height: 32px;
-      padding: 0 var(--space-4);
+      min-height: 36px;
+      padding: 0 var(--space-5);
       border-radius: var(--radius-md);
 
       span {
@@ -7622,6 +7636,83 @@ input[type="search"]::-ms-reveal {
 
 .catalogue-list__remove-spinner {
   animation: spin 0.8s linear infinite;
+}
+
+@keyframes catalogue-view-swap {
+  from {
+    opacity: 0;
+    transform: rotateY(90deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0);
+  }
+}
+
+/* Grade de capsules (header) em 3 colunas: o item vira um card vertical com a
+   capa em cima e o texto abaixo; a ação de "adicionado" flutua sobre a capa. */
+.catalogue-list--grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--space-4);
+
+  .catalogue-list__item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0;
+    height: 100%;
+    min-height: 0;
+    padding-right: 0;
+    contain-intrinsic-size: auto 240px;
+  }
+
+  .catalogue-list__item--placeholder {
+    content-visibility: visible;
+    cursor: default;
+  }
+
+  .catalogue-list__main {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(32px, 1fr);
+    align-items: start;
+    gap: var(--space-3);
+    height: 100%;
+    min-height: 0;
+    padding-bottom: var(--space-2);
+    border-radius: var(--radius-lg);
+  }
+
+  .catalogue-list__cover {
+    height: auto;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .catalogue-list__content {
+    min-height: 32px;
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
+    padding-block: var(--space-1);
+    justify-content: center;
+    transform: none;
+  }
+
+  .catalogue-list__genres {
+    display: none;
+  }
+
+  .catalogue-list__actions {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 2;
+    min-width: 0;
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, black 45%, transparent);
+    color: var(--white);
+  }
 }
 
 .pagination-controls {
@@ -10268,19 +10359,11 @@ input[type="search"]::-ms-reveal {
     .toast__icon {
       color: var(--danger);
     }
-
-    .toast__progress {
-      background: var(--danger);
-    }
   }
 
   &--success {
     .toast__icon {
       color: var(--success);
-    }
-
-    .toast__progress {
-      background: var(--success);
     }
   }
 
@@ -10306,7 +10389,7 @@ input[type="search"]::-ms-reveal {
 
   &__progress {
     height: 4px;
-    background: var(--text-strong);
+    background: #fff;
     animation: toast-progress 6s linear forwards;
     transform-origin: left;
   }
@@ -10571,7 +10654,7 @@ border: 0;
   }
 
   &.game-grid--portrait {
-    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
   }
 
   &.game-grid--cover-format-out .game-card {
@@ -10844,7 +10927,7 @@ html.no-backdrop-blur {
     }
 
     &.game-grid--portrait {
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     }
   }
 }
@@ -14087,7 +14170,10 @@ html.no-backdrop-blur {
   /* Mesma rampa da sidebar, um degrau acima do repouso transparente das abas:
      o botão de ação vive dentro do card e precisa de superfície própria. */
   background: var(--sidebar-option-hover);
-  color: var(--text-secondary);
+  /* Rótulo já nasce em `--text-primary`: dentro do modal o botão é a ação
+     principal do card, não um item de lista secundário — legibilidade não pode
+     depender do hover. O hover segue lendo pela troca de superfície. */
+  color: var(--text-primary);
   font: inherit;
   font-size: var(--type-size-compact);
   font-weight: var(--weight-medium);
@@ -14894,6 +14980,14 @@ button,
 
   .catalogue-list__main {
     grid-template-columns: 140px minmax(0, 1fr);
+  }
+
+  .catalogue-list--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    .catalogue-list__main {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   .modal__details {
@@ -15781,4 +15875,17 @@ button,
 .edit-profile-modal__avatar-button,
 .edit-profile-modal__cover-button {
   border-color: var(--border);
+}
+
+/* Mesma regra do `game-settings-modal__action-button`: em modal o botão é ação
+   direta, então o rótulo fica em `--text-primary` já no repouso. O hover
+   continua sinalizado pela superfície. */
+.collection-modal__actions .button,
+.steam-path-modal__actions .button,
+.confirm-modal__actions .button,
+.feedback-modal__actions .button,
+.backup-restore-modal__actions .button,
+.edit-profile-modal .button,
+.modal:not(.modal--details) .button {
+  color: var(--text-primary);
 }

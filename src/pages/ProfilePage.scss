@@ -1646,7 +1646,7 @@
   }
 
   &__game-grid.game-grid--portrait {
-    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
     grid-auto-rows: auto;
     gap: var(--space-7) var(--space-6);
     width: 100%;
@@ -1907,7 +1907,7 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__game-grid.game-grid--portrait {
-      grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
       grid-auto-rows: auto;
       gap: var(--space-5);
     }

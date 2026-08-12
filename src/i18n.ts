@@ -151,6 +151,10 @@ const translations: Record<Language, TranslationTree> = {
         popular: "Mais populares",
         recentlyAdded: "Adicionados recentemente",
       },
+      view: {
+        grid: "Ver como grade",
+        list: "Ver como lista",
+      },
       noResultsTitle: "Nenhum jogo corresponde aos filtros",
       noResultsDescription: "Tente remover um filtro ou limpar todos os filtros.",
       refreshError: "Não foi possível atualizar os resultados. Os dados anteriores continuam visíveis.",
@@ -732,6 +736,10 @@ const translations: Record<Language, TranslationTree> = {
         label: "Sort catalogue",
         popular: "Most popular",
         recentlyAdded: "Recently added",
+      },
+      view: {
+        grid: "View as grid",
+        list: "View as list",
       },
       noResultsTitle: "No games match these filters",
       noResultsDescription: "Try removing a filter or clearing all filters.",

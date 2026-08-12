@@ -2,6 +2,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  List,
+  Rows2,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -422,6 +424,7 @@ export function CataloguePage({
   const { t } = useSettings();
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
@@ -686,7 +689,6 @@ export function CataloguePage({
         <div className="catalogue-page__results">
           <div className="catalogue-page__toolbar">
             <div className="catalogue-page__summary">
-              <strong>{t("catalogue.resultsCount", { count: matched })}</strong>
               {selectedFilterCount > 0 && (
                 <span>
                   {t("catalogue.filters.selected", { count: selectedFilterCount })}
@@ -699,6 +701,37 @@ export function CataloguePage({
               )}
             </div>
             <div className="catalogue-page__toolbar-actions">
+              <button
+                type="button"
+                className="catalogue-page__view-toggle"
+                aria-label={
+                  viewMode === "list"
+                    ? t("catalogue.view.grid")
+                    : t("catalogue.view.list")
+                }
+                title={
+                  viewMode === "list"
+                    ? t("catalogue.view.grid")
+                    : t("catalogue.view.list")
+                }
+                aria-pressed={viewMode === "grid"}
+                onClick={() =>
+                  setViewMode((mode) => (mode === "list" ? "grid" : "list"))
+                }
+              >
+                <span key={viewMode} className="catalogue-page__view-toggle-icon">
+                  {viewMode === "list" ? (
+                    <Rows2 size={19} strokeWidth={2} aria-hidden="true" />
+                  ) : (
+                    <List size={19} strokeWidth={2} aria-hidden="true" />
+                  )}
+                </span>
+                <span>
+                  {viewMode === "list"
+                    ? t("catalogue.view.grid")
+                    : t("catalogue.view.list")}
+                </span>
+              </button>
               <div
                 className={`settings-dropdown catalogue-page__sort ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
                 ref={sortDropdownRef}
@@ -785,6 +818,7 @@ export function CataloguePage({
             <div className="catalogue-page__list-container">
               <CatalogueList
                 games={visibleGames}
+                viewMode={viewMode}
                 onOpenGame={onOpenGame}
                 onHoverGame={handleHoverGame}
                 addedGameAppIds={addedGameAppIds}

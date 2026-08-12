@@ -256,6 +256,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
 interface CatalogueListProps {
   games: GhostBoxGame[];
+  viewMode?: "list" | "grid";
   onOpenGame: (game: GhostBoxGame) => void;
   onHoverGame: (game: GhostBoxGame | null, options?: { immediate?: boolean }) => void;
   addedGameAppIds?: Set<string>;
@@ -267,6 +268,7 @@ interface CatalogueListProps {
 
 export function CatalogueList({
   games,
+  viewMode = "list",
   onOpenGame,
   onHoverGame,
   addedGameAppIds = new Set(),
@@ -301,7 +303,10 @@ export function CatalogueList({
   // `cataloguePageSize` (20) itens, e o gate de `IntersectionObserver` por linha
   // já evita carregar as capas fora da viewport.
   return (
-    <div className="catalogue-list" ref={listRef}>
+    <div
+      className={`catalogue-list ${viewMode === "grid" ? "catalogue-list--grid" : ""}`}
+      ref={listRef}
+    >
       {games.map((game) => (
         <CatalogueListItem
           game={game}
@@ -316,6 +321,14 @@ export function CatalogueList({
           onGameContextMenu={onGameContextMenu}
         />
       ))}
+      {viewMode === "grid" &&
+        Array.from({ length: (3 - (games.length % 3)) % 3 }).map((_, index) => (
+          <div
+            key={`catalogue-grid-placeholder-${index}`}
+            className="catalogue-list__item catalogue-list__item--placeholder"
+            aria-hidden="true"
+          />
+        ))}
     </div>
   );
 }

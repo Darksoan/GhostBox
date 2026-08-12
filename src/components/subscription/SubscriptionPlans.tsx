@@ -385,12 +385,6 @@ export function SubscriptionPlans({
 
   if (surface === "settings" && isPremium) {
     const planId = subscriptionStatus.subscription.planId;
-    const planLabel =
-      planId === "quarterly"
-        ? copy("Plano trimestral", "Quarterly plan")
-        : planId === "monthly"
-          ? copy("Plano mensal", "Monthly plan")
-          : copy("Plano Premium", "Premium plan");
     const planShortLabel =
       planId === "quarterly"
         ? copy("Trimestral", "Quarterly")
@@ -432,17 +426,12 @@ export function SubscriptionPlans({
         aria-label={copy("Resumo da assinatura Premium", "Premium subscription summary")}
       >
         <header className="subscription-account__header subscription-account__header--active">
-          <div className="subscription-account__header-main">
+          <h3 className="sr-only">{copy("Assinatura ativa", "Active subscription")}</h3>
+          <span className="subscription-account__eyebrow">
             <span className="subscription-account__brand-icon" aria-hidden="true" />
-            <div className="subscription-account__header-copy">
-              <h3 className="sr-only">{copy("Assinatura ativa", "Active subscription")}</h3>
-              <span className="subscription-account__eyebrow">
-                <span className="subscription-account__brand-name">GHOSTBOX</span>
-                <span className="subscription-account__premium-name">PREMIUM</span>
-              </span>
-              <p>{planLabel}</p>
-            </div>
-          </div>
+            <span className="subscription-account__brand-name">GHOSTBOX</span>
+            <span className="subscription-account__premium-name">PREMIUM</span>
+          </span>
         </header>
 
         <div className="subscription-account__summary-grid">
