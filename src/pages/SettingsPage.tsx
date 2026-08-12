@@ -350,7 +350,12 @@ export function SettingsPage({
   }, [backupSettings, games]);
 
   return (
-    <section className="settings-page settings-page--tabs" aria-label={t("nav.settings")}>
+    <section
+      className={`settings-page settings-page--tabs${
+        activeTab.id === "subscription" ? " subscription-surface" : ""
+      }`}
+      aria-label={t("nav.settings")}
+    >
       <article
         className={`settings-panel${
           activeTab.id === "subscription" || activeTab.id === "connections"

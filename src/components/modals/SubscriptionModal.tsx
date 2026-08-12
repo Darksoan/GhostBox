@@ -38,6 +38,7 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
         aria-label={t("subscription.title")}
         onClick={(event) => event.stopPropagation()}
       >
+        <div className="subscription-modal__drag" data-tauri-drag-region aria-hidden="true" />
         <section className="settings-page settings-page--tabs subscription-modal__settings-page" aria-label={t("nav.settings")}>
           <article className="settings-panel settings-panel--bare">
             <div className="settings-panel__body">

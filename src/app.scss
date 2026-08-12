@@ -3984,17 +3984,16 @@ p {
   }
 }
 
-// A aba de assinatura dentro de Ajustes: `.settings-page` aplica
-// `padding: 0 var(--space-10) var(--page-bottom-space)`, o que insere a seção
-// para dentro da área de conteúdo. O backdrop é posicionado contra a seção, e
-// por isso parava antes das bordas — sobrava faixa preta à esquerda e embaixo.
-// Só esta aba zera o padding; as demais continuam com o respiro padrão.
-.settings-page:has(.subscription-plans--settings) {
+// Superfície de assinatura compartilhada entre a modal da titlebar e a aba
+// de assinatura dentro de Ajustes. Garante layout idêntico: zero padding,
+// chain flex para o conteúdo preencher a altura, painel elástico.
+.subscription-surface {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
   gap: 0;
+  margin: 0;
   padding: 0;
 
   .settings-panel,
@@ -4095,6 +4094,7 @@ p {
     .subscription-plans__grid {
       flex: 1 1 auto;
       width: 100%;
+      max-width: calc(var(--space-16) * 20);
       grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
       align-items: stretch;
       gap: var(--space-6);
@@ -4105,7 +4105,31 @@ p {
 
     .subscription-plans__highlights {
       width: 100%;
+      max-width: calc(var(--space-16) * 20);
+      min-height: clamp(140px, 20vh, 210px);
       margin-top: var(--space-6);
+    }
+
+    .subscription-plans__highlight {
+      min-height: clamp(140px, 20vh, 210px);
+      padding: var(--space-8) var(--space-7);
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+
+      > svg {
+        margin-top: 0;
+      }
+
+      strong {
+        margin-bottom: var(--space-2);
+        font-size: var(--type-size-compact);
+      }
+
+      p {
+        font-size: var(--type-size-compact);
+        line-height: var(--type-line-compact);
+      }
     }
 
     .subscription-plans__step {
@@ -4888,10 +4912,12 @@ p {
     font-size: var(--type-size-caption);
     font-weight: var(--weight-medium);
     line-height: var(--type-line-caption);
+    min-height: calc(var(--type-line-caption) * 2);
   }
 
   .subscription-plan-card__benefits {
-    gap: var(--space-2);
+    row-gap: var(--space-4);
+    column-gap: var(--space-4);
     margin-top: var(--space-3);
 
     li {
@@ -4902,15 +4928,15 @@ p {
       line-height: var(--type-line-caption);
     }
 
-    // Ícone ganha um disco: dá ritmo geométrico à lista em vez de glifos soltos.
+    // Ícone sem disco: glifo solto, na escala do texto descritivo.
     li svg {
-      width: calc(var(--space-9) + var(--space-2));
-      height: calc(var(--space-9) + var(--space-2));
+      width: var(--space-9);
+      height: var(--space-9);
       flex: 0 0 auto;
       margin-top: 0;
-      padding: var(--space-3);
-      border-radius: var(--radius-pill);
-      background: var(--surface-popover);
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
       color: var(--text-primary);
     }
   }
@@ -11187,14 +11213,8 @@ html.no-backdrop-blur {
 // inteira e quem limita a leitura é o `max-width` do conteúdo, lá no
 // .subscription-plans--settings.
 .subscription-modal__settings-page {
-  display: flex;
+  @extend .subscription-surface;
   width: 100%;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  gap: 0;
-  margin: 0;
-  padding: 0;
 }
 
 @keyframes subscription-backdrop-enter {
@@ -11235,6 +11255,19 @@ html.no-backdrop-blur {
   to {
     opacity: 0;
   }
+}
+
+// Faixa de arrasto no topo do modal: espelha a titlebar nativa que o
+// modal cobre. O botao de fechar (z-index 1003) fica acima dela sem
+// herdar o arrasto.
+.subscription-modal__drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-header-height);
+  z-index: var(--z-modal);
+  pointer-events: auto;
 }
 
 @media (max-width: 860px) {

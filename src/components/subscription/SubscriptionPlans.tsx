@@ -2,6 +2,7 @@ import { CalendarClock, Check, CloudUpload, CreditCard, ExternalLink, Link, Rota
 import { CupStar, ServerUpdate, Trophy, UserEdit } from "reicon-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppData } from "../../context/AppDataContext";
+import { useAuth } from "../../context/AuthContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
@@ -178,6 +179,7 @@ export function SubscriptionPlans({
 }: SubscriptionPlansProps) {
   const { appearance, t } = useSettings();
   const { showToast } = useOverlay();
+  const { status, openAuthModal } = useAuth();
   const appData = useAppData();
   const steamProfile = steamProfileProp ?? appData.steamProfile;
   const [discordLinkStatus, setDiscordLinkStatus] = useState<DiscordLinkStatus | null>(null);
@@ -585,12 +587,12 @@ export function SubscriptionPlans({
     };
   }> = {
     monthly: {
-      price: "R$ 6,99",
+      price: copy("R$ 6,99", "$1.35"),
       cadence: t("subscription.plans.monthly.cadence"),
       description: copy("Ideal para testar a sincronização premium sem compromisso longo.", "Ideal for trying premium sync without a long commitment."),
     },
     quarterly: {
-      price: "R$ 14,99",
+      price: copy("R$ 14,99", "$2.90"),
       cadence: t("subscription.plans.quarterly.cadence"),
       description: copy("Mais economia para manter seus saves protegidos por mais tempo.", "Better value to keep your saves protected for longer."),
       savings: {
@@ -665,6 +667,10 @@ export function SubscriptionPlans({
 
   async function handleSubscribe(planId: SubscriptionPlanId) {
     if (planId === "free") return;
+    if (status !== "authenticated") {
+      openAuthModal();
+      return;
+    }
     if (!discordLinkStatus?.linked) {
       const discordUrl = await ghostboxApi.getDiscordLinkUrl();
       if (discordUrl) void ghostboxApi.openExternalUrl(discordUrl);
@@ -778,11 +784,13 @@ export function SubscriptionPlans({
           >
             <div className="subscription-plan-card__head">
               <h4>{plan.title}</h4>
-              {plan.savings && (
-                <span className="subscription-plan-card__savings">
-                  {plan.savings.value}
-                </span>
-              )}
+              <span
+                className="subscription-plan-card__savings"
+                aria-hidden={!plan.savings}
+                style={plan.savings ? undefined : { visibility: "hidden" }}
+              >
+                {plan.savings?.value ?? "\u00A0"}
+              </span>
             </div>
 
             <p className="subscription-plan-card__price">
