@@ -486,7 +486,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               debouncedQuery={shell.debouncedQuery}
               activeSettingsTabId={shell.activeSettingsTabId}
               onSettingsTabChange={handleSidebarSettingsTabChange}
-              showSettingsTabsBar={isFloatingNavLayout}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
               activeLibraryCollectionId={shell.activeLibraryCollectionId}

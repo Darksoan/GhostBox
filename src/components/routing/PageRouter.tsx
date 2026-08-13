@@ -107,7 +107,6 @@ interface PageRouterProps {
   debouncedQuery: string;
   activeSettingsTabId: string;
   onSettingsTabChange: (tabId: SettingsTabId) => void;
-  showSettingsTabsBar: boolean;
   activeProfileCollectionId?: string;
   setActiveProfileCollectionId: (id: string | undefined) => void;
   activeLibraryCollectionId: string | null;
@@ -125,7 +124,6 @@ export function PageRouter({
   debouncedQuery,
   activeSettingsTabId,
   onSettingsTabChange,
-  showSettingsTabsBar,
   activeProfileCollectionId,
   setActiveProfileCollectionId,
   activeLibraryCollectionId,
@@ -307,7 +305,6 @@ export function PageRouter({
       return (
         <LazySettingsPage
           activeTabId={activeSettingsTabId as never}
-          showTabsBar={showSettingsTabsBar}
           onTabChange={onSettingsTabChange}
           games={appData.addedLibraryGames}
           steamProfile={appData.steamProfile}
