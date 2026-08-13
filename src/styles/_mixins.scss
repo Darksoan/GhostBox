@@ -190,3 +190,13 @@
   letter-spacing: var(--ls-800);
   font-weight: var(--weight-semibold);
 }
+
+/// Trava a coluna de conteúdo em `--content-max-width` e a centraliza.
+///
+/// Vai no padding, não em `max-width`, de propósito: a caixa continua com 100%
+/// da largura, então quem pinta fundo próprio (`.home-page`) segue full-bleed e
+/// não vira uma faixa de cor no meio do gradiente do shell. Abaixo do limite o
+/// `max()` cai no `$gutter` e nada muda.
+@mixin content-cap($gutter) {
+  padding-inline: max(#{$gutter}, calc((100% - var(--content-max-width)) / 2));
+}

@@ -393,14 +393,6 @@ export function CatalogueList({
           onGameContextMenu={onGameContextMenu}
         />
       ))}
-      {viewMode === "grid" &&
-        Array.from({ length: (3 - (games.length % 3)) % 3 }).map((_, index) => (
-          <div
-            key={`catalogue-grid-placeholder-${index}`}
-            className="catalogue-list__item catalogue-list__item--placeholder"
-            aria-hidden="true"
-          />
-        ))}
     </div>
   );
 }

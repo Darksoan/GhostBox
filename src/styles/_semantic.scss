@@ -208,6 +208,12 @@
   // até o fim do scrollport, então o último elemento encosta na borda da janela.
   // Toda raiz de página aplica este token.
   --page-bottom-space: var(--space-14);
+  // Largura máxima da coluna de conteúdo nas abas tipo vitrine (Home,
+  // Catálogo, Downloads, Notificações). Mesmo princípio do cliente Steam:
+  // passando disto a página não estica os cards, só sobra fundo nas laterais.
+  // Abas de acervo (Biblioteca, Perfil) ficam de fora e usam a janela inteira,
+  // como a Biblioteca da Steam. Aplicado via `mixins.content-cap`.
+  --content-max-width: 1200px;
 
 // --- Tamanho de fonte (papel semântico, valores vêm da rampa --fs-*) ---
   --type-size-micro: var(--fs-100);

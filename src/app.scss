@@ -2679,8 +2679,8 @@ p {
   width: 100%;
   min-height: 100%;
   height: auto;
-  padding: var(--home-page-block-start-padding) var(--home-page-inline-padding)
-    var(--page-bottom-space);
+  padding: var(--home-page-block-start-padding) 0 var(--page-bottom-space);
+  @include mixins.content-cap(var(--home-page-inline-padding));
   background: var(--background-dark);
   /* `clip` e não `hidden`: com `overflow-x: hidden` a spec computa o
      `overflow-y: visible` como `auto`, e a Home virava scroller próprio — a
@@ -2689,9 +2689,9 @@ p {
   overflow-y: visible;
 }
 
-.home-page--maximized {
-  --home-content-inline-inset: 52px;
-}
+/* Sem bump de inset ao maximizar: o respiro lateral agora vem do próprio
+   `content-cap`, que trava a coluna em `--content-max-width` e joga a sobra
+   pras margens. Somar inset por cima disso só estreitaria o conteúdo. */
 
 .home-page--maximized .home-category__games .home-category-card__cover,
 .home-page--maximized .home-recommended__track .home-category-card__cover {
@@ -3066,6 +3066,10 @@ p {
   padding-inline: var(--home-content-inline-inset);
 }
 
+/* Contagem de colunas fixa de propósito: `HomeCategorySection` (HomePage.tsx)
+   renderiza exatamente `maxGames` slots — 6 em janela normal, 8 a partir de
+   1400px (`useWidescreen`) — preenchendo o que falta com `--empty`. 3x2 e 4x2
+   fecham as linhas; `auto-fill` deixaria a última linha torta. */
 .home-category__games {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6556,7 +6560,8 @@ p {
   /* Sem topo o primeiro cartão de filtro encostava na barra de busca: esta
      página não tem cabeçalho próprio para abrir o espaço, ao contrário das
      outras (`.content-section`). */
-  padding: var(--space-4) var(--space-10) 0;
+  padding: var(--space-4) 0 0;
+  @include mixins.content-cap(var(--space-10));
 
   &__footer {
     display: flex;
@@ -7776,7 +7781,7 @@ input[type="search"]::-ms-reveal {
    capa em cima e o texto abaixo; a ação de "adicionado" flutua sobre a capa. */
 .catalogue-list--grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   align-items: stretch;
   gap: var(--space-4);
 
@@ -7788,11 +7793,6 @@ input[type="search"]::-ms-reveal {
     min-height: 0;
     padding-right: 0;
     contain-intrinsic-size: auto 240px;
-  }
-
-  .catalogue-list__item--placeholder {
-    content-visibility: visible;
-    cursor: default;
   }
 
   .catalogue-list__main {
@@ -7996,6 +7996,9 @@ input[type="search"]::-ms-reveal {
 .notifications-feed {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
   gap: var(--space-7);
 }
 
@@ -8335,9 +8338,14 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  /* Lista de coluna única: trava na mesma largura das abas vitrine em vez de
+     esticar linha por linha na janela maximizada. */
   &__list {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: var(--content-max-width);
+    margin-inline: auto;
     gap: var(--space-5);
   }
 
@@ -10029,12 +10037,12 @@ input[type="search"]::-ms-reveal {
 
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-6);
   padding: 0 var(--space-10);
 
   &--dense {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
 
   &--portrait {
@@ -10910,7 +10918,9 @@ html.no-backdrop-blur {
 
   /* Janela larga (maximizada): a Home ganha uma coluna por seção em vez de
      esticar os cards — grades viram 4x4x6 no rail de recomendados, explorar e
-     categorias. As setas acompanham o inset de 36px, inalterado. */
+     categorias. As setas acompanham o inset de 36px, inalterado. Manter em par
+     com `useWidescreen` (mesmo 1400px) em HomePage.tsx, que sobe `maxGames`
+     de 6 para 8 e depende destas 4 colunas para fechar 4x2. */
   .home-category__games {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -10930,11 +10940,11 @@ html.no-backdrop-blur {
   }
 
   /* Centraliza somente os containers; título continua alinhado ao restante da
-     Home, no inset padrão da seção. */
+     Home, no inset padrão da seção. Sem `max-width` próprio: a Home inteira já
+     está travada em `--content-max-width` pelo `content-cap`. */
   .home-calendar__rail {
     align-self: center;
     width: 100%;
-    max-width: 1560px;
   }
 
   .home-calendar__track {
@@ -10957,11 +10967,6 @@ html.no-backdrop-blur {
 
   .catalogue-list__main {
     grid-template-columns: 224px minmax(0, 1fr);
-  }
-
-  .downloads-page__list,
-  .notifications-feed {
-    max-width: 1320px;
   }
 }
 
@@ -14864,8 +14869,6 @@ button,
 
 @media (max-width: 1200px) {
 
-  .game-grid,
-  .game-grid--dense,
   .settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -15034,8 +15037,6 @@ button,
     }
   }
 
-  .game-grid,
-  .game-grid--dense,
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -15069,12 +15070,8 @@ button,
     grid-template-columns: 140px minmax(0, 1fr);
   }
 
-  .catalogue-list--grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-
-    .catalogue-list__main {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  .catalogue-list--grid .catalogue-list__main {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .modal__details {
