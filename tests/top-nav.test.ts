@@ -46,6 +46,23 @@ describe("TopNav — componente", () => {
   });
 });
 
+describe("TopNav — montagem no header", () => {
+  const header = readFileSync("src/components/layout/Header.tsx", "utf8");
+
+  it("fica entre o bloco da esquerda e o de ações", () => {
+    const left = header.indexOf("header__section--left");
+    const nav = header.indexOf("<TopNav");
+    const actions = header.indexOf("header__section--actions");
+
+    expect(nav).toBeGreaterThan(left);
+    expect(nav).toBeLessThan(actions);
+  });
+
+  it("leva o perfil para o bloco de ações", () => {
+    expect(header).toContain("<NavProfile");
+  });
+});
+
 describe("TopNav — estilos", () => {
   const css = postcss.parse(compile("src/app.scss").css);
 

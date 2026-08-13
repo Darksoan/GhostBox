@@ -46,6 +46,8 @@ import {
 } from "../../utils/storage";
 import { SearchSuggestionsLoadingState } from "../ui/LoadingStates";
 import { FeedbackModal } from "../modals/FeedbackModal";
+import { TopNav } from "./TopNav";
+import { NavProfile } from "./NavProfile";
 
 
 const discordInviteUrl = "https://discord.gg/Y7XTy5rKBc";
@@ -128,6 +130,9 @@ interface HeaderProps {
   onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
   onForward: () => void;
+  onNavigate: (page: Page) => void;
+  onOpenProfile: () => void;
+  isCloudProfileRestoring?: boolean;
   onNavigateToNotifications?: () => void;
   onClickPremium?: () => void;
   onOpenSubscriptionPortal?: (flow: SubscriptionPortalFlow) => void;
@@ -179,6 +184,9 @@ export const Header = memo(function Header({
   onSelectSuggestion,
   onBack,
   onForward,
+  onNavigate,
+  onOpenProfile,
+  isCloudProfileRestoring = false,
   onNavigateToNotifications,
   onClickPremium,
   onOpenSubscriptionPortal,
@@ -557,9 +565,18 @@ export const Header = memo(function Header({
             <ChevronRight size={17} strokeWidth={2.0} aria-hidden="true" />
           </button>
         </div>
+
+        <TopNav activePage={page} onNavigate={onNavigate} />
       </div>
 
       <div className="header__section header__section--actions">
+        <NavProfile
+          profile={steamProfile}
+          isCloudProfileRestoring={isCloudProfileRestoring}
+          isActive={page === "profile"}
+          onOpenProfile={onOpenProfile}
+          className="header__profile"
+        />
         <button
           type="button"
           className="header__icon-button header__feedback-button"

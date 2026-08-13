@@ -467,6 +467,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             }}
             onBack={handleBack}
             onForward={handleForward}
+            onNavigate={handleNavigate}
+            onOpenProfile={() => handleNavigate("profile")}
+            isCloudProfileRestoring={appData.isCloudProfileRestoring}
             onNavigateToNotifications={() => handleNavigate("notifications")}
             onClickPremium={() => {
               setSubscriptionModalOpen(true);
