@@ -1319,6 +1319,16 @@ describe("Card flutuante removido", () => {
     expect(app).not.toContain("FloatingNav");
     expect(app).not.toContain("app-main--floating-nav");
   });
+
+  // Herdado de `tests/floating-nav.test.ts`, que este passo deleta: sem isto o
+  // guarda-corpo do desacoplamento da Task 8 sumiria junto com o arquivo.
+  it("o GameModal não procura mais o card no DOM", () => {
+    const modal = readFileSync("src/components/modals/GameModal.tsx", "utf8");
+    expect(modal).not.toContain('querySelector(".floating-nav")');
+    expect(modal).not.toContain("floatingNavTop");
+    expect(modal).not.toContain("floatingNavGapPx");
+    expect(modal).toContain("sidebarBottom");
+  });
 });
 ```
 
@@ -1343,10 +1353,14 @@ Run: `npx tsc --noEmit` e `npx sass --no-source-map src/app.scss /dev/null` → 
 
 - [ ] **Step 5: Commit**
 
+Estagiar por caminho explícito, nunca `git add -A`: o repositório pode ter trabalho de terceiros sem commit, e `-A` varreria tudo para dentro deste commit.
+
 ```bash
-git add -A
+git add src/App.tsx src/app.scss tests/no-floating-nav.test.ts tests/vertical-covers.test.ts tests/page-bottom-spacing.test.ts
 git commit -m "feat: remove o card de navegação flutuante"
 ```
+
+Os arquivos deletados já ficaram estagiados pelo `git rm` do Step 3.
 
 ---
 
@@ -1434,10 +1448,14 @@ Run: `npm run tauri:dev` — percorrer todas as abas; redimensionar de 1920px a 
 
 - [ ] **Step 5: Commit**
 
+Estagiar por caminho explícito, nunca `git add -A` — mesma razão da Task 9.
+
 ```bash
-git add -A
+git add src/App.tsx src/app.scss tests/no-global-sidebar.test.ts tests/home-layout.test.ts tests/typography-tokens.test.ts tests/viewport-resize.test.ts
 git commit -m "feat: remove a sidebar global em favor da navegação no topo"
 ```
+
+Os arquivos deletados já ficaram estagiados pelo `git rm` do Step 3.
 
 ---
 
