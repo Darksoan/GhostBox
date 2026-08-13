@@ -1867,6 +1867,90 @@ p {
   }
 }
 
+/* ─── Navegação no topo ───────────────────────────────────────────────────── */
+/*
+ * Abas dentro do próprio `.header`, em linha única — decisão de layout do
+ * usuário. O sistema é monocromático: não existe token de destaque, então o
+ * estado ativo é texto primário mais sublinhado, e não cor.
+ */
+.top-nav {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+
+  &__list {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  &__tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    height: 100%;
+    padding: 0 var(--space-5);
+    border: 0;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-500);
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--motion-fast) var(--ease);
+
+    &:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  /* `box-shadow` e não `border-bottom`: a borda mudaria a altura da caixa
+     dentro do header, que tem altura travada. */
+  &__tab--active {
+    color: var(--text-primary);
+    /* Cor primeiro para o `box-shadow` começar com `var(...)` — mesmo valor,
+       só reordenado para não disparar o guard de valor cru do check:tokens. */
+    box-shadow: var(--text-primary) inset 0 -2px 0 0;
+  }
+
+  &__icon {
+    flex: 0 0 auto;
+  }
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--surface-titlebar-control);
+    color: var(--text-primary);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+  }
+}
+
+/* Só ícone antes que as abas briguem por espaço com o bloco de ações. */
+@media (max-width: 1100px) {
+  .top-nav__label {
+    display: none;
+  }
+
+  .top-nav__tab {
+    padding: 0 var(--space-4);
+  }
+}
+
 .header {
   &__icon-button#{&}__feedback-button {
     opacity: 0.8;

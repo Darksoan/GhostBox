@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { compile } from "sass-embedded";
+import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -41,5 +43,46 @@ describe("TopNav — componente", () => {
 
   it("marca a aba ativa para leitores de tela", () => {
     expect(source).toContain('aria-current={isActive ? "page" : undefined}');
+  });
+});
+
+describe("TopNav — estilos", () => {
+  const css = postcss.parse(compile("src/app.scss").css);
+
+  const declsFor = (selector: string) => {
+    const found = new Map<string, string>();
+    css.walkRules((rule) => {
+      if (rule.selector !== selector) return;
+      rule.walkDecls((declaration) => {
+        found.set(declaration.prop, declaration.value);
+      });
+    });
+    return found;
+  };
+
+  it("usa o texto terciário no inativo e o primário no ativo", () => {
+    expect(declsFor(".top-nav__tab").get("color")).toBe("var(--text-tertiary)");
+    expect(declsFor(".top-nav__tab--active").get("color")).toBe(
+      "var(--text-primary)"
+    );
+  });
+
+  it("carrega o estado ativo no sublinhado, já que o sistema não tem cor de destaque", () => {
+    expect(declsFor(".top-nav__tab--active").get("box-shadow")).toContain(
+      "var(--text-primary)"
+    );
+  });
+
+  it("colapsa para só ícone antes de o header apertar", () => {
+    const source = readFileSync("src/app.scss", "utf8");
+    expect(source).toContain("@media (max-width: 1100px)");
+    let labelHidden = false;
+    css.walkAtRules("media", (atRule) => {
+      if (!atRule.params.includes("1100px")) return;
+      atRule.walkRules((rule) => {
+        if (rule.selector.includes(".top-nav__label")) labelHidden = true;
+      });
+    });
+    expect(labelHidden).toBe(true);
   });
 });
