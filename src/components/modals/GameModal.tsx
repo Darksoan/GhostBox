@@ -34,6 +34,7 @@ import {
   loadGameStoreDetailsCached,
 } from "../../utils/gameCache";
 import { isAchievementUnlocked } from "../../utils/achievementStats";
+import { subscribeScrollIdle } from "../../utils/scrollIdle";
 import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
 import {
   imageSourceCache,
@@ -51,6 +52,7 @@ import {
 import { lazy, Suspense } from "react";
 import { useSettings } from "../../context/settings";
 import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
+import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 
 const LazyGallerySlider = lazy(() =>
   import("../ui/GallerySlider").then((m) => ({ default: m.GallerySlider }))
@@ -291,6 +293,9 @@ function sanitizeSteamAboutHtml(value: string) {
 // Keyed by the raw description, so a changed payload can never serve stale HTML.
 // Descriptions run to tens of KB, hence the low ceiling: this holds both the raw
 // key and the sanitized value for each entry.
+// Folga entre o fim do bloco "sobre" e o topo do card de navegação flutuante.
+const floatingNavGapPx = 16;
+
 const sanitizedAboutHtmlCache = new Map<string, string>();
 const sanitizedAboutHtmlCacheLimit = 12;
 
@@ -837,6 +842,7 @@ export function GameModal({
   const aboutContentRef = useRef<HTMLDivElement | null>(null);
   const aboutActionsRef = useRef<HTMLDivElement | null>(null);
   const [isAboutOverflowing, setIsAboutOverflowing] = useState(false);
+  const isMaximized = useWindowMaximized();
 
   useEffect(() => {
     setActiveScreenshot(0);
@@ -1237,6 +1243,7 @@ export function GameModal({
   const visibleChips = [...new Set([...visibleGenres, ...visibleTags])];
   const [aboutTheGameHtml, setAboutTheGameHtml] = useState("");
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+  const isEffectivelyExpanded = isMaximized || isAboutExpanded;
 
   useEffect(() => {
     let cancelled = false;
@@ -1305,7 +1312,7 @@ export function GameModal({
   useEffect(() => {
     const shell = aboutContentShellRef.current;
 
-    if (!aboutTheGameHtml || isAboutExpanded) {
+    if (!aboutTheGameHtml || isEffectivelyExpanded) {
       shell?.style.removeProperty("--about-collapsed-height");
       setIsAboutOverflowing(false);
       return;
@@ -1330,10 +1337,25 @@ export function GameModal({
             : sidebar.getBoundingClientRect().bottom;
         const shellTop = currentShell.getBoundingClientRect().top;
         const actionsHeight = actions?.getBoundingClientRect().height ?? 36;
-        // `- 10` é o gap do flex da seção (--space-5) entre o shell e as ações.
+
+        // A sidebar é `sticky` e pode terminar em qualquer altura da janela,
+        // inclusive atrás do card de navegação flutuante. Nesse layout o card é
+        // a única navegação e fica por cima do modal, então ele — e não a
+        // sidebar — passa a ser o limite de baixo: o botão "Ver mais" não pode
+        // ficar embaixo dele. Sem card no DOM (layout com sidebar), o limite
+        // continua sendo só a sidebar.
+        const floatingNav = document.querySelector(".floating-nav");
+        const floatingNavTop = floatingNav
+          ? floatingNav.getBoundingClientRect().top - floatingNavGapPx
+          : Number.POSITIVE_INFINITY;
+        const bottomLimit = Math.min(sidebarBottom, floatingNavTop);
+
+        // A shell ocupa a altura total até o limite de baixo. O botão "Ver mais"
+        // fica dentro da shell com `position: absolute; bottom: 0`, sobrepondo
+        // o texto — assim o gradiente e o botão ficam no mesmo Y (sidebar bottom).
         const nextHeight = Math.max(
           160,
-          Math.floor(sidebarBottom - shellTop - actionsHeight - 10)
+          Math.floor(bottomLimit - shellTop)
         );
         const content = currentShell.firstElementChild;
         const contentHeight =
@@ -1345,7 +1367,9 @@ export function GameModal({
           "--about-collapsed-height",
           `${nextHeight}px`
         );
-        setIsAboutOverflowing(contentHeight > nextHeight + 1);
+        // O conteúdo transborda se não cabe na área acima do botão sobreposto.
+        const usableHeight = nextHeight - actionsHeight - 10;
+        setIsAboutOverflowing(contentHeight > usableHeight + 1);
       });
     };
 
@@ -1368,12 +1392,19 @@ export function GameModal({
       window.addEventListener("resize", handleResize);
     }
 
+    // A sidebar é sticky e o card flutuante é fixo na janela: os dois limites de
+    // baixo mudam de posição relativa conforme a página rola, e nenhum observer
+    // de tamanho vê isso. Remede quando a rolagem para — durante a rolagem seria
+    // o bloco mudando de altura debaixo do dedo.
+    const unsubscribeScrollIdle = subscribeScrollIdle(updateCollapsedHeight);
+
     return () => {
       window.cancelAnimationFrame(frameId);
       if (handleResize) window.removeEventListener("resize", handleResize);
+      unsubscribeScrollIdle();
       observer?.disconnect();
     };
-  }, [aboutTheGameHtml, isAboutExpanded, displayGame?.id, shouldShowDetailLoading]);
+  }, [aboutTheGameHtml, isEffectivelyExpanded, displayGame?.id, shouldShowDetailLoading]);
 
   const handleViewAchievements = useCallback(() => {
     if (!displayGame || !onViewAchievements) return;
@@ -1521,34 +1552,34 @@ export function GameModal({
                   >
                     <div
                       ref={aboutContentShellRef}
-                      className={`modal__about-content-shell ${isAboutExpanded ? "modal__about-content-shell--expanded" : ""} ${!isAboutExpanded && isAboutOverflowing ? "modal__about-content-shell--clamped" : ""}`}
+                      className={`modal__about-content-shell ${isEffectivelyExpanded ? "modal__about-content-shell--expanded" : ""} ${!isEffectivelyExpanded && isAboutOverflowing ? "modal__about-content-shell--clamped" : ""}`}
                     >
                       <div
                         ref={aboutContentRef}
                         className="modal__about-content"
                         dangerouslySetInnerHTML={{ __html: aboutTheGameHtml }}
                       />
-                      {!isAboutExpanded && isAboutOverflowing && (
+                      {!isEffectivelyExpanded && isAboutOverflowing && (
                         <div className="modal__about-fade" aria-hidden="true" />
                       )}
+                      {!isMaximized && (isAboutOverflowing || isAboutExpanded) && (
+                        <div className="modal__about-actions" ref={aboutActionsRef}>
+                          <button
+                            type="button"
+                            className="button button--outline modal__about-toggle"
+                            onClick={() => setIsAboutExpanded((value) => !value)}
+                          >
+                            {isAboutExpanded
+                              ? appearance.language === "en"
+                                ? "Show less"
+                                : "Ver menos"
+                              : appearance.language === "en"
+                                ? "Show more"
+                                : "Ver mais"}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {(isAboutOverflowing || isAboutExpanded) && (
-                      <div className="modal__about-actions" ref={aboutActionsRef}>
-                        <button
-                          type="button"
-                          className="button button--outline modal__about-toggle"
-                          onClick={() => setIsAboutExpanded((value) => !value)}
-                        >
-                          {isAboutExpanded
-                            ? appearance.language === "en"
-                              ? "Show less"
-                              : "Ver menos"
-                            : appearance.language === "en"
-                              ? "Show more"
-                              : "Ver mais"}
-                        </button>
-                      </div>
-                    )}
                   </section>
                 )}
               </div>

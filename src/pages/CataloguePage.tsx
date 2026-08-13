@@ -2,8 +2,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  List,
-  Rows2,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -54,8 +52,10 @@ import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import {
+  CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS,
   createCatalogueHoverPreviewIntent,
   createCatalogueHoverPreviewRetention,
+  type CataloguePreviewPointer,
 } from "../utils/cataloguePreview";
 const maxVisibleFilterOptions = 160;
 
@@ -423,8 +423,10 @@ export function CataloguePage({
 }: CataloguePageProps) {
   const { t } = useSettings();
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  // O preview pousa sempre nesta faixa: borda direita dentro da coluna de
+  // filtros, cobrindo um pedaço dela.
+  const filtersColumnRef = useRef<HTMLElement | null>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
@@ -432,14 +434,25 @@ export function CataloguePage({
     y: number;
     mode: "game" | "collection";
   } | null>(null);
-  const [hoveredGame, setHoveredGame] = useState<GhostBoxGame | null>(null);
-  const clearHoveredGame = useCallback(() => setHoveredGame(null), []);
+  // Cursor e cartão viajam junto do jogo: o preview flutua por cima da
+  // listagem, colado no ponteiro, fora da coluna de filtros.
+  const [hoveredPreview, setHoveredPreview] = useState<{
+    game: GhostBoxGame;
+    anchor: HTMLElement | null;
+    pointer: CataloguePreviewPointer | null;
+  } | null>(null);
+  const clearHoveredGame = useCallback(() => setHoveredPreview(null), []);
   const hoverPreviewRetention = useMemo(
     () => createCatalogueHoverPreviewRetention(clearHoveredGame),
     [clearHoveredGame]
   );
   const hoverPreviewIntent = useMemo(
-    () => createCatalogueHoverPreviewIntent<GhostBoxGame>(setHoveredGame),
+    () =>
+      createCatalogueHoverPreviewIntent<{
+        game: GhostBoxGame;
+        anchor: HTMLElement | null;
+        pointer: CataloguePreviewPointer | null;
+      }>(setHoveredPreview),
     []
   );
   const sortOptions = useMemo(
@@ -577,7 +590,7 @@ export function CataloguePage({
   useEffect(() => {
     hoverPreviewRetention.cancelClear();
     hoverPreviewIntent.cancel();
-    setHoveredGame(null);
+    setHoveredPreview(null);
     setContextMenu(null);
   }, [displayedPage, hoverPreviewIntent, hoverPreviewRetention, visibleGamesCacheKey]);
 
@@ -590,13 +603,34 @@ export function CataloguePage({
   );
 
   const handleHoverGame = useCallback(
-    (game: GhostBoxGame | null, options?: { immediate?: boolean }) => {
+    (
+      game: GhostBoxGame | null,
+      options?: {
+        immediate?: boolean;
+        anchor?: HTMLElement | null;
+        pointer?: CataloguePreviewPointer | null;
+        settled?: boolean;
+      }
+    ) => {
       if (game) {
+        const target = {
+          game,
+          anchor: options?.anchor ?? null,
+          pointer: options?.pointer ?? null,
+        };
         hoverPreviewRetention.cancelClear();
         if (options?.immediate) {
-          hoverPreviewIntent.showImmediately(game);
+          hoverPreviewIntent.showImmediately(target);
         } else {
-          hoverPreviewIntent.scheduleShow(game);
+          // Hover que veio do conteúdo se mexendo espera bem mais: assim a
+          // enxurrada de cartões passando sob o cursor comita um preview só,
+          // no fim, em vez de um por cartão.
+          hoverPreviewIntent.scheduleShow(
+            target,
+            options?.settled === false
+              ? CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS
+              : undefined
+          );
         }
         return;
       }
@@ -701,37 +735,6 @@ export function CataloguePage({
               )}
             </div>
             <div className="catalogue-page__toolbar-actions">
-              <button
-                type="button"
-                className="catalogue-page__view-toggle"
-                aria-label={
-                  viewMode === "list"
-                    ? t("catalogue.view.grid")
-                    : t("catalogue.view.list")
-                }
-                title={
-                  viewMode === "list"
-                    ? t("catalogue.view.grid")
-                    : t("catalogue.view.list")
-                }
-                aria-pressed={viewMode === "grid"}
-                onClick={() =>
-                  setViewMode((mode) => (mode === "list" ? "grid" : "list"))
-                }
-              >
-                <span key={viewMode} className="catalogue-page__view-toggle-icon">
-                  {viewMode === "list" ? (
-                    <Rows2 size={19} strokeWidth={2} aria-hidden="true" />
-                  ) : (
-                    <List size={19} strokeWidth={2} aria-hidden="true" />
-                  )}
-                </span>
-                <span>
-                  {viewMode === "list"
-                    ? t("catalogue.view.grid")
-                    : t("catalogue.view.list")}
-                </span>
-              </button>
               <div
                 className={`settings-dropdown catalogue-page__sort ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
                 ref={sortDropdownRef}
@@ -818,7 +821,6 @@ export function CataloguePage({
             <div className="catalogue-page__list-container">
               <CatalogueList
                 games={visibleGames}
-                viewMode={viewMode}
                 onOpenGame={onOpenGame}
                 onHoverGame={handleHoverGame}
                 addedGameAppIds={addedGameAppIds}
@@ -860,11 +862,10 @@ export function CataloguePage({
           />
         )}
         <aside
+          ref={filtersColumnRef}
           id="catalogue-filters-panel"
           className={`catalogue-filters ${isFiltersOpen ? "catalogue-filters--open" : ""}`}
           aria-label={t("catalogue.filters.label")}
-          onPointerEnter={handlePreviewPointerEnter}
-          onPointerLeave={handlePreviewPointerLeave}
         >
           <div className="catalogue-filters__mobile-header">
             <strong>{t("catalogue.filters.label")}</strong>
@@ -900,11 +901,17 @@ export function CataloguePage({
               />
             ))}
           </div>
-          <CatalogueHoverPreview
-            game={hoveredGame}
-          />
         </aside>
       </div>
+
+      <CatalogueHoverPreview
+        game={hoveredPreview?.game ?? null}
+        anchor={hoveredPreview?.anchor ?? null}
+        columnRef={filtersColumnRef}
+        pointer={hoveredPreview?.pointer ?? null}
+        onPointerEnter={handlePreviewPointerEnter}
+        onPointerLeave={handlePreviewPointerLeave}
+      />
 
       {contextMenu && contextMenuItems.length > 0 && (
         <ContextMenu

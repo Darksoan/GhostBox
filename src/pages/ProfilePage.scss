@@ -2,7 +2,16 @@
   /* Match edit-profile-cover-modal glass exactly */
   --profile-glass-blur: 4px;
   --profile-glass-background: var(--overlay-medium);
-  --profile-cover-height: clamp(220px, 28vw, 280px);
+  /*
+   * Altura fixa, sem `vw` e sem media query.
+   *
+   * Ligar a altura à largura da viewport faz `object-fit: cover` mudar o
+   * recorte: a janela alarga, a caixa muda de proporção e a capa passa a mostrar
+   * uma faixa vertical diferente da arte. Maximizar então não só aumentava a
+   * capa como reenquadrava a imagem. Com altura constante, maximizar só revela
+   * mais no eixo horizontal — que é o eixo que de fato cresceu.
+   */
+  --profile-cover-height: 320px;
 
   display: flex;
   flex-direction: column;
@@ -109,7 +118,12 @@
     z-index: 1;
     width: 100%;
     min-height: var(--profile-cover-height);
-    padding: var(--space-10) var(--space-10) var(--space-6);
+    /*
+     * Base leva o padding + os 40px da faixa fosca (::after do content-box), que
+     * fica escondida sob a barra de abas. Sem isso, o centro geométrico da capa
+     * cai 20px abaixo do centro da área realmente visível.
+     */
+    padding: var(--space-10) var(--space-10) calc(var(--space-10) + 40px);
     box-sizing: border-box;
     /* Soft fade only — frosted glass strip is solely on __tabs (matches cover modal) */
     background: linear-gradient(
@@ -119,7 +133,8 @@
       color-mix(in srgb, var(--profile-glass-background) 35%, transparent) 78%,
       color-mix(in srgb, var(--profile-glass-background) 55%, transparent) 100%
     );
-    justify-content: flex-end;
+    /* Identidade fica no eixo horizontal médio da capa, não colada no topo */
+    justify-content: center;
   }
 
   /*
@@ -225,7 +240,9 @@
 
   &__identity {
     display: flex;
-    margin: 48px 0 auto;
+    /* Sem margem de topo: o centro vem do justify-content do overlay.
+       O padding-top do overlay (space-10) já cobre a barra de janela. */
+    margin: 0;
     min-height: 0;
     padding: 0;
     align-items: center;
@@ -243,7 +260,7 @@
     padding: 0;
     place-items: center;
     overflow: hidden;
-    border: 1px solid var(--border-subtle);
+    border: none;
     border-radius: var(--radius-circle);
     background-color: var(--background);
     color: var(--text-secondary);
@@ -258,7 +275,6 @@
 
     &:hover,
     &:focus-visible {
-      border-color: var(--border-strong);
       transform: translateY(-2px);
       outline: 0;
     }
@@ -1916,16 +1932,20 @@ html.no-backdrop-blur .profile-page {
 
 @media (min-width: 1400px) {
   .profile-page {
-    --profile-cover-height: clamp(300px, 20vw, 400px);
+    /* A altura da capa é deliberadamente a mesma de qualquer largura — ver a
+       nota em `--profile-cover-height`. Cruzar este breakpoint não pode
+       reenquadrar a arte. */
 
+    /* Janela maximizada: conteúdo do perfil usa toda a largura útil em vez de
+       ficar preso a um teto centralizado. */
     &__achievement-games {
-      width: min(100%, 1440px);
-      margin-right: auto;
-      margin-left: auto;
+      width: 100%;
+      margin-right: 0;
+      margin-left: 0;
     }
 
     &__game-grid.game-grid--portrait {
-      width: min(100%, 1440px);
+      width: 100%;
       margin-right: 0;
       margin-left: 0;
     }
@@ -1936,7 +1956,9 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__overview-console {
-      width: min(100%, 1440px);
+      width: 100%;
+      margin-right: 0;
+      margin-left: 0;
     }
   }
 }

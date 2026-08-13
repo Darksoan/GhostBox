@@ -1,4 +1,9 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import {
+  isViewportResizing,
+  startViewportResizeTracking,
+  subscribeViewportResize,
+} from "../utils/viewportResize";
 
 const flipDurationMs = 180;
 const flipEasing = "cubic-bezier(0.4, 0, 0.2, 1)";
@@ -22,7 +27,12 @@ export function useFlipLayout<T extends HTMLElement>(
     // Quando a animação está desligada não há motivo para medir cada nó: o
     // `getBoundingClientRect` em todo card força um reflow do layout inteiro
     // e escala linear com a lista. Limpa o cache e sai antes de qualquer leitura.
-    if (!enabled || motionIsDisabled()) {
+    //
+    // Durante o arrasto da janela vale o mesmo: as posições anteriores foram
+    // medidas em outra largura, então o FLIP animaria os cards a partir de um
+    // lugar onde eles nunca estiveram — é o "teleporte" que se vê ao redimensionar
+    // e trocar de filtro em seguida.
+    if (!enabled || motionIsDisabled() || isViewportResizing()) {
       previousRectsRef.current = new Map();
       return;
     }
@@ -91,6 +101,24 @@ export function useFlipLayout<T extends HTMLElement>(
 
     previousRectsRef.current = nextRects;
   }, [enabled, layoutKey]);
+
+  // Redimensionar reposiciona todo mundo sem passar por `layoutKey`. As medidas
+  // guardadas viram lixo nesse instante: descarta e corta as animações em voo,
+  // senão elas terminam mirando coordenadas de antes do resize.
+  useEffect(() => {
+    const release = startViewportResizeTracking();
+    const unsubscribe = subscribeViewportResize((resizing) => {
+      if (!resizing) return;
+      previousRectsRef.current = new Map();
+      for (const animation of animationsRef.current.values()) animation.cancel();
+      animationsRef.current.clear();
+    });
+
+    return () => {
+      unsubscribe();
+      release();
+    };
+  }, []);
 
   useLayoutEffect(() => () => {
     for (const animation of animationsRef.current.values()) animation.cancel();

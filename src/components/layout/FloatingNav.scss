@@ -1,0 +1,231 @@
+/* ─── Navegação flutuante (janela maximizada) ─────────────────────────────── */
+/*
+ * Fica `absolute` dentro de `.app-main`, não `fixed`, para acompanhar o chrome
+ * da janela do app.
+ *
+ * Camada acima do modal (`--z-modal`, usado por `.container--modal-open`) e
+ * abaixo de toast/tooltip. Nesse layout a sidebar não existe: o card é a única
+ * navegação da janela, e deixá-lo sob o modal fazia partes dele sumirem atrás
+ * da arte e dos botões do modal — meio card visível, que é pior que qualquer
+ * uma das duas pontas. Clicar num item chama `handleNavigate`, que fecha o
+ * overlay antes de trocar de página, então nada fica navegando por baixo.
+ *
+ * O respiro para o card não cobrir conteúdo vem de `--page-bottom-space`, que
+ * `.app-main--floating-nav` engorda para todas as páginas e para o modal.
+ */
+.floating-nav {
+  position: absolute;
+  z-index: var(--z-popover);
+  bottom: var(--space-8);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  transform: translateX(-50%);
+  transition:
+    transform var(--motion-base) ease,
+    opacity var(--motion-base) ease;
+
+  &--hidden {
+    transform: translateX(-50%) translateY(calc(100% + var(--space-8)));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &__card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--surface-popover);
+    color: var(--text-primary);
+  }
+
+  &__divider {
+    width: 1px;
+    height: var(--space-8);
+    background: var(--border-subtle);
+  }
+
+  &__profile {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-2) var(--space-5) var(--space-2) var(--space-2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: background var(--motion-base) ease;
+
+    &:hover,
+    &--active {
+      background: var(--surface-hover);
+    }
+  }
+
+  &__avatar {
+    display: flex;
+    overflow: hidden;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-circle);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  &__avatar-skeleton {
+    width: 100%;
+    height: 100%;
+    background: var(--surface-muted);
+  }
+
+  &__profile-name {
+    max-width: 160px;
+    overflow: hidden;
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__menu {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    margin: 0;
+    gap: var(--space-1);
+    list-style: none;
+  }
+
+  &__button {
+    position: relative;
+    display: flex;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition:
+      background var(--motion-base) ease,
+      color var(--motion-base) ease;
+
+    &:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    &--active {
+      background: var(--surface-active);
+      color: var(--text-primary);
+    }
+  }
+
+  &__badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: var(--space-8);
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-pill);
+    background: var(--text-strong);
+    color: var(--background-dark);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+    line-height: var(--space-8);
+    text-align: center;
+  }
+
+  &__collections {
+    width: auto;
+    padding: 0 var(--space-3);
+    gap: var(--space-1);
+  }
+
+  &__collections-chevron {
+    transition: transform var(--motion-base) ease;
+
+    &--open {
+      transform: rotate(180deg);
+    }
+  }
+
+  &__dropup {
+    width: 240px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: var(--space-3);
+    border-radius: var(--radius-panel);
+    background: var(--surface-popover);
+  }
+
+  &__dropup-list {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    gap: var(--space-1);
+    list-style: none;
+  }
+
+  &__dropup-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      background var(--motion-base) ease,
+      color var(--motion-base) ease;
+
+    &:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    &--active {
+      background: var(--surface-active);
+      color: var(--text-primary);
+    }
+  }
+
+  &__dropup-name {
+    flex: 1;
+    overflow: hidden;
+    font-size: var(--type-size-compact);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__dropup-count {
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-nav__collections-chevron {
+    transition: none;
+  }
+}

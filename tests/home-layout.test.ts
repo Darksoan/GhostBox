@@ -93,6 +93,28 @@ describe("Home layout", () => {
     expect(genresRule?.toString()).not.toContain("calc(var(--pill-height) * 2");
   });
 
+  it("reserves the second pill row before the async data lands", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const cardStart = component.indexOf("function HomeCategoryCard");
+    const sectionStart = component.indexOf("function HomeCategorySection");
+    const cardSource = component.slice(cardStart, sectionStart);
+
+    // As pills vêm do enrichment assíncrono, card a card. Ligar a linha ao
+    // conteúdo (`secondaryCategories.length > 0`) fazia o card crescer uma
+    // altura de pill quando a resposta dele voltava, remexendo a linha do grid.
+    expect(cardSource).toContain("{showSecondaryPills ? (");
+    expect(cardSource).not.toContain("showSecondaryPills && secondaryCategories.length");
+
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const tagsRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" && node.selector === ".home-category-card__tags",
+    );
+
+    // A altura fixa é o que faz a linha vazia ocupar o mesmo espaço da cheia.
+    expect(tagsRule?.toString()).toContain("height: var(--pill-height)");
+  });
+
   it("keeps Top rated pill color unchanged on hover", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     const hoverRule = stylesheet.nodes.find(

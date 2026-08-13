@@ -1,15 +1,10 @@
 import {
   ChevronRight,
-  Download,
   Folder,
   Heart,
-  Home,
-  Layers,
   Pencil,
-  Settings,
   Trash,
   UserRound,
-  type LucideIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useDeferredValue, useMemo, useState } from "react";
 import type { GhostBoxGame } from "../../data";
@@ -25,20 +20,7 @@ import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../uti
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
-import { Grid } from "reicon-react";
-
-type SidebarNavIcon = LucideIcon | typeof Grid;
-
-const navigation: { id: Page; icon: SidebarNavIcon; labelKey: string }[] = [
-  { id: "home", labelKey: "nav.home", icon: Home },
-  { id: "catalogue", labelKey: "nav.catalogue", icon: Grid },
-  { id: "library", labelKey: "nav.library", icon: Layers },
-  { id: "downloads", labelKey: "nav.downloads", icon: Download },
-];
-
-const sidebarFooterNavigation: { id: Page; icon: LucideIcon; labelKey: string }[] = [
-  { id: "settings", labelKey: "nav.settings", icon: Settings },
-];
+import { primaryNavigation, secondaryNavigation } from "./navigationItems";
 
 interface SidebarProps {
   activePage: Page;
@@ -218,7 +200,7 @@ export const Sidebar = memo(function Sidebar({
         {!isSettingsPage && (
           <nav className="sidebar__section sidebar__mode-panel" >
             <ul className="sidebar__menu">
-              {navigation.map(({ id, labelKey, icon: Icon }) => (
+              {primaryNavigation.map(({ id, labelKey, icon: Icon }) => (
                 <li
                   key={id}
                   className={`sidebar__menu-item ${activePage === id ? "sidebar__menu-item--active" : ""}`}
@@ -236,7 +218,7 @@ export const Sidebar = memo(function Sidebar({
                   </button>
                 </li>
               ))}
-              {sidebarFooterNavigation.map(({ id, labelKey, icon: Icon }) => (
+              {secondaryNavigation.map(({ id, labelKey, icon: Icon }) => (
                 <li
                   key={id}
                   className={`sidebar__menu-item ${activePage === id ? "sidebar__menu-item--active" : ""}`}

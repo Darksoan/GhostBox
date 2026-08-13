@@ -4,6 +4,7 @@ import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
 import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
+import { useWindowMaximized } from "../hooks/useWindowMaximized";
 import {
   HomeWishlistCardSkeleton,
   HomeWishlistReviewSkeleton,
@@ -491,7 +492,13 @@ function HomeCategoryCard({
                 </span>
               ))}
             </span>
-            {showSecondaryPills && secondaryCategories.length > 0 ? (
+            {/* Renderiza a segunda linha sempre que a variante a declara, mesmo
+                vazia: as pills vêm do enrichment assíncrono e chegam card a card.
+                Condicionar ao conteúdo fazia cada card crescer uma linha de pill
+                no instante em que a resposta dele voltava, remexendo a altura da
+                linha do grid e empurrando o que estava abaixo. A altura fixa de
+                `--pill-height` já deixa a linha vazia ocupar o mesmo espaço. */}
+            {showSecondaryPills ? (
               <span className="home-category-card__tags">
                 {secondaryCategories.map((category) => (
                   <span className="home-category-card__genre" key={category}>
@@ -1487,6 +1494,7 @@ export function HomePage({
 }) {
   const { appearance, t } = useSettings();
   const isWidescreen = useWidescreen();
+  const isMaximized = useWindowMaximized();
   const homeFeaturedMaxGames = isWidescreen ? 8 : 6;
   const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
     () =>
@@ -1960,7 +1968,7 @@ export function HomePage({
   });
 
   return (
-    <section className="home-page" aria-label={t("home.pageAria")}>
+    <section className={`home-page${isMaximized ? " home-page--maximized" : ""}`} aria-label={t("home.pageAria")}>
       <HomeRecommendedHero
         title={t("home.recommended")}
         gameGroups={homeVisibleGameGroups}

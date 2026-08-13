@@ -21,6 +21,7 @@ import {
 import { memo, useState, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
@@ -375,29 +376,10 @@ export const Header = memo(function Header({
 
   const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
   const handleClose = useCallback(() => void ghostboxApi.close(), []);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const isMaximized = useWindowMaximized();
 
   const handleToggleMaximize = useCallback(() => {
     void getCurrentWindow().toggleMaximize();
-  }, []);
-
-  useEffect(() => {
-    const win = getCurrentWindow();
-    let cancelled = false;
-
-    const refreshMaximizedState = () => {
-      void win.isMaximized().then((maximized) => {
-        if (!cancelled) setIsMaximized(maximized);
-      });
-    };
-
-    refreshMaximizedState();
-    const unlisten = win.onResized(refreshMaximizedState);
-
-    return () => {
-      cancelled = true;
-      void unlisten.then((dispose) => dispose());
-    };
   }, []);
 
   const titlebarInteractiveSelector =

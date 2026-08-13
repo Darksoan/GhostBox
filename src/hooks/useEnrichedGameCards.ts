@@ -6,6 +6,7 @@ import {
   normalizeGameCacheId,
 } from "../utils/gameCache";
 import { mergeGameCardData } from "../utils/gameCardData";
+import { gameCardEnrichmentQueue } from "../utils/requestQueue";
 
 export function useEnrichedGameCards(
   games: GhostBoxGame[],
@@ -17,6 +18,11 @@ export function useEnrichedGameCards(
     () => new Map<string, GhostBoxGame>()
   );
   const gamesKey = games.map((game) => normalizeGameCacheId(game)).join("|");
+  // O efeito reage a `gamesKey`, não à identidade do array: o pai recria a
+  // lista a cada render e disparar o cleanup nisso cancelaria e re-enfileiraria
+  // as buscas que já estavam em andamento.
+  const gamesRef = useRef(games);
+  gamesRef.current = games;
 
   useEffect(() => {
     if (!enabled) return;
@@ -52,29 +58,45 @@ export function useEnrichedGameCards(
       }
     };
 
-    games.slice(0, limit).forEach((game) => {
+    // A fila segura as buscas num teto de concorrência: a lista pode ter 80
+    // jogos, mas só um punhado vai ao worker por vez. As que ainda não saíram
+    // da fila quando o efeito é cancelado nunca viram requisição.
+    const enqueueDetails = (
+      game: GhostBoxGame,
+      key: string,
+      load: (gameKey: string) => Promise<GhostBoxGame | null>,
+      gameKey: string
+    ) => {
+      if (requestedKeysRef.current.has(key)) return;
+      requestedKeysRef.current.add(key);
+      outstandingKeys.add(key);
+
+      void gameCardEnrichmentQueue
+        .enqueue(() => {
+          if (cancelled) return null;
+          return load(gameKey);
+        })
+        .then((details) => mergeDetails(game, details))
+        .catch(() => undefined)
+        .finally(() => outstandingKeys.delete(key));
+    };
+
+    gamesRef.current.slice(0, limit).forEach((game) => {
       const gameKey = normalizeGameCacheId(game);
       if (!gameKey) return;
 
-      const storeKey = `${gameKey}:store`;
-      if (!requestedKeysRef.current.has(storeKey)) {
-        requestedKeysRef.current.add(storeKey);
-        outstandingKeys.add(storeKey);
-        loadGameStoreDetailsCached(gameKey)
-          .then((details) => mergeDetails(game, details))
-          .catch(() => undefined)
-          .finally(() => outstandingKeys.delete(storeKey));
-      }
-
-      const achievementKey = `${gameKey}:achievements`;
-      if (!requestedKeysRef.current.has(achievementKey)) {
-        requestedKeysRef.current.add(achievementKey);
-        outstandingKeys.add(achievementKey);
-        loadGameAchievementDetailsCached(gameKey)
-          .then((details) => mergeDetails(game, details))
-          .catch(() => undefined)
-          .finally(() => outstandingKeys.delete(achievementKey));
-      }
+      enqueueDetails(
+        game,
+        `${gameKey}:store`,
+        loadGameStoreDetailsCached,
+        gameKey
+      );
+      enqueueDetails(
+        game,
+        `${gameKey}:achievements`,
+        loadGameAchievementDetailsCached,
+        gameKey
+      );
     });
 
     return () => {
@@ -86,7 +108,7 @@ export function useEnrichedGameCards(
         cancelAnimationFrame(frame);
       }
     };
-  }, [enabled, gamesKey, games, limit]);
+  }, [enabled, gamesKey, limit]);
 
   return useMemo(
     () =>

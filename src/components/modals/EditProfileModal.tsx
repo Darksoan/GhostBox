@@ -6,6 +6,10 @@ import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { preloadImageSources } from "../../utils/imageCache";
 import { profileBannerPlaceholderSource } from "../../utils/image";
+import {
+  encodeAvatarDataUrl,
+  encodeBannerDataUrl,
+} from "../../utils/profileImages";
 import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
@@ -14,10 +18,6 @@ type AvatarCropPosition = { x: number; y: number; scale: number };
 const defaultBannerPosition: BannerPosition = { x: 50, y: 50, scale: 1 };
 const defaultAvatarCropPosition: AvatarCropPosition = { x: 50, y: 50, scale: 1 };
 
-const avatarCropSize = 512;
-const bannerMaxWidth = 2800;
-const bannerMaxHeight = 1225;
-const bannerMaxPixels = 3_430_000;
 
 function clampBannerPosition(value: number) {
   return Math.min(100, Math.max(0, Math.round(value)));
@@ -41,74 +41,6 @@ function normalizeBannerPosition(position?: SteamProfile["bannerPosition"]): Ban
     y: clampBannerPosition(position?.y ?? defaultBannerPosition.y),
     scale: clampBannerScale(position?.scale ?? defaultBannerPosition.scale ?? 1),
   };
-}
-
-function loadImage(source: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Avatar image could not be loaded"));
-    image.src = source;
-  });
-}
-
-async function cropAvatarDataUrl(
-  source: string,
-  position: AvatarCropPosition = defaultAvatarCropPosition
-) {
-  const image = await loadImage(source);
-  const sourceSize = Math.min(image.naturalWidth, image.naturalHeight) / position.scale;
-
-  if (!sourceSize) return source;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = avatarCropSize;
-  canvas.height = avatarCropSize;
-
-  const context = canvas.getContext("2d");
-  if (!context) return source;
-
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-
-  context.drawImage(
-    image,
-    ((image.naturalWidth - sourceSize) * position.x) / 100,
-    ((image.naturalHeight - sourceSize) * position.y) / 100,
-    sourceSize,
-    sourceSize,
-    0,
-    0,
-    avatarCropSize,
-    avatarCropSize
-  );
-
-  return canvas.toDataURL("image/webp", 0.85);
-}
-
-async function resizeBannerDataUrl(source: string) {
-  const image = await loadImage(source);
-  const width = image.naturalWidth;
-  const height = image.naturalHeight;
-
-  if (!width || !height) return source;
-
-  const dimensionScale = Math.min(1, bannerMaxWidth / width, bannerMaxHeight / height);
-  const pixelScale = Math.min(1, Math.sqrt(bannerMaxPixels / (width * height)));
-  const scale = Math.min(dimensionScale, pixelScale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
-
-  const context = canvas.getContext("2d");
-  if (!context) return source;
-
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 interface EditProfileModalProps {
@@ -237,7 +169,7 @@ export function EditProfileModal({
         reader.onload = async (event) => {
           const source = event.target?.result as string;
           try {
-            setBannerUrl(await resizeBannerDataUrl(source));
+            setBannerUrl(await encodeBannerDataUrl(source));
           } catch {
             setBannerUrl(source);
           }
@@ -264,10 +196,7 @@ export function EditProfileModal({
 
     try {
       setAvatarUrl(
-        await cropAvatarDataUrl(
-          pendingAvatar.source,
-          avatarCropPosition
-        )
+        await encodeAvatarDataUrl(pendingAvatar.source, avatarCropPosition)
       );
     } catch {
       setAvatarUrl(pendingAvatar.source);

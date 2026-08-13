@@ -524,14 +524,9 @@ export function FavoritesPageLoadingState() {
         {Array.from({ length: 10 }, (_, index) => (
           <article className="favorites-grid__item favorites-grid__item--skeleton" key={`favorite-skeleton-${index}`}>
             <div className="favorites-grid__cover favorites-grid__cover--skeleton skeleton">
-              <div className="game-card__achievement-progress game-card__achievement-progress--skeleton">
-                <div className="game-card__achievement-progress-count">
-                  <span className="favorites-grid__metric-skeleton skeleton" />
-                  <span className="favorites-grid__metric-skeleton favorites-grid__metric-skeleton--short skeleton" />
-                </div>
-                <div className="game-card__achievement-progress-track">
-                  <span className="favorites-grid__progress-skeleton skeleton" />
-                </div>
+              <div className="game-card__achievement-badges">
+                <span className="favorites-grid__metric-skeleton skeleton" />
+                <span className="favorites-grid__metric-skeleton favorites-grid__metric-skeleton--short skeleton" />
               </div>
             </div>
           </article>

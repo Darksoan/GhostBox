@@ -56,14 +56,26 @@ export function AuthScreen() {
     const form = card?.querySelector(".auth-form") as HTMLElement | null;
     if (!card || !form) return;
 
-    const styles = window.getComputedStyle(card);
-    const verticalSpace =
-      parseFloat(styles.paddingTop) +
-      parseFloat(styles.paddingBottom) +
-      parseFloat(styles.borderTopWidth) +
-      parseFloat(styles.borderBottomWidth);
+    const measure = () => {
+      const styles = window.getComputedStyle(card);
+      const verticalSpace =
+        parseFloat(styles.paddingTop) +
+        parseFloat(styles.paddingBottom) +
+        parseFloat(styles.borderTopWidth) +
+        parseFloat(styles.borderBottomWidth);
 
-    setCardHeight(Math.ceil(form.getBoundingClientRect().height + verticalSpace));
+      setCardHeight(Math.ceil(form.getBoundingClientRect().height + verticalSpace));
+    };
+
+    measure();
+
+    // A altura do card é travada em pixels. Sem observar o formulário, estreitar
+    // a janela quebra os rótulos em mais linhas e o card continua na altura
+    // antiga — conteúdo cortado ou sobrando. O observer refaz a conta.
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(form);
+    return () => observer.disconnect();
   }, [view, error, notice, submitting]);
 
   const handleBackdropClick = useCallback(

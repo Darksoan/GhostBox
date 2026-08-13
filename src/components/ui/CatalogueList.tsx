@@ -18,15 +18,34 @@ import {
 import { CatalogueListLoadingState } from "./LoadingStates";
 import { useSettings } from "../../context/settings";
 
+// Espera a largura assentar antes de remedir os chips de gênero. Casado com o
+// tempo de assentamento de `utils/viewportResize`: o arrasto termina, o layout
+// para, e só então uma medição acontece.
+const genresRemeasureDelayMs = 140;
+
 interface CatalogueListItemProps {
   game: GhostBoxGame;
   isAdded: boolean;
   isAdding?: boolean;
   isRemoving?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
-  onHoverGame: (game: GhostBoxGame | null, options?: { immediate?: boolean }) => void;
+  onHoverGame: (
+    game: GhostBoxGame | null,
+    options?: {
+      immediate?: boolean;
+      anchor?: HTMLElement | null;
+      pointer?: { x: number; y: number } | null;
+      settled?: boolean;
+    }
+  ) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onPreloadGame: (game: GhostBoxGame) => void;
+  onHoverEnter: (
+    game: GhostBoxGame,
+    anchor: HTMLElement | null,
+    x: number,
+    y: number
+  ) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }
 
@@ -39,6 +58,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   onHoverGame,
   onRemoveGame,
   onPreloadGame,
+  onHoverEnter,
   onGameContextMenu,
 }: CatalogueListItemProps) {
   const { appearance } = useSettings();
@@ -130,6 +150,13 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
     if (!genresMeasured) measureGenres();
 
+    // Remedir custa um ciclo "mostra os 3 chips → mede → volta pra 2". Num
+    // arrasto de janela o observer dispara a cada frame, e esse ciclo vira
+    // piscada contínua. O timer segura a remedição até a largura parar de
+    // mudar: durante o arrasto os chips ficam como estão e o ajuste acontece
+    // uma vez só, no fim.
+    let remeasureTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     const resizeObserver = new ResizeObserver((entries) => {
       const nextWidth = entries[0]?.contentRect.width ?? container.getBoundingClientRect().width;
       const previousWidth = lastGenresWidthRef.current;
@@ -138,15 +165,22 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       }
 
       lastGenresWidthRef.current = nextWidth;
-      setGenreDisplay({
-        count: maxGenreLabels.length,
-        key: genreLabelsKey,
-        measured: false,
-      });
+      if (remeasureTimeoutId !== null) clearTimeout(remeasureTimeoutId);
+      remeasureTimeoutId = setTimeout(() => {
+        remeasureTimeoutId = null;
+        setGenreDisplay({
+          count: maxGenreLabels.length,
+          key: genreLabelsKey,
+          measured: false,
+        });
+      }, genresRemeasureDelayMs);
     });
     resizeObserver.observe(container);
 
-    return () => resizeObserver.disconnect();
+    return () => {
+      if (remeasureTimeoutId !== null) clearTimeout(remeasureTimeoutId);
+      resizeObserver.disconnect();
+    };
   }, [genreLabelsKey, genresMeasured, maxGenreLabels.length, visibleGenreCount]);
 
   useEffect(() => {
@@ -179,7 +213,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
         onClick={() => onOpenGame(game)}
         onFocus={() => {
           onPreloadGame(game);
-          onHoverGame(game, { immediate: true });
+          onHoverGame(game, { immediate: true, anchor: itemRef.current });
         }}
         onBlur={(event) => {
           const nextTarget = event.relatedTarget;
@@ -187,10 +221,9 @@ export const CatalogueListItem = memo(function CatalogueListItem({
             onHoverGame(null);
           }
         }}
-        onPointerEnter={() => {
-          onPreloadGame(game);
-          onHoverGame(game);
-        }}
+        onPointerEnter={(event) =>
+          onHoverEnter(game, itemRef.current, event.clientX, event.clientY)
+        }
         onPointerLeave={() => onHoverGame(null)}
       >
         <div
@@ -258,7 +291,15 @@ interface CatalogueListProps {
   games: GhostBoxGame[];
   viewMode?: "list" | "grid";
   onOpenGame: (game: GhostBoxGame) => void;
-  onHoverGame: (game: GhostBoxGame | null, options?: { immediate?: boolean }) => void;
+  onHoverGame: (
+    game: GhostBoxGame | null,
+    options?: {
+      immediate?: boolean;
+      anchor?: HTMLElement | null;
+      pointer?: { x: number; y: number } | null;
+      settled?: boolean;
+    }
+  ) => void;
   addedGameAppIds?: Set<string>;
   addingGameId?: string | null;
   removingGameId?: string | null;
@@ -279,6 +320,8 @@ export function CatalogueList({
 }: CatalogueListProps) {
   const preloadTimeoutRef = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Última posição em que o cursor foi visto de fato se mexendo.
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
 
   const scheduleGamePreload = useCallback((game: GhostBoxGame) => {
     if (preloadTimeoutRef.current !== null) {
@@ -299,6 +342,31 @@ export function CatalogueList({
     };
   }, []);
 
+  const handleHoverEnter = useCallback(
+    (
+      game: GhostBoxGame,
+      anchor: HTMLElement | null,
+      x: number,
+      y: number
+    ) => {
+      const previous = lastPointerRef.current;
+      lastPointerRef.current = { x, y };
+      // Cursor no mesmo pixel de antes com outro cartão embaixo: quem se moveu
+      // foi o conteúdo (troca de aba, lista assentando), não o usuário. Preload
+      // sai fora e o preview espera a poeira baixar — senão cada cartão que
+      // desliza sob o cursor vira uma rodada de requisições.
+      const movedByLayout = previous?.x === x && previous?.y === y;
+
+      if (!movedByLayout) scheduleGamePreload(game);
+      onHoverGame(game, {
+        anchor,
+        pointer: { x, y },
+        settled: !movedByLayout,
+      });
+    },
+    [onHoverGame, scheduleGamePreload]
+  );
+
   // Sem virtualização de propósito: a página do catálogo entrega no máximo
   // `cataloguePageSize` (20) itens, e o gate de `IntersectionObserver` por linha
   // já evita carregar as capas fora da viewport.
@@ -306,6 +374,9 @@ export function CatalogueList({
     <div
       className={`catalogue-list ${viewMode === "grid" ? "catalogue-list--grid" : ""}`}
       ref={listRef}
+      onPointerMove={(event) => {
+        lastPointerRef.current = { x: event.clientX, y: event.clientY };
+      }}
     >
       {games.map((game) => (
         <CatalogueListItem
@@ -318,6 +389,7 @@ export function CatalogueList({
           onHoverGame={onHoverGame}
           onRemoveGame={onRemoveGame}
           onPreloadGame={scheduleGamePreload}
+          onHoverEnter={handleHoverEnter}
           onGameContextMenu={onGameContextMenu}
         />
       ))}

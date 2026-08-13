@@ -43,8 +43,6 @@ export const FavoriteCard = memo(function FavoriteCard({
     game.achievements.unlocked,
     achievementTotal
   );
-  const achievementProgress =
-    achievementTotal > 0 ? (achievementUnlocked / achievementTotal) * 100 : 0;
   const playtimeInMilliseconds = game.playTimeInMilliseconds ?? game.hours * 3_600_000;
 
   useEffect(() => {
@@ -94,38 +92,28 @@ export const FavoriteCard = memo(function FavoriteCard({
       >
         {!areMetricsUnlocked ? (
           <div
-            className="game-card__achievement-progress game-card__achievement-progress--locked"
+            className="game-card__achievement-badges game-card__achievement-badges--locked"
             aria-label={t("metrics.lockedAria")}
           >
-            <div className="game-card__achievement-progress-count">
-              <Lock size={14} strokeWidth={2.0} aria-hidden="true" />
-              <span>{t("metrics.locked")}</span>
-            </div>
+            <Lock size={14} strokeWidth={2.0} aria-hidden="true" />
+            <span>{t("metrics.locked")}</span>
           </div>
         ) : (
           achievementTotal > 0 && (
             <div
-              className="game-card__achievement-progress"
+              className="game-card__achievement-badges"
               aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${formatCompactPlaytime(playtimeInMilliseconds)} jogadas`}
             >
-              <div className="game-card__achievement-progress-count">
-                <>
-                  <Cup size={16} weight="Filled" strokeWidth={2.0} />
-                  <span>
-                    {achievementUnlocked} / {achievementTotal}
-                  </span>
-                </>
-                <span className="game-card__summary-metric">
-                  <Clock size={16} strokeWidth={2.0} />
-                  <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
+              <span className="game-card__summary-metric">
+                <Cup size={16} weight="Filled" strokeWidth={2.0} />
+                <span>
+                  {achievementUnlocked} / {achievementTotal}
                 </span>
-              </div>
-              <div
-                className="game-card__achievement-progress-track"
-                aria-hidden="true"
-              >
-                <span style={{ width: `${achievementProgress}%` }} />
-              </div>
+              </span>
+              <span className="game-card__summary-metric">
+                <Clock size={16} strokeWidth={2.0} />
+                <span>{formatCompactPlaytime(playtimeInMilliseconds)}</span>
+              </span>
             </div>
           )
         )}

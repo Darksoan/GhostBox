@@ -400,7 +400,13 @@ async function handleCloudProfileImageUpload(request: Request, env: Env, kind: "
     return jsonResponse({ error: "invalid_profile_image_type" }, env, 415);
   }
   const bytes = await request.arrayBuffer();
-  const maxBytes = kind === "avatar" ? 100 * 1024 : 350 * 1024;
+  // A reamostragem roda no cliente (utils/profileImages → encodeBannerDataUrl:
+  // teto de 2560×1440 e alvo de ~1,1 MB em WebP), então o que chega aqui já
+  // deveria estar bem abaixo do limite. Este guarda existe pro caso de um
+  // cliente adulterado: cada usuário tem um objeto fixo por tipo
+  // (`<userId>/avatar.webp`, `<userId>/banner.webp`, sempre sobrescrito), então
+  // o teto por requisição é o que limita o custo de armazenamento por conta.
+  const maxBytes = 4 * 1024 * 1024;
   if (bytes.byteLength === 0) return jsonResponse({ error: "empty_profile_image" }, env, 400);
   if (bytes.byteLength > maxBytes) return jsonResponse({ error: "profile_image_too_large" }, env, 413);
 

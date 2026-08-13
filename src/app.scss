@@ -680,11 +680,29 @@ p {
 }
 
 .app-main {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   background: var(--app-gradient);
+
+  /* Com a janela maximizada a sidebar sai e o card flutuante entra sobre o
+     conteúdo. O respiro extra vem por `--page-bottom-space` (aplicado na raiz
+     de cada página) e não por padding no scroller — ver a nota em
+     `.container__content`. */
+  &--floating-nav {
+    --page-bottom-space: calc(
+      var(--space-14) + var(--space-16) + var(--space-8)
+    );
+
+    /* O modal de jogo tem o próprio fim de página: quem consome
+       `--page-bottom-space` lá é o `padding-bottom` de `.modal__details`, via
+       `max()`. Pôr o padding no `.backdrop--details` não resolvia — aquela
+       caixa é `inset: 0`, então o conteúdo transborda o padding em vez de ser
+       empurrado por ele. */
+  }
 }
 
 .container {
@@ -697,7 +715,10 @@ p {
 
   &--modal-open {
     position: relative;
-    z-index: 2;
+    /* Sobe o conteúdo do modal acima do resto do chrome da janela (sidebar
+       inclusive). O card flutuante é a exceção deliberada: ele usa
+       `--z-popover` e fica por cima — ver a nota em `FloatingNav.scss`. */
+    z-index: var(--z-modal);
     overflow: visible;
   }
 
@@ -2563,6 +2584,44 @@ p {
     padding: 0;
   }
 
+  /* Só existe com a janela maximizada: sem sidebar, as abas de ajustes precisam
+     de um lugar dentro da própria página. */
+  &__tabs-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  &__tab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    transition:
+      background var(--motion-base) ease,
+      color var(--motion-base) ease;
+
+    &:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    &--active {
+      background: var(--surface-active);
+      color: var(--text-primary);
+    }
+  }
+
   &--library {
     flex: 1;
     min-height: 0;
@@ -2628,6 +2687,15 @@ p {
      barra ficava 21px pra dentro em vez de na borda, como nas outras abas. */
   overflow-x: clip;
   overflow-y: visible;
+}
+
+.home-page--maximized {
+  --home-content-inline-inset: 52px;
+}
+
+.home-page--maximized .home-category__games .home-category-card__cover,
+.home-page--maximized .home-recommended__track .home-category-card__cover {
+  aspect-ratio: 460 / 202;
 }
 
 /* Títulos de seção só na Home, um degrau abaixo do padrão global (section →
@@ -6582,34 +6650,6 @@ p {
     color: var(--text-primary);
   }
 
-  &__view-toggle {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: var(--space-3);
-    min-height: 36px;
-    padding: 0 var(--space-5);
-    border: 0;
-    border-radius: var(--radius-md);
-    background: var(--surface-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    white-space: nowrap;
-  }
-
-  &__view-toggle:hover,
-  &__view-toggle:focus-visible {
-    background: var(--control-hover);
-    color: var(--text-primary);
-  }
-
-  &__view-toggle-icon {
-    display: inline-flex;
-    animation: catalogue-view-swap var(--motion-base) var(--ease);
-  }
-
   /* Ordenação usa o dropdown compartilhado (`.settings-dropdown`), não um
      `<select>` nativo: o menu nativo é desenhado pelo sistema e ignorava
      inteiramente a rampa de superfície do app. */
@@ -6816,10 +6856,6 @@ p {
     cursor: pointer;
     text-align: left;
     transition: color var(--motion-fast) var(--ease);
-
-    &[aria-expanded="true"] {
-      background: var(--sidebar-option-hover);
-    }
 
     strong {
       @include mixins.truncate;
@@ -7194,14 +7230,20 @@ p {
   }
 }
 
+/* Flutua colado no cursor, por cima dos cartões da listagem (posição vem do JS,
+   em `fixed` contra a janela). Fora da coluna de filtros de propósito: o canto
+   de baixo dela fica livre para o dropdown abrir. */
 .catalogue-hover-preview {
+  position: fixed;
+  z-index: var(--z-overlay);
   display: flex;
+  width: clamp(260px, 24vw, 340px);
   flex: 0 0 auto;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-2);
   will-change: opacity, transform;
   transition:
     opacity var(--motion-base) var(--ease-out),
@@ -7334,6 +7376,55 @@ p {
     white-space: nowrap;
   }
 
+  &__reviews {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-strong);
+  }
+
+  &__histogram {
+    display: block;
+    width: 100%;
+    height: 64px;
+  }
+
+  &__histogram-baseline {
+    stroke: var(--border-subtle);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  &__histogram-bar--up {
+    fill: var(--text-primary);
+  }
+
+  &__histogram-bar--down {
+    fill: var(--danger);
+  }
+
+  &__score {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    line-height: var(--type-line-caption);
+  }
+
+  &__score-ratio {
+    color: var(--text-primary);
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-semibold);
+  }
+
+  &__score-count {
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-medium);
+  }
+
   &__title {
     color: var(--text-primary);
     font-size: var(--type-size-body);
@@ -7354,6 +7445,49 @@ p {
       color: var(--text-tertiary);
       font-weight: var(--weight-medium);
     }
+  }
+
+  &__achievements {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: #151515;
+  }
+
+  &__achievements-label {
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-medium);
+  }
+
+  &__achievements-row {
+    display: flex;
+    overflow: hidden;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  &__achievements-icon {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--surface-media-letterbox);
+  }
+}
+
+/* Abaixo disso o catálogo vira coluna única e o painel de filtros só existe em
+   drawer — não sobra vão ao lado do cartão para o preview flutuar. */
+@media (max-width: 900px) {
+  .catalogue-hover-preview {
+    display: none;
   }
 }
 
@@ -7636,17 +7770,6 @@ input[type="search"]::-ms-reveal {
 
 .catalogue-list__remove-spinner {
   animation: spin 0.8s linear infinite;
-}
-
-@keyframes catalogue-view-swap {
-  from {
-    opacity: 0;
-    transform: rotateY(90deg);
-  }
-  to {
-    opacity: 1;
-    transform: rotateY(0);
-  }
 }
 
 /* Grade de capsules (header) em 3 colunas: o item vira um card vertical com a
@@ -9820,20 +9943,15 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.favorites-grid__item:hover,
-.favorites-grid__item:focus-within {
-  .game-card__achievement-progress-track {
-    background: color-mix(in srgb, var(--surface-active) 64%, var(--text-primary) 18%);
-  }
-}
-
 .favorites-grid__item:hover .favorites-grid__cover,
 .favorites-grid__item:focus-within .favorites-grid__cover {
   transform: none;
 }
 
-.favorites-grid__item:hover .game-card__achievement-progress,
-.favorites-grid__item:focus-within .game-card__achievement-progress {
+/* Mesmo badge das outras capas verticais: o grid de favoritos e coleções não
+   tem estilo próprio. */
+.favorites-grid__item:hover .game-card__achievement-badges,
+.favorites-grid__item:focus-within .game-card__achievement-badges {
   opacity: 1;
   transform: translate3d(-50%, 0, 0);
 }
@@ -10086,75 +10204,9 @@ input[type="search"]::-ms-reveal {
     }
   }
 
-  &__achievement-progress {
-    position: absolute;
-    left: 50%;
-    bottom: 10px;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    width: auto;
-    max-width: calc(100% - var(--space-8));
-    min-width: min(100% - var(--space-8), 148px);
-    padding: var(--space-4) var(--space-4) var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--background-dark) 78%, var(--surface-canvas) 22%);
-    color: var(--text-primary);
-    font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
-    font-variant-numeric: tabular-nums;
-    line-height: var(--type-line-micro);
-    pointer-events: none;
-    opacity: 0;
-    transform: translate3d(-50%, 8px, 0);
-    transition:
-      opacity var(--motion-base) var(--ease),
-      transform var(--motion-base) var(--ease);
-  }
-
-  &__achievement-progress-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-4);
-    width: 100%;
-    color: var(--text-primary);
-
-    > span {
-      min-width: 0;
-    }
-
-    svg {
-      display: block;
-      flex: 0 0 auto;
-      color: var(--text-primary);
-    }
-  }
-
-  &__achievement-progress-track {
-    height: 3px;
-    overflow: hidden;
-    border-radius: var(--radius-pill);
-    background: var(--surface-active);
-    transition: background-color var(--motion-base) var(--ease);
-
-    > span {
-      display: block;
-      height: 100%;
-      border-radius: inherit;
-      background: var(--text-primary);
-    }
-  }
-
   &:hover,
   &:focus-within {
     background: var(--surface-option-hover);
-
-    .game-card__achievement-progress-track {
-      background: color-mix(in srgb, var(--surface-active) 64%, var(--text-primary) 18%);
-    }
   }
 
   &:hover &__cover::after,
@@ -10813,6 +10865,35 @@ html.no-animations {
   @include no-animations-styles;
 }
 
+/*
+ * Arrasto da borda da janela em curso (classe posta por `utils/viewportResize`).
+ *
+ * Toda transição fica suspensa enquanto isso dura. Transição interpola de um
+ * valor antigo para um novo ao longo de ~200ms; num resize contínuo o alvo muda
+ * a cada frame, então o elemento passa o arrasto inteiro perseguindo uma
+ * posição que já mudou — é isso que se vê como tremida e "desliza pro lugar
+ * errado". Sem transição o layout simplesmente acompanha a janela, que é o
+ * comportamento nativo esperado.
+ *
+ * `animation` fica de fora de propósito: skeletons e spinners continuam vivos
+ * durante o arrasto, e eles não dependem de geometria.
+ */
+html.is-resizing {
+  &,
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+
+  /* Preview de hover e menus flutuantes não têm âncora estável no meio do
+     arrasto — some com eles em vez de deixá-los à deriva sobre o conteúdo. */
+  .catalogue-hover-preview {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
 html.no-backdrop-blur {
   *,
   *::before,
@@ -10845,7 +10926,7 @@ html.no-backdrop-blur {
   /* Janela larga: calendário acompanha quatro cápsulas por linha, como Top
      rated/Recomendados, sem deixar o quarto espaço vazio à direita. */
   .home-calendar {
-    --home-calendar-gap: var(--space-9);
+    --home-calendar-gap: clamp(28px, 2.6vw, 52px);
   }
 
   /* Centraliza somente os containers; título continua alinhado ao restante da
@@ -10853,22 +10934,19 @@ html.no-backdrop-blur {
   .home-calendar__rail {
     align-self: center;
     width: 100%;
-    max-width: 1320px;
+    max-width: 1560px;
   }
 
   .home-calendar__track {
-    column-gap: var(--space-9);
+    column-gap: var(--home-calendar-gap);
   }
 
   .home-calendar-day {
     padding-inline: 0;
   }
 
-  /* Janela larga: listas de linha única (catálogo, downloads, notificações)
-     ganham um teto de largura para o conteúdo não se espalhar por toda a área
-     útil — o espaço morto sai de dentro dos cards e vira gutter ao lado. */
   .catalogue-page__results {
-    max-width: 1320px;
+    max-width: 100%;
   }
 
   .catalogue-list__item {
@@ -11525,17 +11603,11 @@ html.no-backdrop-blur {
   &__avatar-button {
     position: relative;
     overflow: hidden;
-    border: 1px solid var(--border);
+    border: none;
     background: var(--background);
     color: var(--text-primary);
     cursor: pointer;
-    transition:
-      border-color var(--motion-base) ease,
-      background-color var(--motion-base) ease;
-
-    &:hover {
-      border-color: var(--border);
-    }
+    transition: background-color var(--motion-base) ease;
   }
 
   &__banner-button {
@@ -11546,9 +11618,6 @@ html.no-backdrop-blur {
     }
   }
 
-  &__avatar-button:hover {
-    border-color: var(--border);
-  }
 
   &__cover-button {
     display: flex;
@@ -12444,8 +12513,17 @@ html.no-backdrop-blur {
     min-width: 0;
     min-height: 0;
     margin: 0 auto;
+    /*
+     * O fim do modal é o que fecha a página inteira: abaixo dele não há mais
+     * nada além da borda da janela. O `clamp` cuida do respiro visual, mas numa
+     * janela baixa ele cai para o mínimo e o botão "Ver mais" encostava na
+     * barra de tarefas. O `max` com `--page-bottom-space` põe um piso: no layout
+     * de nav flutuante esse token já vale a altura do card mais folga, então o
+     * fim do texto nunca fica debaixo dele.
+     */
     padding: clamp(18px, 2.4vw, 32px) var(--modal-details-padding-right)
-      clamp(56px, 8vh, 96px) var(--modal-details-padding-left);
+      max(clamp(72px, 8vh, 96px), var(--page-bottom-space))
+      var(--modal-details-padding-left);
     overflow: visible;
     background: var(--background-dark);
     animation: none;
@@ -13069,7 +13147,7 @@ html.no-backdrop-blur {
   &__about-fade {
     position: absolute;
     inset: auto 0 0;
-    height: 118px;
+    height: 140px;
     background: linear-gradient(
       180deg,
       transparent 0%,
@@ -13082,7 +13160,16 @@ html.no-backdrop-blur {
   &__about-actions {
     display: flex;
     justify-content: center;
-    margin-top: -2px;
+
+    // Dentro da shell colapsada: sobrepõe o fundo junto com o gradiente.
+    // No estado expandido (shell sem height fixa) flui normalmente ao fim do texto.
+    .modal__about-content-shell--clamped & {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding-bottom: var(--space-4);
+    }
   }
 
   &__about-toggle {
@@ -15699,25 +15786,11 @@ button,
   background: var(--surface-hover);
 }
 
-.favorites-grid__item--skeleton .game-card__achievement-progress {
+.favorites-grid__item--skeleton .game-card__achievement-badges {
   opacity: 1;
   transform: translate3d(-50%, 0, 0);
   pointer-events: none;
-  border-color: var(--border);
   background: var(--surface-hover);
-}
-
-.favorites-grid__item--skeleton .game-card__achievement-progress-count {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-5);
-}
-
-.favorites-grid__item--skeleton .game-card__achievement-progress-track {
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
 }
 
 .favorites-grid__metric-skeleton {
@@ -15729,13 +15802,6 @@ button,
 
 .favorites-grid__metric-skeleton--short {
   width: 40px;
-}
-
-.favorites-grid__progress-skeleton {
-  display: block;
-  width: 42%;
-  height: 100%;
-  border-radius: inherit;
 }
 
 /* Settings page skeleton */

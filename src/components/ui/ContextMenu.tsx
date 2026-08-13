@@ -90,13 +90,21 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    // O menu é posicionado uma vez, em coordenadas do clique. Redimensionar a
+    // janela move o alvo por baixo dele e o cálculo de borda vira mentira — o
+    // menu ficava boiando no meio do conteúdo ou meio pra fora da tela. Fechar
+    // é o que o sistema operacional faz nesse caso.
+    const handleWindowResize = () => onClose();
+
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("mousemove", handlePointerMove);
     document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", handleWindowResize, { passive: true });
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("mousemove", handlePointerMove);
       document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", handleWindowResize);
     };
   }, [onClose]);
 
