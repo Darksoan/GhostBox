@@ -1,14 +1,12 @@
-import { ChevronUp, Folder, Heart, UserRound } from "lucide-react";
+import { ChevronUp, Folder, Heart } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
-import { useAuth } from "../../context/AuthContext";
-import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
-import { preloadProfileImages } from "../../utils/image";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
 import { subscribeScrollIdle } from "../../utils/scrollIdle";
 import { primaryNavigation, secondaryNavigation } from "./navigationItems";
+import { NavProfile } from "./NavProfile";
 import "./FloatingNav.scss";
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
@@ -167,11 +165,12 @@ export const FloatingNav = memo(function FloatingNav({
       )}
 
       <nav className="floating-nav__card" aria-label="Navegação principal">
-        <FloatingNavProfile
+        <NavProfile
           profile={steamProfile}
           isCloudProfileRestoring={isCloudProfileRestoring}
           isActive={activePage === "profile"}
           onOpenProfile={onOpenProfile}
+          className="floating-nav__profile"
         />
 
 
@@ -225,71 +224,5 @@ export const FloatingNav = memo(function FloatingNav({
         </button>
       </nav>
     </div>
-  );
-});
-
-interface FloatingNavProfileProps {
-  profile: SteamProfile | null;
-  isCloudProfileRestoring: boolean;
-  isActive: boolean;
-  onOpenProfile: () => void;
-}
-
-const FloatingNavProfile = memo(function FloatingNavProfile({
-  profile,
-  isCloudProfileRestoring,
-  isActive,
-  onOpenProfile,
-}: FloatingNavProfileProps) {
-  const { appearance } = useSettings();
-  const { account } = useAuth();
-  const avatarSources = useCachedImageSources(profile?.avatarUrl ? [profile.avatarUrl] : []);
-  const avatarSource = useLoadableImageSource(avatarSources);
-
-  // Enquanto o perfil da nuvem restaura, o avatar antigo da Steam ainda está no
-  // ar e trocaria duas vezes: segura no skeleton até a fonte final chegar.
-  const shouldHoldSteamAvatar = Boolean(
-    isCloudProfileRestoring &&
-      profile?.avatarUrl &&
-      !profile.avatarUrl.startsWith("data:") &&
-      !profile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
-  );
-
-  useEffect(() => {
-    preloadProfileImages(profile);
-  }, [profile?.avatarUrl, profile?.bannerUrl]);
-
-  const displayName =
-    profile?.displayName ||
-    account?.displayName ||
-    account?.username ||
-    (appearance.language === "en" ? "Log in" : "Faça login");
-
-  return (
-    <button
-      type="button"
-      className={`floating-nav__profile${isActive ? " floating-nav__profile--active" : ""}`}
-      onClick={onOpenProfile}
-      onMouseEnter={() => profile && preloadProfileImages(profile)}
-      onFocus={() => profile && preloadProfileImages(profile)}
-    >
-      <span className="floating-nav__avatar" aria-hidden="true">
-        {shouldHoldSteamAvatar || (isCloudProfileRestoring && !avatarSource) ? (
-          <span className="floating-nav__avatar-skeleton" />
-        ) : avatarSource ? (
-          <img
-            src={avatarSource}
-            alt=""
-            width={28}
-            height={28}
-            decoding="async"
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <UserRound size={16} />
-        )}
-      </span>
-      <span className="floating-nav__profile-name">{displayName}</span>
-    </button>
   );
 });

@@ -1951,6 +1951,64 @@ p {
   }
 }
 
+/* ─── Botão de perfil compartilhado (topo e card flutuante) ────────────────── */
+/*
+ * Base para `NavProfile`, extraído do card flutuante (`FloatingNav.scss`)
+ * para o header também poder usar. O card continua com suas próprias regras
+ * `.floating-nav__profile` etc. em `FloatingNav.scss` — o componente aplica as
+ * duas classes, então este bloco só cobre o essencial do botão.
+ */
+.nav-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-5) var(--space-2) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--motion-base) ease;
+
+  &:hover,
+  &--active {
+    background: var(--surface-hover);
+  }
+
+  &__avatar {
+    display: flex;
+    overflow: hidden;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-circle);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  &__avatar-skeleton {
+    width: 100%;
+    height: 100%;
+    background: var(--surface-muted);
+  }
+
+  &__name {
+    max-width: 160px;
+    overflow: hidden;
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .header {
   &__icon-button#{&}__feedback-button {
     opacity: 0.8;
