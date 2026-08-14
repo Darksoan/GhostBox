@@ -592,7 +592,6 @@ select,
 .profile-page,
 .notifications-page,
 .downloads-page,
-.sidebar,
 .header {
   -webkit-font-smoothing: subpixel-antialiased;
   -moz-osx-font-smoothing: auto;
@@ -612,7 +611,6 @@ label,
 button,
 input,
 .button,
-.sidebar__menu-item-label,
 .game-card__title,
 .catalogue-list__content,
 .settings-option__copy,
@@ -625,37 +623,6 @@ input,
   -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
-}
-
-.sidebar__menu-item-label,
-.sidebar__create-collection-button {
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-}
-
-.sidebar__section-toggle h3,
-.sidebar__collection-button,
-.sidebar__collection-toggle-button {
-  display: inline-flex;
-  align-items: center;
-  line-height: 1.15;
-}
-
-.sidebar__collection-game-button span,
-.sidebar__collection-game-title {
-  display: block;
-  flex: 1 1 auto;
-  @include mixins.truncate;
-  line-height: 16px;
-  transform: none;
-}
-
-.sidebar__collection-more {
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
 }
 
 h1,
@@ -791,14 +758,14 @@ p {
   overflow: visible;
   /* Sem respiro próprio: quem declara o fim da aba é a raiz da página, com
      `--page-bottom-space`. */
-  padding: 0 var(--space-6) 0 0;
+  padding: 0 var(--space-6);
 }
 
 /* Precisa vir DEPOIS de `.page`: mesma especificidade, e o shorthand `padding`
-   acima repõe os 12px. Capa do perfil é full-bleed — sem essa faixa vazia entre
-   ela e a scrollbar, e com o conteúdo do perfil simétrico. */
+   acima repõe os 12px. Capa do perfil é full-bleed dos dois lados — sem a
+   sidebar, o respiro esquerdo também sai. */
 .page--profile {
-  padding-right: 0;
+  padding-inline: 0;
 }
 
 // Keep-alive tab wrappers use the HTML hidden attribute to stay mounted but
@@ -900,650 +867,6 @@ p {
   animation: content-overlay-fade-out 100ms ease-in both;
   pointer-events: none;
 }
-
-.sidebar,
-.sidebar-profile {
-  letter-spacing: var(--ls-500);
-}
-
-/* ─── Sidebar ─────────────────────────────────────────────────────────────── */
-.sidebar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 280px;
-  min-width: 280px;
-  overflow: hidden;
-  border-right: 0;
-  background: var(--surface-sidebar);
-  color: var(--text-primary);
-
-  &__content {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: var(--space-8);
-    padding: var(--space-8);
-    overflow-x: hidden;
-    overflow-y: auto;
-    /* Sem `scrollbar-width`/`scrollbar-color` aqui: no Chromium essas duas
-       propriedades trocam o desenho padrão e DESLIGAM o `::-webkit-scrollbar`
-       global, então a sidebar ganhava uma barra fina e quase invisível
-       enquanto o resto do app usava a de 9px. */
-  }
-
-  &__section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-
-    &--footer {
-      margin-top: auto;
-    }
-  }
-
-  &__collapsible-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  &__mode-panel {
-    contain: paint;
-  }
-
-  &__section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 28px;
-  }
-
-  /* Section label: COLLECTIONS (canonical uppercase) */
-  &__section-title {
-    @include mixins.eyebrow;
-    line-height: 1;
-    transition: color var(--motion-fast) var(--ease);
-  }
-
-  &__section-icon {
-    color: var(--text-secondary);
-    font-weight: var(--weight-medium);
-    transition: color var(--motion-fast) var(--ease);
-  }
-
-  &__section-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
-    cursor: pointer;
-    transition: color var(--motion-fast) var(--ease);
-
-    .sidebar__section-title {
-      color: inherit;
-    }
-
-    &:hover {
-      color: var(--text-primary);
-    }
-
-    &[aria-expanded="true"] {
-      color: var(--text-primary);
-    }
-  }
-
-  &__section-toggle h3 {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-4);
-    margin: 0;
-    color: inherit;
-    cursor: pointer;
-  }
-
-  &__section-toggle-chevron {
-    flex-shrink: 0;
-    color: inherit;
-    transform: rotate(0deg);
-    transition:
-      transform var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &--expanded {
-      transform: rotate(90deg);
-    }
-  }
-
-  &__add-button {
-    display: inline-grid;
-    width: 28px;
-    height: 28px;
-    place-items: center;
-    @include mixins.ghost-button;
-    font-weight: var(--weight-semibold);
-    transition:
-      color var(--motion-fast) var(--ease),
-      background-color var(--motion-fast) var(--ease);
-
-    &:hover {
-      background: var(--surface);
-      color: var(--text-primary);
-    }
-  }
-
-  &__add-icon {
-    position: relative;
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-
-    &::before,
-    &::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      border-radius: var(--radius-pill);
-      background: currentColor;
-      transform: translate(-50%, -50%);
-    }
-
-    &::before {
-      width: 12px;
-      height: 2px;
-    }
-
-    &::after {
-      width: 2px;
-      height: 12px;
-    }
-  }
-
-  /* Menu — notification-card style options */
-  &__menu {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  &__menu-item {
-    position: relative;
-    overflow: hidden;
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: transparent;
-    color: var(--text-primary);
-    text-wrap: nowrap;
-    transition:
-      background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &::before {
-      content: none;
-    }
-
-    // Hover and active share the same selector color.
-    &:hover:not(.sidebar__menu-item--active) {
-      color: var(--text-primary);
-      background: var(--sidebar-option-hover);
-    }
-
-    // Active uses the shared interactive surface token.
-    &--active {
-      color: var(--text-primary);
-      background: var(--sidebar-option-active);
-    }
-
-    &--active:hover {
-      background: var(--sidebar-option-active);
-    }
-
-    /* Collection rows rest muted; expand/active → strong */
-    &.sidebar__collection-item {
-      color: var(--text-secondary);
-      font-weight: var(--weight-medium);
-
-      .sidebar__collection-icon,
-      .sidebar__collection-chevron {
-        color: inherit;
-      }
-
-      &:hover:not(.sidebar__menu-item--active) {
-        color: var(--text-primary);
-        background: var(--sidebar-selector);
-      }
-
-      &.sidebar__menu-item--active {
-        color: var(--text-primary);
-        background: var(--sidebar-option-active);
-      }
-
-      &.sidebar__menu-item--active:hover {
-        background: var(--sidebar-option-active);
-      }
-    }
-
-    &.sidebar__collection-item--expanded {
-      color: var(--text-primary);
-    }
-
-    strong {
-      margin-left: auto;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 var(--space-3);
-      border-radius: var(--radius-pill);
-      background: var(--text-strong);
-      color: var(--background-dark);
-      font-size: var(--type-size-micro);
-      font-weight: var(--weight-semibold);
-      line-height: 20px;
-      text-align: center;
-    }
-  }
-
-  &__menu-item-button {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--space-5);
-    width: 100%;
-    min-width: 0;
-    min-height: 36px;
-    padding: var(--space-4) var(--space-4);
-    overflow: hidden;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font-weight: var(--weight-medium);
-    line-height: 1;
-    text-align: left;
-    transition: color var(--motion-fast) var(--ease);
-
-    svg {
-      display: block;
-      flex-shrink: 0;
-      width: 18px;
-      height: 18px;
-      color: inherit;
-    }
-
-    &--back {
-      transform-origin: left center;
-    }
-  }
-
-  &__menu-item-label {
-    display: inline-flex;
-    align-items: center;
-    @include mixins.truncate;
-    min-height: 18px;
-    color: inherit;
-    font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
-    line-height: 1;
-  }
-
-  /* Collections */
-  &__collection-row {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    min-width: 0;
-
-    .sidebar__menu-item-button {
-      padding-left: 0;
-    }
-  }
-
-  &__collection-toggle-button {
-    display: grid;
-    width: 32px;
-    height: 32px;
-    flex-shrink: 0;
-    place-items: center;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-  }
-
-  &__collection-icon {
-    flex-shrink: 0;
-    color: inherit;
-    transition: color var(--motion-fast) var(--ease);
-  }
-
-  &__collection-chevron {
-    flex-shrink: 0;
-    color: inherit;
-    transform: rotate(0deg);
-    transition:
-      transform var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &--expanded {
-      transform: rotate(90deg);
-    }
-  }
-
-  &__collection-games {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: var(--space-1) 0 var(--space-3);
-    padding: 0 0 0 var(--space-12);
-    list-style: none;
-  }
-
-  &__collection-game {
-    display: flex;
-    min-width: 0;
-  }
-
-  &__game-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    object-fit: contain;
-    border-radius: 0;
-  }
-
-  &__collection-game-title {
-    display: block;
-    flex: 1 1 auto;
-    @include mixins.truncate;
-    line-height: 16px;
-  }
-
-  &__collection-game-button {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-4);
-    /* Fill the row so the selector background spans the full width like other
-       sidebar options. */
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    min-height: 28px;
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-lg);
-    @include mixins.ghost-button;
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    text-align: left;
-    transition:
-      color var(--motion-fast) var(--ease),
-      background-color var(--motion-fast) var(--ease);
-
-    svg,
-    .sidebar__game-icon {
-      flex-shrink: 0;
-    }
-
-    .sidebar__game-icon {
-      width: 16px;
-      height: 16px;
-      object-fit: contain;
-      border-radius: var(--radius-xs);
-
-      &--skeleton {
-        display: block;
-        background: color-mix(in srgb, var(--surface-subtle) 80%, transparent);
-      }
-    }
-
-    &:hover,
-    &:focus-visible {
-      background: var(--sidebar-option-selected);
-      color: var(--text-primary);
-    }
-  }
-
-  &__collection-empty {
-    padding: var(--space-3) var(--space-4);
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
-  }
-
-  &__collection-more {
-    padding: var(--space-2) var(--space-4);
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
-  }
-
-  &__create-collection-button {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--space-5);
-    width: 100%;
-    min-height: 36px;
-    padding: var(--space-4) var(--space-4);
-    @include mixins.ghost-button;
-    font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
-    line-height: 1;
-    text-align: left;
-    transition:
-      color var(--motion-fast) var(--ease),
-      background-color var(--motion-fast) var(--ease);
-
-    &:hover {
-      background: var(--surface);
-      color: var(--text-primary);
-    }
-  }
-
-  &__add-button,
-  &__collection-toggle-button,
-  &__section-toggle,
-  &__menu-item,
-  &__menu-item *,
-  &__menu-item-button,
-  &__menu-item-button *,
-  &__collection-game-button,
-  &__collection-game-button * {
-    cursor: pointer;
-  }
-}
-
-/* ─── Sidebar profile ─────────────────────────────────────────────────────── */
-.sidebar-profile {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-height: 72px;
-  contain: layout style;
-
-  &__button {
-    display: flex;
-    width: 100%;
-    min-width: 0;
-    min-height: 72px;
-    flex: 1;
-    overflow: hidden;
-    padding: var(--space-6);
-    border: 1px solid transparent;
-    border-radius: var(--radius-lg);
-    background: transparent;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition:
-      background-color var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    /* Hover (not selected): border only */
-    &:hover:not(:disabled) {
-      border-color: transparent;
-      background-color: var(--sidebar-selector);
-      color: var(--text-primary);
-    }
-
-    &:disabled {
-      cursor: default;
-    }
-
-    /* Selected: border + shared interactive surface */
-    &--active {
-      border-color: transparent;
-      background-color: var(--sidebar-option-selected);
-      color: var(--text-primary);
-    }
-
-    &--active:hover:not(:disabled) {
-      border-color: transparent;
-      background-color: var(--sidebar-option-selected);
-    }
-  }
-
-  &__button-content {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    width: 100%;
-    min-width: 0;
-  }
-
-  &__avatar {
-    display: grid;
-    width: 52px;
-    min-width: 52px;
-    height: 52px;
-    flex: 0 0 auto;
-    place-items: center;
-    overflow: hidden;
-    border-radius: var(--radius-md);
-    background-color: var(--surface-canvas);
-    color: var(--text-primary);
-
-    &--empty {
-      background-color: var(--sidebar-option-selected);
-      color: var(--text-muted);
-    }
-
-    img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-  }
-
-  &__avatar-skeleton {
-    width: 100%;
-    height: 100%;
-    background: var(--surface-hover);
-  }
-
-  &__button-information {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    min-height: 52px;
-  }
-
-  &__title-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    min-width: 0;
-    max-width: 100%;
-
-    .sidebar-profile__button-title {
-      flex: 0 1 auto;
-      min-width: 0;
-    }
-  }
-
-  &__button-title {
-    overflow: hidden;
-    color: var(--text-primary);
-    font-size: var(--type-size-body-emphasis);
-    font-weight: var(--weight-semibold);
-    line-height: var(--type-line-body-emphasis);
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__premium {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    color: var(--text-strong);
-    line-height: 0;
-    flex-shrink: 0;
-
-    svg {
-      display: block;
-      width: 16px;
-      height: 16px;
-      flex-shrink: 0;
-      overflow: visible;
-    }
-  }
-
-  /* Steam level badge — single box, CSS grid centers the digit reliably */
-  &__level {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    min-height: 24px;
-    margin: 0;
-    padding: 0;
-    border: 2px solid var(--steam-level-ring);
-    border-radius: var(--radius-circle);
-    background: transparent;
-    box-sizing: border-box;
-    color: var(--text-primary);
-    font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1;
-    line-height: 1;
-    letter-spacing: 0;
-    overflow: visible;
-    text-align: center;
-    white-space: nowrap;
-    /* Kill inherited sidebar span quirks that shift baseline */
-    font-family: var(--font-sans);
-  }
-
-  /* Sem correção manual: com `line-height: 1` a caixa de linha tem 1em e a
-     entrelinha negativa da Inter põe a baseline a ~0.864em do topo. Com cap
-     height de ~0.727em o miolo do dígito cai em ~0.500em — o centro exato da
-     caixa que o `place-items: center` alinha. O `translate(-0.6px, -1px)` que
-     estava aqui era o que tirava o número do centro. */
-  &__level-value {
-    display: block;
-  }
-}
-
 
 .header {
   /* Single source of truth for titlebar geometry (o valor mora em :root como
@@ -1861,6 +1184,12 @@ p {
   align-items: center;
   min-width: 0;
   height: 100%;
+  /* Rede de segurança: `.header` precisa de `overflow: visible` para os
+     tooltips e dropdowns do bloco de ações, então quem contém o transbordo das
+     abas é o próprio `.top-nav`, não o header inteiro. Com o breakpoint abaixo
+     isto não deveria disparar em uso normal — é o último recurso contra corte
+     de texto virar sobreposição visual. */
+  overflow: hidden;
 
   &__list {
     display: flex;
@@ -1923,8 +1252,37 @@ p {
   }
 }
 
-/* Só ícone antes que as abas briguem por espaço com o bloco de ações. */
-@media (max-width: 1100px) {
+/* Só ícone antes que as abas briguem por espaço com o bloco de ações.
+ *
+ * 1100px vinha de antes do `NavProfile` entrar em `.header__section--actions`
+ * (~120-210px, avatar + nome truncado em 160px + padding) — ficou baixo
+ * demais e as abas coexistiam com a sobreposição visual confirmada em
+ * ~1487px de janela. Recalculado somando a largura natural de cada lado do
+ * header com todo o conteúdo presente (rótulos cheios em PT-BR, pior caso: 5
+ * abas + badge de download ativo, perfil no teto de 160px):
+ *
+ *   .header padding-inline:                    24 + 12       =  36px
+ *   nav-btns (2×36px + 2px gap):                              =  74px
+ *   gap entre nav-btns e .top-nav:                             =   8px
+ *   .top-nav__list (5 abas, ícone+rótulo+badge, gap 2px×4):    = ~570px
+ *   gap entre .header__section--left e --actions:              =   8px
+ *   NavProfile (avatar 28 + gap 8 + nome 160 + padding 14):    = 210px
+ *   feedback + discord + notificações (3× 36px controle):      = 108px
+ *   indicador de assinatura (pill):                            = 120px
+ *   busca (`.header__search`, largura fixa):                   = 200px
+ *   gaps dentro de --actions (5× var(--space-3)=6px):           =  30px
+ *   gap entre --actions e .header__window-controls:             =   8px
+ *   controles da janela (3× 40px, sem gap):                    = 120px
+ *   ---------------------------------------------------------------------
+ *   total natural (pior caso)                                  ≈ 1492px
+ *
+ * A sidebar global de 280px saiu no mesmo commit, então o header passa a
+ * herdar a largura inteira da janela (antes tirava 280px dela) — o que ajuda,
+ * mas 1492px de conteúdo natural ainda fica acima dos ~1487px onde a
+ * sobreposição foi confirmada. 1550px dá ~60px de folga sobre o pior caso
+ * calculado, cobrindo variação de fonte entre plataformas sem, ainda assim,
+ * colapsar cedo demais em janelas largas. */
+@media (max-width: 1550px) {
   .top-nav__label {
     display: none;
   }
@@ -11165,10 +10523,6 @@ border: 0;
   .steam-path-modal,
   .backup-restore-modal,
   .modal__collection-picker,
-  .sidebar__mode-panel,
-  .sidebar__mode-panel .sidebar__menu-item,
-  .sidebar__mode-panel .sidebar__section-header,
-  .sidebar__mode-panel .sidebar__section-header + .sidebar__menu,
   .subscription-account__header::before,
   .content-overlay-enter,
   .content-overlay-exit,
@@ -15148,10 +14502,6 @@ html.no-backdrop-blur {
   font-weight: var(--weight-medium);
 }
 
-.sidebar__section-title {
-  font-weight: var(--weight-semibold);
-}
-
 .catalogue-list__content strong {
   font-weight: var(--weight-medium);
 }
@@ -15161,10 +14511,6 @@ html.no-backdrop-blur {
 .backup-list__copy strong,
 .modal__backup-option-copy strong {
   font-weight: var(--weight-semibold);
-}
-
-.sidebar-profile__button-title {
-  font-weight: var(--weight-medium);
 }
 
 .content-section__header p,
@@ -15315,42 +14661,16 @@ button,
     padding-inline: 0;
   }
 
-  .sidebar {
-    width: 76px !important;
-    min-width: 76px;
-
-    &__section-title,
-    &__section-header,
-    &__menu-item span,
-    &__menu-item strong {
-      display: none;
-    }
-  }
-
-  .sidebar-profile {
-    flex-direction: column;
-
-    &__button {
-      justify-content: center;
-      padding: var(--space-4) 0;
-    }
-
-    &__button-content {
-      justify-content: center;
-    }
-
-    &__button-information {
-      display: none;
-    }
-  }
-
   .page {
-    padding: var(--space-6) var(--space-6) 0 0;
+    /* Só o topo muda aqui — direita/esquerda já são simétricas na regra base
+       de `.page` (era só o lado direito antes, com o esquerdo reservado pra
+       sidebar). Longhand em vez do shorthand `padding` pra não reabrir a
+       assimetria por cima da base. */
+    padding-top: var(--space-6);
   }
 
   .page--library {
-    padding: var(--space-6) var(--space-6)
-      var(--space-6) 0;
+    padding: var(--space-6);
   }
 
   .header__search {

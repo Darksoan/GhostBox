@@ -91,11 +91,15 @@ describe("TopNav — estilos", () => {
   });
 
   it("colapsa para só ícone antes de o header apertar", () => {
+    // 1100px vinha de antes do `NavProfile` entrar em `.header__section--actions`
+    // (Task 9) — 1550px é o recalculado depois disso e da remoção da sidebar
+    // global (Task 10), ver o comentário acima de `@media (max-width: 1550px)`
+    // em `src/app.scss`.
     const source = readFileSync("src/app.scss", "utf8");
-    expect(source).toContain("@media (max-width: 1100px)");
+    expect(source).toContain("@media (max-width: 1550px)");
     let labelHidden = false;
     css.walkAtRules("media", (atRule) => {
-      if (!atRule.params.includes("1100px")) return;
+      if (!atRule.params.includes("1550px")) return;
       atRule.walkRules((rule) => {
         if (rule.selector.includes(".top-nav__label")) labelHidden = true;
       });
