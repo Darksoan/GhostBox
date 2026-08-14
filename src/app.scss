@@ -10771,6 +10771,245 @@ border: 0;
   }
 }
 
+/* Painel de coleções da Library — substitui a antiga sidebar global nessa
+   página. Visual portado de `.sidebar` (grupo recolhível, linha de coleção,
+   lista de jogos): mesmos tokens de superfície/seleção, só com o prefixo
+   `library-panel__` em vez de `sidebar__`. */
+.library-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: 272px;
+  min-width: 272px;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background: var(--surface-sidebar);
+  color: var(--text-primary);
+
+  &__header {
+    display: flex;
+    align-items: center;
+  }
+
+  &__home {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    min-height: 36px;
+    padding: var(--space-4) var(--space-4);
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-medium);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    &:hover {
+      color: var(--text-primary);
+      background: var(--sidebar-option-hover);
+    }
+
+    &--active {
+      color: var(--text-primary);
+      background: var(--sidebar-option-active);
+    }
+  }
+
+  &__search {
+    width: 100%;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--surface-option-hover);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    outline: none;
+    padding: var(--space-5) var(--space-5);
+    transition: background var(--motion-fast) var(--ease);
+
+    &::placeholder {
+      color: var(--text-secondary);
+      font-weight: var(--weight-medium);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--icon-default);
+      outline-offset: 2px;
+    }
+  }
+
+  &__groups {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    gap: var(--space-4);
+    overflow-y: auto;
+  }
+
+  /* Separador entre grupos — pedido explícito na referência. */
+  &__group + &__group {
+    border-top: 1px solid var(--border-subtle);
+    padding-top: var(--space-4);
+  }
+
+  &__group-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: var(--space-1);
+  }
+
+  &__group-toggle {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  &__chevron {
+    flex-shrink: 0;
+    color: inherit;
+    transform: rotate(0deg);
+    transition:
+      transform var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
+
+    &--expanded {
+      transform: rotate(90deg);
+    }
+  }
+
+  &__group-button {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    min-width: 0;
+    gap: var(--space-4);
+    min-height: 32px;
+    padding: var(--space-3) var(--space-4);
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: var(--weight-medium);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    svg {
+      flex-shrink: 0;
+      color: inherit;
+    }
+
+    &:hover {
+      color: var(--text-primary);
+      background: var(--sidebar-option-hover);
+    }
+
+    &--active {
+      color: var(--text-primary);
+      background: var(--sidebar-option-active);
+    }
+  }
+
+  &__group-name {
+    @include mixins.truncate;
+    flex: 1 1 auto;
+  }
+
+  &__group-count {
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-size: var(--type-size-caption);
+  }
+
+  &__group-remove {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    place-items: center;
+    @include mixins.ghost-button;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    &:hover {
+      color: var(--text-primary);
+      background: var(--sidebar-option-hover);
+    }
+  }
+
+  &__games {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: var(--space-1) 0 0;
+    padding: 0 0 0 var(--space-12);
+    list-style: none;
+  }
+
+  &__game {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-height: 28px;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
+    @include mixins.ghost-button;
+    @include mixins.truncate;
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    text-align: left;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--sidebar-option-selected);
+      color: var(--text-primary);
+    }
+  }
+
+  &__create {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-5);
+    width: 100%;
+    min-height: 36px;
+    padding: var(--space-4) var(--space-4);
+    @include mixins.ghost-button;
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-medium);
+    text-align: left;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    &:hover {
+      background: var(--surface);
+      color: var(--text-primary);
+    }
+  }
+}
+
 /* Vive lado a lado com o dropdown de ordenação na mesma barra: altura, raio e
    tamanho de texto vêm de lá. Em repouso usava `--library-box` (--c-0), o mesmo
    degrau do fundo da página — a chip não tinha superfície e o hover repetia a
