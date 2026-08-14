@@ -99,15 +99,14 @@ describe("Floating nav — styles", () => {
     expect(modalPadding).toContain("max(");
   });
 
-  it("keeps the game modal's Ver mais button clear of the card", () => {
+  it("o botão Ver mais segue só a sidebar do modal, sem o card", () => {
     const source = readFileSync("src/components/modals/GameModal.tsx", "utf8");
 
-    // O botão é posicionado pela altura calculada do bloco "sobre", que seguia
-    // só o fim da sidebar sticky — e essa podia terminar atrás do card.
-    expect(source).toContain('querySelector(".floating-nav")');
-    expect(source).toContain("Math.min(sidebarBottom, floatingNavTop)");
-    // Sidebar sticky e card fixo mudam de posição relativa ao rolar, e nenhum
-    // ResizeObserver vê isso.
+    expect(source).not.toContain('querySelector(".floating-nav")');
+    expect(source).not.toContain("floatingNavTop");
+    expect(source).not.toContain("floatingNavGapPx");
+    // A sidebar sticky do modal continua sendo o limite de baixo.
+    expect(source).toContain("sidebarBottom");
     expect(source).toContain("subscribeScrollIdle(updateCollapsedHeight)");
   });
 
