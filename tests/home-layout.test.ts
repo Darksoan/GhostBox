@@ -42,7 +42,7 @@ describe("Home layout", () => {
     // Conteúdo usa degrau seguinte no hover, mantendo separação da base.
     expect(customProperties.get("--surface-option")).toBe("var(--n-1)");
     expect(customProperties.get("--surface-option-hover")).toBe("var(--n-2)");
-    expect(declarations.get(".sidebar")?.get("background")).toBe("var(--surface-sidebar)");
+    expect(declarations.get(".library-panel")?.get("background")).toBe("var(--surface-sidebar)");
     expect(declarations.get(".subscription-plan-card")?.get("border")).toBe("0");
     expect(declarations.get(".app-main")?.get("background")).toBe("var(--app-gradient)");
     expect(declarations.get(".header")?.get("background-color")).toBe("var(--surface-titlebar)");

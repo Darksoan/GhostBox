@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Sidebar } from "./components/layout/Sidebar";
-import { FloatingNav } from "./components/layout/FloatingNav";
 import { Header } from "./components/layout/Header";
 import { Toast } from "./components/ui/Toast";
 import { PageRouter } from "./components/routing/PageRouter";
 import { useContentOverlayState } from "./components/routing/ContentOverlay";
 import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellState } from "./hooks/useAppShellState";
-import { useWideViewport } from "./hooks/useWideViewport";
 import { useViewportResizeTracking } from "./hooks/useViewportResize";
 import { useAuthSessionToast } from "./hooks/useAuthSessionToast";
 import { useAppData } from "./context/AppDataContext";
@@ -121,8 +118,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   // Marca `html.is-resizing` durante o arrasto da janela: transições ficam
   // suspensas e quem mede layout espera o resize assentar.
   useViewportResizeTracking();
-  // Card flutuante entra por largura da viewport, não por maximizar a janela.
-  const isFloatingNavLayout = useWideViewport();
   const { appearance, notifications } = useSettings();
   const queryClient = useQueryClient();
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
@@ -326,7 +321,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     shell,
   ]);
 
-  const handleSidebarSettingsTabChange = useCallback(
+  const handleSettingsTabChange = useCallback(
     (tabId: SettingsTabId) => {
       shell.setActiveSettingsTabId(tabId);
     },
@@ -394,49 +389,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     selectedGame,
   ]);
 
-  const activeCollectionId =
-    page === "library"
-      ? (shell.activeLibraryCollectionId ?? undefined)
-      : shell.activeProfileCollectionId;
-
   return (
     <div className="ghostbox-shell">
-      <main className={`app-main${isFloatingNavLayout ? " app-main--floating-nav" : ""}`}>
-        {!isFloatingNavLayout && (
-        <Sidebar
-          activePage={page}
-          activeCollectionId={activeCollectionId}
-          steamProfile={appData.steamProfile}
-          isCloudProfileRestoring={appData.isCloudProfileRestoring}
-          favoriteGames={appData.favoriteGames}
-          addedLibraryGames={appData.addedLibraryGames}
-          userCollections={appData.userCollections}
-          onNavigate={handleNavigate}
-          onBack={handleBack}
-          onOpenProfile={() => handleNavigate("profile")}
-          onOpenGame={openGame}
-          onCreateCollection={appData.openCreateUserCollectionModal}
-          onRemoveFavorite={appData.toggleFavoriteGame}
-          onDeleteCollection={appData.deleteCollection}
-          activeSessionAppIds={appData.activeSessionAppIds}
-          activeSettingsTabId={shell.activeSettingsTabId}
-          onSettingsTabChange={handleSidebarSettingsTabChange}
-        />
-        )}
-
-        {isFloatingNavLayout && (
-          <FloatingNav
-            activePage={page}
-            activeCollectionId={activeCollectionId}
-            steamProfile={appData.steamProfile}
-            isCloudProfileRestoring={appData.isCloudProfileRestoring}
-            favoriteGames={appData.favoriteGames}
-            userCollections={appData.userCollections}
-            onNavigate={handleNavigate}
-            onOpenProfile={() => handleNavigate("profile")}
-          />
-        )}
-
+      <main className="app-main">
         <article
           className={`container ${isGameModalVisible || isAchievementsViewVisible ? "container--modal-open" : ""}`}
         >
@@ -467,6 +422,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             }}
             onBack={handleBack}
             onForward={handleForward}
+            onNavigate={handleNavigate}
+            onOpenProfile={() => handleNavigate("profile")}
+            isCloudProfileRestoring={appData.isCloudProfileRestoring}
             onNavigateToNotifications={() => handleNavigate("notifications")}
             onClickPremium={() => {
               setSubscriptionModalOpen(true);
@@ -482,8 +440,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               page={page}
               debouncedQuery={shell.debouncedQuery}
               activeSettingsTabId={shell.activeSettingsTabId}
-              onSettingsTabChange={handleSidebarSettingsTabChange}
-              showSettingsTabsBar={isFloatingNavLayout}
+              onSettingsTabChange={handleSettingsTabChange}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
               activeLibraryCollectionId={shell.activeLibraryCollectionId}

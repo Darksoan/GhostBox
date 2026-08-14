@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { compile } from "sass-embedded";
 import postcss from "postcss";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -135,13 +134,5 @@ describe("viewportResize — estilos durante o arrasto", () => {
 
     expect(hasTransitionReset).toBe(true);
     expect(freezesAnimations).toBe(false);
-  });
-});
-
-describe("useWideViewport — histerese na troca de navegação", () => {
-  it("usa dois limites para não alternar em cima da fronteira", () => {
-    const source = readFileSync("src/hooks/useWideViewport.ts", "utf8");
-    expect(source).toContain("hysteresisPx");
-    expect(source).toContain("minWidth - hysteresisPx");
   });
 });

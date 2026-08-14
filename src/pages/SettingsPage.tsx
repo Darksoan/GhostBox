@@ -210,8 +210,6 @@ export const settingsTabs: SettingsTab[] = [
 
 interface SettingsPageProps {
   activeTabId: SettingsTabId;
-  /** Com a janela maximizada não há sidebar: as abas vêm para dentro da página. */
-  showTabsBar?: boolean;
   onTabChange?: (tabId: SettingsTabId) => void;
   games: GhostBoxGame[];
   steamProfile: SteamProfile | null;
@@ -229,7 +227,6 @@ interface SettingsPageProps {
 
 export function SettingsPage({
   activeTabId,
-  showTabsBar = false,
   onTabChange,
   games,
   steamProfile,
@@ -365,24 +362,22 @@ export function SettingsPage({
       }`}
       aria-label={t("nav.settings")}
     >
-      {showTabsBar && (
-        <nav className="settings-page__tabs-bar" aria-label={t("nav.settings")}>
-          {settingsNavigationTabs.map(({ id, icon: TabIcon }) => (
-            <button
-              key={id}
-              type="button"
-              className={`settings-page__tab${
-                id === activeTab.id ? " settings-page__tab--active" : ""
-              }`}
-              onClick={() => onTabChange?.(id)}
-              aria-current={id === activeTab.id ? "page" : undefined}
-            >
-              <TabIcon size={16} strokeWidth={2} />
-              <span>{t(settingsTabLabelKeys[id])}</span>
-            </button>
-          ))}
-        </nav>
-      )}
+      <nav className="settings-page__tabs-bar" aria-label={t("nav.settings")}>
+        {settingsNavigationTabs.map(({ id, icon: TabIcon }) => (
+          <button
+            key={id}
+            type="button"
+            className={`settings-page__tab${
+              id === activeTab.id ? " settings-page__tab--active" : ""
+            }`}
+            onClick={() => onTabChange?.(id)}
+            aria-current={id === activeTab.id ? "page" : undefined}
+          >
+            <TabIcon size={16} strokeWidth={2} />
+            <span>{t(settingsTabLabelKeys[id])}</span>
+          </button>
+        ))}
+      </nav>
 
       <article
         className={`settings-panel${

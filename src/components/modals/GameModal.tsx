@@ -293,9 +293,6 @@ function sanitizeSteamAboutHtml(value: string) {
 // Keyed by the raw description, so a changed payload can never serve stale HTML.
 // Descriptions run to tens of KB, hence the low ceiling: this holds both the raw
 // key and the sanitized value for each entry.
-// Folga entre o fim do bloco "sobre" e o topo do card de navegação flutuante.
-const floatingNavGapPx = 16;
-
 const sanitizedAboutHtmlCache = new Map<string, string>();
 const sanitizedAboutHtmlCacheLimit = 12;
 
@@ -1338,17 +1335,9 @@ export function GameModal({
         const shellTop = currentShell.getBoundingClientRect().top;
         const actionsHeight = actions?.getBoundingClientRect().height ?? 36;
 
-        // A sidebar é `sticky` e pode terminar em qualquer altura da janela,
-        // inclusive atrás do card de navegação flutuante. Nesse layout o card é
-        // a única navegação e fica por cima do modal, então ele — e não a
-        // sidebar — passa a ser o limite de baixo: o botão "Ver mais" não pode
-        // ficar embaixo dele. Sem card no DOM (layout com sidebar), o limite
-        // continua sendo só a sidebar.
-        const floatingNav = document.querySelector(".floating-nav");
-        const floatingNavTop = floatingNav
-          ? floatingNav.getBoundingClientRect().top - floatingNavGapPx
-          : Number.POSITIVE_INFINITY;
-        const bottomLimit = Math.min(sidebarBottom, floatingNavTop);
+        // A sidebar sticky do modal é o limite de baixo: o botão "Ver mais" não
+        // pode passar dela.
+        const bottomLimit = sidebarBottom;
 
         // A shell ocupa a altura total até o limite de baixo. O botão "Ver mais"
         // fica dentro da shell com `position: absolute; bottom: 0`, sobrepondo
