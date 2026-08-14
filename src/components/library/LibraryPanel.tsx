@@ -16,6 +16,7 @@ interface LibraryPanelProps {
   onCreateCollection: () => void;
   onDeleteCollection: (collectionId: string) => void;
   onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }
 
 interface PanelGroup {
@@ -35,6 +36,7 @@ export const LibraryPanel = memo(function LibraryPanel({
   onCreateCollection,
   onDeleteCollection,
   onOpenGame,
+  onGameContextMenu,
 }: LibraryPanelProps) {
   const { t, appearance } = useSettings();
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(
@@ -176,6 +178,11 @@ export const LibraryPanel = memo(function LibraryPanel({
                         type="button"
                         className="library-panel__game"
                         onClick={() => onOpenGame(game)}
+                        onContextMenu={(event) => {
+                          if (!onGameContextMenu) return;
+                          event.preventDefault();
+                          onGameContextMenu(game, event.clientX, event.clientY);
+                        }}
                         title={game.title}
                       >
                         {game.title}

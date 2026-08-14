@@ -11010,6 +11010,22 @@ border: 0;
   }
 }
 
+/* Painel de coleções ao lado do conteúdo da Library: linha flex, painel com
+   largura fixa e o resto do conteúdo ocupando o espaço restante. */
+.content-section--library {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+}
+
+.library-page__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-6);
+}
+
 /* Vive lado a lado com o dropdown de ordenação na mesma barra: altura, raio e
    tamanho de texto vêm de lá. Em repouso usava `--library-box` (--c-0), o mesmo
    degrau do fundo da página — a chip não tinha superfície e o hover repetia a

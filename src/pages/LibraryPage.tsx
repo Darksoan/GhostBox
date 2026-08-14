@@ -1,10 +1,14 @@
-import { ChevronDown, Folder, Heart } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
 import { GameGrid, GameGridLoadingState } from "../components/ui/GameCard";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
+import {
+  LibraryPanel,
+  UNCATEGORIZED_GROUP_ID,
+} from "../components/library/LibraryPanel";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useSettings } from "../context/settings";
@@ -65,6 +69,8 @@ interface LibraryPageProps {
   onActiveCollectionChange?: (collectionId: string | null) => void;
   activeSessionAppIds?: Set<string>;
   isActive?: boolean;
+  onCreateCollection: () => void;
+  onDeleteCollection: (collectionId: string) => void;
 }
 
 export function LibraryPage({
@@ -79,6 +85,8 @@ export function LibraryPage({
   onActiveCollectionChange,
   activeSessionAppIds = new Set(),
   isActive = true,
+  onCreateCollection,
+  onDeleteCollection,
 }: LibraryPageProps) {
   const { appearance } = useSettings();
   const [sortBy, setSortBy] = useState<LibrarySortBy>(() =>
@@ -124,6 +132,27 @@ export function LibraryPage({
     if (userCollections.some((c) => c.id === selectedCollectionId)) return;
     changeActiveCollection(null);
   }, [changeActiveCollection, selectedCollectionId, userCollections]);
+
+  // Jogos já reivindicados por alguma coleção do usuário — usado para achar
+  // o que sobra no grupo "sem categoria" do painel.
+  const claimedGameKeys = useMemo(() => {
+    const claimed = new Set<string>();
+    for (const collection of userCollections) {
+      collection.gameIds.forEach((gameId) => addLibraryGameKey(claimed, gameId));
+      (collection.games ?? []).forEach((game) => {
+        for (const key of getLibraryGameKeys(game)) claimed.add(key);
+      });
+    }
+    return claimed;
+  }, [userCollections]);
+
+  const uncategorizedCount = useMemo(
+    () =>
+      visibleGames.filter(
+        (game) => !gameMatchesLibraryKeys(game, claimedGameKeys),
+      ).length,
+    [claimedGameKeys, visibleGames],
+  );
 
   const baseLibraryGames = useMemo(() => {
     // A biblioteca é a fonte do que esta aba mostra: favoritos e coleções
@@ -177,14 +206,20 @@ export function LibraryPage({
           gameMatchesLibraryKeys(game, collectionKeys),
         );
       }
+    } else if (selectedCollectionId === UNCATEGORIZED_GROUP_ID) {
+      filteredGames = [...gamesByKey.values()].filter(
+        (game) => !gameMatchesLibraryKeys(game, claimedGameKeys),
+      );
     }
 
     return sortLibraryGames(filteredGames, sortBy, language);
   }, [
     activeCollectionId,
+    claimedGameKeys,
     favoriteGameIds,
     favoriteGames,
     favoritesOnly,
+    selectedCollectionId,
     language,
     sortBy,
     userCollections,
@@ -246,116 +281,85 @@ export function LibraryPage({
 
   return (
     <section className="content-section content-section--full content-section--library">
-      <div
-        className="library-toolbar"
-        aria-label={
-          language === "en" ? "Library filters" : "Filtros da biblioteca"
-        }
-      >
-        <div className="library-toolbar__row">
-          <div
-            className={`settings-dropdown ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
-            ref={sortDropdownRef}
-          >
-            <button
-              type="button"
-              className="settings-dropdown__trigger"
-              aria-haspopup="listbox"
-              aria-expanded={sortDropdownOpen}
-              onClick={() => setSortDropdownOpen((current) => !current)}
+      <LibraryPanel
+        collections={userCollections}
+        favoriteGames={favoriteGames}
+        uncategorizedCount={uncategorizedCount}
+        activeCollectionId={selectedCollectionId}
+        onSelectCollection={changeActiveCollection}
+        onCreateCollection={onCreateCollection}
+        onDeleteCollection={onDeleteCollection}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={handleGameContextMenu}
+      />
+
+      <div className="library-page__main">
+        <div
+          className="library-toolbar"
+          aria-label={
+            language === "en" ? "Library filters" : "Filtros da biblioteca"
+          }
+        >
+          <div className="library-toolbar__row">
+            <div
+              className={`settings-dropdown ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
+              ref={sortDropdownRef}
             >
-              <span>{sortLabel}</span>
-              <ChevronDown size={14} />
-            </button>
-            {sortDropdownOpen && (
-              <div
-                className="settings-dropdown__menu"
-                role="listbox"
-                aria-label={language === "en" ? "Sort by" : "Ordenar por"}
-              >
-                {sortOptions
-                  .filter((option) => option.value !== sortBy)
-                  .map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`settings-dropdown__option ${option.value === sortBy ? "settings-dropdown__option--active" : ""}`}
-                      onClick={() => {
-                        setSortBy(option.value);
-                        setSortDropdownOpen(false);
-                      }}
-                    >
-                      <span>{option[language]}</span>
-                    </button>
-                  ))}
-              </div>
-            )}
-          </div>
-
-          <div className="library-toolbar__chips">
-            {hasFavorites && (
               <button
                 type="button"
-                className={
-                  favoritesOnly
-                    ? "library-chip library-chip--active"
-                    : "library-chip"
-                }
-                aria-pressed={favoritesOnly}
-                onClick={() => {
-                  changeActiveCollection(
-                    selectedCollectionId === "favorites" ? null : "favorites"
-                  );
-                }}
+                className="settings-dropdown__trigger"
+                aria-haspopup="listbox"
+                aria-expanded={sortDropdownOpen}
+                onClick={() => setSortDropdownOpen((current) => !current)}
               >
-                <Heart size={14} strokeWidth={2.0} fill="none" />
-                <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
+                <span>{sortLabel}</span>
+                <ChevronDown size={14} />
               </button>
-            )}
-
-            {userCollections.map((collection) => (
-              <button
-                key={collection.id}
-                type="button"
-                className={
-                  activeCollectionId === collection.id
-                    ? "library-chip library-chip--active"
-                    : "library-chip"
-                }
-                aria-pressed={activeCollectionId === collection.id}
-                onClick={() => {
-                  changeActiveCollection(
-                    selectedCollectionId === collection.id
-                      ? null
-                      : collection.id,
-                  );
-                }}
-              >
-                <Folder size={14} strokeWidth={2.0} />
-                <span>{collection.name}</span>
-              </button>
-            ))}
+              {sortDropdownOpen && (
+                <div
+                  className="settings-dropdown__menu"
+                  role="listbox"
+                  aria-label={language === "en" ? "Sort by" : "Ordenar por"}
+                >
+                  {sortOptions
+                    .filter((option) => option.value !== sortBy)
+                    .map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`settings-dropdown__option ${option.value === sortBy ? "settings-dropdown__option--active" : ""}`}
+                        onClick={() => {
+                          setSortBy(option.value);
+                          setSortDropdownOpen(false);
+                        }}
+                      >
+                        <span>{option[language]}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {loading ? (
-        <GameGridLoadingState dense count={8} portrait showAchievements libraryCoverFade />
-      ) : libraryGames.length > 0 ? (
-        <GameGrid
-          games={libraryGames}
-          onOpenGame={onOpenGame}
-          onGameContextMenu={handleGameContextMenu}
-          dense
-          portrait
-          showAchievements
-          activeSessionAppIds={activeSessionAppIds}
-          libraryCoverFade
-          animateLayout
-        />
-      ) : (
-        <EmptyState query={query} />
-      )}
+        {loading ? (
+          <GameGridLoadingState dense count={8} portrait showAchievements libraryCoverFade />
+        ) : libraryGames.length > 0 ? (
+          <GameGrid
+            games={libraryGames}
+            onOpenGame={onOpenGame}
+            onGameContextMenu={handleGameContextMenu}
+            dense
+            portrait
+            showAchievements
+            activeSessionAppIds={activeSessionAppIds}
+            libraryCoverFade
+            animateLayout
+          />
+        ) : (
+          <EmptyState query={query} />
+        )}
+      </div>
 
       {contextMenu && collectionContextMenuItems.length > 0 && (
         <ContextMenu

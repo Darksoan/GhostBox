@@ -287,6 +287,8 @@ export function PageRouter({
           onActiveCollectionChange={setActiveLibraryCollectionId}
           activeSessionAppIds={appData.activeSessionAppIds}
           isActive={targetPage === page}
+          onCreateCollection={appData.openCreateUserCollectionModal}
+          onDeleteCollection={appData.deleteCollection}
         />
       );
     }
