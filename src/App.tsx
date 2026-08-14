@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
-import { FloatingNav } from "./components/layout/FloatingNav";
 import { Header } from "./components/layout/Header";
 import { Toast } from "./components/ui/Toast";
 import { PageRouter } from "./components/routing/PageRouter";
@@ -401,7 +400,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   return (
     <div className="ghostbox-shell">
-      <main className={`app-main${isFloatingNavLayout ? " app-main--floating-nav" : ""}`}>
+      <main className="app-main">
         {!isFloatingNavLayout && (
         <Sidebar
           activePage={page}
@@ -422,19 +421,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           activeSettingsTabId={shell.activeSettingsTabId}
           onSettingsTabChange={handleSidebarSettingsTabChange}
         />
-        )}
-
-        {isFloatingNavLayout && (
-          <FloatingNav
-            activePage={page}
-            activeCollectionId={activeCollectionId}
-            steamProfile={appData.steamProfile}
-            isCloudProfileRestoring={appData.isCloudProfileRestoring}
-            favoriteGames={appData.favoriteGames}
-            userCollections={appData.userCollections}
-            onNavigate={handleNavigate}
-            onOpenProfile={() => handleNavigate("profile")}
-          />
         )}
 
         <article

@@ -687,22 +687,6 @@ p {
   min-height: 0;
   overflow: hidden;
   background: var(--app-gradient);
-
-  /* Com a janela maximizada a sidebar sai e o card flutuante entra sobre o
-     conteúdo. O respiro extra vem por `--page-bottom-space` (aplicado na raiz
-     de cada página) e não por padding no scroller — ver a nota em
-     `.container__content`. */
-  &--floating-nav {
-    --page-bottom-space: calc(
-      var(--space-14) + var(--space-16) + var(--space-8)
-    );
-
-    /* O modal de jogo tem o próprio fim de página: quem consome
-       `--page-bottom-space` lá é o `padding-bottom` de `.modal__details`, via
-       `max()`. Pôr o padding no `.backdrop--details` não resolvia — aquela
-       caixa é `inset: 0`, então o conteúdo transborda o padding em vez de ser
-       empurrado por ele. */
-  }
 }
 
 .container {
@@ -716,8 +700,7 @@ p {
   &--modal-open {
     position: relative;
     /* Sobe o conteúdo do modal acima do resto do chrome da janela (sidebar
-       inclusive). O card flutuante é a exceção deliberada: ele usa
-       `--z-popover` e fica por cima — ver a nota em `FloatingNav.scss`. */
+       inclusive). */
     z-index: var(--z-modal);
     overflow: visible;
   }
@@ -1951,12 +1934,10 @@ p {
   }
 }
 
-/* ─── Botão de perfil compartilhado (topo e card flutuante) ────────────────── */
+/* ─── Botão de perfil compartilhado (topo) ──────────────────────────────────── */
 /*
- * Base para `NavProfile`, extraído do card flutuante (`FloatingNav.scss`)
- * para o header também poder usar. O card continua com suas próprias regras
- * `.floating-nav__profile` etc. em `FloatingNav.scss` — o componente aplica as
- * duas classes, então este bloco só cobre o essencial do botão.
+ * Base para `NavProfile`, extraído do antigo card flutuante para o header
+ * também poder usar.
  */
 .nav-profile {
   display: flex;

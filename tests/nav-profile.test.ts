@@ -20,13 +20,4 @@ describe("NavProfile", () => {
     expect(source).toContain("onFocus");
     expect(source).toContain("preloadProfileImages");
   });
-
-  it("o card flutuante passa a consumir o componente extraído", () => {
-    const floating = readFileSync(
-      "src/components/layout/FloatingNav.tsx",
-      "utf8"
-    );
-    expect(floating).toContain('from "./NavProfile"');
-    expect(floating).not.toContain("function FloatingNavProfile");
-  });
 });
