@@ -20,7 +20,6 @@ import {
   startupPageStorageKey,
   profileHistoryGamesStorageKey,
   showSteamGamesStorageKey,
-  personalCalendarStorageKey,
   steamWishlistRecommendationsStorageKey,
   steamWishlistReviewCacheStorageKey,
   recentLibrarySessionLimit,
@@ -34,15 +33,6 @@ import {
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
 export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements" | "perfect";
-
-export type StoredPersonalCalendar = {
-  algorithmVersion: string;
-  weekStart: string;
-  cycleStart: string;
-  expiresAt: string;
-  gameIds: string[];
-  monthGameIds: Record<string, string[]>;
-};
 
 export type StoredSteamWishlistCycle = {
   steamId: string;
@@ -89,51 +79,6 @@ function storedStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
-}
-
-function storedStringArrayRecord(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-
-  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string[]>>(
-    (record, [key, item]) => {
-      const values = storedStringArray(item);
-      if (key && values.length) record[key] = values;
-      return record;
-    },
-    {}
-  );
-}
-
-function normalizeStoredPersonalCalendar(
-  value: unknown
-): StoredPersonalCalendar | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-
-  const calendar = value as Record<string, unknown>;
-  const algorithmVersion = storedString(calendar.algorithmVersion);
-  const cycleStart = storedString(calendar.cycleStart);
-  const weekStart = storedString(calendar.weekStart) || cycleStart;
-  const expiresAt = storedString(calendar.expiresAt);
-  const gameIds = storedStringArray(calendar.gameIds);
-  const monthGameIds = storedStringArrayRecord(calendar.monthGameIds);
-
-  if (
-    !algorithmVersion ||
-    !cycleStart ||
-    !weekStart ||
-    !expiresAt ||
-    !Number.isFinite(Date.parse(cycleStart)) ||
-    !Number.isFinite(Date.parse(weekStart)) ||
-    !Number.isFinite(Date.parse(expiresAt)) ||
-    gameIds.length === 0 ||
-    Object.keys(monthGameIds).length === 0
-  ) {
-    return null;
-  }
-
-  return { algorithmVersion, weekStart, cycleStart, expiresAt, gameIds, monthGameIds };
 }
 
 function normalizeStoredSteamWishlistCycle(value: unknown): StoredSteamWishlistCycle | null {
@@ -490,35 +435,6 @@ export function writeStoredShowSteamGames(value: boolean) {
   }
 }
 
-export function readStoredPersonalCalendar(): StoredPersonalCalendar | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(personalCalendarStorageKey) ?? "null"
-    ) as unknown;
-
-    return normalizeStoredPersonalCalendar(parsed);
-  } catch {
-    return null;
-  }
-}
-
-export function writeStoredPersonalCalendar(
-  calendar: StoredPersonalCalendar
-) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(
-      personalCalendarStorageKey,
-      JSON.stringify(calendar)
-    );
-  } catch {
-    // Calendar can be regenerated if localStorage is unavailable.
-  }
-}
-
 export function readStoredSteamWishlistCycle(): StoredSteamWishlistCycle | null {
   if (typeof window === "undefined") return null;
 
@@ -774,7 +690,6 @@ export function clearStoredAccountData() {
     cloudProfileUpdatedAtStorageKey,
     profileHistoryGamesStorageKey,
     autoRestoredCloudSavesStorageKey,
-    personalCalendarStorageKey,
     steamWishlistRecommendationsStorageKey,
     steamWishlistReviewCacheStorageKey,
   ];

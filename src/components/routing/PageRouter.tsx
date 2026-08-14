@@ -223,6 +223,9 @@ export function PageRouter({
         <LazyHomePage
           onOpenGame={openGame}
           libraryGameAppIds={appData.availableLibraryGameAppIds}
+          libraryGames={appData.addedLibraryGames}
+          favoriteGames={appData.favoriteGames}
+          historyGames={appData.profileHistoryGames}
           steamProfile={steamProfile}
           onOpenCatalogueCategory={(
             key: Extract<CatalogueFilterKey, "genres" | "tags">,

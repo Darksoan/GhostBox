@@ -1,4 +1,4 @@
-﻿import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
@@ -6,6 +6,7 @@ import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedT
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useWindowMaximized } from "../hooks/useWindowMaximized";
 import {
+  HomeCategoryCardSkeleton,
   HomeWishlistCardSkeleton,
   HomeWishlistReviewSkeleton,
 } from "../components/ui/LoadingStates";
@@ -13,19 +14,16 @@ import { SectionHeader } from "../components/ui/SectionHeader";
 import { Shelf } from "../components/ui/Shelf";
 import { useSettings } from "../context/settings";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
-import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
+import { useHomeShelves, type HomeShelf } from "../hooks/useHomeShelves";
 import {
   useCachedImageSources,
   useLoadableImageCover,
 } from "../hooks/useCachedImageSources";
 import {
-  readStoredPersonalCalendar,
-  writeStoredPersonalCalendar,
   readStoredSteamWishlistCycle,
   writeStoredSteamWishlistCycle,
   readStoredSteamWishlistReview,
   writeStoredSteamWishlistReview,
-  type StoredPersonalCalendar,
 } from "../utils/storage";
 import {
   gameHeaderOnlySources,
@@ -34,18 +32,15 @@ import {
   layeredImageStyle,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
-import { createSeedGame, type GameSeed } from "../utils/gameSeed";
+import { createSeedGame } from "../utils/gameSeed";
+import {
+  gameCategoryScore,
+  getGameTraits,
+  normalizeGameTrait,
+} from "../utils/gameTraits";
+import { steamRecommendedTagNames } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime } from "../utils/time";
-import {
-  createPersonalCalendar,
-  getPersonalCalendarCycleStart,
-  getPersonalCalendarDates,
-  getUniquePersonalCalendarPool,
-  isStoredPersonalCalendarFresh,
-  personalCalendarGameKey,
-  pickPersonalCalendarGames,
-} from "../utils/personalCalendar";
 import {
   createWishlistCycle,
   getWishlistCycleIndex,
@@ -54,8 +49,6 @@ import {
   isStoredWishlistCycleFresh,
   pickWishlistCycleGames,
 } from "../utils/wishlistCycle";
-
-type HomeGameSeed = GameSeed;
 
 type HomeCategoryCardVariant = "tile" | "portrait";
 
@@ -66,72 +59,6 @@ type HomeExploreCategory = {
   games: GhostBoxGame[];
   score: number;
 };
-
-const topReviewedSteamGames: HomeGameSeed[] = [
-  {
-    appId: "2050650",
-    title: "Resident Evil 4",
-    shortDescription:
-      "Survival horror reimagined with modern combat, constant tension, and a rescue mission in a village controlled by a brutal threat.",
-  },
-  {
-    appId: "1030300",
-    title: "Hollow Knight: Silksong",
-    shortDescription:
-      "Explore a haunted kingdom in a handcrafted action adventure with precise combat, secrets, and acrobatic movement.",
-  },
-  {
-    appId: "1449690",
-    title: "The Walking Dead: The Telltale Definitive Series",
-    shortDescription:
-      "A complete narrative journey through The Walking Dead universe, with hard choices, memorable characters, and emotional consequences.",
-  },
-  {
-    appId: "1817070",
-    title: "Marvel's Spider-Man Remastered",
-    shortDescription:
-      "Experience the story of a seasoned Peter Parker as he faces major threats and swings through New York with fluid acrobatics.",
-  },
-  { appId: "1693980", title: "Dead Space" },
-  { appId: "208650", title: "Batman: Arkham Knight" },
-  { appId: "413150", title: "Stardew Valley" },
-  { appId: "1714320", title: "Find Love or Die Trying" },
-];
-
-const homeFeaturedSteamGames: HomeGameSeed[] = [
-  { appId: "1332010", title: "Stray" },
-  { appId: "391220", title: "Rise of the Tomb Raider" },
-  { appId: "1903340", title: "Clair Obscur: Expedition 33" },
-  { appId: "1222140", title: "Detroit: Become Human" },
-  { appId: "814380", title: "R.U.S.E." },
-  { appId: "239140", title: "Dying Light" },
-  { appId: "1145360", title: "Hades" },
-  { appId: "413150", title: "Stardew Valley" },
-  { appId: "1086940", title: "Baldur's Gate 3" },
-  { appId: "1091500", title: "Cyberpunk 2077" },
-  { appId: "292030", title: "The Witcher 3: Wild Hunt" },
-  { appId: "620", title: "Portal 2" },
-  { appId: "105600", title: "Terraria" },
-  { appId: "294100", title: "RimWorld" },
-  { appId: "588650", title: "Dead Cells" },
-  { appId: "1794680", title: "Vampire Survivors" },
-  { appId: "504230", title: "Celeste" },
-  { appId: "646570", title: "Slay the Spire" },
-  { appId: "427520", title: "Factorio" },
-  { appId: "1868140", title: "DAVE THE DIVER" },
-  { appId: "1245620", title: "ELDEN RING" },
-  { appId: "1593500", title: "God of War" },
-  { appId: "1174180", title: "Red Dead Redemption 2" },
-  { appId: "1850570", title: "DEATH STRANDING DIRECTOR'S CUT" },
-  { appId: "1551360", title: "Forza Horizon 5" },
-  { appId: "1238840", title: "Battlefield 1" },
-  { appId: "250900", title: "The Binding of Isaac: Rebirth" },
-  { appId: "268910", title: "Cuphead" },
-  { appId: "489830", title: "The Elder Scrolls V: Skyrim Special Edition" },
-  { appId: "1151640", title: "Horizon Zero Dawn Complete Edition" },
-  { appId: "220", title: "Half-Life 2" },
-  { appId: "945360", title: "Among Us" },
-];
 
 const homeCarouselGroupSize = 8;
 // Pills por card, dimensionado para a única linha que o card reserva (ver
@@ -158,31 +85,7 @@ const homeRecommendedCardCount = 3;
 // navegador não aplica as do clamp (texto de uma linha só, muito longo).
 const homeShortDescriptionLimit = 150;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
-const homeRecommendedAppIdGroups = [
-  [
-    "2050650",
-    "1030300",
-    "1449690",
-    "1817070",
-    "1693980",
-    "208650",
-    "413150",
-    "1714320",
-  ],
-];
-const homePersonalCalendarDays = 4;
-const homePersonalCalendarGamesPerDay = 2;
-const homePersonalCalendarGameCount =
-  homePersonalCalendarDays * homePersonalCalendarGamesPerDay;
-const homePersonalCalendarPageSize = 120;
-const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 15;
-const homePersonalCalendarEnrichmentLimit = 6;
-const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
-const homeCalendarCoverLoadMargin = "360px 720px";
-// Below this rail width the fourth day no longer fits on one row, so it is
-// dropped instead of wrapping into an orphan row under the first column.
-const homePersonalCalendarWideMinWidth = 1040;
-const homePersonalCalendarNarrowDays = 3;
+const homeExploreCategoryLimit = 15;
 const homeWishlistCycleSourceCount = 6;
 const homeWishlistSimilarPoolLimit = 16;
 const homeWishlistCycleGameCount = 4;
@@ -303,78 +206,6 @@ function homeWishlistCoverSources(game: GhostBoxGame) {
   return gameHeaderOnlySources(game);
 }
 
-function getSteamRecommendedTagName(tag: unknown) {
-  if (!tag || typeof tag !== "object" || Array.isArray(tag)) return "";
-  const record = tag as Record<string, unknown>;
-  const value = record.name ?? record.tag_name ?? record.tagName;
-  return typeof value === "string" ? normalizeHomeCategory(value) : "";
-}
-
-function normalizeSteamRecommendedTags(tags: unknown[]) {
-  return [
-    ...new Set(
-      tags
-        .map(getSteamRecommendedTagName)
-        .filter(Boolean)
-    ),
-  ];
-}
-
-async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>()) {
-  const games: GhostBoxGame[] = [];
-  const sorts: Array<NonNullable<Parameters<typeof loadGames>[0]>["sort"]> = [
-    "popular",
-    "recentlyAdded",
-  ];
-  const offsets = new Map<typeof sorts[number], number>(
-    sorts.map((sort) => [sort, 0])
-  );
-  const totals = new Map<typeof sorts[number], number | undefined>();
-
-  while (
-    getUniquePersonalCalendarPool(games).filter(
-      (game) => !excludedGameIds.has(personalCalendarGameKey(game))
-    ).length < homePersonalCalendarPoolTarget
-  ) {
-    let loadedAnyPage = false;
-
-    for (const sort of sorts) {
-      const offset = offsets.get(sort) ?? 0;
-      const expectedTotal = totals.get(sort);
-      if (expectedTotal !== undefined && offset >= expectedTotal) continue;
-
-      const result = await loadGames({
-        query: "",
-        limit: homePersonalCalendarPageSize,
-        offset,
-        sort,
-      });
-      games.push(...result.games);
-      totals.set(sort, result.matched || result.total || games.length);
-      offsets.set(sort, offset + homePersonalCalendarPageSize);
-      loadedAnyPage = true;
-
-      if (result.games.length < homePersonalCalendarPageSize) {
-        totals.set(sort, offset + result.games.length);
-      }
-    }
-
-    if (!loadedAnyPage) break;
-  }
-
-  return getUniquePersonalCalendarPool(games);
-}
-
-function getHomeMetadataCategoryPool(game: GhostBoxGame) {
-  return Array.from(
-    new Set(
-      [...game.genres, ...game.tags]
-        .map(normalizeHomeCategory)
-        .filter(Boolean)
-    )
-  );
-}
-
 function HomeCategoryCard({
   game,
   variant = "tile",
@@ -382,6 +213,7 @@ function HomeCategoryCard({
   showSummary = false,
   showTitle = false,
   showSecondaryPills = false,
+  badgeLabel = "",
   language = "pt",
   onOpenGame,
   onGameContextMenu,
@@ -392,6 +224,8 @@ function HomeCategoryCard({
   showSummary?: boolean;
   showTitle?: boolean;
   showSecondaryPills?: boolean;
+  /** Pill de estado que entra antes das categorias, ex. "Em breve". */
+  badgeLabel?: string;
   language?: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
@@ -415,10 +249,15 @@ function HomeCategoryCard({
     : coverSource
       ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
       : fallbackCoverSources;
-  const metadataCategoryPool = getHomeMetadataCategoryPool(game);
+  const metadataCategoryPool = getGameTraits(game);
+  // O badge ocupa uma vaga da primeira linha para a contagem de pills não mudar
+  // — a linha tem altura fechada e não pode transbordar.
+  const primaryCategoryLimit =
+    (showSecondaryPills ? homeTopRatedPrimaryPillCount : homeMetadataCategoryLimit) -
+    (badgeLabel ? 1 : 0);
   const metadataCategories = metadataCategoryPool.slice(
     0,
-    showSecondaryPills ? homeTopRatedPrimaryPillCount : homeMetadataCategoryLimit
+    Math.max(0, primaryCategoryLimit)
   );
   const secondaryCategories = showSecondaryPills
     ? metadataCategoryPool.slice(
@@ -486,9 +325,14 @@ function HomeCategoryCard({
           ) : null}
           <span className="home-category-card__metadata-summary">
             <span className="home-category-card__genres">
+              {badgeLabel ? (
+                <span className="home-category-card__genre home-category-card__genre--badge">
+                  {badgeLabel}
+                </span>
+              ) : null}
               {metadataCategories.map((category) => (
                 <span className="home-category-card__genre" key={category}>
-                  {category}
+                  {getHomeCategoryLabel(category, language)}
                 </span>
               ))}
             </span>
@@ -502,7 +346,7 @@ function HomeCategoryCard({
               <span className="home-category-card__tags">
                 {secondaryCategories.map((category) => (
                   <span className="home-category-card__genre" key={category}>
-                    {category}
+                    {getHomeCategoryLabel(category, language)}
                   </span>
                 ))}
               </span>
@@ -516,24 +360,30 @@ function HomeCategoryCard({
 
 function HomeCategorySection({
   title,
+  subtitle,
   games,
+  loading = false,
   className = "",
   variant = "tile",
   maxGames = 3,
   showMetadata = false,
   showTitle = false,
   showSecondaryPills = false,
+  language = "pt",
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
+  subtitle?: string;
   games: GhostBoxGame[];
+  loading?: boolean;
   className?: string;
   variant?: HomeCategoryCardVariant;
   maxGames?: number;
   showMetadata?: boolean;
   showTitle?: boolean;
   showSecondaryPills?: boolean;
+  language?: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -544,20 +394,31 @@ function HomeCategorySection({
       className={`home-category${className ? ` ${className}` : ""}`}
       aria-label={title}
     >
-      <SectionHeader title={title} />
+      <SectionHeader title={title} subtitle={subtitle} />
       <div className="home-category__games">
         {Array.from({ length: maxGames }, (_, index) => {
           const game = visibleGames[index];
-          return game ? (
-            <HomeCategoryCard
-              key={game.appId || game.id}
-              game={game}
+          if (game) {
+            return (
+              <HomeCategoryCard
+                key={game.appId || game.id}
+                game={game}
+                variant={variant}
+                showMetadata={showMetadata}
+                showTitle={showTitle}
+                showSecondaryPills={showSecondaryPills}
+                language={language}
+                onOpenGame={onOpenGame}
+                onGameContextMenu={onGameContextMenu}
+              />
+            );
+          }
+
+          return loading ? (
+            <HomeCategoryCardSkeleton
+              key={`skeleton-${index}`}
               variant={variant}
-              showMetadata={showMetadata}
               showTitle={showTitle}
-              showSecondaryPills={showSecondaryPills}
-              onOpenGame={onOpenGame}
-              onGameContextMenu={onGameContextMenu}
             />
           ) : (
             <span
@@ -606,35 +467,6 @@ function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
     : source;
 }
 
-function normalizeHomeCategory(value: string) {
-  const normalized = value.trim().replace(/\s+/g, " ");
-  const aliases: Record<string, string> = {
-    acao: "Action",
-    ação: "Action",
-    action: "Action",
-    aventura: "Adventure",
-    adventure: "Adventure",
-    historia: "Story Rich",
-    história: "Story Rich",
-    story: "Story Rich",
-    "story rich": "Story Rich",
-    terror: "Horror",
-    horror: "Horror",
-    corrida: "Racing",
-    racing: "Racing",
-    esportes: "Sports",
-    sports: "Sports",
-    estrategia: "Strategy",
-    estratégia: "Strategy",
-    strategy: "Strategy",
-    exploracao: "Exploration",
-    exploração: "Exploration",
-    exploration: "Exploration",
-  };
-
-  return aliases[normalized.toLowerCase()] ?? normalized;
-}
-
 function getHomeCategoryLabel(value: string, language: "pt" | "en") {
   if (language === "en") return value;
 
@@ -668,12 +500,6 @@ function getHomeCategoryLabel(value: string, language: "pt" | "en") {
   return labels[value] ?? value;
 }
 
-function gameCategoryScore(game: GhostBoxGame) {
-  const reviewScore = game.steamPositiveRatio ?? game.rating ?? 0;
-  const popularityScore = game.recommendations ?? game.steamReviewCount ?? 0;
-  return reviewScore * 100 + Math.log10(popularityScore + 1);
-}
-
 function getHomeExploreCategories(games: GhostBoxGame[]) {
   const categoryMap = new Map<
     string,
@@ -690,12 +516,12 @@ function getHomeExploreCategories(games: GhostBoxGame[]) {
       ...game.genres.map((value) => ({
         key: "genres" as const,
         value,
-        normalized: normalizeHomeCategory(value),
+        normalized: normalizeGameTrait(value),
       })),
       ...game.tags.map((value) => ({
         key: "tags" as const,
         value,
-        normalized: normalizeHomeCategory(value),
+        normalized: normalizeGameTrait(value),
       })),
     ].filter((category) => category.normalized);
 
@@ -729,7 +555,7 @@ function getHomeExploreCategories(games: GhostBoxGame[]) {
   }))
     .filter((category) => category.games.length > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 15);
+    .slice(0, homeExploreCategoryLimit);
 }
 
 function getUniqueHomeGames(games: GhostBoxGame[]) {
@@ -895,246 +721,121 @@ function HomeExploreCategories({
   );
 }
 
-function HomeCalendarGameCardComponent({
-  game,
-  rootRef,
-  onOpenGame,
-  onGameContextMenu,
-}: {
-  game: GhostBoxGame;
-  rootRef: RefObject<HTMLDivElement | null>;
-  onOpenGame: (game: GhostBoxGame) => void;
-  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
-}) {
-  const cardRef = useRef<HTMLButtonElement | null>(null);
-  const [shouldLoadCover, setShouldLoadCover] = useState(false);
-  // Header-only: never include coverUrl/portrait fallbacks. Enrichment and the
-  // global library-capsule cache otherwise swap the landscape header for a
-  // vertical cover after the correct image already painted.
-  const headerSources = useMemo(
-    () =>
-      shouldLoadCover
-        ? [
-            ...gameHeaderOnlySources(game).slice(0, 1),
-            ...gameHeroSources(game),
-            ...gameHeaderOnlySources(game).slice(1),
-          ]
-        : [],
-    [game, shouldLoadCover]
-  );
-
-  useEffect(
-    () => {
-      if (shouldLoadCover) return;
-      const node = cardRef.current;
-      if (!node) return;
-
-      if (typeof IntersectionObserver === "undefined") {
-        setShouldLoadCover(true);
-        return;
-      }
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) {
-            setShouldLoadCover(true);
-            observer.disconnect();
-          }
-        },
-        {
-          root: rootRef.current ?? null,
-          rootMargin: homeCalendarCoverLoadMargin,
-          threshold: 0.01,
-        }
-      );
-
-      observer.observe(node);
-      return () => observer.disconnect();
-    },
-    [rootRef, shouldLoadCover]
-  );
-
-  const coverSources = useCachedImageSources(headerSources);
-  const {
-    source: coverSource,
-    loaded,
-    failed,
-  } = useLoadableImageCover(coverSources);
-  const hasLoadedHeader =
-    shouldLoadCover && loaded && coverSources.includes(coverSource);
-  const layeredSources = hasLoadedHeader ? [coverSource] : [];
-
-  return (
-    <button
-      ref={cardRef}
-      type="button"
-      aria-label={game.title}
-      className={`home-calendar-card${
-        hasLoadedHeader ? "" : " home-calendar-card--skeleton"
-      }${failed ? " home-calendar-card--fallback" : ""}`}
-      onClick={() => onOpenGame(game)}
-      onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
-        event.preventDefault();
-        onGameContextMenu(game, event.clientX, event.clientY);
-      }}
-    >
-      <span
-        className={`home-calendar-card__cover${
-          hasLoadedHeader ? " home-calendar-card__cover--loaded" : ""
-        }`}
-        style={layeredImageStyle(layeredSources, "")}
-        aria-hidden="true"
-      />
-    </button>
-  );
-}
-
-const HomeCalendarGameCard = memo(HomeCalendarGameCardComponent);
-
-// Tracks the rail's own width rather than the viewport so the column count
-// also reacts to the sidebar expanding/collapsing, not just window resizes.
-function useCalendarVisibleDays(
-  railRef: RefObject<HTMLDivElement | null>,
-  mounted: boolean
-) {
-  const [visibleDays, setVisibleDays] = useState(homePersonalCalendarDays);
-
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail || typeof ResizeObserver === "undefined") return;
-
-    const update = (width: number) => {
-      setVisibleDays(
-        width >= homePersonalCalendarWideMinWidth
-          ? homePersonalCalendarDays
-          : homePersonalCalendarNarrowDays
-      );
-    };
-
-    update(rail.getBoundingClientRect().width);
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) update(entry.contentRect.width);
-    });
-    observer.observe(rail);
-    return () => observer.disconnect();
-  }, [railRef, mounted]);
-
-  return visibleDays;
-}
-
-function HomePersonalCalendar({
+/**
+ * Rail genérico de descoberta: mesma estrutura visual do rail de recomendados
+ * (por isso o `blockName`), com card de capa + nome + pills. Enquanto a fonte
+ * não responde, mantém a altura da seção com skeletons em vez de sumir e
+ * empurrar tudo que está abaixo quando os dados chegam.
+ */
+function HomeGameShelf({
   title,
   subtitle,
-  games,
-  cycleStart,
+  shelf,
   language,
-  loading,
+  upcomingLabel = "",
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
-  subtitle: string;
-  games: GhostBoxGame[];
-  cycleStart: string;
+  subtitle?: string;
+  shelf: HomeShelf;
   language: "pt" | "en";
-  loading: boolean;
+  /** Rótulo da pill dos jogos ainda não lançados. */
+  upcomingLabel?: string;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const calendarRef = useRef<HTMLDivElement | null>(null);
-  const gamesPerDay = homePersonalCalendarGamesPerDay;
-  const isVisible = games.length > 0 || loading;
-  const visibleDays = useCalendarVisibleDays(calendarRef, isVisible);
-  const weekdays = getPersonalCalendarDates(
-    language,
-    cycleStart,
-    homePersonalCalendarDays
-  ).slice(0, visibleDays);
+  if (!shelf.games.length) {
+    if (!shelf.loading) return null;
 
-  if (!isVisible) return null;
-
-  return (
-    <section className="home-calendar" aria-label={title}>
-      <SectionHeader title={title} subtitle={subtitle || undefined} />
-      <div className="home-calendar__rail" ref={calendarRef}>
-        <div className="home-calendar__carousel">
-          <div
-            className="home-calendar__track"
-            style={{ "--home-calendar-columns": visibleDays } as CSSProperties}
-          >
-            {weekdays.map((date, dayIndex) => {
-              const dayGames = games.slice(
-                dayIndex * gamesPerDay,
-                dayIndex * gamesPerDay + gamesPerDay
-              );
-
-              return (
-                <section className="home-calendar-day" key={date} aria-label={date}>
-                  <h4 className="home-calendar-day__title">{date}</h4>
-                  <div className="home-calendar-day__games">
-                    {Array.from({ length: gamesPerDay }, (_, gameIndex) => {
-                      const game = dayGames[gameIndex];
-                      return game ? (
-                        <HomeCalendarGameCard
-                          key={homeGameKey(game)}
-                          game={game}
-                          rootRef={calendarRef}
-                          onOpenGame={onOpenGame}
-                          onGameContextMenu={onGameContextMenu}
-                        />
-                      ) : (
-                        <span
-                          key={`placeholder-${gameIndex}`}
-                          className="home-calendar-card home-calendar-card--empty"
-                          aria-hidden="true"
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+    return (
+      <section className="home-recommended" aria-label={title}>
+        <SectionHeader title={title} subtitle={subtitle} />
+        <div className="home-recommended__rail">
+          <div className="home-recommended__carousel">
+            <div className="home-recommended__track">
+              {Array.from({ length: homeRecommendedCardCount }, (_, index) => (
+                <HomeCategoryCardSkeleton key={`shelf-skeleton-${index}`} showTitle />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    );
+  }
+
+  return (
+    <Shelf
+      blockName="home-recommended"
+      title={title}
+      subtitle={subtitle}
+      items={shelf.games}
+      getKey={homeGameKey}
+      minItemsForControls={homeRecommendedCardCount}
+      prevLabel={language === "en" ? "Previous game" : "Jogo anterior"}
+      nextLabel={language === "en" ? "Next game" : "Próximo jogo"}
+      renderItem={(game) => (
+        <HomeCategoryCard
+          game={game}
+          showMetadata
+          showTitle
+          language={language}
+          badgeLabel={
+            upcomingLabel && shelf.upcomingAppIds.has(homeGameAppId(game))
+              ? upcomingLabel
+              : ""
+          }
+          onOpenGame={onOpenGame}
+          onGameContextMenu={onGameContextMenu}
+        />
+      )}
+    />
   );
 }
 
 function HomeRecommendedHero({
   title,
-  gameGroups,
+  subtitle,
+  shelf,
   language,
   onOpenGame,
   onGameContextMenu,
 }: {
   title: string;
-  gameGroups: GhostBoxGame[][];
+  subtitle?: string;
+  shelf: HomeShelf;
   language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  const availableGroups = useMemo(
-    () => gameGroups.filter((group) => group.length > 0),
-    [gameGroups]
-  );
-  const poolGames = useMemo(
-    () => (availableGroups[0] ?? []).slice(0, homeCarouselGroupSize),
-    [availableGroups]
-  );
-  // O card mostra a short description, que só chega em `loadGameStoreDetails`.
-  // Sem enriquecer, os três cards cairiam no fallback de gêneros.
-  const enrichedGames = useEnrichedGameCards(poolGames, homeCarouselGroupSize);
+  const games = shelf.games;
 
   useEffect(() => {
     const cancelPreload = runWhenIdle(() => {
-      void preloadHomeRecommendedGroup(availableGroups[0] ?? []);
+      void preloadHomeRecommendedGroup(games);
     }, 450);
 
     return cancelPreload;
-  }, [availableGroups]);
+  }, [games]);
+
+  if (!games.length) {
+    if (!shelf.loading) return null;
+
+    return (
+      <section className="home-recommended" aria-label={title}>
+        <SectionHeader title={title} subtitle={subtitle} />
+        <div className="home-recommended__rail">
+          <div className="home-recommended__carousel">
+            <div className="home-recommended__track">
+              {Array.from({ length: homeRecommendedCardCount }, (_, index) => (
+                <HomeCategoryCardSkeleton key={`recommended-skeleton-${index}`} showSummary />
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   // Mesmo rail de "Explorar por categoria": as setas rolam o carrossel com
   // `scroll-behavior: smooth` em vez de trocar os cards de uma vez, e somem nas
@@ -1144,7 +845,8 @@ function HomeRecommendedHero({
     <Shelf
       blockName="home-recommended"
       title={title}
-      items={enrichedGames}
+      subtitle={subtitle}
+      items={games}
       getKey={homeGameKey}
       minItemsForControls={homeRecommendedCardCount}
       prevLabel={language === "en" ? "Previous game" : "Jogo anterior"}
@@ -1481,11 +1183,17 @@ function useWidescreen() {
 export function HomePage({
   onOpenGame,
   libraryGameAppIds,
+  libraryGames,
+  favoriteGames,
+  historyGames,
   onOpenCatalogueCategory,
   steamProfile,
 }: {
   onOpenGame: (game: GhostBoxGame) => void;
   libraryGameAppIds: Set<string>;
+  libraryGames: GhostBoxGame[];
+  favoriteGames: GhostBoxGame[];
+  historyGames: GhostBoxGame[];
   onOpenCatalogueCategory: (
     key: Extract<CatalogueFilterKey, "genres" | "tags">,
     value: string
@@ -1496,25 +1204,6 @@ export function HomePage({
   const isWidescreen = useWidescreen();
   const isMaximized = useWindowMaximized();
   const homeFeaturedMaxGames = isWidescreen ? 8 : 6;
-  const [homeTopReviewedGames, setHomeTopReviewedGames] = useState<GhostBoxGame[]>(
-    () =>
-      topReviewedSteamGames.map((game, index) =>
-        createSeedGame(game, index)
-      )
-  );
-  const [homeFeaturedGames, setHomeFeaturedGames] = useState<GhostBoxGame[]>(() =>
-    homeFeaturedSteamGames.map((game, index) =>
-      createSeedGame(game, index, "")
-    )
-  );
-  const [storedPersonalCalendar, setStoredPersonalCalendar] = useState<StoredPersonalCalendar | null>(() =>
-    readStoredPersonalCalendar()
-  );
-  const [personalCalendarCycleStart, setPersonalCalendarCycleStart] = useState(() =>
-    storedPersonalCalendar?.cycleStart ?? getPersonalCalendarCycleStart().toISOString()
-  );
-  const [personalCalendarGames, setPersonalCalendarGames] = useState<GhostBoxGame[]>([]);
-  const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
   const [wishlistRecommendations, setWishlistRecommendations] = useState<GhostBoxGame[]>([]);
   const [isLoadingWishlistRecommendations, setIsLoadingWishlistRecommendations] = useState(false);
   const [homeContextMenu, setHomeContextMenu] = useState<{
@@ -1523,209 +1212,21 @@ export function HomePage({
     y: number;
   } | null>(null);
 
-  // Stable identity so memoized cards (e.g. HomeCalendarGameCard) don't
-  // re-render whenever HomePage re-renders.
+  const { shelves, explorePool, tasteProfile } = useHomeShelves({
+    language: appearance.language,
+    libraryGameAppIds,
+    libraryGames,
+    favoriteGames,
+    historyGames,
+    steamId: steamProfile?.steamId,
+  });
+
+  // Stable identity so memoized cards don't re-render whenever HomePage does.
   const handleGameContextMenu = useCallback(
     (gameItem: GhostBoxGame, x: number, y: number) =>
       setHomeContextMenu({ game: gameItem, x, y }),
     []
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadGameRange(
-      games: HomeGameSeed[],
-      start: number,
-      end: number,
-      updateFn: (results: GhostBoxGame[], offset: number) => void
-    ) {
-      if (cancelled || start >= end) return;
-
-      const batch = games.slice(start, end);
-
-      const results = await Promise.all(
-        batch.map(async (game, index) => {
-          const detailed = await loadGameStoreDetails(game.appId).catch(
-            () => null
-          );
-          if (!detailed) return createSeedGame(game, start + index);
-          const enriched =
-            game.shortDescription && !detailed.shortDescription
-              ? { ...detailed, shortDescription: game.shortDescription }
-              : detailed;
-          if (/^Steam \d+$/.test(detailed.title) && game.title) {
-            return { ...enriched, title: game.title };
-          }
-          return enriched;
-        })
-      );
-
-      if (!cancelled) updateFn(results, start);
-    }
-
-    void loadGameRange(
-      topReviewedSteamGames,
-      0,
-      topReviewedSteamGames.length,
-      (results, offset) => {
-        setHomeTopReviewedGames((current) => {
-          const next = [...current];
-          results.forEach((game, index) => {
-            next[offset + index] = game;
-          });
-          return next;
-        });
-      }
-    );
-
-    void loadGameRange(
-      homeFeaturedSteamGames,
-      0,
-      6,
-      (results, offset) => {
-        setHomeFeaturedGames((current) => {
-          const next = [...current];
-          results.forEach((game, index) => {
-            next[offset + index] = game;
-          });
-          return next;
-        });
-      }
-    );
-
-    const cancelIdleFeaturedLoad = runWhenIdle(() => {
-      void loadGameRange(
-        homeFeaturedSteamGames,
-        6,
-        homeFeaturedSteamGames.length,
-        (results, offset) => {
-          setHomeFeaturedGames((current) => {
-            const next = [...current];
-            results.forEach((game, index) => {
-              next[offset + index] = game;
-            });
-            return next;
-          });
-        }
-      );
-    }, 1800);
-
-    return () => {
-      cancelled = true;
-      cancelIdleFeaturedLoad();
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let refreshTimeout: number | undefined;
-
-    function schedulePersonalCalendarRefresh(calendar: StoredPersonalCalendar | null) {
-      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
-      if (!calendar) return;
-
-      const delay = Date.parse(calendar.expiresAt) - Date.now() + 500;
-      refreshTimeout = window.setTimeout(
-        () => void loadPersonalCalendar(),
-        Math.max(1000, delay)
-      );
-    }
-
-    async function loadPersonalCalendar() {
-      setIsLoadingPersonalCalendar(true);
-
-      try {
-        const currentStoredCalendar = readStoredPersonalCalendar();
-        const excludedGameIds = new Set(libraryGameAppIds);
-
-        if (steamProfile?.steamId) {
-          const wishlistItems = await loadSteamWishlist(steamProfile.steamId).catch(
-            () => []
-          );
-          wishlistItems.forEach((item) => {
-            const appId = item.appId.trim();
-            if (appId) excludedGameIds.add(appId);
-          });
-        }
-
-        if (cancelled) return;
-        setStoredPersonalCalendar(currentStoredCalendar);
-
-        const pool = await loadHomePersonalCalendarPool(excludedGameIds);
-        if (cancelled) return;
-
-        const gameById = new Map<string, GhostBoxGame>();
-        pool.forEach((game) => {
-          gameById.set(personalCalendarGameKey(game), game);
-          gameById.set(game.id, game);
-        });
-
-        if (isStoredPersonalCalendarFresh(currentStoredCalendar, homePersonalCalendarGameCount)) {
-          const storedGames = currentStoredCalendar.gameIds.flatMap((gameId) => {
-            if (excludedGameIds.has(gameId)) return [];
-            const game = gameById.get(gameId);
-            return game ? [game] : [];
-          });
-
-          if (storedGames.length === homePersonalCalendarGameCount) {
-            setPersonalCalendarCycleStart(currentStoredCalendar.cycleStart);
-            setPersonalCalendarGames(storedGames);
-            schedulePersonalCalendarRefresh(currentStoredCalendar);
-            return;
-          }
-        }
-
-        const cycleStart = getPersonalCalendarCycleStart();
-        const selectedGames = pickPersonalCalendarGames(pool, {
-          gameCount: homePersonalCalendarGameCount,
-          gamesPerDay: homePersonalCalendarGamesPerDay,
-          cycleStart,
-          monthGameIds: currentStoredCalendar?.monthGameIds,
-          excludedGameIds,
-        });
-
-        if (!selectedGames.length) {
-          setPersonalCalendarGames([]);
-          schedulePersonalCalendarRefresh(null);
-          return;
-        }
-
-        const nextCalendar = createPersonalCalendar({
-          selectedGames,
-          storedCalendar: currentStoredCalendar,
-          cycleStart,
-          refreshMs: homePersonalCalendarRefreshMs,
-          gamesPerDay: homePersonalCalendarGamesPerDay,
-        });
-        writeStoredPersonalCalendar(nextCalendar);
-        setStoredPersonalCalendar(nextCalendar);
-        setPersonalCalendarCycleStart(nextCalendar.cycleStart);
-        setPersonalCalendarGames(selectedGames);
-        schedulePersonalCalendarRefresh(nextCalendar);
-      } finally {
-        if (!cancelled) setIsLoadingPersonalCalendar(false);
-      }
-    }
-
-    void loadPersonalCalendar();
-
-    function handleVisibilityChange() {
-      if (document.visibilityState !== "visible") return;
-      const calendar = readStoredPersonalCalendar();
-      if (!isStoredPersonalCalendarFresh(calendar, homePersonalCalendarGameCount)) {
-        void loadPersonalCalendar();
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      cancelled = true;
-      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [libraryGameAppIds, steamProfile?.steamId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1877,7 +1378,7 @@ export function HomePage({
             {
               gameCount: missingGameCount,
               sourceTraits,
-              userTraits: normalizeSteamRecommendedTags(recommendedTags),
+              userTraits: steamRecommendedTagNames(recommendedTags),
               excludedAppIds,
             }
           );
@@ -1945,71 +1446,89 @@ export function HomePage({
     };
   }, [steamProfile?.steamId, libraryGameAppIds]);
 
-  const homeVisibleGameGroups = useMemo(() => {
-    return homeRecommendedAppIdGroups.map((appIds) =>
-      appIds
-        .map((appId) =>
-          homeTopReviewedGames.find((game) => homeGameAppId(game) === appId)
-        )
-        .filter((game): game is GhostBoxGame => Boolean(game))
-    );
-  }, [homeTopReviewedGames]);
-  const featuredGames = homeFeaturedGames;
-  const enrichedPersonalCalendarGames = useEnrichedGameCards(
-    personalCalendarGames,
-    homePersonalCalendarEnrichmentLimit
+  const exploreCategories = useMemo(
+    () => getHomeExploreCategories(explorePool),
+    [explorePool]
   );
-  const exploreCategories = useMemo(() => {
-    return getHomeExploreCategories([...homeTopReviewedGames, ...homeFeaturedGames]);
-  }, [homeTopReviewedGames, homeFeaturedGames]);
   const homeContextMenuItems = useGameContextMenu({
     game: homeContextMenu?.game ?? null,
     onOpenGame,
   });
+  const becauseYouPlayedTitle = tasteProfile.seedGame
+    ? t("home.becauseYouPlayed", { title: tasteProfile.seedGame.title })
+    : "";
 
   return (
     <section className={`home-page${isMaximized ? " home-page--maximized" : ""}`} aria-label={t("home.pageAria")}>
       <HomeRecommendedHero
         title={t("home.recommended")}
-        gameGroups={homeVisibleGameGroups}
+        subtitle={t("home.recommendedSubtitle")}
+        shelf={shelves.recommended}
+        language={appearance.language}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={handleGameContextMenu}
+      />
+      <HomeGameShelf
+        title={t("home.trending")}
+        subtitle={t("home.trendingSubtitle")}
+        shelf={shelves.trending}
+        language={appearance.language}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={handleGameContextMenu}
+      />
+      <HomeGameShelf
+        title={t("home.newReleases")}
+        subtitle={t("home.newReleasesSubtitle")}
+        shelf={shelves.newReleases}
+        language={appearance.language}
+        upcomingLabel={t("home.comingSoon")}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={handleGameContextMenu}
+      />
+      {becauseYouPlayedTitle ? (
+        <HomeGameShelf
+          title={becauseYouPlayedTitle}
+          shelf={shelves.becauseYouPlayed}
+          language={appearance.language}
+          onOpenGame={onOpenGame}
+          onGameContextMenu={handleGameContextMenu}
+        />
+      ) : null}
+      <HomeGameShelf
+        title={t("home.topSellers")}
+        subtitle={t("home.topSellersSubtitle")}
+        shelf={shelves.topSellers}
         language={appearance.language}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
       <HomeCategorySection
         title={t("home.featuredGames")}
-        games={featuredGames}
+        games={shelves.topRated.games}
+        loading={shelves.topRated.loading}
         className="home-category--featured"
         variant="tile"
         maxGames={homeFeaturedMaxGames}
         showMetadata
+        showTitle
         showSecondaryPills
+        language={appearance.language}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
       <HomeExploreCategories
         title={t("home.exploreByCategory")}
         categories={exploreCategories}
-        allGames={[...homeTopReviewedGames, ...homeFeaturedGames]}
+        allGames={explorePool}
         language={appearance.language}
         onOpenCategory={(category) =>
           onOpenCatalogueCategory(category.filterKey, category.filterValue)
         }
       />
-      <HomePersonalCalendar
-        title={t("home.personalCalendar")}
-        subtitle=""
-        games={enrichedPersonalCalendarGames}
-        cycleStart={personalCalendarCycleStart}
-        language={appearance.language}
-        loading={isLoadingPersonalCalendar}
-        onOpenGame={onOpenGame}
-        onGameContextMenu={handleGameContextMenu}
-      />
       <HomeWishlistRecommendations
         title={t("home.steamWishlist")}
         subtitle={t("home.steamWishlistSubtitle")}
-         games={wishlistRecommendations}
+        games={wishlistRecommendations}
         loading={isLoadingWishlistRecommendations}
         language={appearance.language}
         onOpenGame={onOpenGame}

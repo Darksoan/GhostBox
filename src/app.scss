@@ -3237,6 +3237,15 @@ p {
   white-space: nowrap;
 }
 
+/* Pill de estado ("Em breve"): mesma caixa da pill de categoria, mas com a cor
+   de destaque — é informação sobre o jogo, não uma categoria navegável. Ocupa
+   uma das vagas da linha, então a altura fechada da linha não muda. */
+.home-category-card__genre--badge {
+  background: var(--pill-bg-hover);
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+
 /* Recomendados (nome + descrição): a linha de pills ocupa a largura inteira do
    card. Com `flex: 0 0 auto` ela fechava na soma dos rótulos e sobrava buraco à
    direita em jogos de tag curta, enquanto jogos de tag longa preenchiam tudo —
