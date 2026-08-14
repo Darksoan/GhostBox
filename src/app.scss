@@ -11026,56 +11026,6 @@ border: 0;
   gap: var(--space-6);
 }
 
-/* Vive lado a lado com o dropdown de ordenação na mesma barra: altura, raio e
-   tamanho de texto vêm de lá. Em repouso usava `--library-box` (--c-0), o mesmo
-   degrau do fundo da página — a chip não tinha superfície e o hover repetia a
-   cor de repouso, então nada respondia ao ponteiro. Hover e selecionado seguem
-   os tokens da sidebar (`--sidebar-option-hover` / `--sidebar-option-active`);
-   o repouso mantém superfície própria porque a chip fica sobre o canvas. */
-.library-chip {
-  display: inline-flex;
-  min-height: 32px;
-  height: 32px;
-  align-items: center;
-  gap: var(--space-4);
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface-option);
-  color: var(--text-secondary);
-  padding: 0 var(--space-6);
-  font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition:
-    color var(--motion-fast) var(--ease),
-    background-color var(--motion-fast) var(--ease);
-
-  svg {
-    flex: 0 0 auto;
-    color: currentcolor;
-  }
-
-  &:hover {
-    background: var(--sidebar-option-hover);
-    color: var(--text-primary);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--border-interactive);
-    outline-offset: 2px;
-  }
-
-  &.library-chip--active,
-  &[aria-pressed="true"],
-  &.library-chip--active:hover,
-  &.library-chip--active:focus-visible,
-  &[aria-pressed="true"]:hover,
-  &[aria-pressed="true"]:focus-visible {
-    background: var(--sidebar-option-active);
-    color: var(--text-primary);
-  }
-}
-
 @keyframes library-cover-format-out {
   from {
     opacity: 1;

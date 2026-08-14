@@ -57,6 +57,23 @@ function gameMatchesLibraryKeys(game: GhostBoxGame, keys: Set<string>) {
   return false;
 }
 
+// Decide se uma seleção de coleção "morreu" (a coleção foi apagada enquanto
+// filtrava) e deve ser desfeita. "favorites" e o grupo derivado de "sem
+// categoria" nunca são coleções reais em `userCollections`, então precisam
+// de exceção explícita — senão são tratados como órfãos e a seleção é
+// desfeita a cada render.
+export function shouldClearStaleCollectionSelection(
+  selectedCollectionId: string | null,
+  userCollections: UserCollection[],
+): boolean {
+  if (!selectedCollectionId) return false;
+  if (selectedCollectionId === "favorites") return false;
+  if (selectedCollectionId === UNCATEGORIZED_GROUP_ID) return false;
+  if (!userCollections.length) return false;
+  if (userCollections.some((c) => c.id === selectedCollectionId)) return false;
+  return true;
+}
+
 interface LibraryPageProps {
   games: GhostBoxGame[];
   favoriteGames?: GhostBoxGame[];
@@ -127,9 +144,8 @@ export function LibraryPage({
   // também alimenta o perfil e o destaque da sidebar. Filtrar ignorando o id
   // morto não bastava — a seleção precisa ser desfeita de fato.
   useEffect(() => {
-    if (!selectedCollectionId || selectedCollectionId === "favorites") return;
-    if (!userCollections.length) return;
-    if (userCollections.some((c) => c.id === selectedCollectionId)) return;
+    if (!shouldClearStaleCollectionSelection(selectedCollectionId, userCollections))
+      return;
     changeActiveCollection(null);
   }, [changeActiveCollection, selectedCollectionId, userCollections]);
 

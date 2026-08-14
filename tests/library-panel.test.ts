@@ -2,6 +2,8 @@ import { compile } from "sass-embedded";
 import { readFileSync } from "node:fs";
 import postcss from "postcss";
 import { describe, expect, it } from "vitest";
+import { shouldClearStaleCollectionSelection } from "../src/pages/LibraryPage";
+import type { UserCollection } from "../src/types";
 
 describe("LibraryPanel — estrutura", () => {
   const source = readFileSync(
@@ -73,6 +75,43 @@ describe("LibraryPanel — ligação com a página", () => {
     // passa inteira, dando a impressão de que o filtro não fez nada.
     expect(page).toContain("UNCATEGORIZED_GROUP_ID");
     expect(page).toContain("claimedGameKeys");
+  });
+});
+
+describe("LibraryPage — desfaz seleção de coleção órfã (shouldClearStaleCollectionSelection)", () => {
+  const liveCollections: UserCollection[] = [
+    { id: "col-1", name: "RPGs", gameIds: ["1"] },
+  ];
+
+  it("não desfaz quando não há seleção", () => {
+    expect(shouldClearStaleCollectionSelection(null, liveCollections)).toBe(false);
+  });
+
+  it("não desfaz favoritos — não é uma coleção real", () => {
+    expect(shouldClearStaleCollectionSelection("favorites", liveCollections)).toBe(
+      false
+    );
+  });
+
+  it("não desfaz o grupo derivado de sem categoria — não é uma coleção real", () => {
+    // Bug reportado em code review: sem esta exceção, selecionar "Sem
+    // categoria" fazia este guard tratar o id como órfão e desfazer a seleção
+    // no próximo render, revertendo o filtro para a biblioteca inteira.
+    expect(
+      shouldClearStaleCollectionSelection("__uncategorized__", liveCollections)
+    ).toBe(false);
+  });
+
+  it("não desfaz uma coleção que ainda existe", () => {
+    expect(shouldClearStaleCollectionSelection("col-1", liveCollections)).toBe(
+      false
+    );
+  });
+
+  it("desfaz uma coleção apagada enquanto filtrava", () => {
+    expect(
+      shouldClearStaleCollectionSelection("col-deleted", liveCollections)
+    ).toBe(true);
   });
 });
 
