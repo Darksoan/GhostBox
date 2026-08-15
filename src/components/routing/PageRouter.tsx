@@ -7,7 +7,6 @@ import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { useCatalogueState } from "../../hooks/useCatalogueState";
 import type { CatalogueFilterKey, Page, SteamProfile } from "../../types";
-import type { SettingsTabId } from "../../features/settings/settingsTabsShared";
 import { isAccountOnlyPage, resolveMountedPages } from "./pageMounting";
 import { emptyCatalogueFilters } from "../../constants/catalogue";
 import { ContentOverlay, useContentOverlayState } from "./ContentOverlay";
@@ -106,7 +105,6 @@ interface PageRouterProps {
   page: Page;
   debouncedQuery: string;
   activeSettingsTabId: string;
-  onSettingsTabChange: (tabId: SettingsTabId) => void;
   activeProfileCollectionId?: string;
   setActiveProfileCollectionId: (id: string | undefined) => void;
   activeLibraryCollectionId: string | null;
@@ -123,7 +121,6 @@ export function PageRouter({
   page,
   debouncedQuery,
   activeSettingsTabId,
-  onSettingsTabChange,
   activeProfileCollectionId,
   setActiveProfileCollectionId,
   activeLibraryCollectionId,
@@ -290,8 +287,6 @@ export function PageRouter({
           onActiveCollectionChange={setActiveLibraryCollectionId}
           activeSessionAppIds={appData.activeSessionAppIds}
           isActive={targetPage === page}
-          onCreateCollection={appData.openCreateUserCollectionModal}
-          onDeleteCollection={appData.deleteCollection}
         />
       );
     }
@@ -310,7 +305,6 @@ export function PageRouter({
       return (
         <LazySettingsPage
           activeTabId={activeSettingsTabId as never}
-          onTabChange={onSettingsTabChange}
           games={appData.addedLibraryGames}
           steamProfile={appData.steamProfile}
           initialPage={appData.initialPage}

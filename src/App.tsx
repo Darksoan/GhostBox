@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { Toast } from "./components/ui/Toast";
 import { PageRouter } from "./components/routing/PageRouter";
@@ -389,9 +390,34 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     selectedGame,
   ]);
 
+  const activeCollectionId =
+    page === "library"
+      ? (shell.activeLibraryCollectionId ?? undefined)
+      : shell.activeProfileCollectionId;
+
   return (
     <div className="ghostbox-shell">
       <main className="app-main">
+        <Sidebar
+          activePage={page}
+          activeCollectionId={activeCollectionId}
+          steamProfile={appData.steamProfile}
+          isCloudProfileRestoring={appData.isCloudProfileRestoring}
+          favoriteGames={appData.favoriteGames}
+          addedLibraryGames={appData.addedLibraryGames}
+          userCollections={appData.userCollections}
+          onNavigate={handleNavigate}
+          onBack={handleBack}
+          onOpenProfile={() => handleNavigate("profile")}
+          onOpenGame={openGame}
+          onCreateCollection={appData.openCreateUserCollectionModal}
+          onRemoveFavorite={appData.toggleFavoriteGame}
+          onDeleteCollection={appData.deleteCollection}
+          activeSessionAppIds={appData.activeSessionAppIds}
+          activeSettingsTabId={shell.activeSettingsTabId}
+          onSettingsTabChange={handleSettingsTabChange}
+        />
+
         <article
           className={`container ${isGameModalVisible || isAchievementsViewVisible ? "container--modal-open" : ""}`}
         >
@@ -422,9 +448,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             }}
             onBack={handleBack}
             onForward={handleForward}
-            onNavigate={handleNavigate}
-            onOpenProfile={() => handleNavigate("profile")}
-            isCloudProfileRestoring={appData.isCloudProfileRestoring}
             onNavigateToNotifications={() => handleNavigate("notifications")}
             onClickPremium={() => {
               setSubscriptionModalOpen(true);
@@ -440,7 +463,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               page={page}
               debouncedQuery={shell.debouncedQuery}
               activeSettingsTabId={shell.activeSettingsTabId}
-              onSettingsTabChange={handleSettingsTabChange}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
               activeLibraryCollectionId={shell.activeLibraryCollectionId}

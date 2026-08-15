@@ -18,11 +18,7 @@ import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
-import {
-  settingsNavigationTabs,
-  settingsTabLabelKeys,
-  type SettingsTabId,
-} from "../features/settings/settingsTabsShared";
+import { type SettingsTabId } from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import {
   readStoredDownloadsDir,
@@ -210,7 +206,6 @@ export const settingsTabs: SettingsTab[] = [
 
 interface SettingsPageProps {
   activeTabId: SettingsTabId;
-  onTabChange?: (tabId: SettingsTabId) => void;
   games: GhostBoxGame[];
   steamProfile: SteamProfile | null;
   initialPage: StartupPage;
@@ -227,7 +222,6 @@ interface SettingsPageProps {
 
 export function SettingsPage({
   activeTabId,
-  onTabChange,
   games,
   steamProfile,
   initialPage,
@@ -362,23 +356,6 @@ export function SettingsPage({
       }`}
       aria-label={t("nav.settings")}
     >
-      <nav className="settings-page__tabs-bar" aria-label={t("nav.settings")}>
-        {settingsNavigationTabs.map(({ id, icon: TabIcon }) => (
-          <button
-            key={id}
-            type="button"
-            className={`settings-page__tab${
-              id === activeTab.id ? " settings-page__tab--active" : ""
-            }`}
-            onClick={() => onTabChange?.(id)}
-            aria-current={id === activeTab.id ? "page" : undefined}
-          >
-            <TabIcon size={16} strokeWidth={2} />
-            <span>{t(settingsTabLabelKeys[id])}</span>
-          </button>
-        ))}
-      </nav>
-
       <article
         className={`settings-panel${
           activeTab.id === "subscription" || activeTab.id === "connections"
