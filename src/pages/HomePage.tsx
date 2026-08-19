@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
@@ -30,6 +31,7 @@ import {
   gameHeroSources,
   gameHeroCapsuleSources,
   layeredImageStyle,
+  withoutHeaderImageSources,
 } from "../utils/image";
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
 import { createSeedGame } from "../utils/gameSeed";
@@ -37,6 +39,7 @@ import {
   gameCategoryScore,
   getGameTraits,
   normalizeGameTrait,
+  reviewSummaryBand,
 } from "../utils/gameTraits";
 import { steamRecommendedTagNames } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
@@ -85,7 +88,12 @@ const homeRecommendedCardCount = 3;
 // navegador não aplica as do clamp (texto de uma linha só, muito longo).
 const homeShortDescriptionLimit = 150;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
+// Faixa larga com dots logo abaixo da vitrine.
+const homeSpotlightSlideCount = 6;
+const homeSpotlightIntervalMs = 7000;
 const homeExploreCategoryLimit = 15;
+// 2 destaques + coluna de 2 menores na grade de "Coleções e destaques".
+const homeCollectionsCategoryCount = 4;
 const homeWishlistCycleSourceCount = 6;
 const homeWishlistSimilarPoolLimit = 16;
 const homeWishlistCycleGameCount = 4;
@@ -687,6 +695,69 @@ function HomeExploreCard({
   );
 }
 
+/**
+ * Grade assimétrica "Coleções e destaques": 2 categorias em destaque + uma
+ * coluna estreita com 2 menores. Reaproveita `HomeExploreCard`, só troca o
+ * container de rail horizontal (`Shelf`) por uma grade estática — a lista de
+ * categorias já vem pronta de `getHomeExploreCategories`.
+ */
+function HomeCollectionsSection({
+  title,
+  subtitle,
+  categories,
+  allGames,
+  language,
+  onOpenCategory,
+}: {
+  title: string;
+  subtitle?: string;
+  categories: HomeExploreCategory[];
+  allGames: GhostBoxGame[];
+  language: "pt" | "en";
+  onOpenCategory: (category: HomeExploreCategory) => void;
+}) {
+  // `HomeExploreCard` lazy-carrega a própria imagem via IntersectionObserver;
+  // fora de um rail que rola por conta própria, `root: null` (viewport) já
+  // resolve o lazy-load certo.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const featuredCategories = categories.slice(0, 2);
+  const asideCategories = categories.slice(2, 4);
+
+  if (!featuredCategories.length) return null;
+
+  return (
+    <section className="home-collections" aria-label={title}>
+      <SectionHeader title={title} subtitle={subtitle} />
+      <div className="home-collections__grid">
+        {featuredCategories.map((category) => (
+          <HomeExploreCard
+            key={category.label}
+            category={category}
+            allGames={allGames}
+            language={language}
+            rootRef={rootRef}
+            onOpenCategory={onOpenCategory}
+          />
+        ))}
+        {asideCategories.length ? (
+          <div className="home-collections__aside-cards">
+            {asideCategories.map((category) => (
+              <HomeExploreCard
+                key={category.label}
+                category={category}
+                allGames={allGames}
+                language={language}
+                rootRef={rootRef}
+                onOpenCategory={onOpenCategory}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function HomeExploreCategories({
   title,
   categories,
@@ -793,10 +864,17 @@ function HomeGameShelf({
   );
 }
 
-function HomeRecommendedHero({
+/**
+ * Vitrine no topo da Home: arte grande do jogo ativo + grade de capturas +
+ * painel com avaliações, no lugar do antigo rail de cards de recomendados.
+ * As setas trocam o jogo ativo entre `shelf.games`; a grade de capturas troca
+ * qual imagem aparece grande à esquerda.
+ */
+function HomeShowcase({
   title,
   subtitle,
   shelf,
+  trendingRankByAppId,
   language,
   onOpenGame,
   onGameContextMenu,
@@ -804,11 +882,15 @@ function HomeRecommendedHero({
   title: string;
   subtitle?: string;
   shelf: HomeShelf;
+  trendingRankByAppId: Map<string, number>;
   language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
+  const { t } = useSettings();
   const games = shelf.games;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeThumbIndex, setActiveThumbIndex] = useState(0);
 
   useEffect(() => {
     const cancelPreload = runWhenIdle(() => {
@@ -818,52 +900,288 @@ function HomeRecommendedHero({
     return cancelPreload;
   }, [games]);
 
+  const activeGame = games.length ? games[activeIndex % games.length] : undefined;
+  const activeGameKey = activeGame ? homeGameKey(activeGame) : "";
+
+  useEffect(() => {
+    setActiveThumbIndex(0);
+  }, [activeGameKey]);
+
+  // Primeiro slot é sempre a arte principal do jogo; os demais são capturas de
+  // tela reais, então clicar num slot troca a imagem grande à esquerda.
+  const thumbs = useMemo(() => {
+    if (!activeGame) return [];
+    const screenshots = withoutHeaderImageSources(activeGame.screenshots ?? []).slice(0, 5);
+    return [gameHeroCapsuleSources(activeGame), ...screenshots.map((source) => [source])];
+  }, [activeGame]);
+
   if (!games.length) {
     if (!shelf.loading) return null;
 
     return (
-      <section className="home-recommended" aria-label={title}>
+      <section className="home-showcase" aria-label={title}>
         <SectionHeader title={title} subtitle={subtitle} />
-        <div className="home-recommended__rail">
-          <div className="home-recommended__carousel">
-            <div className="home-recommended__track">
-              {Array.from({ length: homeRecommendedCardCount }, (_, index) => (
-                <HomeCategoryCardSkeleton key={`recommended-skeleton-${index}`} showSummary />
-              ))}
-            </div>
-          </div>
-        </div>
+        <div className="home-showcase__frame home-showcase__frame--skeleton" aria-hidden="true" />
       </section>
     );
   }
 
-  // Mesmo rail de "Explorar por categoria": as setas rolam o carrossel com
-  // `scroll-behavior: smooth` em vez de trocar os cards de uma vez, e somem nas
-  // pontas. `minItemsForControls` cai para o número de cards visíveis — o padrão
-  // (5) esconderia as setas com o pool atual de 4 jogos.
+  if (!activeGame) return null;
+
+  const goTo = (direction: -1 | 1) => {
+    setActiveIndex((current) => (current + direction + games.length) % games.length);
+  };
+
+  const mainArtSources = thumbs[activeThumbIndex] ?? gameHeroCapsuleSources(activeGame);
+
   return (
-    <Shelf
-      blockName="home-recommended"
-      title={title}
-      subtitle={subtitle}
-      items={games}
-      getKey={homeGameKey}
-      minItemsForControls={homeRecommendedCardCount}
-      prevLabel={language === "en" ? "Previous game" : "Jogo anterior"}
-      nextLabel={language === "en" ? "Next game" : "Próximo jogo"}
-      renderItem={(game) => (
-        <HomeRecommendedCard
-          game={game}
-          language={language}
+    <section className="home-showcase" aria-label={title || t("home.showcaseAria")}>
+      <SectionHeader title={title} subtitle={subtitle} />
+      <div className="home-showcase__frame">
+        {games.length > 1 ? (
+          <button
+            type="button"
+            className="home-showcase__arrow home-showcase__arrow--prev"
+            aria-label={t("home.showcasePreviousGame")}
+            onClick={() => goTo(-1)}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+        ) : null}
+        <HomeShowcaseArt
+          game={activeGame}
+          sources={mainArtSources}
           onOpenGame={onOpenGame}
           onGameContextMenu={onGameContextMenu}
         />
-      )}
+        <div className="home-showcase__thumbs" role="group" aria-label={t("home.showcaseAria")}>
+          {Array.from({ length: 6 }, (_, index) => {
+            const thumbSources = thumbs[index];
+            if (!thumbSources) {
+              return (
+                <span
+                  key={`thumb-empty-${index}`}
+                  className="home-showcase__thumb home-showcase__thumb--empty"
+                  aria-hidden="true"
+                />
+              );
+            }
+
+            return (
+              <HomeShowcaseThumb
+                key={`${activeGameKey}-thumb-${index}`}
+                sources={thumbSources}
+                active={index === activeThumbIndex}
+                label={t("home.showcaseScreenshotLabel", { index: index + 1 })}
+                onSelect={() => setActiveThumbIndex(index)}
+              />
+            );
+          })}
+        </div>
+        <HomeShowcasePanel
+          game={activeGame}
+          rank={trendingRankByAppId.get(homeGameAppId(activeGame))}
+          language={language}
+          t={t}
+        />
+        {games.length > 1 ? (
+          <button
+            type="button"
+            className="home-showcase__arrow home-showcase__arrow--next"
+            aria-label={t("home.showcaseNextGame")}
+            onClick={() => goTo(1)}
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function HomeShowcaseArt({
+  game,
+  sources,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  game: GhostBoxGame;
+  sources: string[];
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  const cachedSources = useCachedImageSources(sources);
+  const { source, loaded } = useLoadableImageCover(cachedSources);
+
+  return (
+    <button
+      type="button"
+      className={`home-showcase__art${loaded ? " home-showcase__art--loaded" : ""}`}
+      aria-label={game.title}
+      onClick={() => onOpenGame(game)}
+      onContextMenu={(event) => {
+        if (!onGameContextMenu) return;
+        event.preventDefault();
+        onGameContextMenu(game, event.clientX, event.clientY);
+      }}
+      style={layeredImageStyle(source ? [source] : sources, "", "100% 100%", "100% 100%")}
     />
   );
 }
 
-function HomeRecommendedCard({
+function HomeShowcaseThumb({
+  sources,
+  active,
+  label,
+  onSelect,
+}: {
+  sources: string[];
+  active: boolean;
+  label: string;
+  onSelect: () => void;
+}) {
+  const cachedSources = useCachedImageSources(sources);
+  const { source } = useLoadableImageCover(cachedSources);
+
+  return (
+    <button
+      type="button"
+      className={`home-showcase__thumb${active ? " home-showcase__thumb--active" : ""}`}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onSelect}
+      style={layeredImageStyle(source ? [source] : sources, "", "100% 100%", "100% 100%")}
+    />
+  );
+}
+
+function HomeShowcasePanel({
+  game,
+  rank,
+  language,
+  t,
+}: {
+  game: GhostBoxGame;
+  rank?: number;
+  language: "pt" | "en";
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const band = reviewSummaryBand(game.steamPositiveRatio, game.steamReviewCount);
+  const reviewCountFormatter = useMemo(
+    () => new Intl.NumberFormat(language === "en" ? "en-US" : "pt-BR"),
+    [language]
+  );
+  const traits = useMemo(() => getGameTraits(game).slice(0, 4), [game]);
+
+  return (
+    <div className="home-showcase__panel">
+      <span className="home-showcase__title">
+        {getDisplayGameTitle(game, language === "en" ? "Untitled game" : "Jogo sem título")}
+      </span>
+      {band ? (
+        <div className="home-showcase__reviews">
+          <span className={`home-showcase__review-label home-showcase__review-label--${band}`}>
+            {t(`home.review.${band}`)}
+          </span>
+          <span className="home-showcase__review-count">
+            {t("home.reviewCount", {
+              count: reviewCountFormatter.format(game.steamReviewCount ?? 0),
+            })}
+          </span>
+        </div>
+      ) : null}
+      {rank ? <p className="home-showcase__rank">{t("home.popularRank", { rank })}</p> : null}
+      {traits.length ? (
+        <div className="home-showcase__genres">
+          {traits.map((trait) => (
+            <span className="home-showcase__genre" key={trait}>
+              {getHomeCategoryLabel(trait, language)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Faixa larga com paginação por dots, entre a vitrine e as demais seções.
+ * Alimentada por `shelves.topSellers`, que já sai deduplicado contra a
+ * vitrine e os outros rails pelo ledger compartilhado de `useHomeShelves`.
+ */
+function HomeSpotlightBanner({
+  games,
+  loading,
+  language,
+  onOpenGame,
+  onGameContextMenu,
+}: {
+  games: GhostBoxGame[];
+  loading: boolean;
+  language: "pt" | "en";
+  onOpenGame: (game: GhostBoxGame) => void;
+  onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+}) {
+  const { t } = useSettings();
+  const slides = useMemo(() => games.slice(0, homeSpotlightSlideCount), [games]);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [slides.length]);
+
+  useEffect(() => {
+    if (slides.length < 2) return;
+    if (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % slides.length);
+    }, homeSpotlightIntervalMs);
+
+    return () => window.clearInterval(interval);
+  }, [slides.length]);
+
+  if (!slides.length) {
+    if (!loading) return null;
+    return <div className="home-spotlight home-spotlight--skeleton" aria-hidden="true" />;
+  }
+
+  const activeGame = slides[activeIndex % slides.length];
+
+  return (
+    <section className="home-spotlight" aria-label={t("home.spotlightAria")}>
+      <HomeSpotlightSlide
+        game={activeGame}
+        language={language}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={onGameContextMenu}
+      />
+      {slides.length > 1 ? (
+        <div className="home-spotlight__dots">
+          {slides.map((game, index) => (
+            <button
+              key={homeGameKey(game)}
+              type="button"
+              className={`home-spotlight__dot${
+                index === activeIndex ? " home-spotlight__dot--active" : ""
+              }`}
+              aria-pressed={index === activeIndex}
+              aria-label={t("home.spotlightSlideLabel", { index: index + 1 })}
+              onClick={() => setActiveIndex(index)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function HomeSpotlightSlide({
   game,
   language,
   onOpenGame,
@@ -874,18 +1192,19 @@ function HomeRecommendedCard({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  // Capa no mesmo aspecto do card de categoria (460/215); o bloco de
-  // metadata troca titulo + short description + pills por review do
-  // jogador, avatar e horas jogadas.
-  const fallbackCoverSources = useMemo(() => gameHeaderOnlySources(game), [game]);
-  const cachedSources = useCachedImageSources(fallbackCoverSources);
-  const { source: coverSource, loaded } = useLoadableImageCover(cachedSources);
+  const fallbackSources = useMemo(() => gameHeroSources(game), [game]);
+  const cachedSources = useCachedImageSources(fallbackSources);
+  const { source, loaded } = useLoadableImageCover(cachedSources);
+  const displayTitle = getDisplayGameTitle(
+    game,
+    language === "en" ? "Untitled game" : "Jogo sem título"
+  );
 
   return (
     <button
       type="button"
-      className="home-category-card home-category-card--tile home-category-card--with-metadata home-category-card--with-review"
-      aria-label={game.title}
+      className={`home-spotlight__slide${loaded ? " home-spotlight__slide--loaded" : ""}`}
+      aria-label={displayTitle}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
         if (!onGameContextMenu) return;
@@ -894,17 +1213,15 @@ function HomeRecommendedCard({
       }}
     >
       <span
-        className={`home-category-card__cover${loaded ? " home-category-card__cover--loaded" : ""}`}
-        style={layeredImageStyle(coverSource ? [coverSource] : fallbackCoverSources, "", "100% 100%", "100% 100%")}
+        className="home-spotlight__art"
+        style={layeredImageStyle(source ? [source] : fallbackSources, "", "cover", "cover")}
         aria-hidden="true"
       />
-      <span className="home-category-card__metadata" aria-hidden="true">
-        <HomeWishlistPlayerReview game={game} language={language} />
-      </span>
+      <span className="home-spotlight__scrim" aria-hidden="true" />
+      <span className="home-spotlight__label">{displayTitle}</span>
     </button>
   );
 }
-
 
 function HomeWishlistPlayerReview({
   game,
@@ -1450,6 +1767,17 @@ export function HomePage({
     () => getHomeExploreCategories(explorePool),
     [explorePool]
   );
+  // As primeiras categorias viram os destaques de "Coleções"; o rail de
+  // "Explorar por categoria" mostra o restante, sem repetir o que já apareceu
+  // ali em cima.
+  const collectionCategories = useMemo(
+    () => exploreCategories.slice(0, homeCollectionsCategoryCount),
+    [exploreCategories]
+  );
+  const exploreRailCategories = useMemo(
+    () => exploreCategories.slice(homeCollectionsCategoryCount),
+    [exploreCategories]
+  );
   const homeContextMenuItems = useGameContextMenu({
     game: homeContextMenu?.game ?? null,
     onOpenGame,
@@ -1457,17 +1785,59 @@ export function HomePage({
   const becauseYouPlayedTitle = tasteProfile.seedGame
     ? t("home.becauseYouPlayed", { title: tasteProfile.seedGame.title })
     : "";
+  // Sinal de popularidade do painel da vitrine: posição (1-based) do jogo
+  // ativo no rail de "Em alta", quando ele estiver lá.
+  const trendingRankByAppId = useMemo(() => {
+    const ranks = new Map<string, number>();
+    shelves.trending.games.forEach((game, index) => {
+      ranks.set(homeGameAppId(game), index + 1);
+    });
+    return ranks;
+  }, [shelves.trending.games]);
 
   return (
     <section className={`home-page${isMaximized ? " home-page--maximized" : ""}`} aria-label={t("home.pageAria")}>
-      <HomeRecommendedHero
+      <HomeShowcase
         title={t("home.recommended")}
         subtitle={t("home.recommendedSubtitle")}
         shelf={shelves.recommended}
+        trendingRankByAppId={trendingRankByAppId}
         language={appearance.language}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
+      <HomeSpotlightBanner
+        games={shelves.topSellers.games}
+        loading={shelves.topSellers.loading}
+        language={appearance.language}
+        onOpenGame={onOpenGame}
+        onGameContextMenu={handleGameContextMenu}
+      />
+      {collectionCategories.length || becauseYouPlayedTitle ? (
+        <div className="home-collections-row">
+          {collectionCategories.length ? (
+            <HomeCollectionsSection
+              title={t("home.collections")}
+              subtitle={t("home.collectionsSubtitle")}
+              categories={collectionCategories}
+              allGames={explorePool}
+              language={appearance.language}
+              onOpenCategory={(category) =>
+                onOpenCatalogueCategory(category.filterKey, category.filterValue)
+              }
+            />
+          ) : null}
+          {becauseYouPlayedTitle ? (
+            <HomeGameShelf
+              title={becauseYouPlayedTitle}
+              shelf={shelves.becauseYouPlayed}
+              language={appearance.language}
+              onOpenGame={onOpenGame}
+              onGameContextMenu={handleGameContextMenu}
+            />
+          ) : null}
+        </div>
+      ) : null}
       <HomeGameShelf
         title={t("home.trending")}
         subtitle={t("home.trendingSubtitle")}
@@ -1485,15 +1855,6 @@ export function HomePage({
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
-      {becauseYouPlayedTitle ? (
-        <HomeGameShelf
-          title={becauseYouPlayedTitle}
-          shelf={shelves.becauseYouPlayed}
-          language={appearance.language}
-          onOpenGame={onOpenGame}
-          onGameContextMenu={handleGameContextMenu}
-        />
-      ) : null}
       <HomeGameShelf
         title={t("home.topSellers")}
         subtitle={t("home.topSellersSubtitle")}
@@ -1518,7 +1879,7 @@ export function HomePage({
       />
       <HomeExploreCategories
         title={t("home.exploreByCategory")}
-        categories={exploreCategories}
+        categories={exploreRailCategories}
         allGames={explorePool}
         language={appearance.language}
         onOpenCategory={(category) =>

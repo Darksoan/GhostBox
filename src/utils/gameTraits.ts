@@ -79,3 +79,30 @@ export function gameTraitAppId(game: GhostBoxGame) {
   const appId = (game.appId || game.id.replace(/^steam-/, "")).trim();
   return /^\d+$/.test(appId) ? appId : "";
 }
+
+export type ReviewSummaryBand =
+  | "overwhelminglyPositive"
+  | "veryPositive"
+  | "positive"
+  | "mostlyPositive"
+  | "mixed"
+  | "mostlyNegative"
+  | "negative";
+
+/**
+ * Steam-style review banding (Home showcase panel). `ratio` is the share of
+ * positive reviews (0–1); the review-count floors keep a handful of 5-star
+ * ratings out of the top bands, matching how Steam's own summary reads.
+ */
+export function reviewSummaryBand(
+  ratio: number | undefined,
+  count: number | undefined
+): ReviewSummaryBand | null {
+  if (ratio == null || count == null || count <= 0) return null;
+  if (ratio >= 0.95 && count >= 500) return "overwhelminglyPositive";
+  if (ratio >= 0.8) return count >= 50 ? "veryPositive" : "positive";
+  if (ratio >= 0.7) return "mostlyPositive";
+  if (ratio >= 0.4) return "mixed";
+  if (ratio >= 0.2) return "mostlyNegative";
+  return "negative";
+}
