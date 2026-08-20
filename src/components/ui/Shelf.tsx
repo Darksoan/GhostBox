@@ -5,6 +5,8 @@ import { useRafThrottle } from "../../hooks/useRafThrottle";
 
 interface ShelfProps<T> {
   title: string;
+  /** Heading rico; `title` segue sendo o texto do `aria-label` da seção. */
+  titleContent?: ReactNode;
   subtitle?: string;
   action?: ReactNode;
   items: readonly T[];
@@ -30,6 +32,7 @@ interface ShelfProps<T> {
  */
 export function Shelf<T>({
   title,
+  titleContent,
   subtitle,
   action,
   items,
@@ -80,7 +83,12 @@ export function Shelf<T>({
 
   return (
     <section className={blockName} aria-label={title}>
-      <SectionHeader title={title} subtitle={subtitle} action={action} />
+      <SectionHeader
+        title={title}
+        titleContent={titleContent}
+        subtitle={subtitle}
+        action={action}
+      />
       <div className={`${blockName}__rail`}>
         {hasControls && (
           <button

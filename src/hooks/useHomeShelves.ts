@@ -5,7 +5,6 @@ import {
   useHomeFeaturedQuery,
   useHomePoolQuery,
   useHomeRecommendedTagsQuery,
-  useHomeSimilarGamesQuery,
   useHomeTrendingQuery,
 } from "../queries/home";
 import { useEnrichedGameCards } from "./useEnrichedGameCards";
@@ -24,7 +23,6 @@ export type HomeShelfId =
   | "recommended"
   | "trending"
   | "newReleases"
-  | "becauseYouPlayed"
   | "topSellers"
   | "topRated";
 
@@ -45,7 +43,6 @@ const shelfSizes: Record<HomeShelfId, number> = {
   recommended: 8,
   trending: 12,
   newReleases: 12,
-  becauseYouPlayed: 8,
   topSellers: 12,
   topRated: 8,
 };
@@ -164,16 +161,10 @@ export function useHomeShelves({
     [libraryGames, favoriteGames, historyGames, recommendedTagsQuery.data]
   );
 
-  const seedGameAppId = tasteProfile.seedGame
-    ? gameTraitAppId(tasteProfile.seedGame)
-    : "";
-  const similarQuery = useHomeSimilarGamesQuery(seedGameAppId);
-
   // Stable identity while a query is still pending: `?? []` would hand the
   // memo below a fresh array on every render and defeat it entirely.
   const poolGames = poolQuery.data?.games ?? emptyGames;
   const trendingGames = trendingQuery.data?.games ?? emptyGames;
-  const similarGames = similarQuery.data ?? emptyGames;
 
   const selection = useMemo(() => {
     const take = createShelfPicker(libraryGameAppIds);
@@ -208,17 +199,6 @@ export function useHomeShelves({
       shelfSizes.newReleases
     );
 
-    const becauseYouPlayed = seedGameAppId
-      ? take(
-          pickRotationWindow(similarGames, {
-            seed,
-            count: shelfSizes.becauseYouPlayed,
-            salt: `similar:${seedGameAppId}`,
-          }),
-          shelfSizes.becauseYouPlayed
-        )
-      : [];
-
     const topSellers = take(
       featuredToGames(featuredQuery.data?.topSellers),
       shelfSizes.topSellers
@@ -244,7 +224,6 @@ export function useHomeShelves({
       recommended,
       trending,
       newReleases,
-      becauseYouPlayed,
       topSellers,
       topRated,
       upcomingAppIds,
@@ -254,8 +233,6 @@ export function useHomeShelves({
     libraryGameAppIds,
     poolGames,
     seed,
-    seedGameAppId,
-    similarGames,
     tasteProfile,
     trendingGames,
   ]);
@@ -265,10 +242,6 @@ export function useHomeShelves({
   const recommended = useEnrichedGameCards(selection.recommended, shelfSizes.recommended);
   const trending = useEnrichedGameCards(selection.trending, shelfSizes.trending);
   const newReleases = useEnrichedGameCards(selection.newReleases, shelfSizes.newReleases);
-  const becauseYouPlayed = useEnrichedGameCards(
-    selection.becauseYouPlayed,
-    shelfSizes.becauseYouPlayed
-  );
   const topSellers = useEnrichedGameCards(selection.topSellers, shelfSizes.topSellers);
   const topRated = useEnrichedGameCards(selection.topRated, shelfSizes.topRated);
 
@@ -294,12 +267,6 @@ export function useHomeShelves({
         loading: featuredQuery.isPending,
         upcomingAppIds: selection.upcomingAppIds,
       },
-      becauseYouPlayed: {
-        id: "becauseYouPlayed",
-        games: becauseYouPlayed,
-        loading: Boolean(seedGameAppId) && similarQuery.isPending,
-        upcomingAppIds: noUpcoming,
-      },
       topSellers: {
         id: "topSellers",
         games: topSellers,
@@ -314,14 +281,11 @@ export function useHomeShelves({
       },
     };
   }, [
-    becauseYouPlayed,
     featuredQuery.isPending,
     newReleases,
     poolQuery.isPending,
     recommended,
-    seedGameAppId,
     selection.upcomingAppIds,
-    similarQuery.isPending,
     topRated,
     topSellers,
     trending,

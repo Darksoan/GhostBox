@@ -253,14 +253,19 @@ export function HomeWishlistCardSkeleton() {
 export function HomeWishlistReviewSkeleton({
   rootRef,
   ariaHidden = false,
+  className = "",
 }: {
   rootRef?: Ref<HTMLSpanElement>;
   ariaHidden?: boolean;
+  /** Classe do contexto que reaproveita o bloco de review (ex. Bem avaliados). */
+  className?: string;
 } = {}) {
   return (
     <span
       ref={rootRef}
-      className="home-wishlist-card__player-review home-wishlist-card__player-review--skeleton"
+      className={`home-wishlist-card__player-review home-wishlist-card__player-review--skeleton${
+        className ? ` ${className}` : ""
+      }`}
       aria-hidden={ariaHidden || undefined}
     >
       <span className="home-wishlist-card__player-review-quote-skeleton">
@@ -296,29 +301,24 @@ function SectionHeaderSkeleton({ withSubtitle = false }: { withSubtitle?: boolea
 export function HomePageLoadingState() {
   return (
     <section className="home-page" aria-hidden="true">
-      <section className="home-recommended">
+      <section className="home-banner">
         <SectionHeaderSkeleton />
-        <div className="home-recommended__rail">
-          <div className="home-recommended__carousel">
-            <div className="home-recommended__track">
+        <div className="home-banner__frame home-banner__frame--skeleton" />
+      </section>
+
+      <section className="home-top-rated">
+        <SectionHeaderSkeleton />
+        <div className="home-top-rated__rail">
+          <div className="home-top-rated__carousel">
+            <div className="home-top-rated__track">
               {Array.from({ length: 3 }, (_, index) => (
-                <HomeCategoryCardSkeleton
-                  variant="tile"
-                  showSummary
-                  key={`home-recommended-${index}`}
-                />
+                <div className="home-top-rated-card" key={`home-top-rated-${index}`}>
+                  <span className="home-top-rated-card__art skeleton" />
+                  <HomeWishlistReviewSkeleton className="home-top-rated-card__review" />
+                </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="home-category home-category--featured">
-        <SectionHeaderSkeleton />
-        <div className="home-category__games">
-          {Array.from({ length: 6 }, (_, index) => (
-            <HomeCategoryCardSkeleton variant="tile" showTitle key={`home-featured-${index}`} />
-          ))}
         </div>
       </section>
 

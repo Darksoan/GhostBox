@@ -2676,25 +2676,23 @@ p {
    pras margens. Somar inset por cima disso só estreitaria o conteúdo. */
 
 .home-page--maximized .home-category__games .home-category-card__cover,
-.home-page--maximized .home-recommended__track .home-category-card__cover {
+.home-page--maximized
+  .home-recommended__track
+  .home-category-card:not(.home-category-card--portrait)
+  .home-category-card__cover {
   aspect-ratio: 460 / 202;
 }
 
-/* Títulos de seção só na Home, um degrau abaixo do padrão global (section →
-   body-emphasis) e com cor mais fraca — essas seções (Top rated, Recommended)
-   são navegação de rolagem, não âncora de página como em outras abas. */
+/* Títulos de seção só na Home, dois degraus abaixo do padrão global (section →
+   compact) e com cor mais fraca — essas seções (Top rated, Recommended) são
+   navegação de rolagem, não âncora de página como em outras abas. Sem
+   subtítulo: a Home não anuncia mais o conteúdo do rail, o rail já mostra. */
 .home-page .section-header__title {
   color: var(--text-tertiary);
-  font-size: var(--type-size-body-emphasis);
-  line-height: var(--type-line-body);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.home-page .section-header__subtitle {
-  color: var(--text-secondary);
   font-size: var(--type-size-compact);
   line-height: var(--type-line-compact);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .home-recommended {
@@ -2750,6 +2748,14 @@ p {
   aspect-ratio: 460 / 215;
 }
 
+/* Prateleiras de capa vertical (`hero_capsule`, 374x448) — hoje "Em alta
+   agora". O rail é compartilhado com as outras prateleiras (mesmo `blockName`),
+   por isso as regras pendem do modificador e não do track. */
+.home-recommended__track .home-category-card--portrait .home-category-card__cover {
+  aspect-ratio: 374 / 448;
+}
+
+
 /* Espaçamento uniforme: o mesmo passo entre todos os elementos do card
    (capa → título → descrição → pills), incluindo a folga vertical do padding.
    O seletor repete o modificador `--with-title` porque a regra-base do
@@ -2758,11 +2764,6 @@ p {
 .home-recommended__track .home-category-card--with-title .home-category-card__metadata {
   gap: var(--space-8);
   padding: var(--space-8) var(--space-6) var(--space-8);
-}
-
-.home-recommended__track .home-category-card--with-review .home-category-card__metadata {
-  gap: var(--space-8);
-  padding: var(--space-10) var(--space-6) var(--space-10);
 }
 
 .home-recommended__track .home-category-card__summary {
@@ -2825,6 +2826,256 @@ p {
 
   .home-recommended__carousel {
     scroll-behavior: auto;
+  }
+}
+
+/* Banner de recomendados: uma arte larga por vez, navegada pelos chevrons. Fica
+   na mesma coluna das outras seções da Home (mesmo inset), sem full-bleed. */
+.home-banner {
+  position: relative;
+  @include mixins.section-column;
+  gap: var(--home-section-heading-gap);
+  padding-inline: var(--home-content-inline-inset);
+}
+
+.home-banner__frame {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-height: 420px;
+  /* Aspecto da `library_hero` (1920x620) — a arte preenche sem letterbox. */
+  aspect-ratio: 1920 / 620;
+  border-radius: var(--radius-lg);
+  background: var(--c-1);
+}
+
+.home-banner__frame--skeleton {
+  animation: home-banner-skeleton 1.6s var(--ease) infinite;
+}
+
+.home-banner__surface {
+  position: absolute;
+  display: block;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* Camada primária: as fatias vizinhas ficam empilhadas e a troca é um
+   cross-fade. A entrada é mais longa que a saída (o que chega importa mais) e
+   ainda assenta de 1.06 para 1 — o "settle" que separa a arte do corte seco. */
+.home-banner__art {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.06);
+  transition:
+    opacity 0.26s var(--ease),
+    transform 0.26s var(--ease);
+  will-change: opacity, transform;
+}
+
+.home-banner__art--active {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--motion-emphasis) var(--ease),
+    transform 0.9s var(--ease-out);
+}
+
+.home-banner__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.86) 0%,
+      rgb(0 0 0 / 0.62) 34%,
+      rgb(0 0 0 / 0.08) 68%,
+      rgb(0 0 0 / 0) 100%
+    ),
+    linear-gradient(to top, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0) 52%);
+  pointer-events: none;
+}
+
+/* Camada secundária: o texto entra depois da arte (80ms) e viaja no sentido da
+   navegação — `data-direction` no frame decide de que lado ele chega. */
+.home-banner__info {
+  position: absolute;
+  left: var(--space-14);
+  right: var(--space-14);
+  bottom: var(--space-12);
+  display: flex;
+  max-width: 46%;
+  flex-direction: column;
+  gap: var(--space-3);
+  animation: home-banner-info-in 0.32s var(--ease-out) 0.08s both;
+}
+
+.home-banner__frame[data-direction="-1"] .home-banner__info {
+  animation-name: home-banner-info-in-back;
+}
+
+.home-banner__title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-700);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-700);
+  line-height: var(--lh-700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-banner__developer {
+  color: var(--text-secondary);
+  font-size: var(--fs-300);
+  line-height: var(--lh-300);
+}
+
+.home-banner__reviews {
+  color: var(--text-tertiary);
+  font-size: var(--fs-200);
+  line-height: var(--lh-200);
+}
+
+.home-banner__arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: 40px;
+  height: 56px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: rgb(0 0 0 / 0.32);
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    transform var(--motion-base) var(--ease-out);
+
+  &:hover,
+  &:focus-visible {
+    background: rgb(0 0 0 / 0.52);
+    color: var(--text-primary);
+  }
+
+  /* Press: o botão afunda um degrau e volta no release — feedback abaixo de
+     150ms, sem overshoot (personalidade sóbria do resto da Home). */
+  &:active {
+    transform: translateY(-50%) scale(0.94);
+    transition-duration: var(--motion-fast);
+  }
+
+  svg {
+    display: block;
+    width: 24px;
+    height: 24px;
+  }
+
+  &--prev {
+    left: var(--space-6);
+  }
+
+  &--next {
+    right: var(--space-6);
+  }
+}
+
+.home-banner__dots {
+  position: absolute;
+  right: var(--space-10);
+  bottom: var(--space-10);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  pointer-events: none;
+}
+
+.home-banner__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.32);
+  transition:
+    width 0.24s var(--ease),
+    background 0.24s var(--ease);
+}
+
+.home-banner__dot--active {
+  width: 18px;
+  background: var(--text-primary);
+}
+
+@keyframes home-banner-info-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes home-banner-info-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes home-banner-skeleton {
+  0%,
+  100% {
+    background: var(--c-1);
+  }
+
+  50% {
+    background: var(--c-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-banner__art,
+  .home-banner__art--active {
+    transform: none;
+    transition: opacity var(--motion-base) var(--ease);
+  }
+
+  .home-banner__info {
+    animation: none;
+  }
+
+  .home-banner__arrow,
+  .home-banner__dot {
+    transition: none;
+  }
+
+  .home-banner__arrow:active {
+    transform: translateY(-50%);
+  }
+
+  .home-banner__frame--skeleton {
+    animation: none;
   }
 }
 
@@ -3048,6 +3299,200 @@ p {
   padding-inline: var(--home-content-inline-inset);
 }
 
+/* "Bem avaliados": rail próprio em vez da grade. Três cards por página, fixo —
+   o card carrega uma citação de review e uma quarta coluna espremeria o texto
+   a ponto de sobrar só a primeira linha. */
+.home-top-rated {
+  position: relative;
+  @include mixins.section-column;
+  gap: var(--home-section-heading-gap);
+  padding-inline: var(--home-content-inline-inset);
+}
+
+.home-top-rated__rail {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.home-top-rated__carousel {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.home-top-rated__track {
+  display: flex;
+  gap: var(--home-category-gap);
+  width: 100%;
+  min-width: 0;
+}
+
+/* Superfície própria e clicável inteira, como o card da wishlist: a arte sangra
+   no topo do painel e o painel é quem recorta. O hover acende o card todo (não
+   só a arte), então a review também é alvo de clique. */
+.home-top-rated-card {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3);
+  flex-direction: column;
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface-secondary);
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: background var(--motion-base) var(--ease);
+
+  &:hover {
+    background: var(--surface-option-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--icon-default);
+    outline-offset: 2px;
+  }
+}
+
+.home-top-rated-card__art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 460 / 215;
+  background-color: var(--surface-canvas);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.home-top-rated-card__art--loaded {
+  animation: download-cover-in var(--motion-base) ease both;
+}
+
+/* Altura reservada para a review: ela chega assíncrona, card a card. Sem piso,
+   cada resposta que voltava crescia o card e empurrava a seção inteira. */
+.home-top-rated-card__review {
+  /* Ocupa o que sobra do card: os cards da fila têm a mesma altura, então a
+     citação de duas linhas não pode deixar o autor subir junto. */
+  flex: 1 1 auto;
+  /* Piso = 3 linhas de citação + autor + os dois respiros. O vão entre os
+     blocos sai da sobra (ver `margin-top: auto` abaixo); o `gap` é só o mínimo
+     para o autor nunca colar no texto quando a citação usa as três linhas. */
+  min-height: 156px;
+  gap: var(--space-8);
+  padding: var(--space-8);
+}
+
+/* O autor ancora no fim do card: com o piso de altura, a sobra de espaço caía
+   embaixo dele (alinhamento no início do flex) e o bloco ficava boiando no meio
+   com um vão morto por baixo. `margin-top: auto` joga a sobra para cima, entre
+   citação e autor — que é onde ela deve ficar. */
+.home-top-rated-card__review .home-wishlist-card__player-review-author {
+  margin-top: auto;
+}
+
+/* Três linhas mínimas, texto no tamanho de destaque: a citação é o conteúdo
+   principal do card, não uma legenda — precisa competir em peso com a arte
+   acima, não sumir embaixo dela. */
+.home-top-rated-card__review .home-wishlist-card__player-review-quote {
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-line-clamp: 3;
+}
+
+/* O piso do skeleton é o mesmo do estado carregado: a regra base do bloco de
+   review (mais abaixo no arquivo) fixa 92px e venceria pela ordem, então a
+   troca skeleton → review encolheria o card. */
+.home-top-rated-card__review.home-wishlist-card__player-review--skeleton {
+  flex: 1 1 auto;
+  min-height: 156px;
+  gap: var(--space-8);
+}
+
+/* A review entra quando a resposta volta — fade curto com 6px de subida, na
+   mesma família de easing do resto da Home. É camada secundária: acompanha o
+   card que já está na tela, não disputa atenção com ele. */
+.home-top-rated-card__review.home-wishlist-card__player-review--loaded {
+  animation: home-top-rated-review-in 0.22s var(--ease-out) both;
+}
+
+.home-top-rated__arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: 28px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition: color var(--motion-fast) ease-out;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--text-primary);
+  }
+
+  svg {
+    display: block;
+    width: 22px;
+    height: 22px;
+  }
+
+  &--prev {
+    left: -28px;
+  }
+
+  &--next {
+    right: -28px;
+  }
+}
+
+@keyframes home-top-rated-review-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-top-rated__carousel {
+    scroll-behavior: auto;
+  }
+
+  .home-top-rated__arrow,
+  .home-top-rated-card {
+    transition: none;
+  }
+
+  .home-top-rated-card__art--loaded {
+    animation: none;
+  }
+
+  .home-top-rated-card__review.home-wishlist-card__player-review--loaded {
+    animation: none;
+  }
+}
+
 /* Contagem de colunas fixa de propósito: `HomeCategorySection` (HomePage.tsx)
    renderiza exatamente `maxGames` slots — 6 em janela normal, 8 a partir de
    1400px (`useWidescreen`) — preenchendo o que falta com `--empty`. 3x2 e 4x2
@@ -3108,6 +3553,87 @@ p {
 
 .home-category-card--portrait .home-category-card__cover {
   aspect-ratio: 3 / 4;
+}
+
+/* Nome no hover dos cards só-de-arte. O gradiente é a camada primária (entra
+   inteiro, 180ms) e o texto é a secundária: sobe 8px com 40ms de atraso, então
+   a leitura chega depois do fundo que a sustenta. A saída é mais curta e sem
+   atraso — quem tira o ponteiro já decidiu. */
+.home-category-card__hover-title {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  opacity: 0;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.88) 0%,
+    rgb(0 0 0 / 0.62) 42%,
+    rgb(0 0 0 / 0) 100%
+  );
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.home-category-card__hover-title-text {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-300);
+  font-weight: var(--weight-semibold);
+  line-height: var(--lh-300);
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+  transform: translateY(8px);
+  transition:
+    opacity var(--motion-fast) var(--ease),
+    transform var(--motion-fast) var(--ease);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-category-card:hover .home-category-card__hover-title,
+  .home-category-card:focus-visible .home-category-card__hover-title {
+    opacity: 1;
+    transition-duration: 0.18s;
+    transition-timing-function: var(--ease-out);
+  }
+
+  .home-category-card:hover .home-category-card__hover-title-text,
+  .home-category-card:focus-visible .home-category-card__hover-title-text {
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity 0.2s var(--ease-out) 0.04s,
+      transform 0.2s var(--ease-out) 0.04s;
+  }
+}
+
+/* Sem hover (toque): o nome fica sempre visível — não há estado intermediário
+   para revelá-lo. */
+@media not all and (hover: hover) {
+  .home-category-card__hover-title,
+  .home-category-card__hover-title-text {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-category-card__hover-title,
+  .home-category-card__hover-title-text {
+    transition: opacity var(--motion-fast) var(--ease);
+    transform: none;
+  }
+
+  .home-category-card:hover .home-category-card__hover-title-text,
+  .home-category-card:focus-visible .home-category-card__hover-title-text {
+    transform: none;
+    transition: opacity var(--motion-fast) var(--ease);
+  }
 }
 
 .home-category-card__metadata {
@@ -3289,377 +3815,6 @@ p {
 
   &.home-category-card--portrait {
     aspect-ratio: 3 / 4;
-  }
-}
-
-/* Vitrine no topo da Home: arte grande do jogo ativo + grade de capturas +
-   painel de avaliações, no lugar do antigo rail de "Recomendados". A arte
-   define a altura da linha via `aspect-ratio`; a grade de capturas e o painel
-   esticam para acompanhá-la (`align-items: stretch` no flex da moldura). */
-.home-showcase {
-  @include mixins.section-column;
-  gap: var(--home-section-heading-gap);
-  padding-inline: var(--home-content-inline-inset);
-}
-
-.home-showcase__frame {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-  gap: var(--home-category-gap);
-}
-
-.home-showcase__frame--skeleton {
-  aspect-ratio: 32 / 11;
-  border-radius: var(--radius-md);
-  background: var(--skeleton-fill);
-}
-
-.home-showcase__art {
-  display: block;
-  flex: 1.6 1 0;
-  min-width: 0;
-  aspect-ratio: 16 / 8;
-  border: 0;
-  border-radius: var(--radius-md);
-  background-color: var(--surface-canvas);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: var(--pb-background-size-current, var(--pb-background-size));
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity var(--motion-slow) ease,
-    background-size var(--motion-base) var(--ease);
-
-  &--loaded {
-    opacity: 1;
-    animation: image-subtle-fade-in var(--motion-slow) ease both;
-  }
-}
-
-.home-showcase__thumbs {
-  display: grid;
-  flex: 0.9 1 0;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.home-showcase__thumb {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background-color: var(--surface-canvas);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: var(--pb-background-size-current, var(--pb-background-size));
-  cursor: pointer;
-  opacity: 0.6;
-  transition:
-    opacity var(--motion-fast) var(--ease),
-    box-shadow var(--motion-fast) var(--ease);
-
-  &:hover,
-  &:focus-visible {
-    opacity: 0.85;
-  }
-
-  &--active {
-    opacity: 1;
-    outline: 2px solid var(--border-interactive);
-    outline-offset: -2px;
-  }
-
-  &--empty {
-    background-color: var(--surface-subtle);
-    cursor: default;
-    opacity: 1;
-  }
-}
-
-.home-showcase__panel {
-  display: flex;
-  flex: 1.1 1 0;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-8);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
-}
-
-.home-showcase__title {
-  @include mixins.type-hero;
-  color: var(--text-primary);
-}
-
-.home-showcase__reviews {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.home-showcase__review-label {
-  color: var(--text-secondary);
-  font-size: var(--type-size-body);
-  font-weight: var(--weight-semibold);
-
-  &--overwhelminglyPositive,
-  &--veryPositive,
-  &--positive {
-    color: var(--success);
-  }
-
-  &--mostlyNegative,
-  &--negative {
-    color: var(--danger);
-  }
-}
-
-.home-showcase__review-count {
-  color: var(--text-tertiary);
-  font-size: var(--type-size-compact);
-}
-
-.home-showcase__rank {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--type-size-compact);
-  font-weight: var(--weight-semibold);
-}
-
-.home-showcase__genres {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: auto;
-}
-
-.home-showcase__genre {
-  @include tag-chip;
-  background: var(--pill-bg);
-  color: var(--text-secondary);
-}
-
-/* Mesma seta dos rails de baixo (Recomendados/Explorar): sem pílula, fora da
-   moldura, dentro do inset de 36px da seção. */
-.home-showcase__arrow {
-  position: absolute;
-  top: 50%;
-  z-index: 2;
-  display: grid;
-  width: 28px;
-  height: 40px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  line-height: 1;
-  transform: translateY(-50%);
-  transition: color var(--motion-fast) ease-out;
-
-  &:hover,
-  &:focus-visible {
-    color: var(--text-primary);
-  }
-
-  svg {
-    display: block;
-    width: 22px;
-    height: 22px;
-  }
-
-  &--prev {
-    left: -28px;
-  }
-
-  &--next {
-    right: -28px;
-  }
-}
-
-@media (max-width: 1100px) {
-  .home-showcase__frame {
-    flex-direction: column;
-  }
-
-  .home-showcase__art {
-    flex-basis: auto;
-  }
-
-  .home-showcase__thumbs {
-    flex-basis: auto;
-    aspect-ratio: 16 / 7;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-  }
-
-  .home-showcase__panel {
-    flex-basis: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .home-showcase__art,
-  .home-showcase__thumb {
-    transition: none;
-  }
-}
-
-/* Faixa larga com paginação por dots, entre a vitrine e os rails de sempre. */
-.home-spotlight {
-  padding-inline: var(--home-content-inline-inset);
-}
-
-.home-spotlight--skeleton {
-  aspect-ratio: 5 / 1;
-  margin-inline: var(--home-content-inline-inset);
-  border-radius: var(--radius-md);
-  background: var(--skeleton-fill);
-}
-
-.home-spotlight__slide {
-  position: relative;
-  display: block;
-  width: 100%;
-  aspect-ratio: 5 / 1;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--radius-md);
-  background-color: var(--surface-canvas);
-  cursor: pointer;
-}
-
-.home-spotlight__art {
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: var(--pb-background-size-current, var(--pb-background-size));
-  opacity: 0;
-  transition: opacity var(--motion-slow) ease;
-}
-
-.home-spotlight__slide--loaded .home-spotlight__art {
-  opacity: 1;
-  animation: image-subtle-fade-in var(--motion-slow) ease both;
-}
-
-.home-spotlight__scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--black) 80%, transparent) 0%,
-    color-mix(in srgb, var(--black) 8%, transparent) 62%,
-    transparent 100%
-  );
-}
-
-.home-spotlight__label {
-  position: absolute;
-  left: var(--space-8);
-  bottom: var(--space-8);
-  z-index: 1;
-  max-width: 60%;
-  color: var(--text-primary);
-  font-size: var(--type-size-fluid-title);
-  font-weight: var(--weight-semibold);
-  text-align: left;
-}
-
-.home-spotlight__dots {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
-}
-
-.home-spotlight__dot {
-  width: 8px;
-  height: 8px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-circle);
-  background: var(--border-strong);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease);
-
-  &:hover,
-  &:focus-visible {
-    background: var(--text-tertiary);
-  }
-
-  &--active {
-    background: var(--text-primary);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .home-spotlight__art {
-    transition: none;
-  }
-}
-
-/* Linha "Coleções e destaques" + rail "Porque você jogou X" lado a lado em
-   telas largas. Cada metade mantém seu próprio inset de 36px (mesmo de
-   qualquer seção da Home), o que já cria o respiro entre as colunas — nenhuma
-   das duas precisou mudar por causa da outra. */
-.home-collections-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-  align-items: start;
-}
-
-@media (max-width: 1100px) {
-  .home-collections-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.home-collections {
-  @include mixins.section-column;
-  gap: var(--home-section-heading-gap);
-  padding-inline: var(--home-content-inline-inset);
-}
-
-/* 2 destaques + coluna estreita com 2 menores, como o "Coleções" do
-   protótipo (sem preço). `.home-explore-card` já traz a própria arte, o
-   scrim e o rótulo — só o tamanho muda por contexto. */
-.home-collections__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.7fr);
-  gap: var(--home-category-gap);
-}
-
-.home-collections__grid > .home-explore-card {
-  min-height: clamp(200px, 20vw, 280px);
-}
-
-.home-collections__aside-cards {
-  display: grid;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: var(--home-category-gap);
-}
-
-.home-collections__aside-cards .home-explore-card {
-  min-height: 0;
-}
-
-@media (max-width: 900px) {
-  .home-collections__grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .home-collections__aside-cards {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: none;
   }
 }
 
@@ -3979,10 +4134,6 @@ p {
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-}
-
-.home-category-card--with-review .home-wishlist-card__player-review {
-  gap: var(--space-8);
 }
 
 .home-wishlist-card__player-review-author {
@@ -11289,6 +11440,13 @@ html.no-backdrop-blur {
 
   .home-recommended__track .home-category-card {
     flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+  }
+
+  /* Capas verticais não ganham a coluna extra: "Em alta agora" fica em três por
+     tela em qualquer largura, na mesma medida do rail de "Bem avaliados" logo
+     abaixo — as duas seções têm que bater coluna a coluna. */
+  .home-recommended__track .home-category-card--portrait {
+    flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3);
   }
 
   .home-explore-card {
