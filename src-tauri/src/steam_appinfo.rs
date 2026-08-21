@@ -276,20 +276,56 @@ pub fn sanitize_install_dir(name: &str) -> String {
     cleaned.trim().trim_end_matches(['.', ' ']).trim().to_string()
 }
 
-/// Le o appinfo local. `None` quando o arquivo nao existe, a versao do formato
-/// mudou, ou o app nao esta em cache — todos os casos em que o chamador precisa
-/// cair no fallback pelo titulo do catalogo.
-pub fn read_app_info(steam_path: &str, app_id: &str) -> Option<AppInfo> {
+/// Carrega o blob KV de um app ja desembrulhado do no raiz `appinfo`.
+///
+/// Alguns dumps de terceiros omitem esse embrulho, entao os dois casos valem.
+fn read_app_blob(steam_path: &str, app_id: &str) -> Option<BTreeMap<String, KvValue>> {
     let app_id_number: u32 = app_id.trim().parse().ok()?;
     let path = Path::new(steam_path).join("appcache").join("appinfo.vdf");
     let data = std::fs::read(path).ok()?;
     let (blob, _table) = find_app_blob(&data, app_id_number)?;
-    // O blob de cada app vem embrulhado num unico no raiz chamado `appinfo`.
-    // Alguns dumps de terceiros omitem esse embrulho, entao os dois casos valem.
-    let blob = match lookup(&blob, &["appinfo"]).and_then(kv_object) {
+    Some(match lookup(&blob, &["appinfo"]).and_then(kv_object) {
         Some(inner) => inner.clone(),
         None => blob,
-    };
+    })
+}
+
+/// Converte um no do KV binario para JSON, para o mesmo parser servir ao
+/// appinfo local e a resposta do `api.steamcmd.net`.
+///
+/// Todo valor escalar sai como string porque e assim que o KV binario guarda
+/// (`parse_kv_object` normaliza int/uint para texto) — e tambem como o steamcmd
+/// serializa. `crate::steam_pics::parse_depots_json` aceita os dois formatos.
+fn kv_to_json(value: &KvValue) -> serde_json::Value {
+    match value {
+        KvValue::Text(text) => serde_json::Value::String(text.clone()),
+        KvValue::Object(object) => serde_json::Value::Object(
+            object
+                .iter()
+                .map(|(key, child)| (key.clone(), kv_to_json(child)))
+                .collect(),
+        ),
+    }
+}
+
+/// Manifests publicos, `oslist` e `buildid` por branch a partir do appinfo local.
+///
+/// E a fonte barata de `crate::steam_pics::resolve_public_app`: sem rede, mas so
+/// responde para app que a Steam desta maquina ja viu.
+pub fn read_public_depots(steam_path: &str, app_id: &str) -> Option<crate::steam_pics::PublicApp> {
+    let blob = read_app_blob(steam_path, app_id)?;
+    let depots = lookup(&blob, &["depots"])?;
+    crate::steam_pics::parse_depots_json(
+        &kv_to_json(depots),
+        crate::steam_pics::PicsSource::LocalAppinfo,
+    )
+}
+
+/// Le o appinfo local. `None` quando o arquivo nao existe, a versao do formato
+/// mudou, ou o app nao esta em cache — todos os casos em que o chamador precisa
+/// cair no fallback pelo titulo do catalogo.
+pub fn read_app_info(steam_path: &str, app_id: &str) -> Option<AppInfo> {
+    let blob = read_app_blob(steam_path, app_id)?;
 
     let install_dir = lookup(&blob, &["config", "installdir"])
         .and_then(kv_text)
@@ -364,15 +400,53 @@ mod tests {
 
             blob.push(0); // objeto: depots
             cstr(&mut blob, "depots");
-            blob.push(0);
-            cstr(&mut blob, "branches");
-            blob.push(0);
-            cstr(&mut blob, "public");
-            blob.push(1);
-            cstr(&mut blob, "buildid");
-            cstr(&mut blob, build_id);
-            blob.push(8); // fecha public
-            blob.push(8); // fecha branches
+            {
+                blob.push(1); // chave especial nao numerica, vizinha dos depots
+                cstr(&mut blob, "baselanguages");
+                cstr(&mut blob, "english");
+
+                blob.push(0); // objeto: depot 367521 (windows)
+                cstr(&mut blob, "367521");
+                blob.push(0);
+                cstr(&mut blob, "config");
+                blob.push(1);
+                cstr(&mut blob, "oslist");
+                cstr(&mut blob, "windows");
+                blob.push(8); // fecha config
+                blob.push(0);
+                cstr(&mut blob, "manifests");
+                blob.push(0);
+                cstr(&mut blob, "public");
+                blob.push(1);
+                cstr(&mut blob, "gid");
+                cstr(&mut blob, "257781644874438846");
+                blob.push(1);
+                cstr(&mut blob, "size");
+                cstr(&mut blob, "5231995691");
+                blob.push(8); // fecha public
+                blob.push(8); // fecha manifests
+                blob.push(8); // fecha 367521
+
+                blob.push(0); // objeto: depot 367522 (macos)
+                cstr(&mut blob, "367522");
+                blob.push(0);
+                cstr(&mut blob, "config");
+                blob.push(1);
+                cstr(&mut blob, "oslist");
+                cstr(&mut blob, "macos");
+                blob.push(8); // fecha config
+                blob.push(8); // fecha 367522
+
+                blob.push(0);
+                cstr(&mut blob, "branches");
+                blob.push(0);
+                cstr(&mut blob, "public");
+                blob.push(1);
+                cstr(&mut blob, "buildid");
+                cstr(&mut blob, build_id);
+                blob.push(8); // fecha public
+                blob.push(8); // fecha branches
+            }
             blob.push(8); // fecha depots
         }
         blob.push(8); // fecha appinfo
@@ -440,6 +514,45 @@ mod tests {
         assert_eq!(sanitize_install_dir("S.T.A.L.K.E.R.: CoP"), "S.T.A.L.K.E.R._ CoP");
         assert_eq!(sanitize_install_dir("Game/Name"), "Game_Name");
         assert_eq!(sanitize_install_dir("trailing..."), "trailing");
+    }
+
+    /// `read_public_depots` le do disco, entao o teste precisa de uma arvore
+    /// `<steam>/appcache/appinfo.vdf` de verdade.
+    fn write_fake_steam(app_id: u32) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-appinfo-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let appcache = root.join("appcache");
+        std::fs::create_dir_all(&appcache).unwrap();
+        std::fs::write(
+            appcache.join("appinfo.vdf"),
+            build_appinfo_v28(app_id, "Hollow Knight", "22529139", "Hollow Knight"),
+        )
+        .unwrap();
+        root
+    }
+
+    #[test]
+    fn public_depots_come_from_the_local_appinfo_with_oslist_and_build_id() {
+        let root = write_fake_steam(367520);
+        let app = read_public_depots(&root.to_string_lossy(), "367520")
+            .expect("depots publicos devem sair do appinfo local");
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(app.source, crate::steam_pics::PicsSource::LocalAppinfo);
+        assert_eq!(app.build_id, "22529139");
+        assert_eq!(app.public_gid(367521), Some(257781644874438846));
+        assert_eq!(
+            app.depot(367521).and_then(|depot| depot.oslist.as_deref()),
+            Some("windows")
+        );
+        assert_eq!(
+            app.depot(367522).and_then(|depot| depot.oslist.as_deref()),
+            Some("macos")
+        );
+        // `baselanguages` e `branches` moram no mesmo objeto que os depots.
+        assert_eq!(app.depots.len(), 2);
     }
 
     #[test]

@@ -1,131 +1,8 @@
 use crate::ghostbox_library;
 use crate::ludusavi::resolved_game_title;
-use crate::util::{text_value, EmptyVecExt};
+use crate::util::text_value;
 use crate::{extract_app_id, resolve_steam_path, save_steam_path, steam_asset_url};
-use std::time::Duration;
 use tauri::Manager;
-
-const LUA_TOOLS_USER_AGENT: &str = "discord(dot)gg/luatools";
-const MAX_LUA_TOOLS_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
-const LUA_TOOLS_CONNECT_TIMEOUT_SECS: u64 = 5;
-const LUA_TOOLS_REQUEST_TIMEOUT_SECS: u64 = 12;
-
-struct LuaToolsApi {
-    name: &'static str,
-    url: &'static str,
-    success_code: u16,
-    unavailable_code: u16,
-}
-
-const DEFAULT_LUA_TOOLS_APIS: &[LuaToolsApi] = &[
-    LuaToolsApi {
-        name: "Sushi",
-        url: "https://raw.githubusercontent.com/sushi-dev55-alt/sushitools-games-repo-alt/refs/heads/main/<appid>.zip",
-        success_code: 200,
-        unavailable_code: 404,
-    },
-];
-
-fn lua_tools_url(api: &LuaToolsApi, app_id: &str) -> String {
-    api.url.replace("<appid>", app_id)
-}
-
-fn validate_lua_tools_url(url: &str) -> bool {
-    reqwest::Url::parse(url)
-        .map(|url| {
-            url.scheme() == "https"
-                || (cfg!(test)
-                    && url.scheme() == "http"
-                    && url.host_str() == Some("127.0.0.1"))
-        })
-        .unwrap_or(false)
-}
-
-async fn download_lua_tools_package_from_apis(
-    app_id: &str,
-    apis: &[LuaToolsApi],
-) -> Result<(String, Vec<u8>), String> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(LUA_TOOLS_CONNECT_TIMEOUT_SECS))
-        .timeout(Duration::from_secs(LUA_TOOLS_REQUEST_TIMEOUT_SECS))
-        .build()
-        .map_err(|error| error.to_string())?;
-    let mut errors = Vec::new();
-
-    for api in apis {
-        let url = lua_tools_url(api, app_id);
-        if !validate_lua_tools_url(&url) {
-            errors.push(format!("{}: URL insegura", api.name));
-            continue;
-        }
-
-        match client
-            .get(&url)
-            .header(reqwest::header::USER_AGENT, LUA_TOOLS_USER_AGENT)
-            .send()
-            .await
-        {
-            Ok(response) => {
-                let status = response.status().as_u16();
-                if status == api.unavailable_code {
-                    errors.push(format!("{}: jogo indisponível", api.name));
-                    continue;
-                }
-                if status != api.success_code {
-                    if matches!(status, 522 | 523 | 524) {
-                        errors.push(format!("{}: serviço indisponível (HTTP {status})", api.name));
-                    } else {
-                        errors.push(format!("{}: HTTP {status}", api.name));
-                    }
-                    continue;
-                }
-
-                let bytes = match response.bytes().await {
-                    Ok(bytes) => bytes,
-                    Err(error) => {
-                        if error.is_timeout() {
-                            errors.push(format!(
-                                "{}: tempo limite excedido durante o download",
-                                api.name
-                            ));
-                        } else {
-                            errors.push(format!(
-                                "{}: falha ao receber o pacote ({error})",
-                                api.name
-                            ));
-                        }
-                        continue;
-                    }
-                };
-                if bytes.len() > MAX_LUA_TOOLS_PACKAGE_BYTES {
-                    errors.push(format!("{}: pacote excede 64 MB", api.name));
-                    continue;
-                }
-                if bytes.len() < 4 || &bytes[..2] != b"PK" {
-                    errors.push(format!("{}: resposta não é zip", api.name));
-                    continue;
-                }
-
-                return Ok((api.name.to_string(), bytes.to_vec()));
-            }
-            Err(error) => {
-                if error.is_timeout() {
-                    errors.push(format!("{}: tempo limite excedido", api.name));
-                } else {
-                    errors.push(format!("{}: {error}", api.name));
-                }
-            }
-        }
-    }
-
-    Err(errors
-        .if_empty(vec!["Jogo indisponível nas APIs configuradas.".to_string()])
-        .join("; "))
-}
-
-async fn download_lua_tools_package(app_id: &str) -> Result<(String, Vec<u8>), String> {
-    download_lua_tools_package_from_apis(app_id, DEFAULT_LUA_TOOLS_APIS).await
-}
 
 fn package_hashes_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     let dir = app.path().app_data_dir().ok()?;
@@ -162,12 +39,16 @@ fn record_package_hash_and_warn(
     if !map.is_object() {
         map = serde_json::json!({});
     }
+    // A chave inclui a fonte: com varias fontes concorrendo, a vencedora muda de
+    // uma instalacao para outra por frescor, e comparar hash entre fontes
+    // diferentes dispararia alerta em cima de um pacote legitimo.
+    let key = format!("{app_id}@{api_name}");
     let previous = map
-        .get(app_id)
+        .get(&key)
         .and_then(|value| value.get("sha256"))
         .and_then(|value| value.as_str())
         .map(str::to_owned);
-    map[app_id] = serde_json::json!({
+    map[&key] = serde_json::json!({
         "sha256": next_hash,
         "api": api_name,
         "updatedAt": chrono::Utc::now().to_rfc3339(),
@@ -202,24 +83,16 @@ fn zip_entry_file_name(name: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+/// Nomes `<depot>_<manifest>.manifest` declarados pelo `.lua`.
+///
+/// Le tambem as linhas comentadas: `install_lua_tools_package` comenta todo
+/// `setManifestid` antes de gravar, entao ignora-las deixaria a remocao sem
+/// saber quais arquivos apagar.
 fn parse_lua_manifest_file_names(lua_content: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    for line in lua_content.lines() {
-        if line.trim_start().starts_with("--") || !line.contains("setManifestid") {
-            continue;
-        }
-        let digits = line
-            .split(|ch: char| !ch.is_ascii_digit())
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>();
-        if digits.len() >= 2 {
-            let name = format!("{}_{}.manifest", digits[0], digits[1]);
-            if !names.iter().any(|item| item == &name) {
-                names.push(name);
-            }
-        }
-    }
-    names
+    crate::manifest_sources::parse_set_manifest_ids(lua_content)
+        .into_iter()
+        .map(|(depot_id, manifest_id)| format!("{depot_id}_{manifest_id}.manifest"))
+        .collect()
 }
 
 const MAX_LUA_SCRIPT_BYTES: usize = 1024 * 1024;
@@ -473,8 +346,11 @@ pub async fn luatools_add_game(
         }));
     };
 
-    let (api_name, zip_bytes) = match download_lua_tools_package(&app_id).await {
-        Ok(result) => result,
+    // O PICS decide qual pacote vence: sem ele todas as fontes parecem
+    // igualmente boas e a escolha volta a ser "a primeira que responder".
+    let public = crate::steam_pics::resolve_public_app(&steam_path, &app_id).await;
+    let candidate = match crate::manifest_sources::best_package(&app_id, public.as_ref()).await {
+        Ok(candidate) => candidate,
         Err(error) => {
             return Ok(serde_json::json!({
                 "success": false,
@@ -482,6 +358,9 @@ pub async fn luatools_add_game(
             }));
         }
     };
+    let api_name = candidate.source.clone();
+    let manifest_score = candidate.score;
+    let zip_bytes = candidate.zip;
     record_package_hash_and_warn(&app, &app_id, &api_name, &zip_bytes);
     let mut library_game = library_game_from_luatools_add(&app_id, &game, &title);
 
@@ -500,6 +379,14 @@ pub async fn luatools_add_game(
                 "api": api_name,
                 "installedPath": installed_path,
                 "manifestCount": manifest_count,
+                // Quantos depots do pacote batem com o branch `public`. Zero com
+                // PICS disponivel significa pacote de build antiga — a UI usa
+                // isso para avisar antes de o download comecar.
+                "publicMatches": manifest_score,
+                "publicBuildId": public
+                    .as_ref()
+                    .map(|app| app.build_id.clone())
+                    .unwrap_or_default(),
                 "libraryGame": library_game
             }))
         }
@@ -561,64 +448,26 @@ pub fn luatools_remove_game(app: tauri::AppHandle, game: serde_json::Value) -> s
 
 #[cfg(test)]
 mod tests {
-    use super::{download_lua_tools_package_from_apis, LuaToolsApi};
-    use std::io::{Read, Write};
-    use std::net::TcpListener;
+    use super::parse_lua_manifest_file_names;
 
     #[test]
-    fn falls_back_when_successful_response_body_is_truncated() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = std::thread::spawn(move || {
-            listener.set_nonblocking(true).unwrap();
-            let responses = [
-                b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nPK".as_slice(),
-                b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nPK\x03\x04"
-                    .as_slice(),
-            ];
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-            let mut response_index = 0;
-            while response_index < responses.len() && std::time::Instant::now() < deadline {
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        let mut request = [0_u8; 1024];
-                        let _ = stream.read(&mut request);
-                        stream.write_all(responses[response_index]).unwrap();
-                        response_index += 1;
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                    Err(error) => panic!("test server failed: {error}"),
-                }
-            }
-        });
+    fn manifest_file_names_survive_the_comment_added_at_install_time() {
+        // `install_lua_tools_package` prefixa `--` em todo `setManifestid` para a
+        // Steam resolver o manifest publico sozinha. A remocao do jogo ainda
+        // precisa achar os arquivos, entao a linha comentada tem que ser lida.
+        let installed = concat!(
+            "addappid(367520)\n",
+            "addappid(367521,1,\"deadbeef\")\n",
+            "--setManifestid(367521,\"257781644874438846\",5231995691)\n",
+        );
+        assert_eq!(
+            parse_lua_manifest_file_names(installed),
+            vec!["367521_257781644874438846.manifest".to_string()]
+        );
+    }
 
-        let broken_url = Box::leak(format!("http://{address}/broken").into_boxed_str());
-        let fallback_url = Box::leak(format!("http://{address}/fallback").into_boxed_str());
-        let apis = [
-            LuaToolsApi {
-                name: "Broken",
-                url: broken_url,
-                success_code: 200,
-                unavailable_code: 404,
-            },
-            LuaToolsApi {
-                name: "Fallback",
-                url: fallback_url,
-                success_code: 200,
-                unavailable_code: 404,
-            },
-        ];
-
-        let result = tauri::async_runtime::block_on(download_lua_tools_package_from_apis(
-            "1332010",
-            &apis,
-        ));
-        server.join().unwrap();
-
-        let (api, bytes) = result.unwrap();
-        assert_eq!(api, "Fallback");
-        assert_eq!(bytes, b"PK\x03\x04");
+    #[test]
+    fn a_lua_without_manifest_lines_yields_no_files() {
+        assert!(parse_lua_manifest_file_names("addappid(367520)\n").is_empty());
     }
 }

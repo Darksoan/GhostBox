@@ -1,29 +1,24 @@
 import {
-  useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type FocusEvent,
-  type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { withoutHeaderImageSources } from "../../utils/image";
-import { withCachedImageSources } from "../../utils/imageCache";
+import {
+  preloadBrowserImage,
+  withCachedImageSources,
+} from "../../utils/imageCache";
 import {
   CATALOGUE_PREVIEW_EXIT_TRANSITION_MS,
-  CATALOGUE_PREVIEW_VIEWPORT_MARGIN,
-  computeCataloguePreviewPosition,
   getAdjacentReadyScreenshotSource,
   getNextReadyScreenshotSource,
   pickDistinctScreenshotSources,
-  type CataloguePreviewPointer,
-  type CataloguePreviewPosition,
 } from "../../utils/cataloguePreview";
 import {
   loadGameAchievementDetailsCached,
@@ -34,37 +29,32 @@ import { pendingScrollIdle } from "../../utils/scrollIdle";
 
 const AUTOPLAY_INTERVAL_MS = 3200;
 
-const DEFAULT_APP_HEADER_HEIGHT = 52;
+/**
+ * Ícones de conquista mostrados na prévia. Seis é o que a linha comporta sem
+ * apertar, e cada ícone a mais é uma requisição a mais por jogo sob o cursor.
+ */
+const ACHIEVEMENT_PREVIEW_COUNT = 6;
 
-function readAppHeaderHeight() {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return DEFAULT_APP_HEADER_HEIGHT;
-  }
-
-  const raw = window
-    .getComputedStyle(document.documentElement)
-    .getPropertyValue("--app-header-height");
-  const parsed = Number.parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : DEFAULT_APP_HEADER_HEIGHT;
-}
+/**
+ * Teto de espera pela primeira screenshot antes de mostrar o painel assim mesmo.
+ * Sem esse teto, uma imagem quebrada ou uma conexão ruim seguraria a prévia
+ * indefinidamente — melhor um painel com a caixa de mídia vazia do que nenhum.
+ */
+const MEDIA_REVEAL_TIMEOUT_MS = 600;
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
-  /** Cartão sob o ponteiro — define a altura em que o painel aparece. */
-  anchor?: HTMLElement | null;
-  /** Coluna de filtros — define a faixa horizontal fixa do painel. */
-  columnRef?: RefObject<HTMLElement | null>;
-  /** Cursor no momento do hover: só serve de reserva se o cartão não for medido. */
-  pointer?: CataloguePreviewPointer | null;
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
 }
 
+/**
+ * Preview do catálogo. Mora dentro de `.catalogue-preview-column`, a faixa fixa
+ * à direita da listagem — não persegue cartão nem cursor, então não há cálculo
+ * de posição nem portal: quem prende no lugar é o `position: sticky` da coluna.
+ */
 export function CatalogueHoverPreview({
   game,
-  anchor = null,
-  columnRef,
-  pointer = null,
   onPointerEnter,
   onPointerLeave,
 }: CatalogueHoverPreviewProps) {
@@ -76,18 +66,11 @@ export function CatalogueHoverPreview({
   const [displayedGame, setDisplayedGame] = useState<GhostBoxGame | null>(
     null
   );
-  const [displayedAnchor, setDisplayedAnchor] = useState<HTMLElement | null>(
-    null
-  );
-  const [position, setPosition] = useState<CataloguePreviewPosition | null>(
-    null
-  );
   const [isVisible, setIsVisible] = useState(false);
+  const [isMediaReady, setIsMediaReady] = useState(false);
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasVisibleRef = useRef(false);
   const previewRef = useRef<HTMLElement | null>(null);
-  // Ponteiro do hover atual, congelado até o cursor entrar em outro cartão.
-  const pointerRef = useRef<CataloguePreviewPointer | null>(null);
 
   const prefersReducedMotion =
     typeof window !== "undefined" &&
@@ -120,9 +103,6 @@ export function CatalogueHoverPreview({
     exitTimeoutRef.current = setTimeout(() => {
       exitTimeoutRef.current = null;
       setDisplayedGame(null);
-      setDisplayedAnchor(null);
-      setPosition(null);
-      pointerRef.current = null;
     }, CATALOGUE_PREVIEW_EXIT_TRANSITION_MS);
 
     return () => {
@@ -133,86 +113,15 @@ export function CatalogueHoverPreview({
     };
   }, [game]);
 
+  // Mesma condição do `--visible` do painel: com a mídia ainda carregando ele
+  // está oculto, e o foco não pode ficar parado num controle invisível.
   useEffect(() => {
-    if (!game) return;
-    setDisplayedAnchor(anchor);
-    if (pointer) pointerRef.current = pointer;
-  }, [game, anchor, pointer]);
-
-  const updatePosition = useCallback(() => {
-    const node = previewRef.current;
-    if (!node || typeof window === "undefined") return;
-
-    const anchorRect = displayedAnchor?.getBoundingClientRect();
-    const columnRect = columnRef?.current?.getBoundingClientRect();
-    if (!anchorRect && !pointerRef.current) return;
-
-    const previewRect = node.getBoundingClientRect();
-    const next = computeCataloguePreviewPosition({
-      card: anchorRect
-        ? {
-            top: anchorRect.top,
-            left: anchorRect.left,
-            width: anchorRect.width,
-            height: anchorRect.height,
-          }
-        : null,
-      pointer: pointerRef.current,
-      column: columnRect
-        ? { left: columnRect.left, width: columnRect.width }
-        : null,
-      preview: { width: previewRect.width, height: previewRect.height },
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      topBoundary: readAppHeaderHeight() + CATALOGUE_PREVIEW_VIEWPORT_MARGIN,
-    });
-
-    setPosition((current) =>
-      current && current.top === next.top && current.left === next.left
-        ? current
-        : next
-    );
-  }, [columnRef, displayedAnchor]);
-
-  // Layout effect: reposiciona antes da pintura, senão o painel aparece um
-  // frame no lugar antigo antes de saltar para o cartão novo.
-  useLayoutEffect(() => {
-    updatePosition();
-  }, [updatePosition, displayedGame]);
-
-  useEffect(() => {
-    const node = previewRef.current;
-    if (!node || !displayedGame || typeof window === "undefined") return;
-
-    let frameId: number | null = null;
-    const scheduleUpdate = () => {
-      if (frameId !== null) return;
-      frameId = requestAnimationFrame(() => {
-        frameId = null;
-        updatePosition();
-      });
-    };
-
-    // O painel não persegue o cursor: fica onde nasceu até o hover trocar de
-    // cartão. Só remede o que muda sozinho — a altura depois da montagem
-    // (conquistas chegam por fetch) e as bordas de encaixe no resize.
-    const resizeObserver = new ResizeObserver(scheduleUpdate);
-    resizeObserver.observe(node);
-    window.addEventListener("resize", scheduleUpdate);
-
-    return () => {
-      if (frameId !== null) cancelAnimationFrame(frameId);
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [displayedGame, updatePosition]);
-
-  useEffect(() => {
-    if (isVisible || typeof document === "undefined") return;
+    if ((isVisible && isMediaReady) || typeof document === "undefined") return;
     const activeElement = document.activeElement;
     if (activeElement && previewRef.current?.contains(activeElement)) {
       (activeElement as HTMLElement).blur();
     }
-  }, [isVisible]);
+  }, [isVisible, isMediaReady]);
 
 
   // Guarda o id junto do resultado: o hover troca de jogo bem mais rápido do
@@ -224,6 +133,8 @@ export function CatalogueHoverPreview({
     list: SteamAchievement[];
   } | null>(null);
   const achievementGameIdRef = useRef<string | null>(null);
+  const [achievementIconsReady, setAchievementIconsReady] = useState(false);
+  const [isFetchingAchievements, setIsFetchingAchievements] = useState(false);
 
   useEffect(() => {
     if (!displayedGame) return;
@@ -231,14 +142,21 @@ export function CatalogueHoverPreview({
     // Só a lista dispensa a busca. Muitos jogos chegam com `achievements.total`
     // preenchido e `achievementList` vazio — contar o total como "já tenho"
     // fazia o container renderizar o texto sem nenhum ícone.
-    if ((displayedGame.achievementList?.length ?? 0) > 0) return;
+    if ((displayedGame.achievementList?.length ?? 0) > 0) {
+      setIsFetchingAchievements(false);
+      return;
+    }
 
     const normalizedId = normalizeGameCacheId(displayedGame);
-    if (!normalizedId || achievementGameIdRef.current === normalizedId) return;
+    if (!normalizedId || achievementGameIdRef.current === normalizedId) {
+      setIsFetchingAchievements(false);
+      return;
+    }
     achievementGameIdRef.current = normalizedId;
 
     let cancelled = false;
     let stored = false;
+    setIsFetchingAchievements(true);
 
     void (async () => {
       try {
@@ -259,6 +177,11 @@ export function CatalogueHoverPreview({
         });
       } catch {
         // Silencioso de propósito: o cache negativo já segura novas tentativas.
+      } finally {
+        // Marca o fim da tentativa mesmo cancelada: é o que separa "ainda
+        // buscando" de "buscou e não veio lista", e sem essa distinção o bloco
+        // fica com uma faixa vazia reservada para ícones que nunca chegam.
+        if (!cancelled) setIsFetchingAchievements(false);
       }
     })();
 
@@ -308,7 +231,37 @@ export function CatalogueHoverPreview({
     setReadyScreenshotCount(0);
     setFailedScreenshotSources(new Set());
     setActiveScreenshotSource(null);
+    setIsMediaReady(false);
   }, [screenshotSourceKey]);
+
+  /**
+   * O painel só entra quando a primeira screenshot já está decodificada. Antes
+   * disso ele aparecia com a caixa de mídia preta e a arte pintava depois, o que
+   * dava a sensação de a prévia se montar em etapas na frente do usuário.
+   *
+   * Jogo sem screenshot nenhuma não espera nada, e o teto de tempo garante que
+   * imagem quebrada ou rede lenta não segurem a prévia para sempre.
+   */
+  useEffect(() => {
+    if (!displayedGame || isMediaReady) return;
+
+    if (!cachedScreenshotSources.length || readyScreenshotCount > 0) {
+      setIsMediaReady(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(
+      () => setIsMediaReady(true),
+      MEDIA_REVEAL_TIMEOUT_MS
+    );
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    cachedScreenshotSources.length,
+    displayedGame,
+    isMediaReady,
+    readyScreenshotCount,
+  ]);
 
   useEffect(() => {
     setActiveScreenshotSource((currentSource) => {
@@ -378,6 +331,65 @@ export function CatalogueHoverPreview({
     onPointerLeave?.();
   };
 
+  // Ícones das conquistas. Calculado aqui em cima porque o efeito de preload
+  // abaixo é hook e não pode ficar depois do `return null`.
+  const achievementIconSources = useMemo(() => {
+    const list = displayedGame?.achievementList?.length
+      ? displayedGame.achievementList
+      : fetchedAchievements?.gameId === normalizeGameCacheId(displayedGame ?? "")
+        ? fetchedAchievements.list
+        : [];
+
+    return list
+      .slice(0, ACHIEVEMENT_PREVIEW_COUNT)
+      .map((achievement) => achievement.icon || achievement.iconGray || "");
+  }, [displayedGame, fetchedAchievements]);
+
+  const achievementIconKey = achievementIconSources.join("\n");
+
+  /**
+   * Os ícones entram como grupo, não um a um. Cada `<img loading="lazy">` fazia
+   * a própria requisição e pintava quando chegava, então o bloco se montava
+   * peça por peça na frente do usuário. Aqui todos são pré-carregados e
+   * decodificados antes de qualquer coisa aparecer.
+   *
+   * `preloadBrowserImage` já traz dedup de requisição em voo, fila de
+   * concorrência global e backoff de falha — passar por ele é o que impede o
+   * hover/scroll de disparar a mesma imagem várias vezes.
+   */
+  useEffect(() => {
+    // Depende só da chave, não do array: a identidade do `useMemo` muda sempre
+    // que `displayedGame`/`fetchedAchievements` mudam, e usá-la como dependência
+    // zerava o estado de pronto (e reanimava a linha) mesmo quando os ícones
+    // eram exatamente os mesmos.
+    const sources = achievementIconKey.split("\n").filter(Boolean);
+    if (!sources.length) {
+      setAchievementIconsReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAchievementIconsReady(false);
+
+    void (async () => {
+      // Mesma regra da busca de conquistas: rolando, os cards passam sozinhos
+      // sob o cursor e baixar ícone de cada um é requisição jogada fora.
+      const idle = pendingScrollIdle();
+      if (idle) await idle;
+      if (cancelled) return;
+
+      await Promise.all(
+        sources.map((source) => preloadBrowserImage(source, { decode: true }))
+      );
+
+      if (!cancelled) setAchievementIconsReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [achievementIconKey]);
+
   if (!displayedGame) return null;
 
   const developers = displayedGame.developers?.filter(Boolean) ?? [];
@@ -404,13 +416,21 @@ export function CatalogueHoverPreview({
     displayedGame.achievementList?.length
       ? displayedGame.achievementList
       : fetchedForGame?.list ?? [];
-  const achievementPreviewList = achievementList.slice(0, 7);
+  const achievementPreviewList = achievementList.slice(
+    0,
+    ACHIEVEMENT_PREVIEW_COUNT
+  );
   const achievementTotal =
     displayedGame.achievements?.total ||
     fetchedForGame?.stats.total ||
     achievementList.length;
   const achievementIconSource = (achievement: (typeof achievementPreviewList)[number]) =>
     achievement.icon || achievement.iconGray || "";
+  // Total sem lista é comum na Steam: sem isto o bloco reservava a faixa de
+  // ícones e ficava com um vão vazio embaixo do rótulo.
+  const hasAchievementIcons = achievementPreviewList.some((achievement) =>
+    achievementIconSource(achievement)
+  );
 
   const screenshotAlt = (index: number) =>
     isEnglish
@@ -450,25 +470,24 @@ export function CatalogueHoverPreview({
     );
   };
 
-  const previewPanel = (
+  // O painel só é dado como visível com a mídia pronta: as duas condições
+  // juntas é que evitam a montagem em etapas.
+  const isPanelVisible = isVisible && isMediaReady;
+
+  return (
     <section
       ref={previewRef}
       className={`catalogue-hover-preview ${
-        isVisible ? "catalogue-hover-preview--visible" : "catalogue-hover-preview--hidden"
+        isPanelVisible
+          ? "catalogue-hover-preview--visible"
+          : "catalogue-hover-preview--hidden"
       }`}
-      style={{
-        top: `${position?.top ?? 0}px`,
-        left: `${position?.left ?? 0}px`,
-        // Antes de medir não há lugar certo para pintar: o painel nasce
-        // invisível e só ganha posição no layout effect.
-        visibility: position ? "visible" : "hidden",
-      }}
       aria-label={
         isEnglish
           ? `Preview of ${displayedGame.title}`
           : `Preview de ${displayedGame.title}`
       }
-      aria-hidden={!isVisible}
+      aria-hidden={!isPanelVisible}
       onPointerEnter={handlePreviewPointerEnter}
       onPointerLeave={handlePreviewPointerLeave}
       onFocusCapture={handlePreviewFocus}
@@ -509,7 +528,7 @@ export function CatalogueHoverPreview({
               type="button"
               aria-label={t("catalogue.preview.previousScreenshot")}
               disabled={readyScreenshotCount < 2}
-              tabIndex={isVisible ? 0 : -1}
+              tabIndex={isPanelVisible ? 0 : -1}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -523,7 +542,7 @@ export function CatalogueHoverPreview({
               type="button"
               aria-label={t("catalogue.preview.nextScreenshot")}
               disabled={readyScreenshotCount < 2}
-              tabIndex={isVisible ? 0 : -1}
+              tabIndex={isPanelVisible ? 0 : -1}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -563,38 +582,61 @@ export function CatalogueHoverPreview({
                 ? `Includes ${achievementTotal} Steam achievements`
                 : `Inclui ${achievementTotal} conquistas Steam`}
             </span>
-            <div className="catalogue-hover-preview__achievements-row">
-              {achievementPreviewList.map((achievement) => {
-                const iconSource = achievementIconSource(achievement);
-                return iconSource ? (
-                  <img
-                    key={achievement.name}
-                    className="catalogue-hover-preview__achievements-icon"
-                    src={iconSource}
-                    alt=""
-                    aria-hidden="true"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ) : (
+            {/* Três estados distintos, e nenhum deles é uma faixa vazia. Muitos
+                jogos da Steam trazem `achievements.total` mas nenhuma lista, e
+                antes disso o bloco reservava a altura dos ícones e ficava com um
+                vão morto embaixo do rótulo — que é o "não aparece nada".
+
+                A linha real só entra com os seis ícones já decodificados; é o
+                `--ready` que governa a animação, em vez de cada imagem aparecer
+                por conta. */}
+            {hasAchievementIcons ? (
+              <div
+                className={`catalogue-hover-preview__achievements-row${
+                  achievementIconsReady
+                    ? " catalogue-hover-preview__achievements-row--ready"
+                    : ""
+                }`}
+              >
+                {achievementPreviewList.map((achievement) => {
+                  const iconSource = achievementIconSource(achievement);
+                  return iconSource ? (
+                    <img
+                      key={achievement.name}
+                      className="catalogue-hover-preview__achievements-icon"
+                      src={iconSource}
+                      alt=""
+                      aria-hidden="true"
+                      decoding="async"
+                    />
+                  ) : (
+                    <span
+                      key={achievement.name}
+                      className="catalogue-hover-preview__achievements-icon catalogue-hover-preview__achievements-icon--fallback"
+                      aria-hidden="true"
+                    />
+                  );
+                })}
+              </div>
+            ) : isFetchingAchievements ? (
+              /* `--ready` também aqui: o estado oculto existe para segurar os
+                 ícones reais até decodificarem, e sem ele o skeleton herdaria o
+                 `opacity: 0` e não apareceria. */
+              <div
+                className="catalogue-hover-preview__achievements-row catalogue-hover-preview__achievements-row--ready"
+                aria-hidden="true"
+              >
+                {Array.from({ length: ACHIEVEMENT_PREVIEW_COUNT }, (_, index) => (
                   <span
-                    key={achievement.name}
-                    className="catalogue-hover-preview__achievements-icon catalogue-hover-preview__achievements-icon--fallback"
-                    aria-hidden="true"
+                    key={`achievement-skeleton-${index}`}
+                    className="catalogue-hover-preview__achievements-icon catalogue-hover-preview__achievements-icon--skeleton skeleton"
                   />
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
     </section>
   );
-
-  // Portal: preso ao `body` o painel escapa do `overflow` do scroller e de
-  // qualquer bloco de contenção da página, então `position: fixed` mede contra
-  // a janela de verdade.
-  return typeof document === "undefined"
-    ? previewPanel
-    : createPortal(previewPanel, document.body);
 }

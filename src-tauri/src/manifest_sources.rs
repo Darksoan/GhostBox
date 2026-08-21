@@ -1,0 +1,637 @@
+//! Escolha do pacote LuaTools mais atual entre varias fontes.
+//!
+//! O comportamento antigo era "primeira fonte que responder 200 vence", com uma
+//! unica fonte cadastrada. Como cada fonte fixa um `setManifestid` proprio e
+//! nenhuma promete estar em dia, isso entregava build de 2022 com frequencia.
+//!
+//! Aqui todas as fontes sao consultadas e o pacote e pontuado contra os gids do
+//! branch `public` vindos de `crate::steam_pics` — quem mais bater, vence.
+//!
+//! # Fonte sem TLS
+//!
+//! O proxy do LuaTools (`http://167.235.229.108/<appid>`) e a unica fonte
+//! confirmada que entrega a build atual, e nao tem variante HTTPS (a porta 443
+//! desse host responde com o certificado default do Traefik). O conteudo dele
+//! acaba em `<steam>/config/stplug-in/` e `<steam>/depotcache/`, entao aceita-lo
+//! as cegas abriria espaco para troca de pacote por quem estiver na rota.
+//!
+//! A trava e `score > 0`: um pacote sem TLS so entra se pelo menos um dos gids
+//! que ele declara bater com o PICS obtido por HTTPS. Substituir o manifest
+//! passa a exigir tambem controlar a resposta do `api.steamcmd.net`. A chave do
+//! depot nao da para conferir assim — chave errada apenas faz a descriptografia
+//! do chunk falhar, sem execucao de nada — e o `.lua` continua passando por
+//! `crate::luatools::validate_lua_script` antes de ser gravado.
+//!
+//! # Fontes que ficaram de fora
+//!
+//! `GET http://167.235.229.108/check_apis?appid=<id>` lista `Luie`, `Ryuu` e
+//! `Sushi`, mas o download por fonte do LuaTools (`/api/manifest/download`) mora
+//! em `https://lua.tools` atras de `Bearer` de conta lua.tools. Sem conta, so
+//! Sushi tem URL direta publica; o proxy acima entrega o pacote agregado. Por
+//! isso `check_apis` nao e consultado: ele nao mudaria a decisao, ja que todas
+//! as fontes alcancaveis sao baixadas de qualquer jeito.
+
+use crate::steam_pics::PublicApp;
+use crate::util::EmptyVecExt;
+use std::collections::BTreeMap;
+use std::time::Duration;
+
+const USER_AGENT: &str = "discord(dot)gg/luatools";
+const MAX_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
+const CONNECT_TIMEOUT_SECS: u64 = 5;
+const REQUEST_TIMEOUT_SECS: u64 = 12;
+
+pub struct ManifestSource {
+    pub name: &'static str,
+    pub url: &'static str,
+    /// `false` marca fonte sem TLS, que so e aceita com `score > 0`.
+    pub requires_tls: bool,
+    pub success_code: u16,
+    pub unavailable_code: u16,
+}
+
+/// Ordem importa: com pontuacao empatada vence a primeira, entao as fontes com
+/// TLS vem antes.
+pub const DEFAULT_SOURCES: &[ManifestSource] = &[
+    ManifestSource {
+        name: "Sushi",
+        url: "https://raw.githubusercontent.com/sushi-dev55-alt/sushitools-games-repo-alt/refs/heads/main/<appid>.zip",
+        requires_tls: true,
+        success_code: 200,
+        unavailable_code: 404,
+    },
+    ManifestSource {
+        name: "LuaTools",
+        url: "http://167.235.229.108/<appid>",
+        requires_tls: false,
+        success_code: 200,
+        unavailable_code: 404,
+    },
+];
+
+#[derive(Debug, Clone)]
+pub struct Candidate {
+    pub source: String,
+    pub zip: Vec<u8>,
+    /// Quantos depots do `.lua` batem com o gid publico do PICS. Zero com PICS
+    /// disponivel = pacote de build antiga.
+    pub score: usize,
+}
+
+fn source_url(source: &ManifestSource, app_id: &str) -> String {
+    source.url.replace("<appid>", app_id)
+}
+
+/// Aceita a URL da fonte. Fonte marcada como TLS precisa mesmo ser `https`; a
+/// sem TLS aceita `http`, e a trava dela e a pontuacao contra o PICS, nao o
+/// esquema. Qualquer outro esquema e recusado.
+pub fn validate_source_url(source: &ManifestSource, url: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    match parsed.scheme() {
+        "https" => true,
+        "http" => !source.requires_tls,
+        _ => false,
+    }
+}
+
+/// Pares `(depot, manifest)` de um `.lua` do SteamTools.
+///
+/// Aceita a linha comentada (`--setManifestid(...)`) porque e assim que
+/// `crate::luatools::install_lua_tools_package` grava o arquivo instalado: o
+/// comentario tira o pin da Steam, mas o valor original segue legivel.
+pub fn parse_set_manifest_ids(lua: &str) -> BTreeMap<u32, u64> {
+    let mut manifests = BTreeMap::new();
+    for line in lua.lines() {
+        let line = line.trim_start().trim_start_matches('-').trim_start();
+        let Some(rest) = line.strip_prefix("setManifestid(") else {
+            continue;
+        };
+        let Some(end) = rest.find(')') else {
+            continue;
+        };
+        let mut arguments = rest[..end].split(',');
+        let Some(depot) = arguments
+            .next()
+            .and_then(|value| value.trim().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let Some(manifest) = arguments
+            .next()
+            .and_then(|value| value.trim().trim_matches('"').trim().parse::<u64>().ok())
+        else {
+            continue;
+        };
+        if depot > 0 && manifest > 0 {
+            manifests.insert(depot, manifest);
+        }
+    }
+    manifests
+}
+
+/// Le o `<appid>.lua` do zip; sem ele, o primeiro `.lua` de nome numerico.
+///
+/// Mesmo criterio de selecao de `crate::luatools::install_lua_tools_package`,
+/// para a pontuacao ser feita sobre o arquivo que sera de fato instalado.
+pub fn lua_from_zip(app_id: &str, zip_bytes: &[u8]) -> Option<String> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).ok()?;
+    let mut fallback = None;
+
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).ok()?;
+        let name = file
+            .name()
+            .replace('\\', "/")
+            .rsplit('/')
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        let Some(stem) = name.strip_suffix(".lua") else {
+            continue;
+        };
+        if stem.is_empty() || !stem.chars().all(|character| character.is_ascii_digit()) {
+            continue;
+        }
+        let mut contents = String::new();
+        if std::io::Read::read_to_string(&mut file, &mut contents).is_err() {
+            continue;
+        }
+        if stem == app_id {
+            return Some(contents);
+        }
+        if fallback.is_none() {
+            fallback = Some(contents);
+        }
+    }
+
+    fallback
+}
+
+fn score_against_public(manifests: &BTreeMap<u32, u64>, public: Option<&PublicApp>) -> usize {
+    let Some(public) = public else {
+        return 0;
+    };
+    manifests
+        .iter()
+        .filter(|(depot_id, manifest_id)| public.public_gid(**depot_id) == Some(**manifest_id))
+        .count()
+}
+
+/// Quantos depots do PICS um pacote perfeito conseguiria acertar.
+///
+/// Serve de criterio de parada: quando uma fonte ja bate em todos eles, nao ha
+/// pacote melhor a procurar e as fontes seguintes nem sao contatadas.
+fn perfect_score(public: Option<&PublicApp>) -> Option<usize> {
+    let public = public?;
+    let total = public
+        .depots
+        .iter()
+        .filter(|depot| depot.manifest_gid > 0)
+        .filter(|depot| crate::steam_pics::depot_runs_on_windows(depot.oslist.as_deref()))
+        .count();
+    (total > 0).then_some(total)
+}
+
+/// Decisao de qual pacote vence, separada do transporte.
+///
+/// Esta e a parte que importa — pontuacao, trava da fonte sem TLS e criterio de
+/// parada — e nao depende de rede, entao os testes a exercitam direto com zips
+/// em memoria em vez de subirem um servidor HTTP.
+struct Selection<'a> {
+    app_id: &'a str,
+    public: Option<&'a PublicApp>,
+    /// Pontuacao que um pacote perfeito teria; `None` sem PICS.
+    target: Option<usize>,
+    best: Option<Candidate>,
+    errors: Vec<String>,
+}
+
+impl<'a> Selection<'a> {
+    fn new(app_id: &'a str, public: Option<&'a PublicApp>) -> Self {
+        Self {
+            app_id,
+            public,
+            target: perfect_score(public),
+            best: None,
+            errors: Vec::new(),
+        }
+    }
+
+    fn reject(&mut self, error: String) {
+        self.errors.push(error);
+    }
+
+    fn offer(&mut self, source: &ManifestSource, zip: Vec<u8>) {
+        let manifests = lua_from_zip(self.app_id, &zip)
+            .map(|lua| parse_set_manifest_ids(&lua))
+            .unwrap_or_default();
+        let score = score_against_public(&manifests, self.public);
+
+        // Sem TLS a pontuacao e a unica prova de que o pacote nao foi trocado na
+        // rota; zero acertos contra o PICS significa que nao ha o que conferir.
+        if !source.requires_tls && score == 0 {
+            self.reject(format!(
+                "{}: pacote sem TLS nao confere com o manifest publico; recusado",
+                source.name
+            ));
+            return;
+        }
+
+        // Empate mantem o vencedor atual, e por isso a ordem da tabela de fontes
+        // decide: as com TLS vem antes.
+        if self.best.as_ref().is_none_or(|best| score > best.score) {
+            self.best = Some(Candidate {
+                source: source.name.to_string(),
+                zip,
+                score,
+            });
+        }
+    }
+
+    /// `true` quando ja existe pacote batendo em todos os depots publicos: nao
+    /// ha o que melhorar e as fontes restantes nem chegam a ser contatadas.
+    fn is_settled(&self) -> bool {
+        let (Some(target), Some(best)) = (self.target, self.best.as_ref()) else {
+            return false;
+        };
+        best.score >= target
+    }
+
+    fn finish(self) -> Result<Candidate, String> {
+        let errors = self.errors;
+        self.best.ok_or_else(|| {
+            errors
+                .if_empty(vec!["Jogo indisponivel nas fontes configuradas.".to_string()])
+                .join("; ")
+        })
+    }
+}
+
+pub async fn best_package(app_id: &str, public: Option<&PublicApp>) -> Result<Candidate, String> {
+    best_package_from(app_id, DEFAULT_SOURCES, public).await
+}
+
+pub async fn best_package_from(
+    app_id: &str,
+    sources: &[ManifestSource],
+    public: Option<&PublicApp>,
+) -> Result<Candidate, String> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let mut selection = Selection::new(app_id, public);
+
+    for source in sources {
+        let url = source_url(source, app_id);
+        if !validate_source_url(source, &url) {
+            selection.reject(format!("{}: URL insegura", source.name));
+            continue;
+        }
+
+        match fetch_package(&client, source, &url).await {
+            Ok(zip) => selection.offer(source, zip),
+            Err(error) => selection.reject(error),
+        }
+
+        if selection.is_settled() {
+            break;
+        }
+    }
+
+    selection.finish()
+}
+
+/// Mensagem de erro do reqwest com a causa real anexada.
+///
+/// O `Display` de `reqwest::Error` para em "error sending request for url
+/// (...)", que nao diz se foi DNS, recusa de conexao ou TLS. A cadeia de
+/// `source()` tem essa informacao, e sem ela tanto o log quanto o aviso na tela
+/// ficam sem diagnostico.
+fn describe_request_error(error: &reqwest::Error) -> String {
+    let mut message = error.to_string();
+    let mut cause: Option<&(dyn std::error::Error + 'static)> = std::error::Error::source(error);
+    while let Some(current) = cause {
+        message.push_str(": ");
+        message.push_str(&current.to_string());
+        cause = current.source();
+    }
+    message
+}
+
+async fn fetch_package(
+    client: &reqwest::Client,
+    source: &ManifestSource,
+    url: &str,
+) -> Result<Vec<u8>, String> {
+    let response = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, USER_AGENT)
+        .send()
+        .await
+        .map_err(|error| {
+            if error.is_timeout() {
+                format!("{}: tempo limite excedido", source.name)
+            } else {
+                format!("{}: {}", source.name, describe_request_error(&error))
+            }
+        })?;
+
+    let status = response.status().as_u16();
+    if status == source.unavailable_code {
+        return Err(format!("{}: jogo indisponivel", source.name));
+    }
+    if status != source.success_code {
+        return Err(if matches!(status, 522 | 523 | 524) {
+            format!("{}: servico indisponivel (HTTP {status})", source.name)
+        } else {
+            format!("{}: HTTP {status}", source.name)
+        });
+    }
+
+    let bytes = response.bytes().await.map_err(|error| {
+        if error.is_timeout() {
+            format!("{}: tempo limite excedido durante o download", source.name)
+        } else {
+            format!("{}: falha ao receber o pacote ({error})", source.name)
+        }
+    })?;
+
+    if bytes.len() > MAX_PACKAGE_BYTES {
+        return Err(format!("{}: pacote excede 64 MB", source.name));
+    }
+    if bytes.len() < 4 || &bytes[..2] != b"PK" {
+        return Err(format!("{}: resposta nao e zip", source.name));
+    }
+
+    Ok(bytes.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steam_pics::{PicsSource, PublicApp, PublicDepot};
+    use std::io::Write;
+
+    const PUBLIC_GID: u64 = 257781644874438846;
+    const OLD_GID: u64 = 3820178394837330515;
+    const APP_ID: &str = "367520";
+
+    /// Um depot windows publicado e um macOS, para o alvo de pontuacao contar
+    /// so o que roda em Windows.
+    fn public_app() -> PublicApp {
+        PublicApp {
+            build_id: "22529139".into(),
+            branch_build_ids: BTreeMap::from([("public".to_string(), "22529139".to_string())]),
+            depots: vec![
+                PublicDepot {
+                    depot_id: 367521,
+                    manifest_gid: PUBLIC_GID,
+                    size: 5231995691,
+                    oslist: Some("windows".into()),
+                    branch_manifests: BTreeMap::from([("public".to_string(), PUBLIC_GID)]),
+                },
+                PublicDepot {
+                    depot_id: 367522,
+                    manifest_gid: 6809616861563627670,
+                    size: 5284750173,
+                    oslist: Some("macos".into()),
+                    branch_manifests: BTreeMap::from([(
+                        "public".to_string(),
+                        6809616861563627670,
+                    )]),
+                },
+            ],
+            source: PicsSource::SteamCmdApi,
+        }
+    }
+
+    fn zip_with_lua(app_id: &str, lua: &str) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
+            writer
+                .start_file::<_, ()>(
+                    format!("{app_id}.lua"),
+                    zip::write::SimpleFileOptions::default(),
+                )
+                .unwrap();
+            writer.write_all(lua.as_bytes()).unwrap();
+            writer.finish().unwrap();
+        }
+        buffer
+    }
+
+    fn stale_zip() -> Vec<u8> {
+        zip_with_lua(APP_ID, &format!("setManifestid(367521,\"{OLD_GID}\")"))
+    }
+
+    fn current_zip() -> Vec<u8> {
+        zip_with_lua(APP_ID, &format!("setManifestid(367521,\"{PUBLIC_GID}\")"))
+    }
+
+    fn source(name: &'static str, requires_tls: bool) -> ManifestSource {
+        ManifestSource {
+            name,
+            url: "https://example.test/<appid>.zip",
+            requires_tls,
+            success_code: 200,
+            unavailable_code: 404,
+        }
+    }
+
+    #[test]
+    fn parses_manifest_ids_from_pinned_and_commented_lines() {
+        let lua = concat!(
+            "addappid(367520)\n",
+            "addappid(367521,1,\"deadbeef\")\n",
+            "--setManifestid(367521,\"3820178394837330515\",7972875944)\n",
+            "setManifestid(367522,\"6809616861563627670\")\n",
+            "-- comentario solto sem manifest\n",
+        );
+        let manifests = parse_set_manifest_ids(lua);
+        assert_eq!(manifests.get(&367521), Some(&3820178394837330515));
+        assert_eq!(manifests.get(&367522), Some(&6809616861563627670));
+        assert_eq!(manifests.len(), 2);
+    }
+
+    #[test]
+    fn lua_from_zip_prefers_the_file_named_after_the_app() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
+            let options = zip::write::SimpleFileOptions::default();
+            writer.start_file::<_, ()>("999.lua", options).unwrap();
+            writer.write_all(b"setManifestid(1,\"1\")").unwrap();
+            writer
+                .start_file::<_, ()>(format!("{APP_ID}.lua"), options)
+                .unwrap();
+            writer.write_all(b"setManifestid(2,\"2\")").unwrap();
+            writer.finish().unwrap();
+        }
+
+        let lua = lua_from_zip(APP_ID, &buffer).unwrap();
+        assert_eq!(parse_set_manifest_ids(&lua).get(&2), Some(&2));
+    }
+
+    #[test]
+    fn the_package_matching_the_public_gid_wins_even_coming_last() {
+        let app = public_app();
+        let mut selection = Selection::new(APP_ID, Some(&app));
+
+        selection.offer(&source("Stale", true), stale_zip());
+        assert_eq!(selection.best.as_ref().unwrap().source, "Stale");
+
+        selection.offer(&source("Current", true), current_zip());
+
+        let winner = selection.finish().unwrap();
+        assert_eq!(winner.source, "Current");
+        assert_eq!(winner.score, 1);
+    }
+
+    #[test]
+    fn a_tie_keeps_the_earlier_source_so_the_tls_one_wins() {
+        let app = public_app();
+        let mut selection = Selection::new(APP_ID, Some(&app));
+
+        selection.offer(&source("Tls", true), current_zip());
+        selection.offer(&source("Plain", false), current_zip());
+
+        assert_eq!(selection.finish().unwrap().source, "Tls");
+    }
+
+    #[test]
+    fn a_source_without_tls_is_refused_when_nothing_matches_the_public_manifest() {
+        let app = public_app();
+        let mut selection = Selection::new(APP_ID, Some(&app));
+
+        selection.offer(&source("Plain", false), stale_zip());
+
+        let error = selection.finish().unwrap_err();
+        assert!(
+            error.contains("nao confere com o manifest publico"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_source_without_tls_is_accepted_once_it_matches_the_public_manifest() {
+        let app = public_app();
+        let mut selection = Selection::new(APP_ID, Some(&app));
+
+        selection.offer(&source("Plain", false), current_zip());
+
+        let winner = selection.finish().unwrap();
+        assert_eq!(winner.source, "Plain");
+        assert_eq!(winner.score, 1);
+    }
+
+    #[test]
+    fn without_pics_a_stale_package_is_still_accepted_from_a_tls_source() {
+        // Sem PICS nao ha como pontuar nada; recusar aqui deixaria o usuario sem
+        // download nenhum quando o `api.steamcmd.net` estivesse fora.
+        let mut selection = Selection::new(APP_ID, None);
+
+        selection.offer(&source("Tls", true), stale_zip());
+
+        let winner = selection.finish().unwrap();
+        assert_eq!(winner.source, "Tls");
+        assert_eq!(winner.score, 0);
+    }
+
+    #[test]
+    fn without_pics_a_source_without_tls_is_never_accepted() {
+        let mut selection = Selection::new(APP_ID, None);
+
+        selection.offer(&source("Plain", false), current_zip());
+
+        assert!(selection.finish().is_err());
+    }
+
+    #[test]
+    fn the_search_stops_once_every_windows_depot_matches() {
+        let app = public_app();
+        let mut selection = Selection::new(APP_ID, Some(&app));
+        // O depot macOS do PICS nao entra no alvo; exigir os dois faria a busca
+        // nunca se dar por satisfeita e sempre contatar a fonte sem TLS.
+        assert_eq!(selection.target, Some(1));
+        assert!(!selection.is_settled());
+
+        selection.offer(&source("Stale", true), stale_zip());
+        assert!(!selection.is_settled());
+
+        selection.offer(&source("Current", true), current_zip());
+        assert!(selection.is_settled());
+    }
+
+    #[test]
+    fn without_pics_the_search_never_settles_early() {
+        let mut selection = Selection::new(APP_ID, None);
+        selection.offer(&source("Tls", true), current_zip());
+        assert!(!selection.is_settled());
+    }
+
+    #[test]
+    fn an_https_url_is_accepted_and_a_plain_one_only_for_a_source_without_tls() {
+        let tls = source("Tls", true);
+        let plain = source("Plain", false);
+
+        assert!(validate_source_url(&tls, "https://example.test/1.zip"));
+        assert!(!validate_source_url(&tls, "http://198.51.100.7/1"));
+        assert!(validate_source_url(&plain, "http://198.51.100.7/1"));
+        assert!(!validate_source_url(&plain, "ftp://example.test/1.zip"));
+        assert!(!validate_source_url(&plain, "nao e uma url"));
+    }
+
+    /// Smoke test contra as fontes reais. `#[ignore]` porque depende de rede e
+    /// de servicos de terceiros; roda com
+    /// `cargo test --lib -- --ignored real_sources`.
+    ///
+    /// Existe porque a feature inteira depende de dois endpoints vivos
+    /// (`api.steamcmd.net` e o proxy do LuaTools). Quando um deles sair do ar ou
+    /// mudar de formato, os testes offline continuam verdes e so este acusa.
+    #[test]
+    #[ignore = "depende de rede"]
+    fn real_sources_still_deliver_the_current_public_build() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        // Um app de depot unico e um de muitos depots com varios SO.
+        for app_id in ["367520", "1091500"] {
+            let public = runtime
+                .block_on(crate::steam_pics::fetch_steamcmd_app(app_id))
+                .unwrap_or_else(|| panic!("api.steamcmd.net deve responder para {app_id}"));
+
+            let winner = runtime
+                .block_on(best_package(app_id, Some(&public)))
+                .unwrap_or_else(|error| panic!("nenhuma fonte serviu {app_id}: {error}"));
+            let manifests = parse_set_manifest_ids(
+                &lua_from_zip(app_id, &winner.zip)
+                    .unwrap_or_else(|| panic!("pacote de {app_id} deve conter o .lua")),
+            );
+
+            let checked = manifests
+                .iter()
+                .filter(|(depot_id, _)| public.public_gid(**depot_id).is_some())
+                .inspect(|(depot_id, manifest_id)| {
+                    assert_eq!(
+                        public.public_gid(**depot_id),
+                        Some(**manifest_id),
+                        "app {app_id}, fonte '{}': depot {depot_id} veio de build antiga",
+                        winner.source
+                    );
+                })
+                .count();
+            assert!(
+                checked > 0,
+                "app {app_id}: nenhum depot do pacote existe no PICS, nada foi verificado"
+            );
+        }
+    }
+}

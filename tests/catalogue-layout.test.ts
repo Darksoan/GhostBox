@@ -27,15 +27,22 @@ describe("Catalogue filter search layout", () => {
     expect(catalogueOverrideColors).not.toContain("var(--text-primary)");
   });
 
-  it("keeps the filter searchbar at the surface-option-hover token on hover", () => {
+  it("steps the filter searchbar up from its panel on hover and focus", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     let defaultBackground: string | undefined;
+    let panelBackground: string | undefined;
     const interactiveBackgrounds: string[] = [];
 
     stylesheet.walkRules((rule) => {
       if (rule.selector === ".catalogue-filter-section__search") {
         rule.walkDecls("background", (declaration) => {
           defaultBackground = declaration.value;
+        });
+      }
+
+      if (rule.selector === ".catalogue-filter-section__content") {
+        rule.walkDecls("background", (declaration) => {
+          panelBackground = declaration.value;
         });
       }
 
@@ -46,8 +53,19 @@ describe("Catalogue filter search layout", () => {
       }
     });
 
-    expect(defaultBackground).toBe("var(--surface-option-hover)");
-    expect(interactiveBackgrounds).toEqual(["var(--surface-option-hover)"]);
+    // #151515 em repouso, #1a1a1a em hover/foco — degraus C3 e C4 da rampa.
+    expect(defaultBackground).toBe("var(--surface-raised)");
+    expect(interactiveBackgrounds).toEqual(["var(--dropdown-option-hover)"]);
+    // O painel não pode empatar com o campo, senão o campo some no fundo.
+    expect(panelBackground).not.toBe(defaultBackground);
+  });
+
+  it("drops the focus ring from the filter searchbar", () => {
+    const css = compile("src/app.scss").css;
+
+    expect(css).not.toContain(
+      ".catalogue-filter-section__search:focus-visible {\n  outline:"
+    );
   });
 
   it("keeps catalogue cards keyboard-operable with a native primary button", () => {

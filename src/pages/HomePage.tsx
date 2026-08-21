@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -23,6 +23,7 @@ import {
 } from "../components/ui/LoadingStates";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Shelf } from "../components/ui/Shelf";
+import { useAppData } from "../context/AppDataContext";
 import { useSettings } from "../context/settings";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useHomeShelves, type HomeShelf } from "../hooks/useHomeShelves";
@@ -102,12 +103,14 @@ const homeTopRatedPrimaryPillCount = 3;
 const homeTopRatedSecondaryPillCount = 2;
 const homeRecommendedHeroPreloadLimit = 8;
 // Cards de recomendados visíveis por vez. Também é o piso para as setas
-// aparecerem: com pool menor ou igual a isto não há o que rolar.
-const homeRecommendedCardCount = 3;
-// Cards de "Bem avaliados" visíveis por página do carrossel. Com a review de
-// jogador embaixo da arte o card fica alto; três por tela é o que mantém a
-// citação legível sem espremer.
-const homeTopRatedCardCount = 3;
+// aparecerem: com pool menor ou igual a isto não há o que rolar. Vale a janela
+// larga (4 colunas, ver `@media (min-width: 1400px)` em app.scss): é a contagem
+// de skeletons, e com 3 a quarta coluna ficava vazia durante o carregamento.
+// Na janela estreita o quarto skeleton só fica fora da área visível do rail.
+const homeRecommendedCardCount = 4;
+// Cards de "Bem avaliados" visíveis por página do carrossel. Mesma contagem do
+// rail de recomendados — os dois rails compartilham a grade de colunas.
+const homeTopRatedCardCount = 4;
 // Teto do texto da descrição curta. O card fecha em duas linhas via
 // `-webkit-line-clamp`; o corte aqui garante reticências mesmo quando o
 // navegador não aplica as do clamp (texto de uma linha só, muito longo).
@@ -489,24 +492,22 @@ function HomeTopRatedCard({
   const handleClick = () => onOpenGame(game);
 
   return (
-    <div
-      className="home-top-rated-card"
-      role="button"
-      tabIndex={0}
-      aria-label={game.title}
-      onClick={handleClick}
-      onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
-        event.preventDefault();
-        onGameContextMenu(game, event.clientX, event.clientY);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+    <div className="home-top-rated-card">
+      {/* Alvo de clique cobre o card inteiro (arte + review), mas fica fora da
+          árvore de conteúdo: a review é texto irmão, não descendente, então
+          continua legível por leitor de tela em vez de virar parte do nome
+          acessível do botão (ou de ser engolida pelo `aria-label`). */}
+      <button
+        type="button"
+        className="home-top-rated-card__hit"
+        aria-label={game.title}
+        onClick={handleClick}
+        onContextMenu={(event) => {
+          if (!onGameContextMenu) return;
           event.preventDefault();
-          handleClick();
-        }
-      }}
-    >
+          onGameContextMenu(game, event.clientX, event.clientY);
+        }}
+      />
       <span
         className={`home-top-rated-card__art${
           loaded ? " home-top-rated-card__art--loaded" : ""
@@ -1045,7 +1046,7 @@ function HomePersonalCalendar({
 
               return (
                 <section className="home-calendar-day" key={date} aria-label={date}>
-                  <h4 className="home-calendar-day__title">{date}</h4>
+                  <h3 className="home-calendar-day__title">{date}</h3>
                   <div className="home-calendar-day__games">
                     {Array.from({ length: gamesPerDay }, (_, gameIndex) => {
                       const game = dayGames[gameIndex];
@@ -1169,17 +1170,6 @@ function homeBannerArtSources(game: GhostBoxGame) {
   ];
 }
 
-function homeBannerReviewCount(game: GhostBoxGame) {
-  const count = game.steamReviewCount ?? game.recommendations ?? 0;
-  return count > 0 ? count : 0;
-}
-
-function formatHomeBannerCount(count: number, language: "pt" | "en") {
-  return new Intl.NumberFormat(language === "en" ? "en-US" : "pt-BR").format(
-    count
-  );
-}
-
 /**
  * Camada de arte do banner. Todas as fatias da janela ficam montadas ao mesmo
  * tempo e só trocam de opacidade — é o que permite o cross-fade; desmontar a
@@ -1251,7 +1241,6 @@ function HomeRecommendedHero({
 
     return (
       <section className="home-banner" aria-label={title}>
-        <SectionHeader title={title} />
         <div className="home-banner__frame home-banner__frame--skeleton" />
       </section>
     );
@@ -1261,12 +1250,17 @@ function HomeRecommendedHero({
   const game = games[safeIndex];
   const hasControls = games.length > 1;
   const developer = (game.developers ?? []).filter(Boolean)[0] ?? "";
-  const reviewCount = homeBannerReviewCount(game);
-  const reviewLabel = reviewCount
-    ? t(reviewCount === 1 ? "home.bannerReviewsOne" : "home.bannerReviews", {
-        count: formatHomeBannerCount(reviewCount, language),
-      })
-    : "";
+  const { availableLibraryGameAppIds, addingGameId, queueGame } = useAppData();
+  const isInLibrary = availableLibraryGameAppIds.has(game.appId);
+  const isAdding = addingGameId === game.id;
+  const addLabel =
+    language === "en"
+      ? isInLibrary
+        ? "In library"
+        : "Add to library"
+      : isInLibrary
+        ? "Na biblioteca"
+        : "Adicionar à biblioteca";
 
   const go = (step: 1 | -1) => {
     setDirection(step);
@@ -1292,7 +1286,8 @@ function HomeRecommendedHero({
       aria-label={title}
       aria-roledescription="carousel"
     >
-      <SectionHeader title={title} />
+      {/* Sem heading visível: o banner é full-bleed e abre a aba colado no topo.
+          `title` segue como `aria-label` da seção. */}
       <div className="home-banner__frame" data-direction={direction}>
         <button
           type="button"
@@ -1327,9 +1322,6 @@ function HomeRecommendedHero({
             {developer ? (
               <span className="home-banner__developer">{developer}</span>
             ) : null}
-            {reviewLabel ? (
-              <span className="home-banner__reviews">{reviewLabel}</span>
-            ) : null}
           </span>
         </button>
         {hasControls ? (
@@ -1362,6 +1354,23 @@ function HomeRecommendedHero({
             </span>
           </>
         ) : null}
+        <div className="home-banner__actions" aria-label={addLabel}>
+          <button
+            type="button"
+            className="home-banner__action home-banner__action--library"
+            aria-label={addLabel}
+            aria-busy={isAdding}
+            disabled={isInLibrary || isAdding}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (isInLibrary || isAdding) return;
+              void queueGame(game);
+            }}
+          >
+            <Plus size={16} strokeWidth={2} aria-hidden="true" />
+            <span>{addLabel}</span>
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -1534,13 +1543,6 @@ function HomeWishlistCardComponent({
   const coverSources = homeWishlistCoverSources(game);
   const sources = useCachedImageSources(coverSources);
   const { source: imageSource, loaded } = useLoadableImageCover(sources);
-  const recommendedTitle = getDisplayGameTitle(
-    game,
-    language === "en" ? "Steam recommendation" : "Recomendação da Steam"
-  );
-  const tags = [...game.tags, ...game.genres]
-    .filter(Boolean)
-    .slice(0, 3);
 
   const handleClick = () => onOpenGame(game);
   const handleContextMenu = (event: React.MouseEvent) => {
@@ -1550,24 +1552,17 @@ function HomeWishlistCardComponent({
   };
 
   return (
-    <div
-      className="home-wishlist-card"
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          handleClick();
-        }
-      }}
-    >
-      <span className="home-wishlist-card__content">
-        <strong className="home-wishlist-card__title">
-          {recommendedTitle}
-        </strong>
-      </span>
+    <div className="home-wishlist-card">
+      {/* Mesmo padrão do card de "Bem avaliados": botão cobre o card inteiro,
+          review fica fora dele como texto irmão em vez de definir o nome
+          acessível do controle. */}
+      <button
+        type="button"
+        className="home-wishlist-card__hit"
+        aria-label={game.title}
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+      />
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span
           className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : ""}`}
@@ -1583,15 +1578,6 @@ function HomeWishlistCardComponent({
         </span>
         <span className="home-wishlist-card__details">
           <HomePlayerReview game={game} language={language} />
-          {tags.length > 0 && (
-            <span className="home-wishlist-card__tags">
-              {tags.map((tag) => (
-                <span key={tag} className="home-wishlist-card__tag">
-                  {tag}
-                </span>
-              ))}
-            </span>
-          )}
         </span>
       </span>
     </div>
@@ -2038,15 +2024,6 @@ export function HomePage({
         title={t("home.recommended")}
         shelf={shelves.recommended}
         language={appearance.language}
-        onOpenGame={onOpenGame}
-        onGameContextMenu={handleGameContextMenu}
-      />
-      <HomeGameShelf
-        title={t("home.trending")}
-        shelf={shelves.trending}
-        language={appearance.language}
-        showMetadata={false}
-        variant="portrait"
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

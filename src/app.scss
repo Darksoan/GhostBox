@@ -801,6 +801,16 @@ p {
   padding-right: 0;
 }
 
+/* Mesmo motivo do perfil: o banner da Home é full-bleed e a faixa de 12px o
+   faria parar antes da borda direita — bleed de um lado só lê como erro de
+   alinhamento. O gutter lateral das outras seções da Home vem do próprio
+   `.home-page`, simétrico. Classe dobrada de propósito: assim a regra também
+   vence o shorthand de `.page` dentro do `@media (max-width: 820px)`, que vem
+   depois no arquivo e reporia os 12px. */
+.page.page--home {
+  padding-right: 0;
+}
+
 // Keep-alive tab wrappers use the HTML hidden attribute to stay mounted but
 // inactive. `.page` sets `display: flex`, which would override the UA
 // `hidden { display: none }` rule, so re-assert it here with equal specificity.
@@ -2661,8 +2671,14 @@ p {
   width: 100%;
   min-height: 100%;
   height: auto;
-  padding: var(--home-page-block-start-padding) 0 var(--page-bottom-space);
-  @include mixins.content-cap(var(--home-page-inline-padding));
+  /* Gutter constante, sem `content-cap`: o teto de largura passou pras seções
+     (`.home-page > section` abaixo). O banner é full-bleed e precisa cancelar o
+     recuo lateral da página com margem negativa — só dá pra fazer isso contra um
+     valor fixo. Com o `content-cap` aqui, o recuo era `max(12px, (100% - teto)/2)`
+     e o `100%` do filho resolve contra a caixa de conteúdo já descontada, então
+     a margem negativa nunca fechava a conta na janela larga. */
+  padding: var(--home-page-block-start-padding) var(--home-page-inline-padding)
+    var(--page-bottom-space);
   background: var(--background-dark);
   /* `clip` e não `hidden`: com `overflow-x: hidden` a spec computa o
      `overflow-y: visible` como `auto`, e a Home virava scroller próprio — a
@@ -2671,9 +2687,18 @@ p {
   overflow-y: visible;
 }
 
-/* Sem bump de inset ao maximizar: o respiro lateral agora vem do próprio
-   `content-cap`, que trava a coluna em `--content-max-width` e joga a sobra
-   pras margens. Somar inset por cima disso só estreitaria o conteúdo. */
+/* Sem bump de inset ao maximizar: o respiro lateral vem do teto de largura, que
+   trava a coluna em `--content-max-width` e joga a sobra pras margens. Somar
+   inset por cima disso só estreitaria o conteúdo.
+
+   O teto vive nas seções, não na página, para o banner poder sair dele. O
+   `:not()` isenta o banner em vez de deixá-lo sobrescrever depois: `> section`
+   carrega um seletor de tipo e venceria `.home-banner` por especificidade. */
+.home-page > section:not(.home-banner) {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+}
 
 .home-page--maximized .home-category__games .home-category-card__cover,
 .home-page--maximized
@@ -2746,13 +2771,6 @@ p {
    recomendados vem do bloco de texto, não da arte. */
 .home-recommended__track .home-category-card__cover {
   aspect-ratio: 460 / 215;
-}
-
-/* Prateleiras de capa vertical (`hero_capsule`, 374x448) — hoje "Em alta
-   agora". O rail é compartilhado com as outras prateleiras (mesmo `blockName`),
-   por isso as regras pendem do modificador e não do track. */
-.home-recommended__track .home-category-card--portrait .home-category-card__cover {
-  aspect-ratio: 374 / 448;
 }
 
 
@@ -2831,11 +2849,20 @@ p {
 
 /* Banner de recomendados: uma arte larga por vez, navegada pelos chevrons. Fica
    na mesma coluna das outras seções da Home (mesmo inset), sem full-bleed. */
+/* Full-bleed: encosta nas quatro bordas da área de conteúdo. Sai do teto de
+   largura das outras seções e cancela o gutter da página com margem negativa —
+   é arte de topo de página, não um card. Sem `SectionHeader`: o banner abre a
+   aba direto, colado no topo do scroller. */
 .home-banner {
   position: relative;
   @include mixins.section-column;
-  gap: var(--home-section-heading-gap);
-  padding-inline: var(--home-content-inline-inset);
+  /* `width: auto` cancela o `width: 100%` do mixin. Com largura explícita a
+     margem negativa só deslocava o banner para a esquerda, deixando o mesmo
+     vão do outro lado; em `auto` o `align-items: stretch` da página resolve a
+     largura como caixa de conteúdo + as duas margens, que é o full-bleed. */
+  width: auto;
+  margin-inline: calc(-1 * var(--home-page-inline-padding));
+  padding-inline: 0;
 }
 
 .home-banner__frame {
@@ -2845,7 +2872,9 @@ p {
   max-height: 420px;
   /* Aspecto da `library_hero` (1920x620) — a arte preenche sem letterbox. */
   aspect-ratio: 1920 / 620;
-  border-radius: var(--radius-lg);
+  /* Sem raio: encostando na borda da janela, canto arredondado deixaria um
+     triângulo de fundo em cada quina. */
+  border-radius: 0;
   background: var(--c-1);
 }
 
@@ -2877,7 +2906,6 @@ p {
   transition:
     opacity 0.26s var(--ease),
     transform 0.26s var(--ease);
-  will-change: opacity, transform;
 }
 
 .home-banner__art--active {
@@ -2921,15 +2949,20 @@ p {
   animation-name: home-banner-info-in-back;
 }
 
+/* Clamp em duas linhas, não corte de uma: em janela estreita `--home-banner__info`
+   ocupa ~330px (46% de um frame de 720px) e um título comum já não cabe numa
+   linha só. O botão carrega o nome inteiro no `aria-label`; isto é só o texto
+   visível. */
 .home-banner__title {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--text-primary);
   font-size: var(--fs-700);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--ls-700);
   line-height: var(--lh-700);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .home-banner__developer {
@@ -2938,36 +2971,43 @@ p {
   line-height: var(--lh-300);
 }
 
-.home-banner__reviews {
-  color: var(--text-tertiary);
-  font-size: var(--fs-200);
-  line-height: var(--lh-200);
-}
-
 .home-banner__arrow {
   position: absolute;
   top: 50%;
   z-index: 2;
   display: grid;
-  width: 40px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-lg);
-  background: rgb(0 0 0 / 0.32);
-  color: var(--text-secondary);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
   cursor: pointer;
   line-height: 1;
-  transform: translateY(-50%);
+  opacity: 0;
+  filter: drop-shadow(0 1px 8px rgb(0 0 0 / 0.7)) drop-shadow(0 0 1px rgb(0 0 0 / 0.85));
+  transform: translateY(-50%) translateY(4px);
   transition:
-    background var(--motion-fast) var(--ease),
+    opacity var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease),
-    transform var(--motion-base) var(--ease-out);
+    transform var(--motion-fast) var(--ease);
+
+  /* Some por padrão — só a passagem do mouse pelo frame (ou foco de teclado
+     na própria seta) revela os controles. Entrada sobe 4px com ease-out
+     (decelera ao chegar); saída é só opacidade encolhendo com ease-in, sem
+     percurso, para não competir com o hover que a substitui. */
+  .home-banner__frame:hover &,
+  &:focus-visible {
+    opacity: 1;
+    transform: translateY(-50%) translateY(0);
+    transition-timing-function: var(--ease-out);
+  }
 
   &:hover,
   &:focus-visible {
-    background: rgb(0 0 0 / 0.52);
+    background: transparent;
     color: var(--text-primary);
   }
 
@@ -2984,23 +3024,28 @@ p {
     height: 24px;
   }
 
+  /* Mesmo recuo dos dots: com o banner encostando na borda da janela, os dois
+     controles precisam compartilhar uma margem só. */
   &--prev {
-    left: var(--space-6);
+    left: var(--space-10);
   }
 
   &--next {
-    right: var(--space-6);
+    right: var(--space-10);
   }
 }
 
 .home-banner__dots {
   position: absolute;
-  right: var(--space-10);
-  bottom: var(--space-10);
+  left: 50%;
+  right: auto;
+  bottom: var(--space-6);
   z-index: 2;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-3);
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -3017,6 +3062,90 @@ p {
 .home-banner__dot--active {
   width: 18px;
   background: var(--text-primary);
+}
+
+.home-banner__actions {
+  position: absolute;
+  right: var(--space-10);
+  bottom: var(--space-6);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) var(--ease),
+    transform var(--motion-fast) var(--ease);
+
+  .home-banner__frame:hover &,
+  .home-banner__frame:focus-within &,
+  &:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    transition-timing-function: var(--ease-out);
+  }
+}
+
+.home-banner__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-300);
+  font-weight: var(--weight-medium);
+  line-height: var(--lh-300);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    opacity var(--motion-fast) var(--ease);
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+
+  &--library {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--background-dark);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: color-mix(in srgb, var(--text-primary) 88%, var(--black) 12%);
+      border-color: color-mix(in srgb, var(--text-primary) 88%, var(--black) 12%);
+    }
+  }
+
+  &--details {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: var(--background-dark);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: color-mix(in srgb, var(--text-primary) 88%, var(--black) 12%);
+      border-color: color-mix(in srgb, var(--text-primary) 88%, var(--black) 12%);
+    }
+  }
 }
 
 @keyframes home-banner-info-in {
@@ -3066,7 +3195,9 @@ p {
   }
 
   .home-banner__arrow,
-  .home-banner__dot {
+  .home-banner__dot,
+  .home-banner__actions,
+  .home-banner__action {
     transition: none;
   }
 
@@ -3355,12 +3486,29 @@ p {
   transition: background var(--motion-base) var(--ease);
 
   &:hover {
-    background: var(--surface-option-hover);
+    background: var(--surface-raised);
   }
+}
+
+/* Alvo de clique/foco do card inteiro — ver comentário acima do JSX
+   (`HomeTopRatedCard`) sobre por que fica fora da árvore de conteúdo.
+   `outline-offset` negativo, não positivo: o card pai recorta com
+   `overflow: hidden`, e um anel saindo para fora do próprio botão some sob
+   esse recorte. */
+.home-top-rated-card__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 
   &:focus-visible {
     outline: 2px solid var(--icon-default);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
 }
 
@@ -3859,10 +4007,6 @@ p {
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
   transition: background var(--motion-fast) var(--ease);
-
-  &:hover {
-    background: var(--sidebar-selector);
-  }
 }
 
 .home-calendar-day__title {
@@ -4009,13 +4153,30 @@ p {
   isolation: isolate;
   transition: background var(--motion-base) var(--ease);
 
+  &:hover {
+    background: var(--surface-raised);
+  }
+}
+
+/* Alvo de clique/foco do card inteiro — mesmo padrão do top-rated (ver comentário
+   lá). `z-index: 2`: dentro do `isolation: isolate` do card, `__media` e
+   `__content` já usam `z-index: 1`, e o botão precisa ficar acima dos dois para
+   capturar o clique. `outline-offset` negativo pelo mesmo motivo: o card recorta
+   com `overflow: hidden`, e offset positivo sumiria sob o recorte. */
+.home-wishlist-card__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+
   &:focus-visible {
     outline: 2px solid var(--icon-default);
-    outline-offset: 2px;
-  }
-
-  &:hover {
-    background: var(--surface-option-hover);
+    outline-offset: -2px;
   }
 }
 
@@ -4102,12 +4263,13 @@ p {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 0 var(--space-4) 0 var(--space-7);
+  padding: var(--space-5) var(--space-4) var(--space-5) var(--space-7);
   background: transparent;
 }
 
 .home-wishlist-card__player-review {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-4);
@@ -4141,6 +4303,7 @@ p {
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
+  margin-top: auto;
 
   img,
   .home-wishlist-card__player-review-avatar {
@@ -7066,6 +7229,19 @@ p {
   }
 }
 
+/* Entrada do painel de filtro: desce 4px enquanto aparece, sinalizando que saiu
+   da pílula logo acima. Curta de propósito — abre a cada clique na barra. */
+@keyframes catalogue-filter-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .catalogue-page {
   display: flex;
   flex-direction: column;
@@ -7106,14 +7282,18 @@ p {
     padding-bottom: var(--page-bottom-space);
   }
 
+  /* Uma linha só: filtros à esquerda, ordenação à direita. `flex-wrap` é a
+     válvula de escape quando não cabe — a barra de filtros não pode rolar
+     (recortaria os painéis dos dropdowns, ver `.catalogue-filterbar`). */
   &__toolbar {
     display: flex;
     min-width: 0;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-6);
+    gap: var(--space-4) var(--space-6);
     min-height: 36px;
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-6);
   }
 
   &__summary,
@@ -7122,6 +7302,12 @@ p {
     min-width: 0;
     align-items: center;
     gap: var(--space-4);
+  }
+
+  /* Não encolhe: a ordenação tem largura mínima própria e quem cede espaço na
+     linha é a barra de filtros. */
+  &__toolbar-actions {
+    flex: 0 0 auto;
   }
 
   &__summary {
@@ -7147,8 +7333,7 @@ p {
     }
   }
 
-  &__clear-filters,
-  &__filters-toggle {
+  &__clear-filters {
     min-height: 32px;
     padding: 0 var(--space-4);
     border: 0;
@@ -7161,9 +7346,7 @@ p {
   }
 
   &__clear-filters:hover,
-  &__filters-toggle:hover,
-  &__clear-filters:focus-visible,
-  &__filters-toggle:focus-visible {
+  &__clear-filters:focus-visible {
     background: var(--control-hover);
     color: var(--text-primary);
   }
@@ -7194,24 +7377,6 @@ p {
     .settings-dropdown__option {
       min-height: 32px;
       border-radius: var(--radius-md);
-    }
-  }
-
-  &__filters-toggle {
-    display: none;
-    align-items: center;
-    gap: var(--space-3);
-
-    span {
-      display: inline-grid;
-      min-width: 18px;
-      height: 18px;
-      place-items: center;
-      padding: 0 var(--space-2);
-      border-radius: var(--radius-pill);
-      background: var(--text-primary);
-      color: var(--surface-canvas);
-      font-size: var(--type-size-micro);
     }
   }
 
@@ -7280,127 +7445,135 @@ p {
   animation: spin 0.75s linear infinite;
 }
 
-.catalogue-filters {
+/* Barra horizontal de filtros. Divide a linha da toolbar com a ordenação e
+   ocupa a sobra dela.
+
+   Sem `overflow` em nenhum eixo, de propósito: os painéis dos dropdowns são
+   filhos absolutos e, pela spec, declarar `overflow-x` faz o `overflow-y`
+   computar como `auto` mesmo escrito `visible` — a barra virava um scroller e
+   recortava o painel inteiro, que abria e não aparecia. Se as pílulas não
+   couberem, a linha quebra (ver `flex-wrap` na toolbar). */
+.catalogue-filterbar {
   display: flex;
-  /* Antes o painel ficava preso pela cadeia de ancestrais com altura limitada.
-     Agora que o catálogo rola no scroller compartilhado, o pinning é explícito:
-     gruda no topo do scrollport, cuja altura é a janela menos a titlebar. */
-  position: sticky;
-  top: var(--space-4);
-  width: 100%;
-  min-height: 0;
-  height: calc(100dvh - var(--app-header-height) - var(--space-4));
-  /* O `top` precisa entrar na conta: sem isso o painel fica alto demais e o
-     último cartão some atrás da borda de baixo do scroller. */
-  max-height: calc(100dvh - var(--app-header-height) - var(--space-4));
   min-width: 0;
-  flex-direction: column;
-  gap: var(--space-6);
-  overflow-anchor: none;
-  overflow: hidden;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
 
-  &--placeholder {
-    overflow: hidden;
-    background: transparent;
-  }
-
-  &__sections {
-    display: flex;
-    min-height: 0;
-    flex: 0 1 auto;
-    flex-direction: column;
-    gap: var(--space-4);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  &__mobile-header {
-    display: none;
-  }
-
-  &__loading {
-    display: grid;
-    min-height: 160px;
-    place-items: center;
-    gap: var(--space-4);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-secondary);
+  &__error {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    text-align: center;
+  }
+}
 
-    .deferred-page-placeholder__spinner {
-      width: 34px;
-      height: 34px;
-      border-width: 2px;
-    }
+/* Coluna do preview: ocupa a faixa que era dos filtros. `sticky` no topo do
+   scrollport — a listagem rola por baixo e o painel acompanha, que é o
+   "fixado à direita". */
+.catalogue-preview-column {
+  position: sticky;
+  top: var(--space-4);
+  /* Grid de uma célula só, com painel e dica empilhados nela. O painel fica
+     montado durante a saída para o fade acontecer; empilhados, os dois nunca
+     disputam altura — a dica reaparece por baixo conforme o painel some, em vez
+     de ser empurrada para fora da coluna por um painel invisível. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(100dvh - var(--app-header-height) - var(--space-4));
+  overflow: hidden;
+  overflow-anchor: none;
+
+  > * {
+    grid-area: 1 / 1;
   }
 
+  &__idle {
+    padding: var(--space-8) var(--space-6);
+    border-radius: var(--radius-lg);
+    background: var(--surface-secondary);
+    color: var(--text-tertiary);
+    font-size: var(--type-size-compact);
+    line-height: var(--type-line-compact);
+    text-align: center;
+    text-wrap: pretty;
+  }
 }
 
-.catalogue-filters-backdrop {
-  display: none;
-}
-
+/* Item da barra horizontal: gatilho em pílula + painel flutuante. `relative`
+   ancora o painel; `overflow` fica visível de propósito, senão o próprio item
+   recortaria o painel que abre para fora dele. */
 .catalogue-filter-section {
+  position: relative;
   flex: 0 0 auto;
-  overflow: hidden;
   border: 0;
-  border-radius: var(--radius-lg);
+  /* Mesmo raio dos outros controles da página (gatilho de ordenação, "limpar
+     filtros"): a pílula totalmente arredondada destoava do resto do app. */
+  border-radius: var(--radius-md);
   background: var(--surface-secondary);
-  transition: border-color var(--motion-fast) var(--ease);
+  transition: background var(--motion-fast) var(--ease);
+
+  &:hover,
+  &--open {
+    background: var(--control-hover);
+  }
 
   &__header {
     display: flex;
     width: 100%;
-    min-height: 44px;
+    min-height: 34px;
     align-items: center;
-    gap: var(--space-5);
-    padding: 0 var(--space-6);
+    gap: var(--space-4);
+    padding: 0 var(--space-5);
     border: 0;
+    border-radius: inherit;
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
     text-align: left;
+    white-space: nowrap;
     transition: color var(--motion-fast) var(--ease);
+
+    &:focus-visible {
+      outline: 2px solid var(--icon-default);
+      outline-offset: 2px;
+    }
 
     strong {
       @include mixins.truncate;
-      flex: 1;
-      font-size: var(--type-size-body);
+      /* Sem `flex: 1`: na barra horizontal a pílula é dimensionada pelo rótulo.
+         Esticar faria todas as facets terem a mesma largura. */
+      flex: 0 0 auto;
+      font-size: var(--type-size-compact);
       font-weight: var(--weight-medium);
       color: var(--text-secondary);
       transition: color var(--motion-fast) var(--ease);
     }
 
-    span:last-child {
+    /* Contagem de selecionados. Pastilha sólida, não texto solto: na pílula ela
+       fica entre o rótulo e o chevron e precisa ler como valor, não como parte
+       do nome da facet. */
+    span:not(.catalogue-filter-section__orb) {
+      display: inline-grid;
+      min-width: 17px;
+      height: 17px;
       flex-shrink: 0;
-      color: var(--text-secondary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      place-items: center;
+      padding: 0 var(--space-2);
+      border-radius: var(--radius-pill);
+      background: var(--text-primary);
+      color: var(--surface-canvas);
+      font-size: var(--type-size-micro);
+      font-weight: var(--weight-semibold);
       font-variant-numeric: tabular-nums;
       line-height: 1;
-      transition: color var(--motion-fast) var(--ease);
     }
 
     &:hover strong,
     &[aria-expanded="true"] strong {
-      color: var(--text-primary);
-    }
-
-    &:hover span:last-child,
-    &[aria-expanded="true"] span:last-child {
       color: var(--text-primary);
     }
 
@@ -7419,8 +7592,10 @@ p {
       transform var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease);
 
+    /* Chevron aponta para baixo em repouso e vira para cima ao abrir — meia
+       volta, não o quarto de volta do acordeão que a barra lateral usava. */
     &--open {
-      transform: rotate(90deg);
+      transform: rotate(180deg);
       color: var(--text-primary);
     }
   }
@@ -7435,30 +7610,33 @@ p {
     opacity: 1;
   }
 
+  /* Painel flutuante do dropdown. Ancorado na borda esquerda da pílula e
+     desmontado ao fechar (ver JSX), então não precisa de estado colapsado —
+     some do DOM em vez de virar uma faixa de altura zero que ainda intercepta
+     ponteiro e Tab. */
   &__content {
-    display: grid;
-    grid-template-rows: 1fr;
-    border-top: 0;
-    opacity: 1;
-    visibility: visible;
-    transition:
-      grid-template-rows var(--motion-slow) var(--ease),
-      opacity var(--motion-fast) var(--ease),
-      visibility 0s;
+    position: absolute;
+    top: calc(100% + var(--space-3));
+    left: 0;
+    z-index: var(--z-popover);
+    width: max-content;
+    min-width: 240px;
+    max-width: min(340px, 90vw);
+    border-radius: var(--radius-md);
+    /* Um degrau abaixo do `--surface-popover` padrão: o campo de busca dentro
+       deste painel é `--surface-raised` (#151515), que é exatamente o valor de
+       `--surface-popover`. Mantendo os dois iguais o campo sumia no fundo. */
+    background: var(--surface-panel);
+    box-shadow: var(--shadow-2);
+    animation: catalogue-filter-panel-in var(--motion-fast) var(--ease-out) both;
+  }
 
-    &[data-collapsed="true"] {
-      grid-template-rows: 0fr;
-      opacity: 0;
-      pointer-events: none;
-      /* `aria-hidden` já está no elemento; sem isto os inputs de busca dentro
-         da seção fechada continuam alcançáveis por Tab. Some só depois que o
-         colapso termina, senão o fechamento pisca. */
-      visibility: hidden;
-      transition:
-        grid-template-rows var(--motion-slow) var(--ease),
-        opacity var(--motion-fast) var(--ease),
-        visibility 0s var(--motion-slow);
-    }
+  /* Última pílula da barra: o painel ancora pela direita para não sair da
+     página. `:last-child` e não medição em JS — a barra é uma fileira simples e
+     só a ponta final tem esse risco. */
+  &:last-child &__content {
+    right: 0;
+    left: auto;
   }
 
   &__content-inner {
@@ -7466,17 +7644,8 @@ p {
     flex-direction: column;
     gap: var(--space-5);
     min-height: 0;
-    padding: 0 var(--space-6) var(--space-6);
+    padding: var(--space-6);
     overflow: hidden;
-    transition: padding var(--motion-slow) var(--ease);
-
-    /* A faixa em `0fr` zera a altura da track, mas o padding do item de grid
-       fica fora dessa conta e sobra como espaço morto embaixo do cabeçalho.
-       Zerar junto é o que faz o fechamento chegar a 0px de verdade. */
-    [data-collapsed="true"] & {
-      padding-top: 0;
-      padding-bottom: 0;
-    }
   }
 
   &__count {
@@ -7488,8 +7657,11 @@ p {
   &__search {
     width: 100%;
     border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-option-hover);
+    /* Mesmo raio dos outros controles do app, como a pílula e o painel. */
+    border-radius: var(--radius-md);
+    /* `--surface-raised` é o degrau #151515 da rampa C; o painel embaixo fica
+       dois degraus abaixo para o campo ter contorno próprio sem borda. */
+    background: var(--surface-raised);
     color: var(--text-primary);
     font: inherit;
     font-size: var(--type-size-compact);
@@ -7504,14 +7676,13 @@ p {
       font-weight: var(--weight-medium);
     }
 
+    /* `--dropdown-option-hover` é o degrau #1a1a1a — mesmo passo que o resto do
+       dropdown usa em hover. O foco acompanha o hover: sem anel, é a única
+       marca de que o campo está ativo. */
     &:hover,
-    &:focus {
-      background: var(--surface-option-hover);
-    }
-
+    &:focus,
     &:focus-visible {
-      outline: 2px solid var(--icon-default);
-      outline-offset: 2px;
+      background: var(--dropdown-option-hover);
     }
   }
 
@@ -7530,15 +7701,6 @@ p {
     font-weight: var(--weight-medium);
     font-size: var(--type-size-compact);
     line-height: var(--type-line-compact);
-  }
-
-  &__hint {
-    display: block;
-    padding: 0 var(--space-4);
-    color: var(--text-tertiary);
-    font-weight: var(--weight-medium);
-    font-size: var(--type-size-caption);
-    line-height: var(--type-line-caption);
   }
 
   &__year-range {
@@ -7751,18 +7913,19 @@ p {
 /* Flutua colado no cursor, por cima dos cartões da listagem (posição vem do JS,
    em `fixed` contra a janela). Fora da coluna de filtros de propósito: o canto
    de baixo dela fica livre para o dropdown abrir. */
+/* Mora dentro de `.catalogue-preview-column`, que é quem prende no scrollport.
+   Sem `position: fixed` nem cálculo de coordenada: o painel ocupa a coluna
+   inteira e a largura vem do grid da página. */
 .catalogue-hover-preview {
-  position: fixed;
-  z-index: var(--z-overlay);
   display: flex;
-  width: clamp(260px, 24vw, 340px);
-  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+  flex: 0 1 auto;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
   box-shadow: var(--shadow-2);
-  will-change: opacity, transform;
   transition:
     opacity var(--motion-base) var(--ease-out),
     transform var(--motion-base) var(--ease-out);
@@ -7972,7 +8135,8 @@ p {
     margin-top: var(--space-2);
     padding: var(--space-3);
     border-radius: var(--radius-md);
-    background: #151515;
+    /* `--surface-raised` é exatamente o #151515 que estava cru aqui. */
+    background: var(--surface-raised);
   }
 
   &__achievements-label {
@@ -7981,11 +8145,29 @@ p {
     font-weight: var(--weight-medium);
   }
 
+  /* Entrada em grupo, sem stagger. Os seis ícones já chegam decodificados (ver
+     o preload em `CatalogueHoverPreview`), então a linha inteira revela de uma
+     vez — escalonar aqui recriaria justamente o "aparece um por um" que o
+     preload existe para matar, e este é um bloco que dispara a cada hover.
+
+     O transform fica na linha, não em cada ícone: a linha tem `overflow: hidden`
+     e recortaria um ícone deslocado no eixo y. Altura já está reservada pelos
+     40px fixos do ícone, então revelar não empurra nada. */
   &__achievements-row {
     display: flex;
     overflow: hidden;
     align-items: center;
     gap: var(--space-2);
+    opacity: 0;
+    transform: translateY(4px);
+    transition:
+      opacity var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out);
+  }
+
+  &__achievements-row--ready {
+    opacity: 1;
+    transform: translateY(0);
   }
 
   &__achievements-icon {
@@ -7998,6 +8180,12 @@ p {
     border-radius: var(--radius-sm);
     object-fit: cover;
     background: var(--surface-media-letterbox);
+  }
+
+  /* Placeholder enquanto a lista da Steam não volta. Ocupa a mesma caixa de
+     40px do ícone real, então a troca skeleton → ícone não desloca nada. */
+  &__achievements-icon--skeleton {
+    background: var(--skeleton-fill);
   }
 }
 
@@ -8019,6 +8207,18 @@ p {
 
     &__control {
       transition: none;
+    }
+
+    /* Sem percurso: a linha de conquistas só troca de opacidade. O estado
+       oculto continua valendo, senão os ícones voltariam a pintar um a um
+       conforme cada um decodifica. */
+    &__achievements-row {
+      transform: none;
+      transition: opacity var(--motion-fast) var(--ease);
+    }
+
+    &__achievements-row--ready {
+      transform: none;
     }
   }
 }
@@ -8835,7 +9035,7 @@ input[type="search"]::-ms-reveal {
   flex-direction: column;
   flex-shrink: 0;
   justify-content: flex-start;
-  padding: 0 var(--space-10) var(--page-bottom-space);
+  padding: var(--space-8) var(--space-10) var(--page-bottom-space);
   gap: var(--space-8);
   min-height: 100%;
   height: auto;
@@ -9084,6 +9284,51 @@ input[type="search"]::-ms-reveal {
     line-height: var(--type-line-caption);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Aviso de build anterior à pública. Fica abaixo da mensagem de erro e
+     carrega o único botão que vive dentro do conteúdo — por isso precisa do
+     `z-index`, senão o `&__open` que cobre o card inteiro come o clique. */
+  &__stale {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    margin-top: var(--space-1);
+  }
+
+  &__stale-detail {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    line-height: var(--type-line-caption);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__stale-action {
+    flex: none;
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-semibold);
+    line-height: var(--type-line-caption);
+    cursor: pointer;
+    transition: background var(--motion-base) var(--ease);
+
+    &:hover {
+      background: var(--surface-option-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--icon-default);
+      outline-offset: 2px;
+    }
   }
 
   &__controls {
@@ -9408,7 +9653,7 @@ input[type="search"]::-ms-reveal {
        entrada dela, e o texto continua branco nos dois estados. */
     .download-details-modal__danger {
       background: var(--surface-modal-control);
-      color: var(--text-secondary);
+      color: var(--text-primary);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
@@ -9422,6 +9667,7 @@ input[type="search"]::-ms-reveal {
        Fechar sumiria ao ser apontado; sobe junto com o de Desinstalar. */
     .button--outline {
       background: var(--surface-modal-control);
+      color: var(--text-primary);
 
       &:hover {
         background: var(--surface-modal-control-hover);
@@ -11429,28 +11675,11 @@ html.no-backdrop-blur {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 
-  /* Janela larga (maximizada): a Home ganha uma coluna por seção em vez de
-     esticar os cards — grades viram 4x4x6 no rail de recomendados, explorar e
-     categorias. As setas acompanham o inset de 36px, inalterado. Manter em par
-     com `useWidescreen` (mesmo 1400px) em HomePage.tsx, que sobe `maxGames`
-     de 6 para 8 e depende destas 4 colunas para fechar 4x2. */
+  /* Grade morta: nenhum componente da Home renderiza `.home-category__games`
+     hoje (sobra de antes da reformulação em storefront). Deixada como estava —
+     não é escopo desta correção. */
   .home-category__games {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .home-recommended__track .home-category-card {
-    flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
-  }
-
-  /* Capas verticais não ganham a coluna extra: "Em alta agora" fica em três por
-     tela em qualquer largura, na mesma medida do rail de "Bem avaliados" logo
-     abaixo — as duas seções têm que bater coluna a coluna. */
-  .home-recommended__track .home-category-card--portrait {
-    flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3);
-  }
-
-  .home-explore-card {
-    flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 5)) / 6);
   }
 
   /* Janela larga: calendário acompanha quatro cápsulas por linha, como Top
@@ -11475,6 +11704,19 @@ html.no-backdrop-blur {
     padding-inline: 0;
   }
 
+  /* Wishlist em duas colunas na janela larga. Empilhada, cada card ocupava a
+     largura inteira e a citação da review passava de 200 caracteres por linha —
+     medida de leitura ruim justamente onde sobra espaço. Duas colunas resolvem
+     as duas coisas: a linha volta pra ~70 caracteres e a seção ocupa a largura. */
+  /* Sem `align-items: start`: os dois cards da linha são superfícies próprias e
+     alturas desencontradas leem como erro. Esticando, a sobra cai entre citação
+     e autor — o autor já ancora no fim por `margin-top: auto`. */
+  .home-wishlist__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--home-category-gap);
+  }
+
   .catalogue-page__results {
     max-width: 100%;
   }
@@ -11487,6 +11729,46 @@ html.no-backdrop-blur {
 
   .catalogue-list__main {
     grid-template-columns: 224px minmax(0, 1fr);
+  }
+}
+
+/* Breakpoint próprio, mais largo que o resto da Home: em 1400px o container
+   (janela − 280 de sidebar − ~9 de gutter de scrollbar − 24 de padding − 72 de
+   inset da seção) mal passa de 1015px. Picotar isso em 4 colunas em vez de 3 dá
+   card de 246px contra os 331px que a mesma largura já dava em 3 — a coluna
+   nova chega antes de caber, e a régua "breakpoints vêm de conteúdo, não de
+   preset" (`references/layout.md` do skill ultimate-design) pede o oposto.
+
+   1900px é o ponto, calculado (não tentativa): o piso de não-regressão do rail
+   de recomendados/bem-avaliados exige card em 4 colunas ≥ 369px (o platô que
+   3 colunas atinge no teto antigo de 1200px), o que só acontece a partir de
+   ~1892px de janela; o de "Explorar" (6 colunas) destrava mais cedo, ~1742px.
+   1900px cobre os dois com folga. Chegando lá, `--content-max-width` sobe
+   junto — sem isso o teto de 1200px ainda prende o container e a 4ª/6ª coluna
+   picotaria o mesmo espaço estreito de novo.
+
+   Calendário e wishlist ficam de fora por design, não por descuido: os dias do
+   calendário mudam de contagem via `ResizeObserver` na própria régua
+   (`useCalendarVisibleDays` em HomePage.tsx, correto por natureza — já é
+   breakpoint de conteúdo). A wishlist troca de 1 para 2 colunas por motivo de
+   leitura (citação da review capada em ~70 caracteres por linha, ver o
+   comentário no bloco de 1400px acima), não para não encolher card — a
+   redução de largura ali é o objetivo, não o bug. */
+@media (min-width: 1900px) {
+  .home-page {
+    --content-max-width: 1760px;
+  }
+
+  .home-recommended__track .home-category-card {
+    flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+  }
+
+  .home-top-rated-card {
+    flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+  }
+
+  .home-explore-card {
+    flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 5)) / 6);
   }
 }
 
@@ -15404,68 +15686,11 @@ button,
     grid-template-columns: 1fr;
   }
 
-  .catalogue-filters {
-    position: static;
-    height: auto;
-    max-height: none;
-    overflow-y: visible;
-  }
-
-  .catalogue-page__filters-toggle {
-    display: inline-flex;
-  }
-
-  .catalogue-filters {
+  /* Coluna única: some com o preview. Ele é acionado por hover, que não existe
+     em toque, e empilhado embaixo da listagem viraria um bloco morto no fim da
+     página. A barra de filtros continua no topo, rolando na horizontal. */
+  .catalogue-preview-column {
     display: none;
-
-    &.catalogue-filters--open {
-      position: fixed;
-      top: var(--app-header-height);
-      right: 0;
-      bottom: 0;
-      z-index: var(--z-modal);
-      display: flex;
-      width: min(380px, calc(100vw - var(--space-8)));
-      height: auto;
-      max-height: none;
-      padding: var(--space-6);
-      overflow: hidden;
-      background: var(--background-dark);
-      box-shadow: var(--shadow-2);
-    }
-
-    &__mobile-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 36px;
-      color: var(--text-primary);
-
-      button {
-        display: grid;
-        width: 32px;
-        height: 32px;
-        place-items: center;
-        border-radius: var(--radius-md);
-        color: var(--text-secondary);
-        cursor: pointer;
-
-        &:hover,
-        &:focus-visible {
-          background: var(--surface-secondary);
-          color: var(--text-primary);
-        }
-      }
-    }
-  }
-
-  .catalogue-filters-backdrop {
-    position: fixed;
-    inset: var(--app-header-height) 0 0;
-    z-index: calc(var(--z-modal) - 1);
-    display: block;
-    background: color-mix(in srgb, var(--black) 48%, transparent);
-    cursor: pointer;
   }
 }
 
@@ -16463,12 +16688,12 @@ button,
 /* Mesma regra do `game-settings-modal__action-button`: em modal o botão é ação
    direta, então o rótulo fica em `--text-primary` já no repouso. O hover
    continua sinalizado pela superfície. */
-.collection-modal__actions .button,
-.steam-path-modal__actions .button,
-.confirm-modal__actions .button,
-.feedback-modal__actions .button,
-.backup-restore-modal__actions .button,
-.edit-profile-modal .button,
-.modal:not(.modal--details) .button {
+.collection-modal__actions .button:not(.button--primary),
+.steam-path-modal__actions .button:not(.button--primary),
+.confirm-modal__actions .button:not(.button--primary),
+.feedback-modal__actions .button:not(.button--primary),
+.backup-restore-modal__actions .button:not(.button--primary),
+.edit-profile-modal .button:not(.button--primary),
+.modal:not(.modal--details) .button:not(.button--primary) {
   color: var(--text-primary);
 }

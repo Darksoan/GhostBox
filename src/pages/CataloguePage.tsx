@@ -1,10 +1,4 @@
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -228,7 +222,12 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
   onYearRangeChange,
 }: CatalogueFilterSectionProps) {
   const { appearance, t } = useSettings();
-  const [isOpen, setIsOpen] = useState(() => selectedValues.length > 0);
+  // Dropdown, não acordeão: a barra é horizontal e não tem altura para expandir
+  // no fluxo — o painel abre por cima. Fechado por padrão mesmo com seleção
+  // ativa; a contagem no gatilho já sinaliza que o filtro está valendo.
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const contentId = useId();
   const [searchTerm, setSearchTerm] = useState("");
   const deferredSearchTerm = useDeferredValue(searchTerm);
@@ -250,48 +249,74 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
     () => visibleValues.slice(0, maxVisibleFilterOptions),
     [visibleValues]
   );
-  const hiddenValueCount = Math.max(0, visibleValues.length - renderedValues.length);
   const yearValues = useMemo(
     () => (filterKey === "years" ? sortYearValues(values) : []),
     [filterKey, values]
   );
   const selectedCount = filterKey === "years" ? Number(selectedValues.length > 0) : selectedValues.length;
+
+  // Clique fora e Escape fecham. Escape devolve o foco ao gatilho — sem isso o
+  // foco fica no painel que acabou de sair do DOM e o Tab seguinte recomeça do
+  // topo da página.
   useEffect(() => {
-    if (selectedValues.length > 0) setIsOpen(true);
-  }, [selectedValues.length]);
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
 
   return (
-    <section className="catalogue-filter-section">
+    <div
+      ref={rootRef}
+      className={`catalogue-filter-section${
+        isOpen ? " catalogue-filter-section--open" : ""
+      }`}
+    >
       <button
+        ref={triggerRef}
         type="button"
         className="catalogue-filter-section__header"
         onClick={() => setIsOpen((open) => !open)}
+        aria-haspopup="true"
         aria-expanded={isOpen}
         aria-controls={contentId}
       >
-        <ChevronRight
-          className={
-            isOpen
-              ? "catalogue-filter-section__chevron catalogue-filter-section__chevron--open"
-              : "catalogue-filter-section__chevron"
-          }
-          size={16}
-        />
         <span
           className="catalogue-filter-section__orb"
           style={{ ["--filter-orb-color" as string]: filterCategoryColors[filterKey] }}
         />
         <strong>{title}</strong>
         {selectedCount > 0 && <span>{selectedCount}</span>}
+        <ChevronDown
+          className={
+            isOpen
+              ? "catalogue-filter-section__chevron catalogue-filter-section__chevron--open"
+              : "catalogue-filter-section__chevron"
+          }
+          size={14}
+          aria-hidden="true"
+        />
       </button>
 
-      <div
-        className="catalogue-filter-section__content"
-        id={contentId}
-        aria-hidden={!isOpen}
-        data-collapsed={isOpen ? "false" : "true"}
-      >
-        <div className="catalogue-filter-section__content-inner">
+      {/* Painel some do DOM ao fechar, em vez de colapsar com `grid-template-rows`
+          como fazia na barra lateral: flutuando por cima da listagem, um painel
+          de altura zero ainda intercepta ponteiro e Tab. */}
+      {isOpen && (
+        <div className="catalogue-filter-section__content" id={contentId}>
+          <div className="catalogue-filter-section__content-inner">
           {filterKey === "years" && onYearRangeChange ? (
             <CatalogueYearRange
               title={title}
@@ -342,19 +367,12 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
                   </span>
                 )}
               </div>
-              {hiddenValueCount > 0 && (
-                <span className="catalogue-filter-section__hint">
-                  {t("catalogue.filters.showing", {
-                    visible: renderedValues.length,
-                    total: visibleValues.length,
-                  })}
-                </span>
-              )}
             </>
           )}
+          </div>
         </div>
-      </div>
-    </section>
+      )}
+    </div>
   );
 });
 interface CataloguePageProps {
@@ -422,10 +440,6 @@ export function CataloguePage({
   scrollElementRef,
 }: CataloguePageProps) {
   const { t } = useSettings();
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  // O preview pousa sempre nesta faixa: borda direita dentro da coluna de
-  // filtros, cobrindo um pedaço dela.
-  const filtersColumnRef = useRef<HTMLElement | null>(null);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -434,25 +448,18 @@ export function CataloguePage({
     y: number;
     mode: "game" | "collection";
   } | null>(null);
-  // Cursor e cartão viajam junto do jogo: o preview flutua por cima da
-  // listagem, colado no ponteiro, fora da coluna de filtros.
-  const [hoveredPreview, setHoveredPreview] = useState<{
-    game: GhostBoxGame;
-    anchor: HTMLElement | null;
-    pointer: CataloguePreviewPointer | null;
-  } | null>(null);
+  // Só o jogo: o preview mora numa coluna fixa, então não precisa mais saber
+  // de qual cartão veio nem onde o cursor estava.
+  const [hoveredPreview, setHoveredPreview] = useState<GhostBoxGame | null>(
+    null
+  );
   const clearHoveredGame = useCallback(() => setHoveredPreview(null), []);
   const hoverPreviewRetention = useMemo(
     () => createCatalogueHoverPreviewRetention(clearHoveredGame),
     [clearHoveredGame]
   );
   const hoverPreviewIntent = useMemo(
-    () =>
-      createCatalogueHoverPreviewIntent<{
-        game: GhostBoxGame;
-        anchor: HTMLElement | null;
-        pointer: CataloguePreviewPointer | null;
-      }>(setHoveredPreview),
+    () => createCatalogueHoverPreviewIntent<GhostBoxGame>(setHoveredPreview),
     []
   );
   const sortOptions = useMemo(
@@ -607,26 +614,23 @@ export function CataloguePage({
       game: GhostBoxGame | null,
       options?: {
         immediate?: boolean;
+        /* `anchor` e `pointer` continuam no contrato porque `CatalogueList` os
+           envia, mas a coluna fixa não usa nenhum dos dois. */
         anchor?: HTMLElement | null;
         pointer?: CataloguePreviewPointer | null;
         settled?: boolean;
       }
     ) => {
       if (game) {
-        const target = {
-          game,
-          anchor: options?.anchor ?? null,
-          pointer: options?.pointer ?? null,
-        };
         hoverPreviewRetention.cancelClear();
         if (options?.immediate) {
-          hoverPreviewIntent.showImmediately(target);
+          hoverPreviewIntent.showImmediately(game);
         } else {
           // Hover que veio do conteúdo se mexendo espera bem mais: assim a
           // enxurrada de cartões passando sob o cursor comita um preview só,
           // no fim, em vez de um por cartão.
           hoverPreviewIntent.scheduleShow(
-            target,
+            game,
             options?.settled === false
               ? CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS
               : undefined
@@ -719,22 +723,50 @@ export function CataloguePage({
 
   return (
     <section className="catalogue-page">
-      <div className="catalogue-page__content">
-        <div className="catalogue-page__results">
-          <div className="catalogue-page__toolbar">
-            <div className="catalogue-page__summary">
-              {selectedFilterCount > 0 && (
-                <span>
-                  {t("catalogue.filters.selected", { count: selectedFilterCount })}
+      <div className="catalogue-page__toolbar">
+            {/* Filtros e ordenação na mesma linha: os dois são controles da
+                listagem, e separá-los em duas faixas gastava uma linha inteira
+                só para a ordenação. */}
+            <div
+              className="catalogue-filterbar"
+              role="group"
+              aria-label={t("catalogue.filters.label")}
+            >
+              {filtersLoading && !filterSections.length && (
+                <CatalogueFilterSectionsLoadingState />
+              )}
+              {hasFacetsError && !filterSections.length && (
+                <span className="catalogue-filterbar__error">
+                  {t("catalogue.facetsError")}
                 </span>
               )}
-              {refreshing && (
-                <span className="catalogue-page__refreshing" role="status">
-                  {t("loading.catalogue")}
-                </span>
-              )}
+              {filterSections.map((section) => (
+                <CatalogueFilterSection
+                  key={section.key}
+                  title={section.title}
+                  filterKey={section.key}
+                  values={section.values}
+                  selectedValues={filters[section.key]}
+                  onToggle={updateFilter}
+                  onYearRangeChange={
+                    section.key === "years" ? updateYearRange : undefined
+                  }
+                />
+              ))}
             </div>
             <div className="catalogue-page__toolbar-actions">
+              <div className="catalogue-page__summary">
+                {selectedFilterCount > 0 && (
+                  <span>
+                    {t("catalogue.filters.selected", { count: selectedFilterCount })}
+                  </span>
+                )}
+                {refreshing && (
+                  <span className="catalogue-page__refreshing" role="status">
+                    {t("loading.catalogue")}
+                  </span>
+                )}
+              </div>
               <div
                 className={`settings-dropdown catalogue-page__sort ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
                 ref={sortDropdownRef}
@@ -785,19 +817,11 @@ export function CataloguePage({
                   {t("catalogue.filters.clearAll")}
                 </button>
               )}
-              <button
-                type="button"
-                className="catalogue-page__filters-toggle"
-                aria-expanded={isFiltersOpen}
-                aria-controls="catalogue-filters-panel"
-                onClick={() => setIsFiltersOpen((open) => !open)}
-              >
-                <SlidersHorizontal size={16} aria-hidden="true" />
-                {t("catalogue.filters.label")}
-                {selectedFilterCount > 0 && <span>{selectedFilterCount}</span>}
-              </button>
             </div>
-          </div>
+      </div>
+
+      <div className="catalogue-page__content">
+        <div className="catalogue-page__results">
           {hasRefreshError && (
             <div className="catalogue-page__notice" role="alert">
               <span>{t("catalogue.refreshError")}</span>
@@ -853,65 +877,25 @@ export function CataloguePage({
           )}
         </div>
 
-        {isFiltersOpen && (
-          <button
-            type="button"
-            className="catalogue-filters-backdrop"
-            aria-label={t("catalogue.filters.label")}
-            onClick={() => setIsFiltersOpen(false)}
-          />
-        )}
+        {/* Coluna do preview: ocupa a faixa onde antes ficavam os filtros. Fica
+            montada mesmo sem hover para a listagem não mudar de largura toda vez
+            que o cursor entra e sai de um card. */}
         <aside
-          ref={filtersColumnRef}
-          id="catalogue-filters-panel"
-          className={`catalogue-filters ${isFiltersOpen ? "catalogue-filters--open" : ""}`}
-          aria-label={t("catalogue.filters.label")}
+          className="catalogue-preview-column"
+          aria-label={t("catalogue.preview.columnLabel")}
         >
-          <div className="catalogue-filters__mobile-header">
-            <strong>{t("catalogue.filters.label")}</strong>
-            <button
-              type="button"
-              aria-label={t("catalogue.filters.label")}
-              onClick={() => setIsFiltersOpen(false)}
-            >
-              <X size={18} aria-hidden="true" />
-            </button>
-          </div>
-          <div className="catalogue-filters__sections">
-            {filtersLoading && !filterSections.length && <CatalogueFilterSectionsLoadingState />}
-            {hasFacetsError && !filterSections.length && (
-              <EmptyState
-                title={t("catalogue.filters.label")}
-                description={t("catalogue.facetsError")}
-                actionLabel={onRetry ? t("catalogue.errorRetry") : undefined}
-                onAction={onRetry}
-              />
-            )}
-            {filterSections.map((section) => (
-              <CatalogueFilterSection
-                key={section.key}
-                title={section.title}
-                filterKey={section.key}
-                values={section.values}
-                selectedValues={filters[section.key]}
-                onToggle={updateFilter}
-                onYearRangeChange={
-                  section.key === "years" ? updateYearRange : undefined
-                }
-              />
-            ))}
-          </div>
+          <CatalogueHoverPreview
+            game={hoveredPreview}
+            onPointerEnter={handlePreviewPointerEnter}
+            onPointerLeave={handlePreviewPointerLeave}
+          />
+          {!hoveredPreview && (
+            <p className="catalogue-preview-column__idle">
+              {t("catalogue.preview.idleHint")}
+            </p>
+          )}
         </aside>
       </div>
-
-      <CatalogueHoverPreview
-        game={hoveredPreview?.game ?? null}
-        anchor={hoveredPreview?.anchor ?? null}
-        columnRef={filtersColumnRef}
-        pointer={hoveredPreview?.pointer ?? null}
-        onPointerEnter={handlePreviewPointerEnter}
-        onPointerLeave={handlePreviewPointerLeave}
-      />
 
       {contextMenu && contextMenuItems.length > 0 && (
         <ContextMenu

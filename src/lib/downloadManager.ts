@@ -19,6 +19,26 @@ export type DownloadSteamIntegration = {
   requiresSteamRestart?: boolean;
 };
 
+export type StaleManifestDepot = {
+  depotId: number;
+  /** Manifest que seria baixado. String: não cabe em `number` sem perder dígito. */
+  manifestId: string;
+  /** Manifest do branch `public` segundo o PICS. */
+  publicGid?: string;
+  /** De onde saiu o manifest escolhido: `public-from-cache`, `newest-in-cache`, `lua-pinned`. */
+  tier: string;
+};
+
+/**
+ * O Rust recusou o download porque o manifest mais novo em disco é anterior à
+ * build pública. Guardado na tarefa para a página poder oferecer "baixar mesmo
+ * assim", que repete a chamada com `allowStale`.
+ */
+export type StaleManifestReport = {
+  publicBuildId?: string;
+  depots: StaleManifestDepot[];
+};
+
 export type DownloadTask = {
   id: string;
   appId: string;
@@ -63,6 +83,9 @@ export type DownloadTask = {
   totalBytesAll?: number;
   failedFiles?: number;
   errorMessage?: string;
+  /** Confirmação do usuário para baixar uma build anterior à pública. */
+  allowStale?: boolean;
+  staleManifest?: StaleManifestReport;
 };
 
 const storageKey = "ghostbox:download-tasks:v1";
@@ -327,6 +350,34 @@ function normalizeSteamIntegration(value: unknown): DownloadSteamIntegration | u
   };
 }
 
+/**
+ * Lê o payload `stale-manifest` do Rust. `undefined` para qualquer outro
+ * resultado, então a página só oferece "baixar mesmo assim" quando foi
+ * exatamente essa a recusa.
+ */
+function normalizeStaleManifest(result: Record<string, unknown>): StaleManifestReport | undefined {
+  if (result.Status !== "stale-manifest") return undefined;
+  const rawDepots = Array.isArray(result.Depots) ? result.Depots : [];
+  const depots = rawDepots.flatMap((entry): StaleManifestDepot[] => {
+    if (!entry || typeof entry !== "object") return [];
+    const raw = entry as Record<string, unknown>;
+    if (!isFiniteNumber(raw.DepotId) || typeof raw.ManifestId !== "string") return [];
+    return [
+      {
+        depotId: raw.DepotId,
+        manifestId: raw.ManifestId,
+        publicGid: typeof raw.PublicGid === "string" ? raw.PublicGid : undefined,
+        tier: typeof raw.Tier === "string" ? raw.Tier : "",
+      },
+    ];
+  });
+  if (depots.length === 0) return undefined;
+  return {
+    publicBuildId: typeof result.PublicBuildId === "string" ? result.PublicBuildId : undefined,
+    depots,
+  };
+}
+
 async function deleteDownloadOutputDir(task: DownloadTask) {
   if (!task.downloadsRoot.trim()) {
     throw new Error("Download folder is unavailable.");
@@ -389,6 +440,7 @@ function startNextQueuedTask() {
       next.title,
       undefined,
       readStoredDownloadParallelChunks(),
+      next.allowStale,
     )
     .then((result) => void finishActiveTask(result))
     .catch((error: unknown) =>
@@ -501,6 +553,7 @@ async function finishActiveTask(result: Record<string, unknown>) {
     resumePending: false,
     resumeBytesFloor: undefined,
     errorMessage: typeof result.Message === "string" ? result.Message : failedDepotMessage,
+    staleManifest: normalizeStaleManifest(result),
   };
 
   archiveTask(finished);
@@ -537,6 +590,42 @@ export function enqueueDownload(game: GhostBoxGame, downloadsRoot: string) {
       bytesDownloaded: 0,
       bytesTotal: 0,
       speedBytesPerSecond: 0,
+    },
+  ];
+  notifyChanged(true);
+  startNextQueuedTask();
+}
+
+/**
+ * Refila uma tarefa recusada por `stale-manifest`, agora com a confirmação do
+ * usuário de que a build anterior à pública serve. Sai do histórico e volta para
+ * a fila viva; qualquer outro estado é ignorado.
+ */
+export function retryDownloadIgnoringStaleManifest(id: string) {
+  ensureLiveTasksHydrated();
+  const history = readHistoryTasks();
+  const task = history.find((entry) => entry.id === id);
+  if (!task?.staleManifest) return;
+  if (liveTasks.some((entry) => entry.appId === task.appId)) return;
+
+  writeHistoryTasks(history.filter((entry) => entry.id !== id));
+  liveTasks = [
+    ...liveTasks,
+    {
+      ...task,
+      status: "queued",
+      allowStale: true,
+      staleManifest: undefined,
+      errorMessage: undefined,
+      queuedAt: Date.now(),
+      startedAt: undefined,
+      finishedAt: undefined,
+      bytesDownloaded: 0,
+      bytesTotal: 0,
+      speedBytesPerSecond: 0,
+      depotIndex: 0,
+      depotTotal: 0,
+      depotStatus: undefined,
     },
   ];
   notifyChanged(true);

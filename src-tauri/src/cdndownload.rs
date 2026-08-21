@@ -158,68 +158,185 @@ fn find_poc_binary() -> Result<std::path::PathBuf, String> {
     ))
 }
 
-/// Read OST .lua file for the given app_id and return all (depotId, manifestId) pairs.
-fn resolve_depots(steam_path: &str, app_id: &str) -> Vec<(u32, u64)> {
+/// De onde saiu o manifest escolhido para um depot, da melhor para a pior opcao.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DepotTier {
+    /// O manifest do branch `public` ja esta no `depotcache`. Build atual.
+    PublicFromCache,
+    /// Nenhum manifest publico em disco; venceu o de maior `buildid` entre os
+    /// que estao no `depotcache`.
+    NewestInCache,
+    /// Nada em disco: sobrou o valor fixado pelo `.lua`. Era o unico
+    /// comportamento antigo, e e o que entregava build de 2022.
+    LuaPinned,
+}
+
+impl DepotTier {
+    fn as_str(self) -> &'static str {
+        match self {
+            DepotTier::PublicFromCache => "public-from-cache",
+            DepotTier::NewestInCache => "newest-in-cache",
+            DepotTier::LuaPinned => "lua-pinned",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedDepot {
+    pub depot_id: u32,
+    pub manifest_id: u64,
+    pub tier: DepotTier,
+    /// gid do branch `public` segundo o PICS, quando conhecido.
+    pub public_gid: Option<u64>,
+}
+
+impl ResolvedDepot {
+    /// `true` quando o manifest escolhido e o publico — ou quando o PICS nao
+    /// respondeu e nao ha com o que comparar.
+    pub fn is_current(&self) -> bool {
+        self.public_gid
+            .is_none_or(|public_gid| public_gid == self.manifest_id)
+    }
+}
+
+/// Manifests presentes no `depotcache` para um depot, como `(manifest_id, mtime)`.
+fn cached_manifests(steam_path: &str, depot_id: u32) -> Vec<(u64, std::time::SystemTime)> {
+    let prefix = format!("{depot_id}_");
+    let Ok(entries) = std::fs::read_dir(Path::new(steam_path).join("depotcache")) else {
+        return vec![];
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let manifest_id = name
+                .strip_prefix(&prefix)?
+                .strip_suffix(".manifest")?
+                .parse::<u64>()
+                .ok()?;
+            let modified = entry
+                .metadata()
+                .and_then(|metadata| metadata.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            Some((manifest_id, modified))
+        })
+        .collect()
+}
+
+/// Escolhe o manifest de um depot entre o que ha em disco e o que o `.lua` fixa.
+///
+/// O `.lua` instalado tem os `setManifestid` comentados de proposito
+/// (`crate::luatools::install_lua_tools_package`), para a Steam resolver o
+/// manifest publico sozinha. Ler esse valor comentado como pin — o que o codigo
+/// antigo fazia — anulava aquela decisao e prendia o download na build velha.
+fn pick_depot_manifest(
+    steam_path: &str,
+    depot_id: u32,
+    lua_pinned: Option<u64>,
+    public: Option<&crate::steam_pics::PublicApp>,
+) -> Option<ResolvedDepot> {
+    let public_gid = public.and_then(|app| app.public_gid(depot_id));
+    let cached = cached_manifests(steam_path, depot_id);
+
+    let resolved = |manifest_id: u64, tier: DepotTier| ResolvedDepot {
+        depot_id,
+        manifest_id,
+        tier,
+        public_gid,
+    };
+
+    if let Some(public_gid) = public_gid {
+        if cached.iter().any(|(manifest_id, _)| *manifest_id == public_gid) {
+            return Some(resolved(public_gid, DepotTier::PublicFromCache));
+        }
+    }
+
+    // `mtime` sozinho nao serve de criterio: o pacote LuaTools grava um manifest
+    // de 2022 com data de hoje. O `buildid` do branch que publicou cada gid e a
+    // ordem real; o `mtime` so desempata o que o PICS nao conhece.
+    let newest = cached.iter().max_by_key(|(manifest_id, modified)| {
+        let build_id = public
+            .and_then(|app| crate::steam_pics::build_id_for_manifest(app, depot_id, *manifest_id))
+            .and_then(|build_id| build_id.trim().parse::<u64>().ok())
+            .unwrap_or(0);
+        (build_id, *modified)
+    });
+    if let Some((manifest_id, _)) = newest {
+        return Some(resolved(*manifest_id, DepotTier::NewestInCache));
+    }
+
+    lua_pinned.map(|manifest_id| resolved(manifest_id, DepotTier::LuaPinned))
+}
+
+/// Depots a baixar para o app, ja com o manifest mais novo que der para usar.
+///
+/// Fonte dos depots: o `.lua` do SteamTools em `config/stplug-in`. Depot que o
+/// PICS marca como exclusivo de outro SO sai fora — sao os depots macOS/Linux
+/// que o pacote traz junto e que so inflavam o download.
+fn resolve_depots(
+    steam_path: &str,
+    app_id: &str,
+    public: Option<&crate::steam_pics::PublicApp>,
+) -> Vec<ResolvedDepot> {
     let lua_path = Path::new(steam_path)
         .join("config")
         .join("stplug-in")
         .join(format!("{app_id}.lua"));
 
-    let content = match std::fs::read_to_string(&lua_path) {
-        Ok(c) => c,
-        Err(_) => return vec![],
+    let Ok(content) = std::fs::read_to_string(&lua_path) else {
+        return vec![];
     };
 
-    let mut depots: Vec<(u32, u64)> = vec![];
+    let pinned = crate::manifest_sources::parse_set_manifest_ids(&content);
+    let mut candidates: Vec<u32> = pinned.keys().copied().collect();
 
-    // Parse --setManifestid(depotId, "manifestId")
-    let search_str = "--setManifestid(";
-    let mut pos = 0;
-    while let Some(start) = content[pos..].find(search_str) {
-        let from = pos + start + search_str.len();
-        if let Some(end_paren) = content[from..].find(')') {
-            let args = &content[from..from + end_paren];
-            if let Some((d_str, rest)) = args.split_once(',') {
-                let d_str = d_str.trim();
-                let m_str = rest.trim().trim_matches('"').trim();
-                if let (Ok(d), Ok(m)) = (d_str.parse::<u32>(), m_str.parse::<u64>()) {
-                    if d > 0 && m > 0 {
-                        depots.push((d, m));
-                    }
-                }
-            }
-            pos = from + end_paren;
-        } else {
-            break;
+    // Depot declarado so por `addappid` (sem linha de manifest) tambem conta: e
+    // assim que parte dos pacotes lista os depots de idioma.
+    for depot_id in cached_depot_ids(steam_path) {
+        if !candidates.contains(&depot_id) && content.contains(&format!("addappid({depot_id},")) {
+            candidates.push(depot_id);
         }
     }
 
-    // If no --setManifestid, try reading depotcache filenames
-    if depots.is_empty() {
-        let depotcache = Path::new(steam_path).join("depotcache");
-        if let Ok(entries) = std::fs::read_dir(&depotcache) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                // {depotId}_{manifestId}.manifest
-                if let Some((d_str, rest)) = name.split_once('_') {
-                    if let Some((m_str, _)) = rest.split_once(".manifest") {
-                        if let (Ok(d), Ok(m)) = (d_str.parse::<u32>(), m_str.parse::<u64>()) {
-                            // Only include depot IDs mentioned in addappid for this app
-                            let add_pattern = format!("addappid({d},");
-                            if content.contains(&add_pattern) {
-                                depots.push((d, m));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let mut depots: Vec<ResolvedDepot> = candidates
+        .into_iter()
+        .filter(|depot_id| {
+            let oslist = public
+                .and_then(|app| app.depot(*depot_id))
+                .and_then(|depot| depot.oslist.as_deref());
+            crate::steam_pics::depot_runs_on_windows(oslist)
+        })
+        .filter_map(|depot_id| {
+            pick_depot_manifest(steam_path, depot_id, pinned.get(&depot_id).copied(), public)
+        })
+        .collect();
 
-    depots.sort();
-    depots.dedup();
+    depots.sort_by_key(|depot| depot.depot_id);
+    depots.dedup_by_key(|depot| depot.depot_id);
     depots
+}
+
+/// IDs de depot com algum `.manifest` no `depotcache`.
+fn cached_depot_ids(steam_path: &str) -> Vec<u32> {
+    let Ok(entries) = std::fs::read_dir(Path::new(steam_path).join("depotcache")) else {
+        return vec![];
+    };
+
+    let mut ids: Vec<u32> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let (depot_id, rest) = name.split_once('_')?;
+            rest.strip_suffix(".manifest")?;
+            depot_id.parse::<u32>().ok()
+        })
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
 }
 
 /// Pasta padrão de downloads: sempre gravável, ao contrário de um caminho derivado
@@ -563,6 +680,7 @@ pub async fn cdndownload_download_game(
     game_title: Option<String>,
     steam_path: Option<String>,
     parallel_chunks: Option<u32>,
+    allow_stale: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let _ = take_download_cancelled(&app_id);
     let parallel_chunks = parallel_chunks.unwrap_or(24).clamp(1, 32);
@@ -575,14 +693,57 @@ pub async fn cdndownload_download_game(
             })?,
     };
 
-    let depots = resolve_depots(&steam_path, &app_id);
-    if depots.is_empty() {
+    let public = crate::steam_pics::resolve_public_app(&steam_path, &app_id).await;
+    let resolved_depots = resolve_depots(&steam_path, &app_id, public.as_ref());
+    if resolved_depots.is_empty() {
         return Ok(serde_json::json!({
             "Type": "error",
             "Status": "no-depots",
             "Message": format!("No depots found for app {app_id} in OST Lua or depotcache.")
         }));
     }
+
+    // Antes de qualquer byte: se algum depot vai baixar uma build que nao e a
+    // publica, o usuario decide. Baixar dezenas de GB de uma versao velha e o
+    // desperdicio que esta correcao existe para evitar.
+    let stale: Vec<&ResolvedDepot> = resolved_depots
+        .iter()
+        .filter(|depot| !depot.is_current())
+        .collect();
+    if !stale.is_empty() {
+        let detail = serde_json::json!({
+            "Type": "status",
+            "Status": "stale-manifest",
+            "AppId": app_id,
+            "PublicBuildId": public.as_ref().map(|app| app.build_id.clone()).unwrap_or_default(),
+            "Depots": stale
+                .iter()
+                .map(|depot| serde_json::json!({
+                    "DepotId": depot.depot_id,
+                    "ManifestId": depot.manifest_id.to_string(),
+                    "PublicGid": depot.public_gid.map(|gid| gid.to_string()),
+                    "Tier": depot.tier.as_str(),
+                }))
+                .collect::<Vec<_>>(),
+        });
+        app.emit("download-progress", detail.clone()).ok();
+
+        if !allow_stale.unwrap_or(false) {
+            let mut refusal = detail;
+            refusal["Type"] = serde_json::json!("error");
+            refusal["Message"] = serde_json::json!(
+                "O manifest mais novo disponivel em disco e anterior a build publica. \
+                 Abra a Steam com o jogo adicionado para ela baixar o manifest atual \
+                 para o depotcache, ou confirme para baixar a build antiga mesmo assim."
+            );
+            return Ok(refusal);
+        }
+    }
+
+    let depots: Vec<(u32, u64)> = resolved_depots
+        .iter()
+        .map(|depot| (depot.depot_id, depot.manifest_id))
+        .collect();
 
     // O destino precisa ser resolvido ANTES do loop: todos os depots gravam na
     // mesma pasta `steamapps\common\<installdir>`, que e como o Steam monta um
@@ -829,6 +990,7 @@ pub async fn cdndownload_download_game(
             game_title.as_deref().unwrap_or_default(),
             &depots,
             &depot_sizes,
+            public.as_ref(),
         )
     };
 
@@ -840,6 +1002,27 @@ pub async fn cdndownload_download_game(
         "OutputDir": install_path_text,
         "SteamIntegration": steam_integration,
     }))
+}
+
+/// `buildid` que os arquivos em disco de fato representam.
+///
+/// Um app so esta na build N se **todos** os seus depots estiverem, entao vence
+/// o menor `buildid` entre os depots baixados. Depot cujo manifest nao aparece
+/// em nenhum branch do PICS nao tem opiniao e e ignorado; se nenhum depot
+/// resolver, o chamador volta ao `buildid` do appinfo.
+fn resolve_installed_build_id(
+    public: Option<&crate::steam_pics::PublicApp>,
+    depots: &[(u32, u64)],
+) -> Option<String> {
+    let public = public?;
+    depots
+        .iter()
+        .filter_map(|(depot_id, manifest_id)| {
+            crate::steam_pics::build_id_for_manifest(public, *depot_id, *manifest_id)
+        })
+        .filter_map(|build_id| build_id.trim().parse::<u64>().ok())
+        .min()
+        .map(|build_id| build_id.to_string())
 }
 
 /// Passo final: depotcache, `appmanifest_<appid>.acf` e registro da biblioteca.
@@ -858,6 +1041,7 @@ fn finalize_steam_integration(
     fallback_title: &str,
     depots: &[(u32, u64)],
     depot_sizes: &[u64],
+    public: Option<&crate::steam_pics::PublicApp>,
 ) -> serde_json::Value {
     let emit = |status: &str| {
         app.emit(
@@ -886,7 +1070,15 @@ fn finalize_steam_integration(
         .map(|info| info.name.as_str())
         .filter(|name| !name.is_empty())
         .unwrap_or(fallback_title);
-    let build_id = app_info.map(|info| info.build_id.as_str()).unwrap_or("");
+    // O `buildid` tem que ser o da build que os arquivos em disco representam.
+    // Carimbar o do branch publico sobre uma build antiga faz a Steam anunciar
+    // "fully installed" e nunca oferecer atualizacao — era exatamente por isso
+    // que os jogos ficavam presos numa versao velha.
+    let installed_build_id = resolve_installed_build_id(public, depots);
+    let build_id = installed_build_id
+        .as_deref()
+        .or_else(|| app_info.map(|info| info.build_id.as_str()))
+        .unwrap_or("");
     let last_owner = crate::steam_appmanifest::resolve_last_owner(steam_path);
 
     let manifest_path = match crate::steam_appmanifest::write_appmanifest(
@@ -988,5 +1180,180 @@ mod tests {
             Path::new(r"E:\GhostBoxDownloads-old\steamapps"),
         )
         .is_err());
+    }
+
+    // --- Escolha do manifest por depot ---------------------------------------
+
+    use super::{
+        pick_depot_manifest, resolve_depots, resolve_installed_build_id, DepotTier,
+    };
+    use crate::steam_pics::{PicsSource, PublicApp, PublicDepot};
+    use std::collections::BTreeMap;
+
+    /// `<root>/config/stplug-in/<appid>.lua` + `<root>/depotcache/*.manifest`.
+    /// `cached` traz `(depot, manifest)` na ordem de gravacao, entao o ultimo
+    /// tem o `mtime` mais recente.
+    fn fake_steam(app_id: &str, lua: &str, cached: &[(u32, u64)]) -> std::path::PathBuf {
+        let root = std::env::temp_dir()
+            .join(format!("ghostbox-depots-{}", uuid::Uuid::new_v4().simple()));
+        let plugins = root.join("config").join("stplug-in");
+        let depotcache = root.join("depotcache");
+        std::fs::create_dir_all(&plugins).unwrap();
+        std::fs::create_dir_all(&depotcache).unwrap();
+        std::fs::write(plugins.join(format!("{app_id}.lua")), lua).unwrap();
+        for (depot_id, manifest_id) in cached {
+            std::fs::write(
+                depotcache.join(format!("{depot_id}_{manifest_id}.manifest")),
+                b"manifest",
+            )
+            .unwrap();
+            // O `mtime` do NTFS tem resolucao grossa; sem a pausa dois arquivos
+            // gravados em sequencia empatam e o desempate por data some.
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        root
+    }
+
+    fn depot(depot_id: u32, oslist: Option<&str>, branches: &[(&str, u64)]) -> PublicDepot {
+        let branch_manifests: BTreeMap<String, u64> = branches
+            .iter()
+            .map(|(branch, gid)| ((*branch).to_string(), *gid))
+            .collect();
+        PublicDepot {
+            depot_id,
+            manifest_gid: branch_manifests.get("public").copied().unwrap_or_default(),
+            size: 0,
+            oslist: oslist.map(str::to_string),
+            branch_manifests,
+        }
+    }
+
+    fn public_app(depots: Vec<PublicDepot>) -> PublicApp {
+        PublicApp {
+            build_id: "22529139".into(),
+            branch_build_ids: BTreeMap::from([
+                ("public".to_string(), "22529139".to_string()),
+                ("antiga".to_string(), "20231655".to_string()),
+            ]),
+            depots,
+            source: PicsSource::SteamCmdApi,
+        }
+    }
+
+    const PUBLIC_GID: u64 = 257781644874438846;
+    const OLD_GID: u64 = 4539921744901848404;
+
+    #[test]
+    fn the_public_manifest_in_the_cache_beats_the_pin_written_in_the_lua() {
+        let lua = format!(
+            "addappid(367521,1,\"ab\")\n--setManifestid(367521,\"{OLD_GID}\")\n"
+        );
+        let root = fake_steam("367520", &lua, &[(367521, OLD_GID), (367521, PUBLIC_GID)]);
+        let app = public_app(vec![depot(
+            367521,
+            Some("windows"),
+            &[("public", PUBLIC_GID), ("antiga", OLD_GID)],
+        )]);
+
+        let depots = resolve_depots(&root.to_string_lossy(), "367520", Some(&app));
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(depots.len(), 1);
+        assert_eq!(depots[0].manifest_id, PUBLIC_GID);
+        assert_eq!(depots[0].tier, DepotTier::PublicFromCache);
+        assert!(depots[0].is_current());
+    }
+
+    #[test]
+    fn without_the_public_manifest_the_highest_build_id_in_the_cache_wins() {
+        // O pacote LuaTools grava o manifest de 2022 com data de hoje, entao o
+        // `mtime` aponta para o lado errado de proposito neste teste.
+        let lua = format!("addappid(367521,1,\"ab\")\n--setManifestid(367521,\"{OLD_GID}\")\n");
+        let root = fake_steam("367520", &lua, &[(367521, 111), (367521, OLD_GID)]);
+        let app = public_app(vec![depot(367521, Some("windows"), &[
+            ("public", PUBLIC_GID),
+            ("antiga", OLD_GID),
+        ])]);
+
+        let depots = resolve_depots(&root.to_string_lossy(), "367520", Some(&app));
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(depots[0].manifest_id, OLD_GID);
+        assert_eq!(depots[0].tier, DepotTier::NewestInCache);
+        assert!(!depots[0].is_current());
+    }
+
+    #[test]
+    fn an_empty_cache_falls_back_to_the_pin_in_the_lua() {
+        let lua = format!("addappid(367521,1,\"ab\")\n--setManifestid(367521,\"{OLD_GID}\")\n");
+        let root = fake_steam("367520", &lua, &[]);
+
+        let depots = resolve_depots(&root.to_string_lossy(), "367520", None);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(depots[0].manifest_id, OLD_GID);
+        assert_eq!(depots[0].tier, DepotTier::LuaPinned);
+        // Sem PICS nao ha com o que comparar, entao nada de aviso de build velha.
+        assert!(depots[0].is_current());
+    }
+
+    #[test]
+    fn depots_of_another_os_are_dropped_and_shared_depots_are_kept() {
+        let lua = concat!(
+            "addappid(367521,1,\"ab\")\n--setManifestid(367521,\"1\")\n",
+            "addappid(367522,1,\"cd\")\n--setManifestid(367522,\"2\")\n",
+            "addappid(367524,1,\"ef\")\n--setManifestid(367524,\"3\")\n",
+        );
+        let root = fake_steam("367520", lua, &[]);
+        let app = public_app(vec![
+            depot(367521, Some("windows"), &[("public", 1)]),
+            depot(367522, Some("macos"), &[("public", 2)]),
+            // Depot compartilhado: sem `oslist`, precisa entrar.
+            depot(367524, None, &[("public", 3)]),
+        ]);
+
+        let depots = resolve_depots(&root.to_string_lossy(), "367520", Some(&app));
+        let _ = std::fs::remove_dir_all(&root);
+
+        let ids: Vec<u32> = depots.iter().map(|depot| depot.depot_id).collect();
+        assert_eq!(ids, vec![367521, 367524]);
+    }
+
+    #[test]
+    fn a_depot_the_pics_does_not_know_still_resolves_from_the_lua() {
+        // PICS indisponivel ou depot removido do app: recusar aqui deixaria o
+        // download impossivel em vez de apenas sem aviso de frescor.
+        let lua = "addappid(999,1,\"ab\")\n--setManifestid(999,\"42\")\n";
+        let root = fake_steam("367520", lua, &[]);
+        let app = public_app(vec![depot(367521, Some("windows"), &[("public", 1)])]);
+
+        let resolved = pick_depot_manifest(&root.to_string_lossy(), 999, Some(42), Some(&app));
+        let _ = std::fs::remove_dir_all(&root);
+
+        let resolved = resolved.unwrap();
+        assert_eq!(resolved.manifest_id, 42);
+        assert_eq!(resolved.public_gid, None);
+        assert!(resolved.is_current());
+    }
+
+    #[test]
+    fn the_installed_build_id_is_the_oldest_depot_not_the_public_branch() {
+        let app = public_app(vec![
+            depot(367521, Some("windows"), &[("public", PUBLIC_GID), ("antiga", OLD_GID)]),
+            depot(367524, None, &[("public", 7), ("antiga", 8)]),
+        ]);
+
+        // Um depot atual e outro atrasado: a instalacao vale pela build antiga.
+        assert_eq!(
+            resolve_installed_build_id(Some(&app), &[(367521, PUBLIC_GID), (367524, 8)]),
+            Some("20231655".to_string())
+        );
+        assert_eq!(
+            resolve_installed_build_id(Some(&app), &[(367521, PUBLIC_GID), (367524, 7)]),
+            Some("22529139".to_string())
+        );
+        // Nenhum manifest conhecido: o chamador cai no buildid do appinfo.
+        assert_eq!(resolve_installed_build_id(Some(&app), &[(367521, 999)]), None);
+        assert_eq!(resolve_installed_build_id(None, &[(367521, PUBLIC_GID)]), None);
     }
 }

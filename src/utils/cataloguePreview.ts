@@ -78,89 +78,14 @@ export function createCatalogueHoverPreviewRetention(
   };
 }
 
-/** Respiro mínimo entre o painel e as bordas da janela. */
-export const CATALOGUE_PREVIEW_VIEWPORT_MARGIN = 16;
-
 /**
- * Quanto da coluna de filtros o painel invade. A borda direita dele pousa nessa
- * fração da largura da coluna: cobre um pedaço dos filtros e para antes da
- * borda direita deles.
+ * Cursor no momento do hover. O preview mora numa coluna fixa e não usa mais a
+ * coordenada para se posicionar, mas `CatalogueList` continua reportando o
+ * ponteiro no evento de hover.
  */
-export const CATALOGUE_PREVIEW_COLUMN_OVERLAP_RATIO = 0.62;
-
-/**
- * Faixa de baixo que o preview nunca ocupa. O painel flutua por cima da coluna
- * de filtros, e o canto inferior dela precisa continuar livre para o dropdown
- * abrir sem ficar por baixo do preview.
- */
-export const CATALOGUE_PREVIEW_BOTTOM_SAFE_AREA = 120;
-
-export interface CataloguePreviewBox {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-}
-
-export interface CataloguePreviewPosition {
-  top: number;
-  left: number;
-}
-
 export interface CataloguePreviewPointer {
   x: number;
   y: number;
-}
-
-/**
- * Painel sempre na mesma faixa à direita: a borda direita dele pousa dentro da
- * coluna de filtros, cobrindo um pedaço dela. Só a vertical acompanha o hover —
- * centrada no cartão, presa entre o cabeçalho e a faixa reservada de baixo, que
- * fica livre para o dropdown dos filtros.
- */
-export function computeCataloguePreviewPosition({
-  card = null,
-  pointer = null,
-  column = null,
-  preview,
-  viewport,
-  margin = CATALOGUE_PREVIEW_VIEWPORT_MARGIN,
-  topBoundary = CATALOGUE_PREVIEW_VIEWPORT_MARGIN,
-  bottomSafeArea = CATALOGUE_PREVIEW_BOTTOM_SAFE_AREA,
-  overlapRatio = CATALOGUE_PREVIEW_COLUMN_OVERLAP_RATIO,
-}: {
-  /** Cartão sob o cursor — manda na vertical. */
-  card?: CataloguePreviewBox | null;
-  /** Usado só quando não há cartão medido. */
-  pointer?: CataloguePreviewPointer | null;
-  /** Coluna de filtros — manda na horizontal. */
-  column?: { left: number; width: number } | null;
-  preview: Pick<CataloguePreviewBox, "width" | "height">;
-  viewport: { width: number; height: number };
-  margin?: number;
-  topBoundary?: number;
-  bottomSafeArea?: number;
-  overlapRatio?: number;
-}): CataloguePreviewPosition {
-  const rightEdge = column
-    ? column.left + column.width * overlapRatio
-    : viewport.width - margin;
-  const maxLeft = viewport.width - margin - preview.width;
-  const left = Math.max(margin, Math.min(rightEdge - preview.width, maxLeft));
-
-  const centerY = card
-    ? card.top + card.height / 2
-    : (pointer?.y ?? viewport.height / 2);
-  const maxTop = Math.max(
-    topBoundary,
-    viewport.height - margin - bottomSafeArea - preview.height
-  );
-  const top = Math.max(
-    topBoundary,
-    Math.min(centerY - preview.height / 2, maxTop)
-  );
-
-  return { top, left };
 }
 
 export function getNextReadyScreenshotSource(

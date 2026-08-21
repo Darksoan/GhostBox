@@ -11,6 +11,7 @@ import {
   readDownloadTasks,
   removeDownloadTask,
   resumeDownloadTask,
+  retryDownloadIgnoringStaleManifest,
   type DownloadTask,
 } from "../lib/downloadManager";
 import { ghostboxApi } from "../lib/ghostboxApi";
@@ -80,6 +81,7 @@ function DownloadCard({
   onOpenFolder,
   onUninstall,
   onLaunch,
+  onRetryStale,
   launching,
 }: {
   task: DownloadTask;
@@ -90,6 +92,7 @@ function DownloadCard({
   onOpenFolder: (task: DownloadTask) => void;
   onUninstall: (id: string) => void;
   onLaunch: (task: DownloadTask) => void;
+  onRetryStale: (id: string) => void;
   launching: boolean;
 }) {
   const { appearance, t } = useSettings();
@@ -333,6 +336,29 @@ function DownloadCard({
             {task.errorMessage ?? t("downloads.genericError")}
           </span>
         ) : null}
+
+        {/* O download foi recusado por trazer uma build anterior à pública. O
+            aviso é o produto principal aqui; o botão é a saída para quem prefere
+            a build antiga a esperar a Steam baixar o manifest atual. */}
+        {task.staleManifest ? (
+          <span className="download-card__stale">
+            <span className="download-card__stale-detail">
+              {t("downloads.staleManifestDetail", {
+                depots: task.staleManifest.depots
+                  .map((depot) => depot.depotId)
+                  .join(", "),
+                buildId: task.staleManifest.publicBuildId || "--",
+              })}
+            </span>
+            <button
+              type="button"
+              className="download-card__stale-action"
+              onClick={() => onRetryStale(task.id)}
+            >
+              {t("downloads.staleManifestDownloadAnyway")}
+            </button>
+          </span>
+        ) : null}
       </div>
 
       {hasControls ? controls : null}
@@ -425,6 +451,7 @@ export function DownloadsPage() {
               onOpenFolder={(task) => void openDownloadFolder(task)}
               onUninstall={openUninstall}
               onLaunch={(task) => void launchDownload(task)}
+              onRetryStale={retryDownloadIgnoringStaleManifest}
               launching={launchingTaskId === task.id}
             />
           ))}

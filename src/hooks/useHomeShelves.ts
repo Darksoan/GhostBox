@@ -21,7 +21,6 @@ import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 
 export type HomeShelfId =
   | "recommended"
-  | "trending"
   | "newReleases"
   | "topSellers"
   | "topRated";
@@ -41,7 +40,6 @@ export type HomeShelves = Record<HomeShelfId, HomeShelf>;
 // Shelf arrows have something to scroll to.
 const shelfSizes: Record<HomeShelfId, number> = {
   recommended: 8,
-  trending: 12,
   newReleases: 12,
   topSellers: 12,
   topRated: 8,
@@ -187,8 +185,6 @@ export function useHomeShelves({
       shelfSizes.recommended
     );
 
-    const trending = take(trendingGames, shelfSizes.trending);
-
     // New releases lead; "coming soon" fills whatever is left so the rail is
     // never short on a quiet release week.
     const newReleases = take(
@@ -222,7 +218,6 @@ export function useHomeShelves({
 
     return {
       recommended,
-      trending,
       newReleases,
       topSellers,
       topRated,
@@ -234,13 +229,11 @@ export function useHomeShelves({
     poolGames,
     seed,
     tasteProfile,
-    trendingGames,
   ]);
 
   // Featured rails arrive as bare seeds and catalogue rails lack the short
   // description, so every rail goes through the shared enrichment queue.
   const recommended = useEnrichedGameCards(selection.recommended, shelfSizes.recommended);
-  const trending = useEnrichedGameCards(selection.trending, shelfSizes.trending);
   const newReleases = useEnrichedGameCards(selection.newReleases, shelfSizes.newReleases);
   const topSellers = useEnrichedGameCards(selection.topSellers, shelfSizes.topSellers);
   const topRated = useEnrichedGameCards(selection.topRated, shelfSizes.topRated);
@@ -253,12 +246,6 @@ export function useHomeShelves({
         id: "recommended",
         games: recommended,
         loading: poolQuery.isPending,
-        upcomingAppIds: noUpcoming,
-      },
-      trending: {
-        id: "trending",
-        games: trending,
-        loading: trendingQuery.isPending,
         upcomingAppIds: noUpcoming,
       },
       newReleases: {
@@ -288,8 +275,6 @@ export function useHomeShelves({
     selection.upcomingAppIds,
     topRated,
     topSellers,
-    trending,
-    trendingQuery.isPending,
   ]);
 
   /**

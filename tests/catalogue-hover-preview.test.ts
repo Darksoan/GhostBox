@@ -74,6 +74,54 @@ describe("Catalogue hover preview", () => {
     expect(component).not.toContain("catalogue.preview.publisher");
   });
 
+  it("caps the achievement row at six icons", () => {
+    const component = readFileSync(
+      "src/components/ui/CatalogueHoverPreview.tsx",
+      "utf8"
+    );
+
+    expect(component).toContain("const ACHIEVEMENT_PREVIEW_COUNT = 6");
+    // Cortado pela constante, não por um literal solto que sai de sincronia.
+    expect(component).toMatch(
+      /achievementList\.slice\(\s*0,\s*ACHIEVEMENT_PREVIEW_COUNT\s*\)/
+    );
+    expect(component).not.toMatch(/achievementList\.slice\(\s*0,\s*\d/);
+  });
+
+  it("reveals the achievement icons as one group", () => {
+    const component = readFileSync(
+      "src/components/ui/CatalogueHoverPreview.tsx",
+      "utf8"
+    );
+    const css = compile("src/app.scss").css;
+
+    // Escopado ao bloco de conquistas: as screenshots 2 e 3 seguem em `lazy` de
+    // propósito, então uma busca no arquivo inteiro acusaria falso positivo.
+    const achievementsBlock = component.slice(
+      component.indexOf("__achievements-row"),
+      component.lastIndexOf("__achievements-icon")
+    );
+
+    // Pré-carregados e decodificados antes de aparecer: sem `lazy`, que traria
+    // de volta a pintura peça a peça.
+    expect(component).toContain("preloadBrowserImage");
+    expect(achievementsBlock).not.toContain("loading=");
+    expect(component).toContain("achievementIconsReady");
+    expect(css).toContain(".catalogue-hover-preview__achievements-row--ready");
+  });
+
+  it("holds the panel until its first screenshot decoded", () => {
+    const component = readFileSync(
+      "src/components/ui/CatalogueHoverPreview.tsx",
+      "utf8"
+    );
+
+    expect(component).toContain("MEDIA_REVEAL_TIMEOUT_MS");
+    expect(component).toContain("isMediaReady");
+    // A classe de visível depende das duas condições.
+    expect(component).toContain("isVisible && isMediaReady");
+  });
+
   it("keeps the panel mounted during exit and drives visibility via a class", () => {
     const component = readFileSync(
       "src/components/ui/CatalogueHoverPreview.tsx",
