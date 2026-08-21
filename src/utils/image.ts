@@ -30,12 +30,6 @@ type GameListPreloadOptions = {
   variant?: "header" | "catalogueHeader" | "portrait" | "hero";
 };
 
-let preferLowResCovers = false;
-
-export function setPreferLowResCovers(value: boolean) {
-  preferLowResCovers = value;
-}
-
 export function layeredImageStyle(
   sources: string[],
   gradient: string,
@@ -240,7 +234,7 @@ export function isHeroImageSource(source: string) {
   return /(^|\/)library_hero(_2x)?\.jpg$/.test(pathname.replace(/\\/g, "/"));
 }
 
-export function isSteamScreenshotSource(source: string) {
+function isSteamScreenshotSource(source: string) {
   const normalizedSource = source.trim().toLowerCase();
   if (!normalizedSource) return false;
 
@@ -269,8 +263,7 @@ export function isLandscapeImageSource(source: string) {
 
   // Common Steam landscape assets that must not be used for portrait covers.
   // The worst offender in the first-boot case is a horizontal screenshot
-  // included as `coverFallbacks` by the backend; we also exclude actual
-  // `game.screenshots` in `gamePortraitSources()`.
+  // included as `coverFallbacks` by the backend.
   const normalizedPath = pathname.replace(/\\/g, "/");
   return (
     /(^|\/)(?:capsule_616x353|capsule_231x87|capsule_467x181)\.jpg$/.test(
@@ -315,41 +308,6 @@ export function gameHeroSources(game: GhostBoxGame) {
   );
 
   return uniqueSources([...steamHeroSources, ...customHeroSources]);
-}
-
-export function gamePortraitSources(game: GhostBoxGame) {
-  const appId = getGameAppId(game);
-  const highDensitySteamPortraitSources = [
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900_2x.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`,
-  ];
-  const standardSteamPortraitSources = [
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_600x900.jpg`,
-  ];
-  const customPortraitSources = [
-    game.coverUrl,
-    ...(game.coverFallbacks ?? []),
-  ].filter((source) => !isHeaderImageSource(source));
-
-  return uniqueSources([
-    ...(preferLowResCovers
-      ? [...standardSteamPortraitSources, ...highDensitySteamPortraitSources]
-      : [...highDensitySteamPortraitSources, ...standardSteamPortraitSources]),
-    ...customPortraitSources.filter(
-      (source) =>
-        // Avoid landscape (horizontal) assets being used as portrait cover.
-        !isHeroImageSource(source) &&
-        !isLandscapeImageSource(source) &&
-        // Backend includes `screenshots[0]` inside `coverFallbacks`; that is
-        // almost always horizontal and causes the initial "stretched" cover.
-        !game.screenshots.includes(source)
-    ),
-  ]);
 }
 
 export function gamePortraitPreviewSources(game: GhostBoxGame) {
@@ -416,7 +374,7 @@ export function gameLogoSources(game: GhostBoxGame) {
   ]);
 }
 
-export function gameModalAssetSources(game: GhostBoxGame, activeScreenshot = 0) {
+function gameModalAssetSources(game: GhostBoxGame, activeScreenshot = 0) {
   const screenshots = withoutHeaderImageSources(game.screenshots);
   const showcaseSources = uniqueSources([
     ...gameHeroSources(game),

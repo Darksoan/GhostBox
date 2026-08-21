@@ -23,7 +23,7 @@ export type SteamAchievement = {
   unlockedAt?: string;
 };
 
-export type GameAchievementLoadState =
+type GameAchievementLoadState =
   | "ready"
   | "no-achievements"
   | "pending"
@@ -31,7 +31,7 @@ export type GameAchievementLoadState =
   | "private"
   | "unavailable";
 
-export type GameAchievementMetadata = {
+type GameAchievementMetadata = {
   status?: GameAchievementLoadState;
   source?: "catalogue" | "steam-schema" | "steam-account" | "local" | "stale";
   stale?: boolean;
@@ -44,7 +44,7 @@ export type GameRequirements = {
   recommended: string[];
 };
 
-export type SteamVideoSource = {
+type SteamVideoSource = {
   max: string;
   "480": string;
 };

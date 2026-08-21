@@ -40,7 +40,7 @@ export function getBackupRecordLatestKey(
   ].join("|");
 }
 
-export function countUnlockedAchievements(game: GhostBoxGame | undefined) {
+function countUnlockedAchievements(game: GhostBoxGame | undefined) {
   if (!game) return 0;
   return getUnlockedAchievementCount(game);
 }

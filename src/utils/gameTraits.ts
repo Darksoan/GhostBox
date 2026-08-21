@@ -58,11 +58,6 @@ export function getGameTraitSet(game: GhostBoxGame) {
   );
 }
 
-/** Comparison-form set out of a loose list of strings (Steam tags, wishlist traits). */
-export function toGameTraitSet(values: Iterable<string> = []) {
-  return new Set([...values].map(normalizeGameTraitKey).filter(Boolean));
-}
-
 /**
  * Quality-weighted popularity used to rank a game inside a category rail.
  * Review ratio dominates; the log keeps a 2M-review blockbuster from burying

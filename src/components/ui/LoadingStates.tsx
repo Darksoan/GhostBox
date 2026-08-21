@@ -135,7 +135,7 @@ export function CatalogueLoadingState() {
   );
 }
 
-export function PageSpinnerLoadingState({
+function PageSpinnerLoadingState({
   label,
   className,
 }: {
@@ -174,7 +174,7 @@ export function AchievementsListLoadingState({ count = 8 }: { count?: number }) 
   );
 }
 
-export function NotificationsFeedLoadingState({ count: _count = 3 }: { count?: number }) {
+function NotificationsFeedLoadingState({ count: _count = 3 }: { count?: number }) {
   const { t } = useSettings();
 
   return <PageSpinnerLoadingState label={t("notifications.loading")} />;
@@ -298,7 +298,7 @@ function SectionHeaderSkeleton({ withSubtitle = false }: { withSubtitle?: boolea
   );
 }
 
-export function HomePageLoadingState() {
+function HomePageLoadingState() {
   return (
     <section className="home-page" aria-hidden="true">
       <section className="home-banner">
@@ -398,7 +398,7 @@ export function ProfileActivityListSkeleton() {
   );
 }
 
-export function ProfilePageLoadingState() {
+function ProfilePageLoadingState() {
   return (
     <section className="profile-page" aria-hidden="true">
       <header className="profile-page__content-box profile-page__content-box--placeholder">
@@ -474,7 +474,7 @@ export function ProfilePageLoadingState() {
   );
 }
 
-export function SettingsPageLoadingState() {
+function SettingsPageLoadingState() {
   return (
     <section className="settings-page settings-page--tabs" aria-hidden="true">
       <article className="settings-panel settings-panel--skeleton">
@@ -500,7 +500,7 @@ export function SettingsPageLoadingState() {
   );
 }
 
-export function LibraryPageLoadingState() {
+function LibraryPageLoadingState() {
   return (
     <section className="content-section content-section--full content-section--library" aria-hidden="true">
       <div className="library-toolbar">
@@ -517,7 +517,7 @@ export function LibraryPageLoadingState() {
   );
 }
 
-export function FavoritesPageLoadingState() {
+function FavoritesPageLoadingState() {
   return (
     <section className="favorites-page content-section content-section--full" aria-hidden="true">
       <div className="favorites-grid">
@@ -536,7 +536,7 @@ export function FavoritesPageLoadingState() {
   );
 }
 
-export function NotificationsPageLoadingState() {
+function NotificationsPageLoadingState() {
   return (
     <section className="notifications-page content-section content-section--full" aria-hidden="true">
       <NotificationsFeedLoadingState count={3} />

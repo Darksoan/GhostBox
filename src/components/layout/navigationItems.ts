@@ -2,9 +2,9 @@ import { Download, Home, Layers, Settings, type LucideIcon } from "lucide-react"
 import { Grid } from "reicon-react";
 import type { Page } from "../../types";
 
-export type NavIcon = LucideIcon | typeof Grid;
+type NavIcon = LucideIcon | typeof Grid;
 
-export type NavItem = {
+type NavItem = {
   id: Page;
   icon: NavIcon;
   labelKey: string;
@@ -22,5 +22,3 @@ export const primaryNavigation: NavItem[] = [
 export const secondaryNavigation: NavItem[] = [
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ];
-
-export const allNavigation: NavItem[] = [...primaryNavigation, ...secondaryNavigation];

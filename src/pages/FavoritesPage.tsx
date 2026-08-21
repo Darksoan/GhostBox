@@ -26,7 +26,7 @@ interface FavoriteCardProps {
   onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }
 
-export const FavoriteCard = memo(function FavoriteCard({
+const FavoriteCard = memo(function FavoriteCard({
   game,
   onOpenGame,
   onContextMenu,

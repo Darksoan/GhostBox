@@ -515,11 +515,27 @@ pub fn cdndownload_launch_game(
     Ok(canonical_executable.to_string_lossy().into_owned())
 }
 
+/// `remove_dir_all` sobre uma instalacao inteira leva segundos ou minutos. Um
+/// comando sincrono do Tauri roda na thread principal, entao a janela congelava
+/// ate o ultimo arquivo sair — o comando so agenda o trabalho, a remocao real
+/// mora aqui e roda fora da thread da UI.
 #[tauri::command]
-pub fn cdndownload_delete_output_dir(
+pub async fn cdndownload_delete_output_dir(
     app_id: String,
     downloads_root: String,
     output_dir: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_output_dir_blocking(&app_id, &downloads_root, &output_dir)
+    })
+    .await
+    .map_err(|error| format!("Download removal failed: {error}"))?
+}
+
+fn delete_output_dir_blocking(
+    app_id: &str,
+    downloads_root: &str,
+    output_dir: &str,
 ) -> Result<bool, String> {
     let app_id = app_id.trim();
     let downloads_root = downloads_root.trim();

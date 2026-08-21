@@ -37,7 +37,7 @@ const steamSoftwareLabelMarkers = [
   "desenvolvimento de jogos",
 ];
 
-export function isSteamSoftwareLikeGame(game: GhostBoxGame) {
+function isSteamSoftwareLikeGame(game: GhostBoxGame) {
   const labels = [...(game.genres ?? []), ...(game.tags ?? [])]
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);

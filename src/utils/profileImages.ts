@@ -24,12 +24,12 @@ export const bannerMaxDimension = 3840;
 export const bannerTargetBytes = 1_100_000;
 
 /** Piso: abaixo disso a imagem começa a mostrar bloco em áreas de céu/gradiente. */
-export const bannerQualitySteps = [0.86, 0.78, 0.7, 0.62] as const;
+const bannerQualitySteps = [0.86, 0.78, 0.7, 0.62] as const;
 
-export const avatarSize = 512;
-export const avatarQuality = 0.85;
+const avatarSize = 512;
+const avatarQuality = 0.85;
 
-export interface FittedSize {
+interface FittedSize {
   width: number;
   height: number;
   scale: number;

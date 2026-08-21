@@ -1,6 +1,6 @@
 import type { SteamProfile, UserCollection } from "../types";
 
-export const CLOUD_PROFILE_SCHEMA_VERSION = 2 as const;
+const CLOUD_PROFILE_SCHEMA_VERSION = 2 as const;
 
 const MAX_URL_LENGTH = 2048;
 const MAX_COLLECTION_NAME_LENGTH = 64;
@@ -76,7 +76,7 @@ function normalizeUrl(value: string | null | undefined): string | null {
   return trimmed;
 }
 
-export function compactCloudUrl(value: string | null | undefined): string | null {
+function compactCloudUrl(value: string | null | undefined): string | null {
   const url = normalizeUrl(value);
   if (!url) return null;
 
@@ -103,7 +103,7 @@ export function compactCloudUrl(value: string | null | undefined): string | null
   return url;
 }
 
-export function expandCloudUrl(value: string | null | undefined): string | null {
+function expandCloudUrl(value: string | null | undefined): string | null {
   const raw = normalizeUrl(value);
   if (!raw) return null;
 
@@ -116,7 +116,7 @@ export function expandCloudUrl(value: string | null | undefined): string | null 
   return raw;
 }
 
-export function compactBannerPosition(
+function compactBannerPosition(
   position: SteamProfile["bannerPosition"] | null | undefined
 ): CloudProfileBannerPosition | null {
   if (!position) return null;
@@ -188,7 +188,7 @@ export function buildCloudProfileSnapshot(input: {
   };
 }
 
-export function expandCloudProfileSnapshot(
+function expandCloudProfileSnapshot(
   snapshot: CloudProfileSnapshot | null | undefined
 ): CloudProfileSnapshot | null {
   if (!snapshot || typeof snapshot !== "object") return null;

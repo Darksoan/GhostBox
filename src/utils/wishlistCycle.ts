@@ -95,11 +95,6 @@ export function getWishlistCycleStart(date = new Date()) {
   return start;
 }
 
-export function getWishlistCycleSeed(cycleStart: Date) {
-  const start = getWishlistCycleStart(cycleStart);
-  return start.getFullYear() * 10000 + (start.getMonth() + 1) * 100 + start.getDate();
-}
-
 export function getWishlistCycleIndex(cycleStart: Date) {
   return Math.floor(
     getWishlistCycleStart(cycleStart).getTime() / (7 * 24 * 60 * 60 * 1000)
@@ -123,7 +118,7 @@ export function isStoredWishlistCycleFresh(
   );
 }
 
-export function rankWishlistCandidates(
+function rankWishlistCandidates(
   candidates: GhostBoxGame[],
   {
     sourceTraits = [],

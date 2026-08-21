@@ -1,16 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import type { GhostBoxGame } from "../data";
 import {
   loadFeatured,
   loadGames,
   loadSteamRecommendedTagsForUser,
-  loadSteamSimilarAppIds,
 } from "../data";
-import { loadGameStoreDetailsCached } from "../utils/gameCache";
-import { createSeedGame } from "../utils/gameSeed";
 
 /** Steam storefront region derived from the UI language. */
-export type HomeStorefront = "br" | "us";
+type HomeStorefront = "br" | "us";
 
 export function homeStorefront(language: "pt" | "en"): HomeStorefront {
   return language === "en" ? "us" : "br";
@@ -22,16 +18,14 @@ const featuredStaleMs = 6 * 60 * 60 * 1000;
 const trendingStaleMs = 5 * 60 * 1000;
 const similarStaleMs = 24 * 60 * 60 * 1000;
 
-export const homeTrendingPoolLimit = 40;
-export const homePoolLimit = 200;
-export const homeSimilarPoolLimit = 12;
+const homeTrendingPoolLimit = 40;
+const homePoolLimit = 200;
 
-export const homeQueryKeys = {
+const homeQueryKeys = {
   all: ["home"] as const,
   featured: (cc: HomeStorefront) => ["home", "featured", cc] as const,
   trending: () => ["home", "trending"] as const,
   pool: (seed: number) => ["home", "pool", seed] as const,
-  similar: (appId: string) => ["home", "similar", appId] as const,
   recommendedTags: (steamId: string) => ["home", "recommended-tags", steamId] as const,
 };
 
@@ -85,37 +79,6 @@ export function useHomePoolQuery(seed: number) {
     // shelves re-render on each enrichment flush) and drift toward refetching
     // mid-cycle, reshuffling the rails under the user.
     staleTime: Infinity,
-  });
-}
-
-async function loadSimilarGames(appId: string): Promise<GhostBoxGame[]> {
-  const similarAppIds = (await loadSteamSimilarAppIds(appId)).slice(
-    0,
-    homeSimilarPoolLimit
-  );
-
-  const games = await Promise.all(
-    similarAppIds.map(async (similarAppId, index) => {
-      const details = await loadGameStoreDetailsCached(similarAppId).catch(
-        () => null
-      );
-      return (
-        details ??
-        createSeedGame({ appId: similarAppId, title: `Steam App ${similarAppId}` }, index, "")
-      );
-    })
-  );
-
-  return games;
-}
-
-/** "Porque você jogou X" — Steam's own similarity graph for the anchor game. */
-export function useHomeSimilarGamesQuery(appId: string) {
-  return useQuery({
-    queryKey: homeQueryKeys.similar(appId),
-    queryFn: () => loadSimilarGames(appId),
-    enabled: Boolean(appId),
-    staleTime: similarStaleMs,
   });
 }
 

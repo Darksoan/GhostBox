@@ -13,8 +13,8 @@ import {
 } from "./steamAssetManifest";
 
 export const imageSourceCache = new Map<string, string>();
-export const imageResolvePromises = new Map<string, Promise<string>>();
-export const screenshotPreloadCache = new Set<string>();
+const imageResolvePromises = new Map<string, Promise<string>>();
+const screenshotPreloadCache = new Set<string>();
 const steamLibraryCoverSourceCache = new Map<string, string>();
 const steamLibraryCoverResolvePromises = new Map<string, Promise<string>>();
 const steamHeaderSourceCache = new Map<string, string>();
@@ -137,7 +137,7 @@ export function runWhenIdle(callback: () => void, timeout = 1200) {
   return () => window.clearTimeout(handle);
 }
 
-export function readStoredImageSourceCache() {
+function readStoredImageSourceCache() {
   if (typeof window === "undefined") return;
 
   try {
@@ -155,7 +155,7 @@ export function readStoredImageSourceCache() {
   }
 }
 
-export function writeStoredImageSourceCache() {
+function writeStoredImageSourceCache() {
   if (typeof window === "undefined") return;
 
   try {
@@ -180,7 +180,7 @@ let cancelPendingCacheWrite: (() => void) | null = null;
 // Coalesce localStorage writes: serializing the whole cache on every resolved
 // image caused main-thread jank while scrolling the catalogue. Write at most
 // once per idle window instead.
-export function scheduleStoredImageSourceCacheWrite() {
+function scheduleStoredImageSourceCacheWrite() {
   if (typeof window === "undefined") {
     writeStoredImageSourceCache();
     return;

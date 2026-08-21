@@ -3,15 +3,15 @@ import type { GhostBoxGame } from "../data";
 import { gameSteamHeaderFirstSources, getGameAppId } from "../utils/image";
 import { readStoredDownloadParallelChunks } from "../utils/storage";
 
-export type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
+type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
 
-export type DownloadSteamIntegrationStatus =
+type DownloadSteamIntegrationStatus =
   | "ok"
   | "skipped"
   | "manifest-failed"
   | "library-not-registered";
 
-export type DownloadSteamIntegration = {
+type DownloadSteamIntegration = {
   status: DownloadSteamIntegrationStatus;
   message?: string;
   manifestPath?: string;
@@ -19,7 +19,7 @@ export type DownloadSteamIntegration = {
   requiresSteamRestart?: boolean;
 };
 
-export type StaleManifestDepot = {
+type StaleManifestDepot = {
   depotId: number;
   /** Manifest que seria baixado. String: não cabe em `number` sem perder dígito. */
   manifestId: string;
@@ -34,7 +34,7 @@ export type StaleManifestDepot = {
  * build pública. Guardado na tarefa para a página poder oferecer "baixar mesmo
  * assim", que repete a chamada com `allowStale`.
  */
-export type StaleManifestReport = {
+type StaleManifestReport = {
   publicBuildId?: string;
   depots: StaleManifestDepot[];
 };
@@ -836,10 +836,6 @@ export async function deleteDownloadTaskFiles(id: string): Promise<void> {
   removeLiveTask(task.appId);
   notifyChanged(true);
   startNextQueuedTask();
-}
-
-export function cancelDownloadTask(id: string) {
-  void deleteDownloadTaskFiles(id).catch(() => undefined);
 }
 
 function eventAppId(payload: Record<string, unknown>): string {

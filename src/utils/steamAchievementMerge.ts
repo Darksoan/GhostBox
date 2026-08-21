@@ -29,7 +29,7 @@ function calculateAchievementStats(achievementList: SteamAchievement[]) {
   };
 }
 
-export function buildSteamAchievementList(
+function buildSteamAchievementList(
   summary: SteamGameAchievementSummary | undefined,
 ): SteamAchievement[] {
   return (summary?.achievements ?? []).map((achievement) => ({
@@ -67,7 +67,7 @@ export function buildSteamAchievementIndex(
   return index;
 }
 
-export function mergeAchievementLists(
+function mergeAchievementLists(
   baseList: SteamAchievement[] = [],
   incomingList: SteamAchievement[] = [],
 ) {

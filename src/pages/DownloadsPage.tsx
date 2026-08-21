@@ -1,5 +1,5 @@
-import { FolderOpen, LoaderCircle, Pause, Play, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { FolderOpen, FolderSearch, GripHorizontal, LoaderCircle, Pause, Play, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { DownloadDetailsModal } from "../components/modals/DownloadDetailsModal";
 import { useOverlay } from "../context/OverlayContext";
@@ -51,117 +51,6 @@ function DownloadsHero({
   onPause,
   onResume,
   onOpen,
-  draggable,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  isDragging,
-  isDragOver,
-}: {
-  task: DownloadTask;
-  queuePosition: number | null;
-  onPause: (id: string) => void;
-  onResume: (id: string) => void;
-  onOpen: (id: string) => void;
-  draggable?: boolean;
-  onDragStart?: (e: React.DragEvent) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDrop?: (e: React.DragEvent) => void;
-  onDragEnd?: (e: React.DragEvent) => void;
-  isDragging?: boolean;
-  isDragOver?: boolean;
-}) {
-  const { appearance, t } = useSettings();
-  const coverSources = useCachedImageSources(task.headerSources);
-  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(coverSources);
-  const progressPercent =
-    task.bytesTotal > 0 ? Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100)) : 0;
-  const etaLabel =
-    typeof task.estimatedSecondsRemaining === "number"
-      ? t("downloads.estimatedTime", { time: formatEta(task.estimatedSecondsRemaining) })
-      : t("downloads.estimatedTimeCalculating");
-  const statusLabel =
-    task.status === "queued"
-      ? t("downloads.queuePosition", { position: queuePosition ?? 1 })
-      : task.status === "downloading"
-        ? t("downloads.statusDownloading")
-        : task.status === "paused"
-          ? t("downloads.statusPaused")
-          : "";
-  const showsProgress = task.status === "downloading" || task.status === "paused" || task.status === "queued";
-  const canPause = task.status === "downloading" || task.status === "queued";
-  const canResume = task.status === "paused";
-
-  return (
-    <section
-      className={`downloads-hero downloads-hero--${task.status}${isDragging ? " downloads-hero--dragging" : ""}${isDragOver ? " downloads-hero--drag-over" : ""}`}
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      data-drop-placement="hero"
-    >
-      <span
-        className={`downloads-hero__cover${headerLoaded && headerSource ? " downloads-hero__cover--loaded" : ""}`}
-        style={layeredImageStyle(headerLoaded && headerSource ? [headerSource] : emptyImageSources, "")}
-        aria-hidden="true"
-      />
-      <span className="downloads-hero__scrim" aria-hidden="true" />
-      <div className="downloads-hero__content">
-        <div className="downloads-hero__main">
-          <strong className="downloads-hero__title">{task.title}</strong>
-          {statusLabel && <span className="downloads-hero__status-pill">{statusLabel}</span>}
-        </div>
-
-        {showsProgress && (
-          <span className="downloads-hero__progress-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
-            <span style={{ width: `${progressPercent}%` }} />
-          </span>
-        )}
-
-        {showsProgress && (
-          <span className="downloads-hero__meta">
-            <span className="downloads-hero__meta-item">
-              {formatBytes(task.bytesDownloaded)} / {task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}
-            </span>
-            {task.status === "downloading" && (
-              <>
-                <span className="downloads-hero__meta-item">{etaLabel}</span>
-                <span className="downloads-hero__meta-item">{formatSpeed(task.speedBytesPerSecond)}</span>
-              </>
-            )}
-            <span className="downloads-hero__meta-item">{progressPercent}%</span>
-          </span>
-        )}
-
-        <div className="downloads-hero__actions">
-          {canPause && (
-            <button type="button" className="downloads-hero__action" onClick={() => onPause(task.id)} aria-label={t("downloads.pause")}>
-              <Pause size={16} strokeWidth={2} /> <span>{t("downloads.pause")}</span>
-            </button>
-          )}
-          {canResume && (
-            <button type="button" className="downloads-hero__action" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")}>
-              <Play size={16} strokeWidth={2} /> <span>{t("downloads.resume")}</span>
-            </button>
-          )}
-          <button type="button" className="downloads-hero__action downloads-hero__action--ghost" onClick={() => onOpen(task.id)} aria-label={t("downloads.details.open", { title: task.title })}>
-            {appearance.language === "en" ? "Detalhes" : "Detalhes"}
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DownloadCard({
-  task,
-  queuePosition,
-  onPause,
-  onResume,
-  onOpen,
   onOpenFolder,
   onUninstall,
   onLaunch,
@@ -194,6 +83,22 @@ function DownloadCard({
   isDragOver?: boolean;
 }) {
   const { appearance, t } = useSettings();
+  const heroSources = useMemo(() => {
+    const appId = task.appId;
+    return [
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
+      `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
+      `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
+      `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
+      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+      `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+      `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+      `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
+      ...task.headerSources,
+    ];
+  }, [task.appId, task.headerSources]);
+  const coverSources = useCachedImageSources(heroSources);
+  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(coverSources, { preferOrder: true });
   const progressPercent =
     task.bytesTotal > 0 ? Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100)) : 0;
   const etaLabel =
@@ -207,158 +112,139 @@ function DownloadCard({
         ? t("downloads.statusDownloading")
         : task.status === "paused"
           ? t("downloads.statusPaused")
-          : task.status === "error"
-            ? t("downloads.statusError")
-            : "";
+          : task.status === "completed"
+            ? t("downloads.statusCompleted")
+            : task.status === "error"
+              ? t("downloads.statusError")
+              : "";
   const downloadedAt = formatDownloadTimestamp(task.startedAt ?? task.queuedAt, appearance.language);
   const showsProgress = task.status === "downloading" || task.status === "paused" || task.status === "queued";
-  const showsLiveSpeed = task.status === "downloading";
+  const canPause = task.status === "downloading" || task.status === "queued";
+  const canResume = task.status === "paused";
+  const canRemove = task.status === "error";
 
   const metaItems = (
     showsProgress
       ? [
-          task.status === "downloading" ? "" : statusLabel,
           `${formatBytes(task.bytesDownloaded)} / ${task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}`,
-          showsLiveSpeed ? etaLabel : "",
-          showsLiveSpeed ? formatSpeed(task.speedBytesPerSecond) : "",
+          task.status === "downloading" ? etaLabel : "",
+          task.status === "downloading" ? formatSpeed(task.speedBytesPerSecond) : "",
+          `${progressPercent}%`,
         ]
-      : [
-          task.status === "error" ? statusLabel : "",
-          task.status === "completed"
-            ? t("downloads.totalDownloaded", { size: formatBytes(task.totalBytesDownloaded ?? 0) })
-            : "",
-          task.status === "completed" && task.failedFiles
-            ? t("downloads.failedFiles", { count: task.failedFiles })
-            : "",
-        ]
+      : task.status === "completed"
+        ? [
+            downloadedAt,
+            t("downloads.totalDownloaded", { size: formatBytes(task.totalBytesDownloaded ?? 0) }),
+            task.failedFiles ? t("downloads.failedFiles", { count: task.failedFiles }) : "",
+          ]
+        : task.status === "error"
+          ? [downloadedAt, task.errorMessage ?? t("downloads.genericError")]
+          : []
   ).filter(Boolean);
-  const canPause = task.status === "downloading" || task.status === "queued";
-  const canResume = task.status === "paused";
-  const canCancel = task.status === "downloading" || task.status === "queued" || task.status === "paused";
-  const canRemove = task.status === "error";
-  const hasControls = canPause || canResume || canCancel || canRemove;
-  const controls = (
-    <span className="download-card__controls">
-      {canPause ? (
-        <button type="button" className="download-card__icon-button" onClick={() => onPause(task.id)} aria-label={t("downloads.pause")} title={t("downloads.pause")}>
-          <Pause size={15} strokeWidth={2} />
-        </button>
-      ) : null}
-      {canResume ? (
-        <button type="button" className="download-card__icon-button" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")} title={t("downloads.resume")}>
-          <Play size={15} strokeWidth={2} />
-        </button>
-      ) : null}
-      {canCancel ? (
-        <button type="button" className="download-card__icon-button download-card__icon-button--danger" onClick={() => onOpen(task.id)} aria-label={t("downloads.cancel")} title={t("downloads.cancel")}>
-          <X size={15} strokeWidth={2} />
-        </button>
-      ) : null}
-      {canRemove ? (
-        <button type="button" className="download-card__remove" onClick={() => removeDownloadTask(task.id)} aria-label={t("downloads.remove")} title={t("downloads.remove")}>
-          <X size={15} strokeWidth={2} />
-        </button>
-      ) : null}
-    </span>
-  );
-
-  const coverSources = useCachedImageSources(task.headerSources);
-  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(coverSources);
 
   return (
-    <article
-      className={`download-card download-card--${task.status}${hasControls ? "" : " download-card--no-controls"}${isDragging ? " download-card--dragging" : ""}${isDragOver ? " download-card--drag-over" : ""}`}
-      draggable={draggable}
-      onDragStart={onDragStart}
+    <section
+      className={`downloads-hero downloads-hero--${task.status}${isDragging ? " downloads-hero--dragging" : ""}${isDragOver ? " downloads-hero--drag-over" : ""}`}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      data-task-id={task.id}
-      data-status={task.status}
+      data-drop-placement="hero"
     >
-      <button type="button" className="download-card__open" onClick={() => onOpen(task.id)} aria-label={t("downloads.details.open", { title: task.title })} />
-      <span className="download-card__cover-slot" aria-hidden="true">
+      <span
+        className={`downloads-hero__cover${headerLoaded && headerSource ? " downloads-hero__cover--loaded" : ""}`}
+        style={layeredImageStyle(headerLoaded && headerSource ? [headerSource] : emptyImageSources, "")}
+        aria-hidden="true"
+      />
+      <span className="downloads-hero__scrim" aria-hidden="true" />
+      {draggable && (
         <span
-          className={`download-card__cover${headerLoaded && headerSource ? " download-card__cover--loaded" : " download-card__cover--loading"}`}
-          style={layeredImageStyle(headerLoaded && headerSource ? [headerSource] : emptyImageSources, "")}
-        />
-      </span>
-
-      <div className="download-card__content">
-        {showsProgress ? null : (
-          <div className="download-card__finished">
-            <span className="download-card__date">{downloadedAt}</span>
-            {task.status === "completed" ? (
-              <span className="download-card__quick-actions">
-                <span className="download-card__quick-action-wrap">
-                  <button type="button" className="download-card__quick-action" onClick={() => onOpenFolder(task)} aria-label={t("downloads.openFolder")}>
-                    <FolderOpen size={15} strokeWidth={2} />
-                  </button>
-                  <span className="download-card__quick-action-tooltip" role="tooltip">
-                    {t("downloads.openFolder")}
-                  </span>
-                </span>
-                <span className="download-card__quick-action-wrap">
-                  <button type="button" className="download-card__quick-action download-card__quick-action--danger" onClick={() => onUninstall(task.id)} aria-label={t("downloads.uninstall")}>
-                    <Trash2 size={15} strokeWidth={2} />
-                  </button>
-                  <span className="download-card__quick-action-tooltip" role="tooltip">
-                    {t("downloads.uninstall")}
-                  </span>
-                </span>
-                <span className="download-card__quick-action-wrap">
-                  <button type="button" className="download-card__quick-action" onClick={() => onLaunch(task)} disabled={launching} aria-busy={launching} aria-label={t("downloads.launch")}>
-                    {launching ? <LoaderCircle className="download-card__launch-spinner" size={15} strokeWidth={2} aria-hidden="true" /> : <Play size={15} strokeWidth={2} />}
-                  </button>
-                  <span className="download-card__quick-action-tooltip" role="tooltip">
-                    {t("downloads.launch")}
-                  </span>
-                </span>
-              </span>
-            ) : null}
+          className="downloads-hero__grip"
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          aria-hidden="true"
+        >
+          <GripHorizontal size={14} strokeWidth={2} />
+        </span>
+      )}
+      <div className="downloads-hero__content">
+        <div className="downloads-hero__top">
+          <div className="downloads-hero__main">
+            <strong className="downloads-hero__title">{task.title}</strong>
+            {statusLabel && <span className="downloads-hero__status-text">{statusLabel}</span>}
           </div>
-        )}
 
-        <strong className="download-card__title">{task.title}</strong>
+          <div className="downloads-hero__actions">
+            {canPause && (
+              <button type="button" className="downloads-hero__action" onClick={() => onPause(task.id)} aria-label={t("downloads.pause")}>
+                <Pause size={16} strokeWidth={1.5} /> <span>{t("downloads.pause")}</span>
+              </button>
+            )}
+            {canResume && (
+              <button type="button" className="downloads-hero__action" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")}>
+                <Play size={16} strokeWidth={1.5} /> <span>{t("downloads.resume")}</span>
+              </button>
+            )}
+            {task.status === "completed" && (
+              <>
+                <button type="button" className="downloads-hero__action" onClick={() => onOpenFolder(task)} aria-label={t("downloads.openFolder")}>
+                  <FolderOpen size={16} strokeWidth={1.5} />
+                </button>
+                <button type="button" className="downloads-hero__action" onClick={() => onUninstall(task.id)} aria-label={t("downloads.uninstall")}>
+                  <Trash2 size={16} strokeWidth={1.5} />
+                </button>
+                <button type="button" className="downloads-hero__action" onClick={() => onLaunch(task)} disabled={launching} aria-busy={launching} aria-label={t("downloads.launch")}>
+                  {launching ? <LoaderCircle className="downloads-hero__launch-spinner" size={16} strokeWidth={1.5} aria-hidden="true" /> : <Play size={16} strokeWidth={1.5} />}
+                  <span>{t("downloads.launch")}</span>
+                </button>
+              </>
+            )}
+            {canRemove && (
+              <button type="button" className="downloads-hero__action" onClick={() => removeDownloadTask(task.id)} aria-label={t("downloads.remove")}>
+                <X size={16} strokeWidth={1.5} /> <span>{t("downloads.remove")}</span>
+              </button>
+            )}
+            <button type="button" className="downloads-hero__action" onClick={() => onOpen(task.id)} aria-label={t("downloads.details.open", { title: task.title })}>
+              <FolderSearch size={16} strokeWidth={1.5} /> <span>Open details</span>
+            </button>
+          </div>
+        </div>
 
-        {showsProgress ? (
-          <span className="download-card__progress-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
+        {showsProgress && (
+          <span className="downloads-hero__progress-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
             <span style={{ width: `${progressPercent}%` }} />
           </span>
-        ) : null}
+        )}
 
-        <span className="download-card__meta-line">
-          {metaItems.map((item) => (
-            <span key={item} className="download-card__meta-item">
-              {item}
-            </span>
-          ))}
-        </span>
+        {metaItems.length > 0 && (
+          <span className="downloads-hero__meta">
+            {metaItems.map((item) => (
+              <span key={item} className="downloads-hero__meta-item">
+                {item}
+              </span>
+            ))}
+          </span>
+        )}
 
-        {task.status === "error" ? <span className="download-card__error">{task.errorMessage ?? t("downloads.genericError")}</span> : null}
-
-        {task.staleManifest ? (
-          <span className="download-card__stale">
-            <span className="download-card__stale-detail">
+        {task.staleManifest && (
+          <span className="downloads-hero__stale">
+            <span className="downloads-hero__stale-detail">
               {t("downloads.staleManifestDetail", {
                 depots: task.staleManifest.depots.map((depot) => depot.depotId).join(", "),
                 buildId: task.staleManifest.publicBuildId || "--",
               })}
             </span>
-            <button type="button" className="download-card__stale-action" onClick={() => onRetryStale(task.id)}>
+            <button type="button" className="downloads-hero__action" onClick={() => onRetryStale(task.id)}>
               {t("downloads.staleManifestDownloadAnyway")}
             </button>
           </span>
-        ) : null}
+        )}
       </div>
-
-      {hasControls ? controls : null}
-    </article>
+    </section>
   );
 }
 
 export function DownloadsPage() {
-  const { t, appearance } = useSettings();
+  const { t } = useSettings();
   const { showToast } = useOverlay();
   const [tasks, setTasks] = useState<DownloadTask[]>(() => readDownloadTasks());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -437,12 +323,6 @@ export function DownloadsPage() {
     setDraggedId(taskId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", taskId);
-    // Prevent ghost image issues with buttons
-    if (e.currentTarget instanceof HTMLElement) {
-      setTimeout(() => {
-        e.currentTarget.classList.add("download-card--dragging");
-      }, 0);
-    }
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, overId: string | null) => {
@@ -603,6 +483,11 @@ export function DownloadsPage() {
                 onPause={pauseDownloadTask}
                 onResume={resumeDownloadTask}
                 onOpen={openDetails}
+                onOpenFolder={(t) => void openDownloadFolder(t)}
+                onUninstall={openUninstall}
+                onLaunch={(t) => void launchDownload(t)}
+                onRetryStale={retryDownloadIgnoringStaleManifest}
+                launching={launchingTaskId === heroTask.id}
                 draggable={Boolean(heroTask)}
                 onDragStart={(e) => handleDragStart(e, heroTask.id)}
                 onDragOver={(e) => handleDragOver(e, heroTask.id)}
@@ -621,13 +506,9 @@ export function DownloadsPage() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDropOnSection(e, "queue")}
             >
-              <div className="downloads-page__section-header">
-                <h3 className="downloads-page__section-title">{appearance.language === "en" ? "Queue" : "Fila"}</h3>
-                <span className="downloads-page__section-count">{queuedTasks.length}</span>
-              </div>
               <div className="downloads-page__list">
                 {queuedTasks.map((task) => (
-                  <DownloadCard
+                  <DownloadsHero
                     key={task.id}
                     task={task}
                     queuePosition={tasks.filter((t) => t.status === "queued").findIndex((e) => e.id === task.id) + 1}
@@ -659,13 +540,9 @@ export function DownloadsPage() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDropOnSection(e, "paused")}
             >
-              <div className="downloads-page__section-header">
-                <h3 className="downloads-page__section-title">{appearance.language === "en" ? "Paused" : "Pausados"}</h3>
-                <span className="downloads-page__section-count">{pausedTasks.length}</span>
-              </div>
               <div className="downloads-page__list">
                 {pausedTasks.map((task) => (
-                  <DownloadCard
+                  <DownloadsHero
                     key={task.id}
                     task={task}
                     queuePosition={null}
@@ -697,13 +574,9 @@ export function DownloadsPage() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDropOnSection(e, "history")}
             >
-              <div className="downloads-page__section-header">
-                <h3 className="downloads-page__section-title">{appearance.language === "en" ? "Completed" : "Concluídos"}</h3>
-                <span className="downloads-page__section-count">{historyTasks.length}</span>
-              </div>
               <div className="downloads-page__list">
                 {historyTasks.map((task) => (
-                  <DownloadCard
+                  <DownloadsHero
                     key={task.id}
                     task={task}
                     queuePosition={null}

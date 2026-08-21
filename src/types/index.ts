@@ -35,14 +35,14 @@ export type BackupRecord = {
   entries?: BackupEntry[];
 };
 
-export type BackupEntry = {
+type BackupEntry = {
   path: string;
   backupAt: string;
   sizeBytes?: number;
   pinned?: boolean;
 };
 
-export type BackupFileTreeEntry = {
+type BackupFileTreeEntry = {
   name: string;
   path: string;
   type: "file" | "directory";
@@ -78,12 +78,6 @@ export type UserCollection = {
   name: string;
   gameIds: string[];
   games?: GhostBoxGame[];
-};
-
-export type GameCollection = {
-  id: string;
-  name: string;
-  gamesCount: number;
 };
 
 export type SteamProfile = {
@@ -133,7 +127,7 @@ export type SteamGameAchievementSummary = {
   achievements: SteamRemoteAchievement[];
 };
 
-export type SteamRemoteAchievement = {
+type SteamRemoteAchievement = {
   name: string;
   title: string;
   description: string;
@@ -144,7 +138,7 @@ export type SteamRemoteAchievement = {
   globalPercent?: number;
 };
 
-export type SteamRecentAchievement = {
+type SteamRecentAchievement = {
   id: string;
   title: string;
   gameTitle: string;

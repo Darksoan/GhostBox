@@ -7,18 +7,18 @@ import {
   loadGameStoreDetails,
 } from "../data";
 
-export const gameDetailsCache = new Map<string, GhostBoxGame | null>();
-export const gameDetailsRequestCache = new Map<
+const gameDetailsCache = new Map<string, GhostBoxGame | null>();
+const gameDetailsRequestCache = new Map<
   string,
   Promise<GhostBoxGame | null>
 >();
-export const gameStoreDetailsCache = new Map<string, GhostBoxGame | null>();
-export const gameStoreDetailsRequestCache = new Map<
+const gameStoreDetailsCache = new Map<string, GhostBoxGame | null>();
+const gameStoreDetailsRequestCache = new Map<
   string,
   Promise<GhostBoxGame | null>
 >();
-export const gameAchievementDetailsCache = new Map<string, GhostBoxGame | null>();
-export const gameAchievementDetailsRequestCache = new Map<
+const gameAchievementDetailsCache = new Map<string, GhostBoxGame | null>();
+const gameAchievementDetailsRequestCache = new Map<
   string,
   Promise<GhostBoxGame | null>
 >();

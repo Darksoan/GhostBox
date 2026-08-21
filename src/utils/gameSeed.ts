@@ -1,6 +1,6 @@
 import type { GhostBoxGame } from "../data";
 
-export type GameSeed = {
+type GameSeed = {
   appId: string;
   title: string;
   shortDescription?: string;

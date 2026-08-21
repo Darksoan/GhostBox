@@ -1,4 +1,4 @@
-export const SCROLL_IDLE_DELAY_MS = 220;
+const SCROLL_IDLE_DELAY_MS = 220;
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let scrolling = false;

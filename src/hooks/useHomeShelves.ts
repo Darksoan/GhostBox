@@ -18,7 +18,7 @@ import {
 } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 
-export type HomeShelfId =
+type HomeShelfId =
   | "recommended"
   | "newReleases"
   | "topSellers"

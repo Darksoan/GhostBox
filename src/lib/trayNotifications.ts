@@ -1,6 +1,6 @@
 import type { Language } from "../i18n";
 
-export type TrayHiddenNotificationPayload = {
+type TrayHiddenNotificationPayload = {
   title: string;
   message: string;
 };

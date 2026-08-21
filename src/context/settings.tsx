@@ -9,7 +9,6 @@ import {
 } from "react";
 import { translate } from "../i18n";
 import { ghostboxApi } from "../lib/ghostboxApi";
-import { setPreferLowResCovers } from "../utils/image";
 import { setImagePreloadConcurrency } from "../utils/imageCache";
 
 export interface AppearanceSettings {
@@ -22,7 +21,6 @@ export interface AppearanceSettings {
   disableBackdropBlur: boolean;
   trailerQuality: "high" | "low";
   trailerAutoplay: boolean;
-  preferLowResCovers: boolean;
   imagePreloadConcurrency: 2 | 4 | 6;
   disablePageKeepAlive: boolean;
 }
@@ -57,7 +55,6 @@ const defaultAppearance: AppearanceSettings = {
   disableBackdropBlur: false,
   trailerQuality: "high",
   trailerAutoplay: true,
-  preferLowResCovers: false,
   imagePreloadConcurrency: 4,
   disablePageKeepAlive: false,
 };
@@ -99,7 +96,6 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     disableBackdropBlur: appearance.disableBackdropBlur === true,
     trailerQuality: appearance.trailerQuality === "low" ? "low" : "high",
     trailerAutoplay,
-    preferLowResCovers: appearance.preferLowResCovers === true,
     imagePreloadConcurrency,
     disablePageKeepAlive: appearance.disablePageKeepAlive === true,
   };
@@ -214,10 +210,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setImagePreloadConcurrency(appearance.imagePreloadConcurrency);
   }, [appearance.imagePreloadConcurrency]);
-
-  useEffect(() => {
-    setPreferLowResCovers(appearance.preferLowResCovers);
-  }, [appearance.preferLowResCovers]);
 
   useEffect(() => {
     void ghostboxApi.setNotificationSettings(notifications).catch(() => undefined);

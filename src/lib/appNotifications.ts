@@ -129,7 +129,7 @@ export function readAppNotifications(): AppNotificationItem[] {
   }
 }
 
-export function writeAppNotifications(items: AppNotificationItem[]) {
+function writeAppNotifications(items: AppNotificationItem[]) {
   if (typeof window === "undefined") return;
 
   try {

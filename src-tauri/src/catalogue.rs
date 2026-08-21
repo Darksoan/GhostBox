@@ -335,21 +335,6 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
     })
 }
 
-#[allow(dead_code)]
-fn is_steam_app_title_placeholder(title: &str, app_id: &str) -> bool {
-    let title = title.trim();
-    title.is_empty()
-        || title.eq_ignore_ascii_case(&format!("Steam App {app_id}"))
-        || title.eq_ignore_ascii_case(&format!("Steam {app_id}"))
-}
-
-#[allow(dead_code)]
-fn set_game_title(game: &mut Value, title: String) {
-    if let Some(object) = game.as_object_mut() {
-        object.insert("title".to_string(), Value::String(title));
-    }
-}
-
 fn merge_header_image(object: &mut serde_json::Map<String, Value>, header_image: String) {
     if header_image.is_empty() {
         return;

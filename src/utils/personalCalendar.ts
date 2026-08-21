@@ -3,9 +3,9 @@ import type { StoredPersonalCalendar } from "./storage";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 import { gameTraitAppId, getGameTraitSet } from "./gameTraits";
 
-export const personalCalendarAlgorithmVersion = "monthly-v2";
+const personalCalendarAlgorithmVersion = "monthly-v2";
 
-export const personalCalendarWeekdayLabels = {
+const personalCalendarWeekdayLabels = {
   pt: ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."],
   en: ["SUN.", "MON.", "TUE.", "WED.", "THU.", "FRI.", "SAT."],
 } as const;

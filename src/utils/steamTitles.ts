@@ -16,7 +16,7 @@ export function isSteamTitlePlaceholder(title: string | undefined, appId?: strin
   );
 }
 
-export function resolveSteamGameTitle(game: GhostBoxGame, knownGames: GhostBoxGame[]) {
+function resolveSteamGameTitle(game: GhostBoxGame, knownGames: GhostBoxGame[]) {
   if (!isSteamTitlePlaceholder(game.title, game.appId)) return game.title;
 
   const knownTitle = knownGames.find(

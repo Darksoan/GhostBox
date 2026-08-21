@@ -28,7 +28,7 @@ export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   download: "settings.tabs.download.label",
 };
 
-export type SettingsNavigationTab = {
+type SettingsNavigationTab = {
   id: SettingsTabId;
   icon: LucideIcon;
 };

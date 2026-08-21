@@ -41,7 +41,7 @@ export function normalizeGameRequest(
   };
 }
 
-export const gamesQueryKeys = {
+const gamesQueryKeys = {
   all: ["games"] as const,
   list: (request: GameDatabaseRequest) =>
     [

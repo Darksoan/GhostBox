@@ -832,9 +832,9 @@ export function writeStoredDownloadsDir(directory: string) {
 }
 
 /* Faixa espelha o clamp do worker em SteamKitPocRunner: fora dela o valor é ignorado. */
-export const downloadParallelChunksMin = 1;
-export const downloadParallelChunksMax = 32;
-export const downloadParallelChunksDefault = 24;
+const downloadParallelChunksMin = 1;
+const downloadParallelChunksMax = 32;
+const downloadParallelChunksDefault = 24;
 
 export function readStoredDownloadParallelChunks(): number {
   if (typeof window === "undefined") return downloadParallelChunksDefault;

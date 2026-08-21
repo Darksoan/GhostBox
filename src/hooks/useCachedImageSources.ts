@@ -94,7 +94,7 @@ export function useCachedImageSources(sources: string[]) {
   return cachedSources;
 }
 
-export type LoadableImageOptions = {
+type LoadableImageOptions = {
   /** Force failure after this many ms so lists can hide broken covers. */
   failTimeoutMs?: number;
   /**
