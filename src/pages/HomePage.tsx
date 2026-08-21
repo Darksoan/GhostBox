@@ -47,7 +47,7 @@ import {
   getUniquePersonalCalendarPool,
   isStoredPersonalCalendarFresh,
   personalCalendarGameKey,
-  pickPersonalCalendarGames,
+  planPersonalCalendar,
 } from "../utils/personalCalendar";
 import {
   gameHeaderOnlySources,
@@ -123,7 +123,6 @@ const homePersonalCalendarGameCount =
 const homePersonalCalendarPageSize = 120;
 const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 15;
 const homePersonalCalendarEnrichmentLimit = 6;
-const homePersonalCalendarRefreshMs = 7 * 24 * 60 * 60 * 1000;
 const homeCalendarCoverLoadMargin = "360px 720px";
 // Below this rail width the fourth day no longer fits on one row, so it is
 // dropped instead of wrapping into an orphan row under the first column.
@@ -132,7 +131,7 @@ const homePersonalCalendarNarrowDays = 3;
 const homeWishlistCycleSourceCount = 6;
 const homeWishlistSimilarPoolLimit = 16;
 const homeWishlistCycleGameCount = 4;
-const homeWishlistCacheRefreshMs = 7 * 24 * 60 * 60 * 1000;
+const homeWishlistReviewCacheMs = 7 * 24 * 60 * 60 * 1000;
 const homeWishlistRetryMs = 30 * 60 * 1000;
 
 function homeGameAppId(game: GhostBoxGame) {
@@ -1452,7 +1451,7 @@ function HomePlayerReview({
           writeStoredSteamWishlistReview({
             appId,
             language: reviewLanguage,
-            expiresAt: new Date(Date.now() + homeWishlistCacheRefreshMs).toISOString(),
+            expiresAt: new Date(Date.now() + homeWishlistReviewCacheMs).toISOString(),
             review: nextReview,
           });
         }
@@ -1631,10 +1630,10 @@ export function HomePage({
 }) {
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
-  const [storedPersonalCalendar, setStoredPersonalCalendar] =
-    useState<StoredPersonalCalendar | null>(() => readStoredPersonalCalendar());
+  // Always anchored to "today": a stored start from a previous day would label
+  // the columns with dates that already passed.
   const [personalCalendarCycleStart, setPersonalCalendarCycleStart] = useState(() =>
-    storedPersonalCalendar?.cycleStart ?? getPersonalCalendarCycleStart().toISOString()
+    getPersonalCalendarCycleStart().toISOString()
   );
   const [personalCalendarGames, setPersonalCalendarGames] = useState<GhostBoxGame[]>([]);
   const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
@@ -1695,38 +1694,19 @@ export function HomePage({
         }
 
         if (cancelled) return;
-        setStoredPersonalCalendar(currentStoredCalendar);
 
         const pool = await loadHomePersonalCalendarPool(excludedGameIds);
         if (cancelled) return;
 
-        const gameById = new Map<string, GhostBoxGame>();
-        pool.forEach((game) => {
-          gameById.set(personalCalendarGameKey(game), game);
-          gameById.set(game.id, game);
-        });
-
-        if (isStoredPersonalCalendarFresh(currentStoredCalendar, homePersonalCalendarGameCount)) {
-          const storedGames = currentStoredCalendar.gameIds.flatMap((gameId) => {
-            if (excludedGameIds.has(gameId)) return [];
-            const game = gameById.get(gameId);
-            return game ? [game] : [];
-          });
-
-          if (storedGames.length === homePersonalCalendarGameCount) {
-            setPersonalCalendarCycleStart(currentStoredCalendar.cycleStart);
-            setPersonalCalendarGames(storedGames);
-            schedulePersonalCalendarRefresh(currentStoredCalendar);
-            return;
-          }
-        }
-
+        // Each date keeps the games it was already assigned; only empty or
+        // no-longer-available slots are re-picked, so a day is never swapped
+        // before it is reached.
         const cycleStart = getPersonalCalendarCycleStart();
-        const selectedGames = pickPersonalCalendarGames(pool, {
-          gameCount: homePersonalCalendarGameCount,
+        const { games: selectedGames, dayGameIds } = planPersonalCalendar(pool, {
+          days: homePersonalCalendarDays,
           gamesPerDay: homePersonalCalendarGamesPerDay,
           cycleStart,
-          monthGameIds: currentStoredCalendar?.monthGameIds,
+          storedCalendar: currentStoredCalendar,
           excludedGameIds,
         });
 
@@ -1737,14 +1717,12 @@ export function HomePage({
         }
 
         const nextCalendar = createPersonalCalendar({
-          selectedGames,
+          dayGameIds,
           storedCalendar: currentStoredCalendar,
           cycleStart,
-          refreshMs: homePersonalCalendarRefreshMs,
-          gamesPerDay: homePersonalCalendarGamesPerDay,
+          days: homePersonalCalendarDays,
         });
         writeStoredPersonalCalendar(nextCalendar);
-        setStoredPersonalCalendar(nextCalendar);
         setPersonalCalendarCycleStart(nextCalendar.cycleStart);
         setPersonalCalendarGames(selectedGames);
         schedulePersonalCalendarRefresh(nextCalendar);
@@ -1940,7 +1918,6 @@ export function HomePage({
           selectedGames,
           storedCycle,
           cycleStart,
-          refreshMs: homeWishlistCacheRefreshMs,
           historyLimit: homeWishlistCycleHistoryLimit,
         });
         if (cancelled) return;

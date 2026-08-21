@@ -2,8 +2,9 @@ import type { GhostBoxGame } from "../data";
 import type { StoredSteamWishlistCycle } from "./storage";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
-export const wishlistCycleAlgorithmVersion = "wishlist-cycle-v1";
-export const homeWishlistCycleHistoryLimit = 4;
+export const wishlistCycleAlgorithmVersion = "wishlist-cycle-v2";
+// One entry per past day: a game picked today stays out for a full week.
+export const homeWishlistCycleHistoryLimit = 7;
 
 type WishlistTraitInput = Iterable<string>;
 
@@ -22,7 +23,6 @@ type CreateWishlistCycleOptions = {
   selectedGames: GhostBoxGame[];
   storedCycle: StoredSteamWishlistCycle | null;
   cycleStart: Date;
-  refreshMs: number;
   historyLimit?: number;
 };
 
@@ -88,16 +88,24 @@ function overlapScore(game: GhostBoxGame, selectedGames: GhostBoxGame[]) {
   }, 0);
 }
 
+// The cycle is one local day: recommendations roll over at midnight.
 export function getWishlistCycleStart(date = new Date()) {
-  const start = atLocalStartOfDay(date);
-  const daysSinceMonday = (start.getDay() + 6) % 7;
-  start.setDate(start.getDate() - daysSinceMonday);
-  return start;
+  return atLocalStartOfDay(date);
+}
+
+export function getWishlistCycleExpiry(cycleStart: Date) {
+  const next = atLocalStartOfDay(cycleStart);
+  next.setDate(next.getDate() + 1);
+  // Re-normalize so DST transitions still land on the next local midnight.
+  next.setHours(0, 0, 0, 0);
+  return next;
 }
 
 export function getWishlistCycleIndex(cycleStart: Date) {
+  const start = getWishlistCycleStart(cycleStart);
   return Math.floor(
-    getWishlistCycleStart(cycleStart).getTime() / (7 * 24 * 60 * 60 * 1000)
+    Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()) /
+      (24 * 60 * 60 * 1000)
   );
 }
 
@@ -208,7 +216,6 @@ export function createWishlistCycle({
   selectedGames,
   storedCycle,
   cycleStart,
-  refreshMs,
   historyLimit = homeWishlistCycleHistoryLimit,
 }: CreateWishlistCycleOptions): StoredSteamWishlistCycle {
   const normalizedStart = atLocalStartOfDay(cycleStart);
@@ -226,7 +233,7 @@ export function createWishlistCycle({
     steamId,
     algorithmVersion: wishlistCycleAlgorithmVersion,
     cycleStart: cycleStartIso,
-    expiresAt: new Date(normalizedStart.getTime() + refreshMs).toISOString(),
+    expiresAt: getWishlistCycleExpiry(normalizedStart).toISOString(),
     gameIds,
     history,
   };

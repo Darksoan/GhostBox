@@ -715,6 +715,19 @@ export const ghostboxApi = {
     );
   },
 
+  /**
+   * Cheque pontual do appinfo público (PICS) de um jogo só. Devolve `{}` quando
+   * a arte não mudou — é o caminho para corrigir uma capa velha sem esperar o
+   * TTL do manifesto da loja.
+   */
+  refreshSteamAssetManifest(appId: string): Promise<Record<string, string>> {
+    return invokeOr<Record<string, string>>(
+      "steam_refresh_asset_manifest",
+      { appId },
+      {},
+    );
+  },
+
   getCachedSteamAssetManifests(
     appIds: string[],
   ): Promise<Record<string, Record<string, string>>> {

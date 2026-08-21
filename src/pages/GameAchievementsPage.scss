@@ -108,7 +108,7 @@
     width: min(200px, 55%);
     height: 14px;
     border-radius: var(--radius-md);
-    background: var(--surface-hover);
+    background: var(--skeleton-fill);
   }
 
   &__skeleton-desc {
@@ -116,7 +116,7 @@
     width: min(280px, 75%);
     height: 12px;
     border-radius: var(--radius-md);
-    background: var(--surface-hover);
+    background: var(--skeleton-fill);
   }
 
   &__skeleton-status {
@@ -125,7 +125,7 @@
     height: 12px;
     margin-left: auto;
     border-radius: var(--radius-md);
-    background: var(--surface-hover);
+    background: var(--skeleton-fill);
   }
 
   &__list {

@@ -143,7 +143,93 @@ fn public_build_number(app: &PublicApp) -> u64 {
     app.build_id.trim().parse().unwrap_or(0)
 }
 
+/// Arte de biblioteca publicada no appinfo (`common.library_assets_full`).
+///
+/// E a mesma tabela que o cliente Steam le para desenhar a capa, e ela vive no
+/// mesmo payload que o `buildid`/depots. Serve para duas coisas: resolver a arte
+/// atual de um jogo migrado (o caminho traz o hash) e detectar que a arte em
+/// cache envelheceu, porque o `_change_number` do app sobe junto.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PublicAppAssets {
+    /// `_change_number` do PICS. Sobe a cada alteracao do appinfo, inclusive
+    /// troca de capa.
+    pub change_number: u64,
+    /// Campo do appinfo (`library_capsule`, `library_capsule_2x`,
+    /// `library_hero`, `library_hero_2x`) -> caminho relativo, com hash quando o
+    /// jogo ja migrou (`<hash>/library_600x900.jpg`) e sem hash quando nao.
+    pub assets: BTreeMap<String, String>,
+}
+
+/// Campos de `library_assets_full` cujo arquivo e byte-a-byte o mesmo que a
+/// `GetItems` devolve. `library_header`/`library_logo` ficam de fora de
+/// proposito: sao arquivos proprios da biblioteca, nao o `header.jpg` da loja.
+const LIBRARY_ASSET_FIELDS: &[(&str, &str, &str)] = &[
+    ("library_capsule", "image", "library_capsule"),
+    ("library_capsule", "image2x", "library_capsule_2x"),
+    ("library_hero", "image", "library_hero"),
+    ("library_hero", "image2x", "library_hero_2x"),
+];
+
+/// Idioma da arte. So o ingles: e o unico que todo app publica, e a capa
+/// localizada nao e "mais nova", e outra arte.
+const LIBRARY_ASSET_LANGUAGE: &str = "english";
+
+/// `{"data":{"<appid>":{"_change_number":…,"common":{"library_assets_full":{…}}}}}`.
+pub fn parse_steamcmd_assets(
+    payload: &serde_json::Value,
+    app_id: &str,
+) -> Option<PublicAppAssets> {
+    if payload
+        .get("status")
+        .and_then(|status| status.as_str())
+        .is_some_and(|status| !status.eq_ignore_ascii_case("success"))
+    {
+        return None;
+    }
+
+    let app = payload.get("data")?.get(app_id)?;
+    let change_number = json_u64(app.get("_change_number"));
+    let library_assets = app.get("common")?.get("library_assets_full")?;
+
+    let mut assets = BTreeMap::new();
+    for (group, variant, field) in LIBRARY_ASSET_FIELDS {
+        let Some(value) = library_assets
+            .get(group)
+            .and_then(|group| group.get(variant))
+            .and_then(|images| images.get(LIBRARY_ASSET_LANGUAGE))
+            .and_then(|value| json_text(Some(value)))
+        else {
+            continue;
+        };
+        let value = value.trim();
+        if !value.is_empty() {
+            assets.insert((*field).to_string(), value.to_string());
+        }
+    }
+
+    if assets.is_empty() {
+        return None;
+    }
+
+    Some(PublicAppAssets {
+        change_number,
+        assets,
+    })
+}
+
+/// Arte de biblioteca do PICS publico. Uma chamada por app — nao existe lote
+/// nesta API, entao o chamador decide quando vale gastar o request.
+pub async fn fetch_steamcmd_assets(app_id: &str) -> Option<PublicAppAssets> {
+    let payload = fetch_steamcmd_payload(app_id).await?;
+    parse_steamcmd_assets(&payload, app_id.trim())
+}
+
 pub async fn fetch_steamcmd_app(app_id: &str) -> Option<PublicApp> {
+    let payload = fetch_steamcmd_payload(app_id).await?;
+    parse_steamcmd_payload(&payload, app_id.trim())
+}
+
+async fn fetch_steamcmd_payload(app_id: &str) -> Option<serde_json::Value> {
     let app_id = app_id.trim();
     if app_id.is_empty() || !app_id.chars().all(|character| character.is_ascii_digit()) {
         return None;
@@ -166,8 +252,7 @@ pub async fn fetch_steamcmd_app(app_id: &str) -> Option<PublicApp> {
     if bytes.len() > MAX_STEAMCMD_RESPONSE_BYTES {
         return None;
     }
-    let payload: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    parse_steamcmd_payload(&payload, app_id)
+    serde_json::from_slice(&bytes).ok()
 }
 
 /// `{"status":"success","data":{"<appid>":{"depots":{...}}}}`.
@@ -377,5 +462,58 @@ mod tests {
     fn missing_app_in_the_payload_is_none_instead_of_an_empty_app() {
         let payload = sample_payload();
         assert!(parse_steamcmd_payload(&payload, "999").is_none());
+    }
+
+    fn library_assets_payload() -> serde_json::Value {
+        serde_json::json!({
+            "data": {
+                "367520": {
+                    "_change_number": 38129562,
+                    "common": {
+                        "library_assets_full": {
+                            "library_capsule": {
+                                "image": { "english": "9f1d/library_600x900.jpg" },
+                                "image2x": { "english": "9f1d/library_600x900_2x.jpg" }
+                            },
+                            "library_hero": { "image": { "english": "library_hero.jpg" } },
+                            "library_header": { "image": { "english": "ab/library_header.jpg" } },
+                            "library_logo": { "image": { "english": "logo.png" } }
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn reads_library_art_and_the_change_number() {
+        let assets = parse_steamcmd_assets(&library_assets_payload(), "367520").unwrap();
+
+        assert_eq!(assets.change_number, 38129562);
+        assert_eq!(
+            assets.assets.get("library_capsule").map(String::as_str),
+            Some("9f1d/library_600x900.jpg")
+        );
+        assert_eq!(
+            assets.assets.get("library_capsule_2x").map(String::as_str),
+            Some("9f1d/library_600x900_2x.jpg")
+        );
+        assert_eq!(
+            assets.assets.get("library_hero").map(String::as_str),
+            Some("library_hero.jpg")
+        );
+        // `library_header`/`library_logo` são arquivos próprios da biblioteca,
+        // não o `header.jpg` da loja: ficam de fora para não trocar um asset
+        // pelo outro.
+        assert!(!assets.assets.contains_key("header"));
+        assert_eq!(assets.assets.len(), 3);
+    }
+
+    #[test]
+    fn app_without_library_art_is_none() {
+        let payload = serde_json::json!({
+            "data": { "367520": { "_change_number": 1, "common": { "name": "Jogo" } } }
+        });
+        assert!(parse_steamcmd_assets(&payload, "367520").is_none());
     }
 }

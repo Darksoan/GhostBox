@@ -22,8 +22,15 @@ const GET_ITEMS_URL: &str = "https://api.steampowered.com/IStoreBrowseService/Ge
 const GET_ITEMS_BATCH_SIZE: usize = 120;
 const GET_ITEMS_MIN_INTERVAL_MS: u64 = 250;
 const GET_ITEMS_TIMEOUT_SECS: u64 = 12;
-const MANIFEST_MAX_AGE_MS: u128 = 30 * 24 * 60 * 60 * 1000;
+/// Três dias, não trinta: o manifesto é o que carrega o hash/cache-buster da
+/// arte, então um TTL longo mantém a capa antiga na tela por semanas depois de o
+/// jogo trocar de capsule. A `GetItems` é em lote (120 appIds por request), então
+/// revalidar a biblioteca inteira custa poucos requests.
+const MANIFEST_MAX_AGE_MS: u128 = 3 * 24 * 60 * 60 * 1000;
 const NEGATIVE_CACHE_TTL_SECS: u64 = 3_600;
+/// Intervalo mínimo entre dois checagens do appinfo do *mesmo* app. O PICS
+/// público não tem lote, então cada cheque é um request inteiro por jogo.
+const PICS_RECHECK_MIN_AGE_MS: u128 = 60 * 60 * 1000;
 const MANIFEST_FILE_NAME: &str = "library-asset-manifest.json";
 
 static MANIFEST_MEMORY: OnceLock<Mutex<HashMap<String, AssetManifest>>> = OnceLock::new();
@@ -60,6 +67,15 @@ pub struct AssetManifest {
     pub community_icon: String,
     #[serde(default)]
     pub fetched_at_ms: u128,
+    /// Arte de biblioteca vinda do appinfo público (PICS). Mesmo formato de
+    /// `assets`, mas é a tabela que o próprio cliente Steam desenha — quando as
+    /// duas divergem, esta é a atual.
+    #[serde(default)]
+    pub pics_assets: HashMap<String, String>,
+    /// `_change_number` do appinfo de onde `pics_assets` saiu. Guardado para
+    /// saber que a arte mudou sem ter que comparar cada caminho.
+    #[serde(default)]
+    pub pics_change_number: u64,
 }
 
 impl AssetManifest {
@@ -68,8 +84,18 @@ impl AssetManifest {
     }
 
     /// URL final de um asset a partir do nome de arquivo clássico.
+    ///
+    /// O PICS vem primeiro: é a arte que o cliente Steam mostra hoje, e o
+    /// `?t=<change_number>` acompanha qualquer alteração do appinfo — inclusive
+    /// nos jogos sem hash no caminho, em que a URL é sempre a mesma e só o
+    /// cache-buster distingue a capa nova da antiga.
     pub fn asset_url(&self, file_name: &str) -> Option<String> {
         let field = asset_field_for_file_name(file_name)?;
+        self.pics_asset_url(field)
+            .or_else(|| self.store_asset_url(field))
+    }
+
+    fn store_asset_url(&self, field: &str) -> Option<String> {
         let value = self
             .assets
             .get(field)
@@ -79,6 +105,63 @@ impl AssetManifest {
             return None;
         }
         Some(self.url_format.replace("${FILENAME}", value))
+    }
+
+    fn pics_asset_url(&self, field: &str) -> Option<String> {
+        let value = self
+            .pics_assets
+            .get(field)
+            .map(String::as_str)
+            .filter(|value| !value.is_empty())?;
+        let app_id = self.app_id_from_url_format()?;
+        Some(format!(
+            "{STORE_ITEM_ASSETS_BASE}steam/apps/{app_id}/{value}?t={}",
+            self.pics_change_number
+        ))
+    }
+
+    /// O appId já está codificado no formato validado pela `sanitize_url_format`
+    /// (`steam/apps/<appid>/${FILENAME}`), então não precisa ser persistido duas
+    /// vezes nem passado por todas as chamadas.
+    fn app_id_from_url_format(&self) -> Option<&str> {
+        self.url_format
+            .split("steam/apps/")
+            .nth(1)?
+            .split('/')
+            .next()
+            .filter(|app_id| !app_id.is_empty() && app_id.chars().all(|c| c.is_ascii_digit()))
+    }
+
+    /// Adota a arte do PICS. `true` quando algum caminho mudou de fato — é o
+    /// sinal de que a capa em tela está velha e precisa ser repintada.
+    pub fn apply_pics_assets(
+        &mut self,
+        app_id: &str,
+        pics: &crate::steam_pics::PublicAppAssets,
+    ) -> bool {
+        let assets = pics
+            .assets
+            .iter()
+            .filter(|(field, _)| asset_field_names().contains(&field.as_str()))
+            .filter_map(|(field, value)| {
+                sanitize_asset_value(value).map(|value| (field.clone(), value))
+            })
+            .collect::<HashMap<_, _>>();
+
+        if assets.is_empty() {
+            return false;
+        }
+
+        // Jogo que a `GetItems` não conhece (sem página de loja, app oculto) fica
+        // sem `url_format`; o PICS sozinho já basta para montar a URL.
+        if self.url_format.is_empty() {
+            self.url_format = format!("{STORE_ITEM_ASSETS_BASE}steam/apps/{app_id}/${{FILENAME}}");
+        }
+
+        let changed = assets != self.pics_assets || pics.change_number != self.pics_change_number;
+        self.pics_assets = assets;
+        self.pics_change_number = pics.change_number;
+        changed
     }
 
     pub fn community_icon_url(&self, app_id: &str) -> Option<String> {
@@ -283,6 +366,7 @@ fn manifest_from_store_item(item: &serde_json::Value, app_id: &str) -> Option<As
         assets: resolved,
         community_icon,
         fetched_at_ms: current_millis(),
+        ..AssetManifest::default()
     })
 }
 
@@ -455,6 +539,65 @@ pub async fn asset_url(app: &AppHandle, app_id: &str, file_name: &str) -> Option
         .asset_url(file_name)
 }
 
+/// Reconsulta o appinfo público e adota a arte de biblioteca de lá.
+///
+/// A `GetItems` responde em lote e é o caminho normal; isto aqui é o cheque
+/// pontual para um jogo só (uma chamada por app, o PICS público não tem lote).
+/// Vale quando a capa em tela precisa estar certa — abrir o jogo, por exemplo —
+/// porque `common.library_assets_full` é exatamente a tabela que o cliente Steam
+/// usa, e o `_change_number` diz que a arte mudou mesmo quando o caminho da URL
+/// é o mesmo de sempre.
+///
+/// Devolve as URLs atualizadas, ou `None` quando nada mudou.
+pub async fn refresh_from_pics(
+    app: &AppHandle,
+    app_id: &str,
+) -> Option<HashMap<String, String>> {
+    let app_id: String = app_id.chars().filter(char::is_ascii_digit).collect();
+    if app_id.is_empty() {
+        return None;
+    }
+
+    // Abrir o mesmo jogo dez vezes seguidas não custa dez requests: o appinfo
+    // que já foi conferido há pouco continua valendo.
+    if let Some(manifest) = cached_manifest(&app_id) {
+        let checked_recently =
+            current_millis().saturating_sub(manifest.fetched_at_ms) < PICS_RECHECK_MIN_AGE_MS;
+        if manifest.pics_change_number > 0 && checked_recently {
+            return None;
+        }
+    }
+
+    let pics = crate::steam_pics::fetch_steamcmd_assets(&app_id).await?;
+
+    // O manifesto da loja ainda entra: ele traz `header`, `main_capsule` e o
+    // ícone de comunidade, que não existem em `library_assets_full`.
+    let mut manifest = manifests(app, std::slice::from_ref(&app_id))
+        .await
+        .remove(&app_id)
+        .unwrap_or_default();
+
+    if !manifest.apply_pics_assets(&app_id, &pics) {
+        return None;
+    }
+    manifest.fetched_at_ms = current_millis();
+
+    if let Ok(mut memory) = manifest_memory().lock() {
+        memory.insert(app_id.clone(), manifest.clone());
+    }
+    write_disk_manifests(app);
+
+    flatten_manifests(HashMap::from([(app_id.clone(), manifest)])).remove(&app_id)
+}
+
+#[tauri::command]
+pub async fn steam_refresh_asset_manifest(
+    app: AppHandle,
+    app_id: String,
+) -> HashMap<String, String> {
+    refresh_from_pics(&app, &app_id).await.unwrap_or_default()
+}
+
 /// Ícone de comunidade dos appIds pedidos. Sai da mesma chamada que resolve as
 /// capas, então não custa request extra quando o manifesto já foi buscado.
 pub async fn community_icon_urls(app: &AppHandle, app_ids: &[String]) -> HashMap<String, String> {
@@ -587,6 +730,66 @@ mod tests {
         assert_eq!(
             manifest.asset_url("library_capsule.jpg"),
             manifest.asset_url("library_600x900.jpg")
+        );
+    }
+
+    const PICS: &str = r#"{
+        "data": {
+            "413150": {
+                "_change_number": 38129562,
+                "common": {
+                    "library_assets_full": {
+                        "library_capsule": {
+                            "image": { "english": "9f1d/library_600x900.jpg" },
+                            "image2x": { "english": "9f1d/library_600x900_2x.jpg" }
+                        },
+                        "library_hero": {
+                            "image": { "english": "library_hero.jpg" }
+                        },
+                        "library_logo": { "image": { "english": "logo.png" } }
+                    }
+                }
+            }
+        }
+    }"#;
+
+    fn pics() -> crate::steam_pics::PublicAppAssets {
+        let payload = serde_json::from_str::<serde_json::Value>(PICS).unwrap();
+        crate::steam_pics::parse_steamcmd_assets(&payload, "413150").unwrap()
+    }
+
+    #[test]
+    fn pics_art_wins_over_the_store_manifest() {
+        let mut manifest = parse(LEGACY, "413150");
+        assert!(manifest.apply_pics_assets("413150", &pics()));
+
+        assert_eq!(
+            manifest.asset_url("library_600x900.jpg").unwrap(),
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/413150/\
+             9f1d/library_600x900.jpg?t=38129562"
+        );
+        // Campo que o PICS não publica continua saindo do manifesto da loja.
+        assert_eq!(
+            manifest.asset_url("header.jpg").unwrap(),
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/413150/header.jpg?t=1754692865"
+        );
+    }
+
+    #[test]
+    fn reapplying_the_same_pics_art_reports_no_change() {
+        let mut manifest = parse(LEGACY, "413150");
+        assert!(manifest.apply_pics_assets("413150", &pics()));
+        assert!(!manifest.apply_pics_assets("413150", &pics()));
+    }
+
+    #[test]
+    fn pics_art_resolves_without_a_store_manifest() {
+        let mut manifest = AssetManifest::default();
+        assert!(manifest.apply_pics_assets("413150", &pics()));
+        assert_eq!(
+            manifest.asset_url("library_hero.jpg").unwrap(),
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/413150/\
+             library_hero.jpg?t=38129562"
         );
     }
 

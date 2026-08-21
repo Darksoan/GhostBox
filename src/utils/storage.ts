@@ -11,6 +11,8 @@ import type {
   UserCollection,
   SteamProfile,
 } from "../types";
+// Type-only dependency in the other direction, so this stays acyclic at runtime.
+import { homeWishlistCycleHistoryLimit } from "./wishlistCycle";
 import {
   favoriteGamesStorageKey,
   userCollectionsStorageKey,
@@ -42,6 +44,7 @@ export type StoredPersonalCalendar = {
   expiresAt: string;
   gameIds: string[];
   monthGameIds: Record<string, string[]>;
+  dayGameIds: Record<string, string[]>;
 };
 
 export type StoredSteamWishlistCycle = {
@@ -118,6 +121,7 @@ function normalizeStoredPersonalCalendar(
   const expiresAt = storedString(calendar.expiresAt);
   const gameIds = storedStringArray(calendar.gameIds);
   const monthGameIds = storedStringArrayRecord(calendar.monthGameIds);
+  const dayGameIds = storedStringArrayRecord(calendar.dayGameIds);
 
   if (
     !algorithmVersion ||
@@ -133,7 +137,15 @@ function normalizeStoredPersonalCalendar(
     return null;
   }
 
-  return { algorithmVersion, weekStart, cycleStart, expiresAt, gameIds, monthGameIds };
+  return {
+    algorithmVersion,
+    weekStart,
+    cycleStart,
+    expiresAt,
+    gameIds,
+    monthGameIds,
+    dayGameIds,
+  };
 }
 
 function normalizeStoredSteamWishlistCycle(value: unknown): StoredSteamWishlistCycle | null {
@@ -147,7 +159,7 @@ function normalizeStoredSteamWishlistCycle(value: unknown): StoredSteamWishlistC
   const gameIds = storedStringArray(wishlist.gameIds);
   const history = Array.isArray(wishlist.history)
     ? wishlist.history
-        .slice(0, 4)
+        .slice(0, homeWishlistCycleHistoryLimit)
         .map((entry) => storedStringArray(entry))
         .filter((entry) => entry.length > 0)
     : [];

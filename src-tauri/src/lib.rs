@@ -1480,6 +1480,7 @@ pub fn run() {
             catalogue::cache_resolve_steam_library_assets_batch,
             steam_assets::steam_get_asset_manifests,
             steam_assets::steam_get_cached_asset_manifests,
+            steam_assets::steam_refresh_asset_manifest,
             settings::app_get_startup_settings,
             settings::app_set_startup_settings,
             settings::app_set_notification_settings,

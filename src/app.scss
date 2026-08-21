@@ -115,7 +115,7 @@
 
 .tray-menu__game-icon--skeleton {
   display: block;
-  background: color-mix(in srgb, var(--surface-subtle) 80%, transparent);
+  background: var(--skeleton-fill);
 }
 
 .tray-menu__separator {
@@ -1301,7 +1301,7 @@ p {
 
       &--skeleton {
         display: block;
-        background: color-mix(in srgb, var(--surface-subtle) 80%, transparent);
+        background: var(--skeleton-fill);
       }
     }
 
@@ -1426,7 +1426,7 @@ p {
   &__avatar-skeleton {
     width: 100%;
     height: 100%;
-    background: var(--surface-hover);
+    background: var(--skeleton-fill);
   }
 
   &__button-information {
@@ -2770,8 +2770,9 @@ p {
   background: var(--c-1);
 }
 
+/* Chapado como todo skeleton do app: sem pulse, sem shimmer. */
 .home-banner__frame--skeleton {
-  animation: home-banner-skeleton 1.6s var(--ease) infinite;
+  background: var(--skeleton-fill);
 }
 
 .home-banner__surface {
@@ -3075,17 +3076,6 @@ p {
   }
 }
 
-@keyframes home-banner-skeleton {
-  0%,
-  100% {
-    background: var(--c-1);
-  }
-
-  50% {
-    background: var(--c-2);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .home-banner__art,
   .home-banner__art--active {
@@ -3106,10 +3096,6 @@ p {
 
   .home-banner__arrow:active {
     transform: translateY(-50%);
-  }
-
-  .home-banner__frame--skeleton {
-    animation: none;
   }
 }
 
@@ -4000,8 +3986,16 @@ p {
   cursor: default;
 }
 
+/* `--skeleton` também vale para o card real enquanto a capa carrega, então ele
+   continua clicável; só o placeholder puro (`--placeholder`, sem jogo por trás)
+   sai do alcance do ponteiro. */
 .home-calendar-card--skeleton {
-  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  background: var(--skeleton-fill);
+}
+
+.home-calendar-card--placeholder {
+  cursor: default;
+  pointer-events: none;
 }
 
 .home-calendar-card--fallback {
@@ -4153,7 +4147,7 @@ p {
   }
 
   &--skeleton {
-    background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+    background: var(--skeleton-fill);
     opacity: 1;
   }
 }
@@ -4255,7 +4249,7 @@ p {
 }
 
 .home-wishlist-card__player-review-avatar--skeleton {
-  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  background: var(--skeleton-fill);
 }
 
 .home-wishlist-card__player-review-author-skeleton {
@@ -4311,7 +4305,7 @@ p {
   width: 82%;
   height: 12px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  background: var(--skeleton-fill);
 
   &--title {
     width: min(42%, 190px);
@@ -4341,7 +4335,7 @@ p {
   width: 72px;
   height: 22px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  background: var(--skeleton-fill);
 }
 
 .home-wishlist-card--skeleton {
@@ -7866,7 +7860,9 @@ input[type="search"]::-ms-reveal {
    capa em cima e o texto abaixo; a ação de "adicionado" flutua sobre a capa. */
 .catalogue-list--grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* Trilha fixa — ver comentário da `.game-grid`. */
+  grid-template-columns: repeat(auto-fill, minmax(0, 260px));
+  justify-content: center;
   align-items: stretch;
   gap: var(--space-4);
 
@@ -9003,9 +8999,11 @@ input[type="search"]::-ms-reveal {
   padding: 0 var(--space-10) var(--page-bottom-space);
 }
 
+/* Mesma trilha fixa da `.game-grid` — ver comentário lá. */
 .favorites-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(0, 176px));
+  justify-content: center;
   gap: var(--space-5);
 }
 
@@ -9140,20 +9138,54 @@ input[type="search"]::-ms-reveal {
  */
 .skeleton {
   background: var(--skeleton-fill);
+  cursor: default;
+  /* Placeholder não é alvo de ponteiro. Sem isso, um skeleton que reaproveita a
+     classe do elemento real (chip do modal, card, aba) herdava o `:hover` dele e
+     trocava de cor sob o mouse. */
+  pointer-events: none;
 }
 
+/*
+ * Classe repetida de propósito: eleva a especificidade acima das regras de
+ * `:hover` dos componentes reais, que aparecem depois neste arquivo e venceriam
+ * por ordem de fonte quando o hover vem de um ancestral.
+ */
+.skeleton.skeleton:hover,
+.skeleton.skeleton:focus-visible,
+:hover .skeleton.skeleton {
+  background: var(--skeleton-fill);
+}
+
+/*
+ * Trilha de largura fixa, não `1fr`.
+ *
+ * Com `minmax(x, 1fr)` a capa mudava de largura a cada pixel de arrasto da
+ * janela e dava um salto quando entrava ou saía uma coluna — é o "teleporta
+ * para maior/menor". Trilha fixa + `justify-content: center` deixa só a
+ * contagem de colunas mudar; a capa (e o badge de hover que vive dentro dela)
+ * mantém a mesma caixa em qualquer largura de janela.
+ *
+ * `minmax(0, <fixo>)` e não `<fixo>` puro: o `auto-fill` conta as repetições
+ * pelo máximo, então continua sendo largura fixa, mas numa janela mais estreita
+ * que uma trilha a coluna única encolhe em vez de estourar o container.
+ */
 .game-grid {
+  --game-grid-track: 280px;
+
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(0, var(--game-grid-track)));
+  justify-content: center;
   gap: var(--space-6);
   padding: 0 var(--space-10);
 
   &--dense {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    --game-grid-track: 260px;
   }
 
+  /* Um pouco acima do mínimo fluido antigo (180px): o badge de conquistas do
+     hover trunca com reticências quando o card fica estreito demais. */
   &--portrait {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    --game-grid-track: 200px;
   }
 
   &--no-padding {
@@ -9373,12 +9405,9 @@ input[type="search"]::-ms-reveal {
     color: var(--text-primary);
   }
 
-  &__title-placeholder {
-    width: min(210px, 72%);
-    height: 18px;
-    border-radius: var(--radius-sm);
-  }
-
+  /* Só a massa chapada da capa: o degradê preto existe para dar legibilidade ao
+     título sobre a arte real e, sobre o skeleton, só escurecia o fill para fora
+     da rampa de superfície. */
   &--placeholder {
     cursor: default;
 
@@ -9387,12 +9416,7 @@ input[type="search"]::-ms-reveal {
     }
 
     .game-card__backdrop {
-      background: linear-gradient(
-        0deg,
-        color-mix(in srgb, var(--black) 64%, transparent) 0%,
-        color-mix(in srgb, var(--black) 38%, transparent) 34%,
-        transparent 68%
-      );
+      background: none;
     }
 
     .game-card__content {
@@ -9730,11 +9754,11 @@ border: 0;
   padding-left: var(--library-inline-padding);
 
   &.game-grid--dense:not(.game-grid--portrait) {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    --game-grid-track: 260px;
   }
 
   &.game-grid--portrait {
-    grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+    --game-grid-track: 164px;
   }
 
   &.game-grid--cover-format-out .game-card {
@@ -9929,9 +9953,8 @@ html.no-backdrop-blur {
 }
 
 @media (min-width: 1400px) {
-  .content-section--library .game-grid.game-grid--dense:not(.game-grid--portrait) {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  }
+  /* Sem override de trilha por breakpoint: trocar a largura fixa ao cruzar
+     1400px é a mesma mudança de tamanho que a trilha fixa existe para evitar. */
 
   /* Grade morta: nenhum componente da Home renderiza `.home-category__games`
      hoje (sobra de antes da reformulação em storefront). Deixada como estava —
@@ -10032,7 +10055,6 @@ html.no-backdrop-blur {
 
 @media (max-width: 720px) {
   .favorites-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: var(--space-4);
   }
 
@@ -10064,14 +10086,6 @@ html.no-backdrop-blur {
     padding-right: var(--space-8);
     padding-bottom: var(--space-6);
     padding-left: var(--library-inline-padding);
-
-    &.game-grid--dense:not(.game-grid--portrait) {
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    }
-
-    &.game-grid--portrait {
-      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-    }
   }
 }
 
@@ -13867,6 +13881,14 @@ button {
 
 /* ─── Skeleton shape refinements (no color changes) ─────────────────────── */
 
+/* Skeletons não são alvos de interação: sem cursor de clique e sem herdar o
+   hover do card real (que trocaria a cor do placeholder no passar do mouse). */
+.game-card--placeholder,
+.home-top-rated-card--skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+
 /* Portrait game card skeleton – same ratio as real portrait card */
 .game-card--placeholder-portrait {
   aspect-ratio: 600 / 900;
@@ -13894,11 +13916,11 @@ button {
   padding: 0 var(--space-6);
   border: 0;
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--black) 22%, transparent);
+  /* Um degrau abaixo do fill do skeleton (C1 sobre C3): as barras internas
+     ficam legíveis sem tinta preta nem blur por cima do placeholder. */
+  background: var(--surface-panel);
   pointer-events: none;
   transform: translateX(-50%);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 
 .game-card__cover .game-card__placeholder-achievements span {
@@ -13930,7 +13952,7 @@ button {
   height: 100%;
   border: 1px solid var(--border-subtle);
   border-radius: inherit;
-  background: var(--surface-hover);
+  background: var(--skeleton-fill);
 }
 
 .game-achievements-page__skeleton-title {
@@ -13974,7 +13996,7 @@ button {
 
 .home-category-card--placeholder {
   border: 0;
-  background: var(--surface-hover);
+  background: var(--skeleton-fill);
   cursor: default;
   opacity: 1;
   pointer-events: none;
@@ -13982,7 +14004,7 @@ button {
 
 .home-category-card--placeholder .home-category-card__cover {
   opacity: 1;
-  background: var(--surface-hover);
+  background: var(--skeleton-fill);
 }
 
 /* Barras no lugar do nome e da descrição. Herdam a altura dos elementos reais
@@ -14002,7 +14024,7 @@ button {
 
 .home-explore-card--skeleton {
   pointer-events: none;
-  background: var(--surface-hover);
+  background: var(--skeleton-fill);
 }
 
 
@@ -14089,14 +14111,16 @@ button {
 }
 
 .favorites-grid__cover--skeleton {
-  background: var(--surface-hover);
+  background: var(--skeleton-fill);
 }
 
 .favorites-grid__item--skeleton .game-card__achievement-badges {
   opacity: 1;
   transform: translate3d(-50%, 0, 0);
   pointer-events: none;
-  background: var(--surface-hover);
+  background: var(--surface-panel);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .favorites-grid__metric-skeleton {

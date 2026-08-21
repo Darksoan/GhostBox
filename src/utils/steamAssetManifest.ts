@@ -9,6 +9,7 @@ import { ghostboxApi } from "../lib/ghostboxApi";
  */
 
 type AssetUrls = Record<string, string>;
+type ManifestEntry = { urls: AssetUrls; fetchedAt: number };
 
 const STORAGE_KEY = "ghostbox:steam-asset-manifest";
 const STORAGE_LIMIT = 4000;
@@ -16,8 +17,16 @@ const BATCH_DEBOUNCE_MS = 50;
 
 const MEMORY_LIMIT = 6000;
 const MAX_FETCH_ATTEMPTS = 3;
+/**
+ * O manifesto é o que carrega o hash e o cache-buster da arte. Sem prazo de
+ * validade — como era antes — a entrada no localStorage sobrevivia à sessão e o
+ * jogo ficava com a capa antiga para sempre, mesmo depois de o Rust já ter
+ * buscado a nova. A entrada vencida continua sendo usada na hora (nada de tela
+ * vazia) e é revalidada em segundo plano.
+ */
+const MANIFEST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-const manifestByAppId = new Map<string, AssetUrls>();
+const manifestByAppId = new Map<string, ManifestEntry>();
 const pendingAppIds = new Set<string>();
 const requestedAppIds = new Set<string>();
 /** AppIds cujo lote já voltou, com ou sem manifesto. */
@@ -75,16 +84,26 @@ function pruneMemoryCaches() {
   }
 }
 
+function isFresh(entry: ManifestEntry | undefined): entry is ManifestEntry {
+  return Boolean(entry && Date.now() - entry.fetchedAt < MANIFEST_MAX_AGE_MS);
+}
+
 function readStoredManifests() {
   if (typeof window === "undefined") return;
 
   try {
     const parsed = JSON.parse(
       window.localStorage.getItem(STORAGE_KEY) ?? "{}"
-    ) as Record<string, AssetUrls>;
+    ) as Record<string, AssetUrls | ManifestEntry>;
 
-    for (const [appId, urls] of Object.entries(parsed)) {
-      if (urls && typeof urls === "object") manifestByAppId.set(appId, urls);
+    for (const [appId, stored] of Object.entries(parsed)) {
+      if (!stored || typeof stored !== "object") continue;
+      // Formato antigo: só o mapa de URLs, sem data. Entra como vencido, para
+      // ser revalidado no primeiro uso em vez de virar capa velha permanente.
+      const entry = (stored as ManifestEntry).urls
+        ? (stored as ManifestEntry)
+        : { urls: stored as AssetUrls, fetchedAt: 0 };
+      manifestByAppId.set(appId, entry);
     }
   } catch {
     // Manifesto corrompido volta a ser buscado no Rust; nada a recuperar aqui.
@@ -113,7 +132,33 @@ function scheduleStorageWrite() {
 
 /** URL já resolvida do asset, ou "" quando o manifesto ainda não chegou. */
 export function getSteamAssetUrl(appId: string, fileName: string) {
-  return manifestByAppId.get(appId)?.[fileName] ?? "";
+  return manifestByAppId.get(appId)?.urls[fileName] ?? "";
+}
+
+/**
+ * Força o cheque do appinfo público (PICS) de um jogo e adota a arte de lá.
+ *
+ * Custa uma chamada de rede por jogo, então é para uso pontual — abrir o jogo,
+ * por exemplo — e não para uma grade inteira, que já é revalidada em lote pelo
+ * caminho normal.
+ */
+export async function refreshSteamAssetManifest(appId: string) {
+  if (!/^\d+$/.test(appId)) return;
+
+  try {
+    const urls = await ghostboxApi.refreshSteamAssetManifest(appId);
+    if (!urls || !Object.keys(urls).length) return;
+
+    const current = manifestByAppId.get(appId);
+    manifestByAppId.set(appId, {
+      urls: { ...current?.urls, ...urls },
+      fetchedAt: Date.now(),
+    });
+    scheduleStorageWrite();
+    notifyListeners(new Set([appId]));
+  } catch {
+    // A capa em cache continua servindo; nada a fazer aqui.
+  }
 }
 
 /** True enquanto o lote deste appId não voltou — usado para evitar flicker. */
@@ -141,7 +186,11 @@ async function flushPendingAppIds() {
     let changed = false;
     for (const [appId, urls] of Object.entries(manifests)) {
       if (!urls || !Object.keys(urls).length) continue;
-      manifestByAppId.set(appId, urls);
+      manifestByAppId.set(appId, { urls, fetchedAt: Date.now() });
+      // Some da fila de "já pedido" para poder ser revalidado quando vencer.
+      // Quem não veio no lote continua marcado, senão um jogo sem entrada na
+      // loja seria re-pedido a cada render.
+      requestedAppIds.delete(appId);
       changed = true;
     }
     // Jogo sem entrada na loja nunca vai ter manifesto. Marcar o lote inteiro
@@ -181,7 +230,9 @@ export function requestSteamAssetManifests(appIds: string[]) {
 
   for (const appId of appIds) {
     if (!/^\d+$/.test(appId)) continue;
-    if (manifestByAppId.has(appId) || requestedAppIds.has(appId)) continue;
+    // Entrada vencida entra na fila de novo: ela continua sendo servida
+    // enquanto o lote não volta, então a revalidação não pisca a capa.
+    if (isFresh(manifestByAppId.get(appId)) || requestedAppIds.has(appId)) continue;
     requestedAppIds.add(appId);
     pendingAppIds.add(appId);
     queued = true;

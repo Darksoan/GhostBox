@@ -74,13 +74,6 @@ export function GameGridLoadingState({
               </div>
             )}
           </div>
-          <div className="game-card__backdrop">
-            <div className="game-card__content">
-              <div className="game-card__title-container">
-                <div className="game-card__title-placeholder skeleton" />
-              </div>
-            </div>
-          </div>
         </article>
       ))}
     </div>
@@ -312,7 +305,10 @@ function HomePageLoadingState() {
           <div className="home-top-rated__carousel">
             <div className="home-top-rated__track">
               {Array.from({ length: 3 }, (_, index) => (
-                <div className="home-top-rated-card" key={`home-top-rated-${index}`}>
+                <div
+                  className="home-top-rated-card home-top-rated-card--skeleton"
+                  key={`home-top-rated-${index}`}
+                >
                   <span className="home-top-rated-card__art skeleton" />
                   <HomeWishlistReviewSkeleton className="home-top-rated-card__review" />
                 </div>
@@ -347,8 +343,8 @@ function HomePageLoadingState() {
                 <div className="home-calendar-day" key={`cal-day-${dayIndex}`}>
                   <span className="home-calendar-day__title-placeholder skeleton" />
                   <div className="home-calendar-day__games">
-                    <span className="home-calendar-card home-calendar-card--skeleton" />
-                    <span className="home-calendar-card home-calendar-card--skeleton" />
+                    <span className="home-calendar-card home-calendar-card--skeleton home-calendar-card--placeholder" />
+                    <span className="home-calendar-card home-calendar-card--skeleton home-calendar-card--placeholder" />
                   </div>
                 </div>
               ))}

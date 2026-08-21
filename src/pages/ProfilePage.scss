@@ -294,7 +294,7 @@
     .profile-page__avatar-skeleton {
       width: 100%;
       height: 100%;
-      background: var(--surface-hover);
+      background: var(--skeleton-fill);
     }
 
     &:hover img {
@@ -816,7 +816,8 @@
     min-height: 84px;
     padding: 0;
     padding-right: var(--space-6);
-    opacity: 0.78;
+    /* Sem opacidade: ela escurecia o fill do skeleton para fora da rampa. */
+    opacity: 1;
   }
 
   /*
@@ -871,7 +872,7 @@
   }
 
   &__game-cover--loading {
-    background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+    background: var(--skeleton-fill);
   }
 
   &__game-cover--loaded {
@@ -1108,7 +1109,7 @@
   &__skeleton-line {
     display: block;
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+    background: var(--skeleton-fill);
   }
 
   &__skeleton-line {
@@ -1558,7 +1559,7 @@
     }
 
     &--skeleton {
-      background-color: color-mix(in srgb, var(--surface-subtle) 80%, transparent);
+      background-color: var(--skeleton-fill);
     }
   }
 
@@ -1661,8 +1662,10 @@
     padding-block: 48px;
   }
 
+  /* Só a largura da trilha; o `grid-template-columns` fixo vem da `.game-grid`. */
   &__game-grid.game-grid--portrait {
-    grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+    --game-grid-track: 164px;
+
     grid-auto-rows: auto;
     gap: var(--space-7) var(--space-6);
     width: 100%;
@@ -1923,7 +1926,6 @@ html.no-backdrop-blur .profile-page {
     }
 
     &__game-grid.game-grid--portrait {
-      grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
       grid-auto-rows: auto;
       gap: var(--space-5);
     }
@@ -1948,11 +1950,6 @@ html.no-backdrop-blur .profile-page {
       width: 100%;
       margin-right: 0;
       margin-left: 0;
-    }
-
-    &__game-grid.game-grid--portrait {
-      grid-template-columns: repeat(auto-fit, minmax(176px, 210px));
-      justify-content: start;
     }
 
     &__overview-console {

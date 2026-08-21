@@ -36,6 +36,7 @@ import {
 import { isAchievementUnlocked } from "../../utils/achievementStats";
 import { subscribeScrollIdle } from "../../utils/scrollIdle";
 import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
+import { refreshSteamAssetManifest } from "../../utils/steamAssetManifest";
 import {
   imageSourceCache,
   preloadImageSources,
@@ -924,6 +925,11 @@ export function GameModal({
       onDetailsLoaded?.(details);
     };
     const detailsGameId = game.appId || game.id;
+
+    // Cheque pontual da arte no appinfo público: é aqui que uma capa velha fica
+    // mais evidente, e é um jogo só, então o request extra se paga. Quando nada
+    // mudou, o Rust responde vazio e ninguém repinta.
+    if (game.appId) void refreshSteamAssetManifest(game.appId);
 
     loadGameStoreDetailsCached(detailsGameId)
       .then(mergeStoreDetails)
