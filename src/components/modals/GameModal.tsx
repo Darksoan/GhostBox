@@ -71,10 +71,13 @@ const GameRequirementsSection = memo(function GameRequirementsSection({
   const requirementsSectionPanelId = `${requirementsId}-section-panel`;
   const minimum = requirements?.minimum ?? [];
   const recommended = requirements?.recommended ?? [];
+  const hasMinimum = minimum.length > 0;
+  const hasRecommended = recommended.length > 0;
+  const hasSingleTab = !(hasMinimum && hasRecommended);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeRequirement, setActiveRequirement] = useState<
     "minimum" | "recommended"
-  >(minimum.length ? "minimum" : "recommended");
+  >(hasMinimum ? "minimum" : "recommended");
 
   useEffect(() => {
     if (activeRequirement === "minimum" && !minimum.length && recommended.length) {
@@ -122,7 +125,7 @@ const GameRequirementsSection = memo(function GameRequirementsSection({
       >
         <div className="modal__sidebar-section-panel modal__requirements-panel">
           <div
-            className="modal__requirements-tabs"
+            className={`modal__requirements-tabs${hasSingleTab ? " modal__requirements-tabs--single" : ""}`}
             role="tablist"
             aria-label={
               appearance.language === "en"
@@ -130,30 +133,32 @@ const GameRequirementsSection = memo(function GameRequirementsSection({
                 : "Opções de requisitos"
             }
           >
-            <button
-              type="button"
-              className={`modal__requirements-tab ${activeRequirement === "minimum" ? "modal__requirements-tab--active" : ""}`}
-              onClick={() => setActiveRequirement("minimum")}
-              disabled={!minimum.length}
-              role="tab"
-              id={`${requirementsId}-minimum-tab`}
-              aria-selected={activeRequirement === "minimum"}
-              aria-controls={`${requirementsId}-panel`}
-            >
-              {appearance.language === "en" ? "Minimum" : "Mínimos"}
-            </button>
-            <button
-              type="button"
-              className={`modal__requirements-tab ${activeRequirement === "recommended" ? "modal__requirements-tab--active" : ""}`}
-              onClick={() => setActiveRequirement("recommended")}
-              disabled={!recommended.length}
-              role="tab"
-              id={`${requirementsId}-recommended-tab`}
-              aria-selected={activeRequirement === "recommended"}
-              aria-controls={`${requirementsId}-panel`}
-            >
-              {appearance.language === "en" ? "Recommended" : "Recomendados"}
-            </button>
+            {hasMinimum && (
+              <button
+                type="button"
+                className={`modal__requirements-tab ${activeRequirement === "minimum" ? "modal__requirements-tab--active" : ""}`}
+                onClick={() => setActiveRequirement("minimum")}
+                role="tab"
+                id={`${requirementsId}-minimum-tab`}
+                aria-selected={activeRequirement === "minimum"}
+                aria-controls={`${requirementsId}-panel`}
+              >
+                {appearance.language === "en" ? "Minimum" : "Mínimos"}
+              </button>
+            )}
+            {hasRecommended && (
+              <button
+                type="button"
+                className={`modal__requirements-tab ${activeRequirement === "recommended" ? "modal__requirements-tab--active" : ""}`}
+                onClick={() => setActiveRequirement("recommended")}
+                role="tab"
+                id={`${requirementsId}-recommended-tab`}
+                aria-selected={activeRequirement === "recommended"}
+                aria-controls={`${requirementsId}-panel`}
+              >
+                {appearance.language === "en" ? "Recommended" : "Recomendados"}
+              </button>
+            )}
           </div>
 
           <div

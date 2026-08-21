@@ -9,11 +9,10 @@ import {
 } from "../queries/home";
 import { useEnrichedGameCards } from "./useEnrichedGameCards";
 import { createSeedGame } from "../utils/gameSeed";
-import { gameCategoryScore, gameTraitAppId } from "../utils/gameTraits";
-import { homeRotationSeed, pickRotationWindow } from "../utils/homeRotation";
+import { gameTraitAppId } from "../utils/gameTraits";
+import { homeRotationSeed } from "../utils/homeRotation";
 import {
   buildTasteProfile,
-  scoreGameAgainstTaste,
   steamRecommendedTagNames,
   type TasteProfile,
 } from "../utils/tasteProfile";
@@ -39,17 +38,39 @@ export type HomeShelves = Record<HomeShelfId, HomeShelf>;
 // preloader already assumes; the wider rails hold roughly two screens so the
 // Shelf arrows have something to scroll to.
 const shelfSizes: Record<HomeShelfId, number> = {
-  recommended: 8,
+  recommended: 5,
   newReleases: 12,
   topSellers: 12,
-  topRated: 8,
+  topRated: 15,
 };
 
-// Candidate depth each rotating rail draws its weekly window from. Bigger pool
-// = more weeks before an arrangement repeats; too big and quality drops off.
-const recommendedCandidateDepth = 48;
-const topRatedCandidateDepth = 60;
 const exploreCandidateLimit = 120;
+
+const fixedTopRatedAppIds = [
+  "2050650",
+  "1145360",
+  "367520",
+  "1222140",
+  "203160",
+  "1449690",
+  "379720",
+  "814380",
+  "483980",
+  "57400",
+  "424840",
+  "2262610",
+  "254700",
+  "307690",
+  "7670",
+] as const;
+
+const fixedRecommendedAppIds = [
+  "2584270",
+  "2163330",
+  "2825860",
+  "2713000",
+  "4317690",
+] as const;
 
 const emptyGames: GhostBoxGame[] = [];
 
@@ -78,8 +99,11 @@ function isDisplayableGame(game: GhostBoxGame) {
  * pools, so without a shared ledger the same blockbuster lands in three rails
  * at once. Rails are filled in visual order, so the higher rail keeps the game.
  */
-function createShelfPicker(libraryGameAppIds: Set<string>) {
-  const usedAppIds = new Set<string>();
+function createShelfPicker(
+  libraryGameAppIds: Set<string>,
+  initialUsedAppIds: ReadonlySet<string> = new Set()
+) {
+  const usedAppIds = new Set<string>(initialUsedAppIds);
 
   return function take(candidates: GhostBoxGame[], count: number) {
     const picked: GhostBoxGame[] = [];
@@ -95,6 +119,18 @@ function createShelfPicker(libraryGameAppIds: Set<string>) {
 
     return picked;
   };
+}
+
+function createFixedTopRatedGames(): GhostBoxGame[] {
+  return fixedTopRatedAppIds.map((appId, index) =>
+    createSeedGame({ appId, title: `Steam App ${appId}` }, index, "")
+  );
+}
+
+function createFixedRecommendedGames(): GhostBoxGame[] {
+  return fixedRecommendedAppIds.map((appId, index) =>
+    createSeedGame({ appId, title: `Steam App ${appId}` }, index, "")
+  );
 }
 
 /** Steam's featured payload only carries {appId, name, headerImage}. */
@@ -165,25 +201,17 @@ export function useHomeShelves({
   const trendingGames = trendingQuery.data?.games ?? emptyGames;
 
   const selection = useMemo(() => {
-    const take = createShelfPicker(libraryGameAppIds);
+    const fixedTopRatedGames = createFixedTopRatedGames();
+    const fixedRecommendedGames = createFixedRecommendedGames();
+    const take = createShelfPicker(
+      libraryGameAppIds,
+      new Set([
+        ...(fixedTopRatedAppIds as readonly string[]),
+        ...(fixedRecommendedAppIds as readonly string[]),
+      ])
+    );
 
-    const tasteRanked = [...poolGames].sort(
-      (left, right) =>
-        scoreGameAgainstTaste(right, tasteProfile) -
-        scoreGameAgainstTaste(left, tasteProfile)
-    );
-    const qualityRanked = [...poolGames].sort(
-      (left, right) => gameCategoryScore(right) - gameCategoryScore(left)
-    );
-
-    const recommended = take(
-      pickRotationWindow(tasteRanked.slice(0, recommendedCandidateDepth), {
-        seed,
-        count: shelfSizes.recommended,
-        salt: "recommended",
-      }),
-      shelfSizes.recommended
-    );
+    const recommended = fixedRecommendedGames;
 
     // New releases lead; "coming soon" fills whatever is left so the rail is
     // never short on a quiet release week.
@@ -200,14 +228,7 @@ export function useHomeShelves({
       shelfSizes.topSellers
     );
 
-    const topRated = take(
-      pickRotationWindow(qualityRanked.slice(0, topRatedCandidateDepth), {
-        seed,
-        count: shelfSizes.topRated,
-        salt: "top-rated",
-      }),
-      shelfSizes.topRated
-    );
+    const topRated = fixedTopRatedGames;
 
     const upcomingAppIds = new Set(
       (featuredQuery.data?.comingSoon ?? []).flatMap((entry) => {
@@ -223,13 +244,7 @@ export function useHomeShelves({
       topRated,
       upcomingAppIds,
     };
-  }, [
-    featuredQuery.data,
-    libraryGameAppIds,
-    poolGames,
-    seed,
-    tasteProfile,
-  ]);
+  }, [featuredQuery.data, libraryGameAppIds]);
 
   // Featured rails arrive as bare seeds and catalogue rails lack the short
   // description, so every rail goes through the shared enrichment queue.
@@ -245,7 +260,7 @@ export function useHomeShelves({
       recommended: {
         id: "recommended",
         games: recommended,
-        loading: poolQuery.isPending,
+        loading: false,
         upcomingAppIds: noUpcoming,
       },
       newReleases: {
@@ -263,14 +278,13 @@ export function useHomeShelves({
       topRated: {
         id: "topRated",
         games: topRated,
-        loading: poolQuery.isPending,
+        loading: false,
         upcomingAppIds: noUpcoming,
       },
     };
   }, [
     featuredQuery.isPending,
     newReleases,
-    poolQuery.isPending,
     recommended,
     selection.upcomingAppIds,
     topRated,

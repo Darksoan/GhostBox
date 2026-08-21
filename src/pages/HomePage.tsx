@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -23,7 +23,6 @@ import {
 } from "../components/ui/LoadingStates";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Shelf } from "../components/ui/Shelf";
-import { useAppData } from "../context/AppDataContext";
 import { useSettings } from "../context/settings";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useHomeShelves, type HomeShelf } from "../hooks/useHomeShelves";
@@ -615,6 +614,21 @@ function getHomeShortDescription(game: GhostBoxGame, language: "pt" | "en") {
   return source.length > homeShortDescriptionLimit
     ? `${source.slice(0, homeShortDescriptionLimit - 3).trim()}...`
     : source;
+}
+
+function getHomeBannerDescription(game: GhostBoxGame, language: "pt" | "en") {
+  const source =
+    getPlainSteamText(game.shortDescription) ||
+    game.subtitle ||
+    game.genres.slice(0, 3).join(" • ");
+
+  if (!source) {
+    return language === "en"
+      ? "Featured pick from the GhostBox catalogue."
+      : "Destaque selecionado do catálogo GhostBox.";
+  }
+
+  return source;
 }
 
 function getHomeCategoryLabel(value: string, language: "pt" | "en") {
@@ -1249,18 +1263,7 @@ function HomeRecommendedHero({
   const safeIndex = Math.min(index, games.length - 1);
   const game = games[safeIndex];
   const hasControls = games.length > 1;
-  const developer = (game.developers ?? []).filter(Boolean)[0] ?? "";
-  const { availableLibraryGameAppIds, addingGameId, queueGame } = useAppData();
-  const isInLibrary = availableLibraryGameAppIds.has(game.appId);
-  const isAdding = addingGameId === game.id;
-  const addLabel =
-    language === "en"
-      ? isInLibrary
-        ? "In library"
-        : "Add to library"
-      : isInLibrary
-        ? "Na biblioteca"
-        : "Adicionar à biblioteca";
+  const shortDescription = getHomeBannerDescription(game, language);
 
   const go = (step: 1 | -1) => {
     setDirection(step);
@@ -1319,9 +1322,7 @@ function HomeRecommendedHero({
                 language === "en" ? "Untitled game" : "Jogo sem título"
               )}
             </strong>
-            {developer ? (
-              <span className="home-banner__developer">{developer}</span>
-            ) : null}
+            <span className="home-banner__description">{shortDescription}</span>
           </span>
         </button>
         {hasControls ? (
@@ -1354,23 +1355,6 @@ function HomeRecommendedHero({
             </span>
           </>
         ) : null}
-        <div className="home-banner__actions" aria-label={addLabel}>
-          <button
-            type="button"
-            className="home-banner__action home-banner__action--library"
-            aria-label={addLabel}
-            aria-busy={isAdding}
-            disabled={isInLibrary || isAdding}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (isInLibrary || isAdding) return;
-              void queueGame(game);
-            }}
-          >
-            <Plus size={16} strokeWidth={2} aria-hidden="true" />
-            <span>{addLabel}</span>
-          </button>
-        </div>
       </div>
     </section>
   );

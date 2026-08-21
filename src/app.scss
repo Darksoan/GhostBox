@@ -205,7 +205,7 @@
     background-color var(--motion-fast) var(--ease);
 
   &:hover {
-    background: var(--sidebar-selector);
+    background: var(--c-4);
   }
 }
 
@@ -1899,7 +1899,7 @@ p {
     flex: 0 0 auto;
     border: 1px solid transparent;
     border-radius: var(--radius-pill);
-    background: var(--surface-titlebar-control);
+    background: var(--surface-option);
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
@@ -1907,11 +1907,15 @@ p {
     line-height: 1;
     opacity: 1;
     transition:
+      background-color var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
 
     &:hover,
     &:focus-visible {
+      background: var(--surface-dropdown-menu);
+      color: var(--text-primary);
+
       .header__tooltip {
         opacity: 1;
         visibility: visible;
@@ -1975,6 +1979,11 @@ p {
     flex: 0 0 auto;
 
     &--open {
+      .header__premium-indicator {
+        background: var(--surface-dropdown-menu);
+        color: var(--text-primary);
+      }
+
       .header__premium-indicator-arrow {
         color: var(--text-primary);
       }
@@ -2939,7 +2948,7 @@ p {
   right: var(--space-14);
   bottom: var(--space-12);
   display: flex;
-  max-width: 46%;
+  max-width: none;
   flex-direction: column;
   gap: var(--space-3);
   animation: home-banner-info-in 0.32s var(--ease-out) 0.08s both;
@@ -2969,6 +2978,17 @@ p {
   color: var(--text-secondary);
   font-size: var(--fs-300);
   line-height: var(--lh-300);
+}
+
+.home-banner__description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-300);
+  line-height: var(--lh-300);
+  opacity: 0.92;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .home-banner__arrow {
@@ -3925,7 +3945,7 @@ p {
 }
 
 .home-category-card--pill-rows .home-category-card__genre:hover {
-  background: var(--pill-bg);
+  background: var(--c-4);
 }
 
 /* A pill ACOMPANHA o card no hover/foco — mesmo comportamento do catálogo:
@@ -7942,250 +7962,85 @@ p {
     transform: translateY(6px);
   }
 
-  &__screenshots {
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-width: 0;
+    padding: var(--space-4) var(--space-4) var(--space-3);
+  }
+
+  &__title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  &__media-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: 0 var(--space-3) var(--space-3);
+  }
+
+  &__shot {
     position: relative;
-    display: block;
     aspect-ratio: 16 / 9;
     overflow: hidden;
+    border-radius: var(--radius-sm);
     background: var(--surface-media-letterbox);
   }
 
-  &__control {
-    position: absolute;
-    top: 50%;
-    z-index: 2;
-    display: flex;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: var(--radius-circle);
-    background-color: color-mix(in srgb, var(--black) 40%, transparent);
-    color: var(--text-primary);
-    cursor: pointer;
-    opacity: 0;
-    transform: translateY(-50%);
-    transition: all var(--motion-slow) var(--ease);
-
-    &:hover {
-      background-color: color-mix(in srgb, var(--black) 60%, transparent);
-    }
-
-    &:active {
-      transform: translateY(-50%) scale(0.95);
-    }
-
-    &:focus-visible {
-      opacity: 1;
-      outline: 2px solid var(--border-hover);
-      outline-offset: 2px;
-      pointer-events: auto;
-    }
-
-    &:disabled {
-      cursor: not-allowed;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    &--previous {
-      left: var(--space-3);
-      transform: translateY(-50%) translateX(-40px);
-    }
-
-    &--next {
-      right: var(--space-3);
-      transform: translateY(-50%) translateX(40px);
-    }
+  &__shot--empty {
+    background: var(--surface-media-letterbox);
   }
 
-  &__screenshots:hover &__control--previous:not(:disabled),
-  &__screenshots:focus-within &__control--previous:not(:disabled) {
-    transform: translateY(-50%) translateX(0);
-  }
-
-  &__screenshots:hover &__control--next:not(:disabled),
-  &__screenshots:focus-within &__control--next:not(:disabled) {
-    transform: translateY(-50%) translateX(0);
-  }
-
-  &__screenshots:hover &__control:not(:disabled),
-  &__screenshots:focus-within &__control:not(:disabled) {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  &__screenshot,
-  &__empty-media {
+  &__shot-image {
     display: block;
     width: 100%;
     height: 100%;
-    border: 0;
-    background: var(--surface-media-letterbox);
     object-fit: cover;
   }
 
-  &__screenshot {
-    position: absolute;
-    inset: 0;
-    z-index: var(--z-base);
-    opacity: 0;
-    backface-visibility: hidden;
-    pointer-events: none;
-    transition: opacity var(--motion-base) var(--ease);
-
-    &--active {
-      z-index: 1;
-      opacity: 1;
-    }
-  }
-
-  &__details {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-6);
-  }
-
-  &__title,
-  &__credit {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__reviews {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-top: var(--space-2);
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-strong);
-  }
-
-  &__histogram {
-    display: block;
-    width: 100%;
-    height: 64px;
-  }
-
-  &__histogram-baseline {
-    stroke: var(--border-subtle);
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
-  }
-
-  &__histogram-bar--up {
-    fill: var(--text-primary);
-  }
-
-  &__histogram-bar--down {
-    fill: var(--danger);
-  }
-
-  &__score {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    line-height: var(--type-line-caption);
-  }
-
-  &__score-ratio {
-    color: var(--text-primary);
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
-  }
-
-  &__score-count {
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
-  }
-
   &__title {
+    overflow: hidden;
     color: var(--text-primary);
     font-size: var(--type-size-body);
     font-weight: var(--weight-semibold);
     line-height: var(--type-line-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  &__credit {
-    color: var(--text-secondary);
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    /* Caption e não compact: o crédito é uma linha secundária colada no título
-       e o passo de 18px abria demais. `--type-line-caption` é o mesmo 16px que
-       estava aqui em `--lh-200`. */
-    line-height: var(--type-line-caption);
-
-    span {
-      color: var(--text-tertiary);
-      font-weight: var(--weight-medium);
-    }
-  }
-
-  &__achievements {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    margin-top: var(--space-2);
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    /* `--surface-raised` é exatamente o #151515 que estava cru aqui. */
-    background: var(--surface-raised);
-  }
-
-  &__achievements-label {
+  &__developer {
+    overflow: hidden;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-medium);
+    line-height: var(--type-line-caption);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  /* Entrada em grupo, sem stagger. Os seis ícones já chegam decodificados (ver
-     o preload em `CatalogueHoverPreview`), então a linha inteira revela de uma
-     vez — escalonar aqui recriaria justamente o "aparece um por um" que o
-     preload existe para matar, e este é um bloco que dispara a cada hover.
-
-     O transform fica na linha, não em cada ícone: a linha tem `overflow: hidden`
-     e recortaria um ícone deslocado no eixo y. Altura já está reservada pelos
-     40px fixos do ícone, então revelar não empurra nada. */
-  &__achievements-row {
-    display: flex;
-    overflow: hidden;
+  &__rating {
+    display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    opacity: 0;
-    transform: translateY(4px);
-    transition:
-      opacity var(--motion-base) var(--ease-out),
-      transform var(--motion-base) var(--ease-out);
+    flex: 0 0 auto;
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-semibold);
+    line-height: 1;
+    white-space: nowrap;
   }
 
-  &__achievements-row--ready {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  &__achievements-icon {
-    display: flex;
-    width: 40px;
-    height: 40px;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
-    object-fit: cover;
-    background: var(--surface-media-letterbox);
-  }
-
-  /* Placeholder enquanto a lista da Steam não volta. Ocupa a mesma caixa de
-     40px do ícone real, então a troca skeleton → ícone não desloca nada. */
-  &__achievements-icon--skeleton {
-    background: var(--skeleton-fill);
+  &__rating svg {
+    color: var(--text-primary);
+    flex: 0 0 auto;
   }
 }
 
@@ -8200,26 +8055,6 @@ p {
 @media (prefers-reduced-motion: reduce) {
   .catalogue-hover-preview {
     transition: none;
-
-    &__screenshot {
-      transition: none;
-    }
-
-    &__control {
-      transition: none;
-    }
-
-    /* Sem percurso: a linha de conquistas só troca de opacidade. O estado
-       oculto continua valendo, senão os ícones voltariam a pintar um a um
-       conforme cada um decodifica. */
-    &__achievements-row {
-      transform: none;
-      transition: opacity var(--motion-fast) var(--ease);
-    }
-
-    &__achievements-row--ready {
-      transform: none;
-    }
   }
 }
 
@@ -9065,6 +8900,218 @@ input[type="search"]::-ms-reveal {
   &__empty.empty-state {
     min-height: 280px;
   }
+
+  &__stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: var(--content-max-width);
+    margin-inline: auto;
+    gap: var(--space-8);
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  &__section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  &__section-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-semibold);
+    line-height: var(--type-line-body);
+  }
+
+  &__section-count {
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-medium);
+  }
+
+  &__hero-drop {
+    width: 100%;
+  }
+
+  &__drop-active {
+    outline: 1px dashed var(--border-hover);
+    outline-offset: 2px;
+    border-radius: var(--radius-lg);
+  }
+}
+
+.downloads-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 260px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-secondary);
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &--dragging {
+    opacity: 0.55;
+  }
+
+  &--drag-over {
+    outline: 2px solid var(--border-hover);
+    outline-offset: -2px;
+  }
+
+  &__cover {
+    position: absolute;
+    inset: 0;
+    background-color: var(--surface-sunken);
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    transition: opacity var(--motion-base) var(--ease);
+  }
+
+  &__cover--loaded {
+    opacity: 1;
+  }
+
+  &__scrim {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to right, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.45) 42%, rgb(0 0 0 / 0.08) 72%, transparent 100%),
+      linear-gradient(to top, rgb(0 0 0 / 0.55) 0%, transparent 55%);
+    pointer-events: none;
+  }
+
+  &__content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-8);
+    min-width: 0;
+  }
+
+  &__main {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  &__title {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: var(--type-size-section);
+    font-weight: var(--weight-semibold);
+    line-height: var(--type-line-section);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-semibold);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  &__progress-track {
+    display: block;
+    width: 100%;
+    height: 12px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+  }
+
+  &__progress-track > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--text-primary);
+    transition: width var(--motion-slow) var(--ease);
+  }
+
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-medium);
+  }
+
+  &__meta-item {
+    white-space: nowrap;
+  }
+
+  &__actions {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  &__action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    padding: 0 var(--space-5);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font-size: var(--type-size-compact);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease);
+
+    &:hover {
+      background: var(--c-4);
+    }
+  }
+
+  &__action--ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+
+    &:hover {
+      background: var(--surface-raised);
+      color: var(--text-primary);
+    }
+  }
+}
+
+.download-card--dragging {
+  opacity: 0.55;
+}
+
+.download-card--drag-over {
+  outline: 2px solid var(--border-hover);
+  outline-offset: -2px;
 }
 
 /*
@@ -13394,12 +13441,13 @@ html.no-backdrop-blur {
   }
 
   &__details-main > .gallery-slider__container {
+    gap: var(--space-4);
     padding-top: 0;
     padding-bottom: 0;
   }
 
   &__details-main > .gallery-slider__container .gallery-slider__preview {
-    padding-top: 6px;
+    padding-top: var(--space-2);
     padding-bottom: 0;
   }
 
@@ -14407,6 +14455,10 @@ html.no-backdrop-blur {
     overflow: hidden;
     border: 0;
     background: var(--surface-secondary);
+
+    &--single {
+      grid-template-columns: 1fr;
+    }
   }
 
   &__requirements-tab {
@@ -14635,16 +14687,7 @@ html.no-backdrop-blur {
 
     &:hover:not(:disabled),
     &:focus-visible {
-      background: var(--surface-option-hover);
-    }
-  }
-
-  &__add-button,
-  &__favorite-button,
-  &__gear-button {
-    &:hover:not(:disabled),
-    &:focus-visible {
-      background: var(--surface-option-hover);
+      background: var(--c-4);
     }
   }
 
@@ -14652,6 +14695,11 @@ html.no-backdrop-blur {
   &__gear-button--active {
     color: var(--text-primary);
     background: var(--surface-option);
+
+    &:hover:not(:disabled),
+    &:focus-visible {
+      background: var(--c-4);
+    }
   }
 
   &__action-label {
@@ -15897,6 +15945,7 @@ button,
 
 .gallery-slider {
   &__container {
+    gap: var(--space-4);
     padding: var(--space-6) 0;
     width: 100%;
     display: flex;
@@ -15988,7 +16037,7 @@ button,
       translate var(--motion-slow) ease-in-out,
       opacity var(--motion-base) ease;
     border-radius: var(--radius-sm);
-    border: solid 1px var(--border-ui);
+    border: 0;
     overflow: hidden;
     position: relative;
     aspect-ratio: 16/9;

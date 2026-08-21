@@ -685,6 +685,72 @@ export function updateInstallPathsForApp(
   }
 }
 
+export function reorderQueuedTasks(sourceId: string, targetIndex: number) {
+  ensureLiveTasksHydrated();
+  const queued = liveTasks.filter((task) => task.status === "queued");
+  const sourceIndex = queued.findIndex((task) => task.id === sourceId);
+  if (sourceIndex === -1) return;
+  const [moved] = queued.splice(sourceIndex, 1);
+  queued.splice(Math.max(0, Math.min(targetIndex, queued.length)), 0, moved);
+  const downloading = liveTasks.filter((task) => task.status === "downloading");
+  const paused = liveTasks.filter((task) => task.status === "paused");
+  liveTasks = [...downloading, ...queued, ...paused];
+  notifyChanged(true);
+}
+
+export function reorderPausedTasks(sourceId: string, targetIndex: number) {
+  ensureLiveTasksHydrated();
+  const paused = liveTasks.filter((task) => task.status === "paused");
+  const sourceIndex = paused.findIndex((task) => task.id === sourceId);
+  if (sourceIndex === -1) return;
+  const [moved] = paused.splice(sourceIndex, 1);
+  paused.splice(Math.max(0, Math.min(targetIndex, paused.length)), 0, moved);
+  const downloading = liveTasks.filter((task) => task.status === "downloading");
+  const queued = liveTasks.filter((task) => task.status === "queued");
+  liveTasks = [...downloading, ...queued, ...paused];
+  notifyChanged(true);
+}
+
+export function reorderHistoryTasks(sourceId: string, targetIndex: number) {
+  const history = readHistoryTasks();
+  const sourceIndex = history.findIndex((task) => task.id === sourceId);
+  if (sourceIndex === -1) return;
+  const next = [...history];
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, moved);
+  writeHistoryTasks(next);
+  notifyChanged(true);
+}
+
+export function moveQueuedToPaused(sourceId: string, targetIndex: number) {
+  ensureLiveTasksHydrated();
+  const task = liveTasks.find((entry) => entry.id === sourceId && entry.status === "queued");
+  if (!task) return;
+  liveTasks = liveTasks.filter((entry) => entry.id !== sourceId);
+  const paused = liveTasks.filter((entry) => entry.status === "paused");
+  const downloading = liveTasks.filter((entry) => entry.status === "downloading");
+  const queued = liveTasks.filter((entry) => entry.status === "queued");
+  const moved = { ...task, status: "paused" as const, speedBytesPerSecond: 0 };
+  paused.splice(Math.max(0, Math.min(targetIndex, paused.length)), 0, moved);
+  liveTasks = [...downloading, ...queued, ...paused];
+  notifyChanged(true);
+}
+
+export function movePausedToQueued(sourceId: string, targetIndex: number) {
+  ensureLiveTasksHydrated();
+  const task = liveTasks.find((entry) => entry.id === sourceId && entry.status === "paused");
+  if (!task) return;
+  liveTasks = liveTasks.filter((entry) => entry.id !== sourceId);
+  const paused = liveTasks.filter((entry) => entry.status === "paused");
+  const downloading = liveTasks.filter((entry) => entry.status === "downloading");
+  const queued = liveTasks.filter((entry) => entry.status === "queued");
+  const moved = { ...task, status: "queued" as const, depotStatus: undefined, resumePending: true, resumeBytesFloor: task.bytesDownloaded };
+  queued.splice(Math.max(0, Math.min(targetIndex, queued.length)), 0, moved);
+  liveTasks = [...downloading, ...queued, ...paused];
+  notifyChanged(true);
+  startNextQueuedTask();
+}
+
 export function pauseDownloadTask(id: string) {
   ensureLiveTasksHydrated();
   const task = liveTasks.find((entry) => entry.id === id);

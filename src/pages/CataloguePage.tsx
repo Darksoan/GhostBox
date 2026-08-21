@@ -889,11 +889,6 @@ export function CataloguePage({
             onPointerEnter={handlePreviewPointerEnter}
             onPointerLeave={handlePreviewPointerLeave}
           />
-          {!hoveredPreview && (
-            <p className="catalogue-preview-column__idle">
-              {t("catalogue.preview.idleHint")}
-            </p>
-          )}
         </aside>
       </div>
 
