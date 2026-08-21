@@ -199,10 +199,7 @@ pub fn ghostbox_library_set_custom_exe(
         if path_trimmed.is_empty() {
             object.remove("customExePath");
         } else {
-            object.insert(
-                "customExePath".to_string(),
-                json!(path_trimmed.to_string()),
-            );
+            object.insert("customExePath".to_string(), json!(path_trimmed.to_string()));
         }
     }
 

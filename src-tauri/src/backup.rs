@@ -1,8 +1,8 @@
 use crate::catalogue::fetch_remote_game;
 use crate::util::text_value;
 use crate::{
-    backup_details_for_path, is_path_inside_or_equal, load_backup_settings,
-    resolve_steam_path, selected_backup_entry_path,
+    backup_details_for_path, is_path_inside_or_equal, load_backup_settings, resolve_steam_path,
+    selected_backup_entry_path,
 };
 
 #[tauri::command]

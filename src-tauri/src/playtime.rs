@@ -817,7 +817,11 @@ fn record_game_session_playtime(
     } else {
         play_time
     };
-    let next_source = if steam_owns_total { source.as_str() } else { "ghostbox" };
+    let next_source = if steam_owns_total {
+        source.as_str()
+    } else {
+        "ghostbox"
+    };
 
     snapshot[app_id] = serde_json::json!({
         "appId": app_id,
@@ -917,9 +921,8 @@ pub(crate) fn apply_playtime_from_backup(
         .get("source")
         .and_then(|value| value.as_str())
         .map(str::to_string);
-    let is_steam_owned = |source: &Option<String>| {
-        matches!(source.as_deref(), Some("steam") | Some("steam_local"))
-    };
+    let is_steam_owned =
+        |source: &Option<String>| matches!(source.as_deref(), Some("steam") | Some("steam_local"));
     let source = if is_steam_owned(&current_source) {
         current_source
     } else if is_steam_owned(&backup_source) {

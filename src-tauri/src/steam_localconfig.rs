@@ -29,7 +29,10 @@ pub(crate) fn read_steam_local_playtimes(
     let userdata = Path::new(steam_path).join("userdata");
 
     if let Some(account_id) = account_id {
-        let path = userdata.join(account_id).join("config").join("localconfig.vdf");
+        let path = userdata
+            .join(account_id)
+            .join("config")
+            .join("localconfig.vdf");
         return parse_localconfig_playtimes(&path).unwrap_or_default();
     }
 
@@ -83,16 +86,25 @@ fn parse_localconfig_playtimes(path: &Path) -> Option<HashMap<String, LocalAppPl
         if minutes == 0 && last_played == 0 {
             continue;
         }
-        result.insert(app_id.clone(), LocalAppPlaytime { minutes, last_played });
+        result.insert(
+            app_id.clone(),
+            LocalAppPlaytime {
+                minutes,
+                last_played,
+            },
+        );
     }
     Some(result)
 }
 
 fn get_vdf_child<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
-    value
-        .as_object()?
-        .iter()
-        .find_map(|(k, v)| if k.eq_ignore_ascii_case(key) { Some(v) } else { None })
+    value.as_object()?.iter().find_map(|(k, v)| {
+        if k.eq_ignore_ascii_case(key) {
+            Some(v)
+        } else {
+            None
+        }
+    })
 }
 
 /// Minimal recursive-descent parser for Valve's KeyValue (VDF) text format:
@@ -262,7 +274,8 @@ mod tests {
 
     #[test]
     fn missing_localconfig_yields_empty_map_not_a_panic() {
-        let result = read_steam_local_playtimes("Z:\\definitely\\not\\a\\real\\steam\\path", Some("1"));
+        let result =
+            read_steam_local_playtimes("Z:\\definitely\\not\\a\\real\\steam\\path", Some("1"));
         assert!(result.is_empty());
     }
 }

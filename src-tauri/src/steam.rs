@@ -317,9 +317,9 @@ async fn fetch_steam_profile_from_proxy(
         .ok()
         .filter(|url| {
             url.scheme() == "https"
-                && url
-                    .host_str()
-                    .is_some_and(|host| host == "steamstatic.com" || host.ends_with(".steamstatic.com"))
+                && url.host_str().is_some_and(|host| {
+                    host == "steamstatic.com" || host.ends_with(".steamstatic.com")
+                })
         })
         .map(|url| url.to_string())
         .unwrap_or_default();
@@ -725,10 +725,7 @@ async fn fetch_steam_game_achievement_counts(
         .await;
 
     let Ok(response) = response else {
-        return (
-            app_id,
-            stale_entry("request_failed"),
-        );
+        return (app_id, stale_entry("request_failed"));
     };
 
     if !response.status().is_success() {
@@ -753,12 +750,7 @@ async fn fetch_steam_game_achievement_counts(
 
     let value = match response.json::<serde_json::Value>().await {
         Ok(value) => value,
-        Err(_) => {
-            return (
-                app_id,
-                stale_entry("invalid_json"),
-            )
-        }
+        Err(_) => return (app_id, stale_entry("invalid_json")),
     };
 
     let achievements = value
@@ -1420,11 +1412,17 @@ pub async fn steam_get_account_stats(
                     })
                     .collect::<Vec<_>>();
                 seed_playtimes_from_steam_owned_games(&app, &owned_games);
-                apply_local_steam_playtimes(&app, &steam_id, &owned_app_ids_from_stats(&owned_games));
+                apply_local_steam_playtimes(
+                    &app,
+                    &steam_id,
+                    &owned_app_ids_from_stats(&owned_games),
+                );
                 return Ok(stats);
             }
             Err(error) => {
-                return Err(format!("Steam stats proxy is temporarily unavailable: {error}"));
+                return Err(format!(
+                    "Steam stats proxy is temporarily unavailable: {error}"
+                ));
             }
         }
     }
@@ -1590,7 +1588,11 @@ fn write_morelike_cache(
     app: &tauri::AppHandle,
     cache: &serde_json::Map<String, serde_json::Value>,
 ) {
-    let _ = write_json_file(app, STEAM_MORELIKE_CACHE_FILE, &serde_json::Value::Object(cache.clone()));
+    let _ = write_json_file(
+        app,
+        STEAM_MORELIKE_CACHE_FILE,
+        &serde_json::Value::Object(cache.clone()),
+    );
 }
 
 fn cached_morelike_app_ids(app: &tauri::AppHandle, app_id: &str) -> Option<Vec<String>> {
@@ -2105,4 +2107,3 @@ fn is_steam_process_running() -> bool {
 pub fn steam_is_running() -> bool {
     is_steam_process_running()
 }
-

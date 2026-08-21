@@ -101,22 +101,41 @@ fn is_valid_catalogue_response(url: &reqwest::Url, body: &serde_json::Value) -> 
             // "resposta inválida" — ou seja, catálogo vazio sem erro visível.
             if valid_count(object.get("total")).is_none()
                 || valid_count(object.get("matched")).is_none()
-                || object.get("limited").and_then(serde_json::Value::as_bool).is_none()
+                || object
+                    .get("limited")
+                    .and_then(serde_json::Value::as_bool)
+                    .is_none()
             {
                 return false;
             }
-            if url.query_pairs().any(|(key, value)| key == "facetsOnly" && value == "1") {
-                return games.is_empty() && object.get("facets").and_then(serde_json::Value::as_object).is_some();
+            if url
+                .query_pairs()
+                .any(|(key, value)| key == "facetsOnly" && value == "1")
+            {
+                return games.is_empty()
+                    && object
+                        .get("facets")
+                        .and_then(serde_json::Value::as_object)
+                        .is_some();
             }
             true
         }
         "/home" => {
-            object.get("popular").and_then(serde_json::Value::as_array).is_some()
-                && object.get("recentlyAdded").and_then(serde_json::Value::as_array).is_some()
+            object
+                .get("popular")
+                .and_then(serde_json::Value::as_array)
+                .is_some()
+                && object
+                    .get("recentlyAdded")
+                    .and_then(serde_json::Value::as_array)
+                    .is_some()
                 && valid_count(object.get("total")).is_some()
         }
         path if path.starts_with("/games/") => {
-            object.get("game").and_then(serde_json::Value::as_object).is_some()
+            object
+                .get("game")
+                .and_then(serde_json::Value::as_object)
+                .is_some()
                 || object.get("appId").is_some()
         }
         _ => true,
@@ -221,8 +240,7 @@ fn prune_expired_entries(app: &AppHandle) {
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_millis() as u64)
             .unwrap_or(0);
-        let expired =
-            modified == 0 || now.saturating_sub(modified) > CATALOGUE_ENTRY_STALE_MAX_MS;
+        let expired = modified == 0 || now.saturating_sub(modified) > CATALOGUE_ENTRY_STALE_MAX_MS;
         if expired {
             let _ = std::fs::remove_file(&path);
         }
@@ -282,12 +300,11 @@ pub async fn fetch_json_with_cache(
     if !force_refresh {
         let app_clone = app.clone();
         let key_clone = cache_key.clone();
-        let entry = tauri::async_runtime::spawn_blocking(move || {
-            read_cache_entry(&app_clone, &key_clone)
-        })
-        .await
-        .ok()
-        .flatten();
+        let entry =
+            tauri::async_runtime::spawn_blocking(move || read_cache_entry(&app_clone, &key_clone))
+                .await
+                .ok()
+                .flatten();
         if let Some(entry) = entry {
             if is_fresh(&entry) && is_valid_catalogue_response(&url, &entry.body) {
                 return Ok((entry.body, entry.updated_at, true));
@@ -422,7 +439,10 @@ pub async fn refresh_warm_catalogue_endpoints(
     };
     let _ = write_meta(app, &meta);
 
-    if let Some(updated_at) = latest_updated_at.clone().filter(|value| previous.last_updated_at.as_ref() != Some(value)) {
+    if let Some(updated_at) = latest_updated_at
+        .clone()
+        .filter(|value| previous.last_updated_at.as_ref() != Some(value))
+    {
         let _ = app.emit(
             CATALOGUE_CACHE_UPDATED_EVENT,
             serde_json::json!({ "updatedAt": updated_at }),
@@ -498,8 +518,10 @@ mod tests {
 
     #[test]
     fn cache_key_ignores_query_parameter_order() {
-        let first = "https://example.com/catalogue/search?limit=200&offset=0&sort=popular&includeFacets=1";
-        let second = "https://example.com/catalogue/search?includeFacets=1&sort=popular&offset=0&limit=200";
+        let first =
+            "https://example.com/catalogue/search?limit=200&offset=0&sort=popular&includeFacets=1";
+        let second =
+            "https://example.com/catalogue/search?includeFacets=1&sort=popular&offset=0&limit=200";
 
         assert_eq!(cache_key_for_url(first), cache_key_for_url(second));
     }

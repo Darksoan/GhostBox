@@ -58,9 +58,15 @@ fn clear_active_download_process(app_id: &str) {
         .map(|mut processes| processes.remove(app_id));
 }
 
-fn ensure_download_worker(worker: &mut Option<DownloadWorker>) -> Result<&mut DownloadWorker, String> {
+fn ensure_download_worker(
+    worker: &mut Option<DownloadWorker>,
+) -> Result<&mut DownloadWorker, String> {
     let should_start = match worker.as_mut() {
-        Some(existing) => existing.child.try_wait().map_err(|error| error.to_string())?.is_some(),
+        Some(existing) => existing
+            .child
+            .try_wait()
+            .map_err(|error| error.to_string())?
+            .is_some(),
         None => true,
     };
 
@@ -248,7 +254,10 @@ fn pick_depot_manifest(
     };
 
     if let Some(public_gid) = public_gid {
-        if cached.iter().any(|(manifest_id, _)| *manifest_id == public_gid) {
+        if cached
+            .iter()
+            .any(|(manifest_id, _)| *manifest_id == public_gid)
+        {
             return Some(resolved(public_gid, DepotTier::PublicFromCache));
         }
     }
@@ -362,7 +371,9 @@ pub fn cdndownload_cancel_game(app_id: String) -> Result<bool, String> {
         .insert(app_id.clone());
 
     let worker_stdin = {
-        let worker_guard = download_worker().lock().map_err(|error| error.to_string())?;
+        let worker_guard = download_worker()
+            .lock()
+            .map_err(|error| error.to_string())?;
         let Some(worker) = worker_guard.as_ref() else {
             return Ok(false);
         };
@@ -572,7 +583,9 @@ fn delete_output_dir_blocking(
     if !output_path.is_dir() {
         return Err("Download output path is not a directory.".to_string());
     }
-    let canonical_output = output_path.canonicalize().map_err(|error| error.to_string())?;
+    let canonical_output = output_path
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
     ensure_inside_downloads_root(&canonical_root, &canonical_output)?;
 
     std::fs::remove_dir_all(&canonical_output).map_err(|error| error.to_string())?;
@@ -702,11 +715,9 @@ pub async fn cdndownload_download_game(
     let parallel_chunks = parallel_chunks.unwrap_or(24).clamp(1, 32);
     let steam_path = match steam_path {
         Some(path) => path,
-        None => crate::resolve_steam_path(&app, None)
-            .0
-            .ok_or_else(|| {
-                "Steam path not found. Configure Steam path in Library settings.".to_string()
-            })?,
+        None => crate::resolve_steam_path(&app, None).0.ok_or_else(|| {
+            "Steam path not found. Configure Steam path in Library settings.".to_string()
+        })?,
     };
 
     let public = crate::steam_pics::resolve_public_app(&steam_path, &app_id).await;
@@ -803,9 +814,15 @@ pub async fn cdndownload_download_game(
 
     let mut all_results = Vec::new();
     let (worker_stdin, worker_stdout, worker_process_id) = {
-        let mut worker_guard = download_worker().lock().map_err(|error| error.to_string())?;
+        let mut worker_guard = download_worker()
+            .lock()
+            .map_err(|error| error.to_string())?;
         let worker = ensure_download_worker(&mut worker_guard)?;
-        (worker.stdin.clone(), worker.stdout.clone(), worker.child.id())
+        (
+            worker.stdin.clone(),
+            worker.stdout.clone(),
+            worker.child.id(),
+        )
     };
     active_download_processes()
         .lock()
@@ -956,8 +973,7 @@ pub async fn cdndownload_download_game(
                     serde_json::json!(completed_depot_bytes + current_depot_bytes);
                 value["BytesTotal"] = serde_json::json!(total_download_bytes);
             } else if event_type == "status"
-                && value.get("Status").and_then(|status| status.as_str())
-                    == Some("manifest-loaded")
+                && value.get("Status").and_then(|status| status.as_str()) == Some("manifest-loaded")
             {
                 value["TotalBytes"] = serde_json::json!(total_download_bytes);
             }
@@ -1200,9 +1216,7 @@ mod tests {
 
     // --- Escolha do manifest por depot ---------------------------------------
 
-    use super::{
-        pick_depot_manifest, resolve_depots, resolve_installed_build_id, DepotTier,
-    };
+    use super::{pick_depot_manifest, resolve_depots, resolve_installed_build_id, DepotTier};
     use crate::steam_pics::{PicsSource, PublicApp, PublicDepot};
     use std::collections::BTreeMap;
 
@@ -1210,8 +1224,8 @@ mod tests {
     /// `cached` traz `(depot, manifest)` na ordem de gravacao, entao o ultimo
     /// tem o `mtime` mais recente.
     fn fake_steam(app_id: &str, lua: &str, cached: &[(u32, u64)]) -> std::path::PathBuf {
-        let root = std::env::temp_dir()
-            .join(format!("ghostbox-depots-{}", uuid::Uuid::new_v4().simple()));
+        let root =
+            std::env::temp_dir().join(format!("ghostbox-depots-{}", uuid::Uuid::new_v4().simple()));
         let plugins = root.join("config").join("stplug-in");
         let depotcache = root.join("depotcache");
         std::fs::create_dir_all(&plugins).unwrap();
@@ -1261,9 +1275,7 @@ mod tests {
 
     #[test]
     fn the_public_manifest_in_the_cache_beats_the_pin_written_in_the_lua() {
-        let lua = format!(
-            "addappid(367521,1,\"ab\")\n--setManifestid(367521,\"{OLD_GID}\")\n"
-        );
+        let lua = format!("addappid(367521,1,\"ab\")\n--setManifestid(367521,\"{OLD_GID}\")\n");
         let root = fake_steam("367520", &lua, &[(367521, OLD_GID), (367521, PUBLIC_GID)]);
         let app = public_app(vec![depot(
             367521,
@@ -1286,10 +1298,11 @@ mod tests {
         // `mtime` aponta para o lado errado de proposito neste teste.
         let lua = format!("addappid(367521,1,\"ab\")\n--setManifestid(367521,\"{OLD_GID}\")\n");
         let root = fake_steam("367520", &lua, &[(367521, 111), (367521, OLD_GID)]);
-        let app = public_app(vec![depot(367521, Some("windows"), &[
-            ("public", PUBLIC_GID),
-            ("antiga", OLD_GID),
-        ])]);
+        let app = public_app(vec![depot(
+            367521,
+            Some("windows"),
+            &[("public", PUBLIC_GID), ("antiga", OLD_GID)],
+        )]);
 
         let depots = resolve_depots(&root.to_string_lossy(), "367520", Some(&app));
         let _ = std::fs::remove_dir_all(&root);
@@ -1355,7 +1368,11 @@ mod tests {
     #[test]
     fn the_installed_build_id_is_the_oldest_depot_not_the_public_branch() {
         let app = public_app(vec![
-            depot(367521, Some("windows"), &[("public", PUBLIC_GID), ("antiga", OLD_GID)]),
+            depot(
+                367521,
+                Some("windows"),
+                &[("public", PUBLIC_GID), ("antiga", OLD_GID)],
+            ),
             depot(367524, None, &[("public", 7), ("antiga", 8)]),
         ]);
 
@@ -1369,7 +1386,13 @@ mod tests {
             Some("22529139".to_string())
         );
         // Nenhum manifest conhecido: o chamador cai no buildid do appinfo.
-        assert_eq!(resolve_installed_build_id(Some(&app), &[(367521, 999)]), None);
-        assert_eq!(resolve_installed_build_id(None, &[(367521, PUBLIC_GID)]), None);
+        assert_eq!(
+            resolve_installed_build_id(Some(&app), &[(367521, 999)]),
+            None
+        );
+        assert_eq!(
+            resolve_installed_build_id(None, &[(367521, PUBLIC_GID)]),
+            None
+        );
     }
 }

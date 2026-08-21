@@ -30,6 +30,17 @@
 //! Sushi tem URL direta publica; o proxy acima entrega o pacote agregado. Por
 //! isso `check_apis` nao e consultado: ele nao mudaria a decisao, ja que todas
 //! as fontes alcancaveis sao baixadas de qualquer jeito.
+//!
+//! # Fontes cruas (.lua sem zip)
+//!
+//! SteamTools.games (`/api/files/<appid>/lua`) e os mirrors ManifestHub3
+//! (`steamtools-games/ManifestHub3`) e ManifestHub2 (`youxiya/ManifestHub2`,
+//! branch por AppID no GitHub) servem o `.lua` direto, sem zip — todos
+//! validados com HTTP 200 para o AppID 367520 em 21/08/2026. `PackageFormat::RawLua`
+//! marca essas fontes: o payload passa por uma checagem minima de script e e
+//! embrulhado em um zip em memoria antes de entrar na selecao, entao nada a
+//! jusante (`Selection`, `lua_from_zip`, instalacao) muda. As tres incluem as
+//! chaves de depot inline (`addappid(depot, 0, "hex")`) e sao HTTPS.
 
 use crate::steam_pics::PublicApp;
 use crate::util::EmptyVecExt;
@@ -41,6 +52,16 @@ const MAX_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
 const CONNECT_TIMEOUT_SECS: u64 = 5;
 const REQUEST_TIMEOUT_SECS: u64 = 12;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackageFormat {
+    /// A resposta e um zip contendo o `<appid>.lua` (e, opcionalmente,
+    /// arquivos `.manifest`).
+    Zip,
+    /// A resposta e o proprio `.lua` cru. Ele e embrulhado em um zip em
+    /// memoria antes de entrar na selecao — veja `wrap_raw_lua_in_zip`.
+    RawLua,
+}
+
 pub struct ManifestSource {
     pub name: &'static str,
     pub url: &'static str,
@@ -48,10 +69,12 @@ pub struct ManifestSource {
     pub requires_tls: bool,
     pub success_code: u16,
     pub unavailable_code: u16,
+    pub format: PackageFormat,
 }
 
 /// Ordem importa: com pontuacao empatada vence a primeira, entao as fontes com
-/// TLS vem antes.
+/// TLS vem antes. Todas as cinco sao TLS; o proxy do LuaTools fica por ultimo
+/// porque e a unica sem TLS (e, portanto, a unica sujeita a trava do score).
 pub const DEFAULT_SOURCES: &[ManifestSource] = &[
     ManifestSource {
         name: "Sushi",
@@ -59,6 +82,37 @@ pub const DEFAULT_SOURCES: &[ManifestSource] = &[
         requires_tls: true,
         success_code: 200,
         unavailable_code: 404,
+        format: PackageFormat::Zip,
+    },
+    // Validada em 21/08/2026 (HTTP 200, AppID 367520): retorna o `.lua` com
+    // chaves de depot inline e `setManifestid` por depot.
+    ManifestSource {
+        name: "SteamTools",
+        url: "https://steamtools.games/api/files/<appid>/lua",
+        requires_tls: true,
+        success_code: 200,
+        unavailable_code: 404,
+        format: PackageFormat::RawLua,
+    },
+    // Branch nomeada pelo AppID no repositorio oficial do SteamTools.games;
+    // ausente para jogos obscuros (404), o que apenas rejeita a candidata.
+    ManifestSource {
+        name: "ManifestHub3",
+        url: "https://raw.githubusercontent.com/steamtools-games/ManifestHub3/<appid>/<appid>.lua",
+        requires_tls: true,
+        success_code: 200,
+        unavailable_code: 404,
+        format: PackageFormat::RawLua,
+    },
+    // Mirror ativo do antigo SSMGAlt/ManifestHub2 (removido do GitHub),
+    // mesmo layout de branch por AppID.
+    ManifestSource {
+        name: "ManifestHub2",
+        url: "https://raw.githubusercontent.com/youxiya/ManifestHub2/<appid>/<appid>.lua",
+        requires_tls: true,
+        success_code: 200,
+        unavailable_code: 404,
+        format: PackageFormat::RawLua,
     },
     ManifestSource {
         name: "LuaTools",
@@ -66,6 +120,7 @@ pub const DEFAULT_SOURCES: &[ManifestSource] = &[
         requires_tls: false,
         success_code: 200,
         unavailable_code: 404,
+        format: PackageFormat::Zip,
     },
 ];
 
@@ -94,6 +149,69 @@ pub fn validate_source_url(source: &ManifestSource, url: &str) -> bool {
         "http" => !source.requires_tls,
         _ => false,
     }
+}
+
+const MAX_RAW_LUA_BYTES: usize = 1024 * 1024;
+
+/// Tokens que identificam um `.lua` de SteamTools. Espelho reduzido dos tokens
+/// de `crate::luatools::validate_lua_script`: aqui so serve para recusar
+/// resposta que claramente nao e script (HTML de erro, JSON, pagina em branco);
+/// a validacao completa volta a acontecer na instalacao.
+const RAW_LUA_TOKENS: &[&str] = &["addappid", "setManifestid", "addManifest"];
+
+fn looks_like_lua_script(lua: &str) -> bool {
+    lua.lines()
+        .take(64)
+        .any(|line| RAW_LUA_TOKENS.iter().any(|token| line.contains(token)))
+}
+
+/// Embrulha o `.lua` cru de uma fonte `PackageFormat::RawLua` em um zip em
+/// memoria com a unica entrada `<appid>.lua`.
+///
+/// O pipeline a jusante (`Selection::offer`, `lua_from_zip`,
+/// `install_lua_tools_package`) so conhece zip; com o embrulho aqui, nenhuma
+/// dessas pecas precisa saber que a fonte servia outro formato. A checagem
+/// minima recusa payload vazio, binario, gigante ou sem pinta de script — o
+/// mesmo espírito da trava de zip (`PK`) da fonte comum.
+fn wrap_raw_lua_in_zip(source_name: &str, app_id: &str, lua: &[u8]) -> Result<Vec<u8>, String> {
+    if lua.is_empty() {
+        return Err(format!("{}: script vazio", source_name));
+    }
+    if lua.len() > MAX_RAW_LUA_BYTES {
+        return Err(format!(
+            "{}: script excede {MAX_RAW_LUA_BYTES} bytes",
+            source_name
+        ));
+    }
+    if lua.contains(&0) {
+        return Err(format!("{}: script contem bytes nulos", source_name));
+    }
+    let text = std::str::from_utf8(lua)
+        .map_err(|_| format!("{}: script nao e UTF-8 valido", source_name))?;
+    if !looks_like_lua_script(text) {
+        return Err(format!(
+            "{}: resposta nao parece um script SteamTools",
+            source_name
+        ));
+    }
+
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    writer
+        .start_file::<_, ()>(
+            format!("{app_id}.lua"),
+            zip::write::SimpleFileOptions::default(),
+        )
+        .map_err(|error| format!("{}: falha ao empacotar o script ({error})", source_name))?;
+    std::io::Write::write_all(&mut writer, lua).map_err(|error| {
+        format!(
+            "{}: falha ao gravar o script no pacote ({error})",
+            source_name
+        )
+    })?;
+    let cursor = writer
+        .finish()
+        .map_err(|error| format!("{}: falha ao fechar o pacote ({error})", source_name))?;
+    Ok(cursor.into_inner())
 }
 
 /// Pares `(depot, manifest)` de um `.lua` do SteamTools.
@@ -263,7 +381,9 @@ impl<'a> Selection<'a> {
         let errors = self.errors;
         self.best.ok_or_else(|| {
             errors
-                .if_empty(vec!["Jogo indisponivel nas fontes configuradas.".to_string()])
+                .if_empty(vec![
+                    "Jogo indisponivel nas fontes configuradas.".to_string()
+                ])
                 .join("; ")
         })
     }
@@ -293,7 +413,7 @@ pub async fn best_package_from(
             continue;
         }
 
-        match fetch_package(&client, source, &url).await {
+        match fetch_package(&client, source, &url, app_id).await {
             Ok(zip) => selection.offer(source, zip),
             Err(error) => selection.reject(error),
         }
@@ -327,6 +447,7 @@ async fn fetch_package(
     client: &reqwest::Client,
     source: &ManifestSource,
     url: &str,
+    app_id: &str,
 ) -> Result<Vec<u8>, String> {
     let response = client
         .get(url)
@@ -364,11 +485,16 @@ async fn fetch_package(
     if bytes.len() > MAX_PACKAGE_BYTES {
         return Err(format!("{}: pacote excede 64 MB", source.name));
     }
-    if bytes.len() < 4 || &bytes[..2] != b"PK" {
-        return Err(format!("{}: resposta nao e zip", source.name));
-    }
 
-    Ok(bytes.to_vec())
+    match source.format {
+        PackageFormat::Zip => {
+            if bytes.len() < 4 || &bytes[..2] != b"PK" {
+                return Err(format!("{}: resposta nao e zip", source.name));
+            }
+            Ok(bytes.to_vec())
+        }
+        PackageFormat::RawLua => wrap_raw_lua_in_zip(source.name, app_id, &bytes),
+    }
 }
 
 #[cfg(test)]
@@ -400,10 +526,7 @@ mod tests {
                     manifest_gid: 6809616861563627670,
                     size: 5284750173,
                     oslist: Some("macos".into()),
-                    branch_manifests: BTreeMap::from([(
-                        "public".to_string(),
-                        6809616861563627670,
-                    )]),
+                    branch_manifests: BTreeMap::from([("public".to_string(), 6809616861563627670)]),
                 },
             ],
             source: PicsSource::SteamCmdApi,
@@ -441,7 +564,60 @@ mod tests {
             requires_tls,
             success_code: 200,
             unavailable_code: 404,
+            format: PackageFormat::Zip,
         }
+    }
+
+    fn raw_lua_source(name: &'static str) -> ManifestSource {
+        ManifestSource {
+            url: "https://example.test/<appid>.lua",
+            format: PackageFormat::RawLua,
+            ..source(name, true)
+        }
+    }
+
+    #[test]
+    fn a_raw_lua_payload_is_wrapped_into_a_readable_zip() {
+        let lua = format!("addappid({APP_ID})\nsetManifestid(367521,\"{PUBLIC_GID}\")\n");
+
+        let zip = wrap_raw_lua_in_zip("Teste", APP_ID, lua.as_bytes()).unwrap();
+        assert_eq!(&zip[..2], b"PK", "o embrulho precisa produzir um zip real");
+
+        let parsed = lua_from_zip(APP_ID, &zip).unwrap();
+        assert_eq!(
+            parse_set_manifest_ids(&parsed).get(&367521),
+            Some(&PUBLIC_GID)
+        );
+    }
+
+    #[test]
+    fn an_invalid_raw_lua_payload_is_refused() {
+        let empty: &[u8] = b"";
+        assert!(wrap_raw_lua_in_zip("Teste", APP_ID, empty).is_err());
+
+        let html = b"<html><body>404 not found</body></html>";
+        let error = wrap_raw_lua_in_zip("Teste", APP_ID, html).unwrap_err();
+        assert!(error.contains("nao parece um script SteamTools"), "{error}");
+
+        let binary: &[u8] = &[0x50, 0x4b, 0x00, 0x03, 0x04];
+        assert!(wrap_raw_lua_in_zip("Teste", APP_ID, binary).is_err());
+
+        let oversized = vec![b'a'; MAX_RAW_LUA_BYTES + 1];
+        assert!(wrap_raw_lua_in_zip("Teste", APP_ID, &oversized).is_err());
+    }
+
+    #[test]
+    fn a_raw_lua_source_scores_like_a_zip_one() {
+        let app = public_app();
+        let mut selection = Selection::new(APP_ID, Some(&app));
+
+        let lua = format!("addappid({APP_ID})\nsetManifestid(367521,\"{PUBLIC_GID}\")\n");
+        let wrapped = wrap_raw_lua_in_zip("Cru", APP_ID, lua.as_bytes()).unwrap();
+        selection.offer(&raw_lua_source("Cru"), wrapped);
+
+        let winner = selection.finish().unwrap();
+        assert_eq!(winner.source, "Cru");
+        assert_eq!(winner.score, 1);
     }
 
     #[test]
@@ -591,9 +767,10 @@ mod tests {
     /// de servicos de terceiros; roda com
     /// `cargo test --lib -- --ignored real_sources`.
     ///
-    /// Existe porque a feature inteira depende de dois endpoints vivos
-    /// (`api.steamcmd.net` e o proxy do LuaTools). Quando um deles sair do ar ou
-    /// mudar de formato, os testes offline continuam verdes e so este acusa.
+    /// Existe porque a feature inteira depende de endpoints vivos
+    /// (`api.steamcmd.net`, Sushi, SteamTools.games, os mirrors ManifestHub e o
+    /// proxy do LuaTools). Quando um deles sair do ar ou mudar de formato, os
+    /// testes offline continuam verdes e so este acusa.
     #[test]
     #[ignore = "depende de rede"]
     fn real_sources_still_deliver_the_current_public_build() {

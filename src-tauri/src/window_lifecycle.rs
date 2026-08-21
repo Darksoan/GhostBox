@@ -1,3 +1,4 @@
+use crate::load_startup_settings;
 use crate::playtime::{
     close_all_game_playtime_sessions, start_game_playtime_snapshot_emitter,
     start_steam_running_app_monitor,
@@ -5,7 +6,6 @@ use crate::playtime::{
 use crate::settings::{
     apply_autostart_settings, is_startup_setting_enabled, startup_setting_enabled,
 };
-use crate::load_startup_settings;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_WINDOW_LABEL: &str = "tray-menu";
@@ -278,13 +278,11 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 button,
                 button_state,
                 ..
-            } if matches!(button_state, tauri::tray::MouseButtonState::Down) => {
-                match button {
-                    tauri::tray::MouseButton::Right => show_tray_menu(tray.app_handle(), position),
-                    tauri::tray::MouseButton::Left => show_main_window(tray.app_handle()),
-                    _ => {}
-                }
-            }
+            } if matches!(button_state, tauri::tray::MouseButtonState::Down) => match button {
+                tauri::tray::MouseButton::Right => show_tray_menu(tray.app_handle(), position),
+                tauri::tray::MouseButton::Left => show_main_window(tray.app_handle()),
+                _ => {}
+            },
             _ => {}
         });
 

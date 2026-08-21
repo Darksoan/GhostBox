@@ -14,12 +14,14 @@ Projeto utilizado como camada de dados para o SteamTools.games.
 
 Principais arquivos:
 
-- `depotkeys.json`
-- `appaccesstokens.json`
 - branches organizadas por AppID
 - dados utilizados para geração de manifests
 - suporte à geração de `.lua`
 - suporte à geração de `key.vdf`
+
+> Nota de validação (21/08/2026): os arquivos `depotkeys.json` e
+> `appaccesstokens.json` retornaram HTTP 404 tanto na branch padrão quanto
+> nas branches por AppID e foram removidos desta lista.
 
 O projeto documenta uma API pública sem necessidade de autenticação, incluindo endpoints de busca e geração.
 
@@ -39,6 +41,11 @@ O projeto documenta uma API pública sem necessidade de autenticação, incluind
 
 [sadabx/ManifestHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com)
 
+> Nota de validação (21/08/2026): o repositório ainda responde (HTTP 200),
+> porém foi renomeado e hoje redireciona para `trionine/ManifestHub`. Não
+> possui branch por AppID (testado com o AppID 367520). Usar apenas como
+> referência histórica/arquitetural.
+
 Esse projeto é especialmente importante porque documenta várias fontes externas utilizadas para resolver dados.
 
 Entre as fontes utilizadas estão:
@@ -46,42 +53,12 @@ Entre as fontes utilizadas estão:
 - `api.steamcmd.net`
 - `fylsdy/ManifestHub`
 - `qwe213312/k25FCdfEOoEJ42S6`
-- `SSMGAlt/ManifestHub2`
 
 O projeto funciona como uma boa referência arquitetural para construir um sistema de múltiplos providers.
 
 ---
 
-# 3. SSMGAlt / ManifestHub2
-
-### Repositório
-
-[SSMGAlt/ManifestHub2](https://github.com/SSMGAlt/ManifestHub2?utm_source=chatgpt.com)
-
-Fork do banco original ManifestHub.
-
-Contém:
-
-- `appaccesstokens.json`
-- `depotkeys.json`
-- dados de manifests
-- API para consulta de manifests
-
-O README também documenta uma API baseada em:
-
-```text
-depotId
-+
-manifestId
-+
-API Key
-```
-
-A API documentada utiliza uma chave temporária.
-
----
-
-# 4. SteamTools-Team / GameList
+# 3. SteamTools-Team / GameList
 
 ### Repositório
 
@@ -104,7 +81,7 @@ O repositório é atualizado regularmente e faz parte da organização SteamTool
 
 ---
 
-# 5. Fontes externas utilizadas pelo ManifestHub
+# 4. Fontes externas utilizadas pelo ManifestHub
 
 O repositório `sadabx/ManifestHub` documenta outras fontes que devem ser investigadas individualmente e potencialmente adicionadas como providers.
 
@@ -136,17 +113,11 @@ https://github.com/qwe213312/k25FCdfEOoEJ42S6
 
 Referenciado pelo projeto ManifestHub como repositório contendo arquivos `.manifest`.
 
-## SSMGAlt / ManifestHub2
-
-[SSMGAlt/ManifestHub2](https://github.com/SSMGAlt/ManifestHub2?utm_source=chatgpt.com)
-
-Utilizado como arquivo/backup legado.
-
 A arquitetura do ManifestHub confirma essas fontes como parte do sistema de agregação de dados.
 
 ---
 
-# 6. Mirrors e forks adicionais
+# 5. Mirrors e forks adicionais
 
 Além do repositório principal, existem forks e mirrors que podem ser utilizados como redundância.
 
@@ -156,11 +127,10 @@ Além do repositório principal, existem forks e mirrors que podem ser utilizado
 https://github.com/youxiya/ManifestHub2
 ```
 
-Fork do:
-
-```text
-SSMGAlt/ManifestHub2
-```
+> Nota de validação (21/08/2026): o repositório original `SSMGAlt/ManifestHub2`
+> foi removido do GitHub (HTTP 404) e suas menções foram retiradas deste
+> documento. Este mirror permanece ativo e possui branch por AppID
+> (validado com o AppID 367520).
 
 ## youxiya / ManifestHub
 
@@ -174,7 +144,7 @@ Esses mirrors podem ser utilizados dentro de uma lista de fallback, desde que se
 
 ---
 
-# 7. Arquitetura de fontes recomendada
+# 6. Arquitetura de fontes recomendada
 
 A lista de providers pode ser estruturada da seguinte forma:
 
@@ -187,7 +157,6 @@ SteamCMD Metadata Provider
 │
 ├── ManifestHub Providers
 │   ├── https://github.com/sadabx/ManifestHub
-│   ├── https://github.com/SSMGAlt/ManifestHub2
 │   ├── https://github.com/youxiya/ManifestHub2
 │   └── https://github.com/youxiya/ManifestHub
 │
@@ -201,28 +170,27 @@ SteamCMD Metadata Provider
 
 ---
 
-# 8. Prioridade inicial sugerida
+# 7. Prioridade inicial sugerida
 
 ## Tier 1 — Fontes principais
 
 1. [SteamTools.games / ManifestHub3](https://github.com/steamtools-games/ManifestHub3?utm_source=chatgpt.com)
 2. `https://api.steamcmd.net`
-3. [SSMGAlt/ManifestHub2](https://github.com/SSMGAlt/ManifestHub2?utm_source=chatgpt.com)
 
 ## Tier 2 — Fontes secundárias
 
-4. [sadabx/ManifestHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com)
-5. `https://github.com/qwe213312/k25FCdfEOoEJ42S6`
-6. `https://github.com/fylsdy/ManifestHub`
+3. [sadabx/ManifestHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com)
+4. `https://github.com/qwe213312/k25FCdfEOoEJ42S6`
+5. `https://github.com/fylsdy/ManifestHub`
 
 ## Tier 3 — Mirrors/Fallback
 
-7. `https://github.com/youxiya/ManifestHub2`
-8. `https://github.com/youxiya/ManifestHub`
+6. `https://github.com/youxiya/ManifestHub2`
+7. `https://github.com/youxiya/ManifestHub`
 
 ---
 
-# 9. Fontes que devem receber testes automatizados
+# 8. Fontes que devem receber testes automatizados
 
 Antes de integrar qualquer fonte como provider oficial, executar testes usando o AppID:
 
@@ -262,7 +230,6 @@ Cada resultado deve ser armazenado para determinar a prioridade real dos provide
 |---|---|
 | ManifestHub3 | [GitHub](https://github.com/steamtools-games/ManifestHub3?utm_source=chatgpt.com) |
 | ManifestHub | [GitHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com) |
-| ManifestHub2 | [GitHub](https://github.com/SSMGAlt/ManifestHub2?utm_source=chatgpt.com) |
 | SteamTools GameList | [GitHub](https://github.com/SteamTools-Team/GameList?utm_source=chatgpt.com) |
 | SteamTools.games | [Website](https://steamtools.games/?utm_source=chatgpt.com) |
 | SteamTools API Docs | [Developers](https://steamtools.games/developers?utm_source=chatgpt.com) |

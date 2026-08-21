@@ -128,13 +128,13 @@ pub async fn resolve_public_app(steam_path: &str, app_id: &str) -> Option<Public
     let remote = fetch_steamcmd_app(app_id).await;
 
     match (local, remote) {
-        (Some(local), Some(remote)) => {
-            Some(if public_build_number(&remote) > public_build_number(&local) {
+        (Some(local), Some(remote)) => Some(
+            if public_build_number(&remote) > public_build_number(&local) {
                 remote
             } else {
                 local
-            })
-        }
+            },
+        ),
         (local, remote) => local.or(remote),
     }
 }
@@ -175,10 +175,7 @@ const LIBRARY_ASSET_FIELDS: &[(&str, &str, &str)] = &[
 const LIBRARY_ASSET_LANGUAGE: &str = "english";
 
 /// `{"data":{"<appid>":{"_change_number":…,"common":{"library_assets_full":{…}}}}}`.
-pub fn parse_steamcmd_assets(
-    payload: &serde_json::Value,
-    app_id: &str,
-) -> Option<PublicAppAssets> {
+pub fn parse_steamcmd_assets(payload: &serde_json::Value, app_id: &str) -> Option<PublicAppAssets> {
     if payload
         .get("status")
         .and_then(|status| status.as_str())

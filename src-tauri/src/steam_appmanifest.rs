@@ -264,7 +264,9 @@ pub fn resolve_last_owner(steam_path: &str) -> String {
         if let Some(candidate) = trimmed
             .strip_prefix('"')
             .and_then(|rest| rest.strip_suffix('"'))
-            .filter(|candidate| candidate.len() == 17 && candidate.bytes().all(|b| b.is_ascii_digit()))
+            .filter(|candidate| {
+                candidate.len() == 17 && candidate.bytes().all(|b| b.is_ascii_digit())
+            })
         {
             current_id = candidate.to_string();
             if first_id.is_empty() {
@@ -433,9 +435,9 @@ fn append_library_block(
     app_id: &str,
     size_on_disk: u64,
 ) -> Result<String, String> {
-    let closing = contents
-        .rfind('}')
-        .ok_or_else(|| "libraryfolders.vdf malformado: nao achei o fecha-chaves final.".to_string())?;
+    let closing = contents.rfind('}').ok_or_else(|| {
+        "libraryfolders.vdf malformado: nao achei o fecha-chaves final.".to_string()
+    })?;
 
     // Indices das entradas sao strings numericas sequenciais; a nova vai depois
     // da maior existente para nao colidir com nenhuma biblioteca do usuario.
@@ -532,6 +534,9 @@ mod tests {
 
     #[test]
     fn path_matching_ignores_case_separator_and_trailing_slash() {
-        assert_eq!(normalized_path_key("E:/Games/"), normalized_path_key("e:\\games"));
+        assert_eq!(
+            normalized_path_key("E:/Games/"),
+            normalized_path_key("e:\\games")
+        );
     }
 }

@@ -395,7 +395,10 @@ pub async fn cloud_list_saves(
     }
     let mut parsed =
         serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())?;
-    if let Some(saves) = parsed.get_mut("saves").and_then(|value| value.as_array_mut()) {
+    if let Some(saves) = parsed
+        .get_mut("saves")
+        .and_then(|value| value.as_array_mut())
+    {
         for save in saves {
             if save
                 .pointer("/manifest/profileProgress/achievementCount")
@@ -438,10 +441,8 @@ pub async fn cloud_list_saves(
             let Some(profile_progress_object) = profile_progress.as_object_mut() else {
                 continue;
             };
-            profile_progress_object.insert(
-                "achievementCount".to_string(),
-                serde_json::json!(count),
-            );
+            profile_progress_object
+                .insert("achievementCount".to_string(), serde_json::json!(count));
         }
     }
     Ok(parsed)
@@ -504,8 +505,7 @@ pub async fn cloud_restore_save(
         let zip_path_for_task = zip_path.clone();
         let restore_dir_for_task = restore_dir.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            std::fs::create_dir_all(&restore_dir_for_task)
-                .map_err(|error| error.to_string())?;
+            std::fs::create_dir_all(&restore_dir_for_task).map_err(|error| error.to_string())?;
             unzip_to_directory(&zip_path_for_task, &restore_dir_for_task)
         })
         .await

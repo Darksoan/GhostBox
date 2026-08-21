@@ -245,10 +245,7 @@ fn select_luatools_asset(release: &GithubRelease) -> Option<GithubAsset> {
     release
         .assets
         .iter()
-        .find(|asset| {
-            asset.name.starts_with("LuaTools-")
-                && asset.name.ends_with("-full.nupkg")
-        })
+        .find(|asset| asset.name.starts_with("LuaTools-") && asset.name.ends_with("-full.nupkg"))
         .cloned()
         .or_else(|| {
             release
@@ -281,8 +278,9 @@ fn zip_file_name(name: &str) -> Option<String> {
 }
 
 fn install_luatools_package(app: &AppHandle, download: &AssetDownload) -> Result<(), String> {
-    let target_dir = lua_tools_current_dir(app)
-        .ok_or_else(|| "Não foi possível localizar LOCALAPPDATA para instalar LuaTools.".to_string())?;
+    let target_dir = lua_tools_current_dir(app).ok_or_else(|| {
+        "Não foi possível localizar LOCALAPPDATA para instalar LuaTools.".to_string()
+    })?;
     let temp_dir = target_dir.with_extension("ghostbox-tmp");
     if temp_dir.exists() {
         std::fs::remove_dir_all(&temp_dir).map_err(|error| error.to_string())?;
@@ -301,13 +299,20 @@ fn install_luatools_package(app: &AppHandle, download: &AssetDownload) -> Result
         let Some(enclosed) = file.enclosed_name().map(|path| path.to_path_buf()) else {
             continue;
         };
-        let parts = enclosed.components().map(|part| part.as_os_str().to_owned()).collect::<Vec<_>>();
+        let parts = enclosed
+            .components()
+            .map(|part| part.as_os_str().to_owned())
+            .collect::<Vec<_>>();
         let relative = if parts.len() >= 3
             && parts[0].to_string_lossy().eq_ignore_ascii_case("lib")
             && parts[1].to_string_lossy().eq_ignore_ascii_case("app")
         {
             parts[2..].iter().collect::<PathBuf>()
-        } else if download.asset.name.eq_ignore_ascii_case("LuaTools-win-Portable.zip") {
+        } else if download
+            .asset
+            .name
+            .eq_ignore_ascii_case("LuaTools-win-Portable.zip")
+        {
             enclosed
         } else {
             continue;
@@ -349,8 +354,8 @@ fn install_luatools_package(app: &AppHandle, download: &AssetDownload) -> Result
 }
 
 fn extract_opensteamtool_files(bytes: &[u8]) -> Result<HashMap<String, Vec<u8>>, String> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes.to_vec()))
-        .map_err(|error| error.to_string())?;
+    let mut archive =
+        zip::ZipArchive::new(Cursor::new(bytes.to_vec())).map_err(|error| error.to_string())?;
     let mut files = HashMap::new();
 
     for index in 0..archive.len() {
@@ -368,13 +373,16 @@ fn extract_opensteamtool_files(bytes: &[u8]) -> Result<HashMap<String, Vec<u8>>,
             continue;
         }
         let mut content = Vec::new();
-        file.read_to_end(&mut content).map_err(|error| error.to_string())?;
+        file.read_to_end(&mut content)
+            .map_err(|error| error.to_string())?;
         files.insert(file_name, content);
     }
 
     for required in OPENSTEAMTOOL_FILES {
         if !files.keys().any(|name| name.eq_ignore_ascii_case(required)) {
-            return Err(format!("O pacote BetterSteamTools não continha {required}."));
+            return Err(format!(
+                "O pacote BetterSteamTools não continha {required}."
+            ));
         }
     }
 
@@ -508,7 +516,9 @@ fn normalize_config_path(value: &str) -> String {
 }
 
 fn lua_section_bounds(lines: &[&str]) -> Option<(usize, usize)> {
-    let start = lines.iter().position(|line| line.trim().eq_ignore_ascii_case("[lua]"))?;
+    let start = lines
+        .iter()
+        .position(|line| line.trim().eq_ignore_ascii_case("[lua]"))?;
     let end = lines
         .iter()
         .enumerate()
@@ -542,18 +552,24 @@ fn ensure_opensteamtool_lua_path(config: &str) -> Result<String, String> {
     }
 
     let mut lines = config.lines().map(ToOwned::to_owned).collect::<Vec<_>>();
-    if let Some((start, end)) = lua_section_bounds(&lines.iter().map(String::as_str).collect::<Vec<_>>()) {
+    if let Some((start, end)) =
+        lua_section_bounds(&lines.iter().map(String::as_str).collect::<Vec<_>>())
+    {
         if let Some(relative_index) = lines[start + 1..end]
             .iter()
             .position(|line| line.trim_start().starts_with("paths"))
         {
             let index = start + 1 + relative_index;
             let line = &lines[index];
-            let close = line
-                .rfind(']')
-                .ok_or_else(|| "opensteamtool.toml tem lua.paths em formato não suportado.".to_string())?;
+            let close = line.rfind(']').ok_or_else(|| {
+                "opensteamtool.toml tem lua.paths em formato não suportado.".to_string()
+            })?;
             let (left, right) = line.split_at(close);
-            let separator = if left.trim_end().ends_with('[') { "" } else { ", " };
+            let separator = if left.trim_end().ends_with('[') {
+                ""
+            } else {
+                ", "
+            };
             lines[index] = format!("{left}{separator}\"config/stplug-in\"{right}");
         } else {
             lines.insert(start + 1, "paths = [\"config/stplug-in\"]".to_string());
@@ -609,10 +625,11 @@ fn dependency_status(app: &AppHandle) -> DependencyStatus {
         .as_ref()
         .map(|path| Path::new(path).join("config").join("stplug-in").is_dir())
         .unwrap_or(false);
-    let (better_steam_tools_installed, open_steam_tool_files, open_steam_tool_configured) = steam_path
-        .as_ref()
-        .map(|path| opensteamtool_status(path, &state))
-        .unwrap_or_else(|| (false, Vec::new(), false));
+    let (better_steam_tools_installed, open_steam_tool_files, open_steam_tool_configured) =
+        steam_path
+            .as_ref()
+            .map(|path| opensteamtool_status(path, &state))
+            .unwrap_or_else(|| (false, Vec::new(), false));
     let ready = steam_path.is_some()
         && lua_tools_installed
         && st_plugin_folder_found
@@ -640,11 +657,9 @@ fn steam_is_running() -> bool {
         .args(["/FI", "IMAGENAME eq steam.exe", "/NH"])
         .output();
     match output {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout)
-                .to_ascii_lowercase()
-                .contains("steam.exe")
-        }
+        Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .to_ascii_lowercase()
+            .contains("steam.exe"),
         _ => false,
     }
 }
@@ -682,13 +697,23 @@ async fn run_bootstrap(app: AppHandle) -> Value {
         state.last_error = Some(error.clone());
         state.updated_at = Some(now_rfc3339());
         let _ = write_state(&app, &state);
-        return finish_payload(false, "failed", "A instalação será tentada novamente na próxima inicialização.", Some(error));
+        return finish_payload(
+            false,
+            "failed",
+            "A instalação será tentada novamente na próxima inicialização.",
+            Some(error),
+        );
     };
 
     let _ = save_steam_path(&app, &steam_path);
     let before = dependency_status(&app);
     if before.ready {
-        return finish_payload(true, "ready", "LuaTools e BetterSteamTools já estão prontos.", None);
+        return finish_payload(
+            true,
+            "ready",
+            "LuaTools e BetterSteamTools já estão prontos.",
+            None,
+        );
     }
 
     let result = async {
@@ -696,7 +721,13 @@ async fn run_bootstrap(app: AppHandle) -> Value {
             let release = fetch_latest_release(LUATOOLS_REPO).await?;
             let asset = select_luatools_asset(&release)
                 .ok_or_else(|| "Release do LuaTools não contém pacote instalável.".to_string())?;
-            let download = download_asset(asset, LUATOOLS_REPO, &release.tag_name, MAX_LUATOOLS_PACKAGE_BYTES).await?;
+            let download = download_asset(
+                asset,
+                LUATOOLS_REPO,
+                &release.tag_name,
+                MAX_LUATOOLS_PACKAGE_BYTES,
+            )
+            .await?;
             install_luatools_package(&app, &download)?;
             state.lua_tools_version = Some(release.tag_name);
         }
@@ -704,9 +735,16 @@ async fn run_bootstrap(app: AppHandle) -> Value {
         let after_luatools = dependency_status(&app);
         if !after_luatools.better_steam_tools_installed {
             let release = fetch_latest_release(OPENSTEAMTOOL_REPO).await?;
-            let asset = select_opensteamtool_asset(&release)
-                .ok_or_else(|| "Release do BetterSteamTools não contém pacote Release.".to_string())?;
-            let download = download_asset(asset, OPENSTEAMTOOL_REPO, &release.tag_name, MAX_OPENSTEAMTOOL_PACKAGE_BYTES).await?;
+            let asset = select_opensteamtool_asset(&release).ok_or_else(|| {
+                "Release do BetterSteamTools não contém pacote Release.".to_string()
+            })?;
+            let download = download_asset(
+                asset,
+                OPENSTEAMTOOL_REPO,
+                &release.tag_name,
+                MAX_OPENSTEAMTOOL_PACKAGE_BYTES,
+            )
+            .await?;
             install_opensteamtool(&app, &steam_path, &download, &mut state)?;
             state.open_steam_tool_version = Some(release.tag_name);
         }
@@ -768,7 +806,9 @@ pub fn luatools_dependencies_ensure(app: AppHandle) -> Value {
     }
 
     {
-        let mut running = running_guard().lock().unwrap_or_else(|error| error.into_inner());
+        let mut running = running_guard()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         if *running {
             return json!({ "status": "running", "started": false, "ready": false });
         }
@@ -779,7 +819,9 @@ pub fn luatools_dependencies_ensure(app: AppHandle) -> Value {
     tauri::async_runtime::spawn(async move {
         let payload = run_bootstrap(app_for_task.clone()).await;
         let _ = app_for_task.emit(EVENT_NAME, payload);
-        let mut running = running_guard().lock().unwrap_or_else(|error| error.into_inner());
+        let mut running = running_guard()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         *running = false;
     });
 
@@ -810,12 +852,18 @@ mod tests {
         std::fs::write(root.join("dwmapi.dll"), b"foreign-dwmapi").unwrap();
         std::fs::write(root.join("xinput1_4.dll"), b"foreign-xinput").unwrap();
 
-        let error = validate_opensteamtool_targets(&root, &files, &BootstrapState::default())
-            .unwrap_err();
+        let error =
+            validate_opensteamtool_targets(&root, &files, &BootstrapState::default()).unwrap_err();
         assert!(error.contains("dwmapi.dll"));
         assert!(error.contains("xinput1_4.dll"));
-        assert_eq!(std::fs::read(root.join("dwmapi.dll")).unwrap(), b"foreign-dwmapi");
-        assert_eq!(std::fs::read(root.join("xinput1_4.dll")).unwrap(), b"foreign-xinput");
+        assert_eq!(
+            std::fs::read(root.join("dwmapi.dll")).unwrap(),
+            b"foreign-dwmapi"
+        );
+        assert_eq!(
+            std::fs::read(root.join("xinput1_4.dll")).unwrap(),
+            b"foreign-xinput"
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

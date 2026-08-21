@@ -209,7 +209,10 @@ fn parse_kv_object(
 /// Percorre as entradas de app ate achar `app_id` e devolve so o blob KV dele.
 /// O arquivo passa de 100 MB em instalacoes grandes — parsear tudo seria
 /// desperdicio, entao o loop pula pelo campo `size` de cada entrada.
-fn find_app_blob(data: &[u8], app_id: u32) -> Option<(BTreeMap<String, KvValue>, Option<Vec<String>>)> {
+fn find_app_blob(
+    data: &[u8],
+    app_id: u32,
+) -> Option<(BTreeMap<String, KvValue>, Option<Vec<String>>)> {
     let mut offset = 0usize;
     let magic = read_u32(data, &mut offset)?;
     if magic != MAGIC_V27 && magic != MAGIC_V28 && magic != MAGIC_V29 {
@@ -273,7 +276,11 @@ pub fn sanitize_install_dir(name: &str) -> String {
             }
         })
         .collect();
-    cleaned.trim().trim_end_matches(['.', ' ']).trim().to_string()
+    cleaned
+        .trim()
+        .trim_end_matches(['.', ' '])
+        .trim()
+        .to_string()
 }
 
 /// Carrega o blob KV de um app ja desembrulhado do no raiz `appinfo`.
@@ -354,7 +361,11 @@ pub fn read_app_info(steam_path: &str, app_id: &str) -> Option<AppInfo> {
 /// Resolve o `installdir` com o fallback do plano: appinfo primeiro, titulo do
 /// catalogo sanitizado depois. Nunca devolve string vazia — um `installdir` vazio
 /// faria o ACF apontar para a raiz de `steamapps\common`.
-pub fn resolve_install_dir(app_info: Option<&AppInfo>, fallback_title: &str, app_id: &str) -> String {
+pub fn resolve_install_dir(
+    app_info: Option<&AppInfo>,
+    fallback_title: &str,
+    app_id: &str,
+) -> String {
     if let Some(info) = app_info {
         if !info.install_dir.is_empty() {
             return info.install_dir.clone();
@@ -511,7 +522,10 @@ mod tests {
     #[test]
     fn sanitize_strips_invalid_chars_and_trailing_dots() {
         assert_eq!(sanitize_install_dir("Portal 2"), "Portal 2");
-        assert_eq!(sanitize_install_dir("S.T.A.L.K.E.R.: CoP"), "S.T.A.L.K.E.R._ CoP");
+        assert_eq!(
+            sanitize_install_dir("S.T.A.L.K.E.R.: CoP"),
+            "S.T.A.L.K.E.R._ CoP"
+        );
         assert_eq!(sanitize_install_dir("Game/Name"), "Game_Name");
         assert_eq!(sanitize_install_dir("trailing..."), "trailing");
     }
@@ -562,8 +576,14 @@ mod tests {
             build_id: "1".into(),
             name: "N".into(),
         };
-        assert_eq!(resolve_install_dir(Some(&info), "Hollow Knight", "367520"), "Hollow Knight");
-        assert_eq!(resolve_install_dir(None, "Hollow Knight", "367520"), "Hollow Knight");
+        assert_eq!(
+            resolve_install_dir(Some(&info), "Hollow Knight", "367520"),
+            "Hollow Knight"
+        );
+        assert_eq!(
+            resolve_install_dir(None, "Hollow Knight", "367520"),
+            "Hollow Knight"
+        );
         assert_eq!(resolve_install_dir(None, "...", "367520"), "app_367520");
     }
 }

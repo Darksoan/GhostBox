@@ -445,8 +445,8 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
         object.insert("movies".to_string(), Value::Array(movies));
     }
 
-    let about_the_game = text(details.get("aboutTheGame"))
-        .if_empty_then(|| text(details.get("about_the_game")));
+    let about_the_game =
+        text(details.get("aboutTheGame")).if_empty_then(|| text(details.get("about_the_game")));
     if !about_the_game.is_empty() {
         object.insert("aboutTheGame".to_string(), Value::String(about_the_game));
     }
@@ -823,7 +823,11 @@ async fn fetch_steam_game_reviews_direct(
     review_type: &str,
 ) -> Option<Value> {
     let url = format!("https://store.steampowered.com/appreviews/{app_id}");
-    let filter = if review_type == "all" { "recent" } else { "all" };
+    let filter = if review_type == "all" {
+        "recent"
+    } else {
+        "all"
+    };
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -993,8 +997,7 @@ async fn fetch_steam_achievements(
         };
         let mut last_result = AchievementFetchResult::default();
         for &language in languages {
-            let result =
-                fetch_steam_achievements_from_proxy(&proxy_url, app_id, language).await;
+            let result = fetch_steam_achievements_from_proxy(&proxy_url, app_id, language).await;
             if !result.achievements.is_empty() {
                 return result;
             }
@@ -1010,7 +1013,8 @@ async fn fetch_steam_achievements(
 
     // Offline / proxy miss: local Steam schema only (no HTML community scrape).
     let _ = app;
-    let achievements = crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id);
+    let achievements =
+        crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id);
     AchievementFetchResult {
         status: if achievements.is_empty() {
             "no-achievements".to_string()
@@ -1367,8 +1371,12 @@ fn get_game_icons_from_local_appinfo(
             if let Some(hash) = read_client_icon_from_vdf(&bytes, app_id) {
                 return Some((app_id.clone(), steam_community_icon_url(app_id, &hash)));
             }
-            read_icon_hash_from_vdf(&bytes, app_id, b"icon\0")
-                .map(|hash| (app_id.clone(), steam_community_image_url(app_id, &hash, "jpg")))
+            read_icon_hash_from_vdf(&bytes, app_id, b"icon\0").map(|hash| {
+                (
+                    app_id.clone(),
+                    steam_community_image_url(app_id, &hash, "jpg"),
+                )
+            })
         })
         .collect()
 }
@@ -1378,7 +1386,10 @@ fn get_game_icon_from_local_files(app: &tauri::AppHandle, app_id: &str) -> Optio
     let steam_path = steam_path?;
     let steam_root = Path::new(&steam_path);
     let candidates = [
-        steam_root.join("steam").join("games").join(format!("{app_id}.ico")),
+        steam_root
+            .join("steam")
+            .join("games")
+            .join(format!("{app_id}.ico")),
         steam_root
             .join("appcache")
             .join("librarycache")
@@ -1800,7 +1811,9 @@ pub async fn database_get_game_achievement_details(
         .cloned()
         .unwrap_or_default();
 
-    let has_percentages = achievement_list.iter().any(|ach| ach.get("globalPercent").is_some());
+    let has_percentages = achievement_list
+        .iter()
+        .any(|ach| ach.get("globalPercent").is_some());
     let previous_fetch_time = game
         .get("achievementMetadata")
         .and_then(|meta| meta.get("fetchedAt"))
@@ -1877,7 +1890,11 @@ pub async fn steam_get_featured(
     cc: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let proxy_url = crate::settings::load_steam_stats_proxy_url();
-    let cc = if cc.as_deref() == Some("us") { "us" } else { "br" };
+    let cc = if cc.as_deref() == Some("us") {
+        "us"
+    } else {
+        "br"
+    };
     let mut url = reqwest::Url::parse(&format!("{proxy_url}/steam/featured"))
         .map_err(|error| error.to_string())?;
     url.query_pairs_mut().append_pair("cc", cc);
@@ -2086,7 +2103,10 @@ mod tests {
         let merged = merge_cached_steam_store_details(Some(&previous), &next);
         assert_eq!(merged["movies"], previous["movies"]);
         assert_eq!(merged["aboutTheGame"], "Updated description");
-        assert_eq!(merged["pcRequirements"]["minimum"], previous["pcRequirements"]["minimum"]);
+        assert_eq!(
+            merged["pcRequirements"]["minimum"],
+            previous["pcRequirements"]["minimum"]
+        );
         assert_eq!(
             merged["pcRequirements"]["recommended"],
             next["pcRequirements"]["recommended"]
@@ -2130,7 +2150,10 @@ mod tests {
         bytes.extend_from_slice(hash.as_bytes());
         bytes.push(0);
 
-        assert_eq!(read_client_icon_from_vdf(&bytes, "2138720"), Some(hash.to_string()));
+        assert_eq!(
+            read_client_icon_from_vdf(&bytes, "2138720"),
+            Some(hash.to_string())
+        );
     }
 
     #[test]
@@ -2143,6 +2166,9 @@ mod tests {
             "3602290",
             &format!("https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/3602290/{hash}.jpg")
         ));
-        assert!(!is_cached_icon_source("3602290", &format!("https://example.com/{hash}.jpg")));
+        assert!(!is_cached_icon_source(
+            "3602290",
+            &format!("https://example.com/{hash}.jpg")
+        ));
     }
 }

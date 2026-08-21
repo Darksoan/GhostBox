@@ -173,4 +173,3 @@ pub(crate) fn ludusavi_args(
     }
     args
 }
-

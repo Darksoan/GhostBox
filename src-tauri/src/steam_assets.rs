@@ -165,8 +165,12 @@ impl AssetManifest {
     }
 
     pub fn community_icon_url(&self, app_id: &str) -> Option<String> {
-        is_hex_hash(&self.community_icon)
-            .then(|| format!("{COMMUNITY_IMAGES_BASE}/{app_id}/{}.jpg", self.community_icon))
+        is_hex_hash(&self.community_icon).then(|| {
+            format!(
+                "{COMMUNITY_IMAGES_BASE}/{app_id}/{}.jpg",
+                self.community_icon
+            )
+        })
     }
 }
 
@@ -226,10 +230,9 @@ fn load_disk_manifests(app: &AppHandle) {
     let Some(path) = manifest_cache_path(app) else {
         return;
     };
-    let Some(disk) = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|contents| serde_json::from_str::<HashMap<String, AssetManifest>>(&contents).ok())
-    else {
+    let Some(disk) = std::fs::read_to_string(path).ok().and_then(|contents| {
+        serde_json::from_str::<HashMap<String, AssetManifest>>(&contents).ok()
+    }) else {
         return;
     };
 
@@ -303,7 +306,12 @@ pub fn normalize_app_ids(app_ids: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     app_ids
         .iter()
-        .map(|app_id| app_id.chars().filter(char::is_ascii_digit).collect::<String>())
+        .map(|app_id| {
+            app_id
+                .chars()
+                .filter(char::is_ascii_digit)
+                .collect::<String>()
+        })
         .filter(|app_id| !app_id.is_empty() && seen.insert(app_id.clone()))
         .collect()
 }
@@ -549,10 +557,7 @@ pub async fn asset_url(app: &AppHandle, app_id: &str, file_name: &str) -> Option
 /// é o mesmo de sempre.
 ///
 /// Devolve as URLs atualizadas, ou `None` quando nada mudou.
-pub async fn refresh_from_pics(
-    app: &AppHandle,
-    app_id: &str,
-) -> Option<HashMap<String, String>> {
+pub async fn refresh_from_pics(app: &AppHandle, app_id: &str) -> Option<HashMap<String, String>> {
     let app_id: String = app_id.chars().filter(char::is_ascii_digit).collect();
     if app_id.is_empty() {
         return None;
@@ -808,7 +813,9 @@ mod tests {
             "https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/3602290/\
              4cc8c99722309845b2c4775902ace66f468303ec.jpg"
         );
-        assert!(parse(LEGACY, "413150").community_icon_url("413150").is_none());
+        assert!(parse(LEGACY, "413150")
+            .community_icon_url("413150")
+            .is_none());
     }
 
     #[test]

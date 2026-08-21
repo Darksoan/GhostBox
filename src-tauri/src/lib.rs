@@ -15,7 +15,6 @@ const LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE: &str = "eden-achievements.json";
 const LEGACY_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
 const GHOSTBOX_PLAYTIME_BACKUP_FILE: &str = "ghostbox-playtime.json";
 
-
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ProfileProgressSnapshot {
     pub has_achievements: bool,
@@ -39,8 +38,8 @@ mod cloud_save;
 mod ghostbox_library;
 mod image_cache;
 mod luatools;
-mod ludusavi;
 mod luatools_bootstrap;
+mod ludusavi;
 mod manifest_sources;
 mod playtime;
 mod settings;
@@ -170,12 +169,9 @@ fn emit_backup_settings_changed(app: &tauri::AppHandle, settings: &serde_json::V
     let _ = app.emit(BACKUP_SETTINGS_CHANGED_EVENT, settings.clone());
 }
 
-
-
 fn current_timestamp_string() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
-
 
 pub(crate) fn is_path_inside_or_equal(
     parent_path: &std::path::Path,
@@ -840,12 +836,11 @@ pub(crate) fn local_backup_achievement_count(
     app_id: &str,
     title: &str,
 ) -> Option<usize> {
-    read_ghostbox_achievements_backup_file(app, app_id, title, None)
-        .and_then(|file| {
-            file.get("unlocked")
-                .and_then(|value| value.as_array())
-                .map(Vec::len)
-        })
+    read_ghostbox_achievements_backup_file(app, app_id, title, None).and_then(|file| {
+        file.get("unlocked")
+            .and_then(|value| value.as_array())
+            .map(Vec::len)
+    })
 }
 
 fn write_ghostbox_achievements_backup_file(
@@ -867,7 +862,6 @@ fn write_ghostbox_achievements_backup_file(
     std::fs::write(&file_path, contents).map_err(|error| error.to_string())?;
     Ok(file_path.to_string_lossy().to_string())
 }
-
 
 pub(crate) fn get_backup_record_entries(
     record: Option<&serde_json::Value>,
@@ -900,7 +894,6 @@ pub(crate) fn get_backup_record_entries(
         "pinned": false
     })]
 }
-
 
 pub(crate) fn save_failed_backup_record(
     app: &tauri::AppHandle,
@@ -1126,7 +1119,6 @@ pub(crate) fn sanitize_folder_name(value: &str) -> String {
         .if_empty("Game".to_string())
 }
 
-
 pub(crate) fn save_backup_record(
     app: &tauri::AppHandle,
     app_id: &str,
@@ -1164,7 +1156,6 @@ pub(crate) fn directory_has_content(path: &std::path::Path) -> bool {
         })
     })
 }
-
 
 pub(crate) fn selected_backup_entry_path(
     settings: &serde_json::Value,

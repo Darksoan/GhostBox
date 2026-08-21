@@ -12,9 +12,9 @@ const IMAGE_CACHE_CLEANUP_INTERVAL_MS: u64 = 6 * 60 * 60 * 1000;
 static CLEANUP_STARTED: OnceLock<()> = OnceLock::new();
 static IMAGE_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 static LIBRARY_ASSET_CACHE_WRITE_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
-static LIBRARY_ASSET_CACHE_MEMO:
-    OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>> =
-    OnceLock::new();
+static LIBRARY_ASSET_CACHE_MEMO: OnceLock<
+    std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>,
+> = OnceLock::new();
 
 fn library_asset_cache_memo(
 ) -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>
