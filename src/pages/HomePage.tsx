@@ -1197,7 +1197,13 @@ function HomeBannerArt({
 }) {
   const fallbackSources = useMemo(() => homeBannerArtSources(game), [game]);
   const cachedSources = useCachedImageSources(fallbackSources);
-  const { source, loaded } = useLoadableImageCover(cachedSources);
+  // `preferOrder` faz o walk respeitar o ranking da lista (library_hero
+  // primeiro). Sem ele, o atalho de sessão pinta qualquer source já decodificada
+  // — um screenshot carregado por outro card vencia o hero e a capa do banner
+  // trocava de arte depois que a fonte de maior prioridade terminava.
+  const { source, loaded } = useLoadableImageCover(cachedSources, {
+    preferOrder: true,
+  });
 
   return (
     <span

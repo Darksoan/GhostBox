@@ -93,19 +93,22 @@ describe("catalogue preview manual navigation", () => {
     ]);
   });
 
-  it("renders accessible controls and pauses autoplay on preview hover", () => {
+  it("keeps the preview accessible with hover/focus retention wired to the parent", () => {
     const component = readFileSync(
       "src/components/ui/CatalogueHoverPreview.tsx",
       "utf8"
     );
 
-    expect(component).toContain("catalogue-hover-preview__control");
-    expect(component).toContain("previousScreenshot");
-    expect(component).toContain("nextScreenshot");
-    expect(component).toContain("getAdjacentReadyScreenshotSource");
-    expect(component).toContain("isAutoplayPaused");
-    expect(component).toContain("onFocusCapture");
-    expect(component).toContain("onBlurCapture");
+    // Sem controles manuais desde o redesign: o painel é só leitura. A
+    // acessibilidade vive no rótulo da seção, no espelhamento hover↔foco e na
+    // visibilidade atrelada à mídia decodificada.
+    expect(component).toContain("aria-label={");
+    expect(component).toContain("onFocusCapture={handlePreviewFocus}");
+    expect(component).toContain("onBlurCapture={handlePreviewBlur}");
+    expect(component).toContain("onPointerEnter={handlePreviewPointerEnter}");
+    expect(component).toContain("onPointerLeave={handlePreviewPointerLeave}");
+    expect(component).toContain("aria-hidden={!isPanelVisible}");
+    expect(component).toContain("isVisible && isMediaReady");
   });
 });
 

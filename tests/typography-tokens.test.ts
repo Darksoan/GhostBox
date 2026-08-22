@@ -34,12 +34,15 @@ describe("Typography tokens", () => {
   it("uses the contrast-equalized surface ramp", () => {
     const tokens = collectTokens();
 
-    expect(tokens.get("--n-0")).toBe("#0a0a0a");
-    expect(tokens.get("--n-1")).toBe("#101010");
-    expect(tokens.get("--n-2")).toBe("#121212");
-    expect(tokens.get("--n-3")).toBe("#151515");
-    expect(tokens.get("--n-4")).toBe("#1a1a1a");
-    expect(tokens.has("--n-000")).toBe(false);
+    // Rampa de superfície renomeada de --n-* para --c-*; o prefixo --n seguiu
+    // apenas para borda/texto (--n-5 em diante).
+    expect(tokens.get("--c-0")).toBe("#0a0a0a");
+    expect(tokens.get("--c-1")).toBe("#101010");
+    expect(tokens.get("--c-2")).toBe("#121212");
+    expect(tokens.get("--c-3")).toBe("#151515");
+    expect(tokens.get("--c-4")).toBe("#1a1a1a");
+    expect(tokens.has("--n-0")).toBe(false);
+    expect(tokens.has("--c-000")).toBe(false);
   });
 
   it("keeps surface-role tokens inside the surface ramp", () => {
@@ -49,7 +52,12 @@ describe("Typography tokens", () => {
 
     for (const name of tokens.keys()) {
       if (!surfaceRole.test(name)) continue;
+      // Estados de seleção forte ficam deliberadamente acima do teto da rampa
+      // (#202020, --c-5) — ver comentário em _semantic.scss. O hover do
+      // trigger herda do par de dropdowns de Configurações.
       if (name === "--settings-dropdown-surface-hover") continue;
+      if (name === "--settings-dropdown-trigger-hover") continue;
+      if (name === "--surface-option-selected") continue;
       const resolved = resolveToken(name, tokens);
       if (!/^#[0-9a-f]{6}$/i.test(resolved)) continue;
       expect(parseInt(resolved.slice(1), 16), `${name} = ${resolved}`).toBeLessThanOrEqual(
@@ -153,11 +161,26 @@ describe("Typography tokens", () => {
   });
 
   it("forbids literal font-size and stray ramp references in UI styles", () => {
+    // Exceções deliberadas de src/app.scss, documentadas no próprio SCSS:
+    // 1. Citação da review no card de Top rated — conteúdo principal do card,
+    //    15px cai entre os degraus caption/body.
+    // 2. Título display do hero da página de Downloads — tamanho fluido próprio,
+    //    fora da rampa semântica de propósito.
+    const allowedLiterals: Record<string, string[]> = {
+      "src/app.scss": [
+        "font-size: 15px",
+        "font-size: clamp(1.25rem, 2.4vw, 1.75rem)",
+      ],
+    };
+
     for (const file of UI_STYLES) {
       const source = readFileSync(file, "utf8");
+      const literals = [
+        ...source.matchAll(/font-size\s*:\s*(?:clamp\(|[0-9])[^;]*/g),
+      ].map((match) => match[0].trim());
 
-      expect(source, `${file} literal font-size`).not.toMatch(
-        /font-size\s*:\s*(?:clamp\(|[0-9])/
+      expect(literals, `${file} literal font-size`).toEqual(
+        allowedLiterals[file] ?? []
       );
       expect(source, `${file} raw ramp reference`).not.toMatch(/var\(--fs-/);
     }
@@ -175,11 +198,22 @@ describe("Typography tokens", () => {
   it("keeps Home secondary copy above micro text size", () => {
     const source = readFileSync("src/app.scss", "utf8");
 
-    expect(source).toContain(".home-page .section-header__subtitle");
-    expect(source).toContain(".home-wishlist-card__reason");
-    expect(source).toContain("font-size: var(--type-size-compact);");
-    expect(source).toContain("font-size: var(--type-size-caption);");
-    expect(source).toContain("line-height: var(--type-line-compact);");
-    expect(source).toContain("line-height: var(--type-line-caption);");
+    // A cópia secundária da Home hoje é o autor da review do jogador (a frase
+    // "Já que X está na sua lista de desejos" saiu junto com o seletor __reason).
+    // Nome e metadado fecham em caption — nada abaixo do piso de 12px.
+    // Âncora com "\n" para não pegar a variante
+    // `.home-top-rated-card__review .home-wishlist-card__player-review-author`,
+    // que só reposiciona o bloco e não declara tipografia.
+    const authorBlockStart = source.indexOf(
+      "\n.home-wishlist-card__player-review-author {"
+    );
+    const authorBlockEnd = source.indexOf(
+      ".home-wishlist-card__player-review-author-skeleton",
+      authorBlockStart
+    );
+    const authorBlock = source.slice(authorBlockStart, authorBlockEnd);
+    expect(authorBlock).toContain("font-size: var(--type-size-caption);");
+    expect(authorBlock).toContain("line-height: var(--type-line-caption);");
+    expect(authorBlock).not.toContain("var(--type-size-micro)");
   });
 });

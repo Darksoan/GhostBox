@@ -29,21 +29,24 @@ describe("Home layout", () => {
 
     expect(customProperties.get("--background")).toBe("var(--surface-canvas)");
     expect(customProperties.get("--background-dark")).toBe("var(--surface-canvas)");
-    expect(customProperties.get("--surface-canvas")).toBe("var(--n-0)");
-    expect(customProperties.get("--n-0")).toBe("#0a0a0a");
-    expect(customProperties.get("--surface-sidebar")).toBe("var(--n-1)");
+    // Rampa estrutural renomeada de --n-* para --c-* (primitivos de COR).
+    expect(customProperties.get("--surface-canvas")).toBe("var(--c-0)");
+    expect(customProperties.get("--c-0")).toBe("#0a0a0a");
+    expect(customProperties.get("--surface-sidebar")).toBe("var(--c-1)");
     expect(customProperties.get("--surface-titlebar")).toBe("var(--surface-canvas)");
-    expect(customProperties.get("--n-1")).toBe("#101010");
+    expect(customProperties.get("--c-1")).toBe("#101010");
     // Navegação clareia: sidebar sobe no hover e sobe de novo quando selecionada.
-    expect(customProperties.get("--sidebar-option-hover")).toBe("var(--n-3)");
-    expect(customProperties.get("--n-3")).toBe("#151515");
-    expect(customProperties.get("--sidebar-option-selected")).toBe("var(--n-4)");
-    expect(customProperties.get("--n-4")).toBe("#1a1a1a");
+    expect(customProperties.get("--sidebar-option-hover")).toBe("var(--c-3)");
+    expect(customProperties.get("--c-3")).toBe("#151515");
+    expect(customProperties.get("--sidebar-option-selected")).toBe("var(--c-4)");
+    expect(customProperties.get("--c-4")).toBe("#1a1a1a");
     // Conteúdo usa degrau seguinte no hover, mantendo separação da base.
-    expect(customProperties.get("--surface-option")).toBe("var(--n-1)");
-    expect(customProperties.get("--surface-option-hover")).toBe("var(--n-2)");
+    expect(customProperties.get("--surface-option")).toBe("var(--c-1)");
+    expect(customProperties.get("--surface-option-hover")).toBe("var(--c-2)");
     expect(declarations.get(".sidebar")?.get("background")).toBe("var(--surface-sidebar)");
-    expect(declarations.get(".subscription-plan-card")?.get("border")).toBe("0");
+    // O card de plano se define por superfície + raio; nenhuma borda é
+    // declarada (a antiga regra `border: 0` saiu junto com o reset).
+    expect(declarations.get(".subscription-plan-card")?.get("border")).toBeUndefined();
     expect(declarations.get(".app-main")?.get("background")).toBe("var(--app-gradient)");
     expect(declarations.get(".header")?.get("background-color")).toBe("var(--surface-titlebar)");
     expect(declarations.get(".home-page")?.get("background")).toBe("var(--background-dark)");
@@ -51,11 +54,13 @@ describe("Home layout", () => {
 
   it("removes the rated percentage and gives Home pills the full metadata row", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    // `HomeCategorySection` foi absorvida pelo rail genérico (`Shelf`); o fim do
+    // card é a próxima declaração de função de topo no arquivo.
     const cardStart = component.indexOf("function HomeCategoryCard");
-    const sectionStart = component.indexOf("function HomeCategorySection");
+    const cardEnd = component.indexOf("\nfunction ", cardStart);
     expect(cardStart).toBeGreaterThanOrEqual(0);
-    expect(sectionStart).toBeGreaterThan(cardStart);
-    const cardSource = component.slice(cardStart, sectionStart);
+    expect(cardEnd).toBeGreaterThan(cardStart);
+    const cardSource = component.slice(cardStart, cardEnd);
 
     expect(cardSource).not.toContain("home-category-card__rating");
     expect(cardSource).not.toContain("reviewScore");
@@ -96,8 +101,8 @@ describe("Home layout", () => {
   it("reserves the second pill row before the async data lands", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeCategoryCard");
-    const sectionStart = component.indexOf("function HomeCategorySection");
-    const cardSource = component.slice(cardStart, sectionStart);
+    const cardEnd = component.indexOf("\nfunction ", cardStart);
+    const cardSource = component.slice(cardStart, cardEnd);
 
     // As pills vêm do enrichment assíncrono, card a card. Ligar a linha ao
     // conteúdo (`secondaryCategories.length > 0`) fazia o card crescer uma
@@ -115,22 +120,37 @@ describe("Home layout", () => {
     expect(tagsRule?.toString()).toContain("height: var(--pill-height)");
   });
 
-  it("keeps Top rated pill color unchanged on hover", () => {
+  it("keeps the Top rated pill hover on the same step as the card hover", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const customProperties = new Map<string, string>();
+    stylesheet.walkRules((rule) => {
+      if (rule.selector !== ":root") return;
+      rule.walkDecls((declaration) => {
+        if (declaration.prop.startsWith("--")) {
+          customProperties.set(declaration.prop, declaration.value);
+        }
+      });
+    });
+
     const hoverRule = stylesheet.nodes.find(
       (node) =>
         node.type === "rule" &&
         node.selector === ".home-category-card--pill-rows .home-category-card__genre:hover",
     );
 
-    expect(hoverRule?.toString()).toContain("background: var(--pill-bg)");
+    // A pill é rótulo, não segundo botão: o hover direto dela pinta o mesmo
+    // degrau estrutural (--c-4) que o hover do card aplica via --pill-bg-hover.
+    // Nenhuma cor fora desse par repouso/elevação.
+    expect(customProperties.get("--pill-bg")).toBe("var(--c-3)");
+    expect(customProperties.get("--pill-bg-hover")).toBe("var(--c-4)");
+    expect(hoverRule?.toString()).toContain("background: var(--c-4)");
   });
 
-  it("lets Top rated cards show the game title without the short description", () => {
+  it("wires the title toggle independently from the short description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeCategoryCard");
-    const sectionStart = component.indexOf("function HomeCategorySection");
-    const cardSource = component.slice(cardStart, sectionStart);
+    const cardEnd = component.indexOf("\nfunction ", cardStart);
+    const cardSource = component.slice(cardStart, cardEnd);
 
     // O nome do jogo liga independente da descrição curta (showTitle vs.
     // showSummary), e os dois compartilham o mesmo modificador de respiro.
@@ -138,11 +158,13 @@ describe("Home layout", () => {
     expect(cardSource).toContain("showTitleBlock = showSummary || showTitle");
     expect(cardSource).toContain("home-category-card--with-title");
 
-    const featuredSectionStart = component.indexOf('title={t("home.featuredGames")}');
-    const featuredSectionEnd = component.indexOf("/>", featuredSectionStart);
-    const featuredSection = component.slice(featuredSectionStart, featuredSectionEnd);
-    expect(featuredSection).toContain("showTitle");
-    expect(featuredSection).not.toContain("showSummary");
+    // Top rated saiu do HomeCategoryCard: hoje o shelf renderiza o
+    // HomeTopRatedCard (arte + review do jogador), sem título nem pills.
+    const shelfStart = component.indexOf("function HomeTopRatedShelf");
+    const shelfEnd = component.indexOf("\nfunction ", shelfStart);
+    const shelfSource = component.slice(shelfStart, shelfEnd);
+    expect(shelfSource).toContain("<HomeTopRatedCard");
+    expect(shelfSource).not.toContain("showSummary");
   });
 
   it("gives the section header real hierarchy over card body copy", () => {

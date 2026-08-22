@@ -2850,7 +2850,7 @@ p {
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--fs-700);
+  font-size: var(--type-size-page);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--ls-700);
   line-height: var(--lh-700);
@@ -2860,7 +2860,7 @@ p {
 
 .home-banner__developer {
   color: var(--text-secondary);
-  font-size: var(--fs-300);
+  font-size: var(--type-size-compact);
   line-height: var(--lh-300);
 }
 
@@ -2868,7 +2868,7 @@ p {
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: var(--fs-300);
+  font-size: var(--type-size-compact);
   line-height: var(--lh-300);
   opacity: 0.92;
   -webkit-box-orient: vertical;
@@ -3002,7 +3002,7 @@ p {
   padding: 0 var(--space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  font-size: var(--fs-300);
+  font-size: var(--type-size-compact);
   font-weight: var(--weight-medium);
   line-height: var(--lh-300);
   white-space: nowrap;
@@ -3618,7 +3618,7 @@ p {
 .home-category-card__hover-title-text {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--fs-300);
+  font-size: var(--type-size-compact);
   font-weight: var(--weight-semibold);
   line-height: var(--lh-300);
   text-overflow: ellipsis;

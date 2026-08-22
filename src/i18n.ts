@@ -742,11 +742,7 @@ const translations: Record<Language, TranslationTree> = {
         selected: "{count} filter(s)",
       },
       preview: {
-        developer: "Developer",
-        previousScreenshot: "Previous screenshot",
-        nextScreenshot: "Next screenshot",
         columnLabel: "Game preview",
-        idleHint: "Hover a game to see its preview.",
       },
       pagination: {
         label: "Catalogue pagination",
