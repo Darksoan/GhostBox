@@ -3,7 +3,6 @@ import {
   ChevronDown,
   Cpu,
   Download,
-  Gamepad,
   Gamepad2,
   Heart,
   Image as ImageIcon,
@@ -15,6 +14,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import playstationIcon from "../../../Icons/playstation-original.svg";
+import xboxIcon from "../../../Icons/xbox-original.svg";
 import { Cup } from "reicon-react";
 import {
   memo,
@@ -254,8 +255,8 @@ const GameControllerSupportSection = memo(function GameControllerSupportSection(
       >
         <div className="modal__sidebar-section-panel modal__controller-support">
           <div className="modal__controller-support-icons" aria-hidden="true">
-            <Gamepad size={26} strokeWidth={1.6} />
-            <Gamepad2 size={26} strokeWidth={1.6} />
+            <img src={playstationIcon} alt="" draggable={false} />
+            <img src={xboxIcon} alt="" draggable={false} />
           </div>
           <span
             className={`modal__controller-support-badge modal__controller-support-badge--${status}`}

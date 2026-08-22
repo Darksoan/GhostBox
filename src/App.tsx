@@ -195,6 +195,17 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     };
   }, []);
 
+  // A coroa pertence a uma conta autenticada: o logout precisa derruba-la na
+  // hora. O poll de status devolve null quando deslogado e mantem de proposito
+  // o ultimo valor conhecido — sem este reset o botao "Assinatura" sobrevivia
+  // ao logout ate o app reiniciar. Cobre tambem a sessao expirada detectada
+  // pelo refreshAccount, que reverte para anonymous.
+  useEffect(() => {
+    if (status !== "anonymous") return;
+    setIsPremium(false);
+    setSubscriptionPeriodEnd(null);
+  }, [status]);
+
   useEffect(() => {
     if (isPremium) setSubscriptionModalOpen(false);
   }, [isPremium, setSubscriptionModalOpen]);

@@ -64,30 +64,35 @@ pub(crate) fn read_steam_local_playtimes(
 
 fn parse_localconfig_playtimes(path: &Path) -> Option<HashMap<String, LocalAppPlaytime>> {
     let contents = std::fs::read_to_string(path).ok()?;
-    let root = parse_vdf_value(&mut contents.chars().peekable());
-    let apps = ["UserLocalConfigStore", "Software", "Valve", "Steam", "apps"]
+    let parsed = parse_vdf_lenient(&contents)?;
+    if !parsed.key.eq_ignore_ascii_case("UserLocalConfigStore") {
+        return None;
+    }
+    let root = parsed.value.get_obj()?;
+    let apps = ["Software", "Valve", "Steam", "apps"]
         .iter()
-        .try_fold(&root, |acc, key| get_vdf_child(acc, key))?;
-    let apps_object = apps.as_object()?;
+        .try_fold(root, |acc, key| get_vdf_child_obj(acc, key))?;
 
     let mut result = HashMap::new();
-    for (app_id, entry) in apps_object {
+    for (app_id, values) in apps.0.iter() {
+        let app_id = app_id.as_ref();
         if app_id.is_empty() || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
             continue;
         }
-        let minutes = get_vdf_child(entry, "Playtime")
-            .and_then(|value| value.as_str())
+        let Some(entry) = values.last().and_then(keyvalues_parser::Value::get_obj) else {
+            continue;
+        };
+        let minutes = get_vdf_child_str(entry, "Playtime")
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(0);
-        let last_played = get_vdf_child(entry, "LastPlayed")
-            .and_then(|value| value.as_str())
+        let last_played = get_vdf_child_str(entry, "LastPlayed")
             .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(0);
         if minutes == 0 && last_played == 0 {
             continue;
         }
         result.insert(
-            app_id.clone(),
+            app_id.to_string(),
             LocalAppPlaytime {
                 minutes,
                 last_played,
@@ -97,92 +102,45 @@ fn parse_localconfig_playtimes(path: &Path) -> Option<HashMap<String, LocalAppPl
     Some(result)
 }
 
-fn get_vdf_child<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
-    value.as_object()?.iter().find_map(|(k, v)| {
+/// Steam escapes backslashes when it writes `localconfig.vdf`, so the default
+/// (escaped) mode is the correct one. Unlike the hand-rolled parser this
+/// replaced, though, this one is all-or-nothing: a single odd value — say a
+/// path left with a literal trailing `\` before its closing quote — desyncs the
+/// escaped parser for the whole document and would zero out every local
+/// playtime. Retrying in literal mode keeps that from being silent data loss.
+fn parse_vdf_lenient(contents: &str) -> Option<keyvalues_parser::PartialVdf<'_>> {
+    keyvalues_parser::parse(contents).ok().or_else(|| {
+        keyvalues_parser::Parser::new()
+            .literal_special_chars(true)
+            .parse(contents)
+            .ok()
+    })
+}
+
+/// VDF allows a key to repeat within a block. The parser keeps every
+/// occurrence, so pick the last one — that is what the previous
+/// insert-into-a-map parser effectively did.
+fn get_vdf_child_obj<'a>(
+    obj: &'a keyvalues_parser::Obj<'a>,
+    key: &str,
+) -> Option<&'a keyvalues_parser::Obj<'a>> {
+    obj.0.iter().find_map(|(k, values)| {
         if k.eq_ignore_ascii_case(key) {
-            Some(v)
+            values.last().and_then(keyvalues_parser::Value::get_obj)
         } else {
             None
         }
     })
 }
 
-/// Minimal recursive-descent parser for Valve's KeyValue (VDF) text format:
-/// nested `"key" { ... }` blocks and `"key" "value"` pairs. Builds a
-/// serde_json object tree so callers can navigate with plain `Value` lookups.
-fn parse_vdf_value(chars: &mut std::iter::Peekable<std::str::Chars>) -> serde_json::Value {
-    let mut map = serde_json::Map::new();
-    loop {
-        skip_vdf_whitespace_and_comments(chars);
-        match chars.peek() {
-            None => break,
-            Some('}') => {
-                chars.next();
-                break;
-            }
-            Some('"') => {
-                let key = read_vdf_quoted_string(chars);
-                skip_vdf_whitespace_and_comments(chars);
-                match chars.peek() {
-                    Some('{') => {
-                        chars.next();
-                        map.insert(key, parse_vdf_value(chars));
-                    }
-                    Some('"') => {
-                        let value = read_vdf_quoted_string(chars);
-                        map.insert(key, serde_json::Value::String(value));
-                    }
-                    _ => break,
-                }
-            }
-            Some(_) => {
-                chars.next();
-            }
+fn get_vdf_child_str<'a>(obj: &'a keyvalues_parser::Obj<'_>, key: &str) -> Option<&'a str> {
+    obj.0.iter().find_map(|(k, values)| {
+        if k.eq_ignore_ascii_case(key) {
+            values.last().and_then(keyvalues_parser::Value::get_str)
+        } else {
+            None
         }
-    }
-    serde_json::Value::Object(map)
-}
-
-fn read_vdf_quoted_string(chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
-    chars.next();
-    let mut value = String::new();
-    while let Some(ch) = chars.next() {
-        match ch {
-            '\\' => {
-                if let Some(escaped) = chars.next() {
-                    match escaped {
-                        'n' => value.push('\n'),
-                        't' => value.push('\t'),
-                        other => value.push(other),
-                    }
-                }
-            }
-            '"' => break,
-            other => value.push(other),
-        }
-    }
-    value
-}
-
-fn skip_vdf_whitespace_and_comments(chars: &mut std::iter::Peekable<std::str::Chars>) {
-    loop {
-        while chars.peek().is_some_and(|ch| ch.is_whitespace()) {
-            chars.next();
-        }
-        if chars.peek() == Some(&'/') {
-            let mut lookahead = chars.clone();
-            lookahead.next();
-            if lookahead.peek() == Some(&'/') {
-                for ch in chars.by_ref() {
-                    if ch == '\n' {
-                        break;
-                    }
-                }
-                continue;
-            }
-        }
-        break;
-    }
+    })
 }
 
 #[cfg(test)]
@@ -268,6 +226,42 @@ mod tests {
         // still recover playtime by scanning userdata/*.
         let result = read_steam_local_playtimes(&steam_path, None);
         assert_eq!(result.get("999999").unwrap().minutes, 137);
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A value ending in a literal `\` makes the escaped parser read `\"` as an
+    /// escaped quote and lose the rest of the document. Playtime must survive it.
+    #[test]
+    fn a_literal_trailing_backslash_does_not_wipe_every_playtime() {
+        const TRAILING_BACKSLASH: &str = r#"
+"UserLocalConfigStore"
+{
+    "LastInstallDir"    "D:\Games\"
+    "Software"
+    {
+        "Valve"
+        {
+            "Steam"
+            {
+                "apps"
+                {
+                    "999999"
+                    {
+                        "Playtime"      "137"
+                        "LastPlayed"    "1700000000"
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+        let root = write_fixture("literal-backslash", "123456", TRAILING_BACKSLASH);
+        let steam_path = root.to_string_lossy().to_string();
+
+        let result = read_steam_local_playtimes(&steam_path, Some("123456"));
+        assert_eq!(result.get("999999").expect("appid 999999").minutes, 137);
 
         std::fs::remove_dir_all(&root).ok();
     }

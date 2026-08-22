@@ -62,6 +62,8 @@ describe("resolveControllerSupportStatus", () => {
 
 describe("getControllerSupportCopy", () => {
   it("localizes labels to English and Portuguese", () => {
+    expect(getControllerSupportCopy("full", false).description).toBeUndefined();
+    expect(getControllerSupportCopy("full", true).description).toBeUndefined();
     expect(getControllerSupportCopy("full", false).label).toBe("SUPORTE TOTAL");
     expect(getControllerSupportCopy("full", true).label).toBe("FULL SUPPORT");
     expect(getControllerSupportCopy("partial", false).label).toBe(

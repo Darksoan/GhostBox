@@ -223,11 +223,33 @@ pub(crate) fn steam_asset_url(app_id: &str, file_name: &str) -> String {
     format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/{file_name}")
 }
 
+/// Steam's own record of where it is installed (Windows registry, or the
+/// platform equivalent). Catches installs on drives other than C:, which the
+/// hardcoded candidates below miss entirely.
+///
+/// Cached: `resolve_steam_path` runs this on every call — including per-image
+/// paths in `image_cache.rs` — and Steam does not move while GhostBox is
+/// running, so a registry hit per lookup would be pure waste.
+fn located_steam_path() -> Option<&'static String> {
+    static LOCATED: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    LOCATED
+        .get_or_init(|| {
+            steamlocate::SteamDir::locate()
+                .ok()
+                .map(|steam_dir| steam_dir.path().to_string_lossy().to_string())
+        })
+        .as_ref()
+}
+
 fn default_steam_path_candidates() -> Vec<String> {
-    let mut candidates = vec![
-        "C:\\Program Files (x86)\\Steam".to_string(),
-        "C:\\Program Files\\Steam".to_string(),
-    ];
+    let mut candidates = Vec::new();
+
+    if let Some(located) = located_steam_path() {
+        candidates.push(located.clone());
+    }
+
+    candidates.push("C:\\Program Files (x86)\\Steam".to_string());
+    candidates.push("C:\\Program Files\\Steam".to_string());
 
     if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
         candidates.push(format!("{home}\\.steam\\steam"));

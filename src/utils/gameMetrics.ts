@@ -57,11 +57,10 @@ export function getControllerSupportCopy(
 ): ControllerSupportCopy {
   switch (status) {
     case "full":
+      // Sem subtexto: o badge "SUPORTE TOTAL" ja basta — a descricao era
+      // redundante embaixo das logos de PlayStation/Xbox.
       return {
         label: isEnglish ? "FULL SUPPORT" : "SUPORTE TOTAL",
-        description: isEnglish
-          ? "Playable start to finish with a controller."
-          : "Jogável do início ao fim com controle.",
       };
     case "partial":
       return {
