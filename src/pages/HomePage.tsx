@@ -18,6 +18,7 @@ import { ContextMenu } from "../components/ui/ContextMenu";
 import { useWindowMaximized } from "../hooks/useWindowMaximized";
 import {
   HomeCategoryCardSkeleton,
+  HomeTopRatedCardBodySkeleton,
   HomeWishlistCardSkeleton,
   HomeWishlistReviewSkeleton,
 } from "../components/ui/LoadingStates";
@@ -459,9 +460,9 @@ function HomeCategoryCard({
 }
 
 /**
- * Card de "Bem avaliados": a arte só-de-arte (com nome no hover) e, embaixo, a
- * review positiva de um jogador — é o que dá o "bem avaliado" da seção em vez
- * de uma nota solta. A review fica fora do botão: é texto, não alvo de clique.
+ * Card de "Bem avaliados": a arte só-de-arte e, embaixo, o nome do jogo com
+ * uma linha fechada de pills de categorias — o mesmo empilhamento do card da
+ * grade com título, mas em superfície própria com alvo de clique inteiro.
  */
 function HomeTopRatedCard({
   game,
@@ -486,15 +487,20 @@ function HomeTopRatedCard({
         ...fallbackCoverSources.filter((source) => source !== coverSource),
       ]
     : fallbackCoverSources;
+  // Mesma fonte de pills da grade (gêneros primeiro, ver `getGameTraits`) e
+  // contagem fixa por linha: a linha fechada mantém os cards da fila na mesma
+  // altura sem piso artificial.
+  const traits = getGameTraits(game);
+  const primaryTraits = traits.slice(0, homeTopRatedPrimaryPillCount);
 
   const handleClick = () => onOpenGame(game);
 
   return (
     <div className="home-top-rated-card">
-      {/* Alvo de clique cobre o card inteiro (arte + review), mas fica fora da
-          árvore de conteúdo: a review é texto irmão, não descendente, então
-          continua legível por leitor de tela em vez de virar parte do nome
-          acessível do botão (ou de ser engolida pelo `aria-label`). */}
+      {/* Alvo de clique cobre o card inteiro (arte + texto), mas fica fora da
+          árvore de conteúdo: nome e pills são texto irmão, não descendente,
+          então continuam legíveis por leitor de tela em vez de virar parte do
+          nome acessível do botão (ou de serem engolidos pelo `aria-label`). */}
       <button
         type="button"
         className="home-top-rated-card__hit"
@@ -513,11 +519,29 @@ function HomeTopRatedCard({
         style={layeredImageStyle(layeredSources, "")}
         aria-hidden="true"
       />
-      <HomePlayerReview
-        game={game}
-        language={language}
-        className="home-top-rated-card__review"
-      />
+      <span className="home-top-rated-card__body">
+        <span className="home-top-rated-card__title">{game.title}</span>
+        {/* A linha mostra as tags que o jogo tem (1, 2 ou 3 — o `flex: 1 1
+            auto` espalha as que existirem pela largura inteira do card).
+            Sem nenhuma trait (enrichment ainda pendente ou cache sem
+            gêneros), entram placeholders de skeleton no lugar: a linha nunca
+            fica como um vão vazio sob o nome. A altura fixa mantém o card
+            estável nas duas situações. */}
+        <span className="home-top-rated-card__tags">
+          {primaryTraits.length
+            ? primaryTraits.map((trait) => (
+                <span className="home-top-rated-card__tag" key={trait}>
+                  {getHomeCategoryLabel(trait, language)}
+                </span>
+              ))
+            : Array.from({ length: homeTopRatedPrimaryPillCount }, (_, index) => (
+                <span
+                  className="home-top-rated-card__tag home-top-rated-card__tag--skeleton skeleton"
+                  key={`top-rated-tag-pending-${index}`}
+                />
+              ))}
+        </span>
+      </span>
     </div>
   );
 }
@@ -547,10 +571,7 @@ function HomeTopRatedShelf({
               {Array.from({ length: homeTopRatedCardCount }, (_, index) => (
                 <div className="home-top-rated-card" key={`top-rated-${index}`}>
                   <span className="home-top-rated-card__art skeleton" />
-                  <HomeWishlistReviewSkeleton
-                    className="home-top-rated-card__review"
-                    ariaHidden
-                  />
+                  <HomeTopRatedCardBodySkeleton />
                 </div>
               ))}
             </div>

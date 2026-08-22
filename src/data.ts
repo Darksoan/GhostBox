@@ -44,6 +44,13 @@ export type GameRequirements = {
   recommended: string[];
 };
 
+export type ControllerSupportStatus = "full" | "partial" | "none";
+
+export type GameLanguageSupport = {
+  language: string;
+  hasAudio: boolean;
+};
+
 type SteamVideoSource = {
   max: string;
   "480": string;
@@ -110,6 +117,10 @@ export type GhostBoxGame = {
   achievementList: SteamAchievement[];
   achievementMetadata?: GameAchievementMetadata;
   pcRequirements?: GameRequirements;
+  /** Suporte a controle resolvido da Steam appdetails; ausente = desconhecido. */
+  controllerSupport?: ControllerSupportStatus;
+  /** String HTML bruta de `supported_languages` da Steam appdetails. */
+  supportedLanguages?: string;
   databaseAddedAt?: number;
   popularityScore?: number;
   popularityRank?: number;

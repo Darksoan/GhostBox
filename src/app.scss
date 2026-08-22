@@ -3320,8 +3320,8 @@ p {
 }
 
 /* "Bem avaliados": rail próprio em vez da grade. Três cards por página, fixo —
-   o card carrega uma citação de review e uma quarta coluna espremeria o texto
-   a ponto de sobrar só a primeira linha. */
+   cada card leva nome + uma linha fechada de pills, e uma quarta coluna
+   espremeria o bloco de texto a ponto de sobrar só a primeira linha. */
 .home-top-rated {
   position: relative;
   @include mixins.section-column;
@@ -3360,7 +3360,7 @@ p {
 
 /* Superfície própria e clicável inteira, como o card da wishlist: a arte sangra
    no topo do painel e o painel é quem recorta. O hover acende o card todo (não
-   só a arte), então a review também é alvo de clique. */
+   só a arte), então o bloco de texto também é alvo de clique. */
 .home-top-rated-card {
   position: relative;
   display: flex;
@@ -3375,7 +3375,10 @@ p {
   transition: background var(--motion-base) var(--ease);
 
   &:hover {
-    background: var(--surface-raised);
+    /* Mesmo degrau do hover dos cards da grade (--surface-option-hover =
+       --c-2, #121212): um passo acima do painel (#101010) sem saltar direto
+       para o --surface-raised (#151515). */
+    background: var(--surface-option-hover);
   }
 }
 
@@ -3415,51 +3418,79 @@ p {
   animation: download-cover-in var(--motion-base) ease both;
 }
 
-/* Altura reservada para a review: ela chega assíncrona, card a card. Sem piso,
-   cada resposta que voltava crescia o card e empurrava a seção inteira. */
-.home-top-rated-card__review {
-  /* Ocupa o que sobra do card: os cards da fila têm a mesma altura, então a
-     citação de duas linhas não pode deixar o autor subir junto. */
+/* Corpo do card: nome + uma linha de pills, mesmo empilhamento do card da
+   grade com título (`--with-title`). A linha tem altura fechada e contagem
+   fixa decidida no TSX (ver `homeTopRatedPrimaryPillCount`), então os cards
+   da fila fecham na mesma altura sem piso artificial — a review que chegava
+   assíncrona e exigia `min-height` saiu do card. */
+.home-top-rated-card__body {
+  display: flex;
   flex: 1 1 auto;
-  /* Piso = 3 linhas de citação + autor + os dois respiros. O vão entre os
-     blocos sai da sobra (ver `margin-top: auto` abaixo); o `gap` é só o mínimo
-     para o autor nunca colar no texto quando a citação usa as três linhas. */
-  min-height: 156px;
-  gap: var(--space-8);
-  padding: var(--space-8);
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--space-7);
+  padding: var(--space-7) var(--space-6);
 }
 
-/* O autor ancora no fim do card: com o piso de altura, a sobra de espaço caía
-   embaixo dele (alinhamento no início do flex) e o bloco ficava boiando no meio
-   com um vão morto por baixo. `margin-top: auto` joga a sobra para cima, entre
-   citação e autor — que é onde ela deve ficar. */
-.home-top-rated-card__review .home-wishlist-card__player-review-author {
-  margin-top: auto;
+.home-top-rated-card__title {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--type-size-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--type-line-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Três linhas mínimas, texto no tamanho de destaque: a citação é o conteúdo
-   principal do card, não uma legenda — precisa competir em peso com a arte
-   acima, não sumir embaixo dela. */
-.home-top-rated-card__review .home-wishlist-card__player-review-quote {
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-line-clamp: 3;
+/* Uma linha, contagem decidida no TSX. `nowrap`: rótulo longo encolhe (a pill
+   segura com reticências) em vez de vazar para uma segunda linha que o
+   `overflow: hidden` comeria — mesma decisão das `--pill-rows` da grade. */
+.home-top-rated-card__tags {
+  display: flex;
+  height: var(--pill-height);
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-content: flex-start;
+  gap: var(--space-2);
+  overflow: hidden;
 }
 
-/* O piso do skeleton é o mesmo do estado carregado: a regra base do bloco de
-   review (mais abaixo no arquivo) fixa 92px e venceria pela ordem, então a
-   troca skeleton → review encolheria o card. */
-.home-top-rated-card__review.home-wishlist-card__player-review--skeleton {
+/* `flex: 1 1 auto`: a largura natural continua sendo a base, mas depois a
+   pill estica e divide a sobra com as irmãs da linha — cobrindo a largura
+   inteira do card, sem buraco à direita quando o rótulo é curto (mesma regra
+   das pills de Recomendados/Top rated da grade). */
+.home-top-rated-card__tag {
+  @include tag-chip;
   flex: 1 1 auto;
-  min-height: 156px;
-  gap: var(--space-8);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border-color: transparent;
+  background: var(--pill-bg);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* A review entra quando a resposta volta — fade curto com 6px de subida, na
-   mesma família de easing do resto da Home. É camada secundária: acompanha o
-   card que já está na tela, não disputa atenção com ele. */
-.home-top-rated-card__review.home-wishlist-card__player-review--loaded {
-  animation: home-top-rated-review-in 0.22s var(--ease-out) both;
+/* A pill ACOMPANHA o card no hover — mesmo repique de elevação da grade:
+   quando o card muda de degrau, a pill sobe do --c-3 para --c-4 (#1a1a1a).
+   A pill é não-interativa; o hover direto nela pinta o mesmo degrau porque
+   quem responde ao ponteiro é o card inteiro. Placeholders (`--skeleton`)
+   ficam de fora: são vagas aguardando dado, não conteúdo. */
+@media (hover: hover) and (pointer: fine) {
+  .home-top-rated-card:hover .home-top-rated-card__tag:not(.skeleton) {
+    background: var(--pill-bg-hover);
+  }
+}
+
+/* Placeholder do nome: largura parcial para não ler como barra cheia. As pills
+   skeleton preenchem as vagas que ainda não têm trait (enrichment pendente ou
+   cache sem gêneros) — herdando o `flex: 1 1 auto`, dividem a sobra com as
+   pills reais e mantêm a linha cobrindo a largura do card. */
+.home-top-rated-card__title--skeleton {
+  width: 64%;
+  height: var(--type-line-body);
 }
 
 .home-top-rated__arrow {
@@ -3499,18 +3530,6 @@ p {
   }
 }
 
-@keyframes home-top-rated-review-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .home-top-rated__carousel {
     scroll-behavior: auto;
@@ -3522,10 +3541,6 @@ p {
   }
 
   .home-top-rated-card__art--loaded {
-    animation: none;
-  }
-
-  .home-top-rated-card__review.home-wishlist-card__player-review--loaded {
     animation: none;
   }
 }
@@ -13064,6 +13079,114 @@ html.no-backdrop-blur {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
+}
+
+// Suporte a controle (badge estilo Hydra)
+.modal__controller-support {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.modal__controller-support-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  color: var(--text-secondary);
+
+  svg {
+    display: block;
+  }
+}
+
+.modal__controller-support-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+}
+
+.modal__controller-support-badge--full {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.modal__controller-support-badge--partial {
+  color: var(--premium-gold);
+  background: color-mix(in srgb, var(--premium-gold) 14%, transparent);
+}
+
+.modal__controller-support-description {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--text-secondary);
+  font-size: var(--type-size-compact);
+  line-height: 1.45;
+}
+
+// Tabela de idiomas (Idioma | Legendas | Áudio)
+.modal__languages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modal__languages-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 264px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.modal__languages-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.modal__languages-row--header {
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+
+  > span:not(:first-child) {
+    text-align: center;
+  }
+}
+
+.modal__languages-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal__languages-check {
+  color: var(--success);
+}
+
+.modal__languages-cross {
+  color: var(--text-secondary);
 }
 
 .modal__chip {

@@ -1,14 +1,19 @@
 import {
+  Check,
   ChevronDown,
   Cpu,
   Download,
+  Gamepad,
+  Gamepad2,
   Heart,
   Image as ImageIcon,
+  Languages,
   Lock,
   Play,
   Settings,
   Tags as TagsIcon,
   Trash2,
+  X,
 } from "lucide-react";
 import { Cup } from "reicon-react";
 import {
@@ -22,6 +27,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type {
+  ControllerSupportStatus,
   GhostBoxGame,
   GameRequirements,
   SteamAchievement,
@@ -35,6 +41,11 @@ import {
 } from "../../utils/gameCache";
 import { isAchievementUnlocked } from "../../utils/achievementStats";
 import { subscribeScrollIdle } from "../../utils/scrollIdle";
+import {
+  getControllerSupportCopy,
+  parseSupportedLanguages,
+  resolveControllerSupportStatus,
+} from "../../utils/gameMetrics";
 import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
 import { refreshSteamAssetManifest } from "../../utils/steamAssetManifest";
 import {
@@ -197,6 +208,156 @@ const RequirementItem = memo(function RequirementItem({ item }: { item: string }
       <strong>{item.slice(0, separatorIndex + 1)}</strong>{" "}
       {item.slice(separatorIndex + 1).trim()}
     </li>
+  );
+});
+
+const GameControllerSupportSection = memo(function GameControllerSupportSection({
+  support,
+}: {
+  support?: ControllerSupportStatus;
+}) {
+  const { appearance } = useSettings();
+  const isEnglish = appearance.language === "en";
+  const sectionPanelId = useId();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const status = resolveControllerSupportStatus(support);
+  // Como no Hydra: só exibe quando há suporte (total ou parcial) confirmado.
+  if (status === "none") return null;
+
+  const copy = getControllerSupportCopy(status, isEnglish);
+  return (
+    <section
+      className="modal__requirements-section"
+      aria-label={isEnglish ? "Controller support" : "Suporte a controle"}
+    >
+      <button
+        type="button"
+        className="modal__requirements-header modal__sidebar-section-toggle"
+        aria-expanded={!isCollapsed}
+        aria-controls={sectionPanelId}
+        onClick={() => setIsCollapsed((value) => !value)}
+      >
+        <Gamepad2 size={18} aria-hidden="true" />
+        <strong>{isEnglish ? "Controller support" : "Suporte a controle"}</strong>
+        <ChevronDown
+          className="modal__sidebar-section-chevron"
+          size={16}
+          aria-hidden="true"
+        />
+      </button>
+      <div
+        className="modal__sidebar-section-content"
+        id={sectionPanelId}
+        aria-hidden={isCollapsed}
+        data-collapsed={isCollapsed ? "true" : "false"}
+      >
+        <div className="modal__sidebar-section-panel modal__controller-support">
+          <div className="modal__controller-support-icons" aria-hidden="true">
+            <Gamepad size={26} strokeWidth={1.6} />
+            <Gamepad2 size={26} strokeWidth={1.6} />
+          </div>
+          <span
+            className={`modal__controller-support-badge modal__controller-support-badge--${status}`}
+          >
+            {copy.label}
+          </span>
+          {copy.description && (
+            <p className="modal__controller-support-description">
+              {copy.description}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+});
+
+const GameLanguageSection = memo(function GameLanguageSection({
+  languages,
+}: {
+  languages?: string;
+}) {
+  const { appearance } = useSettings();
+  const isEnglish = appearance.language === "en";
+  const sectionPanelId = useId();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const parsedLanguages = useMemo(
+    () => parseSupportedLanguages(languages),
+    [languages]
+  );
+  if (parsedLanguages.length === 0) return null;
+
+  return (
+    <section
+      className="modal__requirements-section"
+      aria-label={isEnglish ? "Languages" : "Idiomas"}
+    >
+      <button
+        type="button"
+        className="modal__requirements-header modal__sidebar-section-toggle"
+        aria-expanded={!isCollapsed}
+        aria-controls={sectionPanelId}
+        onClick={() => setIsCollapsed((value) => !value)}
+      >
+        <Languages size={18} aria-hidden="true" />
+        <strong>{isEnglish ? "Languages" : "Idiomas"}</strong>
+        <ChevronDown
+          className="modal__sidebar-section-chevron"
+          size={16}
+          aria-hidden="true"
+        />
+      </button>
+      <div
+        className="modal__sidebar-section-content"
+        id={sectionPanelId}
+        aria-hidden={isCollapsed}
+        data-collapsed={isCollapsed ? "true" : "false"}
+      >
+        <div className="modal__sidebar-section-panel modal__languages">
+          <div
+            className="modal__languages-row modal__languages-row--header"
+            aria-hidden="true"
+          >
+            <span>{isEnglish ? "Language" : "Idioma"}</span>
+            <span>{isEnglish ? "Subtitles" : "Legendas"}</span>
+            <span>{isEnglish ? "Audio" : "Áudio"}</span>
+          </div>
+          <div className="modal__languages-list">
+            {parsedLanguages.map((lang) => (
+              <div className="modal__languages-row" key={lang.language}>
+                <span className="modal__languages-name" title={lang.language}>
+                  {lang.language}
+                </span>
+                <span className="modal__languages-cell">
+                  <Check
+                    size={14}
+                    className="modal__languages-check"
+                    aria-hidden="true"
+                  />
+                </span>
+                <span className="modal__languages-cell">
+                  {lang.hasAudio ? (
+                    <Check
+                      size={14}
+                      className="modal__languages-check"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <X
+                      size={14}
+                      className="modal__languages-cross"
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 });
 
@@ -1687,6 +1848,14 @@ export function GameModal({
 
                     <GameRequirementsSection
                       requirements={displayGame.pcRequirements}
+                    />
+
+                    <GameControllerSupportSection
+                      support={displayGame.controllerSupport}
+                    />
+
+                    <GameLanguageSection
+                      languages={displayGame.supportedLanguages}
                     />
 
                     {visibleChips.length > 0 && (

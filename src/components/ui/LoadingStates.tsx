@@ -243,6 +243,28 @@ export function HomeWishlistCardSkeleton() {
   );
 }
 
+/**
+ * Corpo skeleton do card de "Bem avaliados": espelha a composição do corpo
+ * real (`HomeTopRatedCard`) — nome + uma linha fechada de pills, na mesma
+ * contagem fixa definida em HomePage.tsx (`homeTopRatedPrimaryPillCount`) —
+ * para o skeleton fechar na mesma altura do card carregado.
+ */
+export function HomeTopRatedCardBodySkeleton() {
+  return (
+    <span className="home-top-rated-card__body">
+      <span className="home-top-rated-card__title home-top-rated-card__title--skeleton skeleton" />
+      <span className="home-top-rated-card__tags">
+        {Array.from({ length: 3 }, (_, index) => (
+          <span
+            className="home-top-rated-card__tag home-top-rated-card__tag--skeleton skeleton"
+            key={`top-rated-tag-${index}`}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function HomeWishlistReviewSkeleton({
   rootRef,
   ariaHidden = false,
@@ -310,7 +332,7 @@ function HomePageLoadingState() {
                   key={`home-top-rated-${index}`}
                 >
                   <span className="home-top-rated-card__art skeleton" />
-                  <HomeWishlistReviewSkeleton className="home-top-rated-card__review" />
+                  <HomeTopRatedCardBodySkeleton />
                 </div>
               ))}
             </div>

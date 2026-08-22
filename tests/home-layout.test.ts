@@ -158,8 +158,8 @@ describe("Home layout", () => {
     expect(cardSource).toContain("showTitleBlock = showSummary || showTitle");
     expect(cardSource).toContain("home-category-card--with-title");
 
-    // Top rated saiu do HomeCategoryCard: hoje o shelf renderiza o
-    // HomeTopRatedCard (arte + review do jogador), sem título nem pills.
+    // Top rated renderiza o HomeTopRatedCard (arte + nome + pills), sem
+    // review e sem reaproveitar as props de descrição da grade.
     const shelfStart = component.indexOf("function HomeTopRatedShelf");
     const shelfEnd = component.indexOf("\nfunction ", shelfStart);
     const shelfSource = component.slice(shelfStart, shelfEnd);

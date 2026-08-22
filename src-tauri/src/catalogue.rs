@@ -12,7 +12,7 @@ use tauri::{Emitter, Manager};
 
 const STEAM_STORE_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
-const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 2;
+const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 3;
 const STEAM_STORE_DETAILS_CACHE_MAX_AGE_DAYS: i64 = 30;
 const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.hella.workers.dev";
 const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
@@ -177,6 +177,32 @@ fn steam_store_movie(movie: &Value) -> Option<Value> {
     }))
 }
 
+// Steam marca suporte a controle com o campo `controller_support` ("full" |
+// "partial") ou, quando ausente, pelas categorias 28 (total) e 18 (parcial).
+fn steam_controller_support(store_data: &Value) -> Option<String> {
+    let direct = store_data
+        .get("controller_support")
+        .and_then(|value| value.as_str())
+        .map(str::trim);
+    if matches!(direct, Some("full") | Some("partial")) {
+        return direct.map(str::to_string);
+    }
+
+    let categories = store_data.get("categories").and_then(|value| value.as_array())?;
+    let has_category = |id: u64| {
+        categories
+            .iter()
+            .any(|category| category.get("id").and_then(|value| value.as_u64()) == Some(id))
+    };
+    if has_category(28) {
+        return Some("full".to_string());
+    }
+    if has_category(18) {
+        return Some("partial".to_string());
+    }
+    None
+}
+
 fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
     let Some(object) = game.as_object_mut() else {
         return;
@@ -243,6 +269,17 @@ fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
             "recommended": requirements(pc_requirements.get("recommended"))
         }),
     );
+
+    if let Some(support) = steam_controller_support(store_data) {
+        object.insert("controllerSupport".to_string(), Value::String(support));
+    }
+    let supported_languages = text(store_data.get("supported_languages"));
+    if !supported_languages.is_empty() {
+        object.insert(
+            "supportedLanguages".to_string(),
+            Value::String(supported_languages),
+        );
+    }
 
     let genres: Vec<Value> = store_data
         .get("genres")
@@ -332,6 +369,9 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
         "genres": genres,
         "developers": text_array(store_data.get("developers"), usize::MAX),
         "publishers": text_array(store_data.get("publishers"), usize::MAX),
+        "controllerSupport": steam_controller_support(store_data)
+            .unwrap_or_else(|| "none".to_string()),
+        "supportedLanguages": text(store_data.get("supported_languages")),
     })
 }
 
@@ -475,6 +515,24 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
                 }),
             );
         }
+    }
+
+    let controller_support = text(details.get("controllerSupport"))
+        .if_empty_then(|| text(details.get("controller_support")));
+    if matches!(controller_support.as_str(), "full" | "partial") {
+        object.insert(
+            "controllerSupport".to_string(),
+            Value::String(controller_support),
+        );
+    }
+
+    let supported_languages = text(details.get("supportedLanguages"))
+        .if_empty_then(|| text(details.get("supported_languages")));
+    if !supported_languages.is_empty() {
+        object.insert(
+            "supportedLanguages".to_string(),
+            Value::String(supported_languages),
+        );
     }
 
     let genres = text_array(details.get("genres"), 6);
@@ -765,6 +823,22 @@ fn steam_details_have_about(details: &Value) -> bool {
     !text(details.get("aboutTheGame"))
         .if_empty_then(|| text(details.get("about_the_game")))
         .is_empty()
+}
+
+// Campos novos do modal (suporte a controle + idiomas). "none" é um valor
+// válido e definitivo para controle — significa que a Steam foi consultada e
+// não há suporte; ausente/vazio significa que ainda não buscamos esse dado.
+fn steam_details_have_metric_fields(details: &Value) -> bool {
+    let controller_support = text(details.get("controllerSupport"))
+        .if_empty_then(|| text(details.get("controller_support")));
+    let has_controller = matches!(
+        controller_support.as_str(),
+        "full" | "partial" | "none"
+    );
+    let has_languages = !text(details.get("supportedLanguages"))
+        .if_empty_then(|| text(details.get("supported_languages")))
+        .is_empty();
+    has_controller && has_languages
 }
 
 fn steam_reviews_response_is_usable(value: &Value) -> bool {
@@ -1756,6 +1830,9 @@ pub async fn database_get_game_store_details(
         merge_normalized_steam_details(&mut game, cached_details);
         if cached_steam_store_details_is_fresh(&app, &app_id, steam_language)
             && steam_details_have_about(cached_details)
+            // Cache escrito pelo proxy pode não ter os campos novos (controle/
+            // idiomas); nesse caso seguimos para completar com a busca direta.
+            && steam_details_have_metric_fields(cached_details)
         {
             return Ok(Some(game));
         }
@@ -1766,7 +1843,9 @@ pub async fn database_get_game_store_details(
             merge_cached_steam_store_details(latest_cached_details.as_ref(), &proxy_details);
         merge_normalized_steam_details(&mut game, &merged_details);
         write_cached_steam_store_details(&app, &app_id, steam_language, &merged_details);
-        if steam_details_have_about(&merged_details) {
+        if steam_details_have_about(&merged_details)
+            && steam_details_have_metric_fields(&merged_details)
+        {
             return Ok(Some(game));
         }
     }

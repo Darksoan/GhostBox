@@ -7,7 +7,7 @@ import {
 
 type Env = Record<string, never>;
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const POSITIVE_CACHE_CONTROL =
   "public, max-age=28800, stale-while-revalidate=86400, stale-if-error=604800";
 const NEGATIVE_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=60";

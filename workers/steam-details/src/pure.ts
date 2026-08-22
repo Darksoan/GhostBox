@@ -14,6 +14,8 @@ export type SteamMovie = {
   webm: { max: string; "480": string };
 };
 
+export type ControllerSupport = "" | "full" | "partial";
+
 export type GameDetails = {
   appId: string;
   createdAt: number;
@@ -27,6 +29,8 @@ export type GameDetails = {
   pcRequirements: { minimum: string[]; recommended: string[] };
   developers: string[];
   publishers: string[];
+  controllerSupport: ControllerSupport;
+  supportedLanguages: string;
 };
 
 function isObject(value: unknown): value is UnknownObject {
@@ -167,6 +171,26 @@ function normalizeGenres(value: unknown): string[] {
     .slice(0, 6);
 }
 
+// Steam marca suporte a controle com o campo `controller_support` ("full" |
+// "partial") ou, quando ausente, pelas categorias 28 (total) e 18 (parcial).
+const CONTROLLER_FULL_CATEGORY_ID = 28;
+const CONTROLLER_PARTIAL_CATEGORY_ID = 18;
+
+export function normalizeControllerSupport(
+  value: unknown,
+  categories: unknown
+): ControllerSupport {
+  if (value === "full" || value === "partial") return value;
+  if (Array.isArray(categories)) {
+    const ids = categories.map((category) =>
+      isObject(category) ? category.id : category
+    );
+    if (ids.includes(CONTROLLER_FULL_CATEGORY_ID)) return "full";
+    if (ids.includes(CONTROLLER_PARTIAL_CATEGORY_ID)) return "partial";
+  }
+  return "";
+}
+
 export function normalizeStoreDetails(
   appId: string,
   value: unknown,
@@ -192,6 +216,11 @@ export function normalizeStoreDetails(
     },
     developers: textArray(value.developers),
     publishers: textArray(value.publishers),
+    controllerSupport: normalizeControllerSupport(
+      first(value, ["controller_support", "controllerSupport"]),
+      value.categories
+    ),
+    supportedLanguages: text(first(value, ["supported_languages", "supportedLanguages"])),
   };
 }
 

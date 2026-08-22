@@ -78,4 +78,41 @@ describe("Steam normalization", () => {
       .toEqual({ name: "Dota 2" });
     expect(steamAppData({ "570": { success: false } }, "570")).toBeNull();
   });
+
+  it("normalizes controller support from the direct field", () => {
+    const details = normalizeStoreDetails("570", {
+      name: "Dota 2",
+      controller_support: "partial",
+    });
+    expect(details?.controllerSupport).toBe("partial");
+  });
+
+  it("falls back to category ids 28 (full) and 18 (partial)", () => {
+    expect(
+      normalizeStoreDetails("570", {
+        name: "Dota 2",
+        categories: [{ id: 28 }, { id: 1 }],
+      })?.controllerSupport
+    ).toBe("full");
+    expect(
+      normalizeStoreDetails("570", {
+        name: "Dota 2",
+        categories: [{ id: 18 }],
+      })?.controllerSupport
+    ).toBe("partial");
+    expect(
+      normalizeStoreDetails("570", { name: "Dota 2" })?.controllerSupport
+    ).toBe("");
+  });
+
+  it("passes supported languages through as raw HTML", () => {
+    const details = normalizeStoreDetails("570", {
+      name: "Dota 2",
+      supported_languages:
+        "Inglês<strong>*</strong>, Português (Brasil)<br>legendas",
+    });
+    expect(details?.supportedLanguages).toBe(
+      "Inglês<strong>*</strong>, Português (Brasil)<br>legendas"
+    );
+  });
 });

@@ -162,13 +162,10 @@ describe("Typography tokens", () => {
 
   it("forbids literal font-size and stray ramp references in UI styles", () => {
     // Exceções deliberadas de src/app.scss, documentadas no próprio SCSS:
-    // 1. Citação da review no card de Top rated — conteúdo principal do card,
-    //    15px cai entre os degraus caption/body.
-    // 2. Título display do hero da página de Downloads — tamanho fluido próprio,
+    // 1. Título display do hero da página de Downloads — tamanho fluido próprio,
     //    fora da rampa semântica de propósito.
     const allowedLiterals: Record<string, string[]> = {
       "src/app.scss": [
-        "font-size: 15px",
         "font-size: clamp(1.25rem, 2.4vw, 1.75rem)",
       ],
     };
@@ -201,9 +198,8 @@ describe("Typography tokens", () => {
     // A cópia secundária da Home hoje é o autor da review do jogador (a frase
     // "Já que X está na sua lista de desejos" saiu junto com o seletor __reason).
     // Nome e metadado fecham em caption — nada abaixo do piso de 12px.
-    // Âncora com "\n" para não pegar a variante
-    // `.home-top-rated-card__review .home-wishlist-card__player-review-author`,
-    // que só reposiciona o bloco e não declara tipografia.
+    // Âncora com "\n" para não pegar seletores que apenas contêm esse nome no
+    // meio (ex. variantes compostas), que não declaram tipografia.
     const authorBlockStart = source.indexOf(
       "\n.home-wishlist-card__player-review-author {"
     );
