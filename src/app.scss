@@ -4898,62 +4898,6 @@ p {
     gap: var(--space-5);
   }
 
-  // Controle segmentado de cobrança. Vive acima dos cards (não dentro do
-  // Premium) para valer pela seção inteira e não desbalancear o card.
-  &__billing {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    justify-self: center;
-    width: fit-content;
-    min-width: calc(var(--space-16) * 2 + var(--space-12));
-    padding: var(--space-1);
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
-    backdrop-filter: blur(20px);
-
-    button {
-      position: relative;
-      z-index: 1;
-      min-height: calc(var(--space-8) * 2);
-      padding-inline: var(--space-8);
-      border: 0;
-      border-radius: var(--radius-pill);
-      background: transparent;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font: inherit;
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      white-space: nowrap;
-      transition: color var(--motion-fast) var(--ease);
-
-      &.is-active {
-        color: var(--text-primary);
-      }
-
-      &:focus-visible {
-        outline: 2px solid var(--focus-ring-color);
-        outline-offset: 2px;
-      }
-    }
-  }
-
-  &__billing-thumb {
-    position: absolute;
-    top: var(--space-1);
-    bottom: var(--space-1);
-    left: var(--space-1);
-    width: calc(50% - var(--space-1));
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-    transition: transform var(--motion-base) var(--ease);
-
-    &--quarterly {
-      transform: translateX(100%);
-    }
-  }
-
   // Benefícios como linhas enxutas — três caixas grandes competiam com os
   // cards de plano e empurravam a página para baixo.
   &__highlights {
@@ -5284,6 +5228,65 @@ p {
     }
   }
 
+  // Controle segmentado de cobrança: mora dentro do card Premium, logo acima
+  // do preço que ele alterna. Largura do card, altura compacta para não
+  // competir com o CTA.
+  &__billing {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    padding: var(--space-1);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+
+    button {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(var(--space-10) + var(--space-4));
+      padding-inline: var(--space-6);
+      border: 0;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font: inherit;
+      font-size: var(--type-size-compact);
+      font-weight: var(--weight-semibold);
+      white-space: nowrap;
+      transition: color var(--motion-fast) var(--ease);
+
+      &.is-active {
+        color: var(--text-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--focus-ring-color);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  &__billing-thumb {
+    position: absolute;
+    top: var(--space-1);
+    bottom: var(--space-1);
+    left: var(--space-1);
+    width: calc(50% - var(--space-1));
+    border-radius: var(--radius-pill);
+    // Popover (não raised): o card featured já é raised — o thumb precisa
+    // ficar um degrau acima da própria superfície que habita.
+    background: var(--surface-popover);
+    transition: transform var(--motion-base) var(--ease);
+
+    &--quarterly {
+      transform: translateX(100%);
+    }
+  }
+
   &__price {
     color: var(--text-secondary);
     font-size: var(--type-size-section);
@@ -5327,28 +5330,27 @@ p {
     }
   }
 
+  // Informativo de economia: pill amarelada no rodapé do card, ecoando o CTA
+  // dourado. `margin-top: auto` cola a pill no rodapé e `margin-bottom`
+  // garante respiro extra entre ela e o botão de assinar.
   &__savings {
     display: flex;
-    align-items: baseline;
+    align-items: center;
+    align-self: center;
     justify-content: center;
-    gap: var(--space-2);
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
-    line-height: var(--type-line-compact);
+    width: fit-content;
+    margin-top: auto;
+    margin-bottom: var(--space-6);
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--premium-gold) 16%, transparent);
+    color: var(--premium-gold);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-100);
+    line-height: var(--type-line-caption);
     text-align: center;
-
-    strong {
-      color: var(--text-primary);
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
-      letter-spacing: var(--ls-300);
-      line-height: var(--type-line-caption);
-    }
-
-    &--empty {
-      visibility: hidden;
-    }
+    white-space: nowrap;
   }
 
   &__action {
@@ -5456,19 +5458,6 @@ p {
     color: var(--premium-gold);
   }
 
-  // Nota de economia: peso de rótulo, não de card. Fica na paleta neutra — o
-  // dourado é gasto uma vez só, no CTA.
-  .subscription-plan-card__savings {
-    padding: var(--space-1) var(--space-4);
-    border-radius: var(--radius-pill);
-    background: var(--surface-popover);
-    color: var(--text-secondary);
-    font-size: var(--type-size-micro);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--ls-100);
-    white-space: nowrap;
-  }
-
   // Preço é o herói: valor e cadência dividem a mesma linha de base.
   .subscription-plan-card__price {
     display: flex;
@@ -5528,8 +5517,8 @@ p {
   }
 
   .subscription-plan-card__action {
-    // Ancora o CTA no rodapé sem precisar de altura fixa no card.
-    margin-top: auto;
+    // O rodapé é ancorado pela `__savings` (margin-top: auto); o CTA segue
+    // logo abaixo da pill, no gap padrão do card.
     min-height: calc(var(--space-8) * 2 + var(--space-2));
     border-radius: var(--radius-md);
     font-size: var(--type-size-caption);
@@ -6070,6 +6059,17 @@ p {
     border-radius: var(--radius-sm);
     background: var(--surface-popover);
     object-fit: cover;
+
+    // Nenhuma candidate resolveu (jogo sem arte pública): mostra o ícone
+    // fantasma centralizado em vez de um buraco em branco na lista.
+    &--placeholder {
+      display: inline-flex;
+      background-color: var(--surface-popover);
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: 55%;
+      opacity: 0.35;
+    }
   }
 
   &__backup-title {
@@ -8520,13 +8520,16 @@ input[type="search"]::-ms-reveal {
     flex-wrap: wrap;
     justify-content: flex-end;
     align-items: center;
-    /* Nunca anima opacity aqui: um ancestral com opacity < 1 vira backdrop root
-       para o backdrop-filter dos botões, e o blur só passaria a amostrar a arte
-       real ao cravar em 1 — dando um salto no fim da transição. visibility
-       nunca fica fracionária, então o blur é estável do primeiro ao último frame. */
+    /* Nunca anima opacity NESTE contêiner: um ancestral com opacity < 1 vira
+       backdrop root para o backdrop-filter dos botões, e o blur só passaria a
+       amostrar a arte real ao cravar em 1 — dando um salto no fim da transição.
+       O fade vive em `__action`, que aplica opacity no próprio elemento do
+       backdrop-filter; assim o blur é estável do primeiro ao último frame. */
     visibility: hidden;
     transform: translateY(6px);
-    transition: transform 0.14s var(--ease), visibility 0s linear 0.14s;
+    transition:
+      transform var(--motion-fast) var(--ease),
+      visibility 0s linear var(--motion-fast);
     pointer-events: none;
   }
 
@@ -8535,7 +8538,7 @@ input[type="search"]::-ms-reveal {
     visibility: visible;
     transform: translateY(0);
     pointer-events: auto;
-    transition: transform 0.2s var(--ease-out);
+    transition: transform var(--motion-base) var(--ease-out);
   }
 
   /* Sem hover (touch): ações ficam sempre visíveis, senão ficam inacessíveis. */
@@ -8544,6 +8547,11 @@ input[type="search"]::-ms-reveal {
       visibility: visible;
       transform: none;
       pointer-events: auto;
+      transition: none;
+    }
+
+    &__action {
+      opacity: 1;
       transition: none;
     }
   }
@@ -8563,7 +8571,11 @@ input[type="search"]::-ms-reveal {
     cursor: pointer;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    transition: background 0.12s var(--ease), transform 0.12s var(--ease);
+    opacity: 0;
+    transition:
+      background var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease),
+      opacity var(--motion-fast) var(--ease);
 
     &:hover {
       background: rgb(255 255 255 / 0.16);
@@ -8573,6 +8585,15 @@ input[type="search"]::-ms-reveal {
       transform: scale(0.96);
       transition-duration: 0.08s;
     }
+  }
+
+  &:hover &__action,
+  &:focus-within &__action {
+    opacity: 1;
+    transition:
+      background var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease),
+      opacity var(--motion-base) var(--ease-out);
   }
 
   &__action--ghost {
@@ -8999,11 +9020,13 @@ input[type="search"]::-ms-reveal {
   padding: 0 var(--space-10) var(--page-bottom-space);
 }
 
-/* Mesma trilha fixa da `.game-grid` — ver comentário lá. */
+/* Mesma trilha fixa da `.game-grid` — ver comentário lá. `start` e não
+   `center` pelo mesmo motivo: a sobra da linha vai para a direita em vez de
+   virar vazio simétrico à esquerda das capas. */
 .favorites-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(0, 176px));
-  justify-content: center;
+  justify-content: start;
   gap: var(--space-5);
 }
 
@@ -9161,20 +9184,25 @@ input[type="search"]::-ms-reveal {
  *
  * Com `minmax(x, 1fr)` a capa mudava de largura a cada pixel de arrasto da
  * janela e dava um salto quando entrava ou saía uma coluna — é o "teleporta
- * para maior/menor". Trilha fixa + `justify-content: center` deixa só a
+ * para maior/menor". Trilha fixa + `justify-content: start` deixa só a
  * contagem de colunas mudar; a capa (e o badge de hover que vive dentro dela)
  * mantém a mesma caixa em qualquer largura de janela.
  *
  * `minmax(0, <fixo>)` e não `<fixo>` puro: o `auto-fill` conta as repetições
  * pelo máximo, então continua sendo largura fixa, mas numa janela mais estreita
  * que uma trilha a coluna única encolhe em vez de estourar o container.
+ *
+ * `start` e não `center`: com trilha fixa sobra espaço no fim da linha, e
+ * `center` reparte essa sobra dos dois lados — a primeira capa descolava da
+ * margem e ficava um vazio à esquerda desalinhado da toolbar/abas. Alinhado ao
+ * início, a folga vai inteira para a direita.
  */
 .game-grid {
   --game-grid-track: 280px;
 
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(0, var(--game-grid-track)));
-  justify-content: center;
+  justify-content: start;
   gap: var(--space-6);
   padding: 0 var(--space-10);
 
@@ -9447,7 +9475,7 @@ input[type="search"]::-ms-reveal {
 
   &__content {
     display: grid;
-    grid-template-columns: 22px minmax(0, 1fr) 20px;
+    grid-template-columns: auto minmax(0, 1fr) 20px;
     align-items: center;
     gap: var(--space-6);
     padding: var(--space-8);
@@ -9455,6 +9483,27 @@ input[type="search"]::-ms-reveal {
 
   &__icon {
     color: var(--text-primary);
+  }
+
+  // Capsule (header) do jogo no lugar do check nos toasts de backup OK.
+  // Mesmas dimensões de um toast comum: sem padding especial e sem altura
+  // mínima — a arte ocupa apenas o slot do ícone, na altura da linha de
+  // texto, coberta pelo object-fit sem distorcer. Radius segue o padrão
+  // único de raio da interface.
+  &__media {
+    align-self: stretch;
+    display: grid;
+    place-items: center;
+    width: 84px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+  }
+
+  &__capsule {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   // Estado vive no ícone e na barra de progresso. A borda tingida era decoração

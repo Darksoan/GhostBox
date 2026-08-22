@@ -919,14 +919,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [hasPremiumCloudProfileAccess, pushCloudProfileSnapshot, rehydrateCollectionGames]);
 
   const queueBackupToast = useCallback(
-    (record: BackupSettings["backupRecords"][string]) => {
+    (appId: string, record: BackupSettings["backupRecords"][string]) => {
       const shouldNotify =
         record.lastBackupSuccess !== false
           ? notifications.backupSuccessEnabled
           : notifications.backupErrorEnabled;
       if (!shouldNotify) return;
 
-      const pendingToast = createBackupToastFromRecord(record);
+      const pendingToast = createBackupToastFromRecord(record, appId);
       const createdAt = Date.parse(record.lastBackupAt);
 
       pushAppNotification({
@@ -944,6 +944,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           pendingToast.title,
           pendingToast.message,
           pendingToast.variant,
+          { imageSources: pendingToast.imageSources },
         );
       } else {
         pendingBackupToastRef.current = pendingToast;
@@ -973,7 +974,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       const pendingToast = pendingBackupToastRef.current;
       pendingBackupToastRef.current = null;
-      showToast(pendingToast.title, pendingToast.message, pendingToast.variant);
+      showToast(pendingToast.title, pendingToast.message, pendingToast.variant, {
+        imageSources: pendingToast.imageSources,
+      });
     };
 
     window.addEventListener("focus", flushPendingBackupToast);
@@ -1002,13 +1005,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const unsubscribe = ghostboxApi.onBackupSettingsChanged((settings) => {
       if (cancelled) return;
 
-      const changedRecord = getLatestChangedBackupRecord(
+      const changed = getLatestChangedBackupRecord(
         backupSettingsRef.current,
         settings,
       );
       backupSettingsRef.current = settings;
       setBackupSettings(settings);
-      if (changedRecord) queueBackupToast(changedRecord);
+      if (changed) queueBackupToast(changed.appId, changed.record);
     });
 
     return () => {

@@ -1,22 +1,55 @@
 import { CircleAlert, CircleCheck, X } from "lucide-react";
 import { useSettings } from "../../context/settings";
+import {
+  useCachedImageSources,
+  useLoadableImageCover,
+} from "../../hooks/useCachedImageSources";
 
 export type ToastVariant = "success" | "error";
 
+const noImageSources: string[] = [];
+
 interface ToastProps {
-  toast: { id: number; title: string; message: string; variant?: ToastVariant } | null;
+  toast: {
+    id: number;
+    title: string;
+    message: string;
+    variant?: ToastVariant;
+    imageSources?: string[];
+  } | null;
   onClose: () => void;
 }
 
 export function Toast({ toast, onClose }: ToastProps) {
   const { appearance } = useSettings();
   const isError = toast?.variant === "error";
+  // A capsule (header) do jogo substitui o check nos toasts de backup bem
+  // sucedido; se nenhuma arte carregar, o ícone volta como fallback dentro
+  // da mesma caixa, que ocupa espaço desde o primeiro paint (sem reflow).
+  const hasCapsule = !isError && Boolean(toast?.imageSources?.length);
+  const capsuleSources = useCachedImageSources(
+    hasCapsule && toast?.imageSources?.length ? toast.imageSources : noImageSources,
+  );
+  const { source: capsuleSource } = useLoadableImageCover(capsuleSources);
+
   if (!toast) return null;
 
   return (
     <div className={`toast ${isError ? "toast--error" : "toast--success"}`}>
       <div className="toast__content">
-        {isError ? <CircleAlert className="toast__icon" size={20} /> : <CircleCheck className="toast__icon" size={20} />}
+        {hasCapsule ? (
+          <div className="toast__media">
+            {capsuleSource ? (
+              <img className="toast__capsule" src={capsuleSource} alt="" />
+            ) : (
+              <CircleCheck className="toast__icon" size={20} />
+            )}
+          </div>
+        ) : isError ? (
+          <CircleAlert className="toast__icon" size={20} />
+        ) : (
+          <CircleCheck className="toast__icon" size={20} />
+        )}
         <div>
           <strong>{toast.title}</strong>
           {toast.message && <span>{toast.message}</span>}

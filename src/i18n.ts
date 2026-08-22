@@ -558,6 +558,18 @@ const translations: Record<Language, TranslationTree> = {
           label: "Toasts de erro",
           description: "Permite avisos de falha, validação ou atenção.",
         },
+        testToast: {
+          label: "Testar toast",
+          description: "Dispara um aviso de sucesso de exemplo dentro do app.",
+          action: "Testar",
+          toastTitle: "Ajustes salvos",
+          toastMessage: "Este é um toast de teste do GhostBox.",
+        },
+        testBackupToast: {
+          label: "Testar toast de backup",
+          description: "Dispara o aviso de backup concluído com a capsule do jogo.",
+          action: "Testar",
+        },
       },
       download: {
         morrenusApiKey: {
@@ -1146,6 +1158,18 @@ const translations: Record<Language, TranslationTree> = {
         inAppErrorToasts: {
           label: "Error toasts",
           description: "Allows failure, validation, or attention alerts.",
+        },
+        testToast: {
+          label: "Test toast",
+          description: "Fires a sample success alert inside the app.",
+          action: "Test",
+          toastTitle: "Settings saved",
+          toastMessage: "This is a GhostBox test toast.",
+        },
+        testBackupToast: {
+          label: "Test backup toast",
+          description: "Fires the completed-backup alert with the game capsule.",
+          action: "Test",
         },
       },
       download: {

@@ -1,10 +1,12 @@
 import type { BackupRecord, BackupSettings } from "../types";
 import type { ToastVariant } from "../components/ui/Toast";
+import { highDensityHeaderSources } from "../utils/image";
 
 export type BackupToastPayload = {
   title: string;
   message: string;
   variant: ToastVariant;
+  imageSources?: string[];
 };
 
 export function getBackupRecordLatestKey(record: BackupRecord) {
@@ -16,13 +18,15 @@ export function getBackupRecordLatestKey(record: BackupRecord) {
   ].join("|");
 }
 
+export type ChangedBackupRecord = { appId: string; record: BackupRecord };
+
 export function getLatestChangedBackupRecord(
   previous: BackupSettings | null,
   next: BackupSettings
-): BackupRecord | null {
+): ChangedBackupRecord | null {
   if (!previous) return null;
 
-  return Object.entries(next.backupRecords).reduce<BackupRecord | null>(
+  return Object.entries(next.backupRecords).reduce<ChangedBackupRecord | null>(
     (latest, [appId, record]) => {
       const previousRecord = previous.backupRecords[appId];
       if (
@@ -34,9 +38,9 @@ export function getLatestChangedBackupRecord(
         return latest;
       }
 
-      if (!latest) return record;
-      return Date.parse(record.lastBackupAt) > Date.parse(latest.lastBackupAt)
-        ? record
+      if (!latest) return { appId, record };
+      return Date.parse(record.lastBackupAt) > Date.parse(latest.record.lastBackupAt)
+        ? { appId, record }
         : latest;
     },
     null
@@ -44,13 +48,16 @@ export function getLatestChangedBackupRecord(
 }
 
 export function createBackupToastFromRecord(
-  record: BackupRecord
+  record: BackupRecord,
+  appId?: string
 ): BackupToastPayload {
   if (record.lastBackupSuccess) {
     return {
-      title: "Backup concluído",
-      message: `${record.title} foi salvo com sucesso.`,
+      title: `${record.title} salvo com sucesso!`,
+      // O título já informa o resultado; a capsule do jogo ocupa o lugar do texto.
+      message: "",
       variant: "success",
+      imageSources: appId ? highDensityHeaderSources(appId) : undefined,
     };
   }
 

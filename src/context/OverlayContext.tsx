@@ -26,6 +26,7 @@ type ToastState = {
   title: string;
   message: string;
   variant?: ToastVariant;
+  imageSources?: string[];
 } | null;
 
 interface OverlayContextValue {
@@ -44,7 +45,12 @@ interface OverlayContextValue {
     options?: { reopenModalOnBack?: boolean; highlightAchievementId?: string },
   ) => void;
   closeAchievements: () => void;
-  showToast: (title: string, message: string, variant?: ToastVariant) => void;
+  showToast: (
+    title: string,
+    message: string,
+    variant?: ToastVariant,
+    options?: { imageSources?: string[] },
+  ) => void;
   dismissToast: () => void;
   setCollectionModalOpen: (open: boolean) => void;
   setSteamPathModalOpen: (open: boolean) => void;
@@ -79,7 +85,12 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   achievementsViewRef.current = achievementsView;
 
   const showToast = useCallback(
-    (title: string, message: string, variant?: ToastVariant) => {
+    (
+      title: string,
+      message: string,
+      variant?: ToastVariant,
+      options?: { imageSources?: string[] },
+    ) => {
       const nextVariant = getToastVariant(title, variant);
       if (!notifications.inAppToastsEnabled) return;
       if (nextVariant === "success" && !notifications.inAppSuccessToastsEnabled)
@@ -93,6 +104,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         title,
         message,
         variant: nextVariant,
+        imageSources: options?.imageSources,
       });
     },
     [

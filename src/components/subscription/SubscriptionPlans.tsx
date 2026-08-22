@@ -1,6 +1,7 @@
 import { CalendarClock, Check, CloudUpload, CreditCard, ExternalLink, Link, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
 import { CupStar, ServerUpdate, Trophy, UserEdit } from "reicon-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useOverlay } from "../../context/OverlayContext";
@@ -43,6 +44,58 @@ type CloudBackupGameSummary = {
   lastBackupAt: string | null;
   lastBackupSuccess: boolean;
 };
+
+// Candidatos de capa para o resumo de backup: o resumo só tem `appId`, então
+// espelhamos os hosts/variantes de `gameHeaderOnlySources` (o header.jpg só
+// existe no host legado; jogos novos publicam em `store_item_assets`, e a
+// capsule 616x353 cobre os que não publicam header nenhum).
+function backupThumbSources(appId: string) {
+  if (!appId) return [];
+  return [
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+  ];
+}
+
+const emptyBackupThumbSources: string[] = [];
+
+function BackupGameThumb({ appId }: { appId: string }) {
+  const sources = useMemo(
+    () => (appId ? backupThumbSources(appId) : emptyBackupThumbSources),
+    [appId],
+  );
+  const cachedSources = useCachedImageSources(sources);
+  // O hook percorre os candidatos em ordem e ainda resolve o header com hash
+  // via SteamCMD antes de declarar falha. Só pintamos depois de decodificar,
+  // então nada de <img> quebrado: cai no placeholder com o ícone fantasma.
+  const { source, loaded } = useLoadableImageCover(cachedSources);
+
+  if (!loaded || !source) {
+    return (
+      <span
+        className="subscription-account__backup-thumb subscription-account__backup-thumb--placeholder"
+        style={{ backgroundImage: `url(${ghostIcon})` }}
+        aria-hidden="true"
+      />
+    );
+  }
+
+  return (
+    <img
+      className="subscription-account__backup-thumb"
+      src={source}
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+    />
+  );
+}
 
 const benefits: Record<SubscriptionPlanId, string[]> = {
   free: ["subscription.benefits.backupSync"],
@@ -495,16 +548,7 @@ export function SubscriptionPlans({
               <ul className="subscription-account__backup-list">
                 {recentBackups.map((game) => (
                   <li key={game.appId}>
-                    <img
-                      className="subscription-account__backup-thumb"
-                      src={`https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`}
-                      alt=""
-                      aria-hidden="true"
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.style.visibility = "hidden";
-                      }}
-                    />
+                    <BackupGameThumb appId={game.appId} />
                     <div className="subscription-account__backup-title">
                       <strong>{game.title}</strong>
                       {game.achievementCount !== null ? (
@@ -734,33 +778,6 @@ export function SubscriptionPlans({
         )}
       </header>
 
-      <div
-        className="subscription-plans__billing"
-        role="group"
-        aria-label={copy("Escolha o período da assinatura", "Choose billing period")}
-      >
-        <span
-          className={`subscription-plans__billing-thumb subscription-plans__billing-thumb--${selectedPlanId}`}
-          aria-hidden="true"
-        />
-        <button
-          type="button"
-          className={selectedPlanId === "monthly" ? "is-active" : undefined}
-          aria-pressed={selectedPlanId === "monthly"}
-          onClick={() => setSelectedPlanId("monthly")}
-        >
-          {t("subscription.plans.monthly.title")}
-        </button>
-        <button
-          type="button"
-          className={selectedPlanId === "quarterly" ? "is-active" : undefined}
-          aria-pressed={selectedPlanId === "quarterly"}
-          onClick={() => setSelectedPlanId("quarterly")}
-        >
-          {t("subscription.plans.quarterly.title")}
-        </button>
-      </div>
-
       <div className="subscription-plans__grid">
         {plans.map((plan) => (
           <article
@@ -771,16 +788,42 @@ export function SubscriptionPlans({
               plan.id !== "free" ? "subscription-plan-card--featured" : "",
             ].filter(Boolean).join(" ")}
           >
-            <div className="subscription-plan-card__head">
-              <h4>{plan.title}</h4>
-              <span
-                className="subscription-plan-card__savings"
-                aria-hidden={!plan.savings}
-                style={plan.savings ? undefined : { visibility: "hidden" }}
+            {plan.id === "free" && (
+              <div className="subscription-plan-card__head">
+                <h4>{plan.title}</h4>
+              </div>
+            )}
+
+            {/* Controle segmentado de cobrança: vive dentro do card Premium,
+                junto do preço que ele altera — não mais solto no topo da seção. */}
+            {plan.id !== "free" && (
+              <div
+                className="subscription-plan-card__billing"
+                role="group"
+                aria-label={copy("Escolha o período da assinatura", "Choose billing period")}
               >
-                {plan.savings?.value ?? "\u00A0"}
-              </span>
-            </div>
+                <span
+                  className={`subscription-plan-card__billing-thumb subscription-plan-card__billing-thumb--${selectedPlanId}`}
+                  aria-hidden="true"
+                />
+                <button
+                  type="button"
+                  className={selectedPlanId === "monthly" ? "is-active" : undefined}
+                  aria-pressed={selectedPlanId === "monthly"}
+                  onClick={() => setSelectedPlanId("monthly")}
+                >
+                  {t("subscription.plans.monthly.title")}
+                </button>
+                <button
+                  type="button"
+                  className={selectedPlanId === "quarterly" ? "is-active" : undefined}
+                  aria-pressed={selectedPlanId === "quarterly"}
+                  onClick={() => setSelectedPlanId("quarterly")}
+                >
+                  {t("subscription.plans.quarterly.title")}
+                </button>
+              </div>
+            )}
 
             <p className="subscription-plan-card__price">
               <strong>{plan.price}</strong>
@@ -800,6 +843,17 @@ export function SubscriptionPlans({
                 </li>
               ))}
             </ul>
+
+            {/* Informativo de economia: pill dourada no rodapé do card,
+                imediatamente acima do CTA. Placeholder invisível no Free
+                mantém os dois cards alinhados. */}
+            <span
+              className="subscription-plan-card__savings"
+              aria-hidden={!plan.savings}
+              style={plan.savings ? undefined : { visibility: "hidden" }}
+            >
+              {plan.savings ? `${plan.savings.label} ${plan.savings.value}` : "\u00A0"}
+            </span>
 
             <button
               type="button"
