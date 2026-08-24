@@ -28,6 +28,17 @@ export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   download: "settings.tabs.download.label",
 };
 
+/** Descripciones por aba — texto corto bajo el título del encabezado de página. */
+export const settingsTabDescriptionKeys: Record<SettingsTabId, string> = {
+  general: "settings.tabs.general.description",
+  performance: "settings.tabs.performance.description",
+  library: "settings.tabs.library.description",
+  connections: "settings.tabs.connections.description",
+  subscription: "settings.tabs.subscription.description",
+  notifications: "settings.tabs.notifications.description",
+  download: "settings.tabs.download.description",
+};
+
 type SettingsNavigationTab = {
   id: SettingsTabId;
   icon: LucideIcon;

@@ -292,6 +292,9 @@ export type SubscriptionPaymentMethod = {
   last4: string | null;
 };
 
+/** Cards go through Stripe, Pix through Cakto. */
+export type PaymentProvider = "stripe" | "cakto";
+
 export type SubscriptionStatusResult = {
   userId: string;
   steamId: string | null;
@@ -303,6 +306,8 @@ export type SubscriptionStatusResult = {
     currentPeriodEnd: string | null;
     lastPaymentId: string | null;
     cancelAtPeriodEnd?: boolean;
+    /** Who granted the current period. Pix has no billing portal and never renews itself. */
+    provider?: PaymentProvider | null;
     updatedAt: string | null;
   };
   latestPayment: unknown | null;
@@ -341,6 +346,35 @@ export type SubscriptionCheckoutResult = {
 export type SubscriptionRefreshResult = {
   payment: SubscriptionPayment;
   subscription: SubscriptionStatusResult["subscription"];
+};
+
+/** Payer details Cakto requires. Sent straight to the worker, never stored locally. */
+export type PixPayer = {
+  name: string;
+  email: string;
+  phone: string;
+  document: string;
+  fingerprint: string;
+};
+
+export type PixCharge = {
+  paymentId: string;
+  orderId: string | null;
+  status: string;
+  planId: SubscriptionPlanId;
+  amountCents: number;
+  currency: string;
+  /** BR Code, for copy and paste in the bank app. */
+  qrCode: string | null;
+  qrCodeBase64: string | null;
+  expiresAt: string | null;
+  checkoutUrl: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+};
+
+export type PixChargeResult = {
+  charge: PixCharge | null;
 };
 
 export type SubscriptionPortalFlow = "manage" | "payment_method_update";

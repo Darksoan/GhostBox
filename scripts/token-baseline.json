@@ -1,3 +1,6 @@
 {
-  "src/app.scss::z-index-literal": 17
+  "src/app.scss::z-index-literal": 17,
+  "src/app.scss::raw-rgb": 30,
+  "src/app.scss::raw-hex": 5,
+  "src/app.scss::box-shadow-literal": 1
 }

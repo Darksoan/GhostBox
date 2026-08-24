@@ -40,6 +40,8 @@ import type {
   UpdateInstallResult,
   UpdateProgressEvent,
   DiscordLinkStatus,
+  PixChargeResult,
+  PixPayer,
   CloudBackupResult,
   CloudProfileResult,
   CloudProfileSnapshot,
@@ -115,6 +117,10 @@ const PREMIUM_CACHE_KEY = "ghostbox:premium-status";
 // Survives a restart on purpose: the user pays in an external browser, and the
 // app may well be closed and reopened before the checkout is reconciled.
 const PENDING_CHECKOUT_KEY = "ghostbox:pending-checkout";
+// Deliberately outside clearAccountCaches: this identifies the installation,
+// not the account, and rotating it on logout would look like a new device to
+// the payment provider's antifraud on every sign-in.
+const PAYMENT_FINGERPRINT_KEY = "ghostbox:payment-fingerprint";
 const PREMIUM_STATUS_TTL_MS = 5 * 60 * 1000;
 
 type DiscordLinkCacheEntry = {
@@ -373,6 +379,62 @@ export const ghostboxApi = {
       throw new Error(
         typeof error === "string" ? error : "Could not start the subscription checkout.",
       );
+    }
+  },
+
+  /**
+   * Stable per-installation id Cakto requires on every Pix charge.
+   *
+   * Not a real device fingerprint and not meant to be one: it only has to stay
+   * the same across a payment session, so a random id persisted locally is
+   * enough and collects nothing about the machine.
+   */
+  getPaymentFingerprint(): string {
+    try {
+      const stored = localStorage.getItem(PAYMENT_FINGERPRINT_KEY);
+      if (stored) return stored;
+      const generated = `fp_${crypto.randomUUID()}`;
+      localStorage.setItem(PAYMENT_FINGERPRINT_KEY, generated);
+      return generated;
+    } catch {
+      // Private mode / quota: a per-session value still satisfies Cakto.
+      return `fp_${crypto.randomUUID()}`;
+    }
+  },
+
+  /**
+   * Opens a one-off Pix charge through Cakto.
+   *
+   * Errors propagate for the same reason the Stripe checkout's do: "invalid
+   * CPF" and "too many attempts" are exactly what the user needs to read.
+   * The payer details are sent and forgotten — nothing here is persisted.
+   */
+  async createPixCharge(
+    planId: SubscriptionPlanId,
+    payer: PixPayer,
+  ): Promise<PixChargeResult> {
+    try {
+      return await invoke<PixChargeResult>("subscription_create_pix_charge", { planId, payer });
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error(
+        typeof error === "string" ? error : "Não foi possível gerar o Pix.",
+      );
+    }
+  },
+
+  /**
+   * Re-reads a Pix charge while the QR code is on screen.
+   *
+   * Resolves to null when the check itself failed, which callers must treat as
+   * "try again", never as "the payment failed".
+   */
+  async getPixCharge(paymentId: string): Promise<PixChargeResult | null> {
+    try {
+      return await invoke<PixChargeResult>("subscription_get_pix_charge", { paymentId });
+    } catch (error) {
+      console.warn("Could not read Pix charge", error);
+      return null;
     }
   },
 
@@ -1465,6 +1527,14 @@ export const ghostboxApi = {
 
   getGameIconUrls(appIds: string[]): Promise<Record<string, string>> {
     return invokeOr<Record<string, string>>("steam_get_game_icon_urls", { appIds }, {});
+  },
+
+  getSteamPlayerCounts(appIds: string[]): Promise<Record<string, number>> {
+    return invokeOr<Record<string, number>>(
+      "steam_get_player_counts",
+      { appIds },
+      {},
+    );
   },
 
   getLocalGameIconUrls(appIds: string[]): Promise<Record<string, string>> {

@@ -154,6 +154,7 @@ const translations: Record<Language, TranslationTree> = {
         label: "Ordenar catálogo",
         popular: "Mais populares",
         recentlyAdded: "Adicionados recentemente",
+        playingNow: "Mais jogados",
       },
       view: {
         grid: "Ver como grade",
@@ -250,12 +251,46 @@ const translations: Record<Language, TranslationTree> = {
       actions: {
         subscribe: "Assinar",
       },
+      method: {
+        label: "Forma de pagamento",
+        card: "Cartão",
+        pix: "Pix",
+        pixHint: "Pix libera um período fixo, sem renovação automática.",
+      },
+      pix: {
+        title: "Pagar com Pix",
+        formSubtitle: "Confirme seus dados para gerar o Pix de {price}.",
+        scanSubtitle: "Escaneie o QR Code no app do seu banco ou use o copia e cola.",
+        fields: {
+          name: "Nome completo",
+          document: "CPF",
+          phone: "Telefone",
+        },
+        privacy:
+          "Usamos esses dados apenas para emitir a cobrança. Eles não ficam salvos no GhostBox.",
+        generate: "Gerar Pix",
+        generating: "Gerando...",
+        regenerate: "Gerar novo Pix",
+        copy: "Copiar código",
+        copied: "Copiado",
+        copyLabel: "Pix copia e cola",
+        qrAlt: "QR Code do Pix",
+        waiting: "Aguardando pagamento · expira em {time}",
+        waitingNoTimer: "Aguardando pagamento...",
+        expired: "Este Pix expirou. Gere um novo para continuar.",
+        close: "Fechar",
+        paidTitle: "Pagamento confirmado",
+        paidMessage: "Seu acesso Premium já está ativo.",
+      },
+      renewPix: "Renovar com Pix",
+      accessUntil: "Acesso até",
       discordLink: {
-        title: "Vincular Steam ao Discord",
+        title: "Vincular Discord",
         description:
-          "Conecte o Discord à conta Steam usada no GhostBox para receber Premium no servidor futuramente.",
+          "Opcional: vincule o Discord para receber o cargo Premium no servidor do GhostBox. Não é necessário para assinar.",
         signInSteam: "Entrar com Steam",
         link: "Vincular Discord",
+        connecting: "Vinculando…",
         relink: "Atualizar vínculo",
         linked: "Vinculado",
         linkedAs: "Discord vinculado como {name}.",
@@ -410,24 +445,31 @@ const translations: Record<Language, TranslationTree> = {
       tabs: {
         general: {
           label: "Geral",
+          description: "Idioma, apariência e comportamento de início.",
         },
         performance: {
           label: "Desempenho",
+          description: "Uso de memória, aceleração e diagnóstico.",
         },
         library: {
           label: "Biblioteca",
+          description: "Origen Steam e licencias locais.",
         },
         connections: {
           label: "Conexões",
+          description: "Contas, perfiles e vínculos externos.",
         },
         subscription: {
           label: "Assinatura",
+          description: "Plano na nube, backup e recursos exclusivos.",
         },
         notifications: {
           label: "Notificações",
+          description: "Alertas e sons do sistema.",
         },
         download: {
           label: "APIs",
+          description: "Chaves de API e fontes do catálogo.",
         },
       },
       general: {
@@ -755,6 +797,7 @@ const translations: Record<Language, TranslationTree> = {
         label: "Sort catalogue",
         popular: "Most popular",
         recentlyAdded: "Recently added",
+        playingNow: "Most played",
       },
       view: {
         grid: "View as grid",
@@ -850,12 +893,45 @@ const translations: Record<Language, TranslationTree> = {
       actions: {
         subscribe: "Subscribe",
       },
+      method: {
+        label: "Payment method",
+        card: "Card",
+        pix: "Pix",
+        pixHint: "Pix unlocks a fixed period, with no automatic renewal.",
+      },
+      pix: {
+        title: "Pay with Pix",
+        formSubtitle: "Confirm your details to generate the {price} Pix charge.",
+        scanSubtitle: "Scan the QR code in your bank app, or use the copy-and-paste code.",
+        fields: {
+          name: "Full name",
+          document: "CPF",
+          phone: "Phone",
+        },
+        privacy: "These details are only used to issue the charge. GhostBox does not store them.",
+        generate: "Generate Pix",
+        generating: "Generating...",
+        regenerate: "Generate a new Pix",
+        copy: "Copy code",
+        copied: "Copied",
+        copyLabel: "Pix copy-and-paste code",
+        qrAlt: "Pix QR code",
+        waiting: "Waiting for payment · expires in {time}",
+        waitingNoTimer: "Waiting for payment...",
+        expired: "This Pix charge expired. Generate a new one to continue.",
+        close: "Close",
+        paidTitle: "Payment confirmed",
+        paidMessage: "Your Premium access is active.",
+      },
+      renewPix: "Renew with Pix",
+      accessUntil: "Access until",
       discordLink: {
-        title: "Link Steam to Discord",
+        title: "Link Discord",
         description:
-          "Connect Discord to the Steam account used in GhostBox so Premium can be granted in the server later.",
+          "Optional: link Discord to get the Premium role in the GhostBox server. It is not required to subscribe.",
         signInSteam: "Sign in with Steam",
         link: "Link Discord",
+        connecting: "Linking…",
         relink: "Update link",
         linked: "Linked",
         linkedAs: "Discord linked as {name}.",
@@ -1009,24 +1085,31 @@ const translations: Record<Language, TranslationTree> = {
       tabs: {
         general: {
           label: "General",
+          description: "Language, appearance and startup defaults.",
         },
         performance: {
           label: "Performance",
+          description: "Memory use, acceleration and diagnostics.",
         },
         library: {
           label: "Library",
+          description: "Steam and local library sources.",
         },
         connections: {
           label: "Connections",
+          description: "Accounts, profiles and external links.",
         },
         subscription: {
           label: "Subscription",
+          description: "Cloud plan, backup and exclusive resources.",
         },
         notifications: {
           label: "Notifications",
+          description: "System alerts and sounds.",
         },
         download: {
           label: "APIs",
+          description: "API keys and catalogue sources.",
         },
       },
       general: {

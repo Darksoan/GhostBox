@@ -1,6 +1,6 @@
 # GhostBox Subscriptions Worker
 
-Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Stripe-only; there is no SumUp fallback.
+Cloudflare Worker responsible for GhostBox Premium. Cards are billed through Stripe as a recurring subscription; Pix goes through Cakto as a one-off charge that grants a fixed period. A `payments` row belongs to exactly one of them, told apart by `provider`.
 
 ## Endpoints
 
@@ -21,7 +21,10 @@ Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Str
 - `GET /discord/callback`
 - `GET /discord/link-status` — Bearer
 - `POST /discord/sync-premium`
+- `POST /subscription/pix/charges` — Bearer, `{ planId, name, email, phone, document, fingerprint }`, creates a one-off Pix charge and returns the QR code
+- `GET /subscription/pix/charges/:paymentId` — Bearer; only the owner can read it (anything else answers 404). Polled by the app while the QR code is on screen, and the fallback for a delayed Cakto webhook.
 - `POST /stripe/webhook` — Stripe webhook endpoint
+- `POST /cakto/webhook` — Cakto webhook endpoint (Pix)
 - `GET /cloud-saves?appId=...` — Bearer + premium
 - `POST /cloud-saves` — Bearer + premium
 - `GET /cloud-saves/:id/download` — Bearer + premium
@@ -42,6 +45,9 @@ npx wrangler secret put CLOUD_SESSION_SECRET --config workers/subscriptions/wran
 npx wrangler secret put SUPABASE_URL --config workers/subscriptions/wrangler.toml
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/subscriptions/wrangler.toml
 npx wrangler secret put FIREBASE_API_KEY --config workers/subscriptions/wrangler.toml
+npx wrangler secret put CAKTO_CLIENT_ID --config workers/subscriptions/wrangler.toml
+npx wrangler secret put CAKTO_CLIENT_SECRET --config workers/subscriptions/wrangler.toml
+npx wrangler secret put CAKTO_WEBHOOK_SECRET --config workers/subscriptions/wrangler.toml
 ```
 
 `FIREBASE_API_KEY` is the Web API key of the Firebase project (Project settings → General → Web API Key). The worker talks to Firebase Auth over its public REST API only (Identity Toolkit + Secure Token) — no service account/Admin SDK key is needed. Email templates (verification, password reset) are configured in the Firebase console under Authentication → Templates.
@@ -56,6 +62,12 @@ Optional variables/secrets:
 - `ALLOWED_ORIGIN`
 - `CLOUD_SAVE_BUCKET` defaults to `cloud-saves` and must exist as a private Supabase Storage bucket.
 - `STRIPE_API_VERSION` overrides the version pinned in `src/stripe.ts`. Every Stripe call sends it explicitly, so the account's default version in the dashboard cannot reshape payloads underneath the worker. Bump it deliberately, and only after checking `stripeSubscriptionPeriod` / `stripeInvoiceSubscriptionId` against the new shape — `2025-03-31.basil` moved `current_period_*` onto subscription items and dropped `invoice.subscription` (both readers already handle either shape, and `test/stripe-shape.test.ts` covers them).
+
+- `CAKTO_OFFER_MONTHLY` / `CAKTO_OFFER_QUARTERLY` are the Cakto offer ids for each plan. Cakto has no inline pricing: the amount lives on the offer, created in the dashboard under **Produtos**. Without them `/subscription/pix/charges` answers 500.
+- The API key needs the `write payments` and `read orders` scopes (Painel Cakto → Integrações → Cakto API).
+- `CAKTO_API_URL` overrides `https://api.cakto.com.br`, for tests only.
+
+Register the webhook in the Cakto dashboard pointing at `/cakto/webhook`, subscribed to at least `purchase_approved`, `refund` and `chargeback`. Cakto does **not** sign the payload — the only proof of origin is the `secret` field inside the body, which is why every event re-reads the order from `GET /public_api/orders/{id}` before access is granted or revoked. Treat `CAKTO_WEBHOOK_SECRET` as a credential: it is never persisted with the stored event.
 
 The bot must be in the Discord server and have `Manage Roles`. Its highest role must be above the Premium role.
 

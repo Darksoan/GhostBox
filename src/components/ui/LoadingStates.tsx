@@ -98,31 +98,57 @@ export function CatalogueListLoadingState({ count }: { count?: number }) {
   );
 }
 
+/**
+ * Larguras fixas por posição: as pílulas reais são dimensionadas pelo rótulo
+ * (Gêneros, Tags, Desenvolvedoras, Distribuidoras, Anos), então um skeleton de
+ * largura única faria a barra reflowar quando as facets chegassem.
+ */
+const catalogueFilterSkeletonWidths = [96, 76, 132, 128, 84];
+
 export function CatalogueFilterSectionsLoadingState({ count = 5 }: { count?: number }) {
   return (
     <>
       {Array.from({ length: count }, (_, index) => (
-        <section className="catalogue-filter-section catalogue-filter-section--skeleton" key={`filter-loading-${index}`} aria-hidden="true" />
+        <span
+          className="catalogue-filter-section catalogue-filter-section--skeleton skeleton"
+          key={`filter-loading-${index}`}
+          aria-hidden="true"
+          style={{
+            width: `${
+              catalogueFilterSkeletonWidths[index % catalogueFilterSkeletonWidths.length]
+            }px`,
+          }}
+        />
       ))}
     </>
   );
 }
 
+/**
+ * Espelha a árvore da `CataloguePage` carregada — toolbar (barra de filtros +
+ * ações) e o grid resultados/preview. Qualquer nó a menos aqui vira um pulo de
+ * layout no primeiro paint com dados.
+ */
 export function CatalogueLoadingState() {
   const { t } = useSettings();
 
   return (
     <section className="catalogue-page" aria-label={t("loading.catalogue")}>
+      <div className="catalogue-page__toolbar">
+        <div className="catalogue-filterbar" aria-hidden="true">
+          <CatalogueFilterSectionsLoadingState />
+        </div>
+        <div className="catalogue-page__toolbar-actions" aria-hidden="true">
+          <span className="catalogue-page__sort-placeholder skeleton" />
+        </div>
+      </div>
+
       <div className="catalogue-page__content">
         <div className="catalogue-page__results">
           <CatalogueListLoadingState />
         </div>
 
-        <aside className="catalogue-filters catalogue-filters--placeholder" aria-label={t("loading.filters")}>
-          <div className="catalogue-filters__sections">
-            <CatalogueFilterSectionsLoadingState />
-          </div>
-        </aside>
+        <aside className="catalogue-preview-column" aria-hidden="true" />
       </div>
     </section>
   );
@@ -245,14 +271,26 @@ export function HomeWishlistCardSkeleton() {
 
 /**
  * Corpo skeleton do card de "Bem avaliados": espelha a composição do corpo
- * real (`HomeTopRatedCard`) — nome + uma linha fechada de pills, na mesma
- * contagem fixa definida em HomePage.tsx (`homeTopRatedPrimaryPillCount`) —
- * para o skeleton fechar na mesma altura do card carregado.
+ * real (`HomeTopRatedCard`) — nome, as três métricas em colunas e uma linha
+ * fechada de pills, na mesma contagem fixa definida em HomePage.tsx
+ * (`homeTopRatedPrimaryPillCount`) — para o skeleton fechar na mesma altura do
+ * card carregado.
  */
 export function HomeTopRatedCardBodySkeleton() {
   return (
     <span className="home-top-rated-card__body">
       <span className="home-top-rated-card__title home-top-rated-card__title--skeleton skeleton" />
+      <span className="home-top-rated-card__metrics">
+        {Array.from({ length: 3 }, (_, index) => (
+          <span
+            className="home-top-rated-card__metric"
+            key={`top-rated-metric-${index}`}
+          >
+            <span className="home-top-rated-card__metric-label home-top-rated-card__metric-label--skeleton skeleton" />
+            <span className="home-top-rated-card__metric-value home-top-rated-card__metric-value--skeleton skeleton" />
+          </span>
+        ))}
+      </span>
       <span className="home-top-rated-card__tags">
         {Array.from({ length: 3 }, (_, index) => (
           <span

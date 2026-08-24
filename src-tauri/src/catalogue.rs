@@ -22,7 +22,14 @@ const GAME_ICON_URLS_RESOLVED_EVENT: &str = "game-icon-urls-resolved";
 const STEAM_APPINFO_ICON_SEARCH_WINDOW: usize = 65_536;
 const STEAMCMD_DOWNLOAD_URL: &str = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
 const STEAM_ICON_NEGATIVE_CACHE_TTL_SECS: u64 = 3_600;
+/// Contagem de jogadores é dado vivo: dois minutos é o bastante para uma
+/// prateleira inteira reaproveitar a mesma amostra sem o número parecer travado.
+const STEAM_PLAYER_COUNT_TTL_SECS: u64 = 120;
+/// Teto de requisições simultâneas ao endpoint da Steam. Uma prateleira pede
+/// poucos jogos, mas a Home pode pedir várias de uma vez.
+const STEAM_PLAYER_COUNT_CONCURRENCY: usize = 6;
 static STEAM_STORE_DETAILS_CACHE_WRITE_LOCK: Mutex<()> = Mutex::new(());
+static STEAM_PLAYER_COUNT_CACHE: OnceLock<Mutex<HashMap<String, (Instant, u64)>>> = OnceLock::new();
 static STEAM_ICON_URL_MEMORY: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static STEAM_ICON_NEGATIVE_CACHE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 static STEAM_APPINFO_BYTES_CACHE: OnceLock<Mutex<Option<AppinfoBytesCache>>> = OnceLock::new();
@@ -2009,6 +2016,122 @@ pub async fn steam_get_game_icon_url(app: tauri::AppHandle, app_id: String) -> O
         .await
         .into_values()
         .next()
+}
+
+/// Contagem de jogadores de um app, direto do endpoint público da Steam.
+///
+/// `None` quando a Steam não conhece o app (`result` 42) ou a chamada falha —
+/// quem chama omite o jogo do mapa em vez de gravar um zero, que no card seria
+/// lido como "ninguém jogando" em vez de "sem dado".
+async fn fetch_steam_player_count(client: &reqwest::Client, app_id: &str) -> Option<u64> {
+    let response = client
+        .get(format!(
+            "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={app_id}"
+        ))
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()?;
+    let body = response.get("response")?;
+    if body.get("result").and_then(Value::as_u64) != Some(1) {
+        return None;
+    }
+    body.get("player_count").and_then(Value::as_u64)
+}
+
+/// Jogadores online agora, por app id.
+///
+/// Existe em vez de reaproveitar o `playingNow` do catálogo porque aquele
+/// caminho passa pelo cache em disco de 30 minutos do `catalogue_cache` — bom
+/// para dado de catálogo, mas serve contagem de jogadores velha. Aqui o cache
+/// é próprio e curto (ver `STEAM_PLAYER_COUNT_TTL_SECS`).
+///
+/// App ids sem resposta ficam **fora** do mapa: o card distingue "sem dado" de
+/// "zero jogadores".
+#[tauri::command]
+pub async fn steam_get_player_counts(app_ids: Vec<String>) -> HashMap<String, u64> {
+    let app_ids: Vec<String> = app_ids
+        .into_iter()
+        .map(|app_id| {
+            app_id
+                .chars()
+                .filter(char::is_ascii_digit)
+                .collect::<String>()
+        })
+        .filter(|app_id| !app_id.is_empty())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    if app_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let cache = STEAM_PLAYER_COUNT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let ttl = Duration::from_secs(STEAM_PLAYER_COUNT_TTL_SECS);
+    let mut counts = HashMap::new();
+    let mut missing = Vec::new();
+    {
+        let entries = cache.lock().ok();
+        for app_id in app_ids {
+            let cached = entries
+                .as_ref()
+                .and_then(|entries| entries.get(&app_id))
+                .filter(|(sampled_at, _)| sampled_at.elapsed() < ttl)
+                .map(|(_, count)| *count);
+            match cached {
+                Some(count) => {
+                    counts.insert(app_id, count);
+                }
+                None => missing.push(app_id),
+            }
+        }
+    }
+    if missing.is_empty() {
+        return counts;
+    }
+
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(6))
+        .build()
+    else {
+        return counts;
+    };
+
+    // Em blocos, não tudo de uma vez: uma Home cheia dispararia dezenas de
+    // conexões simultâneas contra o mesmo host.
+    for chunk in missing.chunks(STEAM_PLAYER_COUNT_CONCURRENCY) {
+        let handles: Vec<_> = chunk
+            .iter()
+            .map(|app_id| {
+                let client = client.clone();
+                let app_id = app_id.clone();
+                tauri::async_runtime::spawn(async move {
+                    let count = fetch_steam_player_count(&client, &app_id).await;
+                    (app_id, count)
+                })
+            })
+            .collect();
+
+        let mut fetched = Vec::with_capacity(handles.len());
+        for handle in handles {
+            if let Ok((app_id, Some(count))) = handle.await {
+                fetched.push((app_id, count));
+            }
+        }
+
+        let sampled_at = Instant::now();
+        if let Ok(mut entries) = cache.lock() {
+            for (app_id, count) in fetched {
+                entries.insert(app_id.clone(), (sampled_at, count));
+                counts.insert(app_id, count);
+            }
+        }
+    }
+
+    counts
 }
 
 #[tauri::command]

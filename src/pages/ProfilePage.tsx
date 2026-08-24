@@ -20,7 +20,6 @@ import {
   Layers,
   LogOut,
   Pencil,
-  ShieldUser,
   User,
 } from "lucide-react";
 import { Cup, CupStar } from "reicon-react";
@@ -40,6 +39,7 @@ import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import steamIcon from "../../Icons/steam-colored.svg";
+import avatarPlaceholder from "../../Icons/userplaceholder.jpg";
 import { EditProfileModal } from "../components/modals/EditProfileModal";
 import "./ProfilePage.scss";
 import {
@@ -353,7 +353,6 @@ interface ProfilePageProps {
     game: GhostBoxGame,
     achievementId?: string
   ) => void;
-  onConnectSteam?: () => void;
   scrollElementRef?: RefObject<HTMLElement | null>;
 }
 
@@ -474,7 +473,6 @@ export function ProfilePage({
   onOpenGame,
   activeSessionAppIds = new Set(),
   onOpenGameAchievements,
-  onConnectSteam,
   scrollElementRef,
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
@@ -1631,17 +1629,15 @@ export function ProfilePage({
             >
               {shouldHoldSteamAvatar ? (
                 <span className="profile-page__avatar-skeleton" />
-              ) : avatarSource ? (
+              ) : (
                 <img
-                  src={avatarSource}
+                  src={avatarSource || avatarPlaceholder}
                   alt={profileDisplayName}
                   width={120}
                   height={120}
                   decoding="async"
                   referrerPolicy="no-referrer"
                 />
-              ) : (
-                <ShieldUser size={44} />
               )}
             </button>
 
@@ -1710,15 +1706,6 @@ export function ProfilePage({
                       </button>
                     )}
                   </div>
-                ) : onConnectSteam ? (
-                  <button
-                    type="button"
-                    className="profile-page__connect-chip"
-                    onClick={onConnectSteam}
-                  >
-                    <img src={steamIcon} alt="" className="profile-page__steam-id-icon" aria-hidden="true" />
-                    {appearance.language === "en" ? "Connect Steam" : "Conectar Steam"}
-                  </button>
                 ) : null}
                 {discordLink?.linked && (
                   <div className="profile-page__discord-box">

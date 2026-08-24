@@ -4,7 +4,6 @@ import {
   Heart,
   Pencil,
   Trash,
-  UserRound,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useDeferredValue, useMemo, useState } from "react";
 import type { GhostBoxGame } from "../../data";
@@ -21,6 +20,7 @@ import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
 import { primaryNavigation, secondaryNavigation } from "./navigationItems";
+import avatarPlaceholder from "../../../Icons/userplaceholder.jpg";
 
 interface SidebarProps {
   activePage: Page;
@@ -565,19 +565,15 @@ const SidebarProfile = memo(function SidebarProfile({
           <span className="sidebar-profile__avatar" aria-hidden="true">
             {shouldHoldSteamAvatar || (isCloudProfileRestoring && !avatarSource) ? (
               <span className="sidebar-profile__avatar-skeleton" />
-            ) : avatarSource ? (
+            ) : (
               <img
-                src={avatarSource}
+                src={avatarSource || avatarPlaceholder}
                 alt=""
                 width={52}
                 height={52}
                 decoding="async"
                 referrerPolicy="no-referrer"
               />
-            ) : (
-              <span className="sidebar-profile__avatar sidebar-profile__avatar--empty">
-                <UserRound size={24} />
-              </span>
             )}
           </span>
 

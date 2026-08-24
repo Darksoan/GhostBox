@@ -6,6 +6,7 @@ import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { preloadImageSources } from "../../utils/imageCache";
 import { profileBannerPlaceholderSource } from "../../utils/image";
+import avatarPlaceholder from "../../../Icons/userplaceholder.jpg";
 import {
   encodeAvatarDataUrl,
   encodeBannerDataUrl,
@@ -452,11 +453,11 @@ export function EditProfileModal({
                       className="edit-profile-modal__avatar-button"
                       onClick={handleAvatarChange}
                     >
-                      {avatarPreviewSource ? (
-                        <img src={avatarPreviewSource} alt="Avatar" decoding="async" />
-                      ) : (
-                        <div className="edit-profile-modal__avatar-placeholder" />
-                      )}
+                      <img
+                        src={avatarPreviewSource || avatarPlaceholder}
+                        alt="Avatar"
+                        decoding="async"
+                      />
                       <div className="edit-profile-modal__avatar-overlay">
                         <Camera size={24} />
                       </div>

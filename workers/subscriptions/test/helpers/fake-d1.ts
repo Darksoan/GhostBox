@@ -156,6 +156,7 @@ const rules: Rule[] = [
         stripeSubscriptionId,
         stripeSubscriptionStatus,
         cancelAtPeriodEnd,
+        provider,
         eventCreated,
         createdAt,
         updatedAt,
@@ -178,6 +179,7 @@ const rules: Rule[] = [
           stripe_subscription_id: stripeSubscriptionId,
           stripe_subscription_status: stripeSubscriptionStatus,
           cancel_at_period_end: cancelAtPeriodEnd,
+          provider: provider ?? null,
           stripe_event_created: eventCreated,
           stripe_payment_method_json: null,
           stripe_payment_method_updated_at: null,
@@ -202,6 +204,7 @@ const rules: Rule[] = [
       existing.stripe_subscription_id = stripeSubscriptionId ?? existing.stripe_subscription_id;
       existing.stripe_subscription_status = stripeSubscriptionStatus ?? existing.stripe_subscription_status;
       existing.cancel_at_period_end = cancelAtPeriodEnd;
+      existing.provider = provider ?? existing.provider ?? null;
       existing.stripe_event_created = eventCreated;
       existing.updated_at = updatedAt;
       return { changes: 1 };
@@ -267,6 +270,91 @@ const rules: Rule[] = [
     },
   },
   {
+    pattern: /^DELETE FROM discord_links WHERE discord_user_id = \? AND \(user_id IS NULL OR user_id <> \?\)/i,
+    run: ([discordUserId, userId], db) => {
+      const rows = db.rows("discord_links");
+      const kept = rows.filter(
+        (entry) => !(entry.discord_user_id === discordUserId && entry.user_id !== userId)
+      );
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    pattern: /^INSERT INTO discord_links \(/i,
+    run: ([userId, discordUserId, username, globalName, linkedAt, updatedAt], db) => {
+      // discord_user_id is UNIQUE in the schema and the ON CONFLICT clause only
+      // covers user_id, so a row holding this Discord under another account
+      // makes the real INSERT fail. Reproduced here on purpose.
+      const conflicting = db
+        .rows("discord_links")
+        .find((entry) => entry.discord_user_id === discordUserId && entry.user_id !== userId);
+      if (conflicting) {
+        throw new Error("UNIQUE constraint failed: discord_links.discord_user_id");
+      }
+
+      const existing = db.rows("discord_links").find((entry) => entry.user_id === userId);
+      if (existing) {
+        existing.discord_user_id = discordUserId;
+        existing.discord_username = username;
+        existing.discord_global_name = globalName;
+        existing.linked_at = linkedAt;
+        existing.updated_at = updatedAt;
+        return { changes: 1 };
+      }
+
+      db.rows("discord_links").push({
+        steam_id: null,
+        user_id: userId,
+        discord_user_id: discordUserId,
+        discord_username: username,
+        discord_global_name: globalName,
+        linked_at: linkedAt,
+        updated_at: updatedAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM user_connections WHERE provider = 'discord' AND provider_id = \? AND user_id <> \?/i,
+    run: ([providerId, userId], db) => {
+      const rows = db.rows("user_connections");
+      const kept = rows.filter(
+        (entry) =>
+          !(entry.provider === "discord" && entry.provider_id === providerId && entry.user_id !== userId)
+      );
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    // Only the Discord upsert: the Steam one shares this shape but writes a
+    // different provider, so it needs its own rule if a test ever exercises it.
+    pattern: /^INSERT INTO user_connections \(user_id, provider, provider_id, metadata_json, linked_at\) VALUES \(\?, 'discord'/i,
+    run: ([userId, providerId, metadataJson, linkedAt], db) => {
+      const existing = db
+        .rows("user_connections")
+        .find((entry) => entry.user_id === userId && entry.provider === "discord");
+      if (existing) {
+        existing.provider_id = providerId;
+        existing.metadata_json = metadataJson;
+        existing.linked_at = linkedAt;
+        return { changes: 1 };
+      }
+
+      db.rows("user_connections").push({
+        user_id: userId,
+        provider: "discord",
+        provider_id: providerId,
+        metadata_json: metadataJson,
+        linked_at: linkedAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
     pattern: /^SELECT \* FROM discord_links WHERE user_id = \?/i,
     run: ([userId], db) => {
       const row = db.rows("discord_links").find((entry) => entry.user_id === userId);
@@ -280,6 +368,88 @@ const rules: Rule[] = [
         .rows("user_connections")
         .find((entry) => entry.user_id === userId && entry.provider === "steam");
       return { results: row ? [{ provider_id: row.provider_id }] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM payments WHERE cakto_order_id = \?/i,
+    run: ([orderId], db) => {
+      const row = db.rows("payments").find((entry) => entry.cakto_order_id === orderId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM payments WHERE id = \?/i,
+    run: ([paymentId], db) => {
+      const row = db.rows("payments").find((entry) => entry.id === paymentId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^UPDATE payments SET status = 'paid', provider = 'cakto', confirmed_at = \?, updated_at = \? WHERE id = \? AND status <> 'paid'/i,
+    run: ([confirmedAt, updatedAt, paymentId], db) => {
+      const row = db.rows("payments").find((entry) => entry.id === paymentId);
+      // The guard is the whole point: webhook and poll race, and only one of
+      // them may stack a period.
+      if (!row || row.status === "paid") return { changes: 0 };
+      row.status = "paid";
+      row.provider = "cakto";
+      row.confirmed_at = confirmedAt;
+      row.updated_at = updatedAt;
+      db.count("payments.cakto_pay");
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE payments SET status = 'failed', updated_at = \? WHERE id = \? AND status = 'pending'/i,
+    run: ([updatedAt, paymentId], db) => {
+      const row = db.rows("payments").find((entry) => entry.id === paymentId && entry.status === "pending");
+      if (!row) return { changes: 0 };
+      row.status = "failed";
+      row.updated_at = updatedAt;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE payments SET status = \?, provider_payload = \?, updated_at = \? WHERE id = \?/i,
+    run: ([status, providerPayload, updatedAt, paymentId], db) => {
+      const row = db.rows("payments").find((entry) => entry.id === paymentId);
+      if (!row) return { changes: 0 };
+      row.status = status;
+      row.provider_payload = providerPayload;
+      row.updated_at = updatedAt;
+      return { changes: 1 };
+    },
+  },
+  {
+    // Mirrors the single-statement period extension: SQLite does the date
+    // arithmetic in production so two concurrent confirmations cannot both
+    // read the same period end.
+    pattern: /^UPDATE subscriptions SET current_period_end = strftime\('%Y-%m-%dT%H:%M:%fZ', datetime\(/i,
+    run: ([now, nowAgain, modifier, updatedAt, targetValue], db) => {
+      void nowAgain;
+      const months = Number(String(modifier).replace(/[^0-9]/g, "")) || 0;
+      let changes = 0;
+      for (const row of db.rows("subscriptions")) {
+        if (row.user_id !== targetValue && row.steam_id !== targetValue) continue;
+
+        const currentEnd = row.current_period_end ? Date.parse(row.current_period_end) : NaN;
+        const base = Number.isFinite(currentEnd) && row.current_period_end > now
+          ? new Date(currentEnd)
+          : new Date(Date.parse(now));
+
+        const end = new Date(base.getTime());
+        const dayOfMonth = end.getUTCDate();
+        end.setUTCMonth(end.getUTCMonth() + months);
+        // SQLite's `+N months` clamps a rollover (Jan 31 + 1 month = Feb 28)
+        // instead of spilling into the following month.
+        if (end.getUTCDate() !== dayOfMonth) end.setUTCDate(0);
+
+        row.current_period_end = end.toISOString();
+        row.status = "active";
+        row.updated_at = updatedAt;
+        changes += 1;
+      }
+      return { changes };
     },
   },
   {

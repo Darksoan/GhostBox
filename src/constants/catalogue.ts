@@ -1,4 +1,4 @@
-import type { CatalogueFilters, CatalogueFilterKey } from "../types";
+import type { CatalogueFilters } from "../types";
 import type { GameDatabaseResult } from "../data";
 
 export const cataloguePageSize = 20;
@@ -75,11 +75,4 @@ export const emptyGameDatabase: GameDatabaseResult = {
   source: "atualizardatabase.md",
 };
 
-/** Category orbs — one distinct accent per filter family (no repeats). */
-export const filterCategoryColors: Record<CatalogueFilterKey, string> = {
-  genres: "hsl(262deg 50% 47%)", // purple
-  tags: "hsl(95deg 50% 34%)", // green
-  developers: "hsl(205deg 45% 42%)", // blue
-  publishers: "hsl(330deg 36% 42%)", // pink
-  years: "hsl(4deg 62% 48%)", // red
-};
+

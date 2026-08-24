@@ -180,7 +180,7 @@ function DownloadsHero({
               </button>
             )}
             {canResume && (
-              <button type="button" className="downloads-hero__action" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")}>
+              <button type="button" className="downloads-hero__action downloads-hero__action--primary" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")}>
                 <Play size={16} strokeWidth={1.5} /> <span>{t("downloads.resume")}</span>
               </button>
             )}
@@ -192,7 +192,7 @@ function DownloadsHero({
                 <button type="button" className="downloads-hero__action" onClick={() => onUninstall(task.id)} aria-label={t("downloads.uninstall")}>
                   <Trash2 size={16} strokeWidth={1.5} />
                 </button>
-                <button type="button" className="downloads-hero__action" onClick={() => onLaunch(task)} disabled={launching} aria-busy={launching} aria-label={t("downloads.launch")}>
+                <button type="button" className="downloads-hero__action downloads-hero__action--primary" onClick={() => onLaunch(task)} disabled={launching} aria-busy={launching} aria-label={t("downloads.launch")}>
                   {launching ? <LoaderCircle className="downloads-hero__launch-spinner" size={16} strokeWidth={1.5} aria-hidden="true" /> : <Play size={16} strokeWidth={1.5} />}
                   <span>{t("downloads.launch")}</span>
                 </button>

@@ -23,6 +23,11 @@ import { useSettings } from "../../context/settings";
 // para, e só então uma medição acontece.
 const genresRemeasureDelayMs = 140;
 
+// Teto só do passo de medição: nele todas as pills candidatas ficam no DOM ao
+// mesmo tempo, em 20 cards. Nem a linha mais larga do card chega perto disso —
+// quem corta é a medição, não este número.
+const maxMeasuredGenreLabels = 16;
+
 interface CatalogueListItemProps {
   game: GhostBoxGame;
   isAdded: boolean;
@@ -70,24 +75,30 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     useLoadableImageCover(headerSources);
   const previousCoverSourceRef = useRef(coverLoaded ? coverSource : "");
   const isEnglish = appearance.language === "en";
-  const maxGenreLabels = (game.tags.length ? game.tags : game.genres).slice(0, 3);
+  // Sem teto fixo de rótulos: a medição abaixo decide quantas pills cabem na
+  // linha do card, em vez de cortar em 3 e depois derrubar para 2.
+  const maxGenreLabels = useMemo(
+    () =>
+      (game.tags.length ? game.tags : game.genres).slice(
+        0,
+        maxMeasuredGenreLabels
+      ),
+    [game.genres, game.tags]
+  );
   const genreLabelsKey = maxGenreLabels.join("\u0000");
   const genresRef = useRef<HTMLDivElement | null>(null);
+  const genresMeasureRef = useRef<HTMLDivElement | null>(null);
   const lastGenresWidthRef = useRef<number | null>(null);
+  // A linha visível nunca renderiza mais pills do que cabe: a contagem sai da
+  // linha-espelho fora do fluxo. Antes o card pintava todas e recolhia depois
+  // de medir — era esse recolhimento que aparecia na tela.
   const [genreDisplay, setGenreDisplay] = useState(() => ({
-    count: maxGenreLabels.length,
+    count: maxGenreLabels.length <= 1 ? maxGenreLabels.length : 0,
     key: genreLabelsKey,
-    measured: maxGenreLabels.length < 3,
   }));
-  const genresMeasured =
-    genreDisplay.key === genreLabelsKey && genreDisplay.measured;
   const visibleGenreCount =
-    genreDisplay.key === genreLabelsKey
-      ? genreDisplay.count
-      : maxGenreLabels.length;
-  const renderedGenreLabels = genresMeasured
-    ? maxGenreLabels.slice(0, visibleGenreCount)
-    : maxGenreLabels;
+    genreDisplay.key === genreLabelsKey ? genreDisplay.count : 0;
+  const renderedGenreLabels = maxGenreLabels.slice(0, visibleGenreCount);
 
   useEffect(() => {
     if (shouldLoadCover) return;
@@ -115,46 +126,49 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
   useLayoutEffect(() => {
     const container = genresRef.current;
-    if (!container) return;
+    const measureRow = genresMeasureRef.current;
+    if (!container || !measureRow) return;
 
-    if (maxGenreLabels.length < 3) {
+    if (maxGenreLabels.length <= 1) {
       lastGenresWidthRef.current = null;
-      if (!genresMeasured || visibleGenreCount !== maxGenreLabels.length) {
-        setGenreDisplay({
-          count: maxGenreLabels.length,
-          key: genreLabelsKey,
-          measured: true,
-        });
-      }
+      setGenreDisplay((current) =>
+        current.key === genreLabelsKey && current.count === maxGenreLabels.length
+          ? current
+          : { count: maxGenreLabels.length, key: genreLabelsKey }
+      );
       return;
     }
 
+    // Conta na linha-espelho (todas as pills, fora do fluxo e invisível) quantas
+    // fecham dentro da largura do card e corta na primeira que vaza. A linha
+    // visível não participa da medição, então nenhuma pill chega a ser pintada
+    // para depois sumir.
     const measureGenres = () => {
-      const firstChip = container.children.item(0) as HTMLElement | null;
-      const thirdChip = container.children.item(2) as HTMLElement | null;
-      if (!firstChip || !thirdChip) return;
-
       const containerRect = container.getBoundingClientRect();
-      const thirdRect = thirdChip.getBoundingClientRect();
+      if (!containerRect.width) return;
       lastGenresWidthRef.current = containerRect.width;
-      const overflowsLine =
-        thirdChip.offsetTop > firstChip.offsetTop ||
-        thirdRect.right > containerRect.right + 0.5;
 
-      setGenreDisplay({
-        count: overflowsLine ? 2 : maxGenreLabels.length,
-        key: genreLabelsKey,
-        measured: true,
-      });
+      let fittingCount = 0;
+      for (const chip of Array.from(measureRow.children) as HTMLElement[]) {
+        if (chip.getBoundingClientRect().right > containerRect.right + 0.5) break;
+        fittingCount += 1;
+      }
+
+      // Pelo menos uma: card estreito demais ainda mostra o rótulo principal em
+      // vez de uma linha vazia.
+      const nextCount = Math.max(1, fittingCount);
+      setGenreDisplay((current) =>
+        current.key === genreLabelsKey && current.count === nextCount
+          ? current
+          : { count: nextCount, key: genreLabelsKey }
+      );
     };
 
-    if (!genresMeasured) measureGenres();
+    measureGenres();
 
-    // Remedir custa um ciclo "mostra os 3 chips → mede → volta pra 2". Num
-    // arrasto de janela o observer dispara a cada frame, e esse ciclo vira
-    // piscada contínua. O timer segura a remedição até a largura parar de
-    // mudar: durante o arrasto os chips ficam como estão e o ajuste acontece
-    // uma vez só, no fim.
+    // Num arrasto de janela o observer dispara a cada frame. O timer segura a
+    // remedição até a largura parar de mudar — o ajuste acontece uma vez só, no
+    // fim, em vez de a cada frame.
     let remeasureTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -164,15 +178,19 @@ export const CatalogueListItem = memo(function CatalogueListItem({
         return;
       }
 
+      // Primeira largura real do card (item fora da viewport não tem layout até
+      // entrar nela): mede na hora, senão a linha ficaria vazia pelo tempo do
+      // timer justo quando o card aparece.
+      if (previousWidth === null) {
+        measureGenres();
+        return;
+      }
+
       lastGenresWidthRef.current = nextWidth;
       if (remeasureTimeoutId !== null) clearTimeout(remeasureTimeoutId);
       remeasureTimeoutId = setTimeout(() => {
         remeasureTimeoutId = null;
-        setGenreDisplay({
-          count: maxGenreLabels.length,
-          key: genreLabelsKey,
-          measured: false,
-        });
+        measureGenres();
       }, genresRemeasureDelayMs);
     });
     resizeObserver.observe(container);
@@ -181,7 +199,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       if (remeasureTimeoutId !== null) clearTimeout(remeasureTimeoutId);
       resizeObserver.disconnect();
     };
-  }, [genreLabelsKey, genresMeasured, maxGenreLabels.length, visibleGenreCount]);
+  }, [genreLabelsKey, maxGenreLabels.length]);
 
   useEffect(() => {
     if (coverLoaded && coverSource) {
@@ -232,16 +250,28 @@ export const CatalogueListItem = memo(function CatalogueListItem({
         />
         <div className="catalogue-list__content">
           <strong>{game.title}</strong>
-          <div
-            className="catalogue-list__genres"
-            ref={genresRef}
-            style={{ visibility: genresMeasured ? "visible" : "hidden" }}
-          >
+          <div className="catalogue-list__genres" ref={genresRef}>
             {renderedGenreLabels.map((tag, index) => (
               <span className="catalogue-list__genre-chip" key={`${tag}-${index}`}>
                 {tag}
               </span>
             ))}
+            {/* Linha-espelho: mesmas pills, fora do fluxo e invisível. Só ela
+                é medida — a linha de cima já nasce com a contagem certa. */}
+            <div
+              className="catalogue-list__genres-measure"
+              ref={genresMeasureRef}
+              aria-hidden="true"
+            >
+              {maxGenreLabels.map((tag, index) => (
+                <span
+                  className="catalogue-list__genre-chip"
+                  key={`measure-${tag}-${index}`}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </button>

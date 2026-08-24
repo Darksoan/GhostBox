@@ -71,7 +71,7 @@ export type CatalogueFilterKey = "genres" | "tags" | "developers" | "publishers"
 
 export type CatalogueFilters = Record<CatalogueFilterKey, string[]>;
 
-export type CatalogueSort = "popular" | "recentlyAdded";
+export type CatalogueSort = "popular" | "recentlyAdded" | "playingNow";
 
 export type UserCollection = {
   id: string;

@@ -2,6 +2,12 @@ name = "piratebox-catalogue"
 main = "src/index.ts"
 compatibility_date = "2026-07-19"
 
+# Uma página da SteamSpy por execução (ver STEAMSPY_MAX_PAGES): a API limita
+# `request=all` a uma chamada por minuto, e o ciclo das 20 páginas fecha em
+# cinco horas.
+[triggers]
+crons = ["*/15 * * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "piratebox-games"

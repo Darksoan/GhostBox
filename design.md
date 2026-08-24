@@ -16,7 +16,7 @@ Direção central: **biblioteca escura, precisa e personalizável**.
 - Dourado fica reservado para Premium e conquistas raras.
 - Vermelho indica perigo ou estado próprio da Steam, nunca decoração.
 - Cantos quase retos reforçam ferramenta desktop: usar raios pequenos, nunca cartões excessivamente arredondados.
-- Open Sans é família tipográfica canônica.
+- Inter é a família tipográfica canônica, carregada como fonte variável única (`@fontsource-variable/inter`, ver `src/main.tsx`). Pesos reais por papel: regular 400 (`--weight-regular`), corpo 450 (`--weight-body`), medium 500 (`--weight-medium`, controles/rótulos) e semibold 600 (`--weight-semibold`, títulos). Não pedir pesos fora desses papéis.
 - Hierarquia usa peso, escala e espaçamento; não usar caixa alta em blocos longos.
 
 ## Fonte de verdade
@@ -99,6 +99,8 @@ Bordas devem ser econômicas: `--border-subtle` para separação estrutural, `--
 
 - Usar escala semântica `--type-size-*` com sua interlinha `--type-line-*` correspondente.
 - Texto de interface deve permanecer compacto; títulos de página podem ganhar mais respiro.
+- Piso de leitura é caption (13px). Micro (12px) é só rótulo curto — badge, pill, contador — nunca texto de leitura.
+- Nitidez de texto é global e uniforme: `text-rendering: optimizeLegibility` herdado do `body`. Nunca usar `text-rendering: geometricPrecision` — desliga hinting e amolece glifos no Windows. Propriedades de smoothing (`-webkit-font-smoothing`, `-moz-osx-font-smoothing`) são macOS/Firefox e não devem ser adicionadas.
 - Usar `--space-*` para padding, gap e margem. `--spacing` não existe.
 - Alinhar grupos por uma mesma unidade de espaçamento; evitar valores arbitrários para corrigir desalinhamentos locais.
 - Metadados nunca devem ter mais destaque que título, capa ou ação primária.
@@ -113,6 +115,7 @@ Shell compartilhado deve manter titlebar, navegação lateral e área de conteú
 - Último conteúdo de cada página respeita `--page-bottom-space`.
 - Modais, menus e tooltips usam camadas nomeadas de `--z-*`; não inventar z-index.
 - Estados vazios devem explicar situação e próxima ação, sem ocupar espaço visual de conteúdo real.
+- Páginas de Settings usam `settings-page__header` com título e descrição por aba; as abas de superfície dedicada (`subscription`, `connections`) prescindem do header.
 
 ## Componentes
 
@@ -126,11 +129,11 @@ Cards são contêineres funcionais, não painéis ornamentais. Manter título, e
 
 ### Controles
 
-Botões devem declarar prioridade visual: ação primária, secundária, discreta ou perigosa. Campos, selects, toggles e abas devem compartilhar altura, foco e feedback de estado.
+Botões devem declarar prioridade visual: ação primária, secundária, discreta ou perigosa. Campos, selects, toggles e abas devem compartilhar altura, foco e feedback de estado. A ação primária de um hero (ex. `downloads-hero__action--primary`) é a única que compete frontalmente com a arte: preenchimento sólido claro com texto escuro, sem backdrop blur. Toggles acesos sobem ao teto da rampa (`--toggle-track-on: var(--c-5)`) — nunca branco puro, que domina qualquer conteúdo.
 
 ### Tags e badges
 
-Tags informativas usam `tag-chip` ou padrão equivalente. Não transformar cada metadado em badge colorido. Premium usa `--premium-gold`; status usa tokens de status.
+Tags informativas usam `tag-chip` ou padrão equivalente. Não transformar cada metadado em badge colorido. Premium usa `--premium-gold`; status usa tokens de status. Filtros de catálogo são monocromáticos: o estado de seleção se lê por superfície e contador, nunca por acentos de cor por categoria.
 
 ### Modal e popover
 

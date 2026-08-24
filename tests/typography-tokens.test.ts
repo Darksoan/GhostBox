@@ -48,7 +48,7 @@ describe("Typography tokens", () => {
   it("keeps surface-role tokens inside the surface ramp", () => {
     const tokens = collectTokens();
     const surfaceRole =
-      /^--(surface|pill-bg|dropdown-option-hover|sidebar-option|settings-dropdown|profile-dropdown|library-box|toggle-(track|thumb)$|control-hover|skeleton-fill)/;
+      /^--(surface|pill-bg|dropdown-option-hover|sidebar-option|settings-dropdown|profile-dropdown|library-box|control-hover|skeleton-fill)/;
 
     for (const name of tokens.keys()) {
       if (!surfaceRole.test(name)) continue;
@@ -64,6 +64,18 @@ describe("Typography tokens", () => {
         0x1a1a1a,
       );
     }
+  });
+
+  it("keeps the toggle outside the surface ramp on purpose", () => {
+    const tokens = collectTokens();
+
+    // O toggle é estado binário: ligado grita branco, desligado usa um cinza
+    // acima do teto da rampa. Reutilizar um degrau de superfície fazia o trilho
+    // sumir dentro do card — por isso ele fica fora da rampa, de propósito.
+    expect(resolveToken("--toggle-track", tokens)).toBe("#303030");
+    expect(resolveToken("--toggle-track-on", tokens)).toBe("#ffffff");
+    expect(resolveToken("--toggle-thumb", tokens)).toBe("#6e6e6e");
+    expect(resolveToken("--toggle-thumb-on", tokens)).toBe("#0a0a0a");
   });
 
   it("keeps the Settings dropdown on its dedicated surface states", () => {

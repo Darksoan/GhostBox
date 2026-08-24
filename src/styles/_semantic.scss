@@ -51,12 +51,14 @@
   --surface-dropdown-menu: var(--c-3);
   // Hover de opção dentro de qualquer menu de dropdown. Sobe ao teto da rampa.
   --dropdown-option-hover: var(--c-4);
-  // Toggles: trilho desligado afunda; ligado é a cor mais clara do app. O botão
-  // inverte o trilho — escuro sobre trilho claro, claro sobre trilho escuro.
-  --toggle-track: var(--c-1);
-  --toggle-track-on: var(--text-strong);
-  --toggle-thumb: var(--c-3);
-  --toggle-thumb-on: var(--c-1);
+  // Toggles: ligado é branco puro — estado binário precisa gritar, não sugerir.
+  // Desligado usa um cinza escuro fora da rampa de superfície de propósito: se
+  // reutilizasse um degrau (C1..C5) o trilho sumiria dentro do card. O botão
+  // inverte o trilho nos dois estados para manter contraste.
+  --toggle-track: var(--n-5);
+  --toggle-track-on: var(--white);
+  --toggle-thumb: var(--n-7);
+  --toggle-thumb-on: var(--c-0);
   // Card de explorar da home: acompanha o papel de card.
   --surface-explore-card: var(--c-1);
   // Fundo atrás de capa/arte com proporção fixa. Fora da rampa de propósito: não
@@ -240,7 +242,7 @@
   --type-line-showcase: var(--lh-1000);
 
   // --- Tamanhos fluidos (único lugar onde clamp de tipografia é permitido) ---
-  --type-size-fluid-caption: clamp(12px, 1.1vw, 15px);
+  --type-size-fluid-caption: clamp(13px, 1.1vw, 15px);
   --type-size-fluid-meta: clamp(13px, 1.1vw, 15px);
   --type-size-fluid-body: clamp(13px, 1.15vw, 16px);
   --type-size-fluid-title: clamp(15px, 1.35vw, 20px);
@@ -251,15 +253,18 @@
   --type-size-fluid-showcase: clamp(30px, 5vw, 48px);
 
   // --- Peso de fonte ---
-  // Dois pesos, dois papéis, e são os únicos arquivos de fonte carregados
-  // (ver main.tsx). Medium é título e controle clicável; regular é todo o
-  // resto — corpo, descrição, meta, pill, badge. Não existe 600 no bundle:
-  // pedir "semibold" cairia no fallback sintético do sistema.
-  --weight-medium: 400;
-  --weight-semibold: 500;
+  // Inter Variable é o único arquivo de fonte carregado (ver main.tsx) e
+  // sustenta pesos reais, sem síntese do sistema. Quatro papéis: regular é
+  // leitura pontual; body (450) é o peso ótico do corpo em fundo escuro —
+  // hastes um pouco mais firmes que 400 sem engordar blocos longos; medium é
+  // controle clicável e rótulo; semibold é título e ênfase.
+  --weight-regular: 400;
+  --weight-body: 450;
+  --weight-medium: 500;
+  --weight-semibold: 600;
 
   // --- Família ---
-  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
 
   // --- Foco ---
   --focus-ring-color: var(--n-10);

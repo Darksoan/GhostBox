@@ -20,7 +20,11 @@ import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
-import { type SettingsTabId } from "../features/settings/settingsTabsShared";
+import {
+  type SettingsTabId,
+  settingsTabLabelKeys,
+  settingsTabDescriptionKeys,
+} from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import {
   readStoredDownloadsDir,
@@ -396,6 +400,14 @@ export function SettingsPage({
         }`}
       >
         <div className="settings-panel__body">
+          {activeTab.id !== "subscription" && activeTab.id !== "connections" && (
+            <div className="settings-page__header">
+              <div>
+                <h3>{t(settingsTabLabelKeys[activeTab.id])}</h3>
+                <p>{t(settingsTabDescriptionKeys[activeTab.id])}</p>
+              </div>
+            </div>
+          )}
           {activeTab.id === "general" && <AccountSection />}
           {options.length > 0 && (
             <div className="settings-options">

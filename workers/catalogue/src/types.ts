@@ -29,4 +29,10 @@ export interface SearchRequest {
 export interface CatalogueMeta {
   total: number;
   updatedAt: string;
+  /**
+   * Quando o cron da SteamSpy gravou amostras pela última vez. Separado de
+   * `updatedAt` de propósito: o CCU muda de hora em hora e não deve invalidar
+   * o cache do catálogo inteiro, só o das rotas que servem o número.
+   */
+  steamspySampledAt: string;
 }

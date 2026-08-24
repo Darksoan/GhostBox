@@ -1,8 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
+// Inter Variable: arquivo único com os pesos 100–900 disponíveis. É o que
+// sustenta os pesos reais dos tokens --weight-* em _semantic.scss (450/500/600).
+import "@fontsource-variable/inter";
 import App from "./App";
 import { SettingsProvider } from "./context/settings";
 import { OverlayProvider } from "./context/OverlayContext";

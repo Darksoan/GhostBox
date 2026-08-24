@@ -18,7 +18,6 @@ import type {
   CatalogueSort,
 } from "../types";
 import {
-  filterCategoryColors,
   emptyCatalogueFilters,
   cataloguePageSize,
 } from "../constants/catalogue";
@@ -294,10 +293,6 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
         aria-expanded={isOpen}
         aria-controls={contentId}
       >
-        <span
-          className="catalogue-filter-section__orb"
-          style={{ ["--filter-orb-color" as string]: filterCategoryColors[filterKey] }}
-        />
         <strong>{title}</strong>
         {selectedCount > 0 && <span>{selectedCount}</span>}
         <ChevronDown
@@ -467,6 +462,7 @@ export function CataloguePage({
       [
         { value: "popular", label: t("catalogue.sort.popular") },
         { value: "recentlyAdded", label: t("catalogue.sort.recentlyAdded") },
+        { value: "playingNow", label: t("catalogue.sort.playingNow") },
       ] as { value: CatalogueSort; label: string }[],
     [t]
   );
@@ -732,7 +728,11 @@ export function CataloguePage({
               role="group"
               aria-label={t("catalogue.filters.label")}
             >
-              {filtersLoading && !filterSections.length && (
+              {/* Skeleton enquanto não houver seção alguma, independente de
+                  `filtersLoading`: entre o fim do carregamento inicial e a
+                  chegada das facets a flag já é `false` e a barra ficava vazia,
+                  empurrando a listagem quando as pílulas apareciam. */}
+              {!hasFacetsError && !filterSections.length && (filtersLoading || loading || !facets) && (
                 <CatalogueFilterSectionsLoadingState />
               )}
               {hasFacetsError && !filterSections.length && (
@@ -759,11 +759,6 @@ export function CataloguePage({
                 {selectedFilterCount > 0 && (
                   <span>
                     {t("catalogue.filters.selected", { count: selectedFilterCount })}
-                  </span>
-                )}
-                {refreshing && (
-                  <span className="catalogue-page__refreshing" role="status">
-                    {t("loading.catalogue")}
                   </span>
                 )}
               </div>
@@ -821,7 +816,11 @@ export function CataloguePage({
       </div>
 
       <div className="catalogue-page__content">
-        <div className="catalogue-page__results">
+        <div
+          className={`catalogue-page__results${
+            refreshing ? " catalogue-page__results--refreshing" : ""
+          }`}
+        >
           {hasRefreshError && (
             <div className="catalogue-page__notice" role="alert">
               <span>{t("catalogue.refreshError")}</span>
@@ -864,6 +863,20 @@ export function CataloguePage({
               }
               onAction={hasActiveFilters ? clearAllFilters : undefined}
             />
+          )}
+
+          {/* Overlay de recarga: escurece os resultados anteriores em vez de
+              trocá-los por skeleton, para a página não pular de altura entre
+              uma consulta e outra. O spinner é `sticky` (ver SCSS), então fica
+              centrado no que está visível mesmo numa lista longa. */}
+          {refreshing && (
+            <div className="catalogue-page__refreshing" role="status">
+              <span
+                className="page-spinner-loading__spinner"
+                aria-hidden="true"
+              />
+              <span className="sr-only">{t("loading.catalogue")}</span>
+            </div>
           )}
 
           {!refreshing && !loading && !hasError && totalPages > 1 && (

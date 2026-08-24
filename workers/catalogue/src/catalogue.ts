@@ -140,12 +140,13 @@ async function metaValue(db: D1Database, key: string): Promise<string | null> {
 }
 
 async function readCatalogueMeta(db: D1Database): Promise<CatalogueMeta> {
-  const result = await db.prepare("SELECT key, value FROM catalogue_meta WHERE key IN ('totalGames', 'updatedAt')").all<{ key: string; value: string }>();
+  const result = await db.prepare("SELECT key, value FROM catalogue_meta WHERE key IN ('totalGames', 'updatedAt', 'steamspySampledAt')").all<{ key: string; value: string }>();
   const meta = new Map(result.results.map(({ key, value }) => [key, value]));
   const parsedTotal = Number.parseInt(meta.get("totalGames") ?? "0", 10);
   return {
     total: Number.isFinite(parsedTotal) ? parsedTotal : 0,
     updatedAt: meta.get("updatedAt") ?? "unknown",
+    steamspySampledAt: meta.get("steamspySampledAt") ?? "never",
   };
 }
 

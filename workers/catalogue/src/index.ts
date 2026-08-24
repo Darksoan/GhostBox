@@ -1,6 +1,7 @@
 import { cacheControl, cacheKey, canonicalSearchKey, cloudflareCacheControl, searchTtl } from "./cache";
-import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, searchCatalogue } from "./catalogue";
+import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, invalidateCatalogueMetaCache, searchCatalogue } from "./catalogue";
 import { rotationSeed } from "./ranking";
+import { fetchLivePlayerCount, refreshSteamSpySamples } from "./steamspy";
 import { FILTER_NAMES, type Env, type SearchRequest, type Sort } from "./types";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" };
@@ -193,17 +194,51 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   }
   const gameMatch = url.pathname.match(/^\/games\/(\d+)$/);
   if (gameMatch) {
-    return cachedJson(cacheKey("game", `${url.origin}:${gameMatch[1]}`, meta.updatedAt), "game", meta.updatedAt, 86400, ctx, async () => {
-      const game = await getGame(env.DB, gameMatch[1], url.origin);
-      return game === null
-        ? { body: { error: "not found" }, status: 404 }
-        : { body: { game } };
+    // TTL de cinco minutos, o mesmo do sort "playingNow": o payload carrega uma
+    // contagem de jogadores ao vivo, que numa janela de horas viraria número
+    // parado. A amostra da SteamSpy entra na chave para o cron também invalidar.
+    const gameKey = cacheKey("game", `${url.origin}:${gameMatch[1]}`, `${meta.updatedAt}:${meta.steamspySampledAt}`);
+    return cachedJson(gameKey, "game", meta.updatedAt, 300, ctx, async () => {
+      const [game, livePlayerCount] = await Promise.all([
+        getGame(env.DB, gameMatch[1], url.origin),
+        fetchLivePlayerCount(gameMatch[1]),
+      ]);
+      if (game === null) return { body: { error: "not found" }, status: 404 };
+      // A coluna do D1 é a amostra diária da SteamSpy; quando a Steam responde,
+      // o número dela é o real. Falha na Steam mantém a amostra.
+      return {
+        body: {
+          game: livePlayerCount === null
+            ? game
+            : { ...game, playingNow: livePlayerCount || undefined },
+        },
+      };
     });
   }
   return json({ error: "not found" }, 404, { "cache-control": "private, no-store" });
 }
 
 export default {
+  /**
+   * Cron da amostragem da SteamSpy: é o único lugar que grava as colunas
+   * `steamspy_ccu`/`steamspy_owners_max`, que o ingest não toca e que
+   * alimentam `playingNow`/`ownersEstimate` e o sort "playingNow".
+   */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      refreshSteamSpySamples(env.DB)
+        .then(({ page, samples, updated }) => {
+          // O cache do meta é por isolate e guarda o `steamspySampledAt` antigo,
+          // que é justamente o que invalida a chave da rota de detalhe.
+          invalidateCatalogueMetaCache();
+          console.log(`steamspy page ${page}: ${samples} samples, ${updated} rows updated`);
+        })
+        .catch((error) => {
+          console.error("steamspy refresh failed", error);
+        }),
+    );
+  },
+
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
       return await handle(request, env, ctx);

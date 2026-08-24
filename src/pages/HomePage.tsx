@@ -28,6 +28,8 @@ import { useSettings } from "../context/settings";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useHomeShelves, type HomeShelf } from "../hooks/useHomeShelves";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
+import { useSteamPlayerCounts } from "../hooks/useSteamPlayerCounts";
+import { normalizeGameCacheId } from "../utils/gameCache";
 import {
   useCachedImageSources,
   useLoadableImageCover,
@@ -63,6 +65,12 @@ import {
   getGameTraits,
   normalizeGameTrait,
 } from "../utils/gameTraits";
+import {
+  formatCompactCount,
+  getScoreTone,
+  getSteamReviewScore,
+} from "../utils/gameMetrics";
+import { getReleaseYear } from "../utils/filters";
 import { steamRecommendedTagNames } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime } from "../utils/time";
@@ -460,18 +468,22 @@ function HomeCategoryCard({
 }
 
 /**
- * Card de "Bem avaliados": a arte só-de-arte e, embaixo, o nome do jogo com
- * uma linha fechada de pills de categorias — o mesmo empilhamento do card da
- * grade com título, mas em superfície própria com alvo de clique inteiro.
+ * Card de "Bem avaliados": a arte com o selo do Metacritic, e embaixo o nome
+ * do jogo, três métricas em colunas (aprovação, jogando agora, ano) e uma
+ * linha fechada de pills de categorias — o mesmo empilhamento do card da grade
+ * com título, mas em superfície própria com alvo de clique inteiro.
  */
 function HomeTopRatedCard({
   game,
   language,
+  livePlayerCount,
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
   language: "pt" | "en";
+  /** Contagem ao vivo da Steam; `undefined` = ainda sem resposta. */
+  livePlayerCount?: number;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -492,6 +504,50 @@ function HomeTopRatedCard({
   // altura sem piso artificial.
   const traits = getGameTraits(game);
   const primaryTraits = traits.slice(0, homeTopRatedPrimaryPillCount);
+  // As três métricas e o Metacritic vêm do catálogo pelo mesmo enrichment das
+  // pills — chegam depois do primeiro paint, então cada um tem vaga reservada.
+  const reviewScore = getSteamReviewScore(game);
+  const metacriticScore = game.metacriticScore ?? 0;
+  const hasMetacritic = metacriticScore > 0;
+  // A amostra de review é o sinal de que o catálogo já respondeu por este jogo:
+  // antes disso as três vagas ficam em skeleton; depois, cada métrica que o
+  // catálogo não tem vira travessão em vez de placeholder eterno.
+  const hasCatalogueData = reviewScore !== null;
+  // A contagem ao vivo da Steam manda; `game.playingNow` é a amostra da
+  // SteamSpy no payload do catálogo, que pode estar horas atrás (Resident Evil 4
+  // apareceu com 3.748 lá enquanto a Steam reportava 11.796).
+  const playingNow = livePlayerCount ?? game.playingNow;
+  const releaseYear = getReleaseYear(game);
+  const isEnglish = language === "en";
+  const metrics = [
+    {
+      key: "approval",
+      label: isEnglish ? "Approval" : "Aprovação",
+      value: reviewScore ? `${reviewScore.percent}%` : "",
+      tone: reviewScore ? getScoreTone(reviewScore.percent) : "",
+      pending: !hasCatalogueData,
+    },
+    {
+      key: "playing",
+      label: isEnglish ? "Playing" : "Jogando",
+      value: playingNow ? formatCompactCount(playingNow, language) : "",
+      tone: "",
+      // A contagem tem fonte própria (a Steam), então a vaga segue pendente
+      // enquanto ela não responde — mesmo que o catálogo já tenha voltado. Sem
+      // isso o card mostraria travessão e trocaria por número um instante
+      // depois, piscando em toda a fila.
+      pending: livePlayerCount === undefined && !game.playingNow,
+    },
+    {
+      key: "year",
+      label: isEnglish ? "Year" : "Ano",
+      // `getReleaseYear` devolve uma frase de fallback quando não acha o ano;
+      // aqui só o ano de quatro dígitos serve, o resto cai no travessão.
+      value: /^\d{4}$/.test(releaseYear) ? releaseYear : "",
+      tone: "",
+      pending: !hasCatalogueData,
+    },
+  ];
 
   const handleClick = () => onOpenGame(game);
 
@@ -519,8 +575,56 @@ function HomeTopRatedCard({
         style={layeredImageStyle(layeredSources, "")}
         aria-hidden="true"
       />
+      {/* Selo do Metacritic no canto da arte, no formato do próprio site.
+          Irmão da arte (que é `aria-hidden`) e fora do fluxo do corpo: nem
+          todo jogo tem score, e um selo faltando aqui não desloca nada. Sem
+          `z-index`: fica sob o `__hit` transparente, então continua visível
+          sem furar o alvo de clique do card. */}
+      {hasMetacritic ? (
+        <span
+          className={`home-top-rated-card__metacritic home-top-rated-card__metacritic--${getScoreTone(
+            metacriticScore
+          )}`}
+          aria-label={`Metacritic ${metacriticScore}`}
+        >
+          {metacriticScore}
+        </span>
+      ) : null}
       <span className="home-top-rated-card__body">
         <span className="home-top-rated-card__title">{game.title}</span>
+        {/* Grade de três métricas, sempre com as três vagas ocupando a mesma
+            altura: os valores vêm do enrichment assíncrono e ligar a linha ao
+            conteúdo faria o card crescer no instante em que a resposta dele
+            voltasse — foi exatamente isso que tirou a review daqui antes. */}
+        <span className="home-top-rated-card__metrics">
+          {metrics.map((metric) => (
+            <span className="home-top-rated-card__metric" key={metric.key}>
+              <span className="home-top-rated-card__metric-label">
+                {metric.label}
+              </span>
+              {metric.value ? (
+                <span
+                  className={`home-top-rated-card__metric-value${
+                    metric.tone
+                      ? ` home-top-rated-card__metric-value--${metric.tone}`
+                      : ""
+                  }`}
+                >
+                  {metric.value}
+                </span>
+              ) : !metric.pending ? (
+                <span
+                  className="home-top-rated-card__metric-value home-top-rated-card__metric-value--empty"
+                  aria-label={isEnglish ? "No data" : "Sem dado"}
+                >
+                  —
+                </span>
+              ) : (
+                <span className="home-top-rated-card__metric-value home-top-rated-card__metric-value--skeleton skeleton" />
+              )}
+            </span>
+          ))}
+        </span>
         {/* A linha mostra as tags que o jogo tem (1, 2 ou 3 — o `flex: 1 1
             auto` espalha as que existirem pela largura inteira do card).
             Sem nenhuma trait (enrichment ainda pendente ou cache sem
@@ -559,6 +663,10 @@ function HomeTopRatedShelf({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
+  // Antes do early return: hook não pode ficar atrás de condicional. Com a
+  // prateleira ainda vazia a lista é vazia e o hook não busca nada.
+  const playerCounts = useSteamPlayerCounts(shelf.games);
+
   if (!shelf.games.length) {
     if (!shelf.loading) return null;
 
@@ -594,6 +702,7 @@ function HomeTopRatedShelf({
         <HomeTopRatedCard
           game={game}
           language={language}
+          livePlayerCount={playerCounts[normalizeGameCacheId(game)]}
           onOpenGame={onOpenGame}
           onGameContextMenu={onGameContextMenu}
         />

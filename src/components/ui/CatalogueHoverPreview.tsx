@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
-import { Star } from "lucide-react";
+import { Flame } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { withoutHeaderImageSources } from "../../utils/image";
 import { withCachedImageSources } from "../../utils/imageCache";
+import { getSteamReviewScore } from "../../utils/gameMetrics";
 import {
   CATALOGUE_PREVIEW_EXIT_TRANSITION_MS,
   pickDistinctScreenshotSources,
@@ -175,15 +176,11 @@ export function CatalogueHoverPreview({
 
   if (!displayedGame) return null;
 
-  const positiveRatio = displayedGame.steamPositiveRatio;
-  const reviewCount = displayedGame.steamReviewCount;
-  const hasReviewScore =
-    typeof positiveRatio === "number" &&
-    Number.isFinite(positiveRatio) &&
-    reviewCount != null &&
-    reviewCount > 0;
-  const ratingText = hasReviewScore
-    ? (positiveRatio * 5).toFixed(1)
+  // Mesma guarda do card de "Bem avaliados" (ver `getSteamReviewScore`): sem
+  // amostra de review, a razão volta 0 e viraria uma nota 0,0 falsa.
+  const reviewScore = getSteamReviewScore(displayedGame);
+  const ratingText = reviewScore
+    ? ((reviewScore.percent / 100) * 5).toFixed(1)
     : null;
   const developers = displayedGame.developers?.filter(Boolean) ?? [];
   const developerText = developers.join(", ");
@@ -220,9 +217,9 @@ export function CatalogueHoverPreview({
             </span>
           )}
         </div>
-        {hasReviewScore && ratingText && (
+        {ratingText && (
           <span className="catalogue-hover-preview__rating" aria-label={ratingText}>
-            <Star
+            <Flame
               size={16}
               fill="currentColor"
               strokeWidth={1.5}

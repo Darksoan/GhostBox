@@ -419,40 +419,6 @@
     transition: padding var(--motion-slow) var(--ease);
   }
 
-  /* Stands in for the Steam ID box when no Steam account is connected: same
-     glass chip, same 34px rhythm as the boxes beside it, but actionable. */
-  &__connect-chip {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-4);
-    min-height: 34px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--overlay-subtle);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    color: var(--text-secondary);
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    cursor: pointer;
-    transition:
-      background-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &:hover,
-    &:focus-visible {
-      background: var(--overlay-medium);
-      color: var(--text-primary);
-      outline: 0;
-    }
-
-    &:focus-visible {
-      box-shadow: var(--focus-ring-inset);
-    }
-  }
-
   &__steam-id {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
@@ -1353,7 +1319,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     transform: translateX(0);
-    -webkit-font-smoothing: subpixel-antialiased;
     text-rendering: optimizeLegibility;
     transition:
       max-width var(--motion-base) var(--ease),

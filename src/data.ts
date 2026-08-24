@@ -269,6 +269,19 @@ export async function loadSteamRecommendedTagsForUser(
   return ghostboxApi.getSteamRecommendedTagsForUser(steamId);
 }
 
+/**
+ * Jogadores online agora, por app id, direto da Steam.
+ *
+ * Separado do `playingNow` que vem no payload do catálogo: aquele passa pelo
+ * cache em disco de 30 minutos do catálogo, bom para dado estático e ruim para
+ * contagem de jogadores. App id ausente do mapa é "sem dado", não zero.
+ */
+export async function loadSteamPlayerCounts(
+  appIds: string[]
+): Promise<Record<string, number>> {
+  return ghostboxApi.getSteamPlayerCounts(appIds);
+}
+
 export async function loadSteamSimilarAppIds(appId: string): Promise<string[]> {
   return ghostboxApi.getSteamSimilarAppIds(appId);
 }

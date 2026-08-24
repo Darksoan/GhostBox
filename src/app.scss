@@ -1,4 +1,4 @@
-﻿@use "./styles/primitives";
+@use "./styles/primitives";
 @use "./styles/semantic";
 @use "./styles/mixins";
 
@@ -390,11 +390,13 @@ body {
   background: var(--background-dark);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-weight: var(--weight-medium);
+  /* Peso ótico de leitura (450): corpo em fundo escuro com hastes firmes sem
+     recorrer a medium, que é papel de controle/título.
+     `-webkit-font-smoothing` removido: propriedade macOS, sem efeito no
+     Windows/WebView2 — mascarava onde a nitidez real era decidida. */
+  font-weight: var(--weight-body);
   font-size: var(--type-size-body);
   line-height: var(--type-line-body);
-  -webkit-font-smoothing: subpixel-antialiased;
-  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
 }
@@ -561,8 +563,6 @@ b,
 .button,
 button {
   font-weight: var(--weight-medium);
-  -webkit-font-smoothing: subpixel-antialiased;
-  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
 }
@@ -594,8 +594,6 @@ select,
 .downloads-page,
 .sidebar,
 .header {
-  -webkit-font-smoothing: subpixel-antialiased;
-  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
 }
@@ -620,8 +618,6 @@ input,
 .notifications-page,
 .downloads-page,
 .modal__details {
-  -webkit-font-smoothing: subpixel-antialiased;
-  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
 }
@@ -2603,12 +2599,15 @@ p {
 /* Títulos de seção só na Home, dois degraus abaixo do padrão global (section →
    compact) e com cor mais fraca — essas seções (Top rated, Recommended) são
    navegação de rolagem, não âncora de página como em outras abas. Sem
-   subtítulo: a Home não anuncia mais o conteúdo do rail, o rail já mostra. */
+   subtítulo: a Home não anuncia mais o conteúdo do rail, o rail já mostra.
+   Peso e tracking alinhados ao mixin `eyebrow` (semibold + `--ls-100`): no
+   tamanho reduzido, uppercase sem peso perde definição de haste e lê "embaçado". */
 .home-page .section-header__title {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: var(--type-size-compact);
   line-height: var(--type-line-compact);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ls-100);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
 }
 
@@ -3404,6 +3403,40 @@ p {
   }
 }
 
+/* Selo do Metacritic sobre o canto da arte, no formato quadrado do próprio
+   site. Sem `z-index`: fica na mesma camada da arte, sob o `__hit`
+   transparente — visível, mas sem recortar um buraco no alvo de clique. */
+.home-top-rated-card__metacritic {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+}
+
+/* Faixas do Metacritic (75+ / 50-74 / abaixo). O texto vai sobre o fundo
+   cheio, então precisa do contraste do canvas, não do --text-primary. */
+.home-top-rated-card__metacritic--high {
+  background: var(--success);
+  color: var(--surface-canvas);
+}
+
+.home-top-rated-card__metacritic--mid {
+  background: var(--pill-bg-hover);
+  color: var(--text-primary);
+}
+
+.home-top-rated-card__metacritic--low {
+  background: var(--danger);
+  color: var(--surface-canvas);
+}
+
 .home-top-rated-card__art {
   display: block;
   width: 100%;
@@ -3423,12 +3456,16 @@ p {
    fixa decidida no TSX (ver `homeTopRatedPrimaryPillCount`), então os cards
    da fila fecham na mesma altura sem piso artificial — a review que chegava
    assíncrona e exigia `min-height` saiu do card. */
+/* Três blocos agora, não dois: nome, a grade de métricas e as pills. O gap
+   fecha em --space-3 para o nome e as métricas lerem como um bloco só, e as
+   pills se descolam com a própria margem — mantendo o respiro original entre
+   texto e linha de pills. */
 .home-top-rated-card__body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
-  gap: var(--space-7);
+  gap: var(--space-3);
   padding: var(--space-7) var(--space-6);
 }
 
@@ -3443,6 +3480,81 @@ p {
   white-space: nowrap;
 }
 
+/* Três colunas de largura igual e altura fechada: os valores chegam pelo
+   enrichment, card a card. Condicionar a grade ao dado fazia o card crescer no
+   instante em que a resposta voltava — foi o que tirou a review daqui antes.
+   `minmax(0, 1fr)`: sem isso o conteúdo mínimo de uma coluna empurra as
+   irmãs e a grade estoura a largura do card. */
+.home-top-rated-card__metrics {
+  display: grid;
+  height: calc(var(--type-line-micro) + var(--type-line-compact) + var(--space-1));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  overflow: hidden;
+}
+
+.home-top-rated-card__metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-top-rated-card__metric-label {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--type-size-micro);
+  line-height: var(--type-line-micro);
+  letter-spacing: var(--ls-200);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.home-top-rated-card__metric-value {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--type-size-compact);
+  font-weight: var(--weight-semibold);
+  line-height: var(--type-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mesmas faixas do selo do Metacritic — a aprovação não muda de régua no meio
+   do card. Aqui é texto sobre o card, então a cor é a do papel, não o par
+   fundo cheio/canvas do selo. */
+.home-top-rated-card__metric-value--high {
+  color: var(--success);
+}
+
+.home-top-rated-card__metric-value--mid {
+  color: var(--text-secondary);
+}
+
+.home-top-rated-card__metric-value--low {
+  color: var(--danger);
+}
+
+/* Travessão de "o catálogo respondeu e não tem esse dado" — peso de metadado
+   ausente, não de valor. Distinto do skeleton, que é "ainda esperando". */
+.home-top-rated-card__metric-value--empty {
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+}
+
+.home-top-rated-card__metric-label--skeleton {
+  width: 70%;
+  height: var(--type-size-micro);
+  border-radius: var(--radius-sm);
+}
+
+.home-top-rated-card__metric-value--skeleton {
+  width: 55%;
+  height: var(--type-size-compact);
+  border-radius: var(--radius-sm);
+}
+
 /* Uma linha, contagem decidida no TSX. `nowrap`: rótulo longo encolhe (a pill
    segura com reticências) em vez de vazar para uma segunda linha que o
    `overflow: hidden` comeria — mesma decisão das `--pill-rows` da grade. */
@@ -3450,6 +3562,7 @@ p {
   display: flex;
   height: var(--pill-height);
   min-width: 0;
+  margin-top: var(--space-5);
   flex-wrap: nowrap;
   align-content: flex-start;
   gap: var(--space-2);
@@ -5285,6 +5398,54 @@ p {
     }
   }
 
+  // Seletor de forma de pagamento: mesma linguagem do controle de cobrança,
+  // mas sem thumb deslizante — são dois destinos diferentes (Stripe e Pix),
+  // não duas variações do mesmo preço.
+  &__method {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    width: 100%;
+
+    button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      min-height: calc(var(--space-10) + var(--space-2));
+      border: 1px solid transparent;
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font: inherit;
+      font-size: var(--type-size-compact);
+      font-weight: var(--weight-medium);
+      transition:
+        background var(--motion-fast) var(--ease),
+        border-color var(--motion-fast) var(--ease),
+        color var(--motion-fast) var(--ease);
+
+      &.is-active {
+        border-color: var(--border-strong, var(--surface-popover));
+        background: var(--surface-popover);
+        color: var(--text-primary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--focus-ring-color);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  &__method-hint {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: var(--type-size-caption);
+    text-align: center;
+  }
+
   &__billing-thumb {
     position: absolute;
     top: var(--space-1);
@@ -6856,11 +7017,42 @@ p {
   /* Rola no scroller compartilhado (`.container__content`) — a barra fica na
      mesma posição das outras páginas. */
   &__results {
+    position: relative;
     display: flex;
     min-width: 0;
     flex-direction: column;
     gap: var(--space-2);
     padding-bottom: var(--page-bottom-space);
+  }
+
+  /* Enquanto a consulta seguinte não volta, os resultados anteriores ficam na
+     tela sob um scrim em vez de sumirem: trocar por skeleton faria a página
+     saltar de altura a cada mudança de filtro ou de página. */
+  &__results--refreshing {
+    .catalogue-page__list-container {
+      pointer-events: none;
+      user-select: none;
+    }
+  }
+
+  /* O overlay cobre a área de resultados inteira, mas o spinner é `sticky`
+     dentro dele: numa lista longa, um filho centrado por `place-items` cairia
+     no meio da lista (fora da tela). O `sticky` prende o spinner ao meio do
+     que está visível conforme a página rola. */
+  &__refreshing {
+    position: absolute;
+    z-index: 2;
+    display: grid;
+    inset: 0;
+    justify-items: center;
+    background: var(--overlay-medium);
+    border-radius: var(--radius-lg);
+  }
+
+  &__refreshing .page-spinner-loading__spinner {
+    position: sticky;
+    top: calc(50vh - 12px);
+    bottom: calc(50vh - 12px);
   }
 
   /* Uma linha só: filtros à esquerda, ordenação à direita. `flex-wrap` é a
@@ -6907,10 +7099,6 @@ p {
     span {
       flex: 0 0 auto;
       color: var(--text-tertiary);
-    }
-
-    .catalogue-page__refreshing {
-      color: var(--text-secondary);
     }
   }
 
@@ -6959,6 +7147,15 @@ p {
       min-height: 32px;
       border-radius: var(--radius-md);
     }
+  }
+
+  /* Massa do gatilho de ordenação enquanto a página carrega: mesma geometria de
+     `&__sort` (min-width) + `.settings-dropdown__trigger` (altura, raio). */
+  &__sort-placeholder {
+    display: block;
+    width: 190px;
+    height: 36px;
+    border-radius: var(--radius-md);
   }
 
   &__notice {
@@ -7137,7 +7334,7 @@ p {
     /* Contagem de selecionados. Pastilha sólida, não texto solto: na pílula ela
        fica entre o rótulo e o chevron e precisa ler como valor, não como parte
        do nome da facet. */
-    span:not(.catalogue-filter-section__orb) {
+    span {
       display: inline-grid;
       min-width: 17px;
       height: 17px;
@@ -7179,16 +7376,6 @@ p {
       transform: rotate(180deg);
       color: var(--text-primary);
     }
-  }
-
-  &__orb {
-    width: 9px;
-    height: 9px;
-    flex-shrink: 0;
-    border-radius: var(--radius-circle);
-    background: var(--filter-orb-color, var(--text-secondary));
-    box-shadow: none;
-    opacity: 1;
   }
 
   /* Painel flutuante do dropdown. Ancorado na borda esquerda da pílula e
@@ -7790,12 +7977,30 @@ input[type="search"]::-ms-reveal {
   }
 }
 
+/* Altura fechada de uma pill: a contagem visível muda depois da medição e do
+   resize, e sem altura fixa o card inteiro mudaria de altura junto.
+   `overflow: hidden` recorta a linha-espelho, que é mais larga que o card. */
 .catalogue-list__genres {
   position: relative;
   display: flex;
+  height: var(--pill-height);
   flex-wrap: nowrap;
   gap: var(--space-3);
   min-width: 0;
+  overflow: hidden;
+}
+
+/* Fora do fluxo: existe só para medir. Não ocupa espaço, não é pintada e não
+   recebe ponteiro — a linha visível acima é a única que o usuário vê. */
+.catalogue-list__genres-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-3);
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .catalogue-list__genre-chip {
@@ -8618,6 +8823,20 @@ input[type="search"]::-ms-reveal {
     &:hover {
       background: rgb(0 0 0 / 0.3);
       color: #fff;
+    }
+  }
+
+  /* Acción primaria: relleno sólido claro com texto escuro, el único botón que
+     compite por jerarquía frente a la arte. El resto sigue siendo vidrioso. */
+  &__action--primary {
+    background: var(--text-strong);
+    color: var(--surface-canvas);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+
+    &:hover {
+      background: var(--white);
+      color: var(--surface-canvas);
     }
   }
 
@@ -10873,8 +11092,7 @@ html.no-backdrop-blur {
     backface-visibility: hidden;
   }
 
-  &__banner-placeholder,
-  &__avatar-placeholder {
+  &__banner-placeholder {
     width: 100%;
     height: 100%;
     background: var(--surface-canvas);
@@ -11240,7 +11458,6 @@ html.no-backdrop-blur {
     border: none;
     border-radius: var(--radius-lg);
     background: var(--surface-modal);
-    text-rendering: geometricPrecision;
 
     .collection-modal__content {
       gap: 0;
@@ -11284,8 +11501,6 @@ html.no-backdrop-blur {
     button {
       text-shadow: none;
       filter: none;
-      -webkit-font-smoothing: subpixel-antialiased;
-      -moz-osx-font-smoothing: auto;
     }
   }
 
@@ -12216,8 +12431,6 @@ html.no-backdrop-blur {
       opacity var(--motion-fast) ease,
       transform var(--motion-fast) ease;
     will-change: opacity, transform;
-    -webkit-font-smoothing: subpixel-antialiased;
-    -moz-osx-font-smoothing: auto;
     text-rendering: optimizeLegibility;
 
     strong {
@@ -12636,7 +12849,6 @@ html.no-backdrop-blur {
   background: var(--surface-modal-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  text-rendering: geometricPrecision;
 }
 
 .game-settings-modal__hero {
@@ -14112,10 +14324,14 @@ button {
   width: 42px;
 }
 
-/* Skeleton do trilho de filtros: só a massa do cartão, na mesma altura do
-   cabeçalho real (`.catalogue-filter-section__header { min-height: 44px }`). */
+/* Skeleton da pílula de filtro: só a massa, na mesma altura do cabeçalho real
+   (`.catalogue-filter-section__header { min-height: 34px }`). A largura vem
+   inline, por posição, porque a pílula real é dimensionada pelo rótulo. */
 .catalogue-filter-section--skeleton {
-  min-height: 44px;
+  display: block;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--skeleton-fill);
   pointer-events: none;
 }
 

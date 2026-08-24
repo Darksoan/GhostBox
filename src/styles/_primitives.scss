@@ -67,7 +67,10 @@
 
   // --- Tipografia ---
   --fs-100: 12px;
-  --fs-200: 12px;
+  // Caption sobe de 12px para 13px: é tamanho de leitura (metadados, autor,
+  // descrição curta), não rótulo — Inter a 12px sobre superfície escura perde
+  // definição de haste. Micro (badge/pill/contador) permanece 12px.
+  --fs-200: 13px;
   --fs-300: 13px;
   --fs-400: 14px;
   --fs-500: 16px;

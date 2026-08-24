@@ -352,7 +352,6 @@ export function PageRouter({
           onOpenGame={openGame}
           activeSessionAppIds={appData.activeSessionAppIds}
           onOpenGameAchievements={(game) => openAchievements(game)}
-          onConnectSteam={() => void appData.handleConnectSteam()}
         />
       );
     }
