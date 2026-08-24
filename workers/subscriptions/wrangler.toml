@@ -9,15 +9,6 @@ DISCORD_GUILD_ID = "1519331076831580291"
 DISCORD_PREMIUM_ROLE_ID = "1520811722770743388"
 CLOUD_SAVE_BUCKET = "cloud-saves"
 PROFILE_IMAGE_BUCKET = "profile-images"
-# Cakto offer ids (Pix). Created in the Cakto dashboard under Produtos — the
-# price lives there, not in this repo. Secrets (client id/secret, webhook
-# secret) go through `wrangler secret put`, never here.
-# Preço base, sem a taxa de serviço de R$ 0,99 que a Cakto soma no checkout:
-# R$ 6,00 + 0,99 = R$ 6,99 e R$ 14,00 + 0,99 = R$ 14,99, que são os valores
-# anunciados no app. O total realmente cobrado vem em `order.amount` e é ele
-# que fica gravado em `payments.amount_cents`.
-CAKTO_OFFER_MONTHLY = "87ndh3q"
-CAKTO_OFFER_QUARTERLY = "3bfygy6"
 
 [triggers]
 crons = ["*/30 * * * *"]

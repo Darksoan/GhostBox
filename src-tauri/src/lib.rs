@@ -1536,8 +1536,6 @@ pub fn run() {
             subscription::subscription_create_checkout,
             subscription::subscription_create_portal_session,
             subscription::subscription_refresh_status,
-            subscription::subscription_create_pix_charge,
-            subscription::subscription_get_pix_charge,
             subscription::discord_link_start,
             subscription::discord_link_status,
             backup::backup_get_settings,

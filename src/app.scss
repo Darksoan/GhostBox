@@ -4564,21 +4564,12 @@ p {
 }
 
 // ---------------------------------------------------------------------------
-// Backdrop da tela de assinatura: trilhos de capas da biblioteca do usuário.
+// Backdrop da tela de assinatura: trilhos estáticos de capas do catálogo.
 //
-// Profundidade vem de duas fontes somadas, em propriedades diferentes de
-// propósito: `transform` carrega o marquee (animação contínua) e `translate`
-// carrega o parallax do ponteiro. São propriedades separadas no CSS moderno,
-// então uma não sobrescreve a outra — se as duas fossem `transform`, a animação
-// venceria e o parallax sumiria.
+// Sem movimento de propósito: profundidade vem só da inclinação do palco e da
+// opacidade decrescente entre trilhos. A arte é textura, não espetáculo.
 // ---------------------------------------------------------------------------
 .subscription-backdrop {
-  --parallax-x: 0;
-  --parallax-y: 0;
-  // Amplitude do deslocamento por ponteiro. Cada trilho multiplica por um fator
-  // diferente para os planos não andarem juntos.
-  --parallax-depth: var(--space-9);
-
   // Camada que corta: alinhada aos eixos e SEM rotação, senão o próprio recorte
   // gira e expõe as quinas diagonais.
   position: absolute;
@@ -4615,8 +4606,6 @@ p {
     flex: 0 0 auto;
     width: 200%;
     gap: 0;
-    animation: subscription-backdrop-drift linear infinite;
-    will-change: transform;
   }
 
   &__run {
@@ -4627,28 +4616,18 @@ p {
     padding-right: var(--space-4);
   }
 
-  // Trilhos alternam sentido e velocidade; o fator de parallax cresce do fundo
-  // para a frente.
+  // Trilhos estáticos; a opacidade decresce do fundo para a frente e cria
+  // profundidade sem movimento.
   &__rail--1 {
-    animation-duration: 92s;
-    translate: calc(var(--parallax-x) * var(--parallax-depth) * 0.4)
-      calc(var(--parallax-y) * var(--parallax-depth) * 0.25);
     opacity: 0.5;
   }
 
   &__rail--2 {
-    animation-duration: 74s;
-    animation-direction: reverse;
-    translate: calc(var(--parallax-x) * var(--parallax-depth) * 0.75)
-      calc(var(--parallax-y) * var(--parallax-depth) * 0.45);
-    opacity: 0.72;
+    opacity: 0.65;
   }
 
   &__rail--3 {
-    animation-duration: 60s;
-    translate: calc(var(--parallax-x) * var(--parallax-depth) * 1.15)
-      calc(var(--parallax-y) * var(--parallax-depth) * 0.7);
-    opacity: 0.58;
+    opacity: 0.55;
   }
 
   &__tile {
@@ -4661,7 +4640,7 @@ p {
     background: var(--surface-panel) center / cover no-repeat;
     // Dessaturado: as capas entram como textura, a paleta da interface segue
     // sendo a neutra do app.
-    filter: saturate(0.55) contrast(0.92);
+    filter: saturate(0.4) contrast(0.9) brightness(0.85);
     opacity: 0;
     transition: opacity var(--motion-emphasis) var(--ease);
 
@@ -4670,31 +4649,27 @@ p {
     }
   }
 
-  // Scrim: adensa no centro, onde vive o texto, e afina nas bordas para a arte
-  // aparecer. Todas as paradas são translúcidas de propósito — a versão
-  // anterior usava `--background` (opaco) em 0% e 100% e apagava as capas no
-  // topo e na base, dando a impressão de fundo que não cobre a tela.
+  // Scrim: base sutil em toda a tela, adensando no centro (onde vivem os
+  // cards) e nas bordas superior/inferior (header e base da tela). As
+  // paradas são translúcidas de propósito — o objetivo é textura visível,
+  // não um fundo opaco.
   &__scrim {
     position: absolute;
     inset: 0;
     background:
+      linear-gradient(var(--overlay-subtle), var(--overlay-subtle)),
       radial-gradient(
-        ellipse 68% 56% at 50% 50%,
-        var(--overlay-immersive) 26%,
-        transparent 82%
+        ellipse 74% 62% at 50% 50%,
+        var(--overlay-medium) 30%,
+        transparent 86%
       ),
       linear-gradient(
         to bottom,
-        var(--overlay-strong) 0%,
-        var(--overlay-medium) 34%,
-        var(--overlay-medium) 66%,
-        var(--overlay-strong) 100%
+        var(--overlay-medium) 0%,
+        transparent 30%,
+        transparent 70%,
+        var(--overlay-medium) 100%
       );
-  }
-
-  &--still &__rail {
-    animation: none;
-    translate: none;
   }
 }
 
@@ -4714,20 +4689,6 @@ p {
   .settings-panel__body {
     flex: 1;
     min-height: 0;
-  }
-}
-
-@keyframes subscription-backdrop-drift {
-  // Cada trilho tem duas cópias idênticas, então -50% fecha o loop sem salto.
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .subscription-backdrop__rail {
-    animation: none;
-    translate: none;
   }
 }
 
@@ -4804,46 +4765,21 @@ p {
     // deixa o Free terminar no próprio conteúdo em vez de esticar até a altura
     // do Premium — era daí que vinha o vão morto acima do botão "Current".
     // O grid é o elemento elástico da coluna: cresce com a tela e leva os dois
-    // cards junto, com um piso para nunca achatar em telas baixas.
+    // cards junto, com um piso para nunca achatar em telas baixas. Sem a linha
+    // de highlights abaixo, ele absorve todo o espaço vertical restante.
+    // Card único: o checkout é só a oferta Premium agora. Uma coluna de
+    // largura contida. O grid continua elástico (`flex: 1 1 auto`), mas com
+    // `align-items: center` o card flutua centralizado no espaço vertical —
+    // em vez de esticar e espalhar o conteúdo (era o que deixava o toggle
+    // "solto" no topo, com um vão morto antes do CTA).
     .subscription-plans__grid {
       flex: 1 1 auto;
       width: 100%;
-      max-width: calc(var(--space-16) * 20);
-      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-      align-items: stretch;
-      gap: var(--space-6);
-      min-height: clamp(300px, 42vh, 440px);
-      max-height: calc(var(--space-16) * 11);
+      max-width: calc(var(--space-16) * 14);
+      grid-template-columns: minmax(0, 1fr);
+      align-items: center;
+      min-height: clamp(340px, 52vh, 560px);
       margin-top: var(--space-7);
-    }
-
-    .subscription-plans__highlights {
-      width: 100%;
-      max-width: calc(var(--space-16) * 20);
-      min-height: clamp(140px, 20vh, 210px);
-      margin-top: var(--space-6);
-    }
-
-    .subscription-plans__highlight {
-      min-height: clamp(140px, 20vh, 210px);
-      padding: var(--space-8) var(--space-7);
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: flex-start;
-
-      > svg {
-        margin-top: 0;
-      }
-
-      strong {
-        margin-bottom: var(--space-2);
-        font-size: var(--type-size-compact);
-      }
-
-      p {
-        font-size: var(--type-size-compact);
-        line-height: var(--type-line-compact);
-      }
     }
 
     .subscription-plans__step {
@@ -4856,37 +4792,6 @@ p {
         width: calc(var(--space-9) + var(--space-1));
         height: calc(var(--space-9) + var(--space-1));
       }
-    }
-
-    .subscription-plans__discord-link {
-      padding: var(--space-6) var(--space-6);
-      border-radius: var(--radius-md);
-    }
-
-    .subscription-plans__discord-copy {
-      gap: var(--space-5);
-
-      h4 {
-        margin-bottom: 2px;
-        font-size: var(--type-size-compact);
-      }
-
-      p {
-        display: -webkit-box;
-        overflow: hidden;
-        color: var(--text-tertiary);
-        font-weight: var(--weight-medium);
-        font-size: var(--type-size-caption);
-        line-height: var(--type-line-caption);
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 1;
-      }
-    }
-
-    .subscription-plans__discord-action {
-      min-height: 32px;
-      border-radius: var(--radius-md);
-      font-size: var(--type-size-caption);
     }
   }
 
@@ -5027,150 +4932,12 @@ p {
   }
 
   // Benefícios como linhas enxutas — três caixas grandes competiam com os
-  // cards de plano e empurravam a página para baixo.
-  &__highlights {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  &__highlight {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-4);
-    padding: var(--space-6);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
-    backdrop-filter: blur(20px);
-    transition: background var(--motion-fast) var(--ease);
-
-    &:hover {
-      background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
-    }
-
-    &:hover > svg {
-      color: var(--text-primary);
-    }
-
-    > svg {
-      flex: 0 0 auto;
-      margin-top: 1px;
-      color: var(--text-tertiary);
-      transition: color var(--motion-fast) var(--ease);
-    }
-
-    strong {
-      display: block;
-      margin-bottom: var(--space-1);
-      color: var(--text-primary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      line-height: var(--type-line-caption);
-    }
-
-    p {
-      margin: 0;
-      color: var(--text-tertiary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
-      line-height: var(--type-line-caption);
-    }
-  }
-
+  // cards de plano e empurravam a página para baixo. Removidos: a oferta é
+  // só Free + Premium; o espaço vai para os cards.
   &__steps {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-5);
-  }
-
-  &__discord-link {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-8);
-    padding: var(--space-7) var(--space-8);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-panel);
-  }
-
-  &__discord-copy {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    min-width: 0;
-
-    h4 {
-      margin: 0 0 var(--space-2);
-      color: var(--text-primary);
-      font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
-    }
-
-    p {
-      margin: 0;
-      color: var(--text-secondary);
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
-      line-height: var(--type-line-compact);
-    }
-  }
-
-  &__discord-icon {
-    width: 20px;
-    height: 20px;
-    flex: 0 0 auto;
-    filter: brightness(0) invert(1);
-    opacity: 0.8;
-  }
-
-  &__discord-actions {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: var(--space-5);
-  }
-
-  &__discord-action {
-    display: inline-flex;
-    min-height: 34px;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-4);
-    padding: 0 var(--space-6);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-panel);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
-    transition:
-      background var(--motion-fast) var(--ease),
-      opacity var(--motion-fast) var(--ease);
-
-    &:hover,
-    &:focus-visible {
-      background: var(--surface-popover);
-      outline: none;
-    }
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.48;
-    }
-  }
-
-  &__discord-status {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    color: var(--text-primary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
   }
 
   &__step {
@@ -5287,7 +5054,6 @@ p {
 
 .subscription-plan-card {
   // Local scale-derived tokens — mirrors the pattern in .subscription-account.
-  --plan-badge-offset: calc(var(--space-3) * -1 - var(--space-1));
   --plan-action-min-height: var(--space-14);
 
   position: relative;
@@ -5301,29 +5067,8 @@ p {
   transition:
     background var(--motion-fast) var(--ease);
 
-  &--disabled {
-    opacity: 0.88;
-  }
-
   &--featured {
     background: var(--surface-raised);
-  }
-
-  &__badge {
-    position: absolute;
-    top: var(--plan-badge-offset);
-    left: 50%;
-    padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-pill);
-    background: var(--surface-popover);
-    color: var(--text-primary);
-    font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
-    letter-spacing: var(--ls-100);
-    text-transform: uppercase;
-    transform: translateX(-50%);
-    transition: background-color var(--motion-fast) var(--ease);
-    white-space: nowrap;
   }
 
   &__top {
@@ -5395,55 +5140,21 @@ p {
         outline: 2px solid var(--focus-ring-color);
         outline-offset: 2px;
       }
-    }
-  }
 
-  // Seletor de forma de pagamento: mesma linguagem do controle de cobrança,
-  // mas sem thumb deslizante — são dois destinos diferentes (Stripe e Pix),
-  // não duas variações do mesmo preço.
-  &__method {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
-    width: 100%;
-
-    button {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-2);
-      min-height: calc(var(--space-10) + var(--space-2));
-      border: 1px solid transparent;
-      border-radius: var(--radius-lg);
-      background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
-      color: var(--text-secondary);
-      cursor: pointer;
-      font: inherit;
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
-      transition:
-        background var(--motion-fast) var(--ease),
-        border-color var(--motion-fast) var(--ease),
-        color var(--motion-fast) var(--ease);
-
-      &.is-active {
-        border-color: var(--border-strong, var(--surface-popover));
-        background: var(--surface-popover);
-        color: var(--text-primary);
-      }
-
-      &:focus-visible {
-        outline: 2px solid var(--focus-ring-color);
-        outline-offset: 2px;
+      // Economia do trimestral vira uma pill discreta dentro da própria aba,
+      // no lugar da pill dourada que antes flutuava no rodapé do card. O
+      // dourado ecoa o CTA sem competir com ele.
+      .subscription-plan-card__billing-hint {
+        margin-left: var(--space-2);
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-pill);
+        background: color-mix(in srgb, var(--premium-gold) 14%, transparent);
+        color: var(--premium-gold);
+        font-size: var(--type-size-micro);
+        font-weight: var(--weight-semibold);
+        line-height: var(--type-line-caption);
       }
     }
-  }
-
-  &__method-hint {
-    margin: 0;
-    color: var(--text-tertiary);
-    font-size: var(--type-size-caption);
-    text-align: center;
   }
 
   &__billing-thumb {
@@ -5497,38 +5208,6 @@ p {
     }
   }
 
-  &__benefit--disabled {
-    color: var(--text-tertiary);
-    font-weight: var(--weight-medium);
-
-    svg {
-      color: var(--text-tertiary);
-    }
-  }
-
-  // Informativo de economia: pill amarelada no rodapé do card, ecoando o CTA
-  // dourado. `margin-top: auto` cola a pill no rodapé e `margin-bottom`
-  // garante respiro extra entre ela e o botão de assinar.
-  &__savings {
-    display: flex;
-    align-items: center;
-    align-self: center;
-    justify-content: center;
-    width: fit-content;
-    margin-top: auto;
-    margin-bottom: var(--space-6);
-    padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--premium-gold) 16%, transparent);
-    color: var(--premium-gold);
-    font-size: var(--type-size-micro);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--ls-100);
-    line-height: var(--type-line-caption);
-    text-align: center;
-    white-space: nowrap;
-  }
-
   &__action {
     min-height: var(--plan-action-min-height);
     width: 100%;
@@ -5577,11 +5256,6 @@ p {
   .subscription-plan-card__price {
     font-size: var(--type-size-fluid-page);
   }
-
-  .subscription-plan-card__savings {
-    justify-content: center;
-    text-align: center;
-  }
 }
 
 // ATENÇÃO: seletores escritos por extenso, sem `&--mod &__elem`. Dentro de um
@@ -5594,7 +5268,6 @@ p {
   .subscription-plan-card {
     position: relative;
     display: flex;
-    height: 100%;
     flex-direction: column;
     align-items: stretch;
     overflow: hidden;
@@ -5606,41 +5279,19 @@ p {
     transition: background var(--motion-fast) var(--ease);
   }
 
-  .subscription-plan-card--disabled {
-    opacity: 0.72;
-  }
-
   .subscription-plan-card--featured {
     background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
   }
 
-  .subscription-plan-card__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-
-    h4 {
-      margin: 0;
-      color: var(--text-tertiary);
-      font-size: var(--type-size-micro);
-      font-weight: var(--weight-semibold);
-      letter-spacing: var(--ls-100);
-      text-transform: uppercase;
-    }
-  }
-
-  .subscription-plan-card--featured .subscription-plan-card__head h4 {
-    color: var(--premium-gold);
-  }
-
   // Preço é o herói: valor e cadência dividem a mesma linha de base.
+  // O `margin-top` negativo o encosta no toggle logo acima — os dois formam
+  // uma unidade (o controle altera o número embaixo), em vez de blocos soltos.
   .subscription-plan-card__price {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: var(--space-3);
-    margin: 0;
+    margin-top: calc(-1 * var(--space-2));
 
     strong {
       color: var(--text-primary);
@@ -5669,7 +5320,7 @@ p {
   .subscription-plan-card__benefits {
     row-gap: var(--space-4);
     column-gap: var(--space-4);
-    margin-top: var(--space-3);
+    margin-top: var(--space-5);
 
     li {
       align-items: center;
@@ -5679,10 +5330,11 @@ p {
       line-height: var(--type-line-caption);
     }
 
-    // Ícone sem disco: glifo solto, na escala do texto descritivo.
+    // Ícone sem disco: glifo solto, maior que o texto para ancorar a leitura
+    // de cada benefício.
     li svg {
-      width: var(--space-9);
-      height: var(--space-9);
+      width: calc(var(--space-9) + var(--space-2));
+      height: calc(var(--space-9) + var(--space-2));
       flex: 0 0 auto;
       margin-top: 0;
       padding: 0;
@@ -5693,8 +5345,10 @@ p {
   }
 
   .subscription-plan-card__action {
-    // O rodapé é ancorado pela `__savings` (margin-top: auto); o CTA segue
-    // logo abaixo da pill, no gap padrão do card.
+    // Fallback de ancoragem: com o card abraçando o conteúdo não sobra espaço,
+    // então o `auto` colapsa para o gap normal — mas protege o alinhamento se
+    // o card voltar a esticar (ex.: conteúdo dinâmico maior que a viewport).
+    margin-top: auto;
     min-height: calc(var(--space-8) * 2 + var(--space-2));
     border-radius: var(--radius-md);
     font-size: var(--type-size-caption);
@@ -10798,23 +10452,9 @@ html.no-backdrop-blur {
     overflow-y: auto;
   }
 
-  .subscription-plans__grid {
-    grid-template-columns: 1fr;
-  }
-
   .subscription-plans__steps,
   .subscription-plans__details {
     grid-template-columns: 1fr;
-  }
-
-  .subscription-plans__discord-link,
-  .subscription-plans__discord-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .subscription-plans__discord-action {
-    width: 100%;
   }
 
   .subscription-account__summary-grid,

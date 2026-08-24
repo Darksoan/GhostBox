@@ -1,30 +1,24 @@
-import { CalendarClock, Check, CloudUpload, CreditCard, ExternalLink, Link, QrCode, RotateCcw, ScreenShare, Settings2, Wallet, X } from "lucide-react";
-import { CupStar, ServerUpdate, Trophy, UserEdit } from "reicon-react";
+import { CalendarClock, CloudUpload, CreditCard, ExternalLink, RotateCcw, ScreenShare, Settings2, Wallet } from "lucide-react";
+import { Trophy } from "reicon-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
-import { useDiscordLink } from "../../features/settings/useDiscordLink";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import type {
   CloudSave,
-  PaymentProvider,
   SubscriptionPayment,
   SubscriptionPlanId as PaidSubscriptionPlanId,
   SubscriptionPortalFlow,
   SubscriptionStatusResult,
 } from "../../lib/ghostboxApi.types";
-import { PixCheckoutModal } from "./PixCheckoutModal";
 import type { SteamProfile } from "../../types";
 import { loadGameStoreDetailsCached } from "../../utils/gameCache";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import { SubscriptionBackdrop } from "./SubscriptionBackdrop";
-import discordIcon from "../../../Icons/discord.svg";
-
-type SubscriptionPlanId = "free" | PaidSubscriptionPlanId;
 
 type SubscriptionPlansProps = {
   surface?: "modal" | "settings";
@@ -99,8 +93,7 @@ function BackupGameThumb({ appId }: { appId: string }) {
   );
 }
 
-const benefits: Record<SubscriptionPlanId, string[]> = {
-  free: ["subscription.benefits.backupSync"],
+const benefits: Record<PaidSubscriptionPlanId, string[]> = {
   monthly: ["subscription.benefits.localAndCloudBackups", "subscription.benefits.sync", "subscription.benefits.automaticRestore"],
   quarterly: ["subscription.benefits.localAndCloudBackups", "subscription.benefits.sync", "subscription.benefits.automaticRestore"],
 };
@@ -173,7 +166,7 @@ function formatBillingDate(value: string | null | undefined, language: "pt" | "e
   }).format(timestamp);
 }
 
-/** Single source for the price copy — the plan picker and the renew-with-Pix flow both show it. */
+/** Single source for the price copy shown in the plan picker. */
 function planPriceLabel(planId: PaidSubscriptionPlanId, language: "pt" | "en") {
   if (planId === "quarterly") return language === "en" ? "$2.90" : "R$ 14,99";
   return language === "en" ? "$1.35" : "R$ 6,99";
@@ -225,11 +218,10 @@ function visiblePayment(payment: SubscriptionPayment | null, subscription: Subsc
   return payment;
 }
 
-function renderBenefitIcon(benefitKey: string, disabled: boolean) {
-  if (disabled) return <X size={14} strokeWidth={2.15} aria-hidden="true" />;
-  if (benefitKey === "subscription.benefits.sync") return <ScreenShare size={14} strokeWidth={2.15} aria-hidden="true" />;
-  if (benefitKey === "subscription.benefits.automaticRestore") return <RotateCcw size={14} strokeWidth={2.15} aria-hidden="true" />;
-  return <CloudUpload size={14} strokeWidth={2.15} aria-hidden="true" />;
+function renderBenefitIcon(benefitKey: string) {
+  if (benefitKey === "subscription.benefits.sync") return <ScreenShare size={16} strokeWidth={2.15} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.automaticRestore") return <RotateCcw size={16} strokeWidth={2.15} aria-hidden="true" />;
+  return <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />;
 }
 
 export function SubscriptionPlans({
@@ -243,20 +235,14 @@ export function SubscriptionPlans({
   const { status, openAuthModal } = useAuth();
   const appData = useAppData();
   const steamProfile = steamProfileProp ?? appData.steamProfile;
-  // Shared hook instead of a second copy of the link state: it hydrates from
-  // the cache synchronously, polls after `connect()` and revalidates on focus.
-  const discord = useDiscordLink();
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [resolvedCloudGameTitles, setResolvedCloudGameTitles] = useState<Map<string, string>>(new Map());
   const [selectedPlanId, setSelectedPlanId] = useState<PaidSubscriptionPlanId>("monthly");
   const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentProvider>("stripe");
-  const [pixPlanId, setPixPlanId] = useState<PaidSubscriptionPlanId | null>(null);
   const [portalFlow, setPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
   const subscriptionRequestIdRef = useRef(0);
-  const linkedDiscordName = discord.status?.discordGlobalName || discord.status?.discordUsername;
   const language = appearance.language;
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
   const isSettingsSurface = surface === "settings";
@@ -463,9 +449,6 @@ export function SubscriptionPlans({
           : paymentStatus === "cancelled"
             ? "cancelled"
             : "pending";
-    // Pix bought a fixed window: there is no Stripe customer behind it, so the
-    // billing portal would 404. The panel offers a renewal instead.
-    const isPixSubscription = subscriptionStatus.subscription.provider === "cakto";
     // Full list: this panel is the only place backed-up games are listed.
     const recentBackups = [...cloudBackupSummaries].sort((a, b) => {
       const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
@@ -502,15 +485,9 @@ export function SubscriptionPlans({
             <strong>{formatBillingDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
           </article>
           <article className="subscription-account__summary-card">
-            {isPixSubscription
-              ? <QrCode size={18} strokeWidth={2.15} aria-hidden="true" />
-              : <Wallet size={18} strokeWidth={2.15} aria-hidden="true" />}
+            <Wallet size={18} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Método de pagamento", "Payment method")}</span>
-            <strong>
-              {isPixSubscription
-                ? "Pix"
-                : formatPaymentMethodLabel(subscriptionStatus.paymentMethod, language)}
-            </strong>
+            <strong>{formatPaymentMethodLabel(subscriptionStatus.paymentMethod, language)}</strong>
           </article>
           <article className="subscription-account__summary-card">
             <CloudUpload size={18} strokeWidth={2.15} aria-hidden="true" />
@@ -587,17 +564,6 @@ export function SubscriptionPlans({
         </div>
 
         <div className="subscription-account__actions" role="group" aria-label={copy("Gerenciar assinatura", "Manage subscription")}>
-          {isPixSubscription ? (
-            <button
-              type="button"
-              className="subscription-account__action-button"
-              onClick={() => setPixPlanId(planId === "quarterly" ? "quarterly" : "monthly")}
-            >
-              <QrCode size={15} strokeWidth={2.15} aria-hidden="true" />
-              <span>{t("subscription.renewPix")}</span>
-            </button>
-          ) : (
-          <>
           <button
             type="button"
             className="subscription-account__action-button"
@@ -626,21 +592,7 @@ export function SubscriptionPlans({
             </span>
             <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
           </button>
-          </>
-          )}
         </div>
-
-        <PixCheckoutModal
-          open={pixPlanId !== null}
-          planId={pixPlanId ?? "monthly"}
-          priceLabel={planPriceLabel(pixPlanId ?? "monthly", language)}
-          onClose={() => setPixPlanId(null)}
-          onPaid={() => {
-            setPixPlanId(null);
-            refreshSubscriptionStatus();
-            showToast(t("subscription.pix.paidTitle"), t("subscription.pix.paidMessage"), "success");
-          }}
-        />
       </section>
     );
   }
@@ -649,10 +601,6 @@ export function SubscriptionPlans({
     price: string;
     cadence: string;
     description: string;
-    savings?: {
-      label: string;
-      value: string;
-    };
   }> = {
     monthly: {
       price: planPriceLabel("monthly", language),
@@ -663,78 +611,12 @@ export function SubscriptionPlans({
       price: planPriceLabel("quarterly", language),
       cadence: t("subscription.plans.quarterly.cadence"),
       description: copy("Mais economia para manter seus saves protegidos por mais tempo.", "Better value to keep your saves protected for longer."),
-      savings: {
-        label: t("subscription.plans.quarterly.savingsLabel"),
-        value: t("subscription.plans.quarterly.savingsValue"),
-      },
     },
   };
 
   const selectedPaidPlan = paidPlans[selectedPlanId];
 
-  const plans: Array<{
-    id: SubscriptionPlanId;
-    title: string;
-    price: string;
-    cadence: string;
-    description: string;
-    badge?: string;
-    savings?: {
-      label: string;
-      value: string;
-    };
-    action: string;
-    disabled?: boolean;
-  }> = [
-    {
-      id: "free",
-      title: t("subscription.plans.free.title"),
-      price: t("subscription.plans.free.price"),
-      cadence: t("subscription.plans.free.cadence"),
-      description: copy("Comece com o básico e desbloqueie nuvem quando precisar.", "Start with the basics and unlock cloud when you need it."),
-      action: t("subscription.plans.free.action"),
-      disabled: true,
-    },
-    {
-      id: selectedPlanId,
-      title: "Premium",
-      price: selectedPaidPlan.price,
-      cadence: selectedPaidPlan.cadence,
-      description: selectedPaidPlan.description,
-      savings: selectedPaidPlan.savings,
-      action: t("subscription.actions.subscribe"),
-    },
-  ];
-
-  const highlightCards = [
-    {
-      title: copy("Conquistas", "Achievements"),
-      description: copy(
-        "Acompanhe seus marcos e mantenha seu histórico de progresso sempre preservado.",
-        "Track your milestones and keep your progress history preserved."
-      ),
-      icon: CupStar,
-    },
-    {
-      title: copy("Restauração de backups", "Backup restore"),
-      description: copy(
-        "Recupere seus saves com mais segurança quando trocar de PC ou reinstalar um jogo.",
-        "Recover your saves with more confidence when switching PCs or reinstalling a game."
-      ),
-      icon: ServerUpdate,
-    },
-    {
-      title: copy("Personalização de perfil", "Profile customization"),
-      description: copy(
-        "Deixe seu perfil com mais identidade e destaque suas escolhas dentro do GhostBox.",
-        "Give your profile more identity and highlight your choices inside GhostBox."
-      ),
-      icon: UserEdit,
-    },
-  ];
-
-  async function handleSubscribe(planId: SubscriptionPlanId) {
-    if (planId === "free") return;
+  async function handleSubscribe(planId: PaidSubscriptionPlanId) {
     if (status !== "authenticated") {
       openAuthModal();
       return;
@@ -743,13 +625,6 @@ export function SubscriptionPlans({
     // create a checkout, and blocking the button sent everyone who clicked
     // "Subscribe" to Discord instead of Stripe. Linking is optional and only
     // grants the server's Premium role.
-    if (paymentMethod === "cakto") {
-      // Pix never leaves the app: the QR code and the copy-and-paste code are
-      // rendered in the modal.
-      setPixPlanId(planId);
-      return;
-    }
-
     setCheckoutPlan(planId);
     try {
       const checkout = await ghostboxApi.createSubscriptionCheckout(planId);
@@ -816,200 +691,65 @@ export function SubscriptionPlans({
       </header>
 
       <div className="subscription-plans__grid">
-        {plans.map((plan) => (
-          <article
-            key={plan.id === "free" ? plan.id : "premium"}
-            className={[
-              "subscription-plan-card",
-              plan.disabled ? "subscription-plan-card--disabled" : "",
-              plan.id !== "free" ? "subscription-plan-card--featured" : "",
-            ].filter(Boolean).join(" ")}
+        <article className="subscription-plan-card subscription-plan-card--featured">
+          {/* Controle segmentado de cobrança: vive dentro do card Premium,
+              junto do preço que ele altera — não mais solto no topo da seção. */}
+          <div
+            className="subscription-plan-card__billing"
+            role="group"
+            aria-label={copy("Escolha o período da assinatura", "Choose billing period")}
           >
-            {plan.id === "free" && (
-              <div className="subscription-plan-card__head">
-                <h4>{plan.title}</h4>
-              </div>
-            )}
-
-            {/* Controle segmentado de cobrança: vive dentro do card Premium,
-                junto do preço que ele altera — não mais solto no topo da seção. */}
-            {plan.id !== "free" && (
-              <div
-                className="subscription-plan-card__billing"
-                role="group"
-                aria-label={copy("Escolha o período da assinatura", "Choose billing period")}
-              >
-                <span
-                  className={`subscription-plan-card__billing-thumb subscription-plan-card__billing-thumb--${selectedPlanId}`}
-                  aria-hidden="true"
-                />
-                <button
-                  type="button"
-                  className={selectedPlanId === "monthly" ? "is-active" : undefined}
-                  aria-pressed={selectedPlanId === "monthly"}
-                  onClick={() => setSelectedPlanId("monthly")}
-                >
-                  {t("subscription.plans.monthly.title")}
-                </button>
-                <button
-                  type="button"
-                  className={selectedPlanId === "quarterly" ? "is-active" : undefined}
-                  aria-pressed={selectedPlanId === "quarterly"}
-                  onClick={() => setSelectedPlanId("quarterly")}
-                >
-                  {t("subscription.plans.quarterly.title")}
-                </button>
-              </div>
-            )}
-
-            <p className="subscription-plan-card__price">
-              <strong>{plan.price}</strong>
-              <span>{plan.cadence}</span>
-            </p>
-
-            <p className="subscription-plan-card__desc">{plan.description}</p>
-
-            <ul className="subscription-plan-card__benefits">
-              {benefits[plan.id].map((benefitKey) => (
-                <li
-                  key={benefitKey}
-                  className={plan.id === "free" ? "subscription-plan-card__benefit--disabled" : undefined}
-                >
-                  {renderBenefitIcon(benefitKey, plan.id === "free")}
-                  <span>{t(benefitKey)}</span>
-                </li>
-              ))}
-            </ul>
-
-            {/* Método de pagamento: escolhido aqui, antes de qualquer
-                redirecionamento. Cartão sai pela Stripe; Pix é gerado dentro
-                do app pela Cakto. */}
-            {plan.id !== "free" && (
-              <div
-                className="subscription-plan-card__method"
-                role="group"
-                aria-label={t("subscription.method.label")}
-              >
-                <button
-                  type="button"
-                  className={paymentMethod === "stripe" ? "is-active" : undefined}
-                  aria-pressed={paymentMethod === "stripe"}
-                  onClick={() => setPaymentMethod("stripe")}
-                >
-                  <CreditCard size={14} strokeWidth={2.15} aria-hidden="true" />
-                  {t("subscription.method.card")}
-                </button>
-                <button
-                  type="button"
-                  className={paymentMethod === "cakto" ? "is-active" : undefined}
-                  aria-pressed={paymentMethod === "cakto"}
-                  onClick={() => setPaymentMethod("cakto")}
-                >
-                  <QrCode size={14} strokeWidth={2.15} aria-hidden="true" />
-                  {t("subscription.method.pix")}
-                </button>
-              </div>
-            )}
-
-            {plan.id !== "free" && paymentMethod === "cakto" && (
-              <p className="subscription-plan-card__method-hint">{t("subscription.method.pixHint")}</p>
-            )}
-
-            {/* Informativo de economia: pill dourada no rodapé do card,
-                imediatamente acima do CTA. Placeholder invisível no Free
-                mantém os dois cards alinhados. */}
             <span
-              className="subscription-plan-card__savings"
-              aria-hidden={!plan.savings}
-              style={plan.savings ? undefined : { visibility: "hidden" }}
-            >
-              {plan.savings ? `${plan.savings.label} ${plan.savings.value}` : "\u00A0"}
-            </span>
-
+              className={`subscription-plan-card__billing-thumb subscription-plan-card__billing-thumb--${selectedPlanId}`}
+              aria-hidden="true"
+            />
             <button
               type="button"
-              className="subscription-plan-card__action"
-              disabled={plan.disabled || checkoutPlan === plan.id}
-              onClick={() => void handleSubscribe(plan.id)}
+              className={selectedPlanId === "monthly" ? "is-active" : undefined}
+              aria-pressed={selectedPlanId === "monthly"}
+              onClick={() => setSelectedPlanId("monthly")}
             >
-              {checkoutPlan === plan.id ? copy("Abrindo...", "Opening...") : plan.action}
+              {t("subscription.plans.monthly.title")}
             </button>
-          </article>
-        ))}
-      </div>
-
-      <PixCheckoutModal
-        open={pixPlanId !== null}
-        planId={pixPlanId ?? selectedPlanId}
-        priceLabel={paidPlans[pixPlanId ?? selectedPlanId].price}
-        onClose={() => setPixPlanId(null)}
-        onPaid={() => {
-          setPixPlanId(null);
-          refreshSubscriptionStatus();
-          showToast(t("subscription.pix.paidTitle"), t("subscription.pix.paidMessage"), "success");
-        }}
-      />
-
-      {isSettingsSurface && (
-        <ul className="subscription-plans__highlights" aria-label={copy("Benefícios Premium", "Premium benefits")}>
-          {highlightCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <li key={card.title} className="subscription-plans__highlight">
-                <Icon size={16} strokeWidth={2.15} aria-hidden="true" />
-                <div>
-                  <strong>{card.title}</strong>
-                  <p>{card.description}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {/* Purely informational now: linking Discord only grants the server's
-          Premium role and never blocks the subscribe button. Rendered on every
-          surface — both callers pass `settings`, so gating it behind
-          `!isSettingsSurface` left it unreachable. */}
-      <section className="subscription-plans__discord-link" aria-label={t("subscription.discordLink.title")}>
-        <div className="subscription-plans__discord-copy">
-          <img
-            className="subscription-plans__discord-icon"
-            src={discordIcon}
-            alt=""
-            aria-hidden="true"
-          />
-          <div>
-            <h4>{t("subscription.discordLink.title")}</h4>
-            <p>
-              {discord.status?.linked && linkedDiscordName
-                ? t("subscription.discordLink.linkedAs").replace("{name}", linkedDiscordName)
-                : t("subscription.discordLink.description")}
-            </p>
+            <button
+              type="button"
+              className={selectedPlanId === "quarterly" ? "is-active" : undefined}
+              aria-pressed={selectedPlanId === "quarterly"}
+              onClick={() => setSelectedPlanId("quarterly")}
+            >
+              {t("subscription.plans.quarterly.title")}
+              <span className="subscription-plan-card__billing-hint">
+                {`−${t("subscription.plans.quarterly.savingsValue")}`}
+              </span>
+            </button>
           </div>
-        </div>
-        <div className="subscription-plans__discord-actions">
+
+          <p className="subscription-plan-card__price">
+            <strong>{selectedPaidPlan.price}</strong>
+            <span>{selectedPaidPlan.cadence}</span>
+          </p>
+
+          <p className="subscription-plan-card__desc">{selectedPaidPlan.description}</p>
+
+          <ul className="subscription-plan-card__benefits">
+            {benefits[selectedPlanId].map((benefitKey) => (
+              <li key={benefitKey}>
+                {renderBenefitIcon(benefitKey)}
+                <span>{t(benefitKey)}</span>
+              </li>
+            ))}
+          </ul>
+
           <button
             type="button"
-            className="subscription-plans__discord-action"
-            disabled={discord.busy}
-            onClick={() => void discord.connect()}
+            className="subscription-plan-card__action"
+            disabled={checkoutPlan === selectedPlanId}
+            onClick={() => void handleSubscribe(selectedPlanId)}
           >
-            <Link size={14} strokeWidth={2.15} aria-hidden="true" />
-            {discord.busy
-              ? t("subscription.discordLink.connecting")
-              : discord.status?.linked
-                ? t("subscription.discordLink.relink")
-                : t("subscription.discordLink.link")}
+            {checkoutPlan === selectedPlanId ? copy("Abrindo...", "Opening...") : t("subscription.actions.subscribe")}
           </button>
-          {discord.status?.linked && (
-            <span className="subscription-plans__discord-status">
-              <Check size={13} strokeWidth={2.25} aria-hidden="true" />
-              {t("subscription.discordLink.linked")}
-            </span>
-          )}
-        </div>
-      </section>
+        </article>
+      </div>
 
       {!isSettingsSurface && (
         <>

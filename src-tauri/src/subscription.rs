@@ -113,48 +113,6 @@ pub(crate) struct DiscordLinkStartResponse {
     url: String,
 }
 
-/// Payer details Cakto requires on every Pix charge. Passed straight through to
-/// the worker and never stored locally — the document and phone belong to the
-/// payment provider, not to GhostBox.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PixPayer {
-    name: String,
-    email: String,
-    phone: String,
-    document: String,
-    fingerprint: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PixCharge {
-    payment_id: String,
-    #[serde(default)]
-    order_id: Option<String>,
-    status: String,
-    plan_id: String,
-    amount_cents: u64,
-    currency: String,
-    #[serde(default)]
-    qr_code: Option<String>,
-    #[serde(default)]
-    qr_code_base64: Option<String>,
-    #[serde(default)]
-    expires_at: Option<String>,
-    #[serde(default)]
-    checkout_url: Option<String>,
-    created_at: String,
-    #[serde(default)]
-    confirmed_at: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PixChargeResponse {
-    charge: Option<PixCharge>,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SubscriptionStatusCache {
@@ -256,14 +214,6 @@ fn format_subscription_api_error(code: &str, status: reqwest::StatusCode) -> Str
             "Não foi possível confirmar o período da assinatura com a Stripe. Tente novamente em instantes.".to_string()
         }
         "Payment not found" | "payment_not_found" => "Pagamento não encontrado.".to_string(),
-        "invalid_document" => "CPF inválido. Confira os números e tente novamente.".to_string(),
-        "invalid_phone" => "Telefone inválido. Informe DDD e número.".to_string(),
-        "invalid_name" => "Informe o nome completo do pagador.".to_string(),
-        "invalid_email" => "E-mail inválido.".to_string(),
-        "invalid_fingerprint" => {
-            "Não foi possível identificar este dispositivo. Reabra o GhostBox e tente novamente."
-                .to_string()
-        }
         other if !other.is_empty() => other.to_string(),
         _ => format!("Subscription API respondeu HTTP {status}"),
     }
@@ -401,68 +351,6 @@ pub async fn subscription_refresh_status(
         let _ = cache_status(&app, &status);
     }
     Ok(refresh)
-}
-
-#[tauri::command]
-pub async fn subscription_create_pix_charge(
-    app: tauri::AppHandle,
-    plan_id: String,
-    payer: PixPayer,
-) -> Result<PixChargeResponse, String> {
-    let token = session_token(&app)?;
-    let plan_id = plan_id.trim().to_string();
-    if plan_id != "monthly" && plan_id != "quarterly" {
-        return Err("Plano de assinatura inválido.".to_string());
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(25))
-        .build()
-        .map_err(|error| error.to_string())?;
-    let url = format!("{}/subscription/pix/charges", subscription_api_url());
-    json_request::<PixChargeResponse>(
-        client
-            .post(url)
-            .bearer_auth(token)
-            .json(&serde_json::json!({
-                "planId": plan_id,
-                "name": payer.name,
-                "email": payer.email,
-                "phone": payer.phone,
-                "document": payer.document,
-                "fingerprint": payer.fingerprint,
-            })),
-    )
-    .await
-}
-
-#[tauri::command]
-pub async fn subscription_get_pix_charge(
-    app: tauri::AppHandle,
-    payment_id: String,
-) -> Result<PixChargeResponse, String> {
-    let payment_id = payment_id.trim().to_string();
-    // The worker mints these as UUIDs; refusing anything else keeps the value
-    // safe to drop straight into the path without an encoding dependency.
-    if payment_id.is_empty()
-        || !payment_id
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
-    {
-        return Err("Cobrança inválida.".to_string());
-    }
-
-    let token = session_token(&app)?;
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|error| error.to_string())?;
-    let url = format!(
-        "{}/subscription/pix/charges/{}",
-        subscription_api_url(),
-        payment_id
-    );
-    json_request::<PixChargeResponse>(client.get(url).bearer_auth(token)).await
 }
 
 #[tauri::command]

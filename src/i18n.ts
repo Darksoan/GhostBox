@@ -251,39 +251,6 @@ const translations: Record<Language, TranslationTree> = {
       actions: {
         subscribe: "Assinar",
       },
-      method: {
-        label: "Forma de pagamento",
-        card: "Cartão",
-        pix: "Pix",
-        pixHint: "Pix libera um período fixo, sem renovação automática.",
-      },
-      pix: {
-        title: "Pagar com Pix",
-        formSubtitle: "Confirme seus dados para gerar o Pix de {price}.",
-        scanSubtitle: "Escaneie o QR Code no app do seu banco ou use o copia e cola.",
-        fields: {
-          name: "Nome completo",
-          document: "CPF",
-          phone: "Telefone",
-        },
-        privacy:
-          "Usamos esses dados apenas para emitir a cobrança. Eles não ficam salvos no GhostBox.",
-        generate: "Gerar Pix",
-        generating: "Gerando...",
-        regenerate: "Gerar novo Pix",
-        copy: "Copiar código",
-        copied: "Copiado",
-        copyLabel: "Pix copia e cola",
-        qrAlt: "QR Code do Pix",
-        waiting: "Aguardando pagamento · expira em {time}",
-        waitingNoTimer: "Aguardando pagamento...",
-        expired: "Este Pix expirou. Gere um novo para continuar.",
-        close: "Fechar",
-        paidTitle: "Pagamento confirmado",
-        paidMessage: "Seu acesso Premium já está ativo.",
-      },
-      renewPix: "Renovar com Pix",
-      accessUntil: "Acesso até",
       discordLink: {
         title: "Vincular Discord",
         description:
@@ -893,38 +860,6 @@ const translations: Record<Language, TranslationTree> = {
       actions: {
         subscribe: "Subscribe",
       },
-      method: {
-        label: "Payment method",
-        card: "Card",
-        pix: "Pix",
-        pixHint: "Pix unlocks a fixed period, with no automatic renewal.",
-      },
-      pix: {
-        title: "Pay with Pix",
-        formSubtitle: "Confirm your details to generate the {price} Pix charge.",
-        scanSubtitle: "Scan the QR code in your bank app, or use the copy-and-paste code.",
-        fields: {
-          name: "Full name",
-          document: "CPF",
-          phone: "Phone",
-        },
-        privacy: "These details are only used to issue the charge. GhostBox does not store them.",
-        generate: "Generate Pix",
-        generating: "Generating...",
-        regenerate: "Generate a new Pix",
-        copy: "Copy code",
-        copied: "Copied",
-        copyLabel: "Pix copy-and-paste code",
-        qrAlt: "Pix QR code",
-        waiting: "Waiting for payment · expires in {time}",
-        waitingNoTimer: "Waiting for payment...",
-        expired: "This Pix charge expired. Generate a new one to continue.",
-        close: "Close",
-        paidTitle: "Payment confirmed",
-        paidMessage: "Your Premium access is active.",
-      },
-      renewPix: "Renew with Pix",
-      accessUntil: "Access until",
       discordLink: {
         title: "Link Discord",
         description:

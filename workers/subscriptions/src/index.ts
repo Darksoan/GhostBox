@@ -22,19 +22,6 @@ import {
   validPassword,
   type AccountRow,
 } from "./auth";
-import {
-  CaktoApiError,
-  caktoConfigured,
-  caktoOfferId,
-  caktoOrderIsPaid,
-  caktoOrderIsReversed,
-  createCaktoPixCharge,
-  getCaktoOrder,
-  caktoAmountCents,
-  isValidBrazilianPhone,
-  isValidCpf,
-  type CaktoOrder,
-} from "./cakto";
 import { base64Url, base64UrlDecode, hmacSha256, timingSafeEqual } from "./crypto";
 import {
   STRIPE_API_VERSION,
@@ -69,16 +56,7 @@ type Env = {
   PROFILE_IMAGE_BUCKET?: string;
   FIREBASE_API_KEY?: string;
   STRIPE_API_VERSION?: string;
-  CAKTO_CLIENT_ID?: string;
-  CAKTO_CLIENT_SECRET?: string;
-  CAKTO_WEBHOOK_SECRET?: string;
-  CAKTO_OFFER_MONTHLY?: string;
-  CAKTO_OFFER_QUARTERLY?: string;
-  CAKTO_API_URL?: string;
 };
-
-/** Who processed the money. Cards go through Stripe, Pix through Cakto. */
-type PaymentProvider = "stripe" | "cakto";
 
 type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "cancelled";
 type SubscriptionStatus = "free" | "active" | "expired";
@@ -105,8 +83,7 @@ type PaymentRow = {
   stripe_invoice_id: string | null;
   stripe_payment_intent_id: string | null;
   stripe_subscription_id: string | null;
-  cakto_order_id: string | null;
-  provider: PaymentProvider | null;
+  provider: "stripe" | null;
   provider_payload: string | null;
   created_at: string;
   updated_at: string;
@@ -128,8 +105,6 @@ type SubscriptionRow = {
   stripe_event_created?: number | null;
   stripe_payment_method_json?: string | null;
   stripe_payment_method_updated_at?: string | null;
-  /** Which provider granted the current period — the app renders a different panel for each. */
-  provider?: PaymentProvider | null;
   created_at: string;
   updated_at: string;
 };
@@ -567,7 +542,6 @@ function publicSubscription(row: SubscriptionRow | null) {
       currentPeriodEnd: null,
       lastPaymentId: null,
       cancelAtPeriodEnd: false,
-      provider: null,
       updatedAt: null,
     };
   }
@@ -581,8 +555,6 @@ function publicSubscription(row: SubscriptionRow | null) {
     currentPeriodEnd: row.current_period_end,
     lastPaymentId: row.last_payment_id,
     cancelAtPeriodEnd: Boolean(row.cancel_at_period_end),
-    // Legacy rows predate the column and are all Stripe cards.
-    provider: (row.provider ?? "stripe") as PaymentProvider,
     updatedAt: row.updated_at,
   };
 }
@@ -1378,9 +1350,8 @@ async function handleStatus(request: Request, env: Env) {
     : await reconcilePaymentWithSubscription(env, latestPaymentRow, subscription);
 
   // Only subscribers have a card worth showing, and only they see the panel
-  // that renders it. A Pix period has no card at all, so asking Stripe would
-  // be a wasted round trip on every 10s poll.
-  const paymentMethod = isActiveSubscription(subscription) && subscription?.provider !== "cakto"
+  // that renders it.
+  const paymentMethod = isActiveSubscription(subscription)
     ? await resolveCachedPaymentMethod(env, subscription).catch(() => null)
     : null;
 
@@ -1392,407 +1363,6 @@ async function handleStatus(request: Request, env: Env) {
     paymentMethod,
     discordLink: publicDiscordLink(discordLink, null),
   }, env);
-}
-
-// ---- Pix via Cakto ----
-//
-// Pix here is a one-off payment, not a subscription: each confirmed charge
-// grants a fixed period that stacks on whatever is left. Cakto has no billing
-// portal and no mandate, so nothing in the Stripe path is reused beyond
-// `upsertSubscription` and the Discord role sync.
-
-function safeParseJson(value: string | null): Record<string, unknown> | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Cakto rejects the charge without these, and a rejected charge still costs a payments row. */
-function readPixPayer(body: Record<string, any> | null, account: AccountRow | null, request: Request) {
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const email = normalizeEmail(body?.email) || normalizeEmail(account?.email) || "";
-  const phone = typeof body?.phone === "string" ? body.phone : "";
-  const document = typeof body?.document === "string" ? body.document : "";
-  const fingerprint = typeof body?.fingerprint === "string" ? body.fingerprint.trim() : "";
-
-  if (name.length < 3) return { error: "invalid_name" as const };
-  if (!email) return { error: "invalid_email" as const };
-  if (!isValidBrazilianPhone(phone)) return { error: "invalid_phone" as const };
-  if (!isValidCpf(document)) return { error: "invalid_document" as const };
-  if (!fingerprint) return { error: "invalid_fingerprint" as const };
-
-  return {
-    payer: {
-      name: name.slice(0, 120),
-      email,
-      phone,
-      document,
-      documentType: "cpf" as const,
-      fingerprint: fingerprint.slice(0, 120),
-      ip: clientIp(request),
-    },
-  };
-}
-
-function publicPixCharge(payment: PaymentRow, order: CaktoOrder | null) {
-  return {
-    paymentId: payment.id,
-    orderId: payment.cakto_order_id,
-    status: payment.status,
-    planId: payment.plan_id,
-    amountCents: payment.amount_cents,
-    currency: payment.currency,
-    qrCode: order?.pix?.qrCode ?? null,
-    qrCodeBase64: order?.pix?.qrCodeBase64 ?? null,
-    expiresAt: order?.pix?.expiresAt ?? null,
-    checkoutUrl: order?.checkoutUrl ?? payment.hosted_checkout_url,
-    createdAt: payment.created_at,
-    confirmedAt: payment.confirmed_at,
-  };
-}
-
-/**
- * Grants (or extends) the Pix access window for a confirmed order.
- *
- * Idempotent on purpose: the webhook and the app's poll race each other by
- * design, and a payment already marked `paid` must not stack a second period.
- * Returns whether this call was the one that confirmed the payment.
- */
-async function grantCaktoAccess(env: Env, payment: PaymentRow, order: CaktoOrder) {
-  const now = nowIso();
-  const claimed = await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE payments SET status = 'paid', provider = 'cakto', confirmed_at = ?, updated_at = ?
-     WHERE id = ? AND status <> 'paid'`
-  ).bind(now, now, payment.id).run();
-
-  if ((claimed.meta.changes ?? 0) === 0) return false;
-
-  const plan = plans[payment.plan_id];
-
-  // Ensures the row exists (and adopts a legacy steam-keyed one) without
-  // touching the period: `current_period_end` is COALESCE'd in the upsert, so
-  // passing null leaves whatever is on record for the atomic extension below.
-  await upsertSubscription(env, {
-    userId: payment.user_id,
-    steamId: payment.steam_id,
-    planId: payment.plan_id,
-    status: "active",
-    currentPeriodStart: now,
-    currentPeriodEnd: null,
-    lastPaymentId: payment.id,
-    // A Pix charge buys a fixed window and never renews itself, so the panel
-    // must show "access until", not "next billing".
-    cancelAtPeriodEnd: true,
-    provider: "cakto",
-  });
-
-  await extendPeriodInPlace(env, payment, plan.months, now);
-
-  if (payment.user_id) await syncPremiumRole(env, payment.user_id, true);
-  console.log("Cakto payment confirmed", { paymentId: payment.id, orderId: order.id });
-  return true;
-}
-
-/**
- * Adds one Pix period to whatever is left, in a single statement.
- *
- * Read-then-write would lose days: two charges for the same account confirmed
- * seconds apart (webhook for one racing the app's poll for the other) would
- * both read the same `current_period_end` and the later write would overwrite
- * the earlier one's stacking. SQLite does the arithmetic here so the read and
- * the write cannot be interleaved.
- *
- * The `replace` calls exist because the stored timestamps are ISO-8601 with
- * `T` and a trailing `Z`, which `datetime()` does not parse directly.
- */
-async function extendPeriodInPlace(env: Env, payment: PaymentRow, months: number, now: string) {
-  const target = payment.user_id
-    ? { column: "user_id", value: payment.user_id }
-    : payment.steam_id
-      ? { column: "steam_id", value: payment.steam_id }
-      : null;
-  if (!target) return;
-
-  const modifier = `+${months} months`;
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE subscriptions
-     SET current_period_end = strftime('%Y-%m-%dT%H:%M:%fZ', datetime(
-           CASE
-             WHEN current_period_end IS NOT NULL AND current_period_end > ?
-             THEN replace(replace(current_period_end, 'T', ' '), 'Z', '')
-             ELSE replace(replace(?, 'T', ' '), 'Z', '')
-           END, ?)),
-         status = 'active',
-         updated_at = ?
-     WHERE ${target.column} = ?`
-  ).bind(now, now, modifier, now, target.value).run();
-}
-
-async function revokeCaktoAccess(env: Env, payment: PaymentRow, status: PaymentStatus, reason: string) {
-  const now = nowIso();
-  // `payments.status` has no value that separates a refund from a chargeback,
-  // and support needs to tell them apart when a period is pulled back.
-  const providerPayload = JSON.stringify({
-    ...(safeParseJson(payment.provider_payload) ?? {}),
-    reversal: { reason, at: now },
-  });
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE payments SET status = ?, provider_payload = ?, updated_at = ? WHERE id = ?`
-  ).bind(status, providerPayload, now, payment.id).run();
-
-  // Only the period this payment bought is revoked. An account that also has a
-  // live Stripe subscription keeps it — expireSubscription matches on the row
-  // this payment is the last one for.
-  const subscription = payment.user_id ? await getSubscription(env, payment.user_id) : null;
-  if (!subscription || subscription.last_payment_id !== payment.id) return;
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE subscriptions SET status = 'expired', updated_at = ? WHERE user_id = ?`
-  ).bind(now, payment.user_id).run();
-
-  if (payment.user_id) await syncPremiumRole(env, payment.user_id, false);
-}
-
-async function handleCreatePixCharge(request: Request, env: Env) {
-  const auth = await requireSession(request, env);
-  if (auth.response) return auth.response;
-  const userId = auth.session!.userId;
-  const steamId = auth.session!.steamId || null;
-
-  if (!caktoConfigured(env)) {
-    return jsonResponse({ error: "Pix is not configured on the server" }, env, 500);
-  }
-
-  const body = await readJson(request);
-  const planId = body?.planId;
-  if (planId !== "monthly" && planId !== "quarterly") return jsonResponse({ error: "invalid_plan" }, env, 400);
-
-  const offerId = caktoOfferId(env, planId);
-  if (!offerId) return jsonResponse({ error: "Pix offer is not configured on the server" }, env, 500);
-
-  const account = await getAccountByUserId(env, userId);
-  const payer = readPixPayer(body, account, request);
-  if ("error" in payer) return jsonResponse({ error: payer.error }, env, 400);
-
-  // Same ceiling as the Stripe checkout: every attempt costs an upstream call
-  // and a payments row.
-  const ip = clientIp(request);
-  if (
-    (await tooManyAuthAttempts(env, ip, "pix_charge", 10, 3600)) ||
-    (await tooManyAuthAttempts(env, `user:${userId}`, "pix_charge", 10, 3600))
-  ) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-  await recordAuthAttempt(env, ip, "pix_charge");
-  await recordAuthAttempt(env, `user:${userId}`, "pix_charge");
-
-  const plan = plans[planId];
-  const paymentId = crypto.randomUUID();
-
-  let order: CaktoOrder;
-  try {
-    order = await createCaktoPixCharge(env, {
-      offerId,
-      payer: payer.payer,
-      // Doubles as the row id, so a network retry cannot create a second charge.
-      idempotencyKey: paymentId,
-      trackingReference: `ghostbox:${userId}`,
-    });
-  } catch (error) {
-    if (error instanceof CaktoApiError) {
-      console.warn("Cakto Pix charge failed", { userId, status: error.status, message: error.message });
-      return jsonResponse({ error: error.message }, env, error.status === 429 ? 429 : 502);
-    }
-    throw error;
-  }
-
-  if (!order?.id || !order.pix?.qrCode) {
-    return jsonResponse({ error: "Cakto não retornou o QR Code do Pix" }, env, 502);
-  }
-
-  const createdAt = nowIso();
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO payments (
-       id, checkout_reference, checkout_id, cakto_order_id, steam_id, user_id, plan_id, amount_cents, currency,
-       status, hosted_checkout_url, provider, provider_payload, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'BRL', 'pending', ?, 'cakto', ?, ?, ?)`
-  ).bind(
-    paymentId,
-    `cakto-${order.refId || order.id}`,
-    order.id,
-    order.id,
-    steamId,
-    userId,
-    planId,
-    // What the customer is actually charged, fee included — not the offer's
-    // base price.
-    caktoAmountCents(order) ?? plan.amountCents,
-    order.checkoutUrl || null,
-    JSON.stringify({ refId: order.refId ?? null, expiresAt: order.pix.expiresAt ?? null }),
-    createdAt,
-    createdAt
-  ).run();
-
-  const payment = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM payments WHERE id = ?`
-  ).bind(paymentId).first<PaymentRow>();
-
-  return jsonResponse({ charge: payment ? publicPixCharge(payment, order) : null }, env, 201);
-}
-
-/**
- * Poll for the app while the QR code is on screen.
- *
- * Re-reads the order straight from Cakto and grants access on the spot, so a
- * delayed or dropped webhook never leaves someone who already paid staring at
- * the plan picker. Mirrors `/subscription/refresh` on the Stripe side.
- */
-async function handleGetPixCharge(request: Request, env: Env, paymentId: string) {
-  const auth = await requireSession(request, env);
-  if (auth.response) return auth.response;
-  const userId = auth.session!.userId;
-
-  const payment = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM payments WHERE id = ? LIMIT 1`
-  ).bind(paymentId).first<PaymentRow>();
-
-  // 404 rather than 403 for someone else's payment: a 403 would confirm the id.
-  if (!payment || payment.user_id !== userId) return jsonResponse({ error: "payment_not_found" }, env, 404);
-  if (payment.provider !== "cakto" || !payment.cakto_order_id) {
-    return jsonResponse({ error: "payment_not_found" }, env, 404);
-  }
-
-  if (payment.status === "paid") return jsonResponse({ charge: publicPixCharge(payment, null) }, env);
-
-  let order: CaktoOrder | null = null;
-  try {
-    order = await getCaktoOrder(env, payment.cakto_order_id);
-  } catch (error) {
-    const message = error instanceof CaktoApiError ? error.message : String(error);
-    console.warn("Cakto order lookup failed", { paymentId, message });
-    // The charge may still be perfectly alive; report what is on record rather
-    // than telling the user their payment failed.
-    return jsonResponse({ charge: publicPixCharge(payment, null) }, env);
-  }
-
-  if (order && caktoOrderIsPaid(order)) {
-    await grantCaktoAccess(env, payment, order);
-    const confirmed = await env.SUBSCRIPTION_DB.prepare(
-      `SELECT * FROM payments WHERE id = ? LIMIT 1`
-    ).bind(paymentId).first<PaymentRow>();
-    return jsonResponse({ charge: publicPixCharge(confirmed || payment, order) }, env);
-  }
-
-  if (order && caktoOrderIsReversed(order)) {
-    await revokeCaktoAccess(env, payment, "cancelled", order.status || "reversed");
-    return jsonResponse({ charge: { ...publicPixCharge(payment, order), status: "cancelled" } }, env);
-  }
-
-  return jsonResponse({ charge: publicPixCharge(payment, order) }, env);
-}
-
-/**
- * Cakto webhook.
- *
- * Unlike Stripe, Cakto does not sign the payload — the only proof of origin is
- * a shared `secret` inside the body. That is weak enough that the body is never
- * trusted on its own: every event re-reads the order from the API before any
- * access is granted or revoked.
- */
-async function handleCaktoWebhook(request: Request, env: Env) {
-  const configuredSecret = env.CAKTO_WEBHOOK_SECRET?.trim();
-  if (!configuredSecret) {
-    return jsonResponse({ error: "Cakto webhook secret is not configured" }, env, 500);
-  }
-
-  const payload = await request.text();
-  let event: Record<string, any>;
-  try {
-    event = JSON.parse(payload);
-  } catch {
-    return jsonResponse({ error: "Invalid JSON" }, env, 400);
-  }
-
-  const receivedSecret = typeof event.secret === "string" ? event.secret : "";
-  if (!timingSafeEqual(receivedSecret, configuredSecret)) {
-    return jsonResponse({ error: "unauthorized" }, env, 401);
-  }
-
-  const eventType = typeof event.event === "string" ? event.event : null;
-  const data = (event.data && typeof event.data === "object" ? event.data : null) as Record<string, any> | null;
-  const orderId = typeof data?.id === "string" ? data.id : null;
-  if (!eventType || !orderId) return jsonResponse({ ok: true, note: "ignored" }, env);
-
-  const eventId = `cakto-${orderId}-${eventType}`;
-  const eventCreated = nowSeconds();
-  // The secret is a credential; it must not be persisted with the event body.
-  const storedPayload = JSON.stringify({ ...event, secret: undefined });
-
-  const inserted = await env.SUBSCRIPTION_DB.prepare(
-    `INSERT OR IGNORE INTO webhook_events (id, event_type, stripe_event_created, payload)
-     VALUES (?, ?, ?, ?)`
-  ).bind(eventId, eventType, eventCreated, storedPayload).run();
-
-  if ((inserted.meta.changes ?? 0) === 0) {
-    const seen = await env.SUBSCRIPTION_DB.prepare(
-      `SELECT processed_at FROM webhook_events WHERE id = ? LIMIT 1`
-    ).bind(eventId).first<{ processed_at: string | null }>();
-    if (seen?.processed_at) return jsonResponse({ ok: true, note: "duplicate" }, env);
-  }
-
-  try {
-    await processCaktoEvent(env, eventType, orderId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Cakto webhook processing failed", { eventId, eventType, message });
-    await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE webhook_events SET attempts = attempts + 1, last_error = ? WHERE id = ?`
-    ).bind(message.slice(0, 500), eventId).run().catch(() => undefined);
-    // Non-2xx is what makes Cakto redeliver.
-    return jsonResponse({ error: "webhook_processing_failed" }, env, 500);
-  }
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE webhook_events SET processed_at = ? WHERE id = ?`
-  ).bind(nowIso(), eventId).run();
-
-  return jsonResponse({ ok: true }, env);
-}
-
-async function processCaktoEvent(env: Env, eventType: string, orderId: string) {
-  const relevant = ["purchase_approved", "refund", "chargeback", "purchase_refused"];
-  if (!relevant.includes(eventType)) return;
-
-  const payment = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM payments WHERE cakto_order_id = ? LIMIT 1`
-  ).bind(orderId).first<PaymentRow>();
-  // An order we never created (another product on the same Cakto account).
-  if (!payment) return;
-
-  const order = await getCaktoOrder(env, orderId);
-  if (!order) return;
-
-  if (caktoOrderIsPaid(order)) {
-    await grantCaktoAccess(env, payment, order);
-    return;
-  }
-
-  if (caktoOrderIsReversed(order)) {
-    // The order status is more precise than the event name: a chargeback and a
-    // refund both arrive here, and support needs to tell them apart.
-    await revokeCaktoAccess(env, payment, "cancelled", order.status || eventType);
-    return;
-  }
-
-  if (eventType === "purchase_refused") {
-    await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE payments SET status = 'failed', updated_at = ? WHERE id = ? AND status = 'pending'`
-    ).bind(nowIso(), payment.id).run();
-  }
 }
 
 async function handleCloudSavesList(request: Request, env: Env) {
@@ -2324,7 +1894,6 @@ type UpsertSubscriptionInput = {
   stripeSubscriptionId?: string | null;
   stripeSubscriptionStatus?: string | null;
   cancelAtPeriodEnd?: boolean;
-  provider?: PaymentProvider | null;
   /** Stripe `event.created`, in seconds. Guards against out-of-order webhooks. */
   eventCreated?: number;
 };
@@ -2352,8 +1921,8 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
     `INSERT INTO subscriptions (
        steam_id, user_id, plan_id, status, current_period_start, current_period_end,
        last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status,
-       cancel_at_period_end, provider, stripe_event_created, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       cancel_at_period_end, stripe_event_created, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(${conflictColumn}) DO UPDATE SET
        steam_id = COALESCE(excluded.steam_id, subscriptions.steam_id),
        user_id = COALESCE(excluded.user_id, subscriptions.user_id),
@@ -2366,7 +1935,6 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
        stripe_subscription_id = COALESCE(excluded.stripe_subscription_id, subscriptions.stripe_subscription_id),
        stripe_subscription_status = COALESCE(excluded.stripe_subscription_status, subscriptions.stripe_subscription_status),
        cancel_at_period_end = excluded.cancel_at_period_end,
-       provider = COALESCE(excluded.provider, subscriptions.provider),
        stripe_event_created = excluded.stripe_event_created,
        updated_at = excluded.updated_at
      WHERE COALESCE(subscriptions.stripe_event_created, 0) <= excluded.stripe_event_created`
@@ -2382,7 +1950,6 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
     input.stripeSubscriptionId || null,
     input.stripeSubscriptionStatus || null,
     input.cancelAtPeriodEnd ? 1 : 0,
-    input.provider || null,
     eventCreated,
     now,
     now
@@ -2474,7 +2041,6 @@ async function handleRefreshPayment(request: Request, env: Env) {
           stripeSubscriptionId: subscriptionId,
           stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
           cancelAtPeriodEnd: Boolean(subInfo.cancel_at_period_end),
-          provider: "stripe",
         });
 
         if (payment.user_id) {
@@ -2559,7 +2125,6 @@ async function processCheckoutSessionCompleted(env: Env, event: StripeEventConte
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscriptionId,
     stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
-    provider: "stripe",
     eventCreated,
   });
 
@@ -2605,7 +2170,6 @@ async function processSubscriptionUpserted(env: Env, event: StripeEventContext) 
     stripeSubscriptionId: subscriptionId,
     stripeSubscriptionStatus: typeof status === "string" ? status : null,
     cancelAtPeriodEnd: Boolean(data.cancel_at_period_end),
-    provider: "stripe",
     eventCreated,
   });
 
@@ -2700,7 +2264,6 @@ async function processInvoicePaymentSucceeded(env: Env, event: StripeEventContex
     stripeSubscriptionId: subscriptionId,
     stripeSubscriptionStatus: typeof stripeStatus === "string" ? stripeStatus : null,
     cancelAtPeriodEnd: Boolean(subInfo.cancel_at_period_end),
-    provider: "stripe",
     eventCreated,
   });
 
@@ -3310,16 +2873,6 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   }
   if (request.method === "GET" && url.pathname === "/subscription/status") {
     return handleStatus(request, env);
-  }
-  if (request.method === "POST" && url.pathname === "/subscription/pix/charges") {
-    return handleCreatePixCharge(request, env);
-  }
-  const pixChargeMatch = url.pathname.match(/^\/subscription\/pix\/charges\/([^/]+)$/);
-  if (request.method === "GET" && pixChargeMatch) {
-    return handleGetPixCharge(request, env, decodeURIComponent(pixChargeMatch[1]));
-  }
-  if (request.method === "POST" && url.pathname === "/cakto/webhook") {
-    return handleCaktoWebhook(request, env);
   }
   if (request.method === "GET" && url.pathname === "/discord/link-status") {
     return handleDiscordLinkStatus(request, env, context);
