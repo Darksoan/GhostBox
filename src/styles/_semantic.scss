@@ -254,13 +254,11 @@
 
   // --- Peso de fonte ---
   // Inter Variable é o único arquivo de fonte carregado (ver main.tsx) e
-  // sustenta pesos reais, sem síntese do sistema. Quatro papéis: regular é
-  // leitura pontual; body (450) é o peso ótico do corpo em fundo escuro —
-  // hastes um pouco mais firmes que 400 sem engordar blocos longos; medium é
-  // controle clicável e rótulo; semibold é título e ênfase.
+  // sustenta pesos reais, sem síntese do sistema. Só dois papéis: regular é
+  // todo texto corrido, rótulo e controle; semibold é título e ênfase. Pesos
+  // intermediários (450/500) e 700 foram removidos de propósito — a hierarquia
+  // vem de tamanho e cor, não de mais um degrau de peso.
   --weight-regular: 400;
-  --weight-body: 450;
-  --weight-medium: 500;
   --weight-semibold: 600;
 
   // --- Família ---

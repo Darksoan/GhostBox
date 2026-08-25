@@ -40,7 +40,7 @@ describe("Catalogue hover preview", () => {
         node.selector === ".catalogue-hover-preview__developer"
     );
     expect(developerRule?.toString()).toContain(
-      "font-weight: var(--weight-medium)"
+      "font-weight: var(--weight-regular)"
     );
   });
 

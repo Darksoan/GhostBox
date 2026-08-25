@@ -248,6 +248,22 @@ export function HomeCategoryCardSkeleton({
   );
 }
 
+export function HomeTopRatedCardBodySkeleton() {
+  return (
+    <span className="home-top-rated-card__body">
+      <span className="home-top-rated-card__title home-top-rated-card__title--skeleton skeleton" />
+      <span className="home-top-rated-card__tags">
+        {Array.from({ length: 4 }, (_, index) => (
+          <span
+            className="home-top-rated-card__tag home-top-rated-card__tag--skeleton skeleton"
+            key={`top-rated-tag-${index}`}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function HomeWishlistCardSkeleton() {
   return (
     <div className="home-wishlist-card home-wishlist-card--skeleton">
@@ -276,27 +292,6 @@ export function HomeWishlistCardSkeleton() {
  * (`homeTopRatedPrimaryPillCount`) — para o skeleton fechar na mesma altura do
  * card carregado.
  */
-export function HomeTopRatedCardBodySkeleton() {
-  return (
-    <span className="home-top-rated-card__body">
-      <span className="home-top-rated-card__title home-top-rated-card__title--skeleton skeleton" />
-      <span className="home-top-rated-card__summary">
-        <span className="home-top-rated-card__summary-line home-top-rated-card__summary-line--skeleton skeleton" />
-        <span className="home-top-rated-card__summary-line home-top-rated-card__summary-line--skeleton skeleton" />
-        <span className="home-top-rated-card__summary-line home-top-rated-card__summary-line--skeleton skeleton" />
-      </span>
-      <span className="home-top-rated-card__tags">
-        {Array.from({ length: 4 }, (_, index) => (
-          <span
-            className="home-top-rated-card__tag home-top-rated-card__tag--skeleton skeleton"
-            key={`top-rated-tag-${index}`}
-          />
-        ))}
-      </span>
-    </span>
-  );
-}
-
 export function HomeWishlistReviewSkeleton({
   rootRef,
   ariaHidden = false,

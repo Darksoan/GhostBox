@@ -168,28 +168,19 @@ describe("Home layout", () => {
     expect(shelfSource).not.toContain("showSummary");
   });
 
-  it("reserves the summary row before the data lands and drops the badge", () => {
+  it("keeps the card to title and pills — no badge nor description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");
     const cardEnd = component.indexOf("\nfunction ", cardStart);
     const cardSource = component.slice(cardStart, cardEnd);
 
-    // A descrição chega pelo enrichment, card a card. Sem o bloco reservado,
-    // o card cresceria quando a resposta voltasse — a altura fechada mantém a
-    // fila. O badge de popularidade foi removido do card.
-    expect(cardSource).toContain("home-top-rated-card__summary");
+    // Sem badge de popularidade e sem descrição curta: o card carrega só o
+    // nome e a linha de pills. O corpo não reserva bloco de resumo.
     expect(cardSource).not.toContain("home-top-rated-card__players");
+    expect(cardSource).not.toContain("home-top-rated-card__summary");
+    expect(cardSource).not.toContain("home-top-rated-card__summary-line");
     expect(cardSource).not.toContain("home-top-rated-card__metric-value--skeleton");
     expect(cardSource).not.toContain("home-top-rated-card__metric-value--empty");
-
-    const stylesheet = postcss.parse(compile("src/app.scss").css);
-    const summaryRule = stylesheet.nodes.find(
-      (node) =>
-        node.type === "rule" && node.selector === ".home-top-rated-card__summary",
-    );
-
-    // A altura fixa é o que faz o bloco vazio ocupar o mesmo espaço do cheio.
-    expect(summaryRule?.toString()).toContain("height: calc(");
   });
 
   it("gives the section header real hierarchy over card body copy", () => {

@@ -42,7 +42,7 @@
     margin: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
   }
 
@@ -52,7 +52,7 @@
 
   &__summary-playtime strong {
     color: var(--text-primary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__progress-track {
@@ -87,7 +87,7 @@
     gap: var(--space-6);
     padding: var(--space-16) var(--space-10);
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-compact);
   }
 
@@ -207,7 +207,7 @@
     strong {
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
     }
 
@@ -215,7 +215,7 @@
       margin: 0;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
   }
@@ -225,14 +225,14 @@
     max-width: 220px;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     text-align: right;
     white-space: nowrap;
 
     strong {
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
   }
 

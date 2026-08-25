@@ -45,7 +45,7 @@
 .auth-form__title {
   margin: 0;
   font-size: var(--type-size-body-emphasis);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-strong);
   display: flex;
   align-items: center;
@@ -75,7 +75,7 @@
 
 .auth-field__label {
   font-size: var(--type-size-caption);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-muted);
 }
 
@@ -152,7 +152,7 @@
   padding: 0;
   margin-top: -8px;
   font-size: var(--type-size-caption);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
   cursor: pointer;
   transition: color 0.15s ease;
@@ -194,7 +194,7 @@
   border: none;
   border-radius: var(--radius-sm);
   font-size: var(--type-size-body);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   cursor: pointer;
   transition: opacity 0.15s ease;
 
@@ -229,7 +229,7 @@
       border: none;
       padding: 0;
       color: var(--text-primary);
-      font-weight: 600;
+      font-weight: var(--weight-semibold);
       cursor: pointer;
       transition: color 0.15s ease;
 

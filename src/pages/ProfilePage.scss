@@ -309,7 +309,7 @@
     align-items: flex-start;
     min-width: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     z-index: 1;
     overflow: visible;
   }
@@ -343,7 +343,7 @@
     overflow: hidden;
     color: var(--text-primary);
     font-size: var(--type-size-page);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-page);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -368,7 +368,7 @@
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     line-height: 1;
@@ -422,7 +422,7 @@
   &__steam-id {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     letter-spacing: 0.04em;
     user-select: none;
     transition: opacity var(--motion-base) var(--ease);
@@ -521,7 +521,7 @@
   &__discord-id {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     letter-spacing: 0.04em;
     user-select: none;
   }
@@ -638,7 +638,7 @@
       flex: 0 0 auto;
       color: var(--text-primary);
       font-size: var(--type-size-page);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       font-variant-numeric: tabular-nums;
       line-height: 1;
       white-space: nowrap;
@@ -662,7 +662,7 @@
       padding: 0 var(--space-6);
       border-radius: var(--radius-lg);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     .settings-dropdown__menu {
@@ -674,7 +674,7 @@
 
     .settings-dropdown__option {
       border-radius: var(--radius-lg);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
   }
 
@@ -856,7 +856,7 @@
       overflow: hidden;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
       text-overflow: ellipsis;
       transform: translateY(2px);
@@ -877,7 +877,7 @@
   &__activity-hours,
   &__activity-status {
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-caption);
     line-height: var(--type-line-caption);
   }
@@ -933,7 +933,7 @@
   &__activity-progress-label,
   &__activity-progress-count {
     color: var(--text-primary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-caption);
     line-height: var(--type-line-caption);
     white-space: nowrap;
@@ -1042,7 +1042,7 @@
       overflow: hidden;
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1051,7 +1051,7 @@
     small {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
   }
@@ -1066,7 +1066,7 @@
     background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -1207,7 +1207,7 @@
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     cursor: pointer;
     transition: color var(--motion-fast) var(--ease);
 
@@ -1258,7 +1258,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     position: relative;
     z-index: 2;
@@ -1276,7 +1276,7 @@
       /* Sem nudge de meio pixel: 18px centrados numa barra de 40px caem em
          pixel inteiro, e o `-0.5px` só borrava/desalinhava os ícones. */
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       opacity: 0.6;
       transition:
         color var(--motion-base) var(--ease),
@@ -1300,7 +1300,7 @@
     &--active {
       gap: 0;
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
 
       svg {
         color: var(--text-primary);
@@ -1435,7 +1435,7 @@
     background: transparent;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     cursor: pointer;
     transition:
@@ -1456,7 +1456,7 @@
 
     strong {
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       flex: 0 0 auto;
     }
   }
@@ -1610,7 +1610,7 @@
     overflow: hidden;
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-micro);
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1;

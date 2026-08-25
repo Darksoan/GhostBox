@@ -9,8 +9,8 @@ import {
 } from "../queries/home";
 import { useEnrichedGameCards } from "./useEnrichedGameCards";
 import { createSeedGame } from "../utils/gameSeed";
-import { gameTraitAppId, isMultiplayerGame } from "../utils/gameTraits";
-import { homeRotationSeed, shuffledRotation } from "../utils/homeRotation";
+import { gameTraitAppId } from "../utils/gameTraits";
+import { homeRotationSeed } from "../utils/homeRotation";
 import {
   buildTasteProfile,
   steamRecommendedTagNames,
@@ -228,23 +228,7 @@ export function useHomeShelves({
       shelfSizes.topSellers
     );
 
-    // "Mais jogados": ranking ao vivo de jogadores simultâneos da Steam (o
-    // trending já é consumido pela Home — antes só alimentava o explore pool).
-    // O trending vem ordenado (maior → menor), mas o rail quer uma amostra
-    // aleatória do most played, não o topo na ordem: embaralha com a seed
-    // semanal (estável na semana, outro arranjo toda segunda) e o picker só
-    // deduplica — contra biblioteca e rails acima. Só entram jogos de um
-    // jogador: títulos com multiplayer (PvP, co-op, MMO…) ficam de fora.
-    const trendingSinglePlayer = trendingGames.filter(
-      (game) => !isMultiplayerGame(game)
-    );
-    const topRated =
-      trendingSinglePlayer.length > 0
-        ? take(
-            shuffledRotation(trendingSinglePlayer, { seed, salt: "top-rated" }),
-            shelfSizes.topRated
-          )
-        : fixedTopRatedGames;
+    const topRated = fixedTopRatedGames;
 
     const upcomingAppIds = new Set(
       (featuredQuery.data?.comingSoon ?? []).flatMap((entry) => {
@@ -260,7 +244,7 @@ export function useHomeShelves({
       topRated,
       upcomingAppIds,
     };
-  }, [featuredQuery.data, libraryGameAppIds, seed, trendingGames]);
+  }, [featuredQuery.data, libraryGameAppIds]);
 
   // Featured rails arrive as bare seeds and catalogue rails lack the short
   // description, so every rail goes through the shared enrichment queue.

@@ -12,40 +12,36 @@ describe("Home most played rail", () => {
     expect(source).toContain('mostPlayed: "Most played"');
   });
 
-  it("drives the Top rated shelf from a random slice of the trending ranking", () => {
+  it("drives the Top rated shelf from the fixed app id list", () => {
     const hook = readFileSync("src/hooks/useHomeShelves.ts", "utf8");
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
 
-    // O rail é alimentado pelo trending (sort "playingNow"), e a lista fixa
-    // vira apenas fallback enquanto o trending não respondeu — ou quando não
-    // sobra nenhum jogo de um jogador no ranking.
-    expect(hook).toContain("trendingSinglePlayer.length > 0");
-    expect(hook).toContain("shuffledRotation(trendingSinglePlayer");
-    expect(hook).toContain(": fixedTopRatedGames");
+    // O rail é a lista fixa de app ids, não o ranking ao vivo do trending: a
+    // seleção é curada e não muda de semana para semana.
+    expect(hook).toContain("const topRated = fixedTopRatedGames;");
+    expect(hook).toContain("const fixedTopRatedAppIds = [");
+    expect(hook).not.toContain("trendingSinglePlayer");
+    expect(hook).not.toContain('salt: "top-rated"');
     expect(component).toContain('<HomeTopRatedShelf');
 
-    // Só entram jogos sem componente multiplayer no rail.
-    expect(hook).toContain("!isMultiplayerGame(game)");
-    expect(hook).toContain("isMultiplayerGame");
-
-    // A Home também consome o trending no explore pool — o rail não é uma
-    // segunda query nova.
-    expect(hook).toContain("useHomeTrendingQuery");
-    expect(hook).toContain("trendingGames");
+    // Os app ids fixos entram no ledger do picker para não reaparecerem nos
+    // rails de cima.
+    expect(hook).toContain("...(fixedTopRatedAppIds as readonly string[])");
   });
 
-  it("lays out the card with art, summary and a four-pill row — no badge", () => {
+  it("lays out the card with header art, title and a four-pill row — no badge, no description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");
     const cardEnd = component.indexOf("\nfunction ", cardStart);
     const cardSource = component.slice(cardStart, cardEnd);
 
-    // O badge de popularidade foi removido; o título entra direto no corpo.
+    // Header.jpg como arte, nome do jogo e pills embaixo — sem badge de
+    // popularidade e sem descrição curta.
+    expect(cardSource).toContain("gameHeaderOnlySources(game)");
+    expect(cardSource).toContain("home-top-rated-card__title");
     expect(cardSource).not.toContain("home-top-rated-card__players");
-    expect(cardSource).not.toContain("SortAsc");
-    expect(cardSource).not.toContain("SortDesc");
+    expect(cardSource).not.toContain("home-top-rated-card__summary");
     expect(component).not.toContain("reicon-react");
-    expect(cardSource).toContain("home-top-rated-card__summary");
 
     // Contagem fixa de pills, decidida no topo do arquivo (constante do rail).
     expect(component).toContain("const homeTopRatedCardPillCount = 4;");
@@ -57,7 +53,17 @@ describe("Home most played rail", () => {
 
     expect(selectors).not.toContain(".home-top-rated-card__header");
     expect(selectors).not.toContain(".home-top-rated-card__players");
-    expect(selectors).toContain(".home-top-rated-card__summary");
+    expect(selectors).not.toContain(".home-top-rated-card__summary");
+
+    // Arte larga (header.jpg), aspecto 920×377 — não a hero capsule em
+    // retrato usada em iterações anteriores deste rail.
+    let artRuleText = "";
+    stylesheet.walkRules(".home-top-rated-card__art", (rule) => {
+      artRuleText += rule.toString();
+    });
+    expect(artRuleText).toContain("background-size: cover");
+    // O Sass normaliza `920 / 377` para `920/377` na saída.
+    expect(artRuleText).toContain("aspect-ratio: 920/377");
   });
 });
 

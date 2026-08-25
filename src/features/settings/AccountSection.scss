@@ -26,7 +26,7 @@
 .account-section__header h2 {
   margin: 0;
   font-size: var(--type-size-body-emphasis);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-strong);
 }
 
@@ -45,14 +45,14 @@
 
 .account-section__label {
   font-size: var(--type-size-caption);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
 
 .account-section__value {
   font-size: var(--type-size-caption);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: var(--weight-regular);
 }
 
 .account-section__badge {
@@ -65,7 +65,7 @@
   background: var(--text-strong);
   color: var(--surface-canvas);
   font-size: var(--type-size-micro);
-  font-weight: 500;
+  font-weight: var(--weight-regular);
   cursor: pointer;
   transition: opacity var(--motion-fast) ease, background var(--motion-fast) ease,
     color var(--motion-fast) ease;
@@ -82,67 +82,6 @@
 .account-section__badge--sent {
   background: var(--success-soft);
   color: var(--success);
-}
-
-.account-section__copy {
-  position: relative;
-  overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color var(--motion-fast) ease;
-
-  &:hover,
-  &:focus-visible {
-    color: var(--text-primary);
-  }
-}
-
-.account-section__copy--copied {
-  color: var(--success);
-
-  &:hover,
-  &:focus-visible {
-    color: var(--success);
-  }
-}
-
-.account-section__copy-icon {
-  position: absolute;
-  inset: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform var(--motion-slow) var(--ease),
-              opacity var(--motion-slow) var(--ease);
-}
-
-.account-section__copy-icon--copy {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-.account-section__copy-icon--check {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
-.account-section__copy--copied .account-section__copy-icon--copy {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.account-section__copy--copied .account-section__copy-icon--check {
-  transform: translateY(0);
-  opacity: 1;
 }
 
 .account-section__icon {
@@ -191,7 +130,7 @@
   background: var(--surface-modal-control);
   color: var(--text-primary);
   font-size: var(--type-size-caption);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   cursor: pointer;
 
   &:hover:not(:disabled) {

@@ -61,7 +61,7 @@
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-align: left;
   transition:
     background-color var(--motion-fast) var(--ease),
@@ -93,7 +93,7 @@
   margin-left: auto;
   color: var(--text-secondary);
   font-size: var(--type-size-micro);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .tray-menu__game-icon {
@@ -110,7 +110,7 @@
   justify-content: center;
   background: var(--surface-active);
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .tray-menu__game-icon--skeleton {
@@ -129,7 +129,7 @@
   padding: var(--space-3) var(--space-4);
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 // ─── Mixins ──────────────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@
   background: var(--sidebar-selector);
   color: var(--text-secondary);
   font-size: var(--type-size-micro);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: 1;
   letter-spacing: var(--ls-200);
   white-space: nowrap;
@@ -394,7 +394,7 @@ body {
      recorrer a medium, que é papel de controle/título.
      `-webkit-font-smoothing` removido: propriedade macOS, sem efeito no
      Windows/WebView2 — mascarava onde a nitidez real era decidida. */
-  font-weight: var(--weight-body);
+  font-weight: var(--weight-regular);
   font-size: var(--type-size-body);
   line-height: var(--type-line-body);
   text-rendering: optimizeLegibility;
@@ -500,7 +500,7 @@ body {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-align: center;
 }
 
@@ -531,7 +531,7 @@ button {
   border: none;
   background: transparent;
   font-family: var(--font-sans);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 button:focus,
@@ -562,7 +562,7 @@ strong,
 b,
 .button,
 button {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-rendering: optimizeLegibility;
   font-synthesis: none;
 }
@@ -647,7 +647,7 @@ input,
 .sidebar__collection-more {
   padding: var(--space-2) var(--space-4);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   color: var(--text-secondary);
 }
 
@@ -1106,7 +1106,7 @@ p {
     /* Collection rows rest muted; expand/active → strong */
     &.sidebar__collection-item {
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
 
       .sidebar__collection-icon,
       .sidebar__collection-chevron {
@@ -1162,7 +1162,7 @@ p {
     background: transparent;
     color: inherit;
     cursor: pointer;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     text-align: left;
     transition: color var(--motion-fast) var(--ease);
@@ -1187,7 +1187,7 @@ p {
     min-height: 18px;
     color: inherit;
     font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
   }
 
@@ -1278,7 +1278,7 @@ p {
     border-radius: var(--radius-lg);
     @include mixins.ghost-button;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-align: left;
     transition:
       color var(--motion-fast) var(--ease),
@@ -1312,14 +1312,14 @@ p {
     padding: var(--space-3) var(--space-4);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__collection-more {
     padding: var(--space-2) var(--space-4);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__add-button,
@@ -1496,7 +1496,7 @@ p {
     box-sizing: border-box;
     color: var(--text-primary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     line-height: 1;
@@ -1745,7 +1745,7 @@ p {
     background: var(--danger);
     color: var(--text-primary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
     line-height: 1;
@@ -1812,7 +1812,7 @@ p {
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     opacity: 1;
     transition:
@@ -1940,7 +1940,7 @@ p {
     padding: 0 var(--space-5);
     @include mixins.ghost-button;
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     text-align: left;
     transition:
@@ -1985,7 +1985,7 @@ p {
 
   &__tooltip--premium {
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__search-shell {
@@ -2012,7 +2012,7 @@ p {
     border-radius: var(--radius-md);
     background: var(--surface-titlebar-control);
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     overflow: hidden;
     cursor: text;
@@ -2041,7 +2041,7 @@ p {
       outline: none;
       background: transparent;
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       font-size: var(--type-size-compact);
       line-height: 1;
 
@@ -2070,7 +2070,7 @@ p {
     padding: 0;
     flex: 0 0 auto;
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 0;
     opacity: 0.8;
     border: 0;
@@ -2148,7 +2148,7 @@ p {
     box-shadow: none;
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     /* Explicit: icon buttons set line-height 0, which collapsed the box */
     line-height: 1;
     white-space: nowrap;
@@ -2195,7 +2195,7 @@ p {
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-align: left;
     transition: background-color var(--motion-fast) ease;
 
@@ -2208,7 +2208,7 @@ p {
     &-title {
       @include mixins.truncate;
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     &__icons {
@@ -2231,7 +2231,7 @@ p {
     justify-content: center;
     color: var(--text-secondary);
     font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-align: center;
   }
 
@@ -2281,7 +2281,7 @@ p {
     margin: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
   }
 
@@ -2324,7 +2324,7 @@ p {
   cursor: pointer;
   line-height: 1;
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-align: center;
   background: var(--surface-option);
   color: var(--text-secondary);
@@ -2486,7 +2486,7 @@ p {
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     transition:
       background var(--motion-base) ease,
       color var(--motion-base) ease;
@@ -2537,7 +2537,7 @@ p {
 
     p {
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       font-size: var(--type-size-compact);
     }
   }
@@ -3002,7 +3002,7 @@ p {
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: var(--lh-300);
   white-space: nowrap;
   cursor: pointer;
@@ -3319,9 +3319,9 @@ p {
 }
 
 /* "Mais jogados": rail próprio em vez da grade. Três cards por página, fixo —
-   cada card leva arte larga + header (título e badge de popularidade),
-   descrição curta e uma linha fechada de pills; uma quarta coluna espremeria
-   o bloco de texto a ponto de sobrar só a primeira linha. */
+   cada card leva arte larga (`header.jpg`) e, embaixo, nome do jogo e uma
+   linha fechada de pills; uma quarta coluna espremeria o bloco de texto a
+   ponto de o rótulo virar reticências cedo demais. */
 .home-top-rated {
   position: relative;
   @include mixins.section-column;
@@ -3421,11 +3421,10 @@ p {
   animation: download-cover-in var(--motion-base) ease both;
 }
 
-/* Corpo do card: nome, descrição curta e uma linha de pills. A altura dos
+/* Corpo do card: nome e uma linha de pills. A altura dos
    blocos é fechada e as contagens fixas são decididas no TSX (ver
    `homeTopRatedCardPillCount`), então os cards da fila fecham na mesma altura
-   sem piso artificial — os dados que chegam pelo enrichment assíncrono
-   (descrição) nunca remexem o card. */
+   sem piso artificial. */
 .home-top-rated-card__body {
   display: flex;
   flex: 1 1 auto;
@@ -3448,43 +3447,13 @@ p {
   white-space: nowrap;
 }
 
-/* Descrição curta em três linhas fechadas (mesma régua da grade). O clamp segura
-   o texto no nº de linhas; o corte aqui garante reticências mesmo quando o
-   navegador não aplica as do clamp. Altura fixa: o enrichment chega assíncrono
-   e não pode crescer o card no meio da fila. */
-.home-top-rated-card__summary {
-  display: -webkit-box;
-  overflow: hidden;
-  height: calc(var(--type-line-body) * 3);
-  color: var(--text-secondary);
-  font-size: var(--type-size-body);
-  line-height: var(--type-line-body);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-/* Placeholders do corpo: título parcial e linhas de resumo — larguras quebradas
-   para não ler como barra cheia. As pills skeleton preenchem as vagas que ainda
-   não têm trait (ver regra do `__tag`). */
+/* Placeholder do título: largura parcial para não ler como barra cheia. As
+   pills skeleton preenchem as vagas que ainda não têm trait (ver regra do
+   `__tag`). */
 .home-top-rated-card__title--skeleton {
   width: 64%;
   height: var(--type-line-body-emphasis);
 }
-
-.home-top-rated-card__summary-line--skeleton {
-  width: 100%;
-  height: var(--type-line-body);
-  border-radius: var(--radius-sm);
-}
-
-.home-top-rated-card__summary-line--skeleton:nth-child(2) {
-  width: 88%;
-}
-
-.home-top-rated-card__summary-line--skeleton:nth-child(3) {
-  width: 60%;
-}
-
 
 /* Uma linha, contagem decidida no TSX. `nowrap`: rótulo longo encolhe (a pill
    segura com reticências) em vez de vazar para uma segunda linha que o
@@ -3777,7 +3746,7 @@ p {
   overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: var(--type-line-compact);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -4093,7 +4062,7 @@ p {
   background: var(--surface-secondary);
   /* Default body copy in the card */
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   cursor: pointer;
   padding: var(--space-4) 0 var(--space-5);
   text-align: left;
@@ -4136,7 +4105,7 @@ p {
   position: relative;
   z-index: 1;
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .home-wishlist-card__title {
@@ -4225,7 +4194,7 @@ p {
   min-height: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .home-wishlist-card__player-review--skeleton {
@@ -4239,7 +4208,7 @@ p {
   color: var(--text-primary);
   font-size: var(--type-size-fluid-body);
   font-style: italic;
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -4278,14 +4247,14 @@ p {
   strong {
     color: var(--text-primary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
   }
 
   small {
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
   }
 }
@@ -4335,7 +4304,7 @@ p {
   background: var(--pill-bg);
   border-color: var(--border-strong);
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   font-size: var(--type-size-caption);
   line-height: var(--type-line-caption);
 
@@ -4758,7 +4727,7 @@ p {
     > span {
       color: var(--text-secondary);
       font-size: var(--type-size-micro);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       letter-spacing: var(--ls-100);
       text-transform: uppercase;
     }
@@ -4767,7 +4736,7 @@ p {
       margin: 0;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
     }
 
@@ -4776,7 +4745,7 @@ p {
       margin: 0;
       color: var(--text-secondary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
   }
@@ -4810,12 +4779,12 @@ p {
     > span {
       color: var(--text-tertiary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       letter-spacing: var(--ls-100);
       text-transform: uppercase;
 
       strong {
-        font-weight: var(--weight-medium);
+        font-weight: var(--weight-regular);
       }
     }
   }
@@ -4872,7 +4841,7 @@ p {
     background: var(--surface-panel);
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
 
     span {
@@ -4885,12 +4854,12 @@ p {
       background: var(--surface-popover);
       color: var(--text-primary);
       font-size: var(--type-size-micro);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     strong {
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
   }
 
@@ -4914,7 +4883,7 @@ p {
       margin: 0 0 var(--space-5);
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     ul {
@@ -4928,7 +4897,7 @@ p {
     li {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
   }
@@ -4938,22 +4907,22 @@ p {
     gap: var(--space-3);
     padding: var(--space-7) var(--space-8);
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-align: left;
 
     strong {
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     p {
       max-width: none;
       margin: 0;
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body-emphasis);
     }
 
@@ -5003,13 +4972,13 @@ p {
       margin: 0;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     span {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
 
@@ -5018,7 +4987,7 @@ p {
       margin: var(--space-2) 0 0;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
   }
@@ -5099,7 +5068,7 @@ p {
   &__price {
     color: var(--text-secondary);
     font-size: var(--type-size-section);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-section);
     letter-spacing: var(--ls-600);
   }
@@ -5118,7 +5087,7 @@ p {
       gap: var(--space-4);
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
       text-align: left;
 
@@ -5138,7 +5107,7 @@ p {
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     transition:
       background var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease),
@@ -5226,7 +5195,7 @@ p {
     span {
       color: var(--text-tertiary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
   }
 
@@ -5234,7 +5203,7 @@ p {
     margin: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     min-height: calc(var(--type-line-caption) * 2);
   }
@@ -5248,7 +5217,7 @@ p {
       align-items: center;
       gap: var(--space-4);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
 
@@ -5357,7 +5326,7 @@ p {
       margin: var(--space-2) 0 0;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
 
@@ -5386,7 +5355,7 @@ p {
       }
 
       .subscription-account__brand-name {
-        font-weight: var(--weight-medium);
+        font-weight: var(--weight-regular);
       }
 
       .subscription-account__premium-name {
@@ -5475,7 +5444,7 @@ p {
     background: var(--surface-raised);
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     letter-spacing: var(--ls-100);
     text-transform: uppercase;
     white-space: nowrap;
@@ -5596,7 +5565,7 @@ p {
     span {
       color: var(--text-secondary);
       font-size: var(--type-size-micro);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       letter-spacing: var(--ls-100);
       text-transform: uppercase;
     }
@@ -5606,7 +5575,7 @@ p {
       margin-top: auto;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
       font-variant-numeric: tabular-nums;
     }
@@ -5708,7 +5677,7 @@ p {
     strong {
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
       font-variant-numeric: tabular-nums;
     }
@@ -5717,7 +5686,7 @@ p {
       overflow: hidden;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -5735,7 +5704,7 @@ p {
     background: var(--surface-popover);
     color: var(--text-secondary);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     letter-spacing: var(--ls-100);
     text-transform: uppercase;
     white-space: nowrap;
@@ -5789,14 +5758,14 @@ p {
       @include mixins.truncate;
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     span {
       flex: 0 0 auto;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
@@ -5883,12 +5852,12 @@ p {
     border-radius: var(--radius-sm);
     background: var(--surface-raised);
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
 
     strong {
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
@@ -5896,7 +5865,7 @@ p {
       margin: 0;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
   }
@@ -5912,7 +5881,7 @@ p {
     background: transparent;
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-align: center;
   }
 
@@ -5973,7 +5942,7 @@ p {
       overflow: hidden;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -5983,7 +5952,7 @@ p {
       max-width: 62ch;
       color: var(--text-secondary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
   }
@@ -6114,7 +6083,7 @@ p {
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   transition:
     background-color var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease),
@@ -6155,7 +6124,7 @@ p {
   color: var(--text-secondary);
   cursor: pointer;
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   position: relative;
   transition:
     background-color var(--motion-fast) var(--ease),
@@ -6189,7 +6158,7 @@ p {
     right: var(--space-5);
     flex-shrink: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     transition:
       transform var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease);
@@ -6212,7 +6181,7 @@ p {
   border-radius: var(--radius-sm);
   background: var(--background-dark);
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   transition:
     border-color var(--motion-fast) var(--ease),
     background-color var(--motion-fast) var(--ease),
@@ -6251,7 +6220,7 @@ p {
   @include mixins.ghost-button;
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-align: center;
   transition:
     background-color var(--motion-fast) var(--ease),
@@ -6290,7 +6259,7 @@ p {
     border-radius: var(--radius-lg);
     background: var(--settings-dropdown-surface);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     outline: none;
     box-shadow: none;
   }
@@ -6314,7 +6283,7 @@ p {
   .settings-dropdown__option {
     border-radius: var(--radius-lg);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     outline: none;
     box-shadow: none;
   }
@@ -6353,7 +6322,7 @@ p {
   cursor: default;
   font-family: inherit;
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   outline: none;
   text-overflow: ellipsis;
   transition:
@@ -6473,7 +6442,7 @@ p {
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-family: var(--font-sans);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-align: left;
     border-radius: var(--radius-md);
     transition:
@@ -6667,7 +6636,7 @@ p {
     strong {
       overflow: hidden;
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -6687,7 +6656,7 @@ p {
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__clear-filters:hover,
@@ -6902,7 +6871,7 @@ p {
          Esticar faria todas as facets terem a mesma largura. */
       flex: 0 0 auto;
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       color: var(--text-secondary);
       transition: color var(--motion-fast) var(--ease);
     }
@@ -6995,7 +6964,7 @@ p {
   &__count {
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__search {
@@ -7009,7 +6978,7 @@ p {
     color: var(--text-primary);
     font: inherit;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     outline: none;
     user-select: text;
     padding: var(--space-5) var(--space-5);
@@ -7017,7 +6986,7 @@ p {
 
     &::placeholder {
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     /* `--dropdown-option-hover` é o degrau #1a1a1a — mesmo passo que o resto do
@@ -7042,7 +7011,7 @@ p {
 
   &__empty {
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-compact);
     line-height: var(--type-line-compact);
   }
@@ -7057,7 +7026,7 @@ p {
   &__year-range-value {
     color: var(--text-primary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-compact);
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -7152,7 +7121,7 @@ p {
     justify-content: space-between;
     color: var(--text-tertiary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -7343,7 +7312,7 @@ p {
     overflow: hidden;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -7742,7 +7711,7 @@ input[type="search"]::-ms-reveal {
     border-radius: var(--radius-md);
     background: var(--surface-secondary);
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     cursor: pointer;
     font-size: var(--type-size-compact);
     transition:
@@ -7764,7 +7733,7 @@ input[type="search"]::-ms-reveal {
     border: none;
     background: var(--control-hover);
     color: var(--text-primary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__page--ellipsis {
@@ -7777,7 +7746,7 @@ input[type="search"]::-ms-reveal {
     &:hover {
       background: transparent;
       color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     }
   }
 
@@ -7799,7 +7768,7 @@ input[type="search"]::-ms-reveal {
   gap: var(--space-4);
   padding: var(--space-10);
   color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-align: center;
 
   &__body {
@@ -7891,7 +7860,7 @@ input[type="search"]::-ms-reveal {
       margin: 0;
       color: var(--text-secondary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
     }
   }
@@ -8028,7 +7997,7 @@ input[type="search"]::-ms-reveal {
       overflow: hidden;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -8038,7 +8007,7 @@ input[type="search"]::-ms-reveal {
       flex: 0 0 auto;
       color: var(--text-tertiary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
   }
@@ -8047,7 +8016,7 @@ input[type="search"]::-ms-reveal {
     margin: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-body);
   }
 
@@ -8063,7 +8032,7 @@ input[type="search"]::-ms-reveal {
     background: var(--background-dark);
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     cursor: pointer;
   }
@@ -8259,7 +8228,7 @@ input[type="search"]::-ms-reveal {
     overflow: hidden;
     color: #fff;
     font-size: clamp(1.25rem, 2.4vw, 1.75rem);
-    font-weight: 700;
+    font-weight: var(--weight-semibold);
     line-height: 1.1;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -8273,7 +8242,7 @@ input[type="search"]::-ms-reveal {
     align-items: center;
     color: rgb(255 255 255 / 0.65);
     font-size: var(--type-size-caption);
-    font-weight: 400;
+    font-weight: var(--weight-regular);
     line-height: 1;
     white-space: nowrap;
   }
@@ -8302,7 +8271,7 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-3);
     color: rgb(255 255 255 / 0.58);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__meta-item {
@@ -8363,7 +8332,7 @@ input[type="search"]::-ms-reveal {
     background: rgb(255 255 255 / 0.22);
     color: #fff;
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     cursor: pointer;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -8621,7 +8590,7 @@ input[type="search"]::-ms-reveal {
       margin: 0;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
       font-variant-numeric: tabular-nums;
     }
@@ -8646,7 +8615,7 @@ input[type="search"]::-ms-reveal {
       min-width: 0;
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
       /* Quebra em qualquer ponto: o caminho é a string mais longa do modal e
          serve para ser lida ou copiada inteira. Truncar tornava-a decorativa. */
@@ -8658,7 +8627,7 @@ input[type="search"]::-ms-reveal {
     margin: 0;
     color: var(--danger);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__actions {
@@ -8710,7 +8679,7 @@ input[type="search"]::-ms-reveal {
     background: var(--surface-option);
     color: var(--text-primary);
     cursor: pointer;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     transition:
       background var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease);
@@ -8939,7 +8908,7 @@ input[type="search"]::-ms-reveal {
   strong {
     overflow: hidden;
     font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -9131,7 +9100,7 @@ input[type="search"]::-ms-reveal {
       color-mix(in srgb, var(--black) 28%, transparent);
     color: var(--text-primary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
     line-height: 30px;
     letter-spacing: var(--ls-200);
@@ -9158,7 +9127,7 @@ input[type="search"]::-ms-reveal {
     padding-inline: var(--space-4);
     gap: var(--space-3);
     font-size: var(--type-size-micro);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     opacity: 0;
 
     svg {
@@ -9349,7 +9318,7 @@ input[type="search"]::-ms-reveal {
   span {
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   button {
@@ -9435,7 +9404,7 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-6);
     border-radius: var(--radius-lg);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     gap: var(--space-4);
 
     span {
@@ -9460,7 +9429,7 @@ input[type="search"]::-ms-reveal {
     min-height: 32px;
     border-radius: var(--radius-lg);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__row {
@@ -9477,7 +9446,7 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-5);
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
 
     span {
       white-space: nowrap;
@@ -9557,7 +9526,7 @@ border: 0;
   color: var(--text-secondary);
   padding: 0 var(--space-6);
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   cursor: pointer;
   transition:
     color var(--motion-fast) var(--ease),
@@ -9988,7 +9957,7 @@ html.no-backdrop-blur {
       color: var(--text-primary);
       font-family: var(--font-sans);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
     }
 
@@ -9996,7 +9965,7 @@ html.no-backdrop-blur {
       margin: 0;
       color: var(--text-secondary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
@@ -10049,7 +10018,7 @@ html.no-backdrop-blur {
     span {
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     input {
@@ -10066,7 +10035,7 @@ html.no-backdrop-blur {
 
       &::placeholder {
         color: var(--text-secondary);
-        font-weight: var(--weight-medium);
+        font-weight: var(--weight-regular);
         opacity: 0.5;
       }
 
@@ -10099,7 +10068,7 @@ html.no-backdrop-blur {
   > p {
     margin-block: 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-body);
     line-height: var(--type-line-body);
 
@@ -10115,7 +10084,7 @@ html.no-backdrop-blur {
     border-radius: var(--radius-md);
     background: var(--background);
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-caption);
 
     code {
@@ -10174,7 +10143,7 @@ html.no-backdrop-blur {
     span {
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
   }
 
@@ -10194,12 +10163,12 @@ html.no-backdrop-blur {
       background: transparent;
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
 
       &::placeholder {
         color: var(--text-secondary);
-        font-weight: var(--weight-medium);
+        font-weight: var(--weight-regular);
         opacity: 0.5;
       }
 
@@ -10489,7 +10458,7 @@ html.no-backdrop-blur {
     gap: var(--space-3);
     color: var(--text-primary);
     font-size: var(--type-size-body);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
   }
 
   &__section-title-icon {
@@ -10558,7 +10527,7 @@ html.no-backdrop-blur {
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     transition:
       border-color var(--motion-base) ease,
       background-color var(--motion-base) ease;
@@ -10645,7 +10614,7 @@ html.no-backdrop-blur {
   &__avatar-crop-help {
     margin: -var(--space-2) 0 0;
     color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-size: var(--type-size-caption);
     line-height: var(--type-line-caption);
   }
@@ -10717,7 +10686,7 @@ html.no-backdrop-blur {
     background: var(--overlay-medium);
     color: var(--text-primary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     opacity: 0;
     transition: opacity var(--motion-base) ease;
   }
@@ -10754,7 +10723,7 @@ html.no-backdrop-blur {
       color: var(--text-primary);
       font-family: var(--font-sans);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-body);
     }
   }
@@ -10792,7 +10761,7 @@ html.no-backdrop-blur {
     p {
       margin: 0;
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       font-size: var(--type-size-compact);
       line-height: var(--type-line-compact);
     }
@@ -11135,14 +11104,14 @@ html.no-backdrop-blur {
     strong {
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
     span {
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
   }
@@ -11173,7 +11142,7 @@ html.no-backdrop-blur {
     min-height: 34px;
     border-color: var(--border-ui);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     transition:
       background var(--motion-fast) var(--ease),
       border-color var(--motion-fast) var(--ease),
@@ -11240,7 +11209,7 @@ html.no-backdrop-blur {
       overflow: hidden;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -11353,7 +11322,7 @@ html.no-backdrop-blur {
     min-height: 380px;
     place-items: center;
     color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   }
 
   &__nav-button {
@@ -11584,7 +11553,7 @@ html.no-backdrop-blur {
 
   p {
     color: var(--text-secondary);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   }
 
   &__empty-text {
@@ -11615,7 +11584,7 @@ html.no-backdrop-blur {
 
     strong {
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
@@ -11628,7 +11597,7 @@ html.no-backdrop-blur {
   &__chips {
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-compact);
 
     &--loading {
@@ -11676,7 +11645,7 @@ html.no-backdrop-blur {
 
     strong {
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
   }
@@ -11688,7 +11657,7 @@ html.no-backdrop-blur {
     overflow-x: auto;
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-compact);
 
     // Force Steam HTML body to the same subtext recipe (no inherited blues/grays)
@@ -11699,7 +11668,7 @@ html.no-backdrop-blur {
     td,
     th {
       color: var(--text-secondary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       max-width: 100%;
     }
 
@@ -11721,7 +11690,7 @@ html.no-backdrop-blur {
 
     a {
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     h1,
@@ -11740,7 +11709,7 @@ html.no-backdrop-blur {
     strong,
     b {
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     .bb_tag {
@@ -11830,7 +11799,7 @@ html.no-backdrop-blur {
 
     strong {
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
@@ -11968,7 +11937,7 @@ html.no-backdrop-blur {
     text-align: center;
     color: var(--text-primary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     background: color-mix(in srgb, var(--background-dark) 42%, transparent);
 
     svg {
@@ -12007,7 +11976,7 @@ html.no-backdrop-blur {
       z-index: 1;
       color: var(--text-primary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
@@ -12016,7 +11985,7 @@ html.no-backdrop-blur {
       z-index: 1;
       color: var(--text-secondary);
       font-size: var(--type-size-caption);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
 
@@ -12081,11 +12050,11 @@ html.no-backdrop-blur {
     padding: 0 var(--space-8);
     color: var(--text-primary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
 
     strong {
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
@@ -12169,13 +12138,13 @@ html.no-backdrop-blur {
     p {
       color: var(--text-secondary);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
 
     strong {
       color: var(--text-primary);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
   }
 
@@ -12520,7 +12489,7 @@ html.no-backdrop-blur {
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease),
@@ -12576,7 +12545,7 @@ html.no-backdrop-blur {
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: var(--type-line-caption);
 }
 
@@ -12622,14 +12591,14 @@ html.no-backdrop-blur {
 .game-settings-modal__card-copy strong {
   color: var(--text-primary);
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: var(--type-line-compact);
 }
 
 .game-settings-modal__card-copy span {
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: var(--type-line-caption);
 }
 
@@ -12651,7 +12620,7 @@ html.no-backdrop-blur {
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: 1;
 }
 
@@ -12667,7 +12636,7 @@ html.no-backdrop-blur {
   background: var(--surface-canvas);
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   line-height: var(--type-line-caption);
   word-break: break-all;
   user-select: text;
@@ -12703,7 +12672,7 @@ html.no-backdrop-blur {
   color: var(--text-primary);
   font: inherit;
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   white-space: nowrap;
   box-shadow: none;
   cursor: pointer;
@@ -12953,7 +12922,7 @@ html.no-backdrop-blur {
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 
@@ -13135,7 +13104,7 @@ html.no-backdrop-blur {
     background: var(--surface-secondary);
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     cursor: pointer;
 
     &:hover:not(:disabled):not(.pagination-controls__page--active):not(
@@ -13156,7 +13125,7 @@ html.no-backdrop-blur {
       background: var(--control-hover);
       color: var(--text-primary);
       border: none;
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-regular);
     }
 
     &--ellipsis {
@@ -13164,7 +13133,7 @@ html.no-backdrop-blur {
       background: transparent;
       cursor: default;
       color: var(--text-secondary);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     }
   }
 
@@ -13189,7 +13158,7 @@ html.no-backdrop-blur {
 .modal__achievements-heading,
 .modal__requirements-header {
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .content-section__header h3,
@@ -13197,7 +13166,7 @@ html.no-backdrop-blur {
 .modal__requirements-header h4,
 .edit-profile-modal__section-title,
 .settings-option__copy strong {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .sidebar__section-title {
@@ -13205,7 +13174,7 @@ html.no-backdrop-blur {
 }
 
 .catalogue-list__content strong {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .modal__details h3,
@@ -13214,13 +13183,13 @@ html.no-backdrop-blur {
 }
 
 .sidebar-profile__button-title {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .content-section__header p,
 .collection-modal__header p,
 .settings-option__copy span {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .modal__details p,
@@ -13228,12 +13197,12 @@ html.no-backdrop-blur {
 .modal__achievements-state,
 .profile-page p,
 .notifications-page p {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .button,
 button {
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 @media (max-width: 1200px) {
@@ -13723,7 +13692,7 @@ button {
     min-width: 38px;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
   }
 

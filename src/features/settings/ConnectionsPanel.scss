@@ -13,7 +13,7 @@
   h2 {
     margin: 0;
     font-size: var(--type-size-body-emphasis);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
     color: var(--text-strong);
   }
 
@@ -58,7 +58,7 @@
   h3 {
     margin: 0;
     font-size: var(--type-size-body);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
     color: var(--text-strong);
   }
 
@@ -75,7 +75,7 @@
   align-items: center;
   gap: 6px;
   font-size: var(--type-size-caption);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   color: var(--text-muted);
 }
 
@@ -162,7 +162,7 @@
   background: var(--surface-modal-control);
   color: var(--text-primary);
   font-size: var(--type-size-caption);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   white-space: nowrap;
   cursor: pointer;
   transition: opacity 0.15s ease, background 0.15s ease;

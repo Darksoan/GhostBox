@@ -459,10 +459,9 @@ function HomeCategoryCard({
 }
 
 /**
- * Card de "Mais jogados": arte larga, e embaixo o nome do jogo, a descrição
- * curta e uma linha fechada de pills de categorias — o mesmo empilhamento do
- * card da grade com título, mas em superfície própria com alvo de clique
- * inteiro.
+ * Card de "Mais jogados": só a hero capsule, sem superfície de texto embaixo.
+ * arte larga (`header.jpg`), e embaixo o nome do jogo e uma linha fechada de
+ * pills de categorias — em superfície própria com alvo de clique inteiro.
  */
 function HomeTopRatedCard({
   game,
@@ -492,9 +491,6 @@ function HomeTopRatedCard({
   // altura sem piso artificial.
   const traits = getGameTraits(game);
   const primaryTraits = traits.slice(0, homeTopRatedCardPillCount);
-  // Descrição curta em três linhas fechadas (mesma régua da grade): chega pelo
-  // enrichment depois do primeiro paint, então a altura do bloco é fixa.
-  const summary = getHomeShortDescription(game, language);
 
   const handleClick = () => onOpenGame(game);
 
@@ -524,10 +520,6 @@ function HomeTopRatedCard({
       />
       <span className="home-top-rated-card__body">
         <span className="home-top-rated-card__title">{game.title}</span>
-        {/* Descrição curta em três linhas fechadas (mesma régua da grade): chega
-            pelo enrichment depois do primeiro paint e a altura fixa do bloco
-            mantém o card estável. */}
-        <span className="home-top-rated-card__summary">{summary}</span>
         {/* A linha mostra as tags que o jogo tem (1, 2, 3 ou 4 — o `flex: 1 1
             auto` espalha as que existirem pela largura inteira do card). O
             mock traz quatro pílulas; sem nenhuma trait (enrichment ainda

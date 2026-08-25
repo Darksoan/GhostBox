@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Copy, Loader2, LogOut } from "lucide-react";
+import { Check, Loader2, LogOut } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
 import "./AccountSection.scss";
@@ -13,16 +13,9 @@ function errorMessage(error: unknown, fallback: string): string {
 export function AccountSection() {
   const { t } = useSettings();
   const { account, logout, resendVerificationEmail } = useAuth();
-  const [usernameCopied, setUsernameCopied] = useState(false);
   const [sendingVerification, setSendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!usernameCopied) return;
-    const timeout = window.setTimeout(() => setUsernameCopied(false), 2000);
-    return () => window.clearTimeout(timeout);
-  }, [usernameCopied]);
 
   // The badge stays in its "sent" state long enough to read, then offers the
   // resend again — the worker throttles repeats on its own side.
@@ -33,12 +26,6 @@ export function AccountSection() {
   }, [verificationSent]);
 
   if (!account) return null;
-
-  async function onCopyUsernameClick() {
-    if (!account) return;
-    await navigator.clipboard.writeText(account.username);
-    setUsernameCopied(true);
-  }
 
   async function onVerifyEmailClick() {
     if (sendingVerification || verificationSent) return;
@@ -91,25 +78,6 @@ export function AccountSection() {
             <div className="account-section__row">
               <span className="account-section__label">{t("settings.general.account.username")}</span>
               <span className="account-section__value">{account.username}</span>
-              <button
-                type="button"
-                className={`account-section__copy${
-                  usernameCopied ? " account-section__copy--copied" : ""
-                }`}
-                onClick={() => void onCopyUsernameClick()}
-                aria-label={
-                  usernameCopied
-                    ? t("settings.general.account.usernameCopied")
-                    : t("settings.general.account.copyUsername")
-                }
-              >
-                <span className="account-section__copy-icon account-section__copy-icon--copy">
-                  <Copy size={15} strokeWidth={2.25} aria-hidden="true" />
-                </span>
-                <span className="account-section__copy-icon account-section__copy-icon--check">
-                  <Check size={15} strokeWidth={2.5} aria-hidden="true" />
-                </span>
-              </button>
               <button
                 type="button"
                 className="account-section__icon"
