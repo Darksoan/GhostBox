@@ -168,28 +168,28 @@ describe("Home layout", () => {
     expect(shelfSource).not.toContain("showSummary");
   });
 
-  it("reserves the Top rated metric grid before the values land", () => {
+  it("reserves the summary row before the data lands and drops the badge", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");
     const cardEnd = component.indexOf("\nfunction ", cardStart);
     const cardSource = component.slice(cardStart, cardEnd);
 
-    // Os valores chegam pelo enrichment, card a card. Sem dado as três vagas
-    // continuam renderizadas (skeleton antes da resposta, travessão quando o
-    // catálogo respondeu sem a métrica) — foi um card que crescia quando a
-    // review voltava que tirou a review daqui antes.
-    expect(cardSource).toContain("home-top-rated-card__metric-value--skeleton");
-    expect(cardSource).toContain("home-top-rated-card__metric-value--empty");
+    // A descrição chega pelo enrichment, card a card. Sem o bloco reservado,
+    // o card cresceria quando a resposta voltasse — a altura fechada mantém a
+    // fila. O badge de popularidade foi removido do card.
+    expect(cardSource).toContain("home-top-rated-card__summary");
+    expect(cardSource).not.toContain("home-top-rated-card__players");
+    expect(cardSource).not.toContain("home-top-rated-card__metric-value--skeleton");
+    expect(cardSource).not.toContain("home-top-rated-card__metric-value--empty");
 
     const stylesheet = postcss.parse(compile("src/app.scss").css);
-    const metricsRule = stylesheet.nodes.find(
+    const summaryRule = stylesheet.nodes.find(
       (node) =>
-        node.type === "rule" &&
-        node.selector === ".home-top-rated-card__metrics",
+        node.type === "rule" && node.selector === ".home-top-rated-card__summary",
     );
 
-    // A altura fixa é o que faz a grade vazia ocupar o mesmo espaço da cheia.
-    expect(metricsRule?.toString()).toContain("height: calc(");
+    // A altura fixa é o que faz o bloco vazio ocupar o mesmo espaço do cheio.
+    expect(summaryRule?.toString()).toContain("height: calc(");
   });
 
   it("gives the section header real hierarchy over card body copy", () => {

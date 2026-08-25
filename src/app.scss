@@ -3318,9 +3318,10 @@ p {
   padding-inline: var(--home-content-inline-inset);
 }
 
-/* "Bem avaliados": rail próprio em vez da grade. Três cards por página, fixo —
-   cada card leva nome + uma linha fechada de pills, e uma quarta coluna
-   espremeria o bloco de texto a ponto de sobrar só a primeira linha. */
+/* "Mais jogados": rail próprio em vez da grade. Três cards por página, fixo —
+   cada card leva arte larga + header (título e badge de popularidade),
+   descrição curta e uma linha fechada de pills; uma quarta coluna espremeria
+   o bloco de texto a ponto de sobrar só a primeira linha. */
 .home-top-rated {
   position: relative;
   @include mixins.section-column;
@@ -3403,44 +3404,13 @@ p {
   }
 }
 
-/* Selo do Metacritic sobre o canto da arte, no formato quadrado do próprio
-   site. Sem `z-index`: fica na mesma camada da arte, sob o `__hit`
-   transparente — visível, mas sem recortar um buraco no alvo de clique. */
-.home-top-rated-card__metacritic {
-  position: absolute;
-  top: var(--space-5);
-  right: var(--space-5);
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  font-size: var(--type-size-caption);
-  font-weight: var(--weight-semibold);
-  line-height: 1;
-}
-
-/* Faixas do Metacritic (75+ / 50-74 / abaixo). O texto vai sobre o fundo
-   cheio, então precisa do contraste do canvas, não do --text-primary. */
-.home-top-rated-card__metacritic--high {
-  background: var(--success);
-  color: var(--surface-canvas);
-}
-
-.home-top-rated-card__metacritic--mid {
-  background: var(--pill-bg-hover);
-  color: var(--text-primary);
-}
-
-.home-top-rated-card__metacritic--low {
-  background: var(--danger);
-  color: var(--surface-canvas);
-}
-
+/* Arte larga no topo (mesmo aspecto do mock 920×377). O painel recorta a parte
+   de baixo; os cantos superiores do card já são arredondados pelo próprio
+   painel, então a arte preenche a largura deixando o corte do raio visível. */
 .home-top-rated-card__art {
   display: block;
   width: 100%;
-  aspect-ratio: 460 / 215;
+  aspect-ratio: 920 / 377;
   background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
@@ -3451,109 +3421,70 @@ p {
   animation: download-cover-in var(--motion-base) ease both;
 }
 
-/* Corpo do card: nome + uma linha de pills, mesmo empilhamento do card da
-   grade com título (`--with-title`). A linha tem altura fechada e contagem
-   fixa decidida no TSX (ver `homeTopRatedPrimaryPillCount`), então os cards
-   da fila fecham na mesma altura sem piso artificial — a review que chegava
-   assíncrona e exigia `min-height` saiu do card. */
-/* Três blocos agora, não dois: nome, a grade de métricas e as pills. O gap
-   fecha em --space-3 para o nome e as métricas lerem como um bloco só, e as
-   pills se descolam com a própria margem — mantendo o respiro original entre
-   texto e linha de pills. */
+/* Corpo do card: nome, descrição curta e uma linha de pills. A altura dos
+   blocos é fechada e as contagens fixas são decididas no TSX (ver
+   `homeTopRatedCardPillCount`), então os cards da fila fecham na mesma altura
+   sem piso artificial — os dados que chegam pelo enrichment assíncrono
+   (descrição) nunca remexem o card. */
 .home-top-rated-card__body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
-  gap: var(--space-3);
+  gap: var(--space-5);
   padding: var(--space-7) var(--space-6);
 }
 
 .home-top-rated-card__title {
   display: block;
   overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--type-size-body);
-  font-weight: var(--weight-semibold);
-  line-height: var(--type-line-body);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Três colunas de largura igual e altura fechada: os valores chegam pelo
-   enrichment, card a card. Condicionar a grade ao dado fazia o card crescer no
-   instante em que a resposta voltava — foi o que tirou a review daqui antes.
-   `minmax(0, 1fr)`: sem isso o conteúdo mínimo de uma coluna empurra as
-   irmãs e a grade estoura a largura do card. */
-.home-top-rated-card__metrics {
-  display: grid;
-  height: calc(var(--type-line-micro) + var(--type-line-compact) + var(--space-1));
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
-  overflow: hidden;
-}
-
-.home-top-rated-card__metric {
-  display: flex;
+  flex: 1 1 auto;
   min-width: 0;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.home-top-rated-card__metric-label {
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: var(--type-size-micro);
-  line-height: var(--type-line-micro);
-  letter-spacing: var(--ls-200);
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.home-top-rated-card__metric-value {
-  overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--type-size-compact);
+  font-size: var(--type-size-body-emphasis);
   font-weight: var(--weight-semibold);
-  line-height: var(--type-line-compact);
+  line-height: var(--type-line-body-emphasis);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Mesmas faixas do selo do Metacritic — a aprovação não muda de régua no meio
-   do card. Aqui é texto sobre o card, então a cor é a do papel, não o par
-   fundo cheio/canvas do selo. */
-.home-top-rated-card__metric-value--high {
-  color: var(--success);
-}
-
-.home-top-rated-card__metric-value--mid {
+/* Descrição curta em três linhas fechadas (mesma régua da grade). O clamp segura
+   o texto no nº de linhas; o corte aqui garante reticências mesmo quando o
+   navegador não aplica as do clamp. Altura fixa: o enrichment chega assíncrono
+   e não pode crescer o card no meio da fila. */
+.home-top-rated-card__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  height: calc(var(--type-line-body) * 3);
   color: var(--text-secondary);
+  font-size: var(--type-size-body);
+  line-height: var(--type-line-body);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
-.home-top-rated-card__metric-value--low {
-  color: var(--danger);
+/* Placeholders do corpo: título parcial e linhas de resumo — larguras quebradas
+   para não ler como barra cheia. As pills skeleton preenchem as vagas que ainda
+   não têm trait (ver regra do `__tag`). */
+.home-top-rated-card__title--skeleton {
+  width: 64%;
+  height: var(--type-line-body-emphasis);
 }
 
-/* Travessão de "o catálogo respondeu e não tem esse dado" — peso de metadado
-   ausente, não de valor. Distinto do skeleton, que é "ainda esperando". */
-.home-top-rated-card__metric-value--empty {
-  color: var(--text-tertiary);
-  font-weight: var(--weight-medium);
-}
-
-.home-top-rated-card__metric-label--skeleton {
-  width: 70%;
-  height: var(--type-size-micro);
+.home-top-rated-card__summary-line--skeleton {
+  width: 100%;
+  height: var(--type-line-body);
   border-radius: var(--radius-sm);
 }
 
-.home-top-rated-card__metric-value--skeleton {
-  width: 55%;
-  height: var(--type-size-compact);
-  border-radius: var(--radius-sm);
+.home-top-rated-card__summary-line--skeleton:nth-child(2) {
+  width: 88%;
 }
+
+.home-top-rated-card__summary-line--skeleton:nth-child(3) {
+  width: 60%;
+}
+
 
 /* Uma linha, contagem decidida no TSX. `nowrap`: rótulo longo encolhe (a pill
    segura com reticências) em vez de vazar para uma segunda linha que o
@@ -3595,15 +3526,6 @@ p {
   .home-top-rated-card:hover .home-top-rated-card__tag:not(.skeleton) {
     background: var(--pill-bg-hover);
   }
-}
-
-/* Placeholder do nome: largura parcial para não ler como barra cheia. As pills
-   skeleton preenchem as vagas que ainda não têm trait (enrichment pendente ou
-   cache sem gêneros) — herdando o `flex: 1 1 auto`, dividem a sobra com as
-   pills reais e mantêm a linha cobrindo a largura do card. */
-.home-top-rated-card__title--skeleton {
-  width: 64%;
-  height: var(--type-line-body);
 }
 
 .home-top-rated__arrow {

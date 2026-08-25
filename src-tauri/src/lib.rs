@@ -116,7 +116,7 @@ fn normalize_backup_settings(
     let output_path =
         to_backup_root_path(&text_value(value.get("outputPath")).if_empty(fallback_output_path));
 
-    serde_json::json!({
+    let mut normalized = serde_json::json!({
         "outputPath": output_path,
         "automaticBackupsForLibrary": value
             .get("automaticBackupsForLibrary")
@@ -124,7 +124,41 @@ fn normalize_backup_settings(
             .unwrap_or(false),
         "automaticBackups": object_or_empty(value.get("automaticBackups")),
         "backupRecords": object_or_empty(value.get("backupRecords"))
-    })
+    });
+
+    // Migração: registros de falha que na verdade eram bloqueio de plano
+    // ("requer Premium" / "faça login") não são falhas reais e hoje o gate no
+    // playtime nem os produz mais. Saem na primeira leitura para a UI nunca
+    // mais exibir erro vermelho por causa deles.
+    if let Some(records) = normalized
+        .get_mut("backupRecords")
+        .and_then(|value| value.as_object_mut())
+    {
+        strip_blocked_plan_backup_errors(records);
+    }
+
+    normalized
+}
+
+/// Remove dos `backupRecords` as falhas que eram bloqueio de plano.
+fn strip_blocked_plan_backup_errors(records: &mut serde_json::Map<String, serde_json::Value>) {
+    records.retain(|_, record| {
+        let error = record
+            .get("lastBackupError")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default();
+        !is_blocked_plan_backup_error(error)
+    });
+}
+
+/// Mensagens que o fluxo antigo gravava quando o bloqueio era de plano, não
+/// uma falha real. Qualquer correspondência exata descarta o registro.
+fn is_blocked_plan_backup_error(error: &str) -> bool {
+    const BLOCKED_ERRORS: [&str; 2] = [
+        "Backup em nuvem requer GhostBox Premium.",
+        "Backup em nuvem ignorado: faça login com a Steam.",
+    ];
+    BLOCKED_ERRORS.contains(&error.trim())
 }
 
 pub(crate) fn load_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
@@ -1606,4 +1640,62 @@ pub fn run() {
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_legacy_blocked_plan_records_but_keeps_real_failures() {
+        let mut records = serde_json::Map::new();
+        records.insert(
+            "480".to_string(),
+            serde_json::json!({
+                "title": "Free Game",
+                "lastBackupAt": "2026-08-01T10:00:00Z",
+                "lastBackupSuccess": false,
+                "lastBackupError": "Backup em nuvem requer GhostBox Premium."
+            }),
+        );
+        records.insert(
+            "481".to_string(),
+            serde_json::json!({
+                "title": "Not Linked",
+                "lastBackupSuccess": false,
+                "lastBackupError": "Backup em nuvem ignorado: faça login com a Steam."
+            }),
+        );
+        records.insert(
+            "367520".to_string(),
+            serde_json::json!({
+                "title": "Real Failure",
+                "lastBackupSuccess": false,
+                "lastBackupError": "Falha ao enviar o backup para a nuvem."
+            }),
+        );
+
+        strip_blocked_plan_backup_errors(&mut records);
+
+        assert!(!records.contains_key("480"), "bloqueio premium deve sair");
+        assert!(
+            !records.contains_key("481"),
+            "aviso de login (fluxo antigo) deve sair"
+        );
+        assert!(
+            records.contains_key("367520"),
+            "falha real de rede/upload permanece"
+        );
+    }
+
+    #[test]
+    fn blocked_error_match_tolerates_whitespace_only() {
+        assert!(is_blocked_plan_backup_error(
+            "  Backup em nuvem requer GhostBox Premium.  "
+        ));
+        assert!(!is_blocked_plan_backup_error(""));
+        assert!(!is_blocked_plan_backup_error(
+            "Falha ao enviar o backup para a nuvem."
+        ));
+    }
 }

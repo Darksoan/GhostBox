@@ -74,3 +74,47 @@ export function gameTraitAppId(game: GhostBoxGame) {
   const appId = (game.appId || game.id.replace(/^steam-/, "")).trim();
   return /^\d+$/.test(appId) ? appId : "";
 }
+
+/**
+ * Trait keys (comparison form, already lowercased by `normalizeGameTraitKey`)
+ * that mark a game as multiplayer. A game is multiplayer if ANY of its genres
+ * or tags matches — a title carrying "Singleplayer" and "Multiplayer" still
+ * has a multiplayer component, so it must not be offered as a solo pick.
+ *
+ * Co-op variants are matched by exact key (a bare "coop"/"co-op" is a niche
+ * marker) or by the hyphenated "co-op" substring — avoids false positives from
+ * words like "Cooper"/"cooperation" that merely contain "coop".
+ */
+const multiplayerExactKeys = new Set([
+  "co-op",
+  "coop",
+  "online co-op",
+  "online coop",
+  "local co-op",
+  "local coop",
+  "asynchronous multiplayer",
+  "competitive",
+]);
+
+function isMultiplayerTraitKey(key: string): boolean {
+  if (multiplayerExactKeys.has(key)) return true;
+  return (
+    key.includes("multiplayer") ||
+    key.includes("co-op") ||
+    key.includes("pvp") ||
+    key.includes("mmo") ||
+    key.includes("split screen") ||
+    key.includes("shared/split") ||
+    key.includes("online competitive") ||
+    key.includes("lan ") ||
+    key.includes("team-based")
+  );
+}
+
+/** True when the game has any multiplayer genre/tag (PvP, co-op, MMO, LAN…). */
+export function isMultiplayerGame(game: GhostBoxGame): boolean {
+  for (const key of getGameTraitSet(game)) {
+    if (isMultiplayerTraitKey(key)) return true;
+  }
+  return false;
+}

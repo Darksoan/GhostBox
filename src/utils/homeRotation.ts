@@ -73,3 +73,31 @@ export function pickRotationWindow<T>(
   const offset = rotationHash(seed, salt) % pool.length;
   return Array.from({ length: count }, (_, index) => pool[(offset + index) % pool.length]);
 }
+
+/**
+ * Deterministic Fisher–Yates shuffle keyed by the weekly seed + salt.
+ *
+ * Where `pickRotationWindow` keeps the pool's relative order (a contiguous
+ * slice), this permutes it — the "Most played" rail wants a random handful of
+ * the ranking, not the top-N in descending order. Same contract as the window:
+ * stable inside the week, a different arrangement every Monday.
+ *
+ * The LCG state starts from the shelf's hash; the multiplier/addend are the
+ * classic Numerical Recipes pair, so the same seed+salt always yields the same
+ * permutation while neighbours in state still jump around.
+ */
+export function shuffledRotation<T>(
+  pool: readonly T[],
+  { seed, salt }: { seed: number; salt: string }
+): T[] {
+  const result = [...pool];
+  if (result.length < 2) return result;
+
+  let state = rotationHash(seed, salt) >>> 0;
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const swap = state % (index + 1);
+    [result[index], result[swap]] = [result[swap], result[index]];
+  }
+  return result;
+}

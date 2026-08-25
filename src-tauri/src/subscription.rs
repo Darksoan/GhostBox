@@ -195,6 +195,22 @@ fn load_cached_status(app: &tauri::AppHandle, user_id: &str) -> Option<Subscript
     })
 }
 
+/// Status Premium lido do cache criptografado local, sem nenhuma chamada de rede.
+///
+/// Usado para barrar fluxos que só gerariam ruído para usuários free (ex.: o
+/// backup automático ao fechar um jogo): sem sessão, cache expirado ou
+/// ilegível devolve `false` — o lado seguro é sempre bloquear em silêncio e
+/// deixar a UI apresentar o estado "recurso Premium".
+pub(crate) fn cached_is_premium(app: &tauri::AppHandle) -> bool {
+    let Ok(token) = crate::cloud_save::session_token(app) else {
+        return false;
+    };
+    let user_id = decode_session_user_id(&token).unwrap_or_default();
+    load_cached_status(app, &user_id)
+        .map(|status| status.subscription.is_premium)
+        .unwrap_or(false)
+}
+
 /// Turns a worker error code into something worth showing the user.
 ///
 /// The worker answers with stable snake_case codes; surfacing them raw meant a

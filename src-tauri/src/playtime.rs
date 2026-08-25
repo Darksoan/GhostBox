@@ -340,22 +340,25 @@ pub(crate) fn run_automatic_backup_after_close(
             guard.backup_in_progress.insert(app_id.clone());
         }
 
-        let should_run_cloud = has_cloud_session(&app);
-        if !should_run_cloud {
-            // Record the skip so the user learns nothing was saved instead of
-            // the backup silently never happening.
-            let title = resolved_game_title(&app, &game, &app_id);
-            let _ = crate::save_failed_backup_record(
-                &app,
-                &app_id,
-                &title,
-                "",
-                "Backup em nuvem ignorado: faça login com a Steam.",
-            );
-            if let Ok(mut guard) = steam_monitor_state().lock() {
-                guard.backup_in_progress.remove(&app_id);
+        // Gate de plano ANTES de qualquer tentativa: backup é exclusivo do
+        // Premium, e um usuário free NÃO pode gerar registro de falha nem
+        // notificação de erro — só o nudge informativo único.
+        let decision =
+            decide_automatic_backup(crate::subscription::cached_is_premium(&app), has_cloud_session(&app));
+
+        match decision {
+            AutomaticBackupDecision::SkipBlockedByPlan => {
+                emit_premium_backup_nudge(&app);
+                if let Ok(mut guard) = steam_monitor_state().lock() {
+                    guard.backup_in_progress.remove(&app_id);
+                }
+                return;
             }
-            return;
+            AutomaticBackupDecision::NeedsSteamSession => {
+                // Premium sem sessão Steam é falha acionável: o usuário resolve
+                // logando. Segue para o fluxo que grava o registro de falha.
+            }
+            AutomaticBackupDecision::RunCloudBackup => {}
         }
 
         std::thread::sleep(std::time::Duration::from_millis(
@@ -389,6 +392,86 @@ pub(crate) fn run_automatic_backup_after_close(
             guard.backup_in_progress.remove(&app_id);
         }
     });
+}
+
+/// O que fazer com o backup automático quando uma sessão de jogo fecha.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutomaticBackupDecision {
+    /// Plano free: backup é exclusivo do Premium. Não tenta nada, não grava
+    /// nada, não faz ruído — o estado "bloqueado" aparece na UI via isPremium.
+    SkipBlockedByPlan,
+    /// Premium sem sessão Steam: falha acionável que o usuário mesmo resolve.
+    NeedsSteamSession,
+    /// Tentar o backup em nuvem normalmente.
+    RunCloudBackup,
+}
+
+fn decide_automatic_backup(is_premium: bool, has_cloud_session: bool) -> AutomaticBackupDecision {
+    if !is_premium {
+        return AutomaticBackupDecision::SkipBlockedByPlan;
+    }
+    if !has_cloud_session {
+        return AutomaticBackupDecision::NeedsSteamSession;
+    }
+    AutomaticBackupDecision::RunCloudBackup
+}
+
+/// Evento Tauri que dispara o nudge informativo único no frontend.
+const PREMIUM_BACKUP_NUDGE_EVENT: &str = "premium-backup-nudge";
+/// O nudge repete no máximo uma vez por dia por processo (a supressão definitiva
+/// é a flag em localStorage do frontend).
+const PREMIUM_NUDGE_DEBOUNCE_MS: u64 = 24 * 60 * 60 * 1000;
+
+static LAST_PREMIUM_NUDGE_AT: std::sync::OnceLock<std::sync::Mutex<u64>> = std::sync::OnceLock::new();
+
+fn emit_premium_backup_nudge(app: &tauri::AppHandle) {
+    let cell = LAST_PREMIUM_NUDGE_AT.get_or_init(|| std::sync::Mutex::new(0));
+    let now = current_millis();
+    {
+        let Ok(mut last) = cell.lock() else {
+            return;
+        };
+        if now.saturating_sub(*last) < PREMIUM_NUDGE_DEBOUNCE_MS {
+            return;
+        }
+        *last = now;
+    }
+    use tauri::Emitter;
+    let _ = app.emit(PREMIUM_BACKUP_NUDGE_EVENT, serde_json::json!({}));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn free_users_skip_silently_regardless_of_session() {
+        // Plano free NUNCA vira falha — com ou sem sessão Steam.
+        assert_eq!(
+            decide_automatic_backup(false, false),
+            AutomaticBackupDecision::SkipBlockedByPlan
+        );
+        assert_eq!(
+            decide_automatic_backup(false, true),
+            AutomaticBackupDecision::SkipBlockedByPlan
+        );
+    }
+
+    #[test]
+    fn premium_without_steam_session_is_an_actionable_failure() {
+        assert_eq!(
+            decide_automatic_backup(true, false),
+            AutomaticBackupDecision::NeedsSteamSession
+        );
+    }
+
+    #[test]
+    fn premium_with_session_runs_the_cloud_backup() {
+        assert_eq!(
+            decide_automatic_backup(true, true),
+            AutomaticBackupDecision::RunCloudBackup
+        );
+    }
 }
 
 fn poll_steam_running_app_id(app: &tauri::AppHandle) {

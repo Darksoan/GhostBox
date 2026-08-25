@@ -280,19 +280,13 @@ export function HomeTopRatedCardBodySkeleton() {
   return (
     <span className="home-top-rated-card__body">
       <span className="home-top-rated-card__title home-top-rated-card__title--skeleton skeleton" />
-      <span className="home-top-rated-card__metrics">
-        {Array.from({ length: 3 }, (_, index) => (
-          <span
-            className="home-top-rated-card__metric"
-            key={`top-rated-metric-${index}`}
-          >
-            <span className="home-top-rated-card__metric-label home-top-rated-card__metric-label--skeleton skeleton" />
-            <span className="home-top-rated-card__metric-value home-top-rated-card__metric-value--skeleton skeleton" />
-          </span>
-        ))}
+      <span className="home-top-rated-card__summary">
+        <span className="home-top-rated-card__summary-line home-top-rated-card__summary-line--skeleton skeleton" />
+        <span className="home-top-rated-card__summary-line home-top-rated-card__summary-line--skeleton skeleton" />
+        <span className="home-top-rated-card__summary-line home-top-rated-card__summary-line--skeleton skeleton" />
       </span>
       <span className="home-top-rated-card__tags">
-        {Array.from({ length: 3 }, (_, index) => (
+        {Array.from({ length: 4 }, (_, index) => (
           <span
             className="home-top-rated-card__tag home-top-rated-card__tag--skeleton skeleton"
             key={`top-rated-tag-${index}`}

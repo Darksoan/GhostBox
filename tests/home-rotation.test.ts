@@ -5,6 +5,7 @@ import {
   homeRotationSeed,
   pickRotationWindow,
   rotationHash,
+  shuffledRotation,
 } from "../src/utils/homeRotation";
 // Cross-project import on purpose: this is the contract between the client
 // seed and the worker's `rotatePool`. Nothing type-checks it (the root
@@ -119,5 +120,48 @@ describe("rotationHash", () => {
   it("changes when either the seed or the salt changes", () => {
     expect(rotationHash(2900, "a")).not.toBe(rotationHash(2901, "a"));
     expect(rotationHash(2900, "a")).not.toBe(rotationHash(2900, "b"));
+  });
+});
+
+describe("shuffledRotation", () => {
+  // Ranking ordenado (maior → menor) como o trending entrega.
+  const ranking = Array.from({ length: 20 }, (_, index) => index + 1);
+
+  it("is deterministic for the same seed and salt", () => {
+    const first = shuffledRotation(ranking, { seed: 2900, salt: "top-rated" });
+    const second = shuffledRotation(ranking, { seed: 2900, salt: "top-rated" });
+
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(20);
+  });
+
+  it("is a permutation of the pool — never drops or duplicates an entry", () => {
+    for (let seed = 0; seed < 30; seed += 1) {
+      const shuffled = shuffledRotation(ranking, { seed, salt: "top-rated" });
+      expect([...shuffled].sort((a, b) => a - b)).toEqual(ranking);
+    }
+  });
+
+  it("actually breaks the descending order instead of keeping top-N in rank", () => {
+    const shuffled = shuffledRotation(ranking, { seed: 2900, salt: "top-rated" });
+
+    // O rail "Mais jogados" quer uma amostra aleatória — a ordem não pode
+    // continuar a do menor para o maior (nem a inversa).
+    expect(shuffled).not.toEqual(ranking);
+    expect(shuffled).not.toEqual([...ranking].reverse());
+  });
+
+  it("rotates the arrangement across weeks and salts", () => {
+    const weekA = shuffledRotation(ranking, { seed: 2900, salt: "top-rated" });
+    const weekB = shuffledRotation(ranking, { seed: 2901, salt: "top-rated" });
+    const otherSalt = shuffledRotation(ranking, { seed: 2900, salt: "other" });
+
+    expect(weekA).not.toEqual(weekB);
+    expect(weekA).not.toEqual(otherSalt);
+  });
+
+  it("is a no-op for pools too small to shuffle", () => {
+    expect(shuffledRotation([], { seed: 7, salt: "empty" })).toEqual([]);
+    expect(shuffledRotation([1], { seed: 7, salt: "one" })).toEqual([1]);
   });
 });
