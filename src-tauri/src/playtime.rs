@@ -270,14 +270,15 @@ pub(crate) fn open_game_playtime_session(app: &tauri::AppHandle, game: &serde_js
     drop(guard);
     let _ = record_game_launch_playtime(app, &app_id);
     emit_game_playtimes_snapshot(app);
-    if let Some(steam_path) = crate::resolve_steam_path(app, None).0 {
-        crate::achievement_monitor::start_local_achievement_monitor(
-            app,
-            &app_id,
-            &title,
-            &steam_path,
-        );
-    }
+    // O monitor roda mesmo sem Steam resolvido: com o cliente fechado a fonte
+    // é o achievements.json do emulador Goldberg/GSE.
+    let steam_path = crate::resolve_steam_path(app, None).0;
+    crate::achievement_monitor::start_local_achievement_monitor(
+        app,
+        &app_id,
+        &title,
+        steam_path.as_deref(),
+    );
 }
 
 pub(crate) fn close_game_playtime_session(app: &tauri::AppHandle, app_id: &str) -> Option<String> {

@@ -354,6 +354,11 @@ pub fn register_library_folder(
     std::fs::copy(&libraryfolders, &backup)
         .map_err(|error| format!("Falha ao fazer backup de libraryfolders.vdf: {error}"))?;
 
+    // Cada novo backup e a chance de podar os antigos: sem isso um backup por
+    // download se acumula para sempre dentro da pasta da Steam. O recem-criado
+    // e sempre o mais recente, entao sobram ele + KEEP-1 anteriores.
+    prune_libraryfolders_artifacts(steam_path);
+
     let temporary = libraryfolders.with_extension("vdf.tmp");
     std::fs::write(&temporary, updated).map_err(|error| error.to_string())?;
     std::fs::rename(&temporary, &libraryfolders).map_err(|error| {
@@ -362,6 +367,52 @@ pub fn register_library_folder(
     })?;
 
     Ok(())
+}
+
+/// Quantos backups de `libraryfolders.vdf` manter antes de comecar a podar.
+const LIBRARYFOLDERS_BACKUPS_TO_KEEP: usize = 5;
+
+/// Remove residuos nossos da pasta `steamapps` da Steam: o temporario
+/// `.vdf.tmp` que pode ter ficado de um crash no meio do rename, e os backups
+/// `libraryfolders.vdf.ghostbox-*.bak` excedentes (mantem os mais recentes).
+/// Best-effort: qualquer falha individual e ignorada — nunca pode atrapalhar
+/// a operacao do chamador.
+pub(crate) fn prune_libraryfolders_artifacts(steam_path: &str) {
+    let steamapps = Path::new(steam_path).join("steamapps");
+    if !steamapps.is_dir() {
+        return;
+    }
+
+    // Temporario orfao de um rename interrompido por crash.
+    let _ = std::fs::remove_file(steamapps.join("libraryfolders.vdf.tmp"));
+
+    const PREFIX: &str = "libraryfolders.vdf.ghostbox-";
+    const SUFFIX: &str = ".bak";
+    let mut backups: Vec<(u64, std::path::PathBuf)> = std::fs::read_dir(&steamapps)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let timestamp = name
+                .strip_prefix(PREFIX)?
+                .strip_suffix(SUFFIX)?
+                .parse::<u64>()
+                .ok()?;
+            Some((timestamp, entry.path()))
+        })
+        .collect();
+
+    if backups.len() <= LIBRARYFOLDERS_BACKUPS_TO_KEEP {
+        return;
+    }
+
+    backups.sort_by_key(|(timestamp, _)| *timestamp);
+    let excess = backups.len() - LIBRARYFOLDERS_BACKUPS_TO_KEEP;
+    for (_, path) in backups.iter().take(excess) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// Insere `"<app_id>" "<size>"` no bloco `apps` da entrada cujo `path` bate com
@@ -467,6 +518,65 @@ fn append_library_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Monta uma `steamapps` fake com N backups de timestamps crescentes e um
+    /// `.tmp` orfao, poda, e devolve os nomes de backup que sobraram.
+    fn pruned_backup_names(count: usize) -> Vec<String> {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-vdf-prune-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        let steamapps = root.join("steamapps");
+        std::fs::create_dir_all(&steamapps).unwrap();
+
+        for index in 0..count {
+            let name = format!("libraryfolders.vdf.ghostbox-{}.bak", 1_700_000_000 + index);
+            std::fs::write(steamapps.join(name), "backup").unwrap();
+        }
+        std::fs::write(steamapps.join("libraryfolders.vdf.tmp"), "orfao").unwrap();
+
+        prune_libraryfolders_artifacts(root.to_string_lossy().as_ref());
+
+        let mut remaining: Vec<String> = std::fs::read_dir(&steamapps)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .filter(|name| name.ends_with(".bak"))
+            .collect();
+        remaining.sort();
+        assert!(
+            !steamapps.join("libraryfolders.vdf.tmp").exists(),
+            ".tmp orfao deve ser removido"
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+        remaining
+    }
+
+    #[test]
+    fn prune_keeps_only_the_newest_backups() {
+        let remaining = pruned_backup_names(8);
+        assert_eq!(remaining.len(), LIBRARYFOLDERS_BACKUPS_TO_KEEP);
+        // Os mais antigos (timestamps menores) que saem.
+        assert!(!remaining.contains(&"libraryfolders.vdf.ghostbox-1700000000.bak".to_string()));
+        assert!(remaining.contains(&format!(
+            "libraryfolders.vdf.ghostbox-{}.bak",
+            1_700_000_000 + 7
+        )));
+    }
+
+    #[test]
+    fn prune_is_a_no_op_below_the_limit() {
+        let remaining = pruned_backup_names(LIBRARYFOLDERS_BACKUPS_TO_KEEP);
+        assert_eq!(remaining.len(), LIBRARYFOLDERS_BACKUPS_TO_KEEP);
+    }
+
+    #[test]
+    fn prune_tolerates_a_missing_steam_folder() {
+        // Nao pode panico/erro com caminho inexistente.
+        prune_libraryfolders_artifacts("Z:\\nao-existe-ghostbox\\Steam");
+    }
 
     fn sample_manifest() -> String {
         render_appmanifest(

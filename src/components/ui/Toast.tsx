@@ -1,11 +1,11 @@
-import { CircleAlert, CircleCheck, X } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
 import { useSettings } from "../../context/settings";
 import {
   useCachedImageSources,
   useLoadableImageCover,
 } from "../../hooks/useCachedImageSources";
 
-export type ToastVariant = "success" | "error";
+export type ToastVariant = "success" | "error" | "info";
 
 const noImageSources: string[] = [];
 
@@ -34,8 +34,15 @@ export function Toast({ toast, onClose }: ToastProps) {
 
   if (!toast) return null;
 
+  const isInfo = toast.variant === "info";
+  const variantClass = isError
+    ? "toast--error"
+    : isInfo
+      ? "toast--info"
+      : "toast--success";
+
   return (
-    <div className={`toast ${isError ? "toast--error" : "toast--success"}`}>
+    <div className={`toast ${variantClass}`}>
       <div className="toast__content">
         {hasCapsule ? (
           <div className="toast__media">
@@ -47,6 +54,8 @@ export function Toast({ toast, onClose }: ToastProps) {
           </div>
         ) : isError ? (
           <CircleAlert className="toast__icon" size={20} />
+        ) : isInfo ? (
+          <Info className="toast__icon" size={20} />
         ) : (
           <CircleCheck className="toast__icon" size={20} />
         )}

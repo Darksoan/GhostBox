@@ -46,6 +46,24 @@ const translations: Record<Language, TranslationTree> = {
       emptyTitle: "Nenhuma notificação por enquanto",
       emptyMessage: "Backups, conquistas, conta, downloads e alertas do sistema aparecerão aqui.",
     },
+    premium: {
+      backupNudge: {
+        title: "Backup em nuvem é Premium",
+        message:
+          "Seus saves não foram enviados à nuvem: o backup automático do GhostBox faz parte do Premium.",
+        cta: "Conhecer Premium",
+      },
+      lockedBackup: {
+        chipLabel: "Backup automático é Premium",
+        viewPlans: "Ver planos",
+        failedLabel: "Falha no último backup",
+      },
+      profileGate: {
+        toastTitle: "Recurso Premium",
+        toastMessage:
+          "Edição de capa/avatar faz parte do Premium. Conheça os planos na aba Assinatura dos Ajustes.",
+      },
+    },
     downloads: {
       title: "Downloads",
       description: "Acompanhe o progresso dos downloads de jogos iniciados pelo GhostBox.",
@@ -550,6 +568,30 @@ const translations: Record<Language, TranslationTree> = {
           label: "Pasta da Steam",
           description:
             "Caminho usado para localizar jogos instalados pelo LuaTools.",
+        },
+      },
+      storage: {
+        title: "Armazenamento",
+        description: "Espaço usado por caches e dados locais do GhostBox.",
+        totalLabel: "Total em disco",
+        refresh: "Atualizar",
+        refreshing: "Atualizando...",
+        clearCaches: "Limpar caches",
+        clearing: "Limpando...",
+        clearCategory: "Limpar",
+        clearCategoryDescription: "Nada para limpar nesta categoria.",
+        loadError: "Não foi possível carregar o uso de armazenamento.",
+        clearSuccessTitle: "Limpeza concluída",
+        clearSuccessMessage: "{freed} liberados.",
+        clearPartialMessage: "{freed} liberados. Alguns itens falharam: {failed}",
+        clearErrorTitle: "Falha na limpeza",
+        categories: {
+          images: "Imagens do catálogo",
+          catalogueCache: "Cache do catálogo",
+          steamcmd: "SteamCMD",
+          webviewCache: "Cache do navegador",
+          goldbergSaves: "Progresso de conquistas offline",
+          ludusaviConfig: "Configuração do Ludusavi",
         },
       },
       notifications: {
@@ -1157,6 +1199,30 @@ const translations: Record<Language, TranslationTree> = {
         steamPath: {
           label: "Steam folder",
           description: "Path used to find games installed via LuaTools.",
+        },
+      },
+      storage: {
+        title: "Storage",
+        description: "Disk space used by GhostBox caches and local data.",
+        totalLabel: "Total on disk",
+        refresh: "Refresh",
+        refreshing: "Refreshing...",
+        clearCaches: "Clear caches",
+        clearing: "Clearing...",
+        clearCategory: "Clear",
+        clearCategoryDescription: "Nothing to clear in this category.",
+        loadError: "Could not load storage usage.",
+        clearSuccessTitle: "Cleanup finished",
+        clearSuccessMessage: "{freed} freed.",
+        clearPartialMessage: "{freed} freed. Some items failed: {failed}",
+        clearErrorTitle: "Cleanup failed",
+        categories: {
+          images: "Catalogue images",
+          catalogueCache: "Catalogue cache",
+          steamcmd: "SteamCMD",
+          webviewCache: "Browser cache",
+          goldbergSaves: "Offline achievements progress",
+          ludusaviConfig: "Ludusavi configuration",
         },
       },
       notifications: {

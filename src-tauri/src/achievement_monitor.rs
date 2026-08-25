@@ -31,10 +31,10 @@ pub fn start_local_achievement_monitor(
     app: &AppHandle,
     app_id: &str,
     title: &str,
-    steam_path: &str,
+    steam_path: Option<&str>,
 ) {
     let key = normalize_monitor_app_id(app_id);
-    if key.is_empty() || steam_path.is_empty() {
+    if key.is_empty() {
         return;
     }
 
@@ -46,8 +46,12 @@ pub fn start_local_achievement_monitor(
     }
 
     {
-        let initial =
-            crate::steam_appcache::read_local_unlocked_achievement_titles(steam_path, &key);
+        let mut initial = steam_path
+            .map(|path| crate::steam_appcache::read_local_unlocked_achievement_titles(path, &key))
+            .unwrap_or_default();
+        // O emulador Goldberg/GSE grava desbloqueios num JSON próprio; incluí-los
+        // no snapshot inicial evita notificações falsas de conquistas antigas.
+        initial.extend(crate::goldberg::read_goldberg_unlocked_names(&key));
         snapshots()
             .lock()
             .unwrap_or_else(|error| error.into_inner())
@@ -62,7 +66,7 @@ pub fn start_local_achievement_monitor(
 
     let app_handle = app.clone();
     let title = title.to_string();
-    let steam_path = steam_path.to_string();
+    let steam_path = steam_path.map(str::to_string);
 
     std::thread::spawn(move || {
         while !stop.load(Ordering::Relaxed) {
@@ -73,7 +77,7 @@ pub fn start_local_achievement_monitor(
             if !crate::playtime::is_playtime_session_active(&key) {
                 break;
             }
-            notify_new_unlocks(&app_handle, &key, &title, &steam_path);
+            notify_new_unlocks(&app_handle, &key, &title, steam_path.as_deref());
         }
 
         monitors()
@@ -124,8 +128,13 @@ pub fn stop_all_local_achievement_monitors() {
         .clear();
 }
 
-fn notify_new_unlocks(app: &AppHandle, app_id: &str, title: &str, steam_path: &str) {
-    let current = crate::steam_appcache::read_local_unlocked_achievement_titles(steam_path, app_id);
+fn notify_new_unlocks(app: &AppHandle, app_id: &str, title: &str, steam_path: Option<&str>) {
+    let mut current = steam_path
+        .map(|path| crate::steam_appcache::read_local_unlocked_achievement_titles(path, app_id))
+        .unwrap_or_default();
+    // Fonte offline: conquistas persistidas pelo emulador (nomes de API da
+    // schema oficial da Steam).
+    current.extend(crate::goldberg::read_goldberg_unlocked_names(app_id));
     let mut snapshots_guard = snapshots()
         .lock()
         .unwrap_or_else(|error| error.into_inner());

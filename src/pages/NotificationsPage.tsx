@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import { requestNavigateToSettingsTab } from "../lib/appNavigation";
 import {
   appNotificationsChangedEvent,
   clearAppNotifications,
@@ -117,11 +118,23 @@ function NotificationRow({
           <span>{formatRelativeTime(item.createdAt, language)}</span>
         </div>
         <p>{item.message}</p>
-        {item.action?.url ? (
+        {item.action ? (
           <button
             type="button"
             className="app-notification__action"
-            onClick={() => void ghostboxApi.openExternalUrl(item.action?.url ?? "")}
+            onClick={() => {
+              // Ação navegável: alvos internos (`target`) vão pelo barramento
+              // leve de eventos (lib/appNavigation.ts) que o App resolve
+              // abrindo a Settings na aba pedida; URLs externas continuam
+              // abrindo no navegador padrão.
+              if (item.action?.target === "subscription") {
+                requestNavigateToSettingsTab("subscription");
+                return;
+              }
+              if (item.action?.url) {
+                void ghostboxApi.openExternalUrl(item.action.url);
+              }
+            }}
           >
             {item.action.label}
           </button>

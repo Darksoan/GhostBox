@@ -143,6 +143,16 @@ fn existing_cached_file(directory: &Path, url: &str) -> Option<PathBuf> {
     None
 }
 
+/// Renova o mtime de um arquivo de cache quando ele é acessado. A poda usa
+/// mtime como critério de idade; sem este toque ela seria FIFO (ordem de
+/// download) e evictaria imagens quentes antes de imagens esquecidas.
+fn touch_cached_file(path: &Path) {
+    let Ok(file) = std::fs::OpenOptions::new().write(true).open(path) else {
+        return;
+    };
+    let _ = file.set_modified(SystemTime::now());
+}
+
 fn steam_asset_fallback_request(url: &str) -> Option<(String, String)> {
     let parsed = reqwest::Url::parse(url).ok()?;
     if !parsed.host_str()?.ends_with("steamstatic.com") {
@@ -779,6 +789,8 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
     };
 
     if let Some(existing) = existing_cached_file(&directory, url) {
+        // Hit de cache renova a "última utilização" da poda LRU.
+        touch_cached_file(&existing);
         return existing.to_string_lossy().into_owned();
     }
 
@@ -824,4 +836,45 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
     }
 
     String::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn touch_renews_mtime_so_eviction_becomes_lru() {
+        let path = std::env::temp_dir().join(format!(
+            "ghostbox-touch-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::write(&path, b"image-bytes").unwrap();
+
+        // Simula um arquivo antigo: mtime em 2001.
+        let ancient = UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+        {
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap();
+            file.set_modified(ancient).unwrap();
+        }
+        let before = std::fs::metadata(&path)
+            .and_then(|metadata| metadata.modified())
+            .unwrap();
+
+        touch_cached_file(&path);
+
+        let after = std::fs::metadata(&path)
+            .and_then(|metadata| metadata.modified())
+            .unwrap();
+        assert!(
+            after > before,
+            "touch deve renovar o mtime (antes: {before:?}, depois: {after:?})"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"image-bytes", "conteúdo intocado");
+
+        std::fs::remove_file(&path).ok();
+    }
 }

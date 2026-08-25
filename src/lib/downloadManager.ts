@@ -1,7 +1,7 @@
 import { ghostboxApi } from "./ghostboxApi";
 import type { GhostBoxGame } from "../data";
 import { gameSteamHeaderFirstSources, getGameAppId } from "../utils/image";
-import { readStoredDownloadParallelChunks } from "../utils/storage";
+import { readStoredDownloadParallelChunks, readStoredDownloadsDir } from "../utils/storage";
 
 type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
 
@@ -1033,6 +1033,8 @@ export function startDownloadManager(): () => void {
   if (engineStarted) return () => undefined;
   engineStarted = true;
 
+  sweepKnownDownloadRoots();
+
   const unlisten = ghostboxApi.onDownloadProgress(applyProgressEvent);
   const stallWatcher = setInterval(clearStalledEstimates, stallWatchIntervalMs);
 
@@ -1042,4 +1044,25 @@ export function startDownloadManager(): () => void {
     clearInterval(stallWatcher);
     flushStoredTasks();
   };
+}
+
+/**
+ * Manutenção de disco uma vez por boot: temporários de chunks órfãos e ACFs
+ * de jogos apagados manualmente pelo Explorer, em todas as raízes conhecidas.
+ * Fire-and-forget — falha aqui nunca pode atrapalhar a inicialização.
+ */
+function sweepKnownDownloadRoots(): void {
+  try {
+    const roots = new Set<string>();
+    const stored = readStoredDownloadsDir();
+    if (stored) roots.add(stored);
+    for (const task of readHistoryTasks()) {
+      if (task.downloadsRoot) roots.add(task.downloadsRoot);
+    }
+    const known = [...roots];
+    if (!known.length) return;
+    void ghostboxApi.sweepDownloadRoots(known).catch(() => undefined);
+  } catch {
+    // Best-effort only.
+  }
 }

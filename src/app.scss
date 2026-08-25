@@ -9408,6 +9408,13 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  // Informativo/neutro: sem semÃ¢ntica de status, usa o degrau neutro do texto.
+  &--info {
+    .toast__icon {
+      color: var(--text-secondary);
+    }
+  }
+
   strong,
   span {
     display: block;

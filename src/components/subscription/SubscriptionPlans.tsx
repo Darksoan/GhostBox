@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import { requestNavigateToSettingsTab } from "../../lib/appNavigation";
 import type {
   CloudSave,
   SubscriptionPayment,
@@ -16,6 +17,10 @@ import type {
 } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
 import { loadGameStoreDetailsCached } from "../../utils/gameCache";
+import {
+  resolveBackupFailureView,
+  type BackupFailureRecord,
+} from "../../utils/backupStatusDisplay";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import { SubscriptionBackdrop } from "./SubscriptionBackdrop";
@@ -29,11 +34,12 @@ type SubscriptionPlansProps = {
     achievementCount: number;
     lastBackupAt: string | null;
     lastBackupSuccess: boolean | null;
+    lastBackupError?: string | null;
   }>;
   steamProfile?: SteamProfile | null;
 };
 
-type CloudBackupGameSummary = {
+type CloudBackupGameSummary = BackupFailureRecord & {
   appId: string;
   title: string;
   achievementCount: number | null;
@@ -384,7 +390,10 @@ export function SubscriptionPlans({
           title: remoteTitle || fallbackTitle || resolvedCloudGameTitles.get(save.appId) || localTitle || save.appId,
           achievementCount: typeof achievementCount === "number" ? achievementCount : null,
           lastBackupAt: updatedAt,
-          lastBackupSuccess: true,
+          // Falha registrada localmente (ludusavi) vence o "ok" implícito do
+          // save em nuvem — é ela que alimenta o chip bloqueado/erro.
+          lastBackupSuccess: localGame?.lastBackupSuccess ?? true,
+          lastBackupError: localGame?.lastBackupError ?? null,
         });
       }
     }
@@ -550,7 +559,38 @@ export function SubscriptionPlans({
                         </span>
                       ) : null}
                     </div>
-                    {game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null}
+                    {(() => {
+                      // Chip de estado bloqueado: para não-Premium uma falha
+                      // de backup vira aviso informativo com CTA "Ver planos"
+                      // (mesma navegação das ações de notificação), nunca um
+                      // erro vermelho. Premium continua vendo a falha real.
+                      const failureView = resolveBackupFailureView(isPremium, game);
+                      if (failureView.kind === "premium-locked") {
+                        return (
+                          <span className="subscription-account__backup-state subscription-account__backup-state--premium">
+                            <span>{t("premium.lockedBackup.chipLabel")}</span>
+                            <button
+                              type="button"
+                              className="app-notification__action"
+                              onClick={() => requestNavigateToSettingsTab("subscription")}
+                            >
+                              {t("premium.lockedBackup.viewPlans")}
+                            </button>
+                          </span>
+                        );
+                      }
+                      if (failureView.kind === "failed") {
+                        return (
+                          <span
+                            className="subscription-account__backup-state subscription-account__backup-state--failed"
+                            title={game.lastBackupError || undefined}
+                          >
+                            {t("premium.lockedBackup.failedLabel")}
+                          </span>
+                        );
+                      }
+                      return game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null;
+                    })()}
                   </li>
                 ))}
               </ul>

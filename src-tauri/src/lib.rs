@@ -36,6 +36,7 @@ mod cdndownload;
 mod chunk_index;
 mod cloud_save;
 mod ghostbox_library;
+mod goldberg;
 mod image_cache;
 mod luatools;
 mod luatools_bootstrap;
@@ -50,6 +51,7 @@ mod steam_appmanifest;
 mod steam_assets;
 mod steam_localconfig;
 mod steam_pics;
+mod storage_audit;
 mod subscription;
 mod util;
 mod window_lifecycle;
@@ -1354,10 +1356,22 @@ pub(crate) fn launch_game_from_value(
         let working_dir = canonical_executable
             .parent()
             .ok_or_else(|| "Custom executable has no parent folder.".to_string())?;
-        match std::process::Command::new(&canonical_executable)
-            .current_dir(working_dir)
-            .spawn()
+        // Emulador Goldberg/GSE: melhor esforço para suportar conquistas
+        // offline. Falha aqui NÃO pode impedir o lançamento do jogo.
+        if let Err(error) =
+            crate::goldberg::prepare_game_for_offline_launch(&canonical_executable, &app_id)
         {
+            eprintln!("Goldberg setup skipped: {error}");
+        }
+        let mut launch_command = {
+            let mut command = std::process::Command::new(&canonical_executable);
+            command.current_dir(working_dir);
+            for (key, value) in crate::goldberg::process_env_vars(&app_id) {
+                command.env(key, value);
+            }
+            command
+        };
+        match launch_command.spawn() {
             Ok(_) => {
                 if playtime::mark_process_fallback_started(&app_id) {
                     playtime::monitor_game_process(
@@ -1436,6 +1450,11 @@ fn game_launch(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Manutenção de cache WebView2 ANTES do Builder: aqui o navegador ainda
+    // não existe, então as pastas estão destravadas. Barato: só roda de fato
+    // quando há flag pendente ou o cache passou do teto.
+    storage_audit::webview_cache_boot_maintenance();
+
     tauri::Builder::default()
         .on_page_load(|webview, payload| {
             if webview.label() == "main"
@@ -1470,6 +1489,12 @@ pub fn run() {
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             image_cache::start_image_cache_cleanup(app.handle().clone());
             catalogue_cache::start_catalogue_refresh_scheduler(app.handle().clone());
+            // Temporários órfãos de crashes anteriores: fora do disco antes
+            // de qualquer escrita nova começar. Fora da thread principal.
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || storage_audit::startup_temp_sweep(&handle));
+            }
             window_lifecycle::setup_window_lifecycle(app)?;
             Ok(())
         })
@@ -1558,6 +1583,10 @@ pub fn run() {
             cdndownload::cdndownload_move_install_dir,
             cdndownload::cdndownload_launch_game,
             cdndownload::cdndownload_default_dir,
+            cdndownload::cdndownload_sweep_roots,
+            storage_audit::storage_usage,
+            storage_audit::clear_app_caches,
+            storage_audit::clear_storage_category,
             window_lifecycle::window_minimize,
             window_lifecycle::window_close,
             window_lifecycle::tray_set_library_games,

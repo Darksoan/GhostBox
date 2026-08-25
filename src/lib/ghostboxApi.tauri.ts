@@ -9,6 +9,7 @@ import type {
   AppStatus,
   BackupDetails,
   BackupSettings,
+  DownloadRootSweepSummary,
   FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
@@ -55,6 +56,9 @@ import type {
   SubscriptionPortalResult,
   SubscriptionPlanId,
   SubscriptionStatusResult,
+  ClearResult,
+  StorageCategoryId,
+  StorageUsage,
 } from "./ghostboxApi.types";
 
 function noopUnsubscribe() {
@@ -231,6 +235,28 @@ const emptyFeaturedResult: FeaturedResult = {
   topSellers: [],
   newReleases: [],
   comingSoon: [],
+};
+
+const storageCategoryIds: StorageCategoryId[] = [
+  "images",
+  "catalogueCache",
+  "steamcmd",
+  "webviewCache",
+  "goldbergSaves",
+  "ludusaviConfig",
+];
+
+// Preview/browser fallback: nothing on disk is known, so every category
+// reports zero bytes and absent.
+const emptyStorageUsage: StorageUsage = {
+  categories: storageCategoryIds.map((id) => ({ id, bytes: 0, present: false })),
+  totalBytes: 0,
+};
+
+const emptyClearResult: ClearResult = {
+  cleared: [],
+  failed: [],
+  freedBytes: 0,
 };
 
 async function invokeOr<T>(
@@ -853,6 +879,14 @@ export const ghostboxApi = {
     return invokeOr<string>("cdndownload_default_dir", {}, "");
   },
 
+  sweepDownloadRoots(roots: string[]): Promise<DownloadRootSweepSummary> {
+    return invokeOr<DownloadRootSweepSummary>(
+      "cdndownload_sweep_roots",
+      { roots },
+      { removedChunkTemps: 0, removedOrphanAcfs: [] },
+    );
+  },
+
   async selectDownloadsDir(): Promise<string | null> {
     const selectedPath = await open({
       directory: true,
@@ -1314,6 +1348,18 @@ export const ghostboxApi = {
     );
   },
 
+  storageUsage(): Promise<StorageUsage> {
+    return invokeOr<StorageUsage>("storage_usage", {}, emptyStorageUsage);
+  },
+
+  clearAppCaches(): Promise<ClearResult> {
+    return invokeOr<ClearResult>("clear_app_caches", {}, emptyClearResult);
+  },
+
+  clearStorageCategory(id: string): Promise<ClearResult> {
+    return invokeOr<ClearResult>("clear_storage_category", { id }, emptyClearResult);
+  },
+
   getMorrenusApiKey(): Promise<string | undefined> {
     return invokeOr<string | undefined>(
       "app_get_morrenus_api_key",
@@ -1438,6 +1484,27 @@ export const ghostboxApi = {
       "tray-navigate",
       (event) => callback(event.payload),
     ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+
+  /** Emitido pelo backend quando um usuário FREE fecha uma partida (os backups
+   * são exclusivos do Premium e ficam bloqueados). Payload vazio — o conteúdo
+   * do aviso é resolvido no frontend via i18n. */
+  onPremiumBackupNudge(callback: () => void): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void listen("premium-backup-nudge", () => callback()).then((nextUnlisten) => {
       if (disposed) {
         nextUnlisten();
       } else {

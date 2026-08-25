@@ -49,6 +49,11 @@ import {
   showDesktopBackupNotification,
 } from "../lib/backupNotifications";
 import { isHiddenLibraryGame } from "../utils/filters";
+import {
+  buildPremiumBackupNudgeNotification,
+  hasSeenPremiumBackupNudge,
+  markPremiumBackupNudgeSeen,
+} from "../utils/premiumNudge";
 import { readDownloadTasks } from "../lib/downloadManager";
 import { preloadGamePortraitSources } from "../utils/image";
 import { normalizeSteamGameTitles } from "../utils/steamTitles";
@@ -317,7 +322,7 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { showToast, setCollectionModalOpen } = useOverlay();
-  const { appearance, notifications } = useSettings();
+  const { appearance, notifications, t } = useSettings();
   const { account, linkedSteamId } = useAuth();
   const accountUserId = account?.userId ?? null;
 
@@ -1198,6 +1203,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     notifications.achievementsEnabled,
     notifications.desktopNotificationsEnabled,
   ]);
+
+  // Nudge único do evento Tauri `premium-backup-nudge`: o backend emite quando
+  // um usuário FREE fecha uma partida (backups são exclusivos do Premium). A
+  // flag em localStorage (`ghostbox:premium-nudge:v1`) garante UM único push;
+  // o CTA navega para a aba Assinatura via lib/appNavigation.ts.
+  useEffect(() => {
+    return ghostboxApi.onPremiumBackupNudge(() => {
+      // Defensivo: o backend só emite para contas FREE, mas se o cache local
+      // já souber que a conta é Premium, não empurra o aviso informativo.
+      if (ghostboxApi.getCachedIsPremium() === true) return;
+      if (hasSeenPremiumBackupNudge(window.localStorage)) return;
+      markPremiumBackupNudgeSeen(window.localStorage);
+
+      pushAppNotification(
+        buildPremiumBackupNudgeNotification({
+          title: t("premium.backupNudge.title"),
+          message: t("premium.backupNudge.message"),
+          actionLabel: t("premium.backupNudge.cta"),
+        }),
+      );
+    });
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;

@@ -15,6 +15,7 @@ import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
 import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
+import { onAppNavigateToSettingsTab } from "./lib/appNavigation";
 import { startDownloadManager } from "./lib/downloadManager";
 import {
   getTrayHiddenNotificationCopy,
@@ -265,6 +266,17 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       handleNavigate(page);
     });
   }, [handleNavigate]);
+
+  // Barramento leve de navegação interna (lib/appNavigation.ts): usado pelas
+  // ações navegáveis das notificações (ex.: "Conhecer Premium" → aba
+  // Assinatura). Resolve pelo mesmo caminho da tray: navega para Settings e
+  // seleciona a aba pedida.
+  useEffect(() => {
+    return onAppNavigateToSettingsTab((tabId) => {
+      handleNavigate("settings");
+      shell.setActiveSettingsTabId(tabId);
+    });
+  }, [handleNavigate, shell]);
 
   const handleBack = useCallback(() => {
     saveScrollPosition();

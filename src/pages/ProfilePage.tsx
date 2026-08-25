@@ -55,6 +55,7 @@ import {
 } from "../utils/image";
 import { useSettings } from "../context/settings";
 import { useAuth } from "../context/AuthContext";
+import { useOverlay } from "../context/OverlayContext";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
 import {
@@ -477,6 +478,7 @@ export function ProfilePage({
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
   const { account, logout } = useAuth();
+  const { showToast } = useOverlay();
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
     useState("overview");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -523,6 +525,35 @@ export function ProfilePage({
   const scrollContentToTop = useCallback(() => {
     scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [scrollElementRef]);
+
+  // Capa/avatar são recursos Premium: os endpoints de upload exigem sessão
+  // premium no worker (`requirePremiumSession` → 402 premium_required), então
+  // o gate aqui intercepta o clique ANTES de abrir qualquer fluxo de edição —
+  // usuário free recebe um toast informativo apontando para a aba Assinatura
+  // em vez de passar pelo fluxo inteiro para tomar um erro genérico.
+  const showProfileImagePremiumToast = useCallback(() => {
+    showToast(
+      t("premium.profileGate.toastTitle"),
+      t("premium.profileGate.toastMessage"),
+      "info",
+    );
+  }, [showToast, t]);
+
+  const handleCoverAction = useCallback(async () => {
+    if (await ghostboxApi.isPremiumUser()) {
+      setIsCoverModalOpen(true);
+      return;
+    }
+    showProfileImagePremiumToast();
+  }, [showProfileImagePremiumToast]);
+
+  const handleEditProfileAction = useCallback(async () => {
+    if (await ghostboxApi.isPremiumUser()) {
+      setIsEditModalOpen(true);
+      return;
+    }
+    showProfileImagePremiumToast();
+  }, [showProfileImagePremiumToast]);
 
   useEffect(() => {
     if (previousActiveCollectionIdRef.current === activeCollectionId) return;
@@ -1612,7 +1643,7 @@ export function ProfilePage({
           <button
             type="button"
             className="profile-page__hero-action profile-page__hero-action--banner"
-            onClick={() => setIsCoverModalOpen(true)}
+            onClick={() => void handleCoverAction()}
             aria-label={t("profile.changeBanner")}
           >
             <Camera size={16} strokeWidth={2.25} aria-hidden="true" />
@@ -1624,7 +1655,7 @@ export function ProfilePage({
             <button
               type="button"
               className="profile-page__avatar-button"
-              onClick={() => setIsEditModalOpen(true)}
+              onClick={() => void handleEditProfileAction()}
               aria-label={t("profile.editProfile")}
             >
               {shouldHoldSteamAvatar ? (
@@ -1660,7 +1691,7 @@ export function ProfilePage({
                 <button
                   type="button"
                   className="profile-page__hero-action"
-                  onClick={() => setIsEditModalOpen(true)}
+                  onClick={() => void handleEditProfileAction()}
                   aria-label={t("profile.editProfile")}
                 >
                   <Pencil size={14} strokeWidth={2.25} aria-hidden="true" />

@@ -18,6 +18,7 @@ import { createBackupToastFromRecord } from "../lib/backupNotifications";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
+import { StorageSection } from "../features/settings/StorageSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
 import {
@@ -86,6 +87,7 @@ type CloudBackupGame = {
   achievementCount: number;
   lastBackupAt: string | null;
   lastBackupSuccess: boolean | null;
+  lastBackupError?: string | null;
 };
 
 function readDrafts(): DraftsState {
@@ -381,6 +383,7 @@ export function SettingsPage({
         achievementCount: game.achievements.unlocked,
         lastBackupAt: backupRecords[game.appId]?.lastBackupAt ?? null,
         lastBackupSuccess: typeof backupRecords[game.appId]?.lastBackupSuccess === "boolean" ? backupRecords[game.appId].lastBackupSuccess : null,
+        lastBackupError: backupRecords[game.appId]?.lastBackupError ?? null,
       }))
       .sort((left, right) => left.title.localeCompare(right.title));
   }, [backupSettings, games]);
@@ -420,6 +423,7 @@ export function SettingsPage({
               ))}
             </div>
           )}
+          {activeTab.id === "general" && <StorageSection />}
           {activeTab.id === "connections" && <ConnectionsPanel />}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans

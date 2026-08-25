@@ -16,6 +16,10 @@ export type AppNotificationType =
 
 export type AppNotificationSeverity = "info" | "success" | "warning" | "error";
 
+/** Alvo interno suportado para ações navegáveis de notificações. Hoje o único
+ * destino é a aba Assinatura das configurações. */
+export type AppNotificationActionTarget = "subscription";
+
 export type AppNotificationItem = {
   id: string;
   type: AppNotificationType;
@@ -25,6 +29,7 @@ export type AppNotificationItem = {
   createdAt: number;
   action?: {
     label: string;
+    target?: AppNotificationActionTarget;
     page?: Page;
     url?: string;
   };
@@ -76,7 +81,27 @@ function normalizeNotificationGame(value: unknown): AppNotificationItem["game"] 
   };
 }
 
-function normalizeNotification(value: unknown): AppNotificationItem | null {
+/** Normaliza (e valida) o campo opcional `action` de uma notificação. Itens sem
+ * action continuam válidos; actions sem rótulo utilizável são descartadas. */
+export function normalizeNotificationAction(value: unknown): AppNotificationItem["action"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const action = value as Record<string, unknown>;
+  if (typeof action.label !== "string" || !action.label.trim()) return undefined;
+
+  return {
+    label: action.label,
+    ...(action.target === "subscription"
+      ? { target: "subscription" as AppNotificationActionTarget }
+      : {}),
+    ...(typeof action.page === "string" && action.page.trim()
+      ? { page: action.page as Page }
+      : {}),
+    ...(typeof action.url === "string" && action.url.trim() ? { url: action.url } : {}),
+  };
+}
+
+export function normalizeNotification(value: unknown): AppNotificationItem | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
   const item = value as Partial<AppNotificationItem> & Record<string, unknown>;
@@ -94,7 +119,7 @@ function normalizeNotification(value: unknown): AppNotificationItem | null {
     title: item.title,
     message: item.message,
     createdAt: item.createdAt,
-    action: item.action,
+    action: normalizeNotificationAction(item.action),
     game: normalizeNotificationGame(item.game),
   };
 }

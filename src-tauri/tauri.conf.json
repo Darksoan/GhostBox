@@ -41,11 +41,15 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "resources": [
+      "binaries/gbe_fork/**/*"
+    ],
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "sidebarImage": "installer/sidebar.bmp",
-        "headerImage": "installer/header.bmp"
+        "headerImage": "installer/header.bmp",
+        "installerHooks": "./installer/hooks.nsh"
       }
     },
     "externalBin": [

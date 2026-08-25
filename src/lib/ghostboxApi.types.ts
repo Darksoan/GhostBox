@@ -201,6 +201,14 @@ export type CatalogueCacheUpdatedPayload = {
   updatedAt?: string;
 };
 
+/** Resultado da varredura de manutenção das raízes de downloads. */
+export type DownloadRootSweepSummary = {
+  /** Temporários `.ghostbox-chunks.json.tmp` órfãos removidos. */
+  removedChunkTemps: number;
+  /** App IDs cujo ACF apontava para pasta inexistente e foi removido da Steam. */
+  removedOrphanAcfs: string[];
+};
+
 export type LaunchGameResult = {
   success: boolean;
   appId: string;
@@ -455,6 +463,31 @@ export type CloudProfileSnapshot = {
   };
   favoriteGameIds: string[];
   userCollections: CloudProfileCollection[];
+};
+
+export type StorageCategoryId =
+  | "images"
+  | "catalogueCache"
+  | "steamcmd"
+  | "webviewCache"
+  | "goldbergSaves"
+  | "ludusaviConfig";
+
+export type StorageUsageCategory = {
+  id: StorageCategoryId;
+  bytes: number;
+  present: boolean;
+};
+
+export type StorageUsage = {
+  categories: StorageUsageCategory[];
+  totalBytes: number;
+};
+
+export type ClearResult = {
+  cleared: string[];
+  failed: { id: string; reason: string }[];
+  freedBytes: number;
 };
 
 export type CloudProfileResult = {

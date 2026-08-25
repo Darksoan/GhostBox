@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime};
 use tauri::Emitter;
 
 const POC_RELATIVE_PATH: &str = "../sidecars/steamkit-poc/bin/Debug/net8.0/steamkit-poc.exe";
@@ -509,8 +510,22 @@ pub fn cdndownload_launch_game(
     let working_dir = canonical_executable
         .parent()
         .ok_or_else(|| "Game executable has no parent folder.".to_string())?;
-    std::process::Command::new(&canonical_executable)
-        .current_dir(working_dir)
+    // Emulador Goldberg/GSE: melhor esforço para suportar conquistas offline.
+    // Falha aqui NÃO pode impedir o lançamento do jogo.
+    if let Err(error) =
+        crate::goldberg::prepare_game_for_offline_launch(&canonical_executable, app_id)
+    {
+        eprintln!("Goldberg setup skipped: {error}");
+    }
+    let mut launch_command = {
+        let mut command = std::process::Command::new(&canonical_executable);
+        command.current_dir(working_dir);
+        for (key, value) in crate::goldberg::process_env_vars(app_id) {
+            command.env(key, value);
+        }
+        command
+    };
+    launch_command
         .spawn()
         .map_err(|error| format!("Could not launch game executable: {error}"))?;
 
@@ -555,6 +570,10 @@ fn delete_output_dir_blocking(
         return Err("Download removal requires an app ID and a downloads root.".to_string());
     }
 
+    // O progresso offline (conquistas do emulador Goldberg/GSE) morre junto
+    // com o jogo em qualquer caminho de remocao abaixo — best-effort.
+    crate::goldberg::remove_game_saves(app_id);
+
     let root_path = Path::new(downloads_root);
     if output_dir.is_empty() {
         // Cancelado antes de o destino ser resolvido: nao ha pasta a remover,
@@ -595,6 +614,136 @@ fn delete_output_dir_blocking(
     // O indice descreve chunks que nao existem mais; guardado, so acumularia.
     crate::chunk_index::remove_app_stash(&canonical_root, app_id);
     Ok(true)
+}
+
+// ————————————————————————————————————————————————————————————————
+// Manutenção de raízes de downloads (chamada no boot pelo frontend).
+//
+// Dois resíduos só existem fora do fluxo normal e por isso escapam dele:
+// - `.ghostbox-chunks.json.tmp` órfão quando o processo morre no meio do
+//   rename atômico do índice (o cleanup normal roda no fim do depot);
+// - `appmanifest_<appid>.acf` apontando para pasta que o usuário apagou
+//   manualmente no Explorer — a Steam continuaria exibindo o jogo.
+// ————————————————————————————————————————————————————————————————
+
+const CHUNK_TEMP_FILE_NAME: &str = ".ghostbox-chunks.json.tmp";
+const SWEEP_STALE_AFTER_SECS: u64 = 24 * 60 * 60;
+/// Profundidade máxima da varredura: `<root>\steamapps\common\<jogo>\sub\…`.
+const SWEEP_MAX_DEPTH: u8 = 6;
+
+fn sweep_chunks_temp_files(dir: &Path, depth: u8, cutoff: SystemTime) -> usize {
+    if depth > SWEEP_MAX_DEPTH {
+        return 0;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries.flatten().fold(0usize, |mut total, entry| {
+        let path = entry.path();
+        if path.is_dir() {
+            total += sweep_chunks_temp_files(&path, depth + 1, cutoff);
+        } else if path.file_name().and_then(|name| name.to_str()) == Some(CHUNK_TEMP_FILE_NAME) {
+            let stale = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .is_some_and(|modified| modified <= cutoff);
+            if stale && std::fs::remove_file(&path).is_ok() {
+                total += 1;
+            }
+        }
+        total
+    })
+}
+
+/// Remove ACFs cujo `installdir` desapareceu da pasta `common`. ACF malformado
+/// (sem installdir legível) é intocado — não é nosso e não sabemos julgá-lo.
+fn sweep_orphan_appmanifests(root: &Path) -> Vec<String> {
+    let steamapps = crate::steam_appmanifest::steamapps_dir(root);
+    let common = steamapps.join("common");
+    let Ok(entries) = std::fs::read_dir(&steamapps) else {
+        return Vec::new();
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let app_id = name.strip_prefix("appmanifest_")?.strip_suffix(".acf")?.to_string();
+            if app_id.is_empty() || !app_id.chars().all(|character| character.is_ascii_digit()) {
+                return None;
+            }
+            let contents = std::fs::read_to_string(entry.path()).ok()?;
+            let install_dir = contents
+                .lines()
+                .find_map(|line| crate::steam::parse_vdf_string_value(line, "installdir"))
+                .unwrap_or_default();
+            if install_dir.trim().is_empty() || common.join(&install_dir).is_dir() {
+                return None;
+            }
+            // Sem pasta, o stash de chunks descreve arquivos inexistentes.
+            crate::chunk_index::remove_app_stash(root, &app_id);
+            match crate::steam_appmanifest::remove_appmanifest(root, &app_id) {
+                Ok(true) => Some(app_id),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn sweep_downloads_root(root: &Path, cutoff: SystemTime) -> (usize, Vec<String>) {
+    if !root.is_dir() {
+        return (0, Vec::new());
+    }
+    let removed_chunk_temps = sweep_chunks_temp_files(root, 0, cutoff);
+    let removed_orphan_acfs = sweep_orphan_appmanifests(root);
+    (removed_chunk_temps, removed_orphan_acfs)
+}
+
+/// Varre as raízes de downloads conhecidas removendo temporários órfãos e ACFs
+/// de jogos apagados manualmente. As raízes vêm do frontend (localStorage); a
+/// raiz default do app entra sempre. Best-effort em cada raiz.
+#[tauri::command]
+pub fn cdndownload_sweep_roots(app: tauri::AppHandle, roots: Vec<String>) -> serde_json::Value {
+    use tauri::Manager;
+
+    let cutoff = SystemTime::now()
+        .checked_sub(Duration::from_secs(SWEEP_STALE_AFTER_SECS))
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+
+    let mut unique_roots: Vec<PathBuf> = Vec::new();
+    for raw in roots {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let candidate = PathBuf::from(trimmed);
+        if !unique_roots.contains(&candidate) {
+            unique_roots.push(candidate);
+        }
+    }
+    if let Ok(default_downloads) = app.path().app_data_dir().map(|dir| dir.join("downloads")) {
+        if !unique_roots.contains(&default_downloads) {
+            unique_roots.push(default_downloads);
+        }
+    }
+
+    let mut removed_chunk_temps = 0usize;
+    let mut removed_orphan_acfs: Vec<String> = Vec::new();
+    for root in &unique_roots {
+        let (temps, acfs) = sweep_downloads_root(root, cutoff);
+        removed_chunk_temps += temps;
+        for app_id in acfs {
+            if !removed_orphan_acfs.contains(&app_id) {
+                removed_orphan_acfs.push(app_id);
+            }
+        }
+    }
+
+    serde_json::json!({
+        "removedChunkTemps": removed_chunk_temps,
+        "removedOrphanAcfs": removed_orphan_acfs,
+    })
 }
 
 /// Copia recursiva de diretorio para outro volume (fallback quando
@@ -1163,6 +1312,68 @@ fn finalize_steam_integration(
 mod tests {
     use super::ensure_inside_downloads_root;
     use std::path::Path;
+
+    /// Monta uma raiz fake com um `.tmp` de chunks órfão (antigo) e um recente,
+    /// mais um ACF apontando para pasta que não existe e outro saudável.
+    #[test]
+    fn sweep_removes_stale_temps_and_orphan_acfs() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-sweep-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        let common = root.join("steamapps").join("common");
+        let game_dir = common.join("Hollow Knight");
+        std::fs::create_dir_all(&game_dir).unwrap();
+
+        // Temporário antigo (>24h) e recente.
+        let stale_cutoff = std::time::SystemTime::now()
+            .checked_sub(std::time::Duration::from_secs(24 * 60 * 60))
+            .unwrap();
+        let stale_tmp = game_dir.join(".ghostbox-chunks.json.tmp");
+        std::fs::write(&stale_tmp, b"{}").unwrap();
+        {
+            let file = std::fs::OpenOptions::new().write(true).open(&stale_tmp).unwrap();
+            file.set_modified(stale_cutoff - std::time::Duration::from_secs(60)).unwrap();
+        }
+        let fresh_tmp = game_dir.join("other").join(".ghostbox-chunks.json.tmp");
+        std::fs::create_dir_all(fresh_tmp.parent().unwrap()).unwrap();
+        std::fs::write(&fresh_tmp, b"{}").unwrap(); // mtime = agora
+
+        // ACF órfão: installdir sem pasta em common/.
+        std::fs::write(
+            root.join("steamapps").join("appmanifest_999999.acf"),
+            "\"AppState\"\n{\n\t\"installdir\"\t\t\"Jogo Apagado\"\n}\n",
+        )
+        .unwrap();
+        // ACF saudável: pasta existe.
+        std::fs::write(
+            root.join("steamapps").join("appmanifest_367520.acf"),
+            "\"AppState\"\n{\n\t\"installdir\"\t\t\"Hollow Knight\"\n}\n",
+        )
+        .unwrap();
+
+        let (temps, orphans) =
+            super::sweep_downloads_root(&root, stale_cutoff);
+
+        assert_eq!(temps, 1, "apenas o .tmp antigo deve sair");
+        assert!(fresh_tmp.is_file(), ".tmp recente deve permanecer");
+        assert_eq!(orphans, vec!["999999".to_string()]);
+        assert!(!root.join("steamapps").join("appmanifest_999999.acf").exists());
+        assert!(root.join("steamapps").join("appmanifest_367520.acf").is_file());
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn sweep_tolerates_a_missing_root() {
+        let (temps, acfs) = super::sweep_downloads_root(
+            Path::new("Z:\\nao-existe-ghostbox-downloads"),
+            std::time::SystemTime::now(),
+        );
+        assert_eq!(temps, 0);
+        assert!(acfs.is_empty());
+    }
 
     #[test]
     fn accepts_the_merged_install_dir_under_the_root() {
