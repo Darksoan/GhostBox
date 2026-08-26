@@ -39,8 +39,8 @@
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
   --surface-tray: var(--c-1);
   --surface-tray-item: transparent;
-  --surface-tray-item-hover: var(--c-2);
-  --surface-tray-item-focus: var(--c-2);
+  --surface-tray-item-hover: var(--c-4);
+  --surface-tray-item-focus: var(--c-4);
   --focus-ring-tray: inset 0 0 0 1px var(--border-interactive);
 // Dropdowns da aba Ajustes têm classe visual própria. O hover usa o degrau C5
   // — estado opaco deliberadamente acima do teto da rampa estrutural.
@@ -160,11 +160,12 @@
   --overlay-immersive: color-mix(in srgb, var(--overlay-strong) 96%, var(--black));
 
   // --- Status ---
+  --red: #ff3c4c;
   --danger: var(--red-500);
   --danger-hover: var(--red-hover);
   // Anel do badge de nível Steam — vermelho próprio da Steam, não é estado de erro.
   --steam-level-ring: var(--red-600);
-  --danger-soft: rgba(239, 68, 68, 0.12);
+  --danger-soft: color-mix(in srgb, var(--red) 12%, transparent);
   --success: var(--green-500);
   --success-soft: rgba(53, 208, 127, 0.12);
 

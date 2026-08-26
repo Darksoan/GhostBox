@@ -2188,25 +2188,32 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setSteamProfile(optimisticProfile);
       let persistedAvatarUrl = avatarUrl;
       let persistedBannerUrl = bannerUrl;
+      // Free accounts have no cloud bucket: uploading always fails and used to
+      // roll the whole edit back. Keep the encoded data URL as-is — it is
+      // persisted locally (localStorage + saveSteamProfile) and renders the
+      // same. Cloud upload stays premium-only.
+      const canUseCloudImages = await hasPremiumCloudProfileAccess();
       try {
-        if (/^data:/i.test(persistedAvatarUrl)) {
-          persistedAvatarUrl =
-            (await ghostboxApi.uploadProfileImage(
-              persistedAvatarUrl,
-              "avatar",
-            )) || "";
-          if (!persistedAvatarUrl) throw new Error("avatar upload failed");
-        }
-        if (/^data:/i.test(persistedBannerUrl)) {
-          persistedBannerUrl =
-            (await ghostboxApi.uploadProfileImage(
-              persistedBannerUrl,
-              "banner",
-            )) || "";
-          if (!persistedBannerUrl) throw new Error("banner upload failed");
-        } else if (!persistedBannerUrl && previousBannerUrl) {
-          if (!(await ghostboxApi.deleteProfileBanner()))
-            throw new Error("banner delete failed");
+        if (canUseCloudImages) {
+          if (/^data:/i.test(persistedAvatarUrl)) {
+            persistedAvatarUrl =
+              (await ghostboxApi.uploadProfileImage(
+                persistedAvatarUrl,
+                "avatar",
+              )) || "";
+            if (!persistedAvatarUrl) throw new Error("avatar upload failed");
+          }
+          if (/^data:/i.test(persistedBannerUrl)) {
+            persistedBannerUrl =
+              (await ghostboxApi.uploadProfileImage(
+                persistedBannerUrl,
+                "banner",
+              )) || "";
+            if (!persistedBannerUrl) throw new Error("banner upload failed");
+          } else if (!persistedBannerUrl && previousBannerUrl) {
+            if (!(await ghostboxApi.deleteProfileBanner()))
+              throw new Error("banner delete failed");
+          }
         }
       } catch (error) {
         const rawMessage =
@@ -2236,7 +2243,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await ghostboxApi.saveSteamProfile(nextProfile);
       scheduleCloudProfileSync();
     },
-    [scheduleCloudProfileSync, showToast, steamProfile],
+    [
+      hasPremiumCloudProfileAccess,
+      scheduleCloudProfileSync,
+      showToast,
+      steamProfile,
+    ],
   );
 
   const handleStartupSettingsChange = useCallback(

@@ -25,6 +25,8 @@ export const notificationsLastSeenStorageKey = "ghostbox:notifications-last-seen
 export const autoRestoredCloudSavesStorageKey = "ghostbox:auto-restored-cloud-saves:v1";
 export const downloadsDirStorageKey = "ghostbox:downloads-dir:v1";
 export const downloadParallelChunksStorageKey = "ghostbox:download-parallel-chunks:v1";
+export const sidebarCollectionsCollapsedStorageKey = "ghostbox:sidebar:collections-collapsed:v1";
+export const sidebarExpandedCollectionsStorageKey = "ghostbox:sidebar:expanded-collections:v1";
 export const imageSourceCacheLimit = 800;
 
 const legacyStorageKeys: Record<string, string[]> = {

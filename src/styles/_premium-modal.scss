@@ -1,0 +1,554 @@
+// Modal Premium — superfície própria, independente do painel de assinatura da
+// página de Ajustes. Duas colunas: o argumento à esquerda, a decisão à direita.
+
+.premium-modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-10);
+  background: color-mix(in srgb, var(--black) 76%, transparent);
+  backdrop-filter: blur(10px);
+  animation: premium-modal-scrim-in 220ms var(--ease) both;
+
+  &.premium-modal--closing {
+    animation: premium-modal-scrim-in var(--motion-base) var(--ease) reverse both;
+  }
+}
+
+// Faixa de arrasto espelhando a titlebar nativa que o scrim cobre.
+.premium-modal__drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-header-height);
+}
+
+.premium-modal {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(330px, 0.95fr);
+  width: min(1000px, 100%);
+  max-height: min(760px, calc(100vh - var(--space-12)));
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      120% 90% at 0% 0%,
+      color-mix(in srgb, var(--premium-gold) 7%, transparent),
+      transparent 58%
+    ),
+    var(--c-1);
+  color: var(--text-primary);
+  box-shadow: 0 48px 120px -48px var(--black);
+  // Curva de entrada da cena. O diálogo é o elemento pesado: entra em 320ms,
+  // sem overshoot; o conteúdo entra atrás dele em cascata.
+  --enter-ease: cubic-bezier(0.05, 0.7, 0.1, 1);
+  animation: premium-modal-in 320ms var(--ease) both;
+
+  &--closing {
+    // Saída é mais curta que a entrada e o conteúdo não re-anima: quem fecha
+    // já decidiu, não precisa ver a cascata de novo.
+    animation: premium-modal-in var(--motion-base) var(--ease) reverse both;
+
+    .premium-modal__pitch > *:not(.premium-modal__benefits),
+    .premium-modal__benefits li,
+    .premium-modal__checkout > * {
+      animation: none;
+    }
+  }
+
+  &__close {
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-4);
+    z-index: 2;
+    display: inline-grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      background var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
+
+    svg {
+      pointer-events: none;
+    }
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-option-hover);
+      color: var(--text-primary);
+      outline: none;
+    }
+  }
+
+  // --- Coluna do argumento ---
+
+  &__pitch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    padding: clamp(28px, 3.2vw, 44px);
+  }
+
+  &__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--text-tertiary);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-100);
+    text-transform: uppercase;
+
+    strong {
+      color: var(--premium-gold);
+      font-weight: var(--weight-semibold);
+    }
+  }
+
+  &__eyebrow-icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    background: currentColor;
+    mask: var(--subscription-ghost-icon) center / contain no-repeat;
+    -webkit-mask: var(--subscription-ghost-icon) center / contain no-repeat;
+  }
+
+  &__title {
+    max-width: 17ch;
+    margin: 0;
+    font-size: var(--type-size-fluid-page);
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+
+  &__benefits {
+    display: grid;
+    gap: var(--space-5);
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-5);
+    }
+
+    strong {
+      display: block;
+      color: var(--text-primary);
+      font-size: var(--type-size-body);
+      font-weight: var(--weight-semibold);
+      line-height: 1.35;
+    }
+
+    span {
+      display: block;
+      margin-top: 3px;
+      color: var(--text-tertiary);
+      font-size: var(--type-size-micro);
+      line-height: 1.5;
+    }
+  }
+
+  // Só o glifo, sem tile. O `margin-top` alinha o ícone com a primeira linha do
+  // título em vez do topo da caixa de texto.
+  &__benefit-icon {
+    display: inline-grid;
+    flex: 0 0 auto;
+    margin-top: 2px;
+    place-items: center;
+    color: var(--text-primary);
+
+    svg {
+      color: var(--text-primary);
+    }
+  }
+
+  // --- Coluna da decisão ---
+
+  &__checkout {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-10);
+    padding: clamp(28px, 3.2vw, 44px);
+    background: var(--c-0);
+  }
+
+  &__plans {
+    display: grid;
+    gap: var(--space-5);
+  }
+
+  &__plan {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    // Sem column-gap: o espaço da marca precisa colapsar junto com ela, senão
+    // o nome fica deslocado mesmo com o disco escondido.
+    column-gap: 0;
+    padding: var(--space-8) var(--space-9);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--surface-option-hover);
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: background var(--motion-fast) var(--ease);
+
+    &:hover {
+      background: var(--surface-option-active);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+    }
+
+    &.is-selected {
+      background: color-mix(in srgb, var(--premium-gold) 12%, var(--surface-option-hover));
+    }
+  }
+
+  // Marca só existe no plano escolhido. Fechada, ela tem largura zero e o nome
+  // encosta na borda; ao selecionar, o espaço abre (primária, 180ms) e o disco
+  // chega logo atrás com escala (secundária, 40ms de atraso) — o atraso é o que
+  // faz parecer que ele entra no vão em vez de empurrá-lo.
+  &__plan-mark {
+    display: inline-grid;
+    width: 0;
+    height: 20px;
+    margin-right: 0;
+    place-items: center;
+    overflow: hidden;
+    border-radius: var(--radius-circle);
+    background: var(--premium-gold);
+    color: var(--premium-gold-ink);
+    opacity: 0;
+    transform: scale(0.6);
+    transition:
+      width 180ms var(--ease),
+      margin-right 180ms var(--ease),
+      opacity 140ms var(--ease) 40ms,
+      transform 200ms cubic-bezier(0.05, 0.7, 0.1, 1) 40ms;
+  }
+
+  &__plan.is-selected &__plan-mark {
+    width: 20px;
+    margin-right: var(--space-6);
+    opacity: 1;
+    transform: none;
+  }
+
+  &__plan-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-regular);
+
+    em {
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      background: color-mix(in srgb, var(--premium-gold) 16%, transparent);
+      color: var(--premium-gold);
+      font-size: var(--type-size-micro);
+      font-style: normal;
+      font-weight: var(--weight-semibold);
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  &__plan-price {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+    text-align: right;
+
+    strong {
+      font-size: var(--type-size-body);
+      font-weight: var(--weight-semibold);
+      font-variant-numeric: tabular-nums;
+    }
+
+    > span {
+      color: var(--text-tertiary);
+      font-size: var(--type-size-micro);
+      line-height: 1;
+    }
+  }
+
+  &__total {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin: 0;
+
+    strong {
+      font-size: var(--type-size-hero);
+      font-weight: var(--weight-semibold);
+      letter-spacing: -0.035em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    span {
+      color: var(--text-tertiary);
+      font-size: var(--type-size-body);
+    }
+  }
+
+  &__cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    min-height: 52px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--premium-gold);
+    color: var(--premium-gold-ink);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.01em;
+    transition:
+      background var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease),
+      opacity var(--motion-fast) var(--ease);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--premium-gold-hover);
+      outline: none;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.99);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+  }
+
+  &__secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    min-height: 44px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--surface-option-hover);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-semibold);
+    transition:
+      background var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-option-active);
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+  }
+
+  &__note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: var(--type-size-micro);
+    line-height: 1.45;
+
+    svg {
+      flex: 0 0 auto;
+    }
+  }
+
+  // Logotipo no lugar do nome: fica na linha do texto, com a altura amarrada à
+  // altura da letra para não virar um segundo elemento gráfico.
+  &__stripe {
+    height: 1.15em;
+    width: auto;
+    vertical-align: -0.24em;
+  }
+
+  // --- Estado de assinatura ativa ---
+
+  &__active-badge {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 12px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--premium-gold) 15%, transparent);
+    color: var(--premium-gold);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+  }
+
+  &__active-copy {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--type-size-body);
+    line-height: 1.55;
+  }
+
+  &__active-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-8) var(--space-9);
+    border-radius: var(--radius-md);
+    background: var(--surface-option-hover);
+    color: var(--text-tertiary);
+    font-size: var(--type-size-caption);
+
+    strong {
+      margin-left: auto;
+      color: var(--text-primary);
+      font-weight: var(--weight-semibold);
+    }
+  }
+}
+
+// Cascata de entrada. Duas trilhas em paralelo — a coluna do argumento e a da
+// decisão — para o total ficar sob 500ms mesmo com onze elementos. Deslocamento
+// curto (8px) de propósito: é acompanhamento do diálogo, não uma segunda cena.
+// A lista fica fora da regra do bloco: se ela animasse junto, os itens fariam
+// fade dentro de um fade e a cascata perderia definição.
+.premium-modal__pitch > *:not(.premium-modal__benefits),
+.premium-modal__benefits li,
+.premium-modal__checkout > * {
+  animation: premium-modal-item-in 260ms var(--enter-ease, ease-out) both;
+}
+
+.premium-modal__pitch > *:not(.premium-modal__benefits) {
+  animation-delay: 90ms;
+
+  ~ *:not(.premium-modal__benefits) {
+    animation-delay: 135ms;
+  }
+}
+
+// Micro cascade de 40ms: a lista é lida de cima para baixo, então ela entra
+// nessa ordem em vez de aparecer como bloco.
+.premium-modal__benefits li {
+  @for $index from 1 through 5 {
+    &:nth-child(#{$index}) {
+      animation-delay: 150ms + ($index - 1) * 40ms;
+    }
+  }
+}
+
+.premium-modal__checkout > * {
+  @for $index from 1 through 5 {
+    &:nth-child(#{$index}) {
+      animation-delay: 130ms + ($index - 1) * 45ms;
+    }
+  }
+}
+
+@keyframes premium-modal-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes premium-modal-scrim-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes premium-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .premium-modal {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: calc(100vh - var(--space-10));
+
+    &__checkout {
+      justify-content: flex-start;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-modal {
+    animation: premium-modal-scrim-in var(--motion-fast) var(--ease);
+  }
+
+  // Sem deslize: a marca aparece direto, mantendo o estado legível.
+  .premium-modal__plan-mark {
+    transition: none;
+    transform: none;
+  }
+
+  // Conteúdo aparece junto com o diálogo, sem deslocamento e sem cascata.
+  .premium-modal__pitch > *:not(.premium-modal__benefits),
+  .premium-modal__benefits li,
+  .premium-modal__checkout > * {
+    animation-delay: 0ms;
+    animation-duration: var(--motion-fast);
+    transform: none;
+  }
+}

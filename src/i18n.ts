@@ -289,6 +289,8 @@ const translations: Record<Language, TranslationTree> = {
         localAndCloudBackups: "Backup em nuvem automático",
         sync: "Sincronização entre PCs",
         automaticRestore: "Restauração automática",
+        customProfile: "Perfil personalizado",
+        nativeDownloads: "Downloads nativos",
       },
       steps: {
         title: "Como ativar a assinatura",
@@ -568,6 +570,17 @@ const translations: Record<Language, TranslationTree> = {
           description:
             "Caminho usado para localizar jogos instalados pelo LuaTools.",
         },
+        downloadsDir: {
+          label: "Pasta de downloads",
+          description:
+            "Diretório onde os jogos baixados serão salvos. Vira uma biblioteca Steam.",
+          placeholder: "Nenhuma pasta selecionada",
+        },
+        parallelChunks: {
+          label: "Downloads simultâneos",
+          description:
+            "Quantidade de pedaços baixados ao mesmo tempo. Valores altos usam mais banda e memória.",
+        },
       },
       storage: {
         title: "Armazenamento",
@@ -629,17 +642,6 @@ const translations: Record<Language, TranslationTree> = {
           placeholder: "Cole sua API key aqui...",
           openLink: "Abrir link da HubCap's Key",
           saveKey: "Salvar chave",
-        },
-        downloadsDir: {
-          label: "Pasta de downloads",
-          description:
-            "Diretório onde os jogos baixados serão salvos. Vira uma biblioteca Steam.",
-          placeholder: "Nenhuma pasta selecionada",
-        },
-        parallelChunks: {
-          label: "Downloads simultâneos",
-          description:
-            "Quantidade de pedaços baixados ao mesmo tempo. Valores altos usam mais banda e memória.",
         },
         accountStatus: {
           missingKey:
@@ -921,6 +923,8 @@ const translations: Record<Language, TranslationTree> = {
         localAndCloudBackups: "Automatic cloud backup",
         sync: "Sync across PCs",
         automaticRestore: "Automatic restore",
+        customProfile: "Custom profile",
+        nativeDownloads: "Native downloads",
       },
       steps: {
         title: "How to activate the subscription",
@@ -1198,6 +1202,17 @@ const translations: Record<Language, TranslationTree> = {
           label: "Steam folder",
           description: "Path used to find games installed via LuaTools.",
         },
+        downloadsDir: {
+          label: "Downloads folder",
+          description:
+            "Directory where downloaded games will be saved. It becomes a Steam library.",
+          placeholder: "No folder selected",
+        },
+        parallelChunks: {
+          label: "Parallel downloads",
+          description:
+            "How many chunks are fetched at once. Higher values use more bandwidth and memory.",
+        },
       },
       storage: {
         title: "Storage",
@@ -1258,17 +1273,6 @@ const translations: Record<Language, TranslationTree> = {
           placeholder: "Paste your API key here...",
           openLink: "Open HubCap's Key link",
           saveKey: "Save key",
-        },
-        downloadsDir: {
-          label: "Downloads folder",
-          description:
-            "Directory where downloaded games will be saved. It becomes a Steam library.",
-          placeholder: "No folder selected",
-        },
-        parallelChunks: {
-          label: "Parallel downloads",
-          description:
-            "How many chunks are fetched at once. Higher values use more bandwidth and memory.",
         },
         accountStatus: {
           missingKey: "Add an API key to check the HubCap's account status.",

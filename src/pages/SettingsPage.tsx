@@ -632,17 +632,29 @@ function buildTabOptions(
         onClick: onMorrenusApiKeyCheck,
         onChange: (value: string) => onMorrenusApiKeyChange(value),
       },
+    ];
+  }
+
+  if (activeTab.id === "library") {
+    return [
+      ...activeTab.options.map((option) => ({
+        label: t(option.labelKey),
+        description: t(option.descriptionKey),
+        control: option.control,
+        value: steamPath,
+        onClick: onSelectSteamPath,
+      })),
       {
-        label: t("settings.download.downloadsDir.label"),
-        description: t("settings.download.downloadsDir.description"),
+        label: t("settings.library.downloadsDir.label"),
+        description: t("settings.library.downloadsDir.description"),
         control: "input" as const,
         value: downloadsDir,
-        placeholder: t("settings.download.downloadsDir.placeholder"),
+        placeholder: t("settings.library.downloadsDir.placeholder"),
         onClick: onSelectDownloadsDir,
       },
       {
-        label: t("settings.download.parallelChunks.label"),
-        description: t("settings.download.parallelChunks.description"),
+        label: t("settings.library.parallelChunks.label"),
+        description: t("settings.library.parallelChunks.description"),
         control: "select" as const,
         value: String(parallelChunks),
         // Discreto em vez de slider: a faixa util e pequena e o renderer de
@@ -654,21 +666,6 @@ function buildTabOptions(
         onChange: onParallelChunksChange,
       },
     ];
-  }
-
-  if (activeTab.id === "library") {
-    return activeTab.options.map((option) => {
-      const label = t(option.labelKey);
-      const description = t(option.descriptionKey);
-
-      return {
-        label,
-        description,
-        control: option.control,
-        value: steamPath,
-        onClick: onSelectSteamPath,
-      };
-    });
   }
 
   return activeTab.options.map((option) => {

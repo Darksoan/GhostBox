@@ -478,7 +478,7 @@ export function ProfilePage({
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
   const { account, logout } = useAuth();
-  const { showToast } = useOverlay();
+  const { setSubscriptionModalOpen } = useOverlay();
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
     useState("overview");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -526,34 +526,19 @@ export function ProfilePage({
     scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [scrollElementRef]);
 
-  // Capa/avatar são recursos Premium: os endpoints de upload exigem sessão
-  // premium no worker (`requirePremiumSession` → 402 premium_required), então
-  // o gate aqui intercepta o clique ANTES de abrir qualquer fluxo de edição —
-  // usuário free recebe um toast informativo apontando para a aba Assinatura
-  // em vez de passar pelo fluxo inteiro para tomar um erro genérico.
-  const showProfileImagePremiumToast = useCallback(() => {
-    showToast(
-      t("premium.profileGate.toastTitle"),
-      t("premium.profileGate.toastMessage"),
-      "info",
-    );
-  }, [showToast, t]);
-
+  // Capa é Premium (banner exige `requirePremiumSession`), avatar é livre:
+  // free pode editar foto de perfil; ao tentar capa, abre tela de assinatura.
   const handleCoverAction = useCallback(async () => {
     if (await ghostboxApi.isPremiumUser()) {
       setIsCoverModalOpen(true);
       return;
     }
-    showProfileImagePremiumToast();
-  }, [showProfileImagePremiumToast]);
+    setSubscriptionModalOpen(true);
+  }, [setSubscriptionModalOpen]);
 
-  const handleEditProfileAction = useCallback(async () => {
-    if (await ghostboxApi.isPremiumUser()) {
-      setIsEditModalOpen(true);
-      return;
-    }
-    showProfileImagePremiumToast();
-  }, [showProfileImagePremiumToast]);
+  const handleEditProfileAction = useCallback(() => {
+    setIsEditModalOpen(true);
+  }, []);
 
   useEffect(() => {
     if (previousActiveCollectionIdRef.current === activeCollectionId) return;

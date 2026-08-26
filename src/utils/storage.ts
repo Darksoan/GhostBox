@@ -32,6 +32,8 @@ import {
   autoRestoredCloudSavesStorageKey,
   downloadsDirStorageKey,
   downloadParallelChunksStorageKey,
+  sidebarCollectionsCollapsedStorageKey,
+  sidebarExpandedCollectionsStorageKey,
 } from "../constants/catalogue";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
@@ -928,5 +930,50 @@ export function writeNotificationsLastSeenAt(timestamp = Date.now()) {
     window.localStorage.setItem(notificationsLastSeenStorageKey, String(timestamp));
   } catch {
     // Session-only if localStorage is unavailable.
+  }
+}
+
+export function readSidebarCollectionsCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(sidebarCollectionsCollapsedStorageKey);
+    return raw ? JSON.parse(raw) === true : false;
+  } catch {
+    return false;
+  }
+}
+
+export function writeSidebarCollectionsCollapsed(collapsed: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(sidebarCollectionsCollapsedStorageKey, JSON.stringify(collapsed));
+  } catch {
+    // Sidebar state still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readSidebarExpandedCollections(): Set<string> {
+  if (typeof window === "undefined") return new Set(["__favorites__"]);
+  try {
+    const raw = window.localStorage.getItem(sidebarExpandedCollectionsStorageKey);
+    if (!raw) return new Set(["__favorites__"]);
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      const filtered = parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
+      return new Set(filtered.length ? filtered : ["__favorites__"]);
+    }
+    return new Set(["__favorites__"]);
+  } catch {
+    return new Set(["__favorites__"]);
+  }
+}
+
+export function writeSidebarExpandedCollections(ids: Set<string> | string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const arr = Array.isArray(ids) ? ids : [...ids];
+    window.localStorage.setItem(sidebarExpandedCollectionsStorageKey, JSON.stringify(arr));
+  } catch {
+    // Sidebar state still works during the session if localStorage is unavailable.
   }
 }

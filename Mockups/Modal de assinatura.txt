@@ -1,0 +1,462 @@
+import image from "./image.svg";
+import "./style.scss";
+import vector from "./vector.svg";
+import vector2 from "./vector-2.svg";
+import vector3 from "./vector-3.svg";
+import vector4 from "./vector-4.svg";
+import vector5 from "./vector-5.svg";
+import vector6 from "./vector-6.svg";
+import vector7 from "./vector-7.svg";
+import vector8 from "./vector-8.svg";
+import vector9 from "./vector-9.svg";
+import vector10 from "./vector-10.svg";
+import vector11 from "./vector-11.svg";
+import vector12 from "./vector-12.svg";
+import vector13 from "./vector-13.svg";
+import vector14 from "./vector-14.svg";
+import vector15 from "./vector-15.svg";
+import vector16 from "./vector-16.svg";
+
+export const Frame = (): JSX.Element => {
+  return (
+    <div className="frame">
+      <div className="div">
+        <img className="vector" alt="Vector" src={vector14} />
+        <img className="img" alt="Vector" src={vector15} />
+        <img className="vector-2" alt="Vector" src={vector16} />
+      </div>
+      <div className="div-2">
+        <img className="vector-3" alt="Vector" src={vector11} />
+        <img className="vector-4" alt="Vector" src={vector12} />
+        <img className="vector-5" alt="Vector" src={vector13} />
+      </div>
+      <div className="div-3">
+        <img className="vector-6" alt="Vector" src={vector8} />
+        <img className="vector-7" alt="Vector" src={vector9} />
+        <img className="vector-8" alt="Vector" src={vector10} />
+      </div>
+      <div className="rectangle" />
+      <div className="rectangle-2" />
+      <div className="rectangle-3" />
+      <div className="rectangle-4" />
+      <div className="text-wrapper">Montlhy</div>
+      <p className="per-month">
+        <span className="span">per month</span>
+      </p>
+      <p className="ideal-for-trying">
+        Ideal for trying premium sync without a long <br />
+        commitment.
+      </p>
+      <p className="automatic-cloud">
+        <span className="text-wrapper-2">Automatic cloud backup</span>
+      </p>
+      <p className="sync-across-pcs">
+        <span className="text-wrapper-2">Sync across PCs</span>
+      </p>
+      <div className="div-4">
+        <img className="vector-9" alt="Vector" src={vector3} />
+        <img className="vector-10" alt="Vector" src={vector4} />
+        <img className="vector-11" alt="Vector" src={vector5} />
+        <img className="vector-12" alt="Vector" src={vector6} />
+        <img className="vector-12" alt="Vector" src={vector7} />
+      </div>
+      <p className="automatic-restore">
+        <span className="text-wrapper-2">Automatic restore</span>
+      </p>
+      <p className="custom-profile">
+        <span className="text-wrapper-2">Custom profile</span>
+      </p>
+      <p className="native-downloads">
+        <span className="text-wrapper-2">Native downloads</span>
+      </p>
+      <div className="text-wrapper-3">$1.35</div>
+      <div className="text-wrapper-4">Quarterly</div>
+      <div className="text-wrapper-5">Subscribe</div>
+      <div className="text-wrapper-6">-28%</div>
+      <div className="div-5">
+        <img className="vector-13" alt="Vector" src={vector} />
+        <img className="vector-14" alt="Vector" src={image} />
+        <img className="vector-15" alt="Vector" src={vector2} />
+      </div>
+    </div>
+  );
+};
+
+
+.frame {
+  background-color: #101010;
+  min-height: 808px;
+  min-width: 822px;
+  position: relative;
+  width: 100%;
+
+  .div {
+    height: 35px;
+    left: 31px;
+    position: absolute;
+    top: 542px;
+    width: 35px;
+  }
+
+  .vector {
+    height: 90.36%;
+    left: 47.14%;
+    position: absolute;
+    top: 9.64%;
+    width: 52.86%;
+  }
+
+  .img {
+    height: 57.02%;
+    left: 22.14%;
+    position: absolute;
+    top: 42.98%;
+    width: 77.86%;
+  }
+
+  .vector-2 {
+    height: 15.36%;
+    left: 17.98%;
+    position: absolute;
+    top: 84.64%;
+    width: 82.02%;
+  }
+
+  .div-2 {
+    height: 35px;
+    left: 31px;
+    position: absolute;
+    top: 490px;
+    width: 35px;
+  }
+
+  .vector-3 {
+    height: 48.69%;
+    left: 5.48%;
+    position: absolute;
+    top: 51.31%;
+    width: 94.52%;
+  }
+
+  .vector-4 {
+    height: 48.69%;
+    left: 51.31%;
+    position: absolute;
+    top: 51.31%;
+    width: 48.69%;
+  }
+
+  .vector-5 {
+    height: 90.36%;
+    left: 17.98%;
+    position: absolute;
+    top: 9.64%;
+    width: 82.02%;
+  }
+
+  .div-3 {
+    height: 35px;
+    left: 31px;
+    position: absolute;
+    top: 439px;
+    width: 35px;
+  }
+
+  .vector-6 {
+    height: 90.32%;
+    left: 5.49%;
+    position: absolute;
+    top: 9.68%;
+    width: 94.51%;
+  }
+
+  .vector-7 {
+    height: 57.02%;
+    left: 26.31%;
+    position: absolute;
+    top: 42.98%;
+    width: 73.69%;
+  }
+
+  .vector-8 {
+    height: 54.94%;
+    left: 26.31%;
+    position: absolute;
+    top: 45.06%;
+    width: 73.69%;
+  }
+
+  .rectangle {
+    background-color: #121212;
+    border-radius: 50px;
+    height: 79px;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 822px;
+  }
+
+  .rectangle-2 {
+    background-color: #1a1a1a;
+    border-radius: 50px;
+    height: 79px;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 400px;
+  }
+
+  .rectangle-3 {
+    background-color: #302717;
+    border-radius: 50px;
+    height: 51px;
+    left: 631px;
+    opacity: 0.73;
+    position: absolute;
+    top: 14px;
+    width: 110px;
+  }
+
+  .rectangle-4 {
+    background-color: #f5b342;
+    border-radius: 5px;
+    height: 76px;
+    left: 145px;
+    position: absolute;
+    top: 650px;
+    width: 532px;
+  }
+
+  .text-wrapper {
+    color: #fafafa;
+    font-family: "Inter-SemiBold", Helvetica;
+    font-size: 32px;
+    font-weight: 600;
+    left: 136px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 20px;
+  }
+
+  .per-month {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 32px;
+    font-weight: 400;
+    left: 210px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 135px;
+  }
+
+  .span {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 32px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .ideal-for-trying {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    left: 31px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 201px;
+  }
+
+  .automatic-cloud {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    left: 79px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 339px;
+  }
+
+  .text-wrapper-2 {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+
+  .sync-across-pcs {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    left: 79px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 392px;
+  }
+
+  .div-4 {
+    height: 35px;
+    left: 31px;
+    position: absolute;
+    top: 388px;
+    width: 35px;
+  }
+
+  .vector-9 {
+    height: 90.36%;
+    left: 5.48%;
+    position: absolute;
+    top: 9.64%;
+    width: 94.52%;
+  }
+
+  .vector-10 {
+    height: 15.36%;
+    left: 30.48%;
+    position: absolute;
+    top: 84.64%;
+    width: 69.52%;
+  }
+
+  .vector-11 {
+    height: 32.02%;
+    left: 47.14%;
+    position: absolute;
+    top: 67.98%;
+    width: 52.86%;
+  }
+
+  .vector-12 {
+    height: 90.36%;
+    left: 67.98%;
+    position: absolute;
+    top: 9.64%;
+    width: 32.02%;
+  }
+
+  .automatic-restore {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    left: 79px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 443px;
+  }
+
+  .custom-profile {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    left: 79px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 494px;
+  }
+
+  .native-downloads {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 24px;
+    font-weight: 400;
+    left: 79px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 545px;
+  }
+
+  .text-wrapper-3 {
+    color: #fafafa;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 64px;
+    font-weight: 400;
+    left: 31px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 104px;
+  }
+
+  .text-wrapper-4 {
+    color: #a3a3a3;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 32px;
+    font-weight: 400;
+    left: 475px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 20px;
+  }
+
+  .text-wrapper-5 {
+    color: #0a0a0a;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 32px;
+    font-weight: 400;
+    left: 335px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 667px;
+    width: 152px;
+  }
+
+  .text-wrapper-6 {
+    color: #f5b342;
+    font-family: "Inter-Regular", Helvetica;
+    font-size: 32px;
+    font-weight: 400;
+    left: 646px;
+    letter-spacing: 0;
+    line-height: normal;
+    position: absolute;
+    top: 20px;
+  }
+
+  .div-5 {
+    height: 35px;
+    left: 31px;
+    position: absolute;
+    top: 335px;
+    width: 35px;
+  }
+
+  .vector-13 {
+    height: 48.69%;
+    left: 47.14%;
+    position: absolute;
+    top: 51.31%;
+    width: 52.86%;
+  }
+
+  .vector-14 {
+    height: 90.35%;
+    left: 5.49%;
+    position: absolute;
+    top: 9.65%;
+    width: 94.51%;
+  }
+
+  .vector-15 {
+    height: 48.69%;
+    left: 30.48%;
+    position: absolute;
+    top: 51.31%;
+    width: 69.52%;
+  }
+}

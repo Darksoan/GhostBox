@@ -393,7 +393,7 @@ function requireSupabase(env: Env) {
 }
 
 async function handleCloudProfileImageUpload(request: Request, env: Env, kind: "avatar" | "banner") {
-  const auth = await requirePremiumSession(request, env);
+  const auth = kind === "avatar" ? await requireSession(request, env) : await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
   if (!contentType || !["image/jpeg", "image/png", "image/webp"].includes(contentType)) {

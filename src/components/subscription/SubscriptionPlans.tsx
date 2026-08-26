@@ -1,18 +1,17 @@
-import { CalendarClock, CloudUpload, CreditCard, ExternalLink, RotateCcw, ScreenShare, Settings2, Wallet } from "lucide-react";
+import { CalendarClock, CloudUpload, CreditCard, Download, ExternalLink, RotateCcw, ScreenShare, Settings2, User, Wallet } from "lucide-react";
 import { Trophy } from "reicon-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
 import { useAppData } from "../../context/AppDataContext";
-import { useAuth } from "../../context/AuthContext";
-import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
+import { useSubscriptionCheckout } from "../../hooks/useSubscriptionCheckout";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import { planPriceLabel } from "../../lib/subscriptionPricing";
 import { requestNavigateToSettingsTab } from "../../lib/appNavigation";
 import type {
   CloudSave,
   SubscriptionPayment,
   SubscriptionPlanId as PaidSubscriptionPlanId,
-  SubscriptionPortalFlow,
   SubscriptionStatusResult,
 } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
@@ -100,8 +99,20 @@ function BackupGameThumb({ appId }: { appId: string }) {
 }
 
 const benefits: Record<PaidSubscriptionPlanId, string[]> = {
-  monthly: ["subscription.benefits.localAndCloudBackups", "subscription.benefits.sync", "subscription.benefits.automaticRestore"],
-  quarterly: ["subscription.benefits.localAndCloudBackups", "subscription.benefits.sync", "subscription.benefits.automaticRestore"],
+  monthly: [
+    "subscription.benefits.localAndCloudBackups",
+    "subscription.benefits.sync",
+    "subscription.benefits.automaticRestore",
+    "subscription.benefits.customProfile",
+    "subscription.benefits.nativeDownloads",
+  ],
+  quarterly: [
+    "subscription.benefits.localAndCloudBackups",
+    "subscription.benefits.sync",
+    "subscription.benefits.automaticRestore",
+    "subscription.benefits.customProfile",
+    "subscription.benefits.nativeDownloads",
+  ],
 };
 
 const details = [
@@ -172,12 +183,6 @@ function formatBillingDate(value: string | null | undefined, language: "pt" | "e
   }).format(timestamp);
 }
 
-/** Single source for the price copy shown in the plan picker. */
-function planPriceLabel(planId: PaidSubscriptionPlanId, language: "pt" | "en") {
-  if (planId === "quarterly") return language === "en" ? "$2.90" : "R$ 14,99";
-  return language === "en" ? "$1.35" : "R$ 6,99";
-}
-
 function formatCardBrand(brand: string | null | undefined) {
   if (!brand) return null;
   const normalized = brand.trim().toLowerCase();
@@ -225,9 +230,36 @@ function visiblePayment(payment: SubscriptionPayment | null, subscription: Subsc
 }
 
 function renderBenefitIcon(benefitKey: string) {
-  if (benefitKey === "subscription.benefits.sync") return <ScreenShare size={16} strokeWidth={2.15} aria-hidden="true" />;
-  if (benefitKey === "subscription.benefits.automaticRestore") return <RotateCcw size={16} strokeWidth={2.15} aria-hidden="true" />;
-  return <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.sync") return <ScreenShare size={16} strokeWidth={1.75} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.automaticRestore") return <RotateCcw size={16} strokeWidth={1.75} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.customProfile") return <User size={16} strokeWidth={1.75} aria-hidden="true" />;
+  if (benefitKey === "subscription.benefits.nativeDownloads") return <Download size={16} strokeWidth={1.75} aria-hidden="true" />;
+  return <CloudUpload size={16} strokeWidth={1.75} aria-hidden="true" />;
+}
+
+function renderBenefitLabel(benefitKey: string, t: (k: string) => string, language: "pt" | "en") {
+  const text = t(benefitKey);
+  if (benefitKey === "subscription.benefits.localAndCloudBackups") {
+    if (language === "en" && text.startsWith("Automatic ")) return <><span>Automatic </span><strong>cloud backup</strong></>;
+    if (language === "pt" && text.startsWith("Backup em ")) return <><span>Backup em </span><strong>nuvem automático</strong></>;
+  }
+  if (benefitKey === "subscription.benefits.sync") {
+    if (language === "en" && text.startsWith("Sync")) return <><strong>Sync</strong><span> across PCs</span></>;
+    if (language === "pt" && text.startsWith("Sincronização")) return <><strong>Sincronização</strong><span> entre PCs</span></>;
+  }
+  if (benefitKey === "subscription.benefits.automaticRestore") {
+    if (language === "en" && text.startsWith("Automatic ")) return <><span>Automatic </span><strong>restore</strong></>;
+    if (language === "pt" && text.startsWith("Restauração ")) return <><span>Restauração </span><strong>automática</strong></>;
+  }
+  if (benefitKey === "subscription.benefits.customProfile") {
+    if (language === "en" && text.startsWith("Custom ")) return <><strong>Custom</strong><span> profile</span></>;
+    if (language === "pt" && text.startsWith("Perfil ")) return <><span>Perfil </span><strong>personalizado</strong></>;
+  }
+  if (benefitKey === "subscription.benefits.nativeDownloads") {
+    if (language === "en" && text.startsWith("Native ")) return <><span>Native </span><strong>downloads</strong></>;
+    if (language === "pt" && text.startsWith("Downloads ")) return <><span>Downloads </span><strong>nativos</strong></>;
+  }
+  return <span>{text}</span>;
 }
 
 export function SubscriptionPlans({
@@ -237,8 +269,7 @@ export function SubscriptionPlans({
   steamProfile: steamProfileProp,
 }: SubscriptionPlansProps) {
   const { appearance, t } = useSettings();
-  const { showToast } = useOverlay();
-  const { status, openAuthModal } = useAuth();
+  const { checkoutPlan, startCheckout, portalFlow, openBillingPortal } = useSubscriptionCheckout();
   const appData = useAppData();
   const steamProfile = steamProfileProp ?? appData.steamProfile;
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
@@ -246,45 +277,10 @@ export function SubscriptionPlans({
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [resolvedCloudGameTitles, setResolvedCloudGameTitles] = useState<Map<string, string>>(new Map());
   const [selectedPlanId, setSelectedPlanId] = useState<PaidSubscriptionPlanId>("monthly");
-  const [checkoutPlan, setCheckoutPlan] = useState<PaidSubscriptionPlanId | null>(null);
-  const [portalFlow, setPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
   const subscriptionRequestIdRef = useRef(0);
   const language = appearance.language;
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
   const isSettingsSurface = surface === "settings";
-
-  async function openBillingPortal(flow: SubscriptionPortalFlow) {
-    if (portalFlow) return;
-
-    setPortalFlow(flow);
-    try {
-      const session = await ghostboxApi.createSubscriptionPortalSession(flow);
-      if (!session?.url) {
-        throw new Error(
-          copy(
-            "Não foi possível abrir o portal de cobrança.",
-            "Could not open the billing portal."
-          )
-        );
-      }
-      await ghostboxApi.openExternalUrl(session.url);
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : copy(
-              "Não foi possível abrir o portal de cobrança.",
-              "Could not open the billing portal."
-            );
-      showToast(
-        copy("Portal de assinatura", "Subscription portal"),
-        message,
-        "error"
-      );
-    } finally {
-      setPortalFlow(null);
-    }
-  }
 
   function refreshCloudSaves() {
     void ghostboxApi.listCloudSaves()
@@ -656,51 +652,6 @@ export function SubscriptionPlans({
 
   const selectedPaidPlan = paidPlans[selectedPlanId];
 
-  async function handleSubscribe(planId: PaidSubscriptionPlanId) {
-    if (status !== "authenticated") {
-      openAuthModal();
-      return;
-    }
-    // Deliberately no Discord gate here: the worker never required a link to
-    // create a checkout, and blocking the button sent everyone who clicked
-    // "Subscribe" to Discord instead of Stripe. Linking is optional and only
-    // grants the server's Premium role.
-    setCheckoutPlan(planId);
-    try {
-      const checkout = await ghostboxApi.createSubscriptionCheckout(planId);
-      const payment = checkout?.payment;
-      if (!payment?.hostedCheckoutUrl) {
-        throw new Error(
-          copy("Tente novamente em instantes.", "Try again in a moment.")
-        );
-      }
-
-      // Remembered so that, if the Stripe webhook is delayed or lost, the app
-      // can confirm this checkout directly instead of leaving a paying user
-      // looking at the plan picker.
-      ghostboxApi.setPendingCheckoutId(payment.checkoutId ?? payment.checkoutReference);
-
-      await ghostboxApi.openExternalUrl(payment.hostedCheckoutUrl);
-      showToast(
-        copy("Checkout aberto", "Checkout opened"),
-        copy("Finalize o pagamento na janela aberta e volte ao GhostBox para atualizar o status.", "Complete payment in the opened window and return to GhostBox to refresh status."),
-        "success"
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : copy("Tente novamente em instantes.", "Try again in a moment.");
-      showToast(
-        copy("Não foi possível criar o checkout", "Could not create checkout"),
-        message,
-        "error"
-      );
-    } finally {
-      setCheckoutPlan(null);
-    }
-  }
-
   return (
     <section
       className={`subscription-plans subscription-plans--${surface} settings-panel__animated-block`}
@@ -775,7 +726,7 @@ export function SubscriptionPlans({
             {benefits[selectedPlanId].map((benefitKey) => (
               <li key={benefitKey}>
                 {renderBenefitIcon(benefitKey)}
-                <span>{t(benefitKey)}</span>
+                <span>{renderBenefitLabel(benefitKey, t, language)}</span>
               </li>
             ))}
           </ul>
@@ -784,7 +735,7 @@ export function SubscriptionPlans({
             type="button"
             className="subscription-plan-card__action"
             disabled={checkoutPlan === selectedPlanId}
-            onClick={() => void handleSubscribe(selectedPlanId)}
+            onClick={() => void startCheckout(selectedPlanId)}
           >
             {checkoutPlan === selectedPlanId ? copy("Abrindo...", "Opening...") : t("subscription.actions.subscribe")}
           </button>

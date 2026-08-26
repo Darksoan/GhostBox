@@ -1,6 +1,7 @@
 @use "./styles/primitives";
 @use "./styles/semantic";
 @use "./styles/mixins";
+@use "./styles/premium-modal";
 
 .tray-menu-shell {
   width: 100vw;
@@ -909,6 +910,82 @@ p {
   letter-spacing: var(--ls-500);
 }
 
+/* ─── Troca de modo da sidebar (navegação padrão ↔ ajustes) ───────────────────
+   Os dois painéis são montados/desmontados por `isSettingsPage`, então não há
+   painel de saída para cruzar: a coreografia é toda de entrada, em 3 camadas.
+
+   1. Envelope  — o painel inteiro faz fade (`sidebar-mode-panel-in`).
+   2. Primária  — os itens do menu entram em cascata deslocados no eixo X, na
+                  direção da navegação: ajustes = "mais fundo" (entra da
+                  direita), voltar = "mais raso" (entra da esquerda). A direção
+                  vem de `--sidebar-mode-shift`, definido pelos modificadores
+                  `--forward` / `--back`.
+   3. Atrasada  — blocos secundários (coleções, botão voltar) sobem 6px depois
+                  da cascata terminar, via `--delayed`.
+
+   Orçamento total: 120ms de atraso + 300ms ≈ 420ms, dentro do limite de 500ms
+   para stagger. */
+@keyframes sidebar-mode-panel-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sidebar-mode-item-in {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--sidebar-mode-shift, 10px), 0, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes sidebar-mode-block-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.sidebar__mode-panel {
+  animation: sidebar-mode-panel-in var(--motion-base) var(--ease) both;
+}
+
+.sidebar__mode-panel--forward {
+  --sidebar-mode-shift: 10px;
+}
+
+.sidebar__mode-panel--back {
+  --sidebar-mode-shift: -10px;
+}
+
+.sidebar__section.sidebar__mode-panel > .sidebar__menu > .sidebar__menu-item {
+  animation: sidebar-mode-item-in var(--motion-slow) var(--ease-out) both;
+}
+
+@for $i from 1 through 10 {
+  .sidebar__section.sidebar__mode-panel > .sidebar__menu > .sidebar__menu-item:nth-child(#{$i}) {
+    animation-delay: #{($i - 1) * 26}ms;
+  }
+}
+
+/* Blocos secundários chegam depois da cascata do menu principal. */
+.sidebar__mode-panel--delayed {
+  animation: sidebar-mode-block-in var(--motion-slow) var(--ease-out) 120ms both;
+}
+
 /* ─── Sidebar ─────────────────────────────────────────────────────────────── */
 .sidebar {
   position: relative;
@@ -952,7 +1029,9 @@ p {
   }
 
   &__mode-panel {
-    contain: paint;
+    /* `layout style` e não `paint`: a cascata dos itens desloca 10px no eixo X
+       e a contenção de pintura cortaria esse overflow durante a animação. */
+    contain: layout style;
   }
 
   &__section-header {
@@ -965,6 +1044,7 @@ p {
   /* Section label: COLLECTIONS (canonical uppercase) */
   &__section-title {
     @include mixins.eyebrow;
+    font-weight: var(--weight-regular);
     line-height: 1;
     transition: color var(--motion-fast) var(--ease);
   }
@@ -977,7 +1057,7 @@ p {
     border: 0;
     background: transparent;
     color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     cursor: pointer;
     transition: color var(--motion-fast) var(--ease);
 
@@ -1022,7 +1102,7 @@ p {
     height: 28px;
     place-items: center;
     @include mixins.ghost-button;
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     transition:
       color var(--motion-fast) var(--ease),
       background-color var(--motion-fast) var(--ease);
@@ -1141,7 +1221,7 @@ p {
       background: var(--text-strong);
       color: var(--background-dark);
       font-size: var(--type-size-micro);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-regular);
       line-height: 20px;
       text-align: center;
     }
@@ -1452,7 +1532,7 @@ p {
     overflow: hidden;
     color: var(--text-primary);
     font-size: var(--type-size-body-emphasis);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-body-emphasis);
     text-align: left;
     text-overflow: ellipsis;
@@ -4944,22 +5024,29 @@ p {
 }
 
 .subscription-plan-card {
-  // Local scale-derived tokens — mirrors the pattern in .subscription-account.
-  --plan-action-min-height: var(--space-14);
+  --plan-action-min-height: 48px;
 
   position: relative;
-  display: grid;
-  min-height: 0;
-  grid-template-rows: auto 1fr auto;
-  gap: var(--space-7);
-  padding: var(--space-8) var(--space-7) var(--space-7);
-  border-radius: var(--radius-lg);
-  background: var(--surface-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 520px;
+  // Mockup é quase quadrado (822×808) — a altura acompanha a largura.
+  min-height: clamp(460px, 58vh, 520px);
+  margin-inline: auto;
+  border-radius: 16px;
+  background: var(--c-1);
+  overflow: hidden;
+  box-shadow: var(--shadow-2);
   transition:
-    background var(--motion-fast) var(--ease);
+    background var(--motion-fast) var(--ease),
+    transform var(--motion-fast) var(--ease),
+    box-shadow var(--motion-fast) var(--ease);
 
   &--featured {
-    background: var(--surface-raised);
+    background: var(--c-1);
   }
 
   &__top {
@@ -4992,17 +5079,23 @@ p {
     }
   }
 
-  // Controle segmentado de cobrança: mora dentro do card Premium, logo acima
-  // do preço que ele alterna. Largura do card, altura compacta para não
-  // competir com o CTA.
+  // Header — encaixado nas laterais do card: flush top, radius igual ao card
   &__billing {
     position: relative;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
     width: 100%;
-    padding: var(--space-1);
+    height: 64px;
+    min-height: 64px;
+    margin: 0;
+    padding: 5px;
+    // Trilho é uma pill inteira (radius 50 no mockup), não uma faixa com base
+    // reta encostada no card. --radius-circle é 50% (elipse); pill é 999px.
     border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+    // Mesma rampa do segmented control do app (.game-modal__requirements-tab):
+    // trilho em --surface-option-hover, selecionado em --surface-option-selected.
+    background: var(--surface-option-hover);
 
     button {
       position: relative;
@@ -5010,18 +5103,26 @@ p {
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: calc(var(--space-10) + var(--space-4));
-      padding-inline: var(--space-6);
+      gap: var(--space-2);
+      height: 54px;
+      min-height: 54px;
+      padding-inline: var(--space-4);
       border: 0;
       border-radius: var(--radius-pill);
       background: transparent;
       color: var(--text-secondary);
       cursor: pointer;
       font: inherit;
-      font-size: var(--type-size-compact);
+      font-size: var(--type-size-body);
       font-weight: var(--weight-semibold);
+      font-family: var(--font-sans);
+      letter-spacing: -0.01em;
       white-space: nowrap;
       transition: color var(--motion-fast) var(--ease);
+
+      &:hover:not(.is-active) {
+        color: var(--text-primary);
+      }
 
       &.is-active {
         color: var(--text-primary);
@@ -5032,91 +5133,136 @@ p {
         outline-offset: 2px;
       }
 
-      // Economia do trimestral vira uma pill discreta dentro da própria aba,
-      // no lugar da pill dourada que antes flutuava no rodapé do card. O
-      // dourado ecoa o CTA sem competir com ele.
       .subscription-plan-card__billing-hint {
         margin-left: var(--space-2);
-        padding: var(--space-1) var(--space-3);
+        padding: 4px 9px;
         border-radius: var(--radius-pill);
-        background: color-mix(in srgb, var(--premium-gold) 14%, transparent);
+        background: color-mix(in srgb, var(--premium-gold) 15%, transparent);
         color: var(--premium-gold);
         font-size: var(--type-size-micro);
         font-weight: var(--weight-semibold);
-        line-height: var(--type-line-caption);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
       }
     }
   }
 
   &__billing-thumb {
     position: absolute;
-    top: var(--space-1);
-    bottom: var(--space-1);
-    left: var(--space-1);
-    width: calc(50% - var(--space-1));
+    top: 5px;
+    bottom: 5px;
+    left: 5px;
+    width: calc(50% - 5px);
     border-radius: var(--radius-pill);
-    // Popover (não raised): o card featured já é raised — o thumb precisa
-    // ficar um degrau acima da própria superfície que habita.
-    background: var(--surface-popover);
+    background: var(--surface-option-selected);
     transition: transform var(--motion-base) var(--ease);
 
     &--quarterly {
-      transform: translateX(100%);
+      transform: translateX(calc(100% + 5px));
     }
   }
 
+  // Preço e cadência na mesma baseline, como no mockup.
   &__price {
-    color: var(--text-secondary);
-    font-size: var(--type-size-section);
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 26px 24px 0;
+    color: var(--text-primary);
+    line-height: 1;
+
+    strong {
+      color: var(--text-primary);
+      font-size: var(--type-size-fluid-hero);
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    span {
+      color: var(--text-tertiary);
+      font-size: var(--type-size-body-emphasis);
+      font-weight: var(--weight-regular);
+      letter-spacing: normal;
+    }
+  }
+
+  &__desc {
+    margin: 16px 24px 0;
+    max-width: 40ch;
+    width: calc(100% - 48px);
+    color: var(--text-tertiary);
+    font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
-    line-height: var(--type-line-section);
-    letter-spacing: var(--ls-600);
+    line-height: 1.55;
+    text-wrap: pretty;
+    overflow-wrap: anywhere;
   }
 
   &__benefits {
     display: grid;
-    align-content: start;
-    gap: var(--space-4);
-    margin: 0;
+    gap: 14px;
+    margin: 30px 24px 0;
     padding: 0;
     list-style: none;
 
     li {
       display: flex;
-      align-items: flex-start;
-      gap: var(--space-4);
+      align-items: center;
+      gap: 12px;
       color: var(--text-secondary);
-      font-size: var(--type-size-caption);
+      font-size: var(--type-size-body);
       font-weight: var(--weight-regular);
-      line-height: var(--type-line-caption);
+      line-height: 1.4;
       text-align: left;
 
+      // Mockup mantém a linha inteira num único tom — a ênfase vem do ícone e
+      // do espaçamento, não de peso/cor no meio da frase.
+      strong {
+        color: inherit;
+        font-weight: inherit;
+      }
+
+      // Glifo em branco contra o label cinza: é o que separa as linhas da lista.
       svg {
+        width: 19px;
+        height: 19px;
         flex: 0 0 auto;
-        margin-top: var(--space-1);
         color: var(--text-primary);
       }
     }
   }
 
+  // CTA centralizado e mais estreito que o card (532/822 no mockup).
   &__action {
-    min-height: var(--plan-action-min-height);
-    width: 100%;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    color: var(--text-primary);
+    min-height: 52px;
+    width: min(65%, calc(100% - 48px));
+    margin: auto auto 28px;
+    align-self: center;
+    border-radius: 5px;
+    background: var(--premium-gold);
+    color: #0a0a0a;
+    color: var(--premium-gold-ink);
     cursor: pointer;
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-regular);
+    font-size: var(--type-size-body);
+    font-weight: 600;
+    letter-spacing: -0.01em;
     transition:
       background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
 
-    &:hover,
-    &:focus-visible {
-      background: var(--surface-popover);
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--premium-gold-hover);
       outline: none;
+      transform: translateY(-1px);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.99);
     }
 
     &:focus-visible {
@@ -5130,137 +5276,37 @@ p {
     }
 
     &:disabled:hover {
-      background: var(--surface-raised);
+      background: var(--premium-gold);
+      transform: none;
     }
   }
 }
 
 .subscription-plans--modal .subscription-plan-card {
-  min-height: calc(var(--space-16) * 6 + var(--space-9));
-  padding: var(--space-9) var(--space-8) var(--space-8);
+  min-height: auto;
+  padding: 0;
 
   .subscription-plan-card__top {
-    justify-items: center;
-    text-align: center;
+    justify-items: start;
+    text-align: left;
   }
 
   .subscription-plan-card__price {
-    font-size: var(--type-size-fluid-page);
+    font-size: inherit;
   }
 }
 
-// ATENÇÃO: seletores escritos por extenso, sem `&--mod &__elem`. Dentro de um
-// seletor composto o `&` reexpande a cadeia inteira e gera
-// `.a .card--featured .a .card__action`, que nunca casa. Foi o que manteve o
-// CTA dourado sem aplicar.
+// Card já é sólido e fiel ao Figma em todas as superfícies — sem blur translúcido
+// Card fica um degrau acima do canvas (--c-0): no mockup ele se destaca do
+// fundo, e com --c-0 nos dois lados a borda do card sumia.
 .subscription-plans--settings {
-  // Os cards flutuam sobre as capas: superfície translúcida + blur deixa a arte
-  // passar por baixo sem que o texto perca contraste.
   .subscription-plan-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    overflow: hidden;
-    gap: var(--space-4);
-    padding: var(--space-10) var(--space-9);
-    border-radius: var(--radius-lg);
-    background: color-mix(in srgb, var(--surface-canvas) 82%, transparent);
-    backdrop-filter: blur(20px);
-    transition: background var(--motion-fast) var(--ease);
+    background: var(--c-1);
+    backdrop-filter: none;
   }
 
   .subscription-plan-card--featured {
-    background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
-  }
-
-  // Preço é o herói: valor e cadência dividem a mesma linha de base.
-  // O `margin-top` negativo o encosta no toggle logo acima — os dois formam
-  // uma unidade (o controle altera o número embaixo), em vez de blocos soltos.
-  .subscription-plan-card__price {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-    margin-top: calc(-1 * var(--space-2));
-
-    strong {
-      color: var(--text-primary);
-      font-size: var(--type-size-page);
-      font-weight: var(--weight-semibold);
-      letter-spacing: var(--ls-600);
-      line-height: 1.1;
-    }
-
-    span {
-      color: var(--text-tertiary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-regular);
-    }
-  }
-
-  .subscription-plan-card__desc {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: var(--type-line-caption);
-    min-height: calc(var(--type-line-caption) * 2);
-  }
-
-  .subscription-plan-card__benefits {
-    row-gap: var(--space-4);
-    column-gap: var(--space-4);
-    margin-top: var(--space-5);
-
-    li {
-      align-items: center;
-      gap: var(--space-4);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-caption);
-    }
-
-    // Ícone sem disco: glifo solto, maior que o texto para ancorar a leitura
-    // de cada benefício.
-    li svg {
-      width: calc(var(--space-9) + var(--space-2));
-      height: calc(var(--space-9) + var(--space-2));
-      flex: 0 0 auto;
-      margin-top: 0;
-      padding: 0;
-      border-radius: 0;
-      background: transparent;
-      color: var(--text-primary);
-    }
-  }
-
-  .subscription-plan-card__action {
-    // Fallback de ancoragem: com o card abraçando o conteúdo não sobra espaço,
-    // então o `auto` colapsa para o gap normal — mas protege o alinhamento se
-    // o card voltar a esticar (ex.: conteúdo dinâmico maior que a viewport).
-    margin-top: auto;
-    min-height: calc(var(--space-8) * 2 + var(--space-2));
-    border-radius: var(--radius-md);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    transition:
-      background var(--motion-fast) var(--ease),
-      transform var(--motion-fast) var(--ease);
-  }
-
-  .subscription-plan-card__action:not(:disabled):active {
-    transform: scale(0.985);
-  }
-
-  .subscription-plan-card--featured .subscription-plan-card__action:not(:disabled) {
-    background: var(--premium-gold);
-    color: var(--premium-gold-ink);
-  }
-
-  .subscription-plan-card--featured .subscription-plan-card__action:not(:disabled):hover,
-  .subscription-plan-card--featured .subscription-plan-card__action:not(:disabled):focus-visible {
-    background: var(--premium-gold-hover);
+    background: var(--c-1);
   }
 }
 
@@ -6201,7 +6247,7 @@ p {
   right: 0;
   left: 0;
   z-index: var(--z-sticky);
-  padding: 0;
+  padding: var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--surface-dropdown-menu);
@@ -6217,6 +6263,7 @@ p {
   width: 100%;
   min-height: 34px;
   padding: 0;
+  border-radius: var(--radius-sm);
   @include mixins.ghost-button;
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
@@ -6473,9 +6520,11 @@ p {
       }
 
       &:hover {
-        background: var(--danger-soft);
+        background: color-mix(in srgb, var(--red) 12%, transparent);
+        color: var(--red);
 
         svg {
+          color: var(--red);
           opacity: 1;
         }
       }
@@ -8279,17 +8328,16 @@ input[type="search"]::-ms-reveal {
   }
 
   &__actions {
+    position: absolute;
+    right: var(--space-2);
+    bottom: var(--space-2);
+    z-index: 2;
     display: flex;
     gap: var(--space-3);
     flex: 0 0 auto;
     flex-wrap: wrap;
     justify-content: flex-end;
     align-items: center;
-    /* Nunca anima opacity NESTE contêiner: um ancestral com opacity < 1 vira
-       backdrop root para o backdrop-filter dos botões, e o blur só passaria a
-       amostrar a arte real ao cravar em 1 — dando um salto no fim da transição.
-       O fade vive em `__action`, que aplica opacity no próprio elemento do
-       backdrop-filter; assim o blur é estável do primeiro ao último frame. */
     visibility: hidden;
     transform: translateY(6px);
     transition:
@@ -8329,13 +8377,11 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-4);
     border: 0;
     border-radius: var(--radius-lg);
-    background: rgb(255 255 255 / 0.22);
+    background: transparent;
     color: #fff;
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
     cursor: pointer;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     opacity: 0;
     transition:
       background var(--motion-fast) var(--ease),
@@ -8343,7 +8389,7 @@ input[type="search"]::-ms-reveal {
       opacity var(--motion-fast) var(--ease);
 
     &:hover {
-      background: rgb(255 255 255 / 0.16);
+      background: color-mix(in srgb, var(--text-primary) 10%, transparent);
     }
 
     &:active {
@@ -8363,25 +8409,17 @@ input[type="search"]::-ms-reveal {
 
   &__action--ghost {
     background: transparent;
-    color: rgb(255 255 255 / 0.75);
 
     &:hover {
-      background: rgb(0 0 0 / 0.3);
-      color: #fff;
+      background: color-mix(in srgb, var(--text-primary) 10%, transparent);
     }
   }
 
-  /* Acción primaria: relleno sólido claro com texto escuro, el único botón que
-     compite por jerarquía frente a la arte. El resto sigue siendo vidrioso. */
   &__action--primary {
-    background: var(--text-strong);
-    color: var(--surface-canvas);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: transparent;
 
     &:hover {
-      background: var(--white);
-      color: var(--surface-canvas);
+      background: color-mix(in srgb, var(--text-primary) 10%, transparent);
     }
   }
 
@@ -8408,7 +8446,8 @@ input[type="search"]::-ms-reveal {
     }
 
     &__actions {
-      width: 100%;
+      left: var(--space-2);
+      width: auto;
       justify-content: flex-start;
     }
   }
@@ -8665,8 +8704,7 @@ input[type="search"]::-ms-reveal {
   }
 
   /* Vale para "Cancelar download" e para o confirmar do diálogo: os dois usam
-     esta classe. Neutro em repouso, vermelho só no hover — a ação destrutiva se
-     anuncia quando o ponteiro chega, não o tempo todo. */
+     esta classe. Uninstall confirmação agora em var(--red) 40% → 60% hover. */
   &__danger {
     display: inline-flex;
     align-items: center;
@@ -8676,7 +8714,7 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-7);
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--surface-option);
+    background: color-mix(in srgb, var(--red) 40%, transparent);
     color: var(--text-primary);
     cursor: pointer;
     font-weight: var(--weight-regular);
@@ -8686,8 +8724,8 @@ input[type="search"]::-ms-reveal {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      background: var(--surface-option-hover);
-      color: var(--danger-hover);
+      background: color-mix(in srgb, var(--red) 60%, transparent);
+      color: var(--text-primary);
     }
 
     &:disabled {
@@ -8723,12 +8761,14 @@ input[type="search"]::-ms-reveal {
     }
 
     .confirm-modal__actions .confirm-modal__confirm {
+      background: color-mix(in srgb, var(--red) 40%, transparent);
       color: var(--text-primary);
     }
 
     .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
     .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
-      color: var(--danger-hover);
+      background: color-mix(in srgb, var(--red) 60%, transparent);
+      color: var(--text-primary);
     }
 
   }
@@ -8750,12 +8790,14 @@ input[type="search"]::-ms-reveal {
   }
 
   .confirm-modal__actions .confirm-modal__confirm {
+    background: color-mix(in srgb, var(--red) 40%, transparent);
     color: var(--text-primary);
   }
 
   .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
   .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
-    color: var(--danger-hover);
+    background: color-mix(in srgb, var(--red) 60%, transparent);
+    color: var(--text-primary);
   }
 
 }
@@ -9715,7 +9757,9 @@ border: 0;
   .steam-path-modal,
   .modal__collection-picker,
   .sidebar__mode-panel,
+  .sidebar__mode-panel--delayed,
   .sidebar__mode-panel .sidebar__menu-item,
+  .sidebar__section.sidebar__mode-panel > .sidebar__menu > .sidebar__menu-item,
   .sidebar__mode-panel .sidebar__section-header,
   .sidebar__mode-panel .sidebar__section-header + .sidebar__menu,
   .subscription-account__header::before,
@@ -10195,8 +10239,7 @@ html.no-backdrop-blur {
 }
 
 .backdrop--steam-path,
-.backdrop--profile,
-.backdrop--subscription {
+.backdrop--profile {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
@@ -10207,149 +10250,7 @@ html.no-backdrop-blur {
   background: var(--overlay-strong);
 }
 
-.backdrop--subscription {
-  z-index: 1002;
-  align-items: stretch;
-  justify-content: stretch;
-  padding: 0;
-  background: var(--overlay-immersive);
-  animation: subscription-backdrop-enter var(--motion-base) var(--ease);
-}
-
-.backdrop--subscription-closing {
-  animation: subscription-backdrop-exit var(--motion-base) var(--ease) both;
-}
-
-.subscription-modal {
-  position: relative;
-  z-index: 1002;
-  // `100%`, não `100vw`: com barra de rolagem vertical presente, 100vw inclui a
-  // largura dela e sobra conteúdo para o lado — era a barra horizontal na base
-  // da tela. O padding também zera: o conteúdo já tem o seu, e a soma com
-  // `height: 100vh` empurrava a página para além da tela.
-  width: 100%;
-  height: 100vh;
-  // Flex container para a altura descer a cadeia: sem isto o `flex: 1` do
-  // .settings-panel não tem contra o que esticar e a seção nunca ocupa a tela.
-  display: flex;
-  flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
-  border: 0;
-  border-radius: 0;
-  background: var(--background);
-  color: var(--text-primary);
-  padding: 0;
-  animation: subscription-modal-enter var(--motion-base) var(--ease);
-
-  &--closing {
-    animation: subscription-modal-exit var(--motion-base) var(--ease) both;
-  }
-
-  &__close {
-    position: fixed;
-    top: 14px;
-    right: 14px;
-    z-index: 1003;
-    display: inline-grid;
-    width: 38px;
-    height: 38px;
-    place-items: center;
-    border: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    font-weight: var(--weight-semibold);
-    cursor: pointer;
-    pointer-events: auto;
-    transition: color var(--motion-fast) ease;
-
-    svg {
-      pointer-events: none;
-    }
-
-    &:hover,
-    &:focus-visible {
-      color: var(--text-primary);
-      outline: none;
-    }
-  }
-
-}
-
-.subscription-modal .subscription-plans--modal {
-  min-height: 100%;
-  width: min(1080px, 100%);
-  margin: 0 auto;
-}
-
-// Este wrapper prendia tudo em `min(950px, 100vw - 48px)`. Como o backdrop de
-// capas é posicionado contra a seção que vive aqui dentro, ele herdava essa
-// caixa e nunca alcançava as bordas da tela. Agora o wrapper ocupa a largura
-// inteira e quem limita a leitura é o `max-width` do conteúdo, lá no
-// .subscription-plans--settings.
-.subscription-modal__settings-page {
-  @extend .subscription-surface;
-  width: 100%;
-}
-
-@keyframes subscription-backdrop-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes subscription-backdrop-exit {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes subscription-modal-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes subscription-modal-exit {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-// Faixa de arrasto no topo do modal: espelha a titlebar nativa que o
-// modal cobre. O botao de fechar (z-index 1003) fica acima dela sem
-// herdar o arrasto.
-.subscription-modal__drag {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--app-header-height);
-  z-index: var(--z-modal);
-  pointer-events: auto;
-}
-
 @media (max-width: 860px) {
-  .subscription-modal {
-    overflow-y: auto;
-  }
-
   .subscription-plans__steps,
   .subscription-plans__details {
     grid-template-columns: 1fr;
@@ -10377,12 +10278,6 @@ html.no-backdrop-blur {
 
   .subscription-plan-card {
     min-height: 0;
-  }
-}
-
-@media (max-height: 560px) {
-  .subscription-modal {
-    overflow-y: auto;
   }
 }
 
@@ -12724,14 +12619,14 @@ html.no-backdrop-blur {
 }
 
 .game-settings-modal__confirm-danger {
-  background: var(--sidebar-option-hover);
+  background: color-mix(in srgb, var(--red) 40%, transparent);
   color: var(--text-primary);
 }
 
 .game-settings-modal__confirm-danger:hover:not(:disabled),
 .game-settings-modal__confirm-danger:focus-visible:not(:disabled) {
-  background: var(--sidebar-option-active);
-  color: var(--danger-hover);
+  background: color-mix(in srgb, var(--red) 60%, transparent);
+  color: var(--text-primary);
 }
 
 @media (max-width: 600px) {
@@ -13170,7 +13065,7 @@ html.no-backdrop-blur {
 }
 
 .sidebar__section-title {
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
 }
 
 .catalogue-list__content strong {

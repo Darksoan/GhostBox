@@ -176,35 +176,34 @@ function DownloadsHero({
           <div className="downloads-hero__actions">
             {canPause && (
               <button type="button" className="downloads-hero__action" onClick={() => onPause(task.id)} aria-label={t("downloads.pause")}>
-                <Pause size={16} strokeWidth={1.5} /> <span>{t("downloads.pause")}</span>
+                <Pause size={18} strokeWidth={1.75} />
               </button>
             )}
             {canResume && (
               <button type="button" className="downloads-hero__action downloads-hero__action--primary" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")}>
-                <Play size={16} strokeWidth={1.5} /> <span>{t("downloads.resume")}</span>
+                <Play size={18} strokeWidth={1.75} />
               </button>
             )}
             {task.status === "completed" && (
               <>
                 <button type="button" className="downloads-hero__action" onClick={() => onOpenFolder(task)} aria-label={t("downloads.openFolder")}>
-                  <FolderOpen size={16} strokeWidth={1.5} />
+                  <FolderOpen size={18} strokeWidth={1.75} />
                 </button>
                 <button type="button" className="downloads-hero__action" onClick={() => onUninstall(task.id)} aria-label={t("downloads.uninstall")}>
-                  <Trash2 size={16} strokeWidth={1.5} />
+                  <Trash2 size={18} strokeWidth={1.75} />
                 </button>
                 <button type="button" className="downloads-hero__action downloads-hero__action--primary" onClick={() => onLaunch(task)} disabled={launching} aria-busy={launching} aria-label={t("downloads.launch")}>
-                  {launching ? <LoaderCircle className="downloads-hero__launch-spinner" size={16} strokeWidth={1.5} aria-hidden="true" /> : <Play size={16} strokeWidth={1.5} />}
-                  <span>{t("downloads.launch")}</span>
+                  {launching ? <LoaderCircle className="downloads-hero__launch-spinner" size={18} strokeWidth={1.75} aria-hidden="true" /> : <Play size={18} strokeWidth={1.75} />}
                 </button>
               </>
             )}
             {canRemove && (
               <button type="button" className="downloads-hero__action" onClick={() => removeDownloadTask(task.id)} aria-label={t("downloads.remove")}>
-                <X size={16} strokeWidth={1.5} /> <span>{t("downloads.remove")}</span>
+                <X size={18} strokeWidth={1.75} />
               </button>
             )}
             <button type="button" className="downloads-hero__action" onClick={() => onOpen(task.id)} aria-label={t("downloads.details.open", { title: task.title })}>
-              <FolderSearch size={16} strokeWidth={1.5} /> <span>Open details</span>
+              <FolderSearch size={18} strokeWidth={1.75} />
             </button>
           </div>
         </div>

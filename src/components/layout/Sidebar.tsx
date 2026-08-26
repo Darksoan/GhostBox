@@ -19,6 +19,12 @@ import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../uti
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
+import {
+  readSidebarCollectionsCollapsed,
+  readSidebarExpandedCollections,
+  writeSidebarCollectionsCollapsed,
+  writeSidebarExpandedCollections,
+} from "../../utils/storage";
 import { primaryNavigation, secondaryNavigation } from "./navigationItems";
 import avatarPlaceholder from "../../../Icons/userplaceholder.jpg";
 
@@ -71,10 +77,17 @@ export const Sidebar = memo(function Sidebar({
   onSettingsTabChange,
 }: SidebarProps) {
   const isSettingsPage = activePage === "settings";
-  const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(false);
-  const [expandedCollectionIds, setExpandedCollectionIds] = useState<Set<string>>(
-    () => new Set([FAVORITES_COLLECTION_ID])
-  );
+  const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(() => readSidebarCollectionsCollapsed());
+  const [expandedCollectionIds, setExpandedCollectionIds] = useState<Set<string>>(() => readSidebarExpandedCollections());
+
+  useEffect(() => {
+    writeSidebarCollectionsCollapsed(isCollectionsCollapsed);
+  }, [isCollectionsCollapsed]);
+
+  useEffect(() => {
+    writeSidebarExpandedCollections(expandedCollectionIds);
+  }, [expandedCollectionIds]);
+
   const [collectionContextMenu, setCollectionContextMenu] = useState<{
     collection: SidebarCollection | null;
     visible: boolean;
@@ -198,7 +211,7 @@ export const Sidebar = memo(function Sidebar({
         />
 
         {!isSettingsPage && (
-          <nav className="sidebar__section sidebar__mode-panel" >
+          <nav className="sidebar__section sidebar__mode-panel sidebar__mode-panel--back" >
             <ul className="sidebar__menu">
               {primaryNavigation.map(({ id, labelKey, icon: Icon }) => (
                 <li
@@ -238,7 +251,7 @@ export const Sidebar = memo(function Sidebar({
         )}
 
         {isSettingsPage && (
-          <nav className="sidebar__section sidebar__mode-panel" aria-label="Tópicos de ajustes" >
+          <nav className="sidebar__section sidebar__mode-panel sidebar__mode-panel--forward" aria-label="Tópicos de ajustes" >
             <ul className="sidebar__menu">
               {settingsNavigationTabs.map(({ id, icon: Icon }) => (
                 <li
@@ -260,7 +273,7 @@ export const Sidebar = memo(function Sidebar({
         )}
 
         {!isSettingsPage && (
-          <section className="sidebar__collapsible-section sidebar__mode-panel sidebar__mode-panel--delayed">
+          <section className="sidebar__collapsible-section sidebar__mode-panel sidebar__mode-panel--back sidebar__mode-panel--delayed">
             <div className="sidebar__section-header">
               <button
                 type="button"
@@ -443,7 +456,7 @@ export const Sidebar = memo(function Sidebar({
         {isSettingsPage && (
           <nav className="sidebar__section sidebar__section--footer">
             <ul className="sidebar__menu">
-              <li className="sidebar__menu-item sidebar__mode-panel">
+              <li className="sidebar__menu-item sidebar__mode-panel sidebar__mode-panel--forward sidebar__mode-panel--delayed">
                 <button
                   type="button"
                   className="sidebar__menu-item-button sidebar__menu-item-button--back"
