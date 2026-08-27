@@ -5,6 +5,11 @@ compatibility_date = "2026-06-19"
 [vars]
 CHECKOUT_RETURN_URL = "https://ghostbox-subscriptions.hella.workers.dev/subscription/return"
 DISCORD_REDIRECT_URI = "https://ghostbox-subscriptions.hella.workers.dev/discord/callback"
+# Google's callback, and the one every provider added from here on will use.
+# Discord keeps its own above so the URI already registered in its OAuth app
+# does not have to change. Both must match their console entry exactly — a
+# trailing slash or http:// is a redirect_uri_mismatch.
+OAUTH_REDIRECT_URI = "https://ghostbox-subscriptions.hella.workers.dev/oauth/callback"
 DISCORD_GUILD_ID = "1519331076831580291"
 DISCORD_PREMIUM_ROLE_ID = "1520811722770743388"
 CLOUD_SAVE_BUCKET = "cloud-saves"

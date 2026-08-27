@@ -44,9 +44,6 @@ describe("Home layout", () => {
     expect(customProperties.get("--surface-option")).toBe("var(--c-1)");
     expect(customProperties.get("--surface-option-hover")).toBe("var(--c-2)");
     expect(declarations.get(".sidebar")?.get("background")).toBe("var(--surface-sidebar)");
-    // O card de plano se define por superfície + raio; nenhuma borda é
-    // declarada (a antiga regra `border: 0` saiu junto com o reset).
-    expect(declarations.get(".subscription-plan-card")?.get("border")).toBeUndefined();
     expect(declarations.get(".app-main")?.get("background")).toBe("var(--app-gradient)");
     expect(declarations.get(".header")?.get("background-color")).toBe("var(--surface-titlebar)");
     expect(declarations.get(".home-page")?.get("background")).toBe("var(--background-dark)");

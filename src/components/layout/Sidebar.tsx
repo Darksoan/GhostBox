@@ -12,6 +12,11 @@ import { ContextMenu } from "../ui/ContextMenu";
 import { useGameContextMenu } from "../../hooks/useGameContextMenu";
 import { preloadGameIconUrls, useGameIconUrl } from "../../hooks/useGameIconUrl";
 import { settingsNavigationTabs, settingsTabLabelKeys, type SettingsTabId } from "../../features/settings/settingsTabsShared";
+import {
+  defaultProfileTabId,
+  profileNavigationTabs,
+  profileTabLabelKeys,
+} from "../../features/profile/profileTabsShared";
 import { useSettings } from "../../context/settings";
 import { useAuth } from "../../context/AuthContext";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
@@ -46,6 +51,7 @@ interface SidebarProps {
   activeSessionAppIds?: Set<string>;
   activeSettingsTabId: SettingsTabId;
   onSettingsTabChange: (tabId: SettingsTabId) => void;
+  onProfileTabChange: (tabId: string) => void;
 }
 
 const FAVORITES_COLLECTION_ID = "__favorites__";
@@ -75,8 +81,14 @@ export const Sidebar = memo(function Sidebar({
   activeSessionAppIds = new Set(),
   activeSettingsTabId,
   onSettingsTabChange,
+  onProfileTabChange,
 }: SidebarProps) {
   const isSettingsPage = activePage === "settings";
+  const isProfilePage = activePage === "profile";
+  // Perfil e ajustes trocam o menu principal pelo próprio painel de abas, com a
+  // mesma coreografia de entrada (`sidebar__mode-panel--forward`).
+  const isModePage = isSettingsPage || isProfilePage;
+  const activeProfileTabId = activeCollectionId ?? defaultProfileTabId;
   const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(() => readSidebarCollectionsCollapsed());
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<Set<string>>(() => readSidebarExpandedCollections());
 
@@ -210,7 +222,7 @@ export const Sidebar = memo(function Sidebar({
           onOpenProfile={onOpenProfile}
         />
 
-        {!isSettingsPage && (
+        {!isModePage && (
           <nav className="sidebar__section sidebar__mode-panel sidebar__mode-panel--back" >
             <ul className="sidebar__menu">
               {primaryNavigation.map(({ id, labelKey, icon: Icon }) => (
@@ -272,7 +284,32 @@ export const Sidebar = memo(function Sidebar({
           </nav>
         )}
 
-        {!isSettingsPage && (
+        {isProfilePage && (
+          <nav
+            className="sidebar__section sidebar__mode-panel sidebar__mode-panel--forward"
+            aria-label="Seções do perfil"
+          >
+            <ul className="sidebar__menu">
+              {profileNavigationTabs.map(({ id, icon: Icon }) => (
+                <li
+                  key={id}
+                  className={`sidebar__menu-item ${activeProfileTabId === id ? "sidebar__menu-item--active" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="sidebar__menu-item-button"
+                    onClick={() => onProfileTabChange(id)}
+                  >
+                    <Icon size={19} strokeWidth={2} />
+                    <span className="sidebar__menu-item-label">{t(profileTabLabelKeys[id])}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+
+        {!isModePage && (
           <section className="sidebar__collapsible-section sidebar__mode-panel sidebar__mode-panel--back sidebar__mode-panel--delayed">
             <div className="sidebar__section-header">
               <button
@@ -315,8 +352,7 @@ export const Sidebar = memo(function Sidebar({
                       activeCollectionId === "favorites") ||
                     (activePage === "library" &&
                       !isFavoritesCollection &&
-                      activeCollectionId === collection.id) ||
-                    (activePage === "profile" && activeCollectionId === collection.id);
+                      activeCollectionId === collection.id);
 
                   return (
                     <li
@@ -413,7 +449,7 @@ export const Sidebar = memo(function Sidebar({
           </section>
         )}
 
-        {!isSettingsPage && collectionContextMenu.visible && (
+        {!isModePage && collectionContextMenu.visible && (
           <ContextMenu
             x={collectionContextMenu.position.x}
             y={collectionContextMenu.position.y}
@@ -444,7 +480,7 @@ export const Sidebar = memo(function Sidebar({
           />
         )}
 
-        {!isSettingsPage && collectionGameContextMenu.visible && collectionGameContextMenuItems.length > 0 && (
+        {!isModePage && collectionGameContextMenu.visible && collectionGameContextMenuItems.length > 0 && (
           <ContextMenu
             x={collectionGameContextMenu.position.x}
             y={collectionGameContextMenu.position.y}
@@ -453,7 +489,7 @@ export const Sidebar = memo(function Sidebar({
           />
         )}
 
-        {isSettingsPage && (
+        {isModePage && (
           <nav className="sidebar__section sidebar__section--footer">
             <ul className="sidebar__menu">
               <li className="sidebar__menu-item sidebar__mode-panel sidebar__mode-panel--forward sidebar__mode-panel--delayed">

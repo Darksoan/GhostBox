@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   withCachedImageSources,
   resolveCachedImageSource,
+  forgetCachedImageSource,
   imageSourceCache,
   loadedImageSources,
   isPredictableSteamAssetSource,
@@ -106,6 +107,12 @@ type LoadableImageOptions = {
    * over the high-density art at the top.
    */
   preferOrder?: boolean;
+  /**
+   * Muda de valor para refazer a cadeia de carregamento com as mesmas URLs
+   * (voltou a ficar online, usuário pediu retry). Sem isso um erro de rede
+   * pontual congela a imagem em `failed` até a lista de sources mudar.
+   */
+  retryToken?: number | string;
 };
 
 export function useLoadableImageState(
@@ -119,6 +126,7 @@ export function useLoadableImageState(
   const lastGoodSourceRef = useRef<string>("");
   const failTimeoutMs = options.failTimeoutMs ?? 0;
   const preferOrder = options.preferOrder === true;
+  const retryToken = options.retryToken ?? 0;
 
   const [state, setState] = useState<LoadableImageState>(() => {
     const readySource = preferOrder ? null : findReadySource(sources);
@@ -228,6 +236,10 @@ export function useLoadableImageState(
       }
 
       const tryNextSource = () => {
+        // Um source que falhou não pode continuar no cache: se ele for o
+        // arquivo em disco de outra URL, o mapa persistido devolveria o mesmo
+        // caminho morto no próximo boot e a imagem nunca mais se recuperaria.
+        forgetCachedImageSource(source);
         if (!cancelled && !resolved) loadSource(index + 1);
       };
 
@@ -307,7 +319,7 @@ export function useLoadableImageState(
         clearTimeout(failTimer);
       }
     };
-  }, [sourceKey, failTimeoutMs, preferOrder]);
+  }, [sourceKey, failTimeoutMs, preferOrder, retryToken]);
 
   return state;
 }

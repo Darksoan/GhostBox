@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import { ghostboxApi } from "../lib/ghostboxApi";
-import type { GhostBoxAccount } from "../lib/ghostboxApi.types";
+import type {
+  GhostBoxAccount,
+  LoginProvider,
+  OAuthSignupPending,
+  RecoveryTicket,
+} from "../lib/ghostboxApi.types";
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated";
 
@@ -26,11 +31,23 @@ interface AuthContextValue {
     displayName?: string
   ) => Promise<void>;
   login: (identifier: string, password: string) => Promise<void>;
+  /** Resolves to the pending-signup payload when the provider account has no
+   * GhostBox account yet; `null` once a session is in place. Steam never
+   * returns a payload — it cannot create an account. */
+  loginWithProvider: (provider: LoginProvider) => Promise<OAuthSignupPending | null>;
+  completeOAuthSignup: (ticket: string, username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  requestPasswordReset: (identifier: string) => Promise<void>;
-  resendVerificationEmail: () => Promise<{ ok: boolean; emailVerified: boolean }>;
+  /** Step one of recovery: the provider proves the account. GhostBox sends no
+   * email, so this is the only way back into a forgotten password. */
+  startRecovery: (provider: LoginProvider) => Promise<RecoveryTicket>;
+  /** Step two: sets the new password, signs every other device out, and leaves
+   * this one signed in. */
+  completeRecovery: (recoveryToken: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  refreshAccount: () => Promise<void>;
+  /** Resolves to the account as the worker now sees it, so a caller that just
+   * changed something server-side can branch on the result without waiting for
+   * a re-render. */
+  refreshAccount: () => Promise<GhostBoxAccount | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -66,9 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Could not reach the worker (offline, outage). The session may well
       // still be valid, so keep it — signing out here would lock the user out
       // of the whole app over a network blip.
-      return;
+      return null;
     }
-    if (applyAccount(me)) return;
+    if (applyAccount(me)) return me?.account ?? null;
     // null means the worker itself rejected the token (expired/revoked) —
     // drop it so the gate reverts to the login screen instead of a stuck
     // "authenticated" state pointing at a dead session.
@@ -76,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLinkedSteamId(null);
     setStatus("anonymous");
     await ghostboxApi.signOutCloud();
+    return null;
   }, [applyAccount]);
 
   useEffect(() => {
@@ -132,6 +150,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyAccount]);
 
+  const loginWithProvider = useCallback(async (provider: LoginProvider) => {
+    const result = await ghostboxApi.loginWithProvider(provider);
+    if ("needsSignup" in result) return result;
+
+    setAccount(result.account);
+    setStatus("authenticated");
+    try {
+      applyAccount(await ghostboxApi.getAccount());
+    } catch {
+      // Offline right after signing in: keep the session we just received.
+    }
+    return null;
+  }, [applyAccount]);
+
+  const completeOAuthSignup = useCallback(
+    async (ticket: string, username: string, password: string) => {
+      const session = await ghostboxApi.completeOAuthSignup(ticket, username, password);
+      setAccount(session.account);
+      setLinkedSteamId(null);
+      setStatus("authenticated");
+    },
+    [],
+  );
+
   const logout = useCallback(async () => {
     // Flip to anonymous first: signOutCloud wipes the account-scoped
     // localStorage, and AppDataProvider (still mounted until the gate closes)
@@ -142,17 +184,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await ghostboxApi.signOutCloud();
   }, []);
 
-  const requestPasswordReset = useCallback(async (identifier: string) => {
-    await ghostboxApi.requestPasswordReset(identifier);
+  const startRecovery = useCallback(async (provider: LoginProvider) => {
+    return ghostboxApi.startRecovery(provider);
   }, []);
 
-  const resendVerificationEmail = useCallback(async () => {
-    const result = await ghostboxApi.resendVerificationEmail();
-    setAccount((current) =>
-      current ? { ...current, emailVerified: result.emailVerified } : current
-    );
-    return result;
-  }, []);
+  const completeRecovery = useCallback(
+    async (recoveryToken: string, newPassword: string) => {
+      const session = await ghostboxApi.completeRecovery(recoveryToken, newPassword);
+      setAccount(session.account);
+      setStatus("authenticated");
+      try {
+        applyAccount(await ghostboxApi.getAccount());
+      } catch {
+        // Offline right after recovering: keep the session we just received.
+      }
+    },
+    [applyAccount],
+  );
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     await ghostboxApi.changeAccountPassword(currentPassword, newPassword);
@@ -168,9 +216,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       closeAuthModal,
       register,
       login,
+      loginWithProvider,
+      completeOAuthSignup,
       logout,
-      requestPasswordReset,
-      resendVerificationEmail,
+      startRecovery,
+      completeRecovery,
       changePassword,
       refreshAccount,
     }),
@@ -183,9 +233,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       closeAuthModal,
       register,
       login,
+      loginWithProvider,
+      completeOAuthSignup,
       logout,
-      requestPasswordReset,
-      resendVerificationEmail,
+      startRecovery,
+      completeRecovery,
       changePassword,
       refreshAccount,
     ]

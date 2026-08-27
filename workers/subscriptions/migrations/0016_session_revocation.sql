@@ -1,0 +1,16 @@
+-- Makes an issued session token revocable.
+--
+-- Session tokens are stateless HMACs: once signed, nothing could invalidate
+-- one before its 7-day expiry. Changing the password did not sign anyone out.
+-- That is survivable while a password is the only way in, but recovery through
+-- a linked provider makes it a hole — the account owner recovers, and whoever
+-- got in stays in for a week.
+--
+-- token_version is stamped into every token and compared on every
+-- authenticated request. Bumping it invalidates every token minted before.
+--
+-- Existing accounts start at 1 and every token minted from here on carries a
+-- version, so the deploy signs nobody out. Tokens issued BEFORE this migration
+-- carry no version at all and are read as version 1 for the rest of their
+-- lifetime (see readCloudSessionVersion in index.ts).
+ALTER TABLE accounts ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1;

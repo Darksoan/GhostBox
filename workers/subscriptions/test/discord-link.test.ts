@@ -15,14 +15,28 @@ function discordEnv(db: ReturnType<typeof fakeD1>) {
   });
 }
 
-/** Mirrors createDiscordState: `userId.expiresAt.nonce.signature`. */
-async function discordState(userId: string) {
-  const payload = `${userId}.${Math.floor(Date.now() / 1000) + 600}.nonce_1`;
+/** Mirrors createDiscordState:
+ * `purpose.provider.userId.port.appNonce.expiresAt.nonce.signature`. */
+async function discordState(
+  purpose: "link" | "login",
+  userId: string,
+  port: number | "" = "",
+  appNonce = ""
+) {
+  const payload = [
+    purpose,
+    "discord",
+    userId,
+    port,
+    appNonce,
+    Math.floor(Date.now() / 1000) + 600,
+    "nonce_1",
+  ].join(".");
   return `${payload}.${await hmacSha256(STATE_SECRET, payload)}`;
 }
 
 async function callbackRequest(userId: string) {
-  const state = await discordState(userId);
+  const state = await discordState("link", userId);
   return new Request(
     `https://worker.test/discord/callback?code=auth_code_1&state=${encodeURIComponent(state)}`
   );

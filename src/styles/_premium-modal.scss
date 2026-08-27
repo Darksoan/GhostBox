@@ -26,12 +26,56 @@
   height: var(--app-header-height);
 }
 
+// Grade da oferta Premium. Vive fora de `.premium-modal` porque a mesma tela é
+// usada no diálogo e na aba Ajustes › Assinatura, via `PremiumOffer` — o
+// componente devolve só as duas colunas e quem monta o container é a superfície.
+// As variáveis de motion e da lista moram aqui pelo mesmo motivo.
+.premium-offer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(330px, 0.95fr);
+  // Curva de entrada da cena: tudo que entra usa ela, tudo que sai usa o par
+  // acelerado.
+  --enter-ease: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --exit-ease: cubic-bezier(0.3, 0, 1, 1);
+
+  // Altura travada: a lista é a única coisa que cresce, então ela reserva de
+  // antemão o espaço de um detalhe aberto e a superfície nunca muda de tamanho
+  // ao expandir. O cálculo é fechado, sem número solto: cinco linhas de rótulo,
+  // quatro vãos, mais três linhas de texto e o respiro do parágrafo.
+  //
+  // A reserva só cabe um detalhe porque a lista abre um item por vez (ver
+  // `openBenefit` no componente). Três linhas dão folga sobre a descrição mais
+  // longa, que ocupa duas — se alguma tradução futura passar disso, é a reserva
+  // que sobe, não o `overflow`: barra de rolagem aqui dentro é erro visual.
+  --benefit-row: calc(22px + var(--space-3) * 2);
+  --benefit-detail-reserve: calc(var(--lh-300) * 3 + var(--space-4));
+}
+
+// Fora do diálogo a oferta é um card da página, não uma superfície flutuante:
+// herda a grade e ganha só o recorte e o fundo.
+.premium-offer--settings {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      120% 90% at 0% 0%,
+      color-mix(in srgb, var(--premium-gold) 7%, transparent),
+      transparent 58%
+    ),
+    var(--c-1);
+  color: var(--text-primary);
+}
+
 .premium-modal {
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(330px, 0.95fr);
   width: min(1000px, 100%);
+  // O piso de altura é o que dá presença ao diálogo: sem ele o card encolhia
+  // até o conteúdo, e a lista de altura travada deixava a coluna esquerda
+  // curta demais para o peso do argumento. Em janela baixa os dois limites
+  // colapsam no mesmo valor e o piso deixa de valer.
+  min-height: min(640px, calc(100vh - var(--space-12)));
   max-height: min(760px, calc(100vh - var(--space-12)));
   overflow: auto;
   border-radius: var(--radius-lg);
@@ -44,9 +88,8 @@
     var(--c-1);
   color: var(--text-primary);
   box-shadow: 0 48px 120px -48px var(--black);
-  // Curva de entrada da cena. O diálogo é o elemento pesado: entra em 320ms,
-  // sem overshoot; o conteúdo entra atrás dele em cascata.
-  --enter-ease: cubic-bezier(0.05, 0.7, 0.1, 1);
+  // O diálogo é o elemento pesado: entra em 320ms, sem overshoot; o conteúdo
+  // entra atrás dele em cascata, com as curvas de `.premium-offer`.
   animation: premium-modal-in 320ms var(--ease) both;
 
   &--closing {
@@ -61,41 +104,14 @@
     }
   }
 
-  &__close {
-    position: absolute;
-    top: var(--space-4);
-    right: var(--space-4);
-    z-index: 2;
-    display: inline-grid;
-    width: 36px;
-    height: 36px;
-    place-items: center;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition:
-      background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    svg {
-      pointer-events: none;
-    }
-
-    &:hover,
-    &:focus-visible {
-      background: var(--surface-option-hover);
-      color: var(--text-primary);
-      outline: none;
-    }
-  }
-
   // --- Coluna do argumento ---
 
+  // Centrado como a coluna da direita: com o piso de altura, ancorar no topo
+  // deixaria toda a folga sobrando embaixo e as duas colunas desalinhadas.
   &__pitch {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--space-5);
     padding: clamp(28px, 3.2vw, 44px);
   }
@@ -137,45 +153,150 @@
 
   &__benefits {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-2);
+    height: calc(
+      var(--benefit-row) * 5 + var(--space-2) * 4 + var(--benefit-detail-reserve)
+    );
     margin: var(--space-3) 0 0;
     padding: 0;
+    overflow: hidden;
     list-style: none;
+  }
 
-    li {
-      display: flex;
-      align-items: flex-start;
-      gap: var(--space-5);
-    }
+  // Cada benefício é um disclosure: rótulo sempre visível, detalhe sob demanda.
+  // `height` em vez de só padding para a linha medir exatamente o que o cálculo
+  // acima assume — o glifo de 22px é o que manda, o rótulo é mais baixo.
+  &__benefit-toggle {
+    display: flex;
+    width: 100%;
+    height: var(--benefit-row);
+    align-items: center;
+    gap: var(--space-5);
+    padding: var(--space-3) 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
 
     strong {
-      display: block;
-      color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-semibold);
       line-height: 1.35;
     }
 
-    span {
-      display: block;
-      margin-top: 3px;
-      color: var(--text-tertiary);
-      font-size: var(--type-size-micro);
-      line-height: 1.5;
+    // Hover não desloca a seta: ela é o indicador de estado, e movê-la compete
+    // com a rotação que sinaliza aberto/fechado. O retorno é só de contraste.
+    &:hover .premium-modal__benefit-chevron,
+    &:focus-visible .premium-modal__benefit-chevron {
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 4px;
+      border-radius: var(--radius-sm);
     }
   }
 
-  // Só o glifo, sem tile. O `margin-top` alinha o ícone com a primeira linha do
-  // título em vez do topo da caixa de texto.
+  // Só o glifo, sem tile.
   &__benefit-icon {
     display: inline-grid;
     flex: 0 0 auto;
-    margin-top: 2px;
     place-items: center;
     color: var(--text-primary);
 
     svg {
       color: var(--text-primary);
+    }
+  }
+
+  // Camada secundária: o chevron é o indicador de estado, então ele acompanha a
+  // altura em vez de girar antes dela.
+  &__benefit-chevron {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--text-secondary);
+    transition:
+      transform 180ms var(--exit-ease),
+      color var(--motion-fast) var(--ease);
+  }
+
+  &__benefit.is-open &__benefit-chevron {
+    transform: rotate(180deg);
+    transition:
+      transform 240ms var(--enter-ease),
+      color var(--motion-fast) var(--ease);
+  }
+
+  // Camada ambiente: o glifo assume o dourado enquanto o item está aberto —
+  // marca qual rótulo abriu o detalhe sem desenhar moldura nenhuma.
+  &__benefit.is-open &__benefit-icon svg {
+    color: var(--premium-gold);
+  }
+
+  &__benefit-icon svg {
+    transition: color 200ms var(--enter-ease);
+  }
+
+  // Camada primária. Altura animada pelo truque de grid 0fr→1fr, que interpola
+  // até `auto` sem medir nada em JS. O `overflow: hidden` precisa ficar no
+  // filho da grid.
+  //
+  // Fechar é 180ms contra 260ms de abrir, e com a curva acelerada: o painel
+  // some sem cobrar tempo de quem já leu. As duas trilhas também invertem a
+  // ordem — ao abrir, o vão vai na frente e o texto entra dentro dele; ao
+  // fechar, o texto sai primeiro e a altura desce sobre espaço vazio.
+  &__benefit-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    // O `p` tem padding e `box-sizing: border-box` global, então sua caixa nunca
+    // encolhe abaixo do padding: fechado ele sobrava 8px para fora da linha de
+    // 0fr. Clipar aqui é o que faz o painel fechado medir zero de verdade — sem
+    // isto cada um dos cinco vazava 8px e a lista estourava a altura reservada.
+    overflow: hidden;
+    transition: grid-template-rows 180ms var(--exit-ease);
+
+    > p {
+      overflow: hidden;
+      // `visibility` é o que tira o texto fechado do foco e do leitor de tela;
+      // o atraso segura a troca até a altura terminar de fechar.
+      visibility: hidden;
+      margin: 0;
+      // Padding fica na regra base, não no estado aberto, para não saltar no
+      // fim do fechamento. Quem esconde os 8px residuais é o `overflow` do
+      // painel acima.
+      padding: 0 0 var(--space-4) calc(22px + var(--space-5));
+      color: var(--text-tertiary);
+      // Caption (13px) e não micro (12px): o detalhe é texto de leitura, e a
+      // rampa reserva micro para badge/contador. `--lh-300` é o par da rampa e
+      // é o que a reserva de altura da lista assume.
+      font-size: var(--type-size-caption);
+      line-height: var(--lh-300);
+      opacity: 0;
+      // Sem opacidade pura: o texto desliza os mesmos 4px de onde o rótulo
+      // está, para parecer que sai de baixo dele e não que materializa no vão.
+      transform: translateY(-4px);
+      transition:
+        opacity 100ms var(--exit-ease),
+        transform 100ms var(--exit-ease),
+        visibility 0s linear 180ms;
+    }
+  }
+
+  &__benefit.is-open &__benefit-panel {
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 260ms var(--enter-ease);
+
+    > p {
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+      transition:
+        opacity 180ms var(--enter-ease) 80ms,
+        transform 180ms var(--enter-ease) 80ms,
+        visibility 0s;
     }
   }
 
@@ -522,13 +643,20 @@
 }
 
 @media (max-width: 900px) {
-  .premium-modal {
+  // Coluna única nas duas superfícies: a regra segue a grade, não o diálogo.
+  .premium-offer {
     grid-template-columns: minmax(0, 1fr);
-    max-height: calc(100vh - var(--space-10));
+  }
 
-    &__checkout {
-      justify-content: flex-start;
-    }
+  .premium-modal {
+    // Empilhado o conteúdo é mais alto que largo, então o piso de altura perde
+    // sentido e só brigaria com o teto.
+    min-height: 0;
+    max-height: calc(100vh - var(--space-10));
+  }
+
+  .premium-modal__checkout {
+    justify-content: flex-start;
   }
 }
 
@@ -541,6 +669,27 @@
   .premium-modal__plan-mark {
     transition: none;
     transform: none;
+  }
+
+  // Dropdown abre e fecha sem interpolar altura, e o chevron gira direto para o
+  // estado final — o indicador continua correto, só não é animado. Os seletores
+  // repetem `.premium-modal__benefit` porque as regras de estado aberto têm
+  // especificidade maior que a lista simples e venceriam este bloco.
+  .premium-modal__benefit .premium-modal__benefit-panel,
+  .premium-modal__benefit.is-open .premium-modal__benefit-panel,
+  .premium-modal__benefit .premium-modal__benefit-chevron,
+  .premium-modal__benefit.is-open .premium-modal__benefit-chevron,
+  .premium-modal__benefit .premium-modal__benefit-icon svg {
+    transition: none;
+  }
+
+  // O deslize do texto sai; a opacidade fica, porque é ela que marca a troca.
+  .premium-modal__benefit .premium-modal__benefit-panel > p,
+  .premium-modal__benefit.is-open .premium-modal__benefit-panel > p {
+    transform: none;
+    transition:
+      opacity var(--motion-fast) var(--ease),
+      visibility 0s;
   }
 
   // Conteúdo aparece junto com o diálogo, sem deslocamento e sem cascata.

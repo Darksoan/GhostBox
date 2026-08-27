@@ -5,7 +5,7 @@ use crate::settings::{
     write_json_file,
 };
 use crate::steam_localconfig;
-use crate::util::{escape_html, silent_command, text_value, xml_text, EmptyStringExt};
+use crate::util::{silent_command, text_value, xml_text, EmptyStringExt};
 use crate::{
     enrich_game_with_local_achievement_stats, extract_app_id, load_saved_steam_path,
     merge_playtime_into_game, normalize_steam_root_path, resolve_steam_path, save_steam_path,
@@ -921,31 +921,11 @@ fn steam_id_from_openid(callback_url: &reqwest::Url) -> String {
 }
 
 fn steam_login_page_html(success: bool, message: &str) -> String {
-    let text = if message.trim().is_empty() {
-        if success {
-            "Connected."
-        } else {
-            "Not connected."
-        }
-    } else {
-        message.trim()
-    };
-
-    format!(
-        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>GhostBox</title><style>:root {{ color-scheme: dark; }} body {{ min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b0b0b; color: #d3d3d3; font: 500 24px \"Segoe UI\", system-ui, sans-serif; user-select: none; }} p {{ margin: 0; }}</style></head><body><p>{}</p></body></html>",
-        escape_html(text)
-    )
+    crate::oauth_loopback::callback_page_html(success, message)
 }
 
 fn write_http_response(stream: &mut std::net::TcpStream, status: &str, body: &str) {
-    use std::io::Write;
-
-    let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store, max-age=0\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.as_bytes().len()
-    );
-    let _ = stream.write_all(response.as_bytes());
-    let _ = stream.flush();
+    crate::oauth_loopback::write_http_response(stream, status, body)
 }
 
 fn accept_steam_login_callback(
@@ -953,54 +933,14 @@ fn accept_steam_login_callback(
     port: u16,
     state: String,
 ) -> Result<(reqwest::Url, std::net::TcpStream), String> {
-    use std::io::Read;
-
-    listener
-        .set_nonblocking(true)
-        .map_err(|error| error.to_string())?;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-
-    while std::time::Instant::now() < deadline {
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                let mut buffer = [0_u8; 8192];
-                let length = stream
-                    .read(&mut buffer)
-                    .map_err(|error| error.to_string())?;
-                let request = String::from_utf8_lossy(&buffer[..length]);
-                let path = request
-                    .lines()
-                    .next()
-                    .and_then(|line| line.split_whitespace().nth(1))
-                    .unwrap_or("/");
-                let callback_url = reqwest::Url::parse(&format!("http://127.0.0.1:{port}{path}"))
-                    .map_err(|error| error.to_string())?;
-
-                if callback_url.path() != "/steam/callback"
-                    || callback_url
-                        .query_pairs()
-                        .find(|(key, _)| key == "state")
-                        .map(|(_, value)| value.to_string())
-                        != Some(state.clone())
-                {
-                    write_http_response(
-                        &mut stream,
-                        "404 Not Found",
-                        &steam_login_page_html(false, "Not found."),
-                    );
-                    continue;
-                }
-
-                return Ok((callback_url, stream));
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            Err(error) => return Err(error.to_string()),
-        }
-    }
-
-    Err("Steam login timed out".to_string())
+    crate::oauth_loopback::accept_loopback_callback(
+        listener,
+        port,
+        "/steam/callback",
+        Some(&state),
+        std::time::Duration::from_secs(120),
+        "Steam login timed out",
+    )
 }
 
 struct SteamSignInGuard;
@@ -1024,14 +964,24 @@ fn begin_steam_sign_in() -> Result<SteamSignInGuard, String> {
     Ok(SteamSignInGuard)
 }
 
-async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+/// What a completed Steam OpenID hand-off yields: the callback URL to send the
+/// Worker for validation (never the SteamID on its own — only Steam can vouch
+/// for that) and the still-open socket, so the caller decides what page the
+/// user is left looking at.
+struct SteamCallback {
+    url: reqwest::Url,
+    stream: std::net::TcpStream,
+    steam_id: String,
+}
+
+/// Opens Steam's OpenID page in the system browser and waits for the callback.
+///
+/// Steam, unlike Discord and Google, accepts an arbitrary `return_to`, so the
+/// loopback port *is* the redirect target and nothing has to be bounced
+/// through the Worker.
+async fn run_steam_openid_flow(app: &tauri::AppHandle) -> Result<SteamCallback, String> {
     use tauri_plugin_opener::OpenerExt;
 
-    // Connecting Steam links it to the caller's GhostBox account; it no
-    // longer signs anyone in on its own.
-    crate::cloud_save::session_token(app)?;
-
-    let _guard = begin_steam_sign_in()?;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
     let port = listener
         .local_addr()
@@ -1086,11 +1036,96 @@ async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Val
         return Err("Steam OpenID validation failed".to_string());
     }
 
-    let profile = match fetch_steam_profile(&steam_id).await {
+    Ok(SteamCallback {
+        url: callback,
+        stream,
+        steam_id,
+    })
+}
+
+/// Signs in through Steam, with no GhostBox session required up front.
+///
+/// The Worker is what decides whether this Steam belongs to anyone: it
+/// re-validates the callback against Steam and looks the connection up. Steam
+/// cannot create an account (it reports no email address), so an unlinked one
+/// comes back as `steam_not_linked` and the UI sends the user to sign up
+/// another way.
+#[tauri::command]
+pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let _guard = begin_steam_sign_in()?;
+    let mut callback = run_steam_openid_flow(&app).await?;
+
+    let result = crate::cloud_save::cloud_steam_login_callback(callback.url.as_str()).await;
+
+    match result {
+        Ok(session) => {
+            write_http_response(
+                &mut callback.stream,
+                "200 OK",
+                &steam_login_page_html(true, "Signed in. Back to GhostBox."),
+            );
+            // Best effort: the profile only unlocks local metrics, and failing
+            // to fetch it must not undo a sign-in that already succeeded.
+            if let Ok(profile) = fetch_steam_profile(&callback.steam_id).await {
+                let _ = save_steam_profile(&app, profile);
+            }
+            Ok(session)
+        }
+        Err(error) => {
+            write_http_response(
+                &mut callback.stream,
+                "400 Bad Request",
+                &steam_login_page_html(false, "Not signed in."),
+            );
+            Err(error)
+        }
+    }
+}
+
+/// Steam's branch of account recovery. Same proof as `cloud_steam_login`, but
+/// the Worker answers with the narrow recovery session instead of a real one;
+/// finish it with `cloud_recover_set_password`.
+#[tauri::command]
+pub async fn cloud_steam_recover(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let _guard = begin_steam_sign_in()?;
+    let mut callback = run_steam_openid_flow(&app).await?;
+
+    let result = crate::cloud_save::cloud_steam_recover_callback(callback.url.as_str()).await;
+
+    match result {
+        Ok(recovery) => {
+            write_http_response(
+                &mut callback.stream,
+                "200 OK",
+                &steam_login_page_html(true, "Verified. Back to GhostBox."),
+            );
+            Ok(recovery)
+        }
+        Err(error) => {
+            write_http_response(
+                &mut callback.stream,
+                "400 Bad Request",
+                &steam_login_page_html(false, "Not verified."),
+            );
+            Err(error)
+        }
+    }
+}
+
+async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+    // Connecting Steam links it to the caller's GhostBox account; it no
+    // longer signs anyone in on its own. `cloud_steam_login` is the signed-out
+    // path, and it shares the OpenID hand-off below.
+    crate::cloud_save::session_token(app)?;
+
+    let _guard = begin_steam_sign_in()?;
+    let mut callback = run_steam_openid_flow(app).await?;
+
+    let profile = match fetch_steam_profile(&callback.steam_id).await {
         Ok(profile) => profile,
         Err(error) => {
             write_http_response(
-                &mut stream,
+                &mut callback.stream,
                 "400 Bad Request",
                 &steam_login_page_html(false, "Not connected."),
             );
@@ -1105,16 +1140,19 @@ async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Val
         format!("Steam account connected as {display_name}.")
     };
     write_http_response(
-        &mut stream,
+        &mut callback.stream,
         "200 OK",
         &steam_login_page_html(true, &success_message),
     );
 
     let cloud_session =
-        crate::cloud_save::cloud_claim_steam_callback(app, callback.as_str(), &profile)
+        crate::cloud_save::cloud_claim_steam_callback(app, callback.url.as_str(), &profile)
             .await
             .ok();
-    if cloud_session.is_none() && !validate_steam_openid(&callback).await? {
+    // The Worker validates the callback against Steam itself, so that check
+    // stands in for this one. Only when it never ran does the app have to
+    // verify the assertion on its own.
+    if cloud_session.is_none() && !validate_steam_openid(&callback.url).await? {
         return Err("Steam OpenID validation failed".to_string());
     }
 
@@ -1717,7 +1755,16 @@ pub async fn steam_connect_account(app: tauri::AppHandle) -> Result<serde_json::
 /// profile cache used to unlock metrics) goes away.
 #[tauri::command]
 pub async fn steam_disconnect_account(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = crate::cloud_save::cloud_disconnect_connection(app.clone(), "steam".to_string()).await;
+    // Steam is never the account's only connection in a way that matters here:
+    // it cannot sign anyone in on its own unless it was linked, and the Worker
+    // still applies the last-connection guard. Confirmed because the user
+    // already confirmed in the Connections panel.
+    let _ = crate::cloud_save::cloud_disconnect_connection(
+        app.clone(),
+        "steam".to_string(),
+        Some(true),
+    )
+    .await;
     remove_data_file(&app, STEAM_PROFILE_FILE)
 }
 

@@ -218,6 +218,77 @@
   }
 }
 
+// Three providers side by side rather than stacked: they are peers — any of
+// them signs in, and any of them recovers the account.
+.auth-form__providers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.auth-form__provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--surface-modal-control);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-size-body);
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-modal-control-hover);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.auth-form__provider-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+// The "no linked provider means no way back" warning on the recovery screen.
+// Quiet, but it has to be readable: it is the only place the user learns the
+// account can be lost for good.
+.auth-form__hint-block {
+  margin: 0;
+  font-size: var(--type-size-micro);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.auth-form__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -4px 0;
+  font-size: var(--type-size-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--surface-modal-control);
+  }
+}
+
   .auth-form__switch {
     margin: 4px 0 0;
     text-align: center;

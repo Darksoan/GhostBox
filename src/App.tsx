@@ -15,7 +15,7 @@ import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
 import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
-import { onAppNavigateToSettingsTab } from "./lib/appNavigation";
+import { onAppNavigateToSettingsTab, resolveProfileAccess } from "./lib/appNavigation";
 import { startDownloadManager } from "./lib/downloadManager";
 import {
   getTrayHiddenNotificationCopy,
@@ -28,6 +28,11 @@ import ghostIconSource from "../Icons/ghost-solid.png";
 import "./app.scss";
 
 const PREMIUM_STATUS_REFRESH_MS = 5 * 60 * 1000;
+// Right after signing in the read can come back null while the session token
+// settles. Backs off linearly (1.5s, 3s, 4.5s) rather than leaving a paying
+// user on the plan picker until the five-minute poll.
+const PREMIUM_LOGIN_READ_ATTEMPTS = 4;
+const PREMIUM_LOGIN_RETRY_MS = 1500;
 
 type OverlayForwardEntry =
   | { kind: "game"; game: GhostBoxGame }
@@ -98,8 +103,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   // falls back to home, and its history entries go too so Back cannot return
   // to someone else's profile. Layout effect, not effect: the fallback has to
   // land before the browser paints, or signing out flashes an empty page.
+  //
+  // Only "anonymous" counts. "loading" means the stored session has not been
+  // read back yet — purging on it threw away the profile history of a user who
+  // was signed in the whole time.
   useLayoutEffect(() => {
-    if (status === "authenticated") return;
+    if (status !== "anonymous") return;
     purgePage("profile");
   }, [purgePage, status]);
 
@@ -127,6 +136,38 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = useState<string | null>(null);
   const [subscriptionPortalFlow, setSubscriptionPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
 
+  // Guards the async status reads against a late resolve after unmount. A ref,
+  // not an effect-local flag: the read is now kicked off from more than one
+  // effect, and each needs the same liveness answer.
+  const subscriptionReadAliveRef = useRef(true);
+  useEffect(() => {
+    subscriptionReadAliveRef.current = true;
+    return () => {
+      subscriptionReadAliveRef.current = false;
+    };
+  }, []);
+
+  const applySubscriptionStatus = useCallback((result: SubscriptionStatusResult | null) => {
+    if (!subscriptionReadAliveRef.current) return false;
+    // null means the status could not be read (offline, expired session),
+    // not that the subscription ended. Keep whatever we last knew instead
+    // of revoking the crown under a paying user.
+    if (!result) return false;
+
+    const subscription = result.subscription;
+    const active = subscription?.isPremium === true || subscription?.status === "active";
+    const end = subscription?.currentPeriodEnd ?? null;
+    const endTime = end ? Date.parse(end) : NaN;
+
+    setIsPremium(active && (!end || !Number.isFinite(endTime) || endTime > Date.now()));
+    setSubscriptionPeriodEnd(active ? end : null);
+    return true;
+  }, []);
+
+  const refreshSubscriptionStatus = useCallback(() => {
+    void ghostboxApi.getSubscriptionStatus().then(applySubscriptionStatus);
+  }, [applySubscriptionStatus]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -136,23 +177,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     if (freshPremium?.currentPeriodEnd) {
       setSubscriptionPeriodEnd(freshPremium.isPremium ? freshPremium.currentPeriodEnd : null);
     }
-
-    const refreshSubscriptionStatus = () =>
-      void ghostboxApi.getSubscriptionStatus().then((status: SubscriptionStatusResult | null) => {
-        if (cancelled) return;
-        // null means the status could not be read (offline, expired session),
-        // not that the subscription ended. Keep whatever we last knew instead
-        // of revoking the crown under a paying user.
-        if (!status) return;
-
-        const subscription = status.subscription;
-        const active = subscription?.isPremium === true || subscription?.status === "active";
-        const end = subscription?.currentPeriodEnd ?? null;
-        const endTime = end ? Date.parse(end) : NaN;
-
-        setIsPremium(active && (!end || !Number.isFinite(endTime) || endTime > Date.now()));
-        setSubscriptionPeriodEnd(active ? end : null);
-      });
 
     /**
      * Confirms a checkout the user was sent to Stripe for.
@@ -194,7 +218,45 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       window.removeEventListener("focus", refreshSubscriptionStatusIfStale);
       window.clearInterval(refreshInterval);
     };
-  }, []);
+  }, [refreshSubscriptionStatus]);
+
+  /**
+   * Signing in has to re-read the subscription right away.
+   *
+   * The poll above is mounted once and its staleness guard belongs to whoever
+   * was signed in before — nobody, on a cold start. A paying user who signed
+   * in therefore kept seeing "Become premium" until the five-minute tick or an
+   * accidental window focus. This bypasses the cache TTL on purpose: the
+   * cached value cannot describe an account that just arrived.
+   *
+   * The read is retried a few times because a null answer right after login is
+   * usually the session token still settling, not a free account.
+   */
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    let cancelled = false;
+    let attempt = 0;
+    let retryTimer = 0;
+
+    const read = () => {
+      void ghostboxApi.getSubscriptionStatus().then((result) => {
+        if (cancelled) return;
+        if (applySubscriptionStatus(result)) return;
+
+        attempt += 1;
+        if (attempt >= PREMIUM_LOGIN_READ_ATTEMPTS) return;
+        retryTimer = window.setTimeout(read, PREMIUM_LOGIN_RETRY_MS * attempt);
+      });
+    };
+
+    read();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+    };
+  }, [applySubscriptionStatus, status]);
 
   // A coroa pertence a uma conta autenticada: o logout precisa derruba-la na
   // hora. O poll de status devolve null quando deslogado e mantem de proposito
@@ -233,14 +295,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   }, [appearance.language, notifications.desktopNotificationsEnabled]);
 
 
-  const handleNavigate = useCallback(
+  const goToPage = useCallback(
     (newPage: typeof page, collectionId?: string) => {
-      // Single gate for every entry point into the profile — sidebar, tray,
-      // forward history.
-      if (newPage === "profile" && status !== "authenticated") {
-        openAuthModal();
-        return;
-      }
       saveScrollPosition();
       clearOverlayForward();
       closeContentOverlay();
@@ -250,16 +306,41 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
         shell.setActiveProfileCollectionId(collectionId);
       }
     },
-    [
-      clearOverlayForward,
-      closeContentOverlay,
-      navigate,
-      openAuthModal,
-      saveScrollPosition,
-      shell,
-      status,
-    ]
+    [clearOverlayForward, closeContentOverlay, navigate, saveScrollPosition, shell]
   );
+
+  // Set while the profile was asked for before auth finished resolving, so the
+  // click can be replayed against the real answer instead of being guessed at.
+  const pendingProfileNavigationRef = useRef<{ collectionId?: string } | null>(null);
+
+  const handleNavigate = useCallback(
+    (newPage: typeof page, collectionId?: string) => {
+      // Single gate for every entry point into the profile — sidebar, tray,
+      // forward history.
+      if (newPage === "profile") {
+        const access = resolveProfileAccess(status);
+        if (access === "wait") {
+          pendingProfileNavigationRef.current = { collectionId };
+          return;
+        }
+        if (access === "require-sign-in") {
+          openAuthModal();
+          return;
+        }
+      }
+      goToPage(newPage, collectionId);
+    },
+    [goToPage, openAuthModal, status]
+  );
+
+  useEffect(() => {
+    const pending = pendingProfileNavigationRef.current;
+    const access = resolveProfileAccess(status);
+    if (!pending || access === "wait") return;
+    pendingProfileNavigationRef.current = null;
+    if (access === "allow") goToPage("profile", pending.collectionId);
+    else openAuthModal();
+  }, [goToPage, openAuthModal, status]);
 
   useEffect(() => {
     return ghostboxApi.onTrayNavigate(({ page }) => {
@@ -352,6 +433,13 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     [shell]
   );
 
+  const handleProfileTabChange = useCallback(
+    (tabId: string) => {
+      shell.setActiveProfileCollectionId(tabId);
+    },
+    [shell]
+  );
+
   const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {
     const copy = (pt: string, en: string) => appearance.language === "en" ? en : pt;
     if (subscriptionPortalFlow) return;
@@ -439,6 +527,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           activeSessionAppIds={appData.activeSessionAppIds}
           activeSettingsTabId={shell.activeSettingsTabId}
           onSettingsTabChange={handleSettingsTabChange}
+          onProfileTabChange={handleProfileTabChange}
         />
 
         <article

@@ -17,10 +17,7 @@ import {
   Eye,
   EyeOff,
   Camera,
-  Layers,
-  LogOut,
   Pencil,
-  User,
 } from "lucide-react";
 import { Cup, CupStar } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
@@ -45,6 +42,8 @@ import "./ProfilePage.scss";
 import {
   useCachedImageSources,
   useLoadableImageCover,
+  useLoadableImageSource,
+  useLoadableImageState,
 } from "../hooks/useCachedImageSources";
 import {
   gameSteamHeaderFirstSources,
@@ -477,7 +476,7 @@ export function ProfilePage({
   scrollElementRef,
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
-  const { account, logout } = useAuth();
+  const { account } = useAuth();
   const { setSubscriptionModalOpen } = useOverlay();
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
     useState("overview");
@@ -515,6 +514,12 @@ export function ProfilePage({
     ghostboxApi.getCachedDiscordLinkStatus(),
   );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
+  // Avatar e capa vivem em URLs remotas (nuvem). Um erro de rede pontual não
+  // pode deixá-las quebradas até a próxima navegação: mexer neste token refaz
+  // a cadeia de carregamento com as mesmas URLs.
+  const [imageRetryToken, setImageRetryToken] = useState(0);
+  const bannerRetryCountRef = useRef(0);
+  const lastPaintedBannerSourceRef = useRef("");
 
   const activeCollectionId =
     propActiveCollectionId ?? internalActiveCollectionId;
@@ -627,7 +632,6 @@ export function ProfilePage({
       })(),
     [activeCollectionId, profileCollections, userCollectionById],
   );
-  const activeTabId = activeCollection.id;
   const isOverviewActive = activeCollection.id === "overview";
   const isAchievementsActive = activeCollection.id === "achievements";
   const shouldBuildCollectionGameData = !isOverviewActive;
@@ -1022,52 +1026,6 @@ export function ProfilePage({
     setActiveCollectionId("overview");
   }, [activeCollectionId, profileCollections, userCollectionById]);
 
-  const getGamesForCollection = useCallback(
-    (collectionId: string): GhostBoxGame[] => {
-      if (collectionId === "overview") return enrichedAddedLibraryGames.slice(0, 12);
-      if (collectionId === "library") return enrichedAddedLibraryGames.slice(0, 12);
-      if (collectionId === "achievements") return profileAchievementGames.slice(0, 12);
-      const collection = userCollectionById.get(collectionId);
-      if (!collection) return [];
-      const games: GhostBoxGame[] = [];
-      for (const gameId of collection.gameIds) {
-        const game = gamesById.get(gameId);
-        if (game) games.push(game);
-        if (games.length >= 12) break;
-      }
-      return games;
-    },
-    [
-      enrichedAddedLibraryGames,
-      gamesById,
-      profileAchievementGames,
-      userCollectionById,
-    ]
-  );
-
-  const handleCollectionTabHover = useCallback(
-    (collectionId: string) => {
-      const games = getGamesForCollection(collectionId);
-      if (!games.length) return;
-      preloadGameListAssets(games, {
-        variant: collectionId === "overview" ? "header" : "portrait",
-        limit: 12,
-        idle: false,
-        nativeResolve: false,
-        roundRobin: collectionId === "overview",
-        steamHeaderFirst: collectionId === "overview",
-      });
-    },
-    [getGamesForCollection]
-  );
-
-  const handleTabClick = useCallback(
-    (collectionId: string) => {
-      setActiveCollectionId(collectionId);
-    },
-    [setActiveCollectionId]
-  );
-
   const visibleGames = useMemo(() => {
     const seen = new Set<string>();
 
@@ -1454,38 +1412,89 @@ export function ProfilePage({
   );
 
   const profileImageKey = `${steamProfile?.avatarUrl ?? ""}\n${steamProfile?.bannerUrl ?? ""}`;
+  const avatarUrl = steamProfile?.avatarUrl ?? "";
+  const isDataAvatar = avatarUrl.startsWith("data:");
   const avatarSources = useCachedImageSources(
-    steamProfile?.avatarUrl ? [steamProfile.avatarUrl] : []
+    !isDataAvatar && avatarUrl ? [avatarUrl] : []
   );
-  const shouldUseBannerCache = !steamProfile?.bannerUrl?.startsWith("data:");
+  const loadableAvatarSource = useLoadableImageSource(
+    isDataAvatar ? emptyImageSources : avatarSources,
+    { retryToken: imageRetryToken },
+  );
   const bannerUrl = steamProfile?.bannerUrl ?? "";
-  const bannerSources = useCachedImageSources(
-    shouldUseBannerCache && bannerUrl
-      ? [bannerUrl]
-      : shouldUseBannerCache
-        ? [profileBannerPlaceholderSource]
-        : []
+  const isDataBanner = bannerUrl.startsWith("data:");
+  const cachedBannerSources = useCachedImageSources(
+    !isDataBanner && bannerUrl ? [bannerUrl] : []
   );
-  const avatarSource = steamProfile?.avatarUrl?.startsWith("data:")
-    ? steamProfile.avatarUrl
-    : avatarSources[0] ?? steamProfile?.avatarUrl ?? "";
+  // A capa vem da nuvem (bucket `profile-images`) e pode falhar: URL ainda não
+  // propagada, offline, ou um arquivo do cache em disco que sumiu. A cadeia
+  // abaixo tenta cache -> URL remota e, só então, desiste para o placeholder,
+  // em vez de deixar o `<img>` quebrado na tela.
+  const bannerLoadSources = useMemo(
+    () => (isDataBanner ? [bannerUrl] : cachedBannerSources),
+    [bannerUrl, cachedBannerSources, isDataBanner],
+  );
+  const {
+    source: loadedBannerSource,
+    loaded: bannerLoaded,
+    failed: bannerFailed,
+  } = useLoadableImageState(bannerLoadSources, { retryToken: imageRetryToken });
+  const avatarSource = isDataAvatar
+    ? avatarUrl
+    : loadableAvatarSource || avatarUrl;
   const shouldHoldSteamAvatar = Boolean(
     isCloudProfileRestoring &&
       steamProfile?.avatarUrl &&
       !steamProfile.avatarUrl.startsWith("data:") &&
       !steamProfile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
   );
-  const cachedBannerSource = shouldUseBannerCache && bannerUrl
-    ? bannerSources.find((source) => source !== bannerUrl)
-    : "";
-  const bannerImageSource = !shouldUseBannerCache && bannerUrl
-    ? bannerUrl
-    : cachedBannerSource || bannerUrl || bannerSources[0] || profileBannerPlaceholderSource;
-  const isBannerPlaceholder = !steamProfile?.bannerUrl;
+  // Só pinta a arte depois que ela decodificou de fato. Pintar a URL "otimista"
+  // é o que colocava o ícone de imagem quebrada na capa quando o download da
+  // nuvem falhava.
+  const isBannerReady = Boolean(bannerUrl) && bannerLoaded && Boolean(loadedBannerSource);
+  // Trocar a capa muda a URL duas vezes (data: local -> URL pública do bucket).
+  // Sem segurar a última arte já decodificada, cada troca abria uma janela de
+  // "não carregado ainda" e a capa piscava para o placeholder no meio: capa ->
+  // logo -> capa. A arte anterior fica na tela até a nova estar pronta.
+  if (isBannerReady) {
+    lastPaintedBannerSourceRef.current = loadedBannerSource;
+  } else if (!bannerUrl || bannerFailed) {
+    lastPaintedBannerSourceRef.current = "";
+  }
+  const paintedBannerSource = isBannerReady
+    ? loadedBannerSource
+    : lastPaintedBannerSourceRef.current;
+  const isBannerPlaceholder = !paintedBannerSource;
+  const bannerImageSource = isBannerPlaceholder
+    ? profileBannerPlaceholderSource
+    : paintedBannerSource;
 
   useEffect(() => {
     preloadProfileImages(steamProfile);
   }, [profileImageKey]);
+
+  useEffect(() => {
+    const retryProfileImages = () => setImageRetryToken((token) => token + 1);
+    window.addEventListener("online", retryProfileImages);
+    return () => window.removeEventListener("online", retryProfileImages);
+  }, []);
+
+  useEffect(() => {
+    bannerRetryCountRef.current = 0;
+  }, [bannerUrl]);
+
+  // Duas tentativas espaçadas cobrem o caso comum: a capa acabou de subir para
+  // o bucket e a URL pública ainda não respondia no primeiro paint.
+  useEffect(() => {
+    if (!bannerFailed || !bannerUrl || bannerRetryCountRef.current >= 2) return;
+
+    const timeout = window.setTimeout(() => {
+      bannerRetryCountRef.current += 1;
+      setImageRetryToken((token) => token + 1);
+    }, 4000);
+
+    return () => window.clearTimeout(timeout);
+  }, [bannerFailed, bannerUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1742,87 +1751,13 @@ export function ProfilePage({
       <div className="profile-page__content-section">
         <main className="profile-page__main">
           <>
-            <div
-              className="profile-page__tabs"
-              aria-label={t("sidebar.collections")}
-            >
-              <div
-                className="profile-page__collection-tabs"
-                role="tablist"
-                aria-label={t("sidebar.collections")}
-              >
-                {profileCollections.map((collection) => {
-                  const TabIcon =
-                    collection.id === "overview"
-                      ? User
-                      : Layers;
-
-                  return (
-                    <button
-                      key={collection.id}
-                      data-tab-id={collection.id}
-                      id={`profile-tab-${collection.id}`}
-                      type="button"
-                      role="tab"
-                      aria-label={collection.name}
-                      aria-selected={activeTabId === collection.id}
-                      aria-controls="profile-tab-panel"
-                      className={`profile-page__tab ${
-                        activeTabId === collection.id
-                          ? "profile-page__tab--active"
-                          : ""
-                      }`}
-                      onClick={() => handleTabClick(collection.id)}
-                      onMouseEnter={() =>
-                        handleCollectionTabHover(collection.id)
-                      }
-                      onFocus={() => handleCollectionTabHover(collection.id)}
-                    >
-                      {collection.id === "achievements" ? (
-                        <Cup
-                          size={18}
-                          weight="Filled"
-                          strokeWidth={2.0}
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <TabIcon
-                          size={18}
-                          strokeWidth={2.0}
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span
-                        className="profile-page__tab-selector"
-                        aria-hidden="true"
-                      />
-                      <span className="profile-page__tab-label">
-                        {collection.name}
-                      </span>
-
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Signs out of the GhostBox account entirely, back to the
-                  email/password screen — not just the Steam connection.
-                  Unlinking Steam on its own lives in Settings > Connections. */}
-              <button
-                type="button"
-                className="profile-page__sign-out"
-                onClick={() => void logout()}
-                aria-label={t("settings.general.account.signOut")}
-                title={t("settings.general.account.signOut")}
-              >
-                <LogOut size={16} strokeWidth={2.15} aria-hidden="true" />
-              </button>
-            </div>
-
+            {/* Abas (Geral/Biblioteca/Conquistas) e sair da conta vivem na
+                sidebar do app — ver `profileNavigationTabs`. */}
           <div className="profile-page__collection-content">
             <div
               id="profile-tab-panel"
               className="profile-page__tab-panel"
-              role="tabpanel"
+              role="region"
               aria-label={activeCollection.name}
               tabIndex={0}
             >

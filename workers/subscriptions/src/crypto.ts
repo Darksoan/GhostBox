@@ -33,6 +33,11 @@ export function hex(bytes: Uint8Array) {
   return value;
 }
 
+export async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return hex(new Uint8Array(digest));
+}
+
 async function signHmac(secret: string, value: string) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(

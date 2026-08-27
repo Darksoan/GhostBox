@@ -27,7 +27,6 @@
     position: relative;
     overflow: hidden;
     background: transparent;
-    /* layout+style only — paint containment breaks backdrop-filter glass on the bottom strip */
     contain: layout style;
     isolation: isolate;
 
@@ -39,20 +38,6 @@
       background: var(--profile-banner-placeholder-bg);
     }
 
-    /* Frosted bottom strip — identical to .edit-profile-cover-modal__preview::after */
-    &::after {
-      content: "";
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      z-index: 2;
-      height: 40px;
-      background: var(--profile-glass-background);
-      backdrop-filter: blur(var(--profile-glass-blur));
-      -webkit-backdrop-filter: blur(var(--profile-glass-blur));
-      pointer-events: none;
-    }
   }
 
   &__banner-viewport {
@@ -118,14 +103,9 @@
     z-index: 1;
     width: 100%;
     min-height: var(--profile-cover-height);
-    /*
-     * Base leva o padding + os 40px da faixa fosca (::after do content-box), que
-     * fica escondida sob a barra de abas. Sem isso, o centro geométrico da capa
-     * cai 20px abaixo do centro da área realmente visível.
-     */
-    padding: var(--space-10) var(--space-10) calc(var(--space-10) + 40px);
+    padding: var(--space-10);
     box-sizing: border-box;
-    /* Soft fade only — frosted glass strip is solely on __tabs (matches cover modal) */
+    /* Fade suave até a base da capa — sem faixa fosca (as abas saíram daqui). */
     background: linear-gradient(
       to bottom,
       transparent 0%,
@@ -530,7 +510,7 @@
     position: relative;
     display: flex;
     gap: var(--space-10);
-    padding: 0 0 var(--page-bottom-space);
+    padding: var(--space-8) 0 var(--page-bottom-space);
     align-items: flex-start;
     overflow: visible;
   }
@@ -1151,199 +1131,6 @@
     }
   }
 
-  &__tabs {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-6);
-    position: relative;
-    z-index: 3;
-    height: 40px;
-    padding: 0 var(--space-10);
-    /* Sobe a barra para DENTRO da faixa fosca de 40px da capa
-       (`__content-box::after`), como as ações do modal de capa ficam sobre o
-       `::after` do preview. `-var(...)` é sintaxe inválida: o parser descartava
-       a declaração de `margin` inteira e a barra caía abaixo da capa. */
-    margin: calc(var(--space-14) * -1) 0 var(--space-2);
-    overflow: hidden;
-    border-top: 0;
-    /* Transparent — glass strip lives on content-box::after (same as cover modal actions over ::after) */
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  &__collection-tabs {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    /* Desconta o padding interno da própria aba para o primeiro ícone nascer
-       na mesma coluna do avatar/nome (`__background-overlay`, var(--space-10)). */
-    margin-left: calc(var(--space-7) * -1);
-    gap: var(--space-4);
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    position: relative;
-    z-index: 1;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  &__sign-out {
-    display: inline-grid;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    place-items: center;
-    flex: 0 0 auto;
-    margin-left: auto;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    font-weight: var(--weight-regular);
-    cursor: pointer;
-    transition: color var(--motion-fast) var(--ease);
-
-    &:hover,
-    &:focus-visible {
-      color: var(--text-primary);
-      outline: 0;
-    }
-
-    svg {
-      display: block;
-    }
-  }
-
-  &__tab-indicator {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    z-index: 1;
-    display: block;
-    width: 28px;
-    height: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--color-text);
-    pointer-events: none;
-
-    &--ready {
-      transition:
-        transform var(--motion-base) var(--ease),
-        opacity var(--motion-fast) var(--ease);
-    }
-  }
-
-  &__tab {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0;
-    flex: 0 0 auto;
-    height: 100%;
-    min-height: 100%;
-    min-width: 0;
-    padding: 0 var(--space-7);
-    overflow: hidden;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: var(--type-size-body);
-    font-weight: var(--weight-regular);
-    line-height: 1;
-    position: relative;
-    z-index: 2;
-    transition:
-      gap var(--motion-base) var(--ease),
-      background-color var(--motion-base) ease,
-      color var(--motion-base) ease;
-
-    &::after {
-      content: none;
-    }
-
-    svg {
-      flex: 0 0 auto;
-      /* Sem nudge de meio pixel: 18px centrados numa barra de 40px caem em
-         pixel inteiro, e o `-0.5px` só borrava/desalinhava os ícones. */
-      color: var(--text-secondary);
-      font-weight: var(--weight-regular);
-      opacity: 0.6;
-      transition:
-        color var(--motion-base) var(--ease),
-        opacity var(--motion-base) var(--ease);
-    }
-
-    &:not(.profile-page__tab--active):hover,
-    &:not(.profile-page__tab--active):focus-visible {
-      color: var(--text-primary);
-
-      svg {
-        color: var(--text-primary);
-        opacity: 1;
-      }
-    }
-
-    &:focus-visible {
-      outline: 0;
-    }
-
-    &--active {
-      gap: 0;
-      color: var(--text-primary);
-      font-weight: var(--weight-regular);
-
-      svg {
-        color: var(--text-primary);
-        opacity: 1;
-      }
-    }
-
-  }
-
-  &__tab-label {
-    display: block;
-    max-width: 12rem;
-    margin-left: var(--space-3);
-    overflow: hidden;
-    opacity: 1;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    transform: translateX(0);
-    text-rendering: optimizeLegibility;
-    transition:
-      max-width var(--motion-base) var(--ease),
-      margin-left var(--motion-base) var(--ease),
-      opacity var(--motion-fast) var(--ease),
-      transform var(--motion-base) var(--ease);
-  }
-
-  &__tab-selector {
-    position: absolute;
-    bottom: 0;
-    left: 9px;
-    width: 28px;
-    height: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--color-text);
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  &__tab--active &__tab-selector {
-    width: calc(100% - 18px);
-    opacity: 1;
-  }
-
   &__collection-content {
     min-height: 360px;
     contain: layout style;
@@ -1681,7 +1468,6 @@
 }
 
 html.no-backdrop-blur .profile-page {
-  &__content-box::after,
   &__hero-action,
   &__steam-id-box,
   &__discord-box {
@@ -1808,20 +1594,6 @@ html.no-backdrop-blur .profile-page {
   .profile-page {
     &__overview {
       padding-top: 0;
-    }
-
-    &__tab-label {
-      max-width: 0;
-      margin-left: 0;
-      opacity: 0;
-      transform: translateX(-4px);
-    }
-
-    &__tab--active &__tab-label {
-      max-width: 12rem;
-      margin-left: var(--space-3);
-      opacity: 1;
-      transform: translateX(0);
     }
 
     &__activity-toolbar {

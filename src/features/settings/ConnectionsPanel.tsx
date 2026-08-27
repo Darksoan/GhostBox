@@ -4,8 +4,10 @@ import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
 import { useDiscordLink } from "./useDiscordLink";
 import { isSteamConnected } from "../../lib/steamProfile";
+import { ghostboxApi } from "../../lib/ghostboxApi";
 import steamIcon from "../../../Icons/steam-glyph.svg";
 import discordIcon from "../../../Icons/discord.svg";
+import googleIcon from "../../../Icons/google-icon-1.png";
 import "./ConnectionsPanel.scss";
 
 export function ConnectionsPanel() {
@@ -16,6 +18,11 @@ export function ConnectionsPanel() {
   const [confirmingSteamDisconnect, setConfirmingSteamDisconnect] = useState(false);
   const [disconnectingSteam, setDisconnectingSteam] = useState(false);
   const [steamIdCopied, setSteamIdCopied] = useState(false);
+  /** Set when the worker refuses the unlink because it is the account's last
+   * connection. Turns the button into a confirmation that spells out what is
+   * being given up. */
+  const [confirmingLastDiscord, setConfirmingLastDiscord] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
 
   useEffect(() => {
     if (!confirmingSteamDisconnect) return;
@@ -45,6 +52,39 @@ export function ConnectionsPanel() {
       await handleDisconnectSteam();
     } finally {
       setDisconnectingSteam(false);
+    }
+  }
+
+  /**
+   * GhostBox sends no recovery emails and issues no backup codes, so the last
+   * linked provider is the only way back into an account whose password is
+   * forgotten. The worker refuses that unlink until the app has said so, which
+   * is what the second click here is for.
+   */
+  async function onDisconnectDiscordClick() {
+    try {
+      await discord.disconnect(confirmingLastDiscord);
+      setConfirmingLastDiscord(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("last_connection")) {
+        setConfirmingLastDiscord(true);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /** Hands off to the system browser, same as Discord. The link is written by
+   * the worker's callback, so there is nothing to await here beyond the user
+   * leaving — the connection shows up on the next `/auth/me`. */
+  async function onConnectGoogleClick() {
+    setConnectingGoogle(true);
+    try {
+      const url = await ghostboxApi.getGoogleLinkUrl();
+      if (url) await ghostboxApi.openExternalUrl(url);
+    } finally {
+      setConnectingGoogle(false);
     }
   }
 
@@ -148,13 +188,18 @@ export function ConnectionsPanel() {
                 </span>
               </div>
             ) : null}
+            {confirmingLastDiscord && (
+              <p className="connection-card__warning">
+                {t("settings.connections.discord.disconnectLastWarning")}
+              </p>
+            )}
           </div>
           <div className="connection-card__actions">
             {discord.status?.linked ? (
               <button
                 type="button"
                 className="connection-card__button connection-card__button--danger"
-                onClick={() => void discord.disconnect()}
+                onClick={() => void onDisconnectDiscordClick()}
                 disabled={discord.busy}
               >
                 {discord.busy ? (
@@ -162,7 +207,9 @@ export function ConnectionsPanel() {
                 ) : null}
                 {discord.busy
                   ? t("settings.connections.discord.disconnecting")
-                  : t("settings.connections.discord.disconnect")}
+                  : confirmingLastDiscord
+                    ? t("settings.connections.discord.disconnectLastConfirm")
+                    : t("settings.connections.discord.disconnect")}
               </button>
             ) : (
               <button
@@ -181,6 +228,31 @@ export function ConnectionsPanel() {
                   : t("settings.connections.discord.connect")}
               </button>
             )}
+          </div>
+        </section>
+
+        <section className="connection-card">
+          <img className="connection-card__icon" src={googleIcon} alt="" aria-hidden="true" />
+          <div className="connection-card__body">
+            <h3>{t("settings.connections.google.title")}</h3>
+            <p>{t("settings.connections.google.description")}</p>
+          </div>
+          <div className="connection-card__actions">
+            <button
+              type="button"
+              className="connection-card__button connection-card__button--primary"
+              onClick={() => void onConnectGoogleClick()}
+              disabled={connectingGoogle}
+            >
+              {connectingGoogle ? (
+                <Loader2 size={14} className="connection-card__spinner" aria-hidden="true" />
+              ) : (
+                <Link2 size={14} aria-hidden="true" />
+              )}
+              {connectingGoogle
+                ? t("settings.connections.google.connecting")
+                : t("settings.connections.google.connect")}
+            </button>
           </div>
         </section>
       </div>

@@ -377,6 +377,403 @@ const rules: Rule[] = [
       return { results: rows.slice(0, 1), changes: 0 };
     },
   },
+
+  // ---- accounts ----
+  {
+    pattern: /^SELECT \* FROM accounts WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const row = db.rows("accounts").find((entry) => entry.user_id === userId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM accounts WHERE username = \? COLLATE NOCASE/i,
+    run: ([username], db) => {
+      const row = db
+        .rows("accounts")
+        .find((entry) => String(entry.username).toLowerCase() === String(username).toLowerCase());
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM accounts WHERE email = \?/i,
+    run: ([email], db) => {
+      const row = db.rows("accounts").find((entry) => entry.email === email);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^INSERT INTO accounts \(user_id, email, username, display_name, email_verified, verified_via, created_at, updated_at\)/i,
+    run: ([userId, email, username, displayName, emailVerified, verifiedVia, createdAt, updatedAt], db) => {
+      db.rows("accounts").push({
+        user_id: userId,
+        email,
+        username,
+        display_name: displayName,
+        email_verified: emailVerified,
+        verified_via: verifiedVia,
+        token_version: 1,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE accounts SET token_version = token_version \+ 1, updated_at = \? WHERE user_id = \? RETURNING token_version/i,
+    run: ([updatedAt, userId], db) => {
+      const row = db.rows("accounts").find((entry) => entry.user_id === userId);
+      if (!row) return { results: [], changes: 0 };
+      row.token_version = (row.token_version ?? 1) + 1;
+      row.updated_at = updatedAt;
+      return { results: [{ token_version: row.token_version }], changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE accounts SET email_verified = 1, verified_via = 'email'/i,
+    run: ([updatedAt, userId], db) => {
+      const row = db.rows("accounts").find((entry) => entry.user_id === userId);
+      if (!row) return { changes: 0 };
+      row.email_verified = 1;
+      row.verified_via = "email";
+      row.updated_at = updatedAt;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE accounts SET verified_via = 'discord'/i,
+    run: ([updatedAt, userId], db) => {
+      const row = db.rows("accounts").find((entry) => entry.user_id === userId);
+      if (!row) return { changes: 0 };
+      row.verified_via = "discord";
+      row.updated_at = updatedAt;
+      return { changes: 1 };
+    },
+  },
+
+  {
+    pattern: /^UPDATE accounts SET verified_via = NULL, updated_at = \? WHERE user_id = \? AND verified_via = 'discord'/i,
+    run: ([updatedAt, userId], db) => {
+      const row = db
+        .rows("accounts")
+        .find((entry) => entry.user_id === userId && entry.verified_via === "discord");
+      if (!row) return { changes: 0 };
+      row.verified_via = null;
+      row.updated_at = updatedAt;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT user_id FROM user_connections WHERE provider = 'discord' AND provider_id = \? AND user_id <> \?/i,
+    run: ([providerId, userId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find(
+          (entry) =>
+            entry.provider === "discord" && entry.provider_id === providerId && entry.user_id !== userId
+        );
+      return { results: row ? [{ user_id: row.user_id }] : [], changes: 0 };
+    },
+  },
+
+  // ---- security trail ----
+  {
+    pattern: /^INSERT INTO security_events \(id, user_id, kind, provider, ip_prefix, created_at\)/i,
+    run: ([id, userId, kind, provider, ipPrefix, createdAt], db) => {
+      db.rows("security_events").push({
+        id,
+        user_id: userId,
+        kind,
+        provider,
+        ip_prefix: ipPrefix,
+        created_at: createdAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT kind, provider, ip_prefix, created_at FROM security_events WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const rows = db
+        .rows("security_events")
+        .filter((entry) => entry.user_id === userId)
+        .sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)))
+        .slice(0, 20)
+        .map(({ kind, provider, ip_prefix, created_at }) => ({ kind, provider, ip_prefix, created_at }));
+      return { results: rows, changes: 0 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM security_events WHERE created_at < \?/i,
+    run: ([cutoff], db) => {
+      const rows = db.rows("security_events");
+      const kept = rows.filter((entry) => String(entry.created_at) >= String(cutoff));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+
+  // ---- auth rate limiting ----
+  {
+    pattern: /^INSERT INTO auth_attempts \(id, ip, kind, created_at\)/i,
+    run: ([id, ip, kind, createdAt], db) => {
+      db.rows("auth_attempts").push({ id, ip, kind, created_at: createdAt });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT COUNT\(\*\) AS count FROM auth_attempts WHERE ip = \? AND kind = \? AND created_at >= \?/i,
+    run: ([ip, kind, since], db) => {
+      const count = db
+        .rows("auth_attempts")
+        .filter((entry) => entry.ip === ip && entry.kind === kind && String(entry.created_at) >= String(since)).length;
+      return { results: [{ count }], changes: 0 };
+    },
+  },
+
+  // ---- Discord login tickets ----
+  {
+    pattern: /^INSERT INTO discord_login_tickets \(/i,
+    run: (binds, db) => {
+      const [
+        ticketHash,
+        userId,
+        provider,
+        purpose,
+        appNonce,
+        discordUserId,
+        discordUsername,
+        discordGlobalName,
+        discordEmail,
+        discordEmailVerified,
+        expiresAt,
+        createdAt,
+      ] = binds;
+      db.rows("discord_login_tickets").push({
+        ticket_hash: ticketHash,
+        user_id: userId,
+        provider,
+        purpose,
+        app_nonce: appNonce,
+        discord_user_id: discordUserId,
+        discord_username: discordUsername,
+        discord_global_name: discordGlobalName,
+        discord_email: discordEmail,
+        discord_email_verified: discordEmailVerified,
+        expires_at: expiresAt,
+        consumed_at: null,
+        created_at: createdAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM discord_login_tickets WHERE ticket_hash = \?/i,
+    run: ([ticketHash], db) => {
+      const row = db.rows("discord_login_tickets").find((entry) => entry.ticket_hash === ticketHash);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^UPDATE discord_login_tickets SET consumed_at = \? WHERE ticket_hash = \? AND consumed_at IS NULL/i,
+    run: ([consumedAt, ticketHash], db) => {
+      const row = db
+        .rows("discord_login_tickets")
+        .find((entry) => entry.ticket_hash === ticketHash && !entry.consumed_at);
+      if (!row) return { changes: 0 };
+      row.consumed_at = consumedAt;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE discord_login_tickets SET expires_at = \? WHERE ticket_hash = \?/i,
+    run: ([expiresAt, ticketHash], db) => {
+      const row = db.rows("discord_login_tickets").find((entry) => entry.ticket_hash === ticketHash);
+      if (!row) return { changes: 0 };
+      row.expires_at = expiresAt;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM discord_login_tickets WHERE expires_at < \?/i,
+    run: ([cutoff], db) => {
+      const rows = db.rows("discord_login_tickets");
+      const kept = rows.filter((entry) => String(entry.expires_at) >= String(cutoff));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+
+  // ---- Discord DM verification codes ----
+  {
+    pattern: /^INSERT INTO discord_verification_codes \(/i,
+    run: ([userId, codeHash, discordUserId, expiresAt, createdAt], db) => {
+      const rows = db.rows("discord_verification_codes");
+      const existing = rows.find((entry) => entry.user_id === userId);
+      const next = {
+        user_id: userId,
+        code_hash: codeHash,
+        discord_user_id: discordUserId,
+        attempts: 0,
+        expires_at: expiresAt,
+        created_at: createdAt,
+      };
+      if (existing) Object.assign(existing, next);
+      else rows.push(next);
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM discord_verification_codes WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const row = db.rows("discord_verification_codes").find((entry) => entry.user_id === userId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^UPDATE discord_verification_codes SET attempts = attempts \+ 1 WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const row = db.rows("discord_verification_codes").find((entry) => entry.user_id === userId);
+      if (!row) return { changes: 0 };
+      row.attempts += 1;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM discord_verification_codes WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const rows = db.rows("discord_verification_codes");
+      const kept = rows.filter((entry) => entry.user_id !== userId);
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    pattern: /^DELETE FROM discord_verification_codes WHERE expires_at < \?/i,
+    run: ([cutoff], db) => {
+      const rows = db.rows("discord_verification_codes");
+      const kept = rows.filter((entry) => String(entry.expires_at) >= String(cutoff));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+
+  {
+    pattern: /^SELECT provider FROM user_connections WHERE user_id = \?$/i,
+    run: ([userId], db) => {
+      const rows = db
+        .rows("user_connections")
+        .filter((entry) => entry.user_id === userId)
+        .map((entry) => ({ provider: entry.provider }));
+      return { results: rows, changes: 0 };
+    },
+  },
+  {
+    // The provider-neutral lookup: same shape as the Discord-only rule above,
+    // but the provider arrives as a bind rather than baked into the SQL.
+    pattern: /^SELECT \* FROM user_connections WHERE provider = \? AND provider_id = \?/i,
+    run: ([provider, providerId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find((entry) => entry.provider === provider && entry.provider_id === providerId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM user_connections WHERE provider = 'google' AND provider_id = \? AND user_id <> \?/i,
+    run: ([providerId, userId], db) => {
+      const rows = db.rows("user_connections");
+      const kept = rows.filter(
+        (entry) =>
+          !(entry.provider === "google" && entry.provider_id === providerId && entry.user_id !== userId)
+      );
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    pattern: /^INSERT INTO user_connections \(user_id, provider, provider_id, metadata_json, linked_at\) VALUES \(\?, 'google'/i,
+    run: ([userId, providerId, metadataJson, linkedAt], db) => {
+      const existing = db
+        .rows("user_connections")
+        .find((entry) => entry.user_id === userId && entry.provider === "google");
+      if (existing) {
+        existing.provider_id = providerId;
+        existing.metadata_json = metadataJson;
+        existing.linked_at = linkedAt;
+        return { changes: 1 };
+      }
+      db.rows("user_connections").push({
+        user_id: userId,
+        provider: "google",
+        provider_id: providerId,
+        metadata_json: metadataJson,
+        linked_at: linkedAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = \?/i,
+    run: ([providerId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find((entry) => entry.provider === "steam" && entry.provider_id === providerId);
+      return { results: row ? [{ user_id: row.user_id }] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT provider, provider_id, metadata_json, linked_at FROM user_connections WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const rows = db.rows("user_connections").filter((entry) => entry.user_id === userId);
+      return { results: rows, changes: 0 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM user_connections WHERE user_id = \? AND provider = \?/i,
+    run: ([userId, provider], db) => {
+      const rows = db.rows("user_connections");
+      const kept = rows.filter((entry) => !(entry.user_id === userId && entry.provider === provider));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    pattern: /^DELETE FROM discord_links WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const rows = db.rows("discord_links");
+      const kept = rows.filter((entry) => entry.user_id !== userId);
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+
+  // ---- Discord connections lookup ----
+  {
+    pattern: /^SELECT \* FROM user_connections WHERE provider = 'discord' AND provider_id = \?/i,
+    run: ([providerId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find((entry) => entry.provider === "discord" && entry.provider_id === providerId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM user_connections WHERE user_id = \? AND provider = 'discord'/i,
+    run: ([userId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find((entry) => entry.user_id === userId && entry.provider === "discord");
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
 ];
 
 export class FakeD1 {

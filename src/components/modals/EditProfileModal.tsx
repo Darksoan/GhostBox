@@ -4,7 +4,10 @@ import { createPortal } from "react-dom";
 import type { SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
-import { preloadImageSources } from "../../utils/imageCache";
+import {
+  forgetCachedImageSource,
+  preloadImageSources,
+} from "../../utils/imageCache";
 import { profileBannerPlaceholderSource } from "../../utils/image";
 import avatarPlaceholder from "../../../Icons/userplaceholder.jpg";
 import {
@@ -65,6 +68,7 @@ export function EditProfileModal({
   const [pendingAvatar, setPendingAvatar] = useState<{ source: string; type: string } | null>(null);
   const [avatarCropPosition, setAvatarCropPosition] = useState<AvatarCropPosition>(defaultAvatarCropPosition);
   const [bannerUrl, setBannerUrl] = useState("");
+  const [failedBannerPreviewSource, setFailedBannerPreviewSource] = useState("");
   const [bannerPosition, setBannerPosition] = useState<BannerPosition>(defaultBannerPosition);
   const avatarDragRef = useRef<{
     pointerId: number;
@@ -97,8 +101,17 @@ export function EditProfileModal({
         ? resolvedBannerSource
         : bannerUrl
     : resolvedBannerSource ?? profileBannerPlaceholderSource;
+  // Capa da nuvem que não carrega (arquivo do cache sumiu, URL fora do ar) não
+  // pode virar imagem quebrada dentro do editor: cai para o placeholder e
+  // esquece o caminho morto para a próxima tentativa baixar de novo.
+  const hasFailedBannerPreview =
+    Boolean(failedBannerPreviewSource) &&
+    failedBannerPreviewSource === bannerPreviewSource;
+  const effectiveBannerPreviewSource = hasFailedBannerPreview
+    ? profileBannerPlaceholderSource
+    : bannerPreviewSource;
   const isCoverMode = mode === "cover";
-  const isBannerPlaceholder = !bannerUrl;
+  const isBannerPlaceholder = !bannerUrl || hasFailedBannerPreview;
 
   // Sincroniza antes do paint: com `useEffect` o modal chegava a pintar um
   // frame com `bannerUrl` vazio, mostrando o placeholder (ghost-solid).
@@ -112,6 +125,10 @@ export function EditProfileModal({
       setBannerPosition(normalizeBannerPosition(profile.bannerPosition));
     }
   }, [open, profile]);
+
+  useEffect(() => {
+    setFailedBannerPreviewSource("");
+  }, [bannerUrl, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -392,14 +409,24 @@ export function EditProfileModal({
                     onPointerCancel={handleBannerPointerEnd}
                     onWheel={handleBannerWheel}
                   >
-                    {bannerPreviewSource ? (
+                    {effectiveBannerPreviewSource ? (
                       <img
                         className={`edit-profile-cover-modal__preview-image${isBannerPlaceholder ? " edit-profile-cover-modal__preview-image--placeholder" : ""}`}
-                        src={bannerPreviewSource}
+                        src={effectiveBannerPreviewSource}
                         alt=""
                         decoding="async"
                         draggable={false}
                         style={bannerPreviewStyle}
+                        onError={() => {
+                          if (
+                            !bannerPreviewSource ||
+                            bannerPreviewSource === profileBannerPlaceholderSource
+                          ) {
+                            return;
+                          }
+                          forgetCachedImageSource(bannerPreviewSource);
+                          setFailedBannerPreviewSource(bannerPreviewSource);
+                        }}
                       />
                     ) : (
                       <div className="edit-profile-modal__banner-placeholder" />

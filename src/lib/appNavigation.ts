@@ -1,4 +1,5 @@
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
+import type { AuthStatus } from "../context/AuthContext";
 
 /**
  * Barramento leve de navegação interna baseado em CustomEvent de window —
@@ -9,6 +10,17 @@ import type { SettingsTabId } from "../features/settings/settingsTabsShared";
  * custaria mais que um evento. O App escuta este evento uma única vez e resolve
  * com o mesmo caminho da tray (`handleNavigate` + `setActiveSettingsTabId`).
  */
+
+/** `wait` means the stored session has not been read back yet — the click has
+ * to be held until it is. Collapsing it into `require-sign-in` is what showed
+ * the login modal to users who were signed in the whole time. */
+export type ProfileAccessDecision = "allow" | "wait" | "require-sign-in";
+
+export function resolveProfileAccess(status: AuthStatus): ProfileAccessDecision {
+  if (status === "authenticated") return "allow";
+  if (status === "loading") return "wait";
+  return "require-sign-in";
+}
 
 export const appNavigateToSettingsTabEvent = "ghostbox:navigate-to-settings-tab";
 

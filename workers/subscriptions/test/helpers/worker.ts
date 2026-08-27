@@ -34,9 +34,18 @@ export async function stripeWebhookRequest(event: Record<string, unknown>) {
   });
 }
 
-/** Mints the worker's own session token (payload.signature, HMAC-SHA256). */
-export async function sessionToken(userId: string, expiresInSeconds = 3600) {
-  const session = { userId, exp: Math.floor(Date.now() / 1000) + expiresInSeconds };
+/**
+ * Mints the worker's own session token (payload.signature, HMAC-SHA256).
+ *
+ * `version` is left off by default on purpose: that is exactly the shape of a
+ * token minted before migration 0016, and those must keep working.
+ */
+export async function sessionToken(userId: string, expiresInSeconds = 3600, version?: number) {
+  const session = {
+    userId,
+    exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
+    ...(version === undefined ? {} : { v: version }),
+  };
   const json = new TextEncoder().encode(JSON.stringify(session));
   let binary = "";
   for (const byte of json) binary += String.fromCharCode(byte);

@@ -365,16 +365,56 @@ export type GhostBoxAccount = {
   username: string;
   displayName: string | null;
   emailVerified: boolean;
+  /** How the account proved itself. `email` means the address on file is
+   * confirmed; `discord` means a real person holds the linked Discord account
+   * but the address is still unconfirmed. */
+  verifiedVia: "email" | "discord" | null;
+};
+
+/** Providers that sign in through the system browser. Steam is separate: it
+ * takes its callback on the app's own loopback port, and it cannot create an
+ * account because it reports no email address. */
+export type OAuthProvider = "discord" | "google";
+
+/** Every way into an account. */
+export type LoginProvider = OAuthProvider | "steam";
+
+export type ProviderProfile = {
+  email: string | null;
+  emailVerified: boolean;
+  username: string | null;
+  globalName: string | null;
+};
+
+/** Returned by `loginWithProvider` when the provider account has no GhostBox
+ * account yet: the caller collects a password and finishes the signup with
+ * the same ticket. */
+export type OAuthSignupPending = {
+  needsSignup: true;
+  ticket: string;
+  provider: OAuthProvider;
+  profile: ProviderProfile;
+};
+
+/** A proof that an account exists, good for exactly one thing: setting a new
+ * password through `completeRecovery`. Never stored as a session. */
+export type RecoveryTicket = {
+  token: string;
+  expiresInSeconds: number;
+  account: GhostBoxAccount;
 };
 
 export type AccountConnection = {
-  provider: "steam" | "discord" | string;
+  provider: LoginProvider | string;
   providerId: string;
   metadata: unknown | null;
   linkedAt: string;
 };
 
 export type AccountMeResult = {
+  /** Present only when the worker slid the session forward. The Rust side
+   * persists it; callers can ignore it. */
+  token?: string;
   account: GhostBoxAccount;
   subscription: SubscriptionStatusResult["subscription"];
   connections: AccountConnection[];
@@ -382,7 +422,9 @@ export type AccountMeResult = {
 
 export type CloudSessionResult = {
   token: string;
-  firebaseRefreshToken: string;
+  /** Absent on sessions opened through Discord: those never saw the password,
+   * so there is no Firebase credential to refresh. */
+  firebaseRefreshToken?: string;
   account: GhostBoxAccount;
   steamId?: string | null;
 };

@@ -42,6 +42,7 @@ mod luatools;
 mod luatools_bootstrap;
 mod ludusavi;
 mod manifest_sources;
+mod oauth_loopback;
 mod playtime;
 mod settings;
 mod steam;
@@ -1577,9 +1578,15 @@ pub fn run() {
             cloud_save::cloud_sign_out,
             cloud_save::cloud_register,
             cloud_save::cloud_login,
-            cloud_save::cloud_request_password_reset,
-            cloud_save::cloud_resend_verification,
+            cloud_save::cloud_oauth_login,
+            cloud_save::cloud_oauth_complete_signup,
+            cloud_save::cloud_oauth_recover,
+            cloud_save::cloud_recover_set_password,
+            cloud_save::cloud_discord_send_code,
+            cloud_save::cloud_discord_confirm_code,
             cloud_save::cloud_change_password,
+            steam::cloud_steam_login,
+            steam::cloud_steam_recover,
             cloud_save::cloud_get_account,
             cloud_save::cloud_disconnect_connection,
             cloud_save::cloud_list_saves,
@@ -1596,6 +1603,7 @@ pub fn run() {
             subscription::subscription_create_portal_session,
             subscription::subscription_refresh_status,
             subscription::discord_link_start,
+            subscription::google_link_start,
             subscription::discord_link_status,
             backup::backup_get_settings,
             backup::backup_remove_record,

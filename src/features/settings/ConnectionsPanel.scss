@@ -203,6 +203,19 @@
   background: var(--danger-soft);
 }
 
+// Shown when unlinking would leave the account with no way back in. It has to
+// read as a warning, not a caption: this is the one screen where the user can
+// lose the account permanently.
+.connection-card__warning {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--type-size-micro);
+  line-height: 1.45;
+}
+
 .connection-card__spinner {
   animation: connection-card-spin 0.8s linear infinite;
 }

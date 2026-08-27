@@ -555,6 +555,29 @@ export async function resolveCachedImageSource(
   return promise;
 }
 
+/**
+ * Esquece um source que falhou ao carregar — tanto como chave (URL remota
+ * quebrada) quanto como valor (arquivo do cache em disco que sumiu, deixando um
+ * `asset://` órfão no mapa persistido). Sem isso, um cache apontando para um
+ * arquivo apagado nunca mais é rebaixado: `resolveCachedImageSource` devolve o
+ * caminho morto para sempre e a imagem fica quebrada mesmo com a URL de origem
+ * saudável.
+ */
+export function forgetCachedImageSource(source: string) {
+  if (!source) return;
+
+  let changed = imageSourceCache.delete(source);
+  for (const [key, cachedSource] of imageSourceCache) {
+    if (cachedSource !== source) continue;
+    imageSourceCache.delete(key);
+    changed = true;
+  }
+
+  loadedImageSources.delete(source);
+  imageResolvePromises.delete(source);
+  if (changed) scheduleStoredImageSourceCacheWrite();
+}
+
 export function preloadBrowserImage(
   source: string,
   options: ImagePreloadOptions = {}

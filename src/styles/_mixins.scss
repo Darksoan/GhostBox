@@ -17,48 +17,13 @@
   }
 }
 
-// Borda "lanterna" dourada: um conic-gradient que varre a borda com um flash
-// de luz. Usada em exatamente dois contextos — card de assinatura e
-// conquista rara — nunca fora deles.
+// Borda "lanterna" dourada: um conic-gradient que varre a borda com um flash de
+// luz, usada apenas em conquista rara (≤10% de desbloqueio global).
 //
-// $intensity: multiplica a opacidade de cada parada de cor (0–1).
-// $opacity:   opacidade final da camada inteira.
-// $duration:  duração de uma volta completa da animação.
-@mixin gold-flashlight-border($intensity: 1, $opacity: 0.72, $duration: 9s) {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  opacity: $opacity;
-  background: conic-gradient(
-    from var(--premium-border-angle),
-    transparent 0deg,
-    transparent 210deg,
-    color-mix(in srgb, var(--gold-500) #{8 * $intensity}%, transparent) 250deg,
-    color-mix(in srgb, var(--gold-500) #{22 * $intensity}%, transparent) 288deg,
-    color-mix(in srgb, var(--gold-500) #{42 * $intensity}%, transparent) 312deg,
-    color-mix(in srgb, var(--gold-500) #{55 * $intensity}%, #fff 6%) 328deg,
-    color-mix(in srgb, var(--gold-500) #{28 * $intensity}%, transparent) 342deg,
-    color-mix(in srgb, var(--gold-500) #{10 * $intensity}%, transparent) 352deg,
-    transparent 360deg
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: subscription-premium-border-shine #{$duration} linear infinite;
-}
-
-// Variante mais intensa da borda dourada, usada apenas em conquista rara
-// (≤10% de desbloqueio global). Padding e ângulos diferem do card de
-// assinatura de propósito — precisa ler como "mais raro", não como o mesmo elemento.
+// Existia uma variante mais suave para o card de assinatura, removida junto com
+// o card — o modal Premium desenha a borda de outro jeito.
+//
+// $duration: duração de uma volta completa da animação.
 @mixin gold-flashlight-border-rare($duration: 7s) {
   content: "";
   position: absolute;

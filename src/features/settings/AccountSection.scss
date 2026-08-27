@@ -55,33 +55,70 @@
   font-weight: var(--weight-regular);
 }
 
-.account-section__badge {
+/* Same token pair as the game modal's "Ver mais" (.button--outline): a dark
+   surface that lightens on hover, instead of the inverted high-contrast chip
+   this used to be. */
+.account-section__action {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 5px 12px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--text-strong);
-  color: var(--surface-canvas);
+  background: var(--surface-option);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: var(--type-size-micro);
   font-weight: var(--weight-regular);
   cursor: pointer;
-  transition: opacity var(--motion-fast) ease, background var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+  transition: background var(--motion-fast) ease;
 
   &:hover:not(:disabled) {
-    opacity: 0.88;
+    background: var(--surface-option-hover);
+  }
+
+  &:active:not(:disabled) {
+    opacity: 0.7;
   }
 
   &:disabled {
+    opacity: 0.6;
     cursor: default;
   }
 }
 
-.account-section__badge--sent {
-  background: var(--success-soft);
+.account-section__verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--type-size-micro);
   color: var(--success);
+}
+
+.account-section__code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.account-section__code-input {
+  width: 92px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-option);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--type-size-micro);
+  letter-spacing: 0.18em;
+  text-align: center;
+  outline: none;
+
+  &::placeholder {
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
+  }
 }
 
 .account-section__icon {

@@ -380,6 +380,26 @@ pub async fn discord_link_start(app: tauri::AppHandle) -> Result<DiscordLinkStar
     json_request::<DiscordLinkStartResponse>(client.post(url).bearer_auth(token)).await
 }
 
+/// Starts linking Google to the signed-in account.
+///
+/// Returns the authorize URL for the caller to open in the system browser —
+/// the same shape as `discord_link_start`, since a browser navigation cannot
+/// carry the Authorization header this authenticated call does.
+///
+/// Worth having its own button in Settings: with no recovery emails, a second
+/// linked provider is the only thing standing between a forgotten password and
+/// a lost account.
+#[tauri::command]
+pub async fn google_link_start(app: tauri::AppHandle) -> Result<DiscordLinkStartResponse, String> {
+    let token = session_token(&app)?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let url = format!("{}/auth/oauth/google/link", subscription_api_url());
+    json_request::<DiscordLinkStartResponse>(client.post(url).bearer_auth(token)).await
+}
+
 #[tauri::command]
 pub async fn discord_link_status(app: tauri::AppHandle) -> Result<DiscordLinkStatus, String> {
     let token = session_token(&app)?;

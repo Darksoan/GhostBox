@@ -131,18 +131,6 @@ pub(crate) fn session_token(app: &tauri::AppHandle) -> Result<String, String> {
         .ok_or_else(|| "Faça login antes de usar backup em nuvem.".to_string())
 }
 
-fn firebase_refresh_token(app: &tauri::AppHandle) -> Result<String, String> {
-    load_cloud_session(app)
-        .and_then(|session| {
-            session
-                .get("firebaseRefreshToken")
-                .and_then(|value| value.as_str())
-                .map(str::to_string)
-        })
-        .filter(|token| !token.trim().is_empty())
-        .ok_or_else(|| "Sessão inválida. Faça login novamente.".to_string())
-}
-
 fn zip_directory(source: &std::path::Path, destination: &std::path::Path) -> Result<(), String> {
     let file = std::fs::File::create(destination).map_err(|error| error.to_string())?;
     let mut zip = zip::ZipWriter::new(file);
@@ -756,6 +744,29 @@ fn format_auth_api_error(body: &str, status: u16) -> String {
             }
             "invalid_steam_login" => "Não foi possível validar o login da Steam.".to_string(),
             "missing_refresh_token" => "Sessão inválida. Faça login novamente.".to_string(),
+            "invalid_ticket" => {
+                "A autorização do Discord expirou. Tente entrar novamente.".to_string()
+            }
+            "discord_already_linked" => {
+                "Este Discord já está vinculado a uma conta GhostBox.".to_string()
+            }
+            "discord_email_missing" => {
+                "O Discord não informou um e-mail. Cadastre-se com e-mail e senha.".to_string()
+            }
+            "discord_not_linked" => {
+                "Vincule seu Discord nas configurações antes de verificar por lá.".to_string()
+            }
+            "discord_dm_blocked" => {
+                "O bot não conseguiu te enviar DM. Entre no servidor do GhostBox e libere mensagens diretas de membros do servidor."
+                    .to_string()
+            }
+            "discord_dm_failed" => {
+                "Não foi possível enviar a mensagem no Discord. Tente novamente em instantes."
+                    .to_string()
+            }
+            "invalid_code" => "Código incorreto.".to_string(),
+            "code_expired" => "O código expirou. Peça um novo.".to_string(),
+            "code_not_found" => "Nenhum código pendente. Peça um novo.".to_string(),
             other if !other.is_empty() => format!("Erro de autenticação ({other})."),
             _ => format!("Erro de autenticação (HTTP {status})."),
         };
@@ -826,41 +837,257 @@ pub async fn cloud_login(
     Ok(session)
 }
 
+/// Providers whose sign-in goes out through the system browser.
+fn validate_oauth_provider(provider: &str) -> Result<&str, String> {
+    match provider {
+        "discord" | "google" => Ok(provider),
+        _ => Err(format!("Provedor desconhecido: {provider}")),
+    }
+}
+
+/// Runs the browser hand-off and returns the single-use ticket the Worker
+/// bounced back.
+///
+/// Providers only redirect to the one URI registered for the app, so the
+/// browser lands on the Worker, not here. The Worker redirects a ticket to the
+/// loopback listener opened below; the ticket is then traded for a real
+/// session over HTTPS, so the browser never carries a session token.
+///
+/// The nonce is what makes this safe on a shared machine. Without it the
+/// listener accepted whatever reached its port, and any local process could
+/// hand the app a ticket for its own account — the user would silently end up
+/// signed in as someone else, uploading their saves there. The Worker echoes
+/// the nonce back as `state` and the listener refuses anything else.
+async fn run_oauth_browser_flow(
+    app: &tauri::AppHandle,
+    provider: &str,
+    purpose: &str,
+) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+    let port = listener
+        .local_addr()
+        .map_err(|error| error.to_string())?
+        .port();
+
+    // Hex of 16 random bytes: 32 chars, and every one of them safe inside the
+    // Worker's dot-delimited signed state.
+    let nonce = uuid::Uuid::new_v4().simple().to_string();
+
+    let start = auth_json_request(auth_client(15)?.get(format!(
+        "{}/auth/oauth/{provider}/start?port={port}&nonce={nonce}&purpose={purpose}",
+        cloud_api_url()
+    )))
+    .await?;
+    let authorize_url = start
+        .get("url")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "O servidor não devolveu a URL de autorização.".to_string())?;
+
+    app.opener()
+        .open_url(authorize_url, None::<&str>)
+        .map_err(|error| format!("Não foi possível abrir o navegador: {error}"))?;
+
+    let (callback, mut stream) = crate::oauth_loopback::accept_loopback_callback(
+        listener,
+        port,
+        "/oauth/callback",
+        Some(&nonce),
+        std::time::Duration::from_secs(180),
+        "A entrada pelo provedor expirou.",
+    )?;
+
+    let ticket = callback
+        .query_pairs()
+        .find(|(key, _)| key == "ticket")
+        .map(|(_, value)| value.to_string())
+        .unwrap_or_default();
+
+    if ticket.is_empty() {
+        crate::oauth_loopback::write_http_response(
+            &mut stream,
+            "400 Bad Request",
+            &crate::oauth_loopback::callback_page_html(false, "Não conectado."),
+        );
+        return Err("A autorização foi recusada.".to_string());
+    }
+
+    crate::oauth_loopback::write_http_response(
+        &mut stream,
+        "200 OK",
+        &crate::oauth_loopback::callback_page_html(true, "Autorizado. Volte ao GhostBox."),
+    );
+
+    Ok(ticket)
+}
+
+/// Signs in (or starts a signup) through an OAuth provider.
+///
+/// Returns either the saved session, or `{ needsSignup: true, ticket, provider,
+/// profile }` for the caller to finish with `cloud_oauth_complete_signup`.
 #[tauri::command]
-pub async fn cloud_request_password_reset(identifier: String) -> Result<(), String> {
-    auth_json_request(
-        auth_client(15)?
-            .post(format!("{}/auth/password-reset", cloud_api_url()))
-            .json(&serde_json::json!({ "identifier": identifier })),
+pub async fn cloud_oauth_login(
+    app: tauri::AppHandle,
+    provider: String,
+) -> Result<serde_json::Value, String> {
+    let provider = validate_oauth_provider(&provider)?;
+    let ticket = run_oauth_browser_flow(&app, provider, "login").await?;
+
+    let result = auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/oauth/exchange", cloud_api_url()))
+            .json(&serde_json::json!({ "ticket": ticket })),
     )
     .await?;
-    Ok(())
+
+    if result
+        .get("needsSignup")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+    {
+        // No account yet: hand the ticket back so the UI can collect a
+        // password and finish against the very same authorization.
+        let mut pending = result;
+        if let Some(object) = pending.as_object_mut() {
+            object.insert("ticket".to_string(), serde_json::json!(ticket));
+        }
+        return Ok(pending);
+    }
+
+    save_cloud_session(&app, &result)?;
+    Ok(result)
+}
+
+/// Recovers access to an account whose password is lost.
+///
+/// The provider proves the account; the Worker answers with a session that may
+/// do exactly one thing, and `cloud_recover_set_password` is that one thing.
+#[tauri::command]
+pub async fn cloud_oauth_recover(
+    app: tauri::AppHandle,
+    provider: String,
+) -> Result<serde_json::Value, String> {
+    let provider = validate_oauth_provider(&provider)?;
+    let ticket = run_oauth_browser_flow(&app, provider, "recover").await?;
+
+    // Deliberately not persisted: a recovery token is not a session, and
+    // storing it under the session key would make every other command send it
+    // and get a 403.
+    auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/recover/exchange", cloud_api_url()))
+            .json(&serde_json::json!({ "ticket": ticket })),
+    )
+    .await
+}
+
+/// Finishes a recovery. `recovery_token` is what `cloud_oauth_recover` or
+/// `cloud_steam_recover` returned; the session that comes back is a full one
+/// and replaces whatever was stored.
+#[tauri::command]
+pub async fn cloud_recover_set_password(
+    app: tauri::AppHandle,
+    recovery_token: String,
+    new_password: String,
+) -> Result<serde_json::Value, String> {
+    let session = auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/recover/password", cloud_api_url()))
+            .bearer_auth(recovery_token)
+            .json(&serde_json::json!({ "newPassword": new_password })),
+    )
+    .await?;
+    save_cloud_session(&app, &session)?;
+    Ok(session)
 }
 
 #[tauri::command]
-pub async fn cloud_resend_verification(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn cloud_oauth_complete_signup(
+    app: tauri::AppHandle,
+    ticket: String,
+    username: String,
+    password: String,
+) -> Result<serde_json::Value, String> {
+    // The email is not sent: the Worker takes it from the ticket, so a client
+    // cannot claim someone else's address as provider-verified.
+    let session = auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/oauth/register", cloud_api_url()))
+            .json(&serde_json::json!({
+                "ticket": ticket,
+                "username": username,
+                "password": password,
+            })),
+    )
+    .await?;
+    save_cloud_session(&app, &session)?;
+    Ok(session)
+}
+
+#[tauri::command]
+pub async fn cloud_discord_send_code(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let token = session_token(&app)?;
-    let refresh_token = firebase_refresh_token(&app)?;
+    auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/discord/send-code", cloud_api_url()))
+            .bearer_auth(token),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn cloud_discord_confirm_code(
+    app: tauri::AppHandle,
+    code: String,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
     let result = auth_json_request(
         auth_client(15)?
-            .post(format!("{}/auth/resend-verification", cloud_api_url()))
+            .post(format!("{}/auth/discord/confirm-code", cloud_api_url()))
             .bearer_auth(token)
-            .json(&serde_json::json!({ "firebaseRefreshToken": refresh_token })),
+            .json(&serde_json::json!({ "code": code })),
     )
     .await?;
 
-    if let Some(new_refresh_token) = result.get("firebaseRefreshToken").and_then(|v| v.as_str()) {
+    // Keep the persisted session's account in step, so a restart before the
+    // next /auth/me still shows the account as verified.
+    if let Some(account) = result.get("account") {
         if let Some(mut session) = load_cloud_session(&app) {
             if let Some(object) = session.as_object_mut() {
-                object.insert(
-                    "firebaseRefreshToken".to_string(),
-                    serde_json::json!(new_refresh_token),
-                );
+                object.insert("account".to_string(), account.clone());
             }
             let _ = save_cloud_session(&app, &session);
         }
     }
+
     Ok(result)
+}
+
+/// Trades a validated Steam OpenID callback for a session. Called from
+/// `steam::cloud_steam_login`; the Worker re-validates the callback against
+/// Steam itself, so nothing here has to be trusted.
+pub(crate) async fn cloud_steam_login_callback(
+    callback_url: &str,
+) -> Result<serde_json::Value, String> {
+    auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/steam/login", cloud_api_url()))
+            .json(&serde_json::json!({ "callbackUrl": callback_url })),
+    )
+    .await
+}
+
+/// Same proof, recovery scope. See `cloud_recover_set_password`.
+pub(crate) async fn cloud_steam_recover_callback(
+    callback_url: &str,
+) -> Result<serde_json::Value, String> {
+    auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/recover/exchange", cloud_api_url()))
+            .json(&serde_json::json!({ "callbackUrl": callback_url })),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -870,7 +1097,7 @@ pub async fn cloud_change_password(
     new_password: String,
 ) -> Result<(), String> {
     let token = session_token(&app)?;
-    auth_json_request(
+    let result = auth_json_request(
         auth_client(15)?
             .post(format!("{}/auth/change-password", cloud_api_url()))
             .bearer_auth(token)
@@ -880,6 +1107,20 @@ pub async fn cloud_change_password(
             })),
     )
     .await?;
+
+    // Changing the password revokes every session issued so far, this one
+    // included. The Worker hands back a replacement minted on the new version;
+    // storing it is what keeps the user signed in on this device instead of
+    // being bounced to the login modal by their own password change.
+    if let Some(replacement) = result.get("token").and_then(|value| value.as_str()) {
+        if let Some(mut session) = load_cloud_session(&app) {
+            if let Some(object) = session.as_object_mut() {
+                object.insert("token".to_string(), serde_json::json!(replacement));
+                save_cloud_session(&app, &session)?;
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -905,24 +1146,45 @@ pub async fn cloud_get_account(app: tauri::AppHandle) -> Result<Option<serde_jso
     if !status.is_success() {
         return Err(format_auth_api_error(&body, status.as_u16()));
     }
-    serde_json::from_str(&body)
-        .map(Some)
-        .map_err(|error| error.to_string())
+
+    let me = serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())?;
+
+    // The worker slides the session forward once it is past half its life. It
+    // only reaches us here, so persisting it is what actually keeps a
+    // day-to-day user signed in past the seventh day.
+    if let Some(renewed) = me.get("token").and_then(|value| value.as_str()) {
+        if let Some(mut session) = load_cloud_session(&app) {
+            if let Some(object) = session.as_object_mut() {
+                object.insert("token".to_string(), serde_json::json!(renewed));
+                if let Some(account) = me.get("account") {
+                    object.insert("account".to_string(), account.clone());
+                }
+            }
+            let _ = save_cloud_session(&app, &session);
+        }
+    }
+
+    Ok(Some(me))
 }
 
 #[tauri::command]
 pub async fn cloud_disconnect_connection(
     app: tauri::AppHandle,
     provider: String,
+    confirm: Option<bool>,
 ) -> Result<(), String> {
-    if provider != "steam" && provider != "discord" {
+    if provider != "steam" && provider != "discord" && provider != "google" {
         return Err("Conexão inválida.".to_string());
     }
     let token = session_token(&app)?;
+    // The Worker refuses to remove the account's last connection unless the
+    // caller confirms: with no recovery emails and no backup codes, that
+    // connection is the only way back into a forgotten password.
     auth_json_request(
         auth_client(15)?
             .delete(format!("{}/auth/connections/{}", cloud_api_url(), provider))
-            .bearer_auth(token),
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "confirm": confirm.unwrap_or(false) })),
     )
     .await?;
     Ok(())

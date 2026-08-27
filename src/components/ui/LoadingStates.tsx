@@ -476,19 +476,6 @@ function ProfilePageLoadingState() {
 
       <div className="profile-page__content-section">
         <main className="profile-page__main">
-          <div className="profile-page__tabs">
-            <div className="profile-page__collection-tabs">
-              <span className="profile-page__tab-indicator profile-page__tab-indicator--skeleton" />
-              {Array.from({ length: 4 }, (_, index) => (
-                <span
-                  className="profile-page__tab profile-page__tab-skeleton skeleton"
-                  key={`profile-tab-${index}`}
-                />
-              ))}
-            </div>
-            <span className="profile-page__sign-out-skeleton skeleton" />
-          </div>
-
           <div className="profile-page__collection-content">
             <div className="profile-page__overview">
               <section className="profile-page__overview-console">

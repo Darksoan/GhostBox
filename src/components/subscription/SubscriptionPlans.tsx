@@ -1,4 +1,4 @@
-import { CalendarClock, CloudUpload, CreditCard, Download, ExternalLink, RotateCcw, ScreenShare, Settings2, User, Wallet } from "lucide-react";
+import { CalendarClock, CloudUpload, CreditCard, ExternalLink, Settings2, Wallet } from "lucide-react";
 import { Trophy } from "reicon-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
@@ -6,12 +6,10 @@ import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
 import { useSubscriptionCheckout } from "../../hooks/useSubscriptionCheckout";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import { planPriceLabel } from "../../lib/subscriptionPricing";
 import { requestNavigateToSettingsTab } from "../../lib/appNavigation";
 import type {
   CloudSave,
   SubscriptionPayment,
-  SubscriptionPlanId as PaidSubscriptionPlanId,
   SubscriptionStatusResult,
 } from "../../lib/ghostboxApi.types";
 import type { SteamProfile } from "../../types";
@@ -22,7 +20,7 @@ import {
 } from "../../utils/backupStatusDisplay";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
-import { SubscriptionBackdrop } from "./SubscriptionBackdrop";
+import { PremiumOffer } from "./PremiumOffer";
 
 type SubscriptionPlansProps = {
   surface?: "modal" | "settings";
@@ -98,64 +96,6 @@ function BackupGameThumb({ appId }: { appId: string }) {
   );
 }
 
-const benefits: Record<PaidSubscriptionPlanId, string[]> = {
-  monthly: [
-    "subscription.benefits.localAndCloudBackups",
-    "subscription.benefits.sync",
-    "subscription.benefits.automaticRestore",
-    "subscription.benefits.customProfile",
-    "subscription.benefits.nativeDownloads",
-  ],
-  quarterly: [
-    "subscription.benefits.localAndCloudBackups",
-    "subscription.benefits.sync",
-    "subscription.benefits.automaticRestore",
-    "subscription.benefits.customProfile",
-    "subscription.benefits.nativeDownloads",
-  ],
-};
-
-const details = [
-  {
-    title: "subscription.details.payments.title",
-    items: [
-      "subscription.details.payments.card",
-      "subscription.details.payments.methods",
-      "subscription.details.payments.security",
-    ],
-  },
-  {
-    title: "subscription.details.billing.title",
-    items: [
-      "subscription.details.billing.renewal",
-      "subscription.details.billing.activation",
-      "subscription.details.billing.receipt",
-    ],
-  },
-  {
-    title: "subscription.details.refunds.title",
-    items: [
-      "subscription.details.refunds.window",
-      "subscription.details.refunds.prorated",
-      "subscription.details.refunds.abuse",
-    ],
-  },
-  {
-    title: "subscription.details.cancel.title",
-    items: [
-      "subscription.details.cancel.anytime",
-      "subscription.details.cancel.access",
-      "subscription.details.cancel.data",
-    ],
-  },
-];
-
-const steps = [
-  "subscription.steps.choose",
-  "subscription.steps.checkout",
-  "subscription.steps.sync",
-];
-
 function formatDate(value: string | null | undefined, language: "pt" | "en") {
   if (!value) return language === "en" ? "Not available" : "Indisponível";
   const timestamp = Date.parse(value);
@@ -229,39 +169,6 @@ function visiblePayment(payment: SubscriptionPayment | null, subscription: Subsc
   return payment;
 }
 
-function renderBenefitIcon(benefitKey: string) {
-  if (benefitKey === "subscription.benefits.sync") return <ScreenShare size={16} strokeWidth={1.75} aria-hidden="true" />;
-  if (benefitKey === "subscription.benefits.automaticRestore") return <RotateCcw size={16} strokeWidth={1.75} aria-hidden="true" />;
-  if (benefitKey === "subscription.benefits.customProfile") return <User size={16} strokeWidth={1.75} aria-hidden="true" />;
-  if (benefitKey === "subscription.benefits.nativeDownloads") return <Download size={16} strokeWidth={1.75} aria-hidden="true" />;
-  return <CloudUpload size={16} strokeWidth={1.75} aria-hidden="true" />;
-}
-
-function renderBenefitLabel(benefitKey: string, t: (k: string) => string, language: "pt" | "en") {
-  const text = t(benefitKey);
-  if (benefitKey === "subscription.benefits.localAndCloudBackups") {
-    if (language === "en" && text.startsWith("Automatic ")) return <><span>Automatic </span><strong>cloud backup</strong></>;
-    if (language === "pt" && text.startsWith("Backup em ")) return <><span>Backup em </span><strong>nuvem automático</strong></>;
-  }
-  if (benefitKey === "subscription.benefits.sync") {
-    if (language === "en" && text.startsWith("Sync")) return <><strong>Sync</strong><span> across PCs</span></>;
-    if (language === "pt" && text.startsWith("Sincronização")) return <><strong>Sincronização</strong><span> entre PCs</span></>;
-  }
-  if (benefitKey === "subscription.benefits.automaticRestore") {
-    if (language === "en" && text.startsWith("Automatic ")) return <><span>Automatic </span><strong>restore</strong></>;
-    if (language === "pt" && text.startsWith("Restauração ")) return <><span>Restauração </span><strong>automática</strong></>;
-  }
-  if (benefitKey === "subscription.benefits.customProfile") {
-    if (language === "en" && text.startsWith("Custom ")) return <><strong>Custom</strong><span> profile</span></>;
-    if (language === "pt" && text.startsWith("Perfil ")) return <><span>Perfil </span><strong>personalizado</strong></>;
-  }
-  if (benefitKey === "subscription.benefits.nativeDownloads") {
-    if (language === "en" && text.startsWith("Native ")) return <><span>Native </span><strong>downloads</strong></>;
-    if (language === "pt" && text.startsWith("Downloads ")) return <><span>Downloads </span><strong>nativos</strong></>;
-  }
-  return <span>{text}</span>;
-}
-
 export function SubscriptionPlans({
   surface = "settings",
   enterDelay,
@@ -269,18 +176,16 @@ export function SubscriptionPlans({
   steamProfile: steamProfileProp,
 }: SubscriptionPlansProps) {
   const { appearance, t } = useSettings();
-  const { checkoutPlan, startCheckout, portalFlow, openBillingPortal } = useSubscriptionCheckout();
+  const { portalFlow, openBillingPortal } = useSubscriptionCheckout();
   const appData = useAppData();
   const steamProfile = steamProfileProp ?? appData.steamProfile;
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [resolvedCloudGameTitles, setResolvedCloudGameTitles] = useState<Map<string, string>>(new Map());
-  const [selectedPlanId, setSelectedPlanId] = useState<PaidSubscriptionPlanId>("monthly");
   const subscriptionRequestIdRef = useRef(0);
   const language = appearance.language;
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
-  const isSettingsSurface = surface === "settings";
 
   function refreshCloudSaves() {
     void ghostboxApi.listCloudSaves()
@@ -633,145 +538,19 @@ export function SubscriptionPlans({
     );
   }
 
-  const paidPlans: Record<PaidSubscriptionPlanId, {
-    price: string;
-    cadence: string;
-    description: string;
-  }> = {
-    monthly: {
-      price: planPriceLabel("monthly", language),
-      cadence: t("subscription.plans.monthly.cadence"),
-      description: copy("Ideal para testar a sincronização premium sem compromisso longo.", "Ideal for trying premium sync without a long commitment."),
-    },
-    quarterly: {
-      price: planPriceLabel("quarterly", language),
-      cadence: t("subscription.plans.quarterly.cadence"),
-      description: copy("Mais economia para manter seus saves protegidos por mais tempo.", "Better value to keep your saves protected for longer."),
-    },
-  };
-
-  const selectedPaidPlan = paidPlans[selectedPlanId];
-
+  // Mesma tela do modal Premium, e não uma segunda versão do argumento: a aba
+  // e o diálogo compartilham `PremiumOffer`, então copy, planos, acordeão e
+  // animação são um só. O container aqui só fornece a grade e a superfície.
   return (
     <section
-      className={`subscription-plans subscription-plans--${surface} settings-panel__animated-block`}
+      className="premium-offer premium-offer--settings settings-panel__animated-block"
       style={{
-        // Sobe para a raiz da seção: o eyebrow e a marca d'água do card Premium
-        // desenham o mesmo glifo via mask.
         ["--subscription-ghost-icon" as string]: `url(${ghostIcon})`,
         ...(enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : {}),
       }}
       aria-label={t("subscription.title")}
     >
-      {isSettingsSurface && <SubscriptionBackdrop />}
-      <header className="subscription-plans__header">
-        <span className="subscription-plans__eyebrow">
-          <span className="subscription-plans__eyebrow-icon" aria-hidden="true" />
-          {"GhostBox "}
-          <strong className="subscription-plans__eyebrow-premium">Premium</strong>
-        </span>
-        <h3>{t("subscription.title")}</h3>
-        {!isSettingsSurface && (
-          <p>
-            {copy(
-              "Tenha seu progresso, conquistas e perfil sempre com você.",
-              "Have your progress, achievements, and profile always with you."
-            )}
-          </p>
-        )}
-      </header>
-
-      <div className="subscription-plans__grid">
-        <article className="subscription-plan-card subscription-plan-card--featured">
-          {/* Controle segmentado de cobrança: vive dentro do card Premium,
-              junto do preço que ele altera — não mais solto no topo da seção. */}
-          <div
-            className="subscription-plan-card__billing"
-            role="group"
-            aria-label={copy("Escolha o período da assinatura", "Choose billing period")}
-          >
-            <span
-              className={`subscription-plan-card__billing-thumb subscription-plan-card__billing-thumb--${selectedPlanId}`}
-              aria-hidden="true"
-            />
-            <button
-              type="button"
-              className={selectedPlanId === "monthly" ? "is-active" : undefined}
-              aria-pressed={selectedPlanId === "monthly"}
-              onClick={() => setSelectedPlanId("monthly")}
-            >
-              {t("subscription.plans.monthly.title")}
-            </button>
-            <button
-              type="button"
-              className={selectedPlanId === "quarterly" ? "is-active" : undefined}
-              aria-pressed={selectedPlanId === "quarterly"}
-              onClick={() => setSelectedPlanId("quarterly")}
-            >
-              {t("subscription.plans.quarterly.title")}
-              <span className="subscription-plan-card__billing-hint">
-                {`−${t("subscription.plans.quarterly.savingsValue")}`}
-              </span>
-            </button>
-          </div>
-
-          <p className="subscription-plan-card__price">
-            <strong>{selectedPaidPlan.price}</strong>
-            <span>{selectedPaidPlan.cadence}</span>
-          </p>
-
-          <p className="subscription-plan-card__desc">{selectedPaidPlan.description}</p>
-
-          <ul className="subscription-plan-card__benefits">
-            {benefits[selectedPlanId].map((benefitKey) => (
-              <li key={benefitKey}>
-                {renderBenefitIcon(benefitKey)}
-                <span>{renderBenefitLabel(benefitKey, t, language)}</span>
-              </li>
-            ))}
-          </ul>
-
-          <button
-            type="button"
-            className="subscription-plan-card__action"
-            disabled={checkoutPlan === selectedPlanId}
-            onClick={() => void startCheckout(selectedPlanId)}
-          >
-            {checkoutPlan === selectedPlanId ? copy("Abrindo...", "Opening...") : t("subscription.actions.subscribe")}
-          </button>
-        </article>
-      </div>
-
-      {!isSettingsSurface && (
-        <>
-          <div className="subscription-plans__steps" aria-label={t("subscription.steps.title")}>
-            {steps.map((stepKey, index) => (
-              <div key={stepKey} className="subscription-plans__step">
-                <span>{index + 1}</span>
-                <strong>{t(stepKey)}</strong>
-              </div>
-            ))}
-          </div>
-
-          <div className="subscription-plans__details">
-            {details.map((section) => (
-              <article key={section.title} className="subscription-plans__detail-card">
-                <h4>{t(section.title)}</h4>
-                <ul>
-                  {section.items.map((item) => (
-                    <li key={item}>{t(item)}</li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-
-          <footer className="subscription-plans__policy-note">
-            <strong>{t("subscription.policy.title")}</strong>
-            <p>{t("subscription.policy.description")}</p>
-          </footer>
-        </>
-      )}
+      <PremiumOffer />
     </section>
   );
 }
