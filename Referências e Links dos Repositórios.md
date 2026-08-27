@@ -2,13 +2,30 @@
 
 Esta seção reúne os repositórios, APIs e projetos identificados durante a pesquisa.
 
+## Estado dos links — verificado em 27/08/2026
+
+Checagem de disponibilidade (`curl -L`, seguindo redirects). Não valida se o
+conteúdo ainda serve, só se a URL responde.
+
+| Fonte | Status |
+|---|---|
+| `steamtools-games/ManifestHub3` | 200 |
+| `sadabx/ManifestHub` | 200 (redireciona para `trionine/ManifestHub`) |
+| `SteamTools-Team/GameList` | 200 |
+| `steamtools.games` e `/developers` | 200 |
+| `api.steamcmd.net` | **raiz responde 404**; o endpoint real funciona (`/v1/info/2713000` → 200) |
+| `youxiya/ManifestHub2` | 200 |
+| `youxiya/ManifestHub` | 200 |
+| `fylsdy/ManifestHub` | 200 |
+| `qwe213312/k25FCdfEOoEJ42S6` | **502** nas duas tentativas — tratar como indisponível até nova checagem |
+
 ---
 
 ## 1. SteamTools.games / ManifestHub3
 
 ### Repositório principal
 
-[steamtools-games/ManifestHub3](https://github.com/steamtools-games/ManifestHub3?utm_source=chatgpt.com)
+[steamtools-games/ManifestHub3](https://github.com/steamtools-games/ManifestHub3)
 
 Projeto utilizado como camada de dados para o SteamTools.games.
 
@@ -27,11 +44,11 @@ O projeto documenta uma API pública sem necessidade de autenticação, incluind
 
 ### Site/API
 
-[SteamTools.games](https://steamtools.games/?utm_source=chatgpt.com)
+[SteamTools.games](https://steamtools.games/)
 
 ### Documentação da API
 
-[SteamTools.games Developers](https://steamtools.games/developers?utm_source=chatgpt.com)
+[SteamTools.games Developers](https://steamtools.games/developers)
 
 ---
 
@@ -39,7 +56,7 @@ O projeto documenta uma API pública sem necessidade de autenticação, incluind
 
 ### Repositório
 
-[sadabx/ManifestHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com)
+[sadabx/ManifestHub](https://github.com/sadabx/ManifestHub)
 
 > Nota de validação (21/08/2026): o repositório ainda responde (HTTP 200),
 > porém foi renomeado e hoje redireciona para `trionine/ManifestHub`. Não
@@ -62,7 +79,7 @@ O projeto funciona como uma boa referência arquitetural para construir um siste
 
 ### Repositório
 
-[SteamTools-Team/GameList](https://github.com/SteamTools-Team/GameList?utm_source=chatgpt.com)
+[SteamTools-Team/GameList](https://github.com/SteamTools-Team/GameList)
 
 Esse repositório contém o `games.json` utilizado pelo ecossistema SteamTools.
 
@@ -77,7 +94,7 @@ O repositório é atualizado regularmente e faz parte da organização SteamTool
 
 ### Organização SteamTools-Team
 
-[SteamTools-Team no GitHub](https://github.com/SteamTools-Team?utm_source=chatgpt.com)
+[SteamTools-Team no GitHub](https://github.com/SteamTools-Team)
 
 ---
 
@@ -174,13 +191,13 @@ SteamCMD Metadata Provider
 
 ## Tier 1 — Fontes principais
 
-1. [SteamTools.games / ManifestHub3](https://github.com/steamtools-games/ManifestHub3?utm_source=chatgpt.com)
+1. [SteamTools.games / ManifestHub3](https://github.com/steamtools-games/ManifestHub3)
 2. `https://api.steamcmd.net`
 
 ## Tier 2 — Fontes secundárias
 
-3. [sadabx/ManifestHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com)
-4. `https://github.com/qwe213312/k25FCdfEOoEJ42S6`
+3. [sadabx/ManifestHub](https://github.com/sadabx/ManifestHub)
+4. `https://github.com/qwe213312/k25FCdfEOoEJ42S6` — **indisponível (502) em 27/08/2026**
 5. `https://github.com/fylsdy/ManifestHub`
 
 ## Tier 3 — Mirrors/Fallback
@@ -228,13 +245,13 @@ Cada resultado deve ser armazenado para determinar a prioridade real dos provide
 
 | Projeto | Link |
 |---|---|
-| ManifestHub3 | [GitHub](https://github.com/steamtools-games/ManifestHub3?utm_source=chatgpt.com) |
-| ManifestHub | [GitHub](https://github.com/sadabx/ManifestHub?utm_source=chatgpt.com) |
-| SteamTools GameList | [GitHub](https://github.com/SteamTools-Team/GameList?utm_source=chatgpt.com) |
-| SteamTools.games | [Website](https://steamtools.games/?utm_source=chatgpt.com) |
-| SteamTools API Docs | [Developers](https://steamtools.games/developers?utm_source=chatgpt.com) |
-| SteamCMD API | [API](https://api.steamcmd.net/?utm_source=chatgpt.com) |
-| youxiya/ManifestHub2 | [GitHub](https://github.com/youxiya/ManifestHub2?utm_source=chatgpt.com) |
-| youxiya/ManifestHub | [GitHub](https://github.com/youxiya/ManifestHub?utm_source=chatgpt.com) |
-| fylsdy/ManifestHub | [GitHub](https://github.com/fylsdy/ManifestHub?utm_source=chatgpt.com) |
-| qwe213312/k25FCdfEOoEJ42S6 | [GitHub](https://github.com/qwe213312/k25FCdfEOoEJ42S6?utm_source=chatgpt.com) |
+| ManifestHub3 | [GitHub](https://github.com/steamtools-games/ManifestHub3) |
+| ManifestHub | [GitHub](https://github.com/sadabx/ManifestHub) |
+| SteamTools GameList | [GitHub](https://github.com/SteamTools-Team/GameList) |
+| SteamTools.games | [Website](https://steamtools.games/) |
+| SteamTools API Docs | [Developers](https://steamtools.games/developers) |
+| SteamCMD API | [API](https://api.steamcmd.net/) |
+| youxiya/ManifestHub2 | [GitHub](https://github.com/youxiya/ManifestHub2) |
+| youxiya/ManifestHub | [GitHub](https://github.com/youxiya/ManifestHub) |
+| fylsdy/ManifestHub | [GitHub](https://github.com/fylsdy/ManifestHub) |
+| qwe213312/k25FCdfEOoEJ42S6 | [GitHub](https://github.com/qwe213312/k25FCdfEOoEJ42S6) |

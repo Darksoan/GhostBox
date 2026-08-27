@@ -249,15 +249,17 @@ Páginas: Home, Library, Catalogue, Favorites, Downloads, Profile, Notifications
 - [x] Workflow CI (tsc + vitest + check-tokens)
 - [x] README de produto + setup
 - [x] AGENTS.md preenchido
-- [ ] Revisar providers de manifest (links vivos)
+- [x] Revisar providers de manifest (links vivos) — *checado em 27/08/2026; `qwe213312/k25FCdfEOoEJ42S6` fora do ar (502)*
 - [x] Timeouts / cancelamento em requests — *timeout na `requestQueue`; cancelamento real por `AbortController` ainda pendente (hoje só flag `cancelled`)*
 - [x] Erros claros de path Steam — *permissão negada tratada; disco cheio pendente*
 - [ ] Erros claros de Ludusavi (binário ausente já tem mensagem; sem fallback)
 - [ ] Concorrência do `cdndownload` (C1–C4, ver seção 5)
-- [ ] Documentar workers e secrets
-- [ ] Rate limit / cache nos workers
+- [x] Documentar workers e secrets — *[workers/README.md](../workers/README.md)*
+- [ ] Rate limit / cache nos workers — *só `steam-stats` tem rate limit; `catalogue`, `steam-details` e `subscriptions` não (ver workers/README.md)*
+- [ ] Health check em `catalogue`, `steam-details` e `feedback` (só `subscriptions` tem `/health`)
+- [ ] `subscriptions`: `DISCORD_CLIENT_ID`, `STRIPE_API_VERSION` e `STRIPE_PORTAL_RETURN_URL` são lidas pelo código mas não estão no `wrangler.toml` — deploy não é reproduzível só do repositório
 - [ ] Estados vazios/erro/loading nas páginas principais
 - [ ] Testes leves de Premium/logout/checkout
-- [ ] Download manager: persistência e estados
-- [ ] Política de release (tags vs push master)
-- [ ] Changelog no release
+- [ ] Download manager: estado de disco cheio — *fila/pausa/erro/persistência já existem; falta o estado de disco, que depende do `ENOSPC` no Rust*
+- [x] Política de release (tags vs push master) — *release agora só em tag `v*` ou `workflow_dispatch`*
+- [x] Changelog no release — *commits desde a tag anterior no corpo do release*

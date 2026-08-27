@@ -2,9 +2,13 @@ name: Release Windows Installer
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão a publicar (sem o v), ex.: 0.1.7"
+        required: true
 
 permissions:
   contents: write
@@ -25,6 +29,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # O changelog compara com a tag anterior, que não existe num clone raso.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -43,10 +50,21 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Read package version
+      - name: Resolve release version
         shell: pwsh
         run: |
-          $version = node -p "require('./package.json').version"
+          # A tag manda: publicar v0.1.7 com package.json em 0.1.6 geraria um
+          # instalador que não corresponde ao nome do release.
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $version = $env:GITHUB_REF -replace "^refs/tags/v", ""
+          } elseif ("${{ github.event.inputs.version }}") {
+            $version = "${{ github.event.inputs.version }}"
+          } else {
+            $version = node -p "require('./package.json').version"
+          }
+          if ($version -notmatch "^\d+\.\d+\.\d+") {
+            throw "Versão inválida: '$version'. Use uma tag no formato v0.1.7."
+          }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
 
@@ -83,13 +101,46 @@ jobs:
           "sig_path=$($sig.FullName)" >> $env:GITHUB_OUTPUT
           "sig_name=$($sig.Name)" >> $env:GITHUB_OUTPUT
 
+      - name: Build changelog
+        id: changelog
+        shell: pwsh
+        run: |
+          $previous = git tag --list "v*" --sort=-creatordate |
+            Where-Object { $_ -ne "v$env:RELEASE_VERSION" } |
+            Select-Object -First 1
+
+          if ($previous) {
+            $range = "$previous..HEAD"
+            $header = "Mudanças desde $previous"
+          } else {
+            $range = "HEAD"
+            $header = "Mudanças"
+          }
+
+          $commits = git log $range --no-merges --pretty=format:"- %s (%h)"
+          if (-not $commits) { $commits = "- Sem mudanças registradas." }
+
+          $body = @"
+          ## $header
+
+          $($commits -join "`n")
+          "@
+
+          # Delimitador para output multi-linha do Actions.
+          "body<<CHANGELOG_EOF" >> $env:GITHUB_OUTPUT
+          $body >> $env:GITHUB_OUTPUT
+          "CHANGELOG_EOF" >> $env:GITHUB_OUTPUT
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.RELEASE_VERSION }}
           name: GhostBox v${{ env.RELEASE_VERSION }}
           body: |
-            Automated Windows build for commit ${{ github.sha }}.
+            ${{ steps.changelog.outputs.body }}
+
+            ---
+            Build automático para Windows a partir do commit ${{ github.sha }}.
           files: |
             ${{ steps.installer.outputs.path }}
             ${{ steps.installer.outputs.sig_path }}
