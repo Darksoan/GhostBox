@@ -186,7 +186,7 @@ static async Task RunWorkerAsync()
                 OutputDir = root.GetProperty("OutputDir").GetString(),
                 ParallelChunks = root.TryGetProperty("ParallelChunks", out var parallelChunks)
                     ? parallelChunks.GetInt32()
-                    : 24,
+                    : Config.MaxParallelChunks,
             };
 
             var cancellation = new CancellationTokenSource();
@@ -241,5 +241,10 @@ public class Config
     public string? OutputDir { get; set; }
     public ulong ManifestIdOverride { get; set; }
     public uint DepotId { get; set; }
-    public int ParallelChunks { get; set; } = 24;
+    /// Teto de chunks em voo por depot. Não é mais configurável pela UI — o
+    /// download roda sempre no máximo. `--parallel-chunks` continua existindo
+    /// só para diagnóstico pela linha de comando.
+    public const int MaxParallelChunks = 32;
+
+    public int ParallelChunks { get; set; } = MaxParallelChunks;
 }

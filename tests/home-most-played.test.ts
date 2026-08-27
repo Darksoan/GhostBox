@@ -29,23 +29,22 @@ describe("Home most played rail", () => {
     expect(hook).toContain("...(fixedTopRatedAppIds as readonly string[])");
   });
 
-  it("lays out the card with header art, title and a four-pill row — no badge, no description", () => {
+  it("lays out the card with header art, title and a fire rating on the right — no pills, no badge, no description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");
     const cardEnd = component.indexOf("\nfunction ", cardStart);
     const cardSource = component.slice(cardStart, cardEnd);
 
-    // Header.jpg como arte, nome do jogo e pills embaixo — sem badge de
-    // popularidade e sem descrição curta.
+    // Header.jpg como arte, nome do jogo e nota média (fire à direita) — sem
+    // badge de popularidade, sem descrição curta e sem linha de pills.
     expect(cardSource).toContain("gameHeaderOnlySources(game)");
     expect(cardSource).toContain("home-top-rated-card__title");
+    expect(cardSource).toContain("home-top-rated-card__rating");
     expect(cardSource).not.toContain("home-top-rated-card__players");
     expect(cardSource).not.toContain("home-top-rated-card__summary");
+    expect(cardSource).not.toContain("home-top-rated-card__tags");
+    expect(cardSource).not.toContain("home-top-rated-card__tag");
     expect(component).not.toContain("reicon-react");
-
-    // Contagem fixa de pills, decidida no topo do arquivo (constante do rail).
-    expect(component).toContain("const homeTopRatedCardPillCount = 4;");
-    expect(cardSource).toContain("homeTopRatedCardPillCount");
 
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     const selectors: string[] = [];
@@ -54,6 +53,9 @@ describe("Home most played rail", () => {
     expect(selectors).not.toContain(".home-top-rated-card__header");
     expect(selectors).not.toContain(".home-top-rated-card__players");
     expect(selectors).not.toContain(".home-top-rated-card__summary");
+    expect(selectors).not.toContain(".home-top-rated-card__tags");
+    expect(selectors).not.toContain(".home-top-rated-card__tag");
+    expect(selectors).toContain(".home-top-rated-card__rating");
 
     // Arte larga (header.jpg), aspecto 920×377 — não a hero capsule em
     // retrato usada em iterações anteriores deste rail.

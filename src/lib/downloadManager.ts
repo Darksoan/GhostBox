@@ -1,7 +1,7 @@
 import { ghostboxApi } from "./ghostboxApi";
 import type { GhostBoxGame } from "../data";
 import { gameSteamHeaderFirstSources, getGameAppId } from "../utils/image";
-import { readStoredDownloadParallelChunks, readStoredDownloadsDir } from "../utils/storage";
+import { readStoredDownloadsDir } from "../utils/storage";
 
 type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
 
@@ -77,6 +77,8 @@ export type DownloadTask = {
   lastProgressAt?: number;
   lastProgressBytes?: number;
   speedSamples?: number[];
+  /** Início da janela de aquecimento da estimativa. Ver `etaWarmupSeconds`. */
+  speedWarmupStartedAt?: number;
   resumePending?: boolean;
   resumeBytesFloor?: number;
   totalBytesDownloaded?: number;
@@ -103,6 +105,15 @@ const speedSampleWindow = 8;
 const speedStallSeconds = 5;
 /** Teto de sanidade: acima disto o número não informa nada e só assusta. */
 const maxEstimatedSeconds = 99 * 3600;
+/**
+ * Aquecimento antes de publicar qualquer estimativa. O início de um depot não é
+ * representativo do download: enquanto o sidecar materializa os arquivos no
+ * disco, os primeiros ~60s andam a centenas de KB/s e só depois a taxa sobe uma
+ * ou duas ordens de grandeza. Extrapolar essa fase produzia "81h restantes" para
+ * um download de ~25min — medido em 27/08/2026 com Resident Evil 4 (61,5 GB em
+ * 11 arquivos). Enquanto a janela não fecha, a UI mostra "calculando".
+ */
+const etaWarmupSeconds = 45;
 /** Cadência do vigia de travamento, para o caso de os eventos pararem de chegar. */
 const stallWatchIntervalMs = 2000;
 
@@ -439,7 +450,6 @@ function startNextQueuedTask() {
       next.downloadsRoot,
       next.title,
       undefined,
-      readStoredDownloadParallelChunks(),
       next.allowStale,
     )
     .then((result) => void finishActiveTask(result))
@@ -886,6 +896,9 @@ function applyProgressEvent(payload: Record<string, unknown>) {
       lastProgressAt: undefined,
       lastProgressBytes: undefined,
       speedSamples: [],
+      /* Cada depot reabre o custo de materializar arquivos novos, então o
+         aquecimento da estimativa recomeça junto com ele. */
+      speedWarmupStartedAt: undefined,
       resumePending: false,
     };
     if (!isResuming && !hasAggregatePlan) {
@@ -947,6 +960,11 @@ function applyProgressEvent(payload: Record<string, unknown>) {
     let nextSampleAt = lastProgressAt;
     let nextSampleBytes = lastProgressBytes;
 
+    /* A velocidade continua sendo mostrada durante o aquecimento — ela é real.
+       O que fica suspenso é só a extrapolação, que é o número enganoso. */
+    const warmupStartedAt = task?.speedWarmupStartedAt ?? now;
+    const isWarmedUp = now - warmupStartedAt >= etaWarmupSeconds * 1000;
+
     if (canSample) {
       const observedSpeed = progressedBytes / elapsedSeconds;
       speedSamples = [...speedSamples, observedSpeed].slice(-speedSampleWindow);
@@ -965,11 +983,13 @@ function applyProgressEvent(payload: Record<string, unknown>) {
       const predictedPreviousEta = typeof previousEta === "number"
         ? Math.max(0, previousEta - elapsedSeconds)
         : undefined;
-      estimatedSecondsRemaining = clampEstimatedSeconds(
-        typeof instantEta === "number"
-          ? blendEstimatedSeconds(predictedPreviousEta, instantEta)
-          : undefined,
-      );
+      estimatedSecondsRemaining = isWarmedUp
+        ? clampEstimatedSeconds(
+            typeof instantEta === "number"
+              ? blendEstimatedSeconds(predictedPreviousEta, instantEta)
+              : undefined,
+          )
+        : undefined;
       nextSampleAt = now;
       nextSampleBytes = displayedBytes;
     } else if (
@@ -993,6 +1013,7 @@ function applyProgressEvent(payload: Record<string, unknown>) {
       lastProgressAt: nextSampleAt,
       lastProgressBytes: nextSampleBytes,
       speedSamples,
+      speedWarmupStartedAt: warmupStartedAt,
       resumeBytesFloor: isResumeRecovered ? undefined : resumeBytesFloor,
     });
     return;

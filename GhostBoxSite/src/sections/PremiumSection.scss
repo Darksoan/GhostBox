@@ -1,0 +1,116 @@
+.premium__head > * + * {
+  margin-block-start: var(--site-space-4);
+}
+
+.premium__plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-10);
+  // Dois cartões esticando 1200px viram dois painéis vazios: a lista de
+  // benefícios ocupa metade da largura e o resto é ar.
+  max-width: 920px;
+  margin-block-start: var(--site-space-16);
+}
+
+.premium__plan {
+  display: flex;
+  flex-direction: column;
+  padding: var(--site-space-8);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--site-hairline);
+}
+
+.premium__plan[data-highlight="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--premium-gold) 45%, transparent);
+}
+
+.premium__plan-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.premium__plan-name {
+  font-size: var(--type-size-section);
+  line-height: var(--type-line-section);
+  font-weight: var(--weight-semibold);
+}
+
+.premium__badge {
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--premium-gold) 16%, transparent);
+  color: var(--premium-gold);
+  font-size: var(--type-size-micro);
+  line-height: var(--type-line-micro);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.premium__price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin-block-start: var(--site-space-6);
+}
+
+.premium__price-value {
+  font-size: var(--site-fs-title);
+  line-height: 1.1;
+  letter-spacing: var(--ls-800);
+  font-weight: var(--weight-semibold);
+  // Preço troca com o idioma e com a contagem de entrada: dígito de largura fixa
+  // evita que a linha inteira dance.
+  font-variant-numeric: tabular-nums;
+}
+
+.premium__price-cadence {
+  color: var(--text-tertiary);
+  font-size: var(--type-size-body);
+}
+
+.premium__per-month {
+  margin-block-start: var(--space-4);
+  color: var(--text-tertiary);
+  font-size: var(--type-size-caption);
+  line-height: var(--type-line-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.premium__benefits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-block-start: var(--site-space-8);
+}
+
+.premium__benefit {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: var(--type-size-body);
+  line-height: var(--type-line-body);
+}
+
+.premium__benefit svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--premium-gold);
+}
+
+.premium__cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+  margin-block-start: var(--site-space-12);
+}
+
+.premium__cta-note {
+  max-width: var(--site-measure);
+  color: var(--text-tertiary);
+  font-size: var(--type-size-caption);
+  line-height: var(--type-line-caption);
+}

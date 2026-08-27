@@ -51,14 +51,27 @@ function isSteamSoftwareLikeGame(game: GhostBoxGame) {
   );
 }
 
+interface ProfileGameRecognitionOptions {
+  /**
+   * When Steam content is hidden the playtime/achievement signals are stripped,
+   * so requiring them would drop GhostBox-owned games (library, favorites,
+   * backup restores) from the profile. In that mode only the software filter
+   * applies.
+   */
+  requireSteamSignals?: boolean;
+}
+
 /** Steam profile recognition: playtime + unlocked achievements, never software. */
 export function isRecognizedSteamProfileGame(
   game: GhostBoxGame,
   playtimeInMilliseconds: number,
+  { requireSteamSignals = true }: ProfileGameRecognitionOptions = {},
 ) {
-  if (playtimeInMilliseconds <= 0) return false;
-  // Require at least one unlocked achievement — total-only (e.g. 0 of 53) is not enough.
-  if (getUnlockedAchievementCount(game) <= 0) return false;
+  if (requireSteamSignals) {
+    if (playtimeInMilliseconds <= 0) return false;
+    // Require at least one unlocked achievement — total-only (e.g. 0 of 53) is not enough.
+    if (getUnlockedAchievementCount(game) <= 0) return false;
+  }
   if (isSteamSoftwareLikeGame(game)) return false;
   return true;
 }

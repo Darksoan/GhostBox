@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Check, Copy, Link2, Loader2 } from "lucide-react";
 import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
@@ -10,8 +10,17 @@ import "./ConnectionsPanel.scss";
 
 export function ConnectionsPanel() {
   const { t } = useSettings();
-  const { steamProfile, isSteamSigningIn, handleConnectSteam, handleDisconnectSteam } = useAppData();
+  const {
+    steamProfile,
+    isSteamSigningIn,
+    handleConnectSteam,
+    handleDisconnectSteam,
+    showSteamGames,
+    setShowSteamGames,
+  } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
+  const steamVisibilityLabelId = useId();
+  const steamVisibilityDescId = useId();
   const discord = useDiscordLink();
   const [confirmingSteamDisconnect, setConfirmingSteamDisconnect] = useState(false);
   const [disconnectingSteam, setDisconnectingSteam] = useState(false);
@@ -90,81 +99,113 @@ export function ConnectionsPanel() {
             {t("settings.connections.lastConnectionWarning")}
           </p>
         )}
-        <section className="connection-card">
-          <img className="connection-card__icon" src={steamIcon} alt="" aria-hidden="true" />
-          <div className="connection-card__body">
-            <h3>{t("settings.connections.steam.title")}</h3>
-            {!steamConnected && <p>{t("settings.connections.steam.description")}</p>}
-            {steamConnected && steamProfile ? (
-              <div className="connection-card__connected">
-                <span>
-                  {t("settings.connections.steam.connectedAsPrefix")}
-                  <span className="connection-card__connected-name">{steamProfile.displayName}</span>
-                  {t("settings.connections.steam.connectedAsSuffix")}
-                </span>
+        <div className="connections-panel__steam-group">
+          <section className="connection-card">
+            <img className="connection-card__icon" src={steamIcon} alt="" aria-hidden="true" />
+            <div className="connection-card__body">
+              <h3>{t("settings.connections.steam.title")}</h3>
+              {!steamConnected && <p>{t("settings.connections.steam.description")}</p>}
+              {steamConnected && steamProfile ? (
+                <div className="connection-card__connected">
+                  <span>
+                    {t("settings.connections.steam.connectedAsPrefix")}
+                    <span className="connection-card__connected-name">{steamProfile.displayName}</span>
+                    {t("settings.connections.steam.connectedAsSuffix")}
+                  </span>
+                  <button
+                    type="button"
+                    className={`connection-card__copy${steamIdCopied ? " connection-card__copy--copied" : ""}`}
+                    onClick={() => void onCopySteamIdClick(steamProfile.steamId)}
+                    aria-label={
+                      steamIdCopied
+                        ? t("settings.connections.steam.copiedId")
+                        : t("settings.connections.steam.copyId")
+                    }
+                    title={
+                      steamIdCopied
+                        ? t("settings.connections.steam.copiedId")
+                        : t("settings.connections.steam.copyId")
+                    }
+                  >
+                    <span className="connection-card__copy-icon connection-card__copy-icon--copy">
+                      <Copy size={14} aria-hidden="true" />
+                    </span>
+                    <span className="connection-card__copy-icon connection-card__copy-icon--check">
+                      <Check size={14} aria-hidden="true" />
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div className="connection-card__actions">
+              {steamConnected ? (
                 <button
                   type="button"
-                  className={`connection-card__copy${steamIdCopied ? " connection-card__copy--copied" : ""}`}
-                  onClick={() => void onCopySteamIdClick(steamProfile.steamId)}
-                  aria-label={
-                    steamIdCopied
-                      ? t("settings.connections.steam.copiedId")
-                      : t("settings.connections.steam.copyId")
-                  }
-                  title={
-                    steamIdCopied
-                      ? t("settings.connections.steam.copiedId")
-                      : t("settings.connections.steam.copyId")
-                  }
+                  className={`connection-card__button connection-card__button--danger${
+                    confirmingSteamDisconnect ? " connection-card__button--confirming" : ""
+                  }`}
+                  onClick={() => void onDisconnectSteamClick()}
+                  disabled={disconnectingSteam}
                 >
-                  <span className="connection-card__copy-icon connection-card__copy-icon--copy">
-                    <Copy size={14} aria-hidden="true" />
-                  </span>
-                  <span className="connection-card__copy-icon connection-card__copy-icon--check">
-                    <Check size={14} aria-hidden="true" />
-                  </span>
+                  {disconnectingSteam ? (
+                    <Loader2 size={14} className="connection-card__spinner" aria-hidden="true" />
+                  ) : null}
+                  {disconnectingSteam
+                    ? t("settings.connections.steam.disconnecting")
+                    : confirmingSteamDisconnect
+                      ? t("settings.connections.steam.disconnectConfirm")
+                      : t("settings.connections.steam.disconnect")}
                 </button>
+              ) : (
+                <button
+                  type="button"
+                  className="connection-card__button connection-card__button--primary"
+                  onClick={() => void handleConnectSteam()}
+                  disabled={isSteamSigningIn}
+                >
+                  {isSteamSigningIn ? (
+                    <Loader2 size={14} className="connection-card__spinner" aria-hidden="true" />
+                  ) : (
+                    <Link2 size={14} aria-hidden="true" />
+                  )}
+                  {isSteamSigningIn
+                    ? t("settings.connections.steam.connecting")
+                    : t("settings.connections.steam.connect")}
+                </button>
+              )}
+            </div>
+          </section>
+
+          <div
+            className={`connection-card__steam-options${
+              steamConnected ? "" : " connection-card__steam-options--disabled"
+            }`}
+          >
+            <div className="connection-card__steam-option">
+              <div className="connection-card__steam-option-copy">
+                <strong id={steamVisibilityLabelId}>{t("settings.connections.steam.showOnProfile")}</strong>
+                <span id={steamVisibilityDescId}>{t("settings.connections.steam.showOnProfileDescription")}</span>
               </div>
-            ) : null}
-          </div>
-          <div className="connection-card__actions">
-            {steamConnected ? (
               <button
                 type="button"
-                className={`connection-card__button connection-card__button--danger${
-                  confirmingSteamDisconnect ? " connection-card__button--confirming" : ""
+                role="switch"
+                aria-checked={showSteamGames}
+                aria-labelledby={steamVisibilityLabelId}
+                aria-describedby={steamVisibilityDescId}
+                disabled={!steamConnected}
+                className={`settings-switch${showSteamGames ? " settings-switch--on" : ""}${
+                  !steamConnected ? " settings-switch--disabled" : ""
                 }`}
-                onClick={() => void onDisconnectSteamClick()}
-                disabled={disconnectingSteam}
+                onClick={() => {
+                  if (!steamConnected) return;
+                  setShowSteamGames(!showSteamGames);
+                }}
               >
-                {disconnectingSteam ? (
-                  <Loader2 size={14} className="connection-card__spinner" aria-hidden="true" />
-                ) : null}
-                {disconnectingSteam
-                  ? t("settings.connections.steam.disconnecting")
-                  : confirmingSteamDisconnect
-                    ? t("settings.connections.steam.disconnectConfirm")
-                    : t("settings.connections.steam.disconnect")}
+                <span />
               </button>
-            ) : (
-              <button
-                type="button"
-                className="connection-card__button connection-card__button--primary"
-                onClick={() => void handleConnectSteam()}
-                disabled={isSteamSigningIn}
-              >
-                {isSteamSigningIn ? (
-                  <Loader2 size={14} className="connection-card__spinner" aria-hidden="true" />
-                ) : (
-                  <Link2 size={14} aria-hidden="true" />
-                )}
-                {isSteamSigningIn
-                  ? t("settings.connections.steam.connecting")
-                  : t("settings.connections.steam.connect")}
-              </button>
-            )}
+            </div>
           </div>
-        </section>
+        </div>
 
         <section className="connection-card">
           <img className="connection-card__icon" src={discordIcon} alt="" aria-hidden="true" />

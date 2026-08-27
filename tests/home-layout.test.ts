@@ -165,14 +165,14 @@ describe("Home layout", () => {
     expect(shelfSource).not.toContain("showSummary");
   });
 
-  it("keeps the card to title and pills — no badge nor description", () => {
+  it("keeps the card lean — title and fire rating, no badge nor description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");
     const cardEnd = component.indexOf("\nfunction ", cardStart);
     const cardSource = component.slice(cardStart, cardEnd);
 
     // Sem badge de popularidade e sem descrição curta: o card carrega só o
-    // nome e a linha de pills. O corpo não reserva bloco de resumo.
+    // nome com a nota média à direita. O corpo não reserva bloco de resumo.
     expect(cardSource).not.toContain("home-top-rated-card__players");
     expect(cardSource).not.toContain("home-top-rated-card__summary");
     expect(cardSource).not.toContain("home-top-rated-card__summary-line");

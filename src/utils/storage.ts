@@ -31,7 +31,6 @@ import {
   notificationsLastSeenStorageKey,
   autoRestoredCloudSavesStorageKey,
   downloadsDirStorageKey,
-  downloadParallelChunksStorageKey,
   sidebarCollectionsCollapsedStorageKey,
   sidebarExpandedCollectionsStorageKey,
 } from "../constants/catalogue";
@@ -494,6 +493,18 @@ export function writeStoredSteamAccountStats(stats: SteamAccountStats | null) {
   }
 }
 
+export function readStoredShowSteamGames(): boolean {
+  if (typeof window === "undefined") return true;
+
+  try {
+    const raw = window.localStorage.getItem(showSteamGamesStorageKey);
+    if (raw === null) return true;
+    return raw === "true";
+  } catch {
+    return true;
+  }
+}
+
 export function writeStoredShowSteamGames(value: boolean) {
   if (typeof window === "undefined") return;
 
@@ -845,38 +856,6 @@ export function writeStoredDownloadsDir(directory: string) {
   }
 }
 
-/* Faixa espelha o clamp do worker em SteamKitPocRunner: fora dela o valor é ignorado. */
-const downloadParallelChunksMin = 1;
-const downloadParallelChunksMax = 32;
-const downloadParallelChunksDefault = 24;
-
-export function readStoredDownloadParallelChunks(): number {
-  if (typeof window === "undefined") return downloadParallelChunksDefault;
-
-  try {
-    const raw = window.localStorage.getItem(downloadParallelChunksStorageKey);
-    const parsed = Number.parseInt(raw ?? "", 10);
-    if (!Number.isFinite(parsed)) return downloadParallelChunksDefault;
-    return Math.min(downloadParallelChunksMax, Math.max(downloadParallelChunksMin, parsed));
-  } catch {
-    return downloadParallelChunksDefault;
-  }
-}
-
-export function writeStoredDownloadParallelChunks(value: number) {
-  if (typeof window === "undefined") return;
-
-  const clamped = Math.min(
-    downloadParallelChunksMax,
-    Math.max(downloadParallelChunksMin, Math.round(value)),
-  );
-
-  try {
-    window.localStorage.setItem(downloadParallelChunksStorageKey, String(clamped));
-  } catch {
-    // The chosen value still applies for the rest of the session.
-  }
-}
 
 export function readStoredOverviewSortBy(): OverviewSortBy {
   if (typeof window === "undefined") return "recent";

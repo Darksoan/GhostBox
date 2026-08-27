@@ -55,6 +55,7 @@ import {
 import { useSettings } from "../context/settings";
 import { useAuth } from "../context/AuthContext";
 import { useOverlay } from "../context/OverlayContext";
+import { useAppData } from "../context/AppDataContext";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
 import {
@@ -395,6 +396,9 @@ type ProfileActivityViewModel = {
 // flush below rather than by hydrating less.
 const localAchievementHydrationLimit = 80;
 const localAchievementHydrationBatchSize = 5;
+// A game whose store page resolved but whose achievement list did not is retried
+// on the next hydration pass after this window, instead of staying blank.
+const localAchievementRetryDelayMs = 5 * 60 * 1000;
 let hasPreparedProfileOverviewData = false;
 
 
@@ -478,6 +482,9 @@ export function ProfilePage({
   const { appearance, t } = useSettings();
   const { account } = useAuth();
   const { setSubscriptionModalOpen } = useOverlay();
+  const { showSteamGames, cloudSaveAppIds } = useAppData();
+  const steamConnected = isSteamConnected(steamProfile);
+  const shouldShowSteamContent = steamConnected && showSteamGames;
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
     useState("overview");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -488,6 +495,8 @@ export function ProfilePage({
   );
   const [localAchievementGamesByAppId, setLocalAchievementGamesByAppId] =
     useState<Map<string, GhostBoxGame>>(() => new Map());
+  const [achievementHydrationAttempt, setAchievementHydrationAttempt] =
+    useState(0);
   const localAchievementRequestedAppIdsRef = useRef(new Set<string>());
   const localAchievementCompletedAppIdsRef = useRef(new Set<string>());
   const localAchievementHydrationFailedUntilRef = useRef(new Map<string, number>());
@@ -660,16 +669,16 @@ export function ProfilePage({
 
   const steamAchievementIndex = useMemo(
     () =>
-      shouldComputeOverviewData
+      shouldComputeOverviewData && shouldShowSteamContent
         ? buildSteamAchievementIndex(steamAccountStats)
         : new Map(),
-    [shouldComputeOverviewData, steamAccountStats],
+    [shouldComputeOverviewData, shouldShowSteamContent, steamAccountStats],
   );
 
   // Steam account games are not listed in the library, but profile recognition
   // still needs playtime + achievements from the owned stats payload.
   const steamOwnedProfileGames = useMemo(() => {
-    if (!shouldComputeOverviewData || !steamAccountStats?.ownedPlaytimes?.length) {
+    if (!shouldComputeOverviewData || !shouldShowSteamContent || !steamAccountStats?.ownedPlaytimes?.length) {
       return [];
     }
     return mergeSteamAchievementsIntoGames(
@@ -690,7 +699,14 @@ export function ProfilePage({
       );
     };
 
-    for (const game of achievementHistoryGames) addGame(game);
+    // With Steam hidden the profile only speaks for the GhostBox account, so
+    // the local play history (appcache scan) is narrowed to the games the
+    // account actually owns in the cloud — everything else is machine-local
+    // noise that was never in the user's cloud database.
+    for (const game of achievementHistoryGames) {
+      if (!shouldShowSteamContent && !cloudSaveAppIds.has(game.appId)) continue;
+      addGame(game);
+    }
     for (const game of addedLibraryGames) addGame(game);
     for (const game of favoriteGames) addGame(game);
     for (const game of steamOwnedProfileGames) addGame(game);
@@ -699,14 +715,20 @@ export function ProfilePage({
   }, [
     achievementHistoryGames,
     addedLibraryGames,
+    cloudSaveAppIds,
     favoriteGames,
     shouldComputeOverviewData,
+    shouldShowSteamContent,
     steamOwnedProfileGames,
   ]);
 
   const overviewPreloadGames = useMemo(() => {
     return profileGameBase
-      .filter((game) => isRecognizedSteamProfileGame(game, getGamePlaytime(game)))
+      .filter((game) =>
+        isRecognizedSteamProfileGame(game, getGamePlaytime(game), {
+          requireSteamSignals: shouldShowSteamContent,
+        }),
+      )
       .sort((left, right) => {
         const lastPlayedDelta =
           parseLastPlayed(right.lastTimePlayed) -
@@ -716,6 +738,7 @@ export function ProfilePage({
       });
   }, [
     profileGameBase,
+    shouldShowSteamContent,
   ]);
 
   useEffect(() => {
@@ -806,6 +829,11 @@ export function ProfilePage({
     // wiping profile-level achievement data for uninstalled games.
     for (const game of localAchievementGamesByAppId.values()) {
       const base = games.get(game.appId);
+      // Same rule as `profileGameBase`: with Steam hidden, a local-only game
+      // that the account does not own in the cloud must not enter the list.
+      if (!base && !shouldShowSteamContent && !cloudSaveAppIds.has(game.appId)) {
+        continue;
+      }
       games.set(
         game.appId,
         base
@@ -820,6 +848,8 @@ export function ProfilePage({
       );
     }
 
+    const effectiveSteamAccountStats = shouldShowSteamContent ? steamAccountStats : null;
+    const effectiveSteamIndex = shouldShowSteamContent ? steamAchievementIndex : new Map();
     return [...games.values()]
       .map((game) =>
         withResolvedProfileGameTitle(game, resolvedGameTitlesByAppId),
@@ -827,21 +857,36 @@ export function ProfilePage({
       .map((game) =>
         mergeSteamAchievementsIntoGame(
           game,
-          steamAccountStats,
-          steamAchievementIndex,
+          effectiveSteamAccountStats,
+          effectiveSteamIndex,
         ),
       )
       .filter((game) =>
-        isRecognizedSteamProfileGame(game, getGamePlaytime(game)),
+        isRecognizedSteamProfileGame(game, getGamePlaytime(game), {
+          requireSteamSignals: shouldShowSteamContent,
+        }),
       );
   }, [
+    cloudSaveAppIds,
     localAchievementGamesByAppId,
     profileGameBase,
     resolvedGameTitlesByAppId,
     shouldComputeOverviewData,
+    shouldShowSteamContent,
     steamAchievementIndex,
     steamAccountStats,
   ]);
+
+  // Flipping the Steam toggle changes which games need local hydration, so the
+  // in-flight/backoff bookkeeping is reset for everything that never produced a
+  // local achievement list.
+  useEffect(() => {
+    localAchievementHydrationFailedUntilRef.current.clear();
+    localAchievementRequestedAppIdsRef.current = new Set(
+      localAchievementCompletedAppIdsRef.current,
+    );
+    setAchievementHydrationAttempt((current) => current + 1);
+  }, [shouldShowSteamContent]);
 
   useEffect(() => {
     if (!shouldComputeOverviewData) return;
@@ -850,27 +895,39 @@ export function ProfilePage({
     const recentGameIndexes = new Map(
       achievementHistoryGames.map((game, index) => [game.appId, index])
     );
+    // Remote unlocks only cover the card when Steam content is visible; with the
+    // toggle off they are stripped from the merge, so those games must be
+    // hydrated locally instead of skipped.
     const remoteAchievementAppIds = new Set(
-      (steamAccountStats?.achievements ?? [])
-        .filter((entry) => entry.achievements.length > 0)
-        .map((entry) => entry.appId)
+      shouldShowSteamContent
+        ? (steamAccountStats?.achievements ?? [])
+            .filter((entry) => entry.achievements.length > 0)
+            .map((entry) => entry.appId)
+        : []
     );
     const now = Date.now();
     const failedUntil = localAchievementHydrationFailedUntilRef.current;
+    const seenCandidateAppIds = new Set<string>();
     const candidates = [
       ...achievementHistoryGames,
       ...addedLibraryGames,
+      ...favoriteGames,
       ...steamOwnedProfileGames,
     ]
       .filter((game) => {
         if (
           !game.appId ||
+          // The source lists overlap (history/library/favorites), so the same
+          // appId must not be hydrated twice in one pass.
+          seenCandidateAppIds.has(game.appId) ||
           localAchievementRequestedAppIdsRef.current.has(game.appId)
         ) {
           return false;
         }
         if (remoteAchievementAppIds.has(game.appId)) return false;
-        return (failedUntil.get(game.appId) ?? 0) <= now;
+        if ((failedUntil.get(game.appId) ?? 0) > now) return false;
+        seenCandidateAppIds.add(game.appId);
+        return true;
       })
       .sort((left, right) => {
         const leftRecentIndex = recentGameIndexes.get(left.appId);
@@ -893,20 +950,25 @@ export function ProfilePage({
       localAchievementRequestedAppIdsRef.current.add(game.appId);
     }
 
+    let earliestRetryDelay = Number.POSITIVE_INFINITY;
+    let retryTimeoutId: number | undefined;
+
     void (async () => {
       const pendingHydratedGames = new Map<string, GhostBoxGame>();
       const pendingResolvedTitles = new Map<string, string>();
       const flushPendingResults = () => {
         if (pendingHydratedGames.size > 0) {
-          for (const appId of pendingHydratedGames.keys()) {
-            localAchievementCompletedAppIdsRef.current.add(appId);
-          }
           setLocalAchievementGamesByAppId((current) => {
             let changed = false;
             const next = new Map(current);
             for (const [appId, game] of pendingHydratedGames) {
-              if (next.has(appId)) continue;
-              next.set(appId, game);
+              // A retry must be able to upgrade an entry stored without
+              // achievements — keeping the first result would pin games whose
+              // achievement fetch failed (rate limit, cold cache) to "no
+              // achievements" for the whole session.
+              const merged = getRicherAchievementGame(next.get(appId), game);
+              if (merged === next.get(appId)) continue;
+              next.set(appId, merged);
               changed = true;
             }
             return changed ? next : current;
@@ -969,24 +1031,48 @@ export function ProfilePage({
             const enrichedGame = storeDetails
               ? mergeGameCardData(game, storeDetails)
               : game;
-            const achievementGame = details?.achievementList?.length
-              ? mergeAchievementDetailsIntoGame(enrichedGame, details)
-              : enrichedGame;
+            const hasAchievements = Boolean(details?.achievementList?.length);
+            const achievementGame =
+              details && hasAchievements
+                ? mergeAchievementDetailsIntoGame(enrichedGame, details)
+                : enrichedGame;
 
             return {
-              ...achievementGame,
-              title,
+              game: { ...achievementGame, title },
+              hasAchievements,
+              retryAfterSeconds: details?.achievementMetadata?.retryAfter ?? 0,
             };
           })
         );
         if (cancelled) return;
 
-        for (const game of hydratedGames) {
-          if (!game) continue;
+        for (const result of hydratedGames) {
+          if (!result) continue;
+          const { game, hasAchievements, retryAfterSeconds } = result;
           pendingHydratedGames.set(game.appId, game);
           if (!isSteamTitlePlaceholder(game.title, game.appId)) {
             pendingResolvedTitles.set(game.appId, game.title);
           }
+
+          if (hasAchievements) {
+            localAchievementCompletedAppIdsRef.current.add(game.appId);
+            localAchievementHydrationFailedUntilRef.current.delete(game.appId);
+            continue;
+          }
+
+          // Store details came back but the achievement list did not. Keep the
+          // card (title/cover already improved) and queue another attempt
+          // instead of treating the empty list as the final answer.
+          localAchievementRequestedAppIdsRef.current.delete(game.appId);
+          const retryDelay =
+            retryAfterSeconds > 0
+              ? retryAfterSeconds * 1000
+              : localAchievementRetryDelayMs;
+          localAchievementHydrationFailedUntilRef.current.set(
+            game.appId,
+            Date.now() + retryDelay,
+          );
+          earliestRetryDelay = Math.min(earliestRetryDelay, retryDelay);
         }
 
         const batchNumber = Math.floor(index / localAchievementHydrationBatchSize) + 1;
@@ -998,10 +1084,18 @@ export function ProfilePage({
           flushPendingResults();
         }
       }
+
+      if (cancelled || !Number.isFinite(earliestRetryDelay)) return;
+      // Nothing else re-runs this effect on its own, so games left pending need
+      // an explicit wake-up once their backoff window closes.
+      retryTimeoutId = window.setTimeout(() => {
+        setAchievementHydrationAttempt((current) => current + 1);
+      }, earliestRetryDelay);
     })();
 
     return () => {
       cancelled = true;
+      if (retryTimeoutId) window.clearTimeout(retryTimeoutId);
       for (const game of candidates) {
         if (!localAchievementCompletedAppIdsRef.current.has(game.appId)) {
           localAchievementRequestedAppIdsRef.current.delete(game.appId);
@@ -1010,8 +1104,11 @@ export function ProfilePage({
     };
   }, [
     achievementHistoryGames,
+    achievementHydrationAttempt,
     addedLibraryGames,
+    favoriteGames,
     shouldComputeOverviewData,
+    shouldShowSteamContent,
     steamOwnedProfileGames,
     steamAccountStats,
   ]);
@@ -1133,7 +1230,7 @@ export function ProfilePage({
   );
 
   const steamOverviewMetrics = useMemo(() => {
-    if (steamAccountStats) {
+    if (shouldShowSteamContent && steamAccountStats) {
       return {
         games: steamAccountStats.gamesCount,
         achievements: steamAccountStats.unlockedAchievements,
@@ -1164,7 +1261,7 @@ export function ProfilePage({
         : 0,
       playtime,
     };
-  }, [profileAchievementGames, steamAccountStats]);
+  }, [profileAchievementGames, shouldShowSteamContent, steamAccountStats]);
 
   const steamMetricNumberFormatter = useMemo(
     () => new Intl.NumberFormat(appearance.language === "en" ? "en-US" : "pt-BR"),
@@ -1603,7 +1700,6 @@ export function ProfilePage({
   // Steam account is connected.
   const profileDisplayName =
     steamProfile?.displayName || account?.displayName || account?.username || "";
-  const steamConnected = isSteamConnected(steamProfile);
   const steamLevelLabel =
     steamLevel === null
       ? appearance.language === "en"
@@ -1774,6 +1870,10 @@ export function ProfilePage({
                         className="profile-page__activity-toolbar"
                         aria-label={t("profile.sortAria")}
                       >
+                        {/* Same metric trio either way: with Steam hidden the
+                            numbers come from the GhostBox account games, so the
+                            toolbar keeps one layout instead of collapsing into
+                            a notice line. */}
                         <div
                           className="profile-page__activity-metrics"
                           aria-label={t("profile.steamMetrics")}

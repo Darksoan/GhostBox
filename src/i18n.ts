@@ -546,6 +546,9 @@ const translations: Record<Language, TranslationTree> = {
           connectedAsSuffix: ".",
           copyId: "Copiar ID da Steam",
           copiedId: "ID copiado",
+          showOnProfile: "Mostrar no perfil",
+          showOnProfileDescription:
+            "Exibe métricas e jogos da conta Steam no seu perfil GhostBox.",
         },
         discord: {
           title: "Discord",
@@ -599,35 +602,17 @@ const translations: Record<Language, TranslationTree> = {
             "Diretório onde os jogos baixados serão salvos. Vira uma biblioteca Steam.",
           placeholder: "Nenhuma pasta selecionada",
         },
-        parallelChunks: {
-          label: "Downloads simultâneos",
-          description:
-            "Quantidade de pedaços baixados ao mesmo tempo. Valores altos usam mais banda e memória.",
-        },
       },
-      storage: {
-        title: "Armazenamento",
-        description: "Espaço usado por caches e dados locais do GhostBox.",
-        totalLabel: "Total em disco",
-        refresh: "Atualizar",
-        refreshing: "Atualizando...",
-        clearCaches: "Limpar caches",
+      tempFiles: {
+        title: "Arquivos temporários",
+        description: "Caches que o GhostBox recria sozinho quando precisa.",
+        descriptionWithSize:
+          "{size} em caches que o GhostBox recria sozinho quando precisa.",
+        clear: "Limpar",
         clearing: "Limpando...",
-        clearCategory: "Limpar",
-        clearCategoryDescription: "Nada para limpar nesta categoria.",
-        loadError: "Não foi possível carregar o uso de armazenamento.",
-        clearSuccessTitle: "Limpeza concluída",
-        clearSuccessMessage: "{freed} liberados.",
-        clearPartialMessage: "{freed} liberados. Alguns itens falharam: {failed}",
-        clearErrorTitle: "Falha na limpeza",
-        categories: {
-          images: "Imagens do catálogo",
-          catalogueCache: "Cache do catálogo",
-          steamcmd: "SteamCMD",
-          webviewCache: "Cache do navegador",
-          goldbergSaves: "Progresso de conquistas offline",
-          ludusaviConfig: "Configuração do Ludusavi",
-        },
+        successTitle: "Limpeza concluída",
+        successMessage: "{freed} liberados.",
+        errorTitle: "Falha na limpeza",
       },
       notifications: {
         inAppToasts: {
@@ -1202,6 +1187,9 @@ const translations: Record<Language, TranslationTree> = {
           connectedAsSuffix: ".",
           copyId: "Copy Steam ID",
           copiedId: "ID copied",
+          showOnProfile: "Show on profile",
+          showOnProfileDescription:
+            "Show metrics and games from your Steam account on your GhostBox profile.",
         },
         discord: {
           title: "Discord",
@@ -1254,35 +1242,17 @@ const translations: Record<Language, TranslationTree> = {
             "Directory where downloaded games will be saved. It becomes a Steam library.",
           placeholder: "No folder selected",
         },
-        parallelChunks: {
-          label: "Parallel downloads",
-          description:
-            "How many chunks are fetched at once. Higher values use more bandwidth and memory.",
-        },
       },
-      storage: {
-        title: "Storage",
-        description: "Disk space used by GhostBox caches and local data.",
-        totalLabel: "Total on disk",
-        refresh: "Refresh",
-        refreshing: "Refreshing...",
-        clearCaches: "Clear caches",
+      tempFiles: {
+        title: "Temporary files",
+        description: "Caches GhostBox rebuilds on its own when needed.",
+        descriptionWithSize:
+          "{size} in caches GhostBox rebuilds on its own when needed.",
+        clear: "Clear",
         clearing: "Clearing...",
-        clearCategory: "Clear",
-        clearCategoryDescription: "Nothing to clear in this category.",
-        loadError: "Could not load storage usage.",
-        clearSuccessTitle: "Cleanup finished",
-        clearSuccessMessage: "{freed} freed.",
-        clearPartialMessage: "{freed} freed. Some items failed: {failed}",
-        clearErrorTitle: "Cleanup failed",
-        categories: {
-          images: "Catalogue images",
-          catalogueCache: "Catalogue cache",
-          steamcmd: "SteamCMD",
-          webviewCache: "Browser cache",
-          goldbergSaves: "Offline achievements progress",
-          ludusaviConfig: "Ludusavi configuration",
-        },
+        successTitle: "Cleanup finished",
+        successMessage: "{freed} freed.",
+        errorTitle: "Cleanup failed",
       },
       notifications: {
         inAppToasts: {

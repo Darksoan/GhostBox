@@ -1,0 +1,59 @@
+.install__head > * + * {
+  margin-block-start: var(--site-space-4);
+}
+
+.install__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-10);
+  margin-block-start: var(--site-space-16);
+  counter-reset: install;
+}
+
+.install__step {
+  padding: var(--site-space-8);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--site-hairline);
+}
+
+.install__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.install__step-title {
+  margin-block: var(--site-space-6) var(--space-4);
+  font-size: var(--type-size-body-emphasis);
+  line-height: var(--type-line-body-emphasis);
+  font-weight: var(--weight-semibold);
+}
+
+.install__step-body {
+  color: var(--text-secondary);
+  font-size: var(--type-size-body);
+  line-height: var(--site-lh-body);
+  text-wrap: pretty;
+}
+
+.install__cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-10);
+  margin-block-start: var(--site-space-12);
+}
+
+.install__requirements {
+  color: var(--text-tertiary);
+  font-size: var(--type-size-caption);
+}

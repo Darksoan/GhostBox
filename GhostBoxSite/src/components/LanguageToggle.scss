@@ -1,0 +1,33 @@
+.language-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+}
+
+.language-toggle__option {
+  // Largura fixa: trocar PT por EN não pode empurrar o resto da barra.
+  min-width: 40px;
+  min-height: 36px;
+  padding-inline: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-200);
+  cursor: pointer;
+  transition:
+    background-color var(--site-motion-quick) var(--site-ease),
+    color var(--site-motion-quick) var(--site-ease);
+}
+
+.language-toggle__option:hover {
+  color: var(--text-primary);
+}
+
+.language-toggle__option[aria-pressed="true"] {
+  background: var(--surface-strong);
+  color: var(--text-primary);
+}

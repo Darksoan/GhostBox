@@ -818,12 +818,11 @@ export const ghostboxApi = {
     downloadsRoot: string,
     gameTitle?: string,
     steamPath?: string,
-    parallelChunks?: number,
     allowStale?: boolean,
   ): Promise<Record<string, unknown>> {
     return invokeOr<Record<string, unknown>>(
       "cdndownload_download_game",
-      { appId, downloadsRoot, gameTitle, steamPath, parallelChunks, allowStale },
+      { appId, downloadsRoot, gameTitle, steamPath, allowStale },
       { Type: "error", Message: "Não foi possível iniciar o download." },
     );
   },

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -59,6 +59,7 @@ import {
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
 import { createSeedGame } from "../utils/gameSeed";
 import { gameCategoryScore, getGameTraits, normalizeGameTrait } from "../utils/gameTraits";
+import { getSteamReviewScore } from "../utils/gameMetrics";
 import { steamRecommendedTagNames } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime } from "../utils/time";
@@ -97,9 +98,6 @@ const homeMetadataCategoryLimit = 3;
 // card mostra sempre 3 + 2 = 5 pills quando o jogo tem categorias suficientes.
 const homeTopRatedPrimaryPillCount = 3;
 const homeTopRatedSecondaryPillCount = 2;
-// Pills por card do rail de "Mais jogados" (o mock traz quatro pílulas na
-// linha de baixo). Constante própria — a grade usa as contagens de cima.
-const homeTopRatedCardPillCount = 4;
 const homeRecommendedHeroPreloadLimit = 8;
 // Cards de recomendados visíveis por vez. Também é o piso para as setas
 // aparecerem: com pool menor ou igual a isto não há o que rolar. Vale a janela
@@ -459,18 +457,16 @@ function HomeCategoryCard({
 }
 
 /**
- * Card de "Mais jogados": só a hero capsule, sem superfície de texto embaixo.
- * arte larga (`header.jpg`), e embaixo o nome do jogo e uma linha fechada de
- * pills de categorias — em superfície própria com alvo de clique inteiro.
+ * Card de "Mais jogados": arte larga (`header.jpg`) e embaixo o nome do jogo
+ * com a nota média (fire + nota) à direita — sem linha de pills. Superfície
+ * própria com alvo de clique inteiro.
  */
 function HomeTopRatedCard({
   game,
-  language,
   onOpenGame,
   onGameContextMenu,
 }: {
   game: GhostBoxGame;
-  language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
@@ -486,18 +482,19 @@ function HomeTopRatedCard({
         ...fallbackCoverSources.filter((source) => source !== coverSource),
       ]
     : fallbackCoverSources;
-  // Mesma fonte de pills da grade (gêneros primeiro, ver `getGameTraits`) e
-  // contagem fixa por linha: a linha fechada mantém os cards da fila na mesma
-  // altura sem piso artificial.
-  const traits = getGameTraits(game);
-  const primaryTraits = traits.slice(0, homeTopRatedCardPillCount);
+  // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra de
+  // review, a razão volta 0 e viraria uma nota 0,0 falsa.
+  const reviewScore = getSteamReviewScore(game);
+  const ratingText = reviewScore
+    ? ((reviewScore.percent / 100) * 5).toFixed(1)
+    : null;
 
   const handleClick = () => onOpenGame(game);
 
   return (
     <div className="home-top-rated-card">
       {/* Alvo de clique cobre o card inteiro (arte + texto), mas fica fora da
-          árvore de conteúdo: nome e pills são texto irmão, não descendente,
+          árvore de conteúdo: nome e nota são texto irmão, não descendente,
           então continuam legíveis por leitor de tela em vez de virar parte do
           nome acessível do botão (ou de serem engolidos pelo `aria-label`). */}
       <button
@@ -519,26 +516,22 @@ function HomeTopRatedCard({
         aria-hidden="true"
       />
       <span className="home-top-rated-card__body">
-        <span className="home-top-rated-card__title">{game.title}</span>
-        {/* A linha mostra as tags que o jogo tem (1, 2, 3 ou 4 — o `flex: 1 1
-            auto` espalha as que existirem pela largura inteira do card). O
-            mock traz quatro pílulas; sem nenhuma trait (enrichment ainda
-            pendente ou cache sem gêneros), entram placeholders de skeleton no
-            lugar e a linha nunca fica como um vão vazio. A altura fixa mantém
-            o card estável nas duas situações. */}
-        <span className="home-top-rated-card__tags">
-          {primaryTraits.length
-            ? primaryTraits.map((trait) => (
-                <span className="home-top-rated-card__tag" key={trait}>
-                  {getHomeCategoryLabel(trait, language)}
-                </span>
-              ))
-            : Array.from({ length: homeTopRatedCardPillCount }, (_, index) => (
-                <span
-                  className="home-top-rated-card__tag home-top-rated-card__tag--skeleton skeleton"
-                  key={`top-rated-tag-pending-${index}`}
-                />
-              ))}
+        <span className="home-top-rated-card__title-row">
+          <span className="home-top-rated-card__title">{game.title}</span>
+          {ratingText ? (
+            <span
+              className="home-top-rated-card__rating"
+              aria-label={ratingText}
+            >
+              <Flame
+                size={16}
+                fill="currentColor"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span>{ratingText}</span>
+            </span>
+          ) : null}
         </span>
       </span>
     </div>
@@ -592,7 +585,6 @@ function HomeTopRatedShelf({
       renderItem={(game) => (
         <HomeTopRatedCard
           game={game}
-          language={language}
           onOpenGame={onOpenGame}
           onGameContextMenu={onGameContextMenu}
         />

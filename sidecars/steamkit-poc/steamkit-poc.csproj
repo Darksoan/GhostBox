@@ -13,8 +13,29 @@
     <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\depotdownloader-mod\DepotDownloader\DepotDownloaderMod.csproj" />
+  <!-- O fork em `sidecars/depotdownloader-mod` não está no repo. Enquanto ele
+       não voltar, o build compila contra o DepotDownloaderMod.dll guardado em
+       `lib/` e declara as dependências que o fork trazia por transitividade
+       (versões lidas de DepotDownloaderMod.deps.json). Se a pasta do fork
+       reaparecer, o ProjectReference volta a valer sozinho. -->
+  <PropertyGroup>
+    <DepotDownloaderModProject>..\depotdownloader-mod\DepotDownloader\DepotDownloaderMod.csproj</DepotDownloaderModProject>
+    <HasDepotDownloaderModSource>false</HasDepotDownloaderModSource>
+    <HasDepotDownloaderModSource Condition="Exists('$(DepotDownloaderModProject)')">true</HasDepotDownloaderModSource>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(HasDepotDownloaderModSource)' == 'true'">
+    <ProjectReference Include="$(DepotDownloaderModProject)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HasDepotDownloaderModSource)' != 'true'">
+    <Reference Include="DepotDownloaderMod">
+      <HintPath>lib\DepotDownloaderMod.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <PackageReference Include="SteamKit2" Version="3.2.0" />
+    <PackageReference Include="System.IO.Hashing" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 
 </Project>

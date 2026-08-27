@@ -18,7 +18,7 @@ import { createBackupToastFromRecord } from "../lib/backupNotifications";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
-import { StorageSection } from "../features/settings/StorageSection";
+import { TempFilesSection } from "../features/settings/TempFilesSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
 import {
@@ -27,12 +27,7 @@ import {
   settingsTabDescriptionKeys,
 } from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
-import {
-  readStoredDownloadsDir,
-  writeStoredDownloadsDir,
-  readStoredDownloadParallelChunks,
-  writeStoredDownloadParallelChunks,
-} from "../utils/storage";
+import { readStoredDownloadsDir, writeStoredDownloadsDir } from "../utils/storage";
 
 export type { SettingsTabId } from "../features/settings/settingsTabsShared";
 export { settingsTabLabelKeys } from "../features/settings/settingsTabsShared";
@@ -253,20 +248,12 @@ export function SettingsPage({
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
   );
   const [downloadsDir, setDownloadsDir] = useState(() => readStoredDownloadsDir());
-  const [parallelChunks, setParallelChunks] = useState(() => readStoredDownloadParallelChunks());
 
   const handleSelectDownloadsDir = useCallback(async () => {
     const picked = await ghostboxApi.selectDownloadsDir();
     if (!picked) return;
     writeStoredDownloadsDir(picked);
     setDownloadsDir(picked);
-  }, []);
-
-  const handleParallelChunksChange = useCallback((value: string) => {
-    const nextValue = Number.parseInt(value, 10);
-    if (!Number.isFinite(nextValue)) return;
-    writeStoredDownloadParallelChunks(nextValue);
-    setParallelChunks(readStoredDownloadParallelChunks());
   }, []);
 
   const handleTestToast = useCallback(() => {
@@ -350,14 +337,13 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave, downloadsDir, handleSelectDownloadsDir, parallelChunks, handleParallelChunksChange, handleTestToast, handleTestBackupToast),
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave, downloadsDir, handleSelectDownloadsDir, handleTestToast, handleTestBackupToast),
     [
       activeTab,
       appearance,
       backupSettings,
       downloadsDir,
       drafts,
-      handleParallelChunksChange,
       handleSelectDownloadsDir,
       handleTestBackupToast,
       handleTestToast,
@@ -366,7 +352,6 @@ export function SettingsPage({
       onMorrenusApiKeyChange,
       onMorrenusApiKeySave,
       onSelectSteamPath,
-      parallelChunks,
       steamPath,
       t,
       updateAppearance,
@@ -423,7 +408,7 @@ export function SettingsPage({
               ))}
             </div>
           )}
-          {activeTab.id === "general" && <StorageSection />}
+          {activeTab.id === "performance" && <TempFilesSection />}
           {activeTab.id === "connections" && <ConnectionsPanel />}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans
@@ -455,8 +440,6 @@ function buildTabOptions(
   onMorrenusApiKeyCheck: () => void,
   downloadsDir: string,
   onSelectDownloadsDir: () => void,
-  parallelChunks: number,
-  onParallelChunksChange: (value: string) => void,
   onTestToast: () => void,
   onTestBackupToast: () => void
 ) {
@@ -651,19 +634,6 @@ function buildTabOptions(
         value: downloadsDir,
         placeholder: t("settings.library.downloadsDir.placeholder"),
         onClick: onSelectDownloadsDir,
-      },
-      {
-        label: t("settings.library.parallelChunks.label"),
-        description: t("settings.library.parallelChunks.description"),
-        control: "select" as const,
-        value: String(parallelChunks),
-        // Discreto em vez de slider: a faixa util e pequena e o renderer de
-        // opcoes ja fala "select", entao nao vale um controle novo so por isso.
-        choices: [1, 4, 8, 16, 24, 32].map((value) => ({
-          label: String(value),
-          value: String(value),
-        })),
-        onChange: onParallelChunksChange,
       },
     ];
   }

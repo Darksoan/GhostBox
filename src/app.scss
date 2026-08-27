@@ -3501,17 +3501,21 @@ p {
   animation: download-cover-in var(--motion-base) ease both;
 }
 
-/* Corpo do card: nome e uma linha de pills. A altura dos
-   blocos é fechada e as contagens fixas são decididas no TSX (ver
-   `homeTopRatedCardPillCount`), então os cards da fila fecham na mesma altura
-   sem piso artificial. */
+/* Corpo do card: o nome com a nota média à direita, numa única linha. O nome
+   encolhe (reticências) e a nota é o único elemento fixo à direita. */
 .home-top-rated-card__body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
-  gap: var(--space-5);
   padding: var(--space-7) var(--space-6);
+}
+
+.home-top-rated-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 .home-top-rated-card__title {
@@ -3527,54 +3531,30 @@ p {
   white-space: nowrap;
 }
 
-/* Placeholder do título: largura parcial para não ler como barra cheia. As
-   pills skeleton preenchem as vagas que ainda não têm trait (ver regra do
-   `__tag`). */
-.home-top-rated-card__title--skeleton {
-  width: 64%;
-  height: var(--type-line-body-emphasis);
-}
-
-/* Uma linha, contagem decidida no TSX. `nowrap`: rótulo longo encolhe (a pill
-   segura com reticências) em vez de vazar para uma segunda linha que o
-   `overflow: hidden` comeria — mesma decisão das `--pill-rows` da grade. */
-.home-top-rated-card__tags {
-  display: flex;
-  height: var(--pill-height);
-  min-width: 0;
-  margin-top: var(--space-5);
-  flex-wrap: nowrap;
-  align-content: flex-start;
+/* Nota média (fire + valor), ao lado direito do nome — mesmo padrão do preview
+   do catálogo. `flex: 0 0 auto` impede a nota de encolher quando o título é
+   longo; quem encolhe é o nome. */
+.home-top-rated-card__rating {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
-  overflow: hidden;
-}
-
-/* `flex: 1 1 auto`: a largura natural continua sendo a base, mas depois a
-   pill estica e divide a sobra com as irmãs da linha — cobrindo a largura
-   inteira do card, sem buraco à direita quando o rótulo é curto (mesma regra
-   das pills de Recomendados/Top rated da grade). */
-.home-top-rated-card__tag {
-  @include tag-chip;
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  border-color: transparent;
-  background: var(--pill-bg);
+  flex: 0 0 auto;
   color: var(--text-secondary);
-  text-overflow: ellipsis;
+  font-size: var(--type-size-compact);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
   white-space: nowrap;
 }
 
-/* A pill ACOMPANHA o card no hover — mesmo repique de elevação da grade:
-   quando o card muda de degrau, a pill sobe do --c-3 para --c-4 (#1a1a1a).
-   A pill é não-interativa; o hover direto nela pinta o mesmo degrau porque
-   quem responde ao ponteiro é o card inteiro. Placeholders (`--skeleton`)
-   ficam de fora: são vagas aguardando dado, não conteúdo. */
-@media (hover: hover) and (pointer: fine) {
-  .home-top-rated-card:hover .home-top-rated-card__tag:not(.skeleton) {
-    background: var(--pill-bg-hover);
-  }
+.home-top-rated-card__rating svg {
+  color: var(--text-primary);
+  flex: 0 0 auto;
+}
+
+/* Placeholder do título: largura parcial para não ler como barra cheia. */
+.home-top-rated-card__title--skeleton {
+  width: 64%;
+  height: var(--type-line-body-emphasis);
 }
 
 .home-top-rated__arrow {

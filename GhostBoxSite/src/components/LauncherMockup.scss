@@ -1,0 +1,791 @@
+// A janela é desenhada em pixels reais do app (1280×800) e reduzida por
+// `scale`. É o que mantém a fidelidade: 52px de titlebar continuam 52px, a
+// sidebar continua 280px e a capa continua 460×215 — igual ao launcher.
+.lm {
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+// --lm-scale e --lm-height vêm do ResizeObserver (useScaleToFit). O fallback
+// cobre o primeiro paint e o caso sem JS: 0.45 é a razão de uma coluna típica
+// de desktop (576px) para os 1280px de projeto.
+.lm__scaler {
+  --lm-scale: 0.45;
+  --lm-height: 360px;
+  position: relative;
+  width: 100%;
+  height: var(--lm-height);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  box-shadow:
+    var(--shadow-3),
+    var(--site-hairline);
+}
+
+// Fora do fluxo de propósito: `transform` não muda a caixa de layout, então uma
+// janela de 1280px em fluxo esticaria a coluna inteira numa tela de celular.
+.lm__window {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: 1280px;
+  height: 800px;
+  display: flex;
+  flex-direction: column;
+  transform: scale(var(--lm-scale));
+  transform-origin: top left;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1;
+}
+
+// --- Titlebar (--app-header-height: 52px) ---------------------------------
+// Fica à direita da sidebar, como no app: a sidebar sobe até o topo da janela.
+
+.lm__stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lm__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  min-height: 52px;
+  padding: 0 12px 0 24px;
+  background: var(--surface-canvas);
+}
+
+.lm__nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
+.lm__titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lm__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--icon-default);
+}
+
+.lm__icon-button--disabled {
+  opacity: 0.35;
+}
+
+.lm__badge {
+  position: absolute;
+  inset-block-start: 5px;
+  inset-inline-end: 6px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--text-primary);
+  color: var(--surface-canvas);
+  font-size: 9px;
+  line-height: 13px;
+  text-align: center;
+}
+
+.lm__premium {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  color: var(--premium-gold);
+  font-size: 14px;
+}
+
+.lm__premium-chevron {
+  color: var(--text-tertiary);
+}
+
+.lm__search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 200px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.lm__search-placeholder {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.lm__window-controls {
+  display: inline-flex;
+  margin-inline-start: 6px;
+}
+
+.lm__window-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 36px;
+  color: var(--icon-default);
+  opacity: 0.7;
+}
+
+// --- Sidebar (280px) ------------------------------------------------------
+
+.lm__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.lm__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 280px;
+  min-width: 280px;
+  padding: 16px;
+  background: var(--surface-panel);
+}
+
+.lm__account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+}
+
+.lm__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(150deg, #3a4356 0%, #1a1e26 100%);
+}
+
+.lm__account-name {
+  font-size: 16px;
+}
+
+.lm__account-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.lm__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lm__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+}
+
+// Navegação clareia: repouso transparente, selecionado no teto da rampa.
+.lm__menu-item[data-active] {
+  background: var(--surface-strong);
+}
+
+.lm__menu-item--collection {
+  color: var(--text-secondary);
+}
+
+.lm__menu-label {
+  flex: 1;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lm__count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--text-primary);
+  color: var(--surface-canvas);
+  font-size: 12px;
+  font-weight: var(--weight-regular);
+  line-height: 20px;
+  text-align: center;
+}
+
+// Seção de coleções fechada, como no app quando não há coleção expandida.
+.lm__section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  color: var(--text-tertiary);
+}
+
+.lm__section-title {
+  flex: 1;
+  font-size: 13px;
+  letter-spacing: var(--ls-100);
+  text-transform: uppercase;
+}
+
+.lm__section-add {
+  display: inline-flex;
+}
+
+// --- Conteúdo -------------------------------------------------------------
+
+.lm__content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface-canvas);
+  // A página continua abaixo da dobra da janela; o esmaecimento diz isso em vez
+  // de deixar a última fileira parecendo corte errado.
+  mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
+}
+
+.lm__page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.lm__page--padded {
+  padding-block-start: 12px;
+}
+
+.lm__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+// --- Home -----------------------------------------------------------------
+
+.lm__banner {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1920 / 620;
+  max-height: 420px;
+  overflow: hidden;
+  background: var(--surface-panel);
+}
+
+.lm__banner-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lm__banner-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.86) 0%,
+      rgb(0 0 0 / 0.62) 34%,
+      rgb(0 0 0 / 0.08) 68%,
+      rgb(0 0 0 / 0) 100%
+    ),
+    linear-gradient(to top, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0) 52%);
+}
+
+.lm__banner-info {
+  position: absolute;
+  inset-inline: 40px;
+  inset-block-end: 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lm__banner-title {
+  font-size: 28px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-700);
+  line-height: 34px;
+}
+
+.lm__banner-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.lm__banner-dots {
+  position: absolute;
+  inset-inline-start: 40px;
+  inset-block-end: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lm__banner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--white) 32%, transparent);
+}
+
+.lm__banner-dot--active {
+  width: 18px;
+  background: var(--text-primary);
+}
+
+.lm__shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-inline: 48px;
+}
+
+// Título de prateleira do app: caixa alta, pequeno e discreto — a arte é que
+// tem de puxar o olho.
+.lm__shelf-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--ls-100);
+  line-height: 18px;
+  text-transform: uppercase;
+}
+
+.lm__shelf-rail {
+  position: relative;
+}
+
+.lm__shelf-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lm__shelf-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.lm__shelf-cover {
+  display: block;
+  aspect-ratio: 460 / 215;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.lm__shelf-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.lm__shelf-name {
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lm__rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lm__rail-arrow {
+  position: absolute;
+  inset-inline-end: -30px;
+  inset-block-start: 40%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 40px;
+  color: var(--text-secondary);
+}
+
+// --- Chips ----------------------------------------------------------------
+
+.lm__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lm__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lm__chip--sm {
+  height: 22px;
+  padding: 0 8px;
+}
+
+.lm__chip--active,
+.lm__chip[data-active] {
+  background: var(--surface-strong);
+  color: var(--text-primary);
+}
+
+.lm__chip-count {
+  min-width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--text-primary);
+  color: var(--surface-canvas);
+  font-size: 10px;
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+  text-align: center;
+}
+
+// --- Biblioteca -----------------------------------------------------------
+
+.lm__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-inline: 24px;
+}
+
+.lm__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 240px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-tertiary);
+}
+
+.lm__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(0, 200px));
+  justify-content: start;
+  gap: 12px;
+  padding-inline: 24px;
+}
+
+.lm__card {
+  position: relative;
+  aspect-ratio: 600 / 900;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.lm__card-badges {
+  position: absolute;
+  inset-inline: 8px;
+  inset-block-end: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 30px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--black) 62%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.lm__card-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+// --- Catálogo -------------------------------------------------------------
+
+// Filtro do catálogo: gatilho de dropdown, não pill de seleção.
+.lm__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.lm__filter svg {
+  color: var(--text-tertiary);
+}
+
+.lm__sort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 200px;
+  height: 36px;
+  margin-inline-start: auto;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.lm__sort svg {
+  color: var(--text-tertiary);
+}
+
+.lm__catalogue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding-inline: 24px;
+}
+
+.lm__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lm__row {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 84px;
+  padding-inline-end: 12px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.lm__row-cover {
+  display: block;
+  width: 196px;
+  height: 84px;
+  overflow: hidden;
+}
+
+.lm__row-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lm__row-title {
+  font-size: 15px;
+  font-weight: var(--weight-regular);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Coluna de prévia: sem cartão próprio, como no app — título, estúdio e
+// capturas soltos sobre o canvas.
+.lm__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lm__preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lm__preview-title {
+  font-size: 16px;
+  font-weight: var(--weight-semibold);
+}
+
+.lm__preview-developer {
+  margin-block-end: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.lm__preview-shot {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+// --- Conquistas (visão geral do perfil) -----------------------------------
+
+.lm__metrics {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding-inline: 24px;
+}
+
+.lm__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lm__metric strong {
+  font-size: 20px;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.lm__metric span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.lm__activity {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-inline: 24px;
+}
+
+.lm__activity-card {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 10px;
+  min-height: 84px;
+  padding-inline-end: 12px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.lm__activity-cover {
+  grid-row: 1 / -1;
+  display: block;
+  width: 196px;
+  height: 92px;
+  overflow: hidden;
+}
+
+.lm__activity-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block-start: 12px;
+}
+
+.lm__activity-title {
+  font-size: 14px;
+  font-weight: var(--weight-regular);
+}
+
+.lm__activity-hours {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.lm__activity-progress {
+  display: grid;
+  grid-template-columns: auto auto minmax(120px, 320px);
+  align-items: center;
+  gap: 10px;
+  padding-block-end: 12px;
+}
+
+.lm__cup {
+  color: var(--text-primary);
+}
+
+.lm__cup--perfect {
+  color: var(--premium-gold);
+}
+
+.lm__activity-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lm__track {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
+}
+
+.lm__track-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-primary);
+}

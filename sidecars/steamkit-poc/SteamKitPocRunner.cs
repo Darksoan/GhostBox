@@ -13,6 +13,7 @@ public class SteamKitPocRunner
     private Steam3Session? _steam3;
     private CDNClientPool? _cdnPool;
     private byte[]? _depotKey;
+    private DownloadTelemetry? _telemetry;
 
     private static readonly SemaphoreSlim WorkerSessionGate = new(1, 1);
     private static readonly Dictionary<uint, CDNClientPool> WorkerCdnPools = [];
@@ -682,10 +683,20 @@ public class SteamKitPocRunner
         System.Diagnostics.Stopwatch? networkStopwatch = null;
         var progressLock = new object();
         var fileStates = new List<FileDownloadState>();
-        var parallelChunks = Math.Clamp(_config.ParallelChunks, 1, 32);
+        var parallelChunks = Math.Clamp(_config.ParallelChunks, 1, Config.MaxParallelChunks);
         var validationIndexPath = Path.Combine(_config.OutputDir!, ".ghostbox-chunks.json");
         var validationIndex = LoadValidationIndex(validationIndexPath, _config.ManifestIdOverride);
         var validationIndexLock = new object();
+        var telemetry = new DownloadTelemetry(
+            _config.OutputDir,
+            _config.AppId,
+            manifest.DepotID,
+            _config.ManifestIdOverride,
+            parallelChunks);
+        _telemetry = telemetry;
+        telemetry.Log(
+            $"plan files={totalFiles} chunks={totalChunks} bytes={totalBytes} " +
+            $"validationIndex={(validationIndex?.Files.Count ?? -1)} outputDir={_config.OutputDir}");
 
         if (manifest.Files == null)
         {
@@ -729,6 +740,9 @@ public class SteamKitPocRunner
         {
             Interlocked.Increment(ref work.FileState.FailedChunks);
             Interlocked.Increment(ref failedChunks);
+            telemetry.RecordChunkFailure(status);
+            telemetry.LogFailureSample(
+                $"chunk-failure status={status} file={work.FileState.File.FileName} chunk={work.ChunkIndex}");
             EmitProgress(new ProgressEvent
             {
                 Type = "error",
@@ -808,6 +822,7 @@ public class SteamKitPocRunner
             }
 
             var preparationAbort = 0;
+            var preparationStartedAt = DownloadTelemetry.Now();
             try
             {
                 await Parallel.ForEachAsync(
@@ -848,14 +863,22 @@ public class SteamKitPocRunner
                             {
                                 // Fail early for unwritable destinations, without opening one handle per
                                 // file for the whole depot. Workers reuse one lazy stream per file.
-                                await using var probe = new FileStream(
+                                //
+                                // Handle síncrono de propósito: `SparseFiles.TryMarkSparse` precisa
+                                // completar antes do `SetLength`, senão a pré-alocação já saiu densa
+                                // e o zero-fill do NTFS volta. Este é o único ponto que pré-aloca,
+                                // então marcar aqui cobre todas as escritas do depot.
+                                using var probe = new FileStream(
                                     state.Path,
                                     FileMode.OpenOrCreate,
                                     FileAccess.ReadWrite,
                                     FileShare.Read,
                                     bufferSize: 1024 * 1024,
-                                    FileOptions.Asynchronous | FileOptions.RandomAccess);
+                                    FileOptions.RandomAccess);
+                                var sparse = SparseFiles.TryMarkSparse(probe);
                                 probe.SetLength(state.Length);
+                                if (!sparse)
+                                    telemetry.LogFailureSample($"sparse-not-supported file={state.File.FileName}");
                             }
 
                             if (missingChunks == 0)
@@ -909,6 +932,12 @@ public class SteamKitPocRunner
                     failedChunks,
                     false);
             }
+
+            telemetry.Log(
+                $"prepass done in {DownloadTelemetry.Since(preparationStartedAt) / (double)System.Diagnostics.Stopwatch.Frequency:F2}s " +
+                $"files={fileStates.Count} chunksAlreadyValid={Interlocked.Read(ref downloadedChunks)} " +
+                $"bytesAlreadyValid={Interlocked.Read(ref downloadedBytes)}");
+            telemetry.Log(telemetry.BuildSummary("after-prepass", parallelChunks));
 
             var channel = Channel.CreateBounded<ChunkWorkItem>(new BoundedChannelOptions(
                 Math.Max(parallelChunks * 4, 1))
@@ -969,7 +998,10 @@ public class SteamKitPocRunner
                         Server? connection = null;
                         try
                         {
+                            var connectionWaitStartedAt = DownloadTelemetry.Now();
                             connection = _cdnPool!.GetConnection();
+                            telemetry.AddConnectionWait(DownloadTelemetry.Since(connectionWaitStartedAt));
+
                             string? cdnToken = null;
                             if (_steam3!.CDNAuthTokens.TryGetValue((manifest.DepotID, connection.Host), out var authTask))
                             {
@@ -977,14 +1009,32 @@ public class SteamKitPocRunner
                                 cdnToken = authResult.Token;
                             }
 
-                            written = await _cdnPool.CDNClient.DownloadDepotChunkAsync(
-                                manifest.DepotID,
-                                chunk,
-                                connection,
-                                chunkBuffer,
-                                _depotKey,
-                                _cdnPool.ProxyServer,
-                                cdnToken);
+                            var networkStartedAt = DownloadTelemetry.Now();
+                            try
+                            {
+                                written = await _cdnPool.CDNClient.DownloadDepotChunkAsync(
+                                    manifest.DepotID,
+                                    chunk,
+                                    connection,
+                                    chunkBuffer,
+                                    _depotKey,
+                                    _cdnPool.ProxyServer,
+                                    cdnToken);
+                            }
+                            catch (Exception networkError) when (networkError is not OperationCanceledException)
+                            {
+                                telemetry.RecordAttemptException(
+                                    connection.Host,
+                                    DownloadTelemetry.Since(networkStartedAt),
+                                    networkError);
+                                throw;
+                            }
+
+                            telemetry.RecordAttempt(
+                                connection.Host,
+                                DownloadTelemetry.Since(networkStartedAt),
+                                written,
+                                written > 0);
 
                             if (written > 0)
                             {
@@ -1009,7 +1059,9 @@ public class SteamKitPocRunner
                         if (attempt < maxAttempts)
                         {
                             var backoffMs = Math.Min(4000, 150 * (1 << (attempt - 1)));
+                            var retryStartedAt = DownloadTelemetry.Now();
                             await Task.Delay(backoffMs + Random.Shared.Next(0, 101), _cancellationToken);
+                            telemetry.AddRetryDelay(DownloadTelemetry.Since(retryStartedAt));
                         }
                     }
 
@@ -1025,7 +1077,9 @@ public class SteamKitPocRunner
                         return;
                     }
 
+                    var hashStartedAt = DownloadTelemetry.Now();
                     var adler = ComputeAdler32(chunkBuffer, written);
+                    telemetry.AddHash(DownloadTelemetry.Since(hashStartedAt));
                     var expected = BitConverter.GetBytes(chunk.Checksum);
                     if (!adler.AsSpan().SequenceEqual(expected))
                     {
@@ -1038,11 +1092,14 @@ public class SteamKitPocRunner
                     }
 
                     var fileStream = GetOrOpenFileStream(work.FileState);
+                    var diskWriteStartedAt = DownloadTelemetry.Now();
                     await RandomAccess.WriteAsync(
                         fileStream.SafeFileHandle,
                         chunkBuffer.AsMemory(0, written),
                         (long)chunk.Offset,
                         _cancellationToken);
+                    telemetry.AddDiskWrite(DownloadTelemetry.Since(diskWriteStartedAt), written);
+                    telemetry.RecordChunkCompleted();
                     UpdateValidationIndexChunk(
                         validationIndex,
                         validationIndexLock,
@@ -1083,6 +1140,25 @@ public class SteamKitPocRunner
 
                     if (progressUpdate != null)
                         EmitProgress(progressUpdate);
+
+                    // Snapshot periódico: é o log que diz se os segundos foram para
+                    // rede, disco ou retry enquanto o download ainda está rodando.
+                    if (telemetry.ShouldSnapshot(15))
+                    {
+                        telemetry.Log(telemetry.BuildSummary("in-flight", parallelChunks));
+                        EmitProgress(new ProgressEvent
+                        {
+                            Type = "telemetry",
+                            Status = "download-stage-breakdown",
+                            AppId = _config.AppId,
+                            DepotId = manifest.DepotID,
+                            Message = telemetry.BuildVerdict(parallelChunks),
+                            OutputDir = telemetry.LogPath,
+                            BytesDownloaded = (ulong)Interlocked.Read(ref downloadedBytes),
+                            BytesTotal = totalBytes,
+                            FailedChunks = Volatile.Read(ref failedChunks),
+                        });
+                    }
 
                     workCompleted = true;
                 }
@@ -1130,6 +1206,19 @@ public class SteamKitPocRunner
                 try { File.Delete(state.Path); } catch { }
             }
             SaveValidationIndex(validationIndexPath, validationIndex);
+            telemetry.Log(telemetry.BuildSummary("depot-final", parallelChunks));
+            telemetry.Log($"verdict {telemetry.BuildVerdict(parallelChunks)}");
+            EmitProgress(new ProgressEvent
+            {
+                Type = "telemetry",
+                Status = "download-stage-final",
+                AppId = _config.AppId,
+                DepotId = manifest.DepotID,
+                Message = telemetry.BuildVerdict(parallelChunks),
+                OutputDir = telemetry.LogPath,
+                FailedChunks = Volatile.Read(ref failedChunks),
+            });
+            _telemetry = null;
         }
 
         return new DepotDownloadResult(
@@ -1153,6 +1242,11 @@ public class SteamKitPocRunner
         if (!File.Exists(filePath))
             return validChunks;
 
+        var validationStartedAt = DownloadTelemetry.Now();
+        long validationBytesRead = 0;
+        long validationChunksHashed = 0;
+        long validationChunksFromCache = 0;
+
         var fileInfo = new FileInfo(filePath);
         var cachedFile = GetCachedFileIndex(validationIndex, validationIndexLock, filePath, fileInfo, expectedFileLength);
         var needsDiskValidation = cachedFile == null;
@@ -1172,6 +1266,7 @@ public class SteamKitPocRunner
             if (!needsDiskValidation && TryGetCachedChunk(cachedFile!, chunkIndex, chunk))
             {
                 validChunks[chunkIndex] = true;
+                validationChunksFromCache++;
                 continue;
             }
 
@@ -1193,7 +1288,9 @@ public class SteamKitPocRunner
                     totalRead += read;
                 }
 
+                validationBytesRead += totalRead;
                 if (totalRead != chunk.UncompressedLength) continue;
+                validationChunksHashed++;
                 var adler = ComputeAdler32(existingBuffer, totalRead);
                 var expected = BitConverter.GetBytes(chunk.Checksum);
                 validChunks[chunkIndex] = adler.AsSpan().SequenceEqual(expected);
@@ -1214,6 +1311,12 @@ public class SteamKitPocRunner
                 ArrayPool<byte>.Shared.Return(existingBuffer);
             }
         }
+
+        _telemetry?.AddValidation(
+            DownloadTelemetry.Since(validationStartedAt),
+            validationBytesRead,
+            validationChunksHashed,
+            validationChunksFromCache);
 
         return validChunks;
     }

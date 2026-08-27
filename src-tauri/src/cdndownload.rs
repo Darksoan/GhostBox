@@ -8,6 +8,12 @@ use tauri::Emitter;
 
 const POC_RELATIVE_PATH: &str = "../sidecars/steamkit-poc/bin/Debug/net8.0/steamkit-poc.exe";
 
+/// Chunks baixados em paralelo por depot. Fixo no teto que o worker aceita
+/// (`Math.Clamp(..., 1, 32)` em `SteamKitPocRunner`): deixar isto configurável
+/// só dava ao usuário a chance de escolher errado, e o custo de disco que
+/// justificava valores baixos foi resolvido marcando os arquivos como sparse.
+const MAX_PARALLEL_CHUNKS: u32 = 32;
+
 static ACTIVE_DOWNLOAD_PROCESSES: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
 static CANCELLED_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static DOWNLOAD_WORKER: OnceLock<Mutex<Option<DownloadWorker>>> = OnceLock::new();
@@ -857,11 +863,10 @@ pub async fn cdndownload_download_game(
     downloads_root: String,
     game_title: Option<String>,
     steam_path: Option<String>,
-    parallel_chunks: Option<u32>,
     allow_stale: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let _ = take_download_cancelled(&app_id);
-    let parallel_chunks = parallel_chunks.unwrap_or(24).clamp(1, 32);
+    let parallel_chunks = MAX_PARALLEL_CHUNKS;
     let steam_path = match steam_path {
         Some(path) => path,
         None => crate::resolve_steam_path(&app, None).0.ok_or_else(|| {

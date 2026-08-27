@@ -37,7 +37,7 @@ Comandos aceitos em stdin (um objeto JSON por linha):
   `TotalBytes` e a soma do `UncompressedLength` de todos os chunks, usada pelo
   Rust para calcular o tamanho total antes de iniciar o download.
 - `{"Type":"downloadDepot","AppId":<u32>,"DepotId":<u32>,"ManifestId":<u64>,"SteamPath":"...","OutputDir":"...","ParallelChunks":<i32>}`
-  — `ParallelChunks` e opcional (default `24`); os demais campos sao
+  — `ParallelChunks` e opcional (default `32`, que e tambem o teto); os demais campos sao
   obrigatorios. Se ja houver download ativo para o mesmo `AppId`, ele e
   cancelado antes de o novo comecar.
 - `{"Type":"cancelDownload","AppId":<u32>}` e `{"Type":"pauseDownload","AppId":<u32>}`

@@ -1,0 +1,67 @@
+// Camada só-marketing. Não existe no launcher: a escala do app (--space-16: 48px
+// no teto) é apertada demais para uma landing, e a rampa tipográfica do app para
+// em 48px. Tudo aqui é construído em cima dos primitivos, nunca ao lado deles.
+@use "semantic";
+
+:root {
+  // --- Espaçamento de página (4/8pt, fluido) ---
+  --site-space-2: 8px;
+  --site-space-3: 12px;
+  --site-space-4: 16px;
+  --site-space-6: 24px;
+  --site-space-8: 32px;
+  --site-space-12: 48px;
+  --site-space-16: 64px;
+  --site-space-24: 96px;
+  --site-space-32: 128px;
+  // Respiro entre seções: 64px no celular, 128px no desktop.
+  --site-space-section: clamp(64px, 9vw, 128px);
+  --site-gutter: clamp(20px, 5vw, 48px);
+  --site-max-width: 1200px;
+  // Coluna de leitura. Parágrafo nunca passa disto (60–75 caracteres).
+  --site-measure: 65ch;
+
+  // --- Tipografia de display (único lugar com clamp acima da rampa do app) ---
+  --site-fs-display: clamp(36px, 4.6vw, 62px);
+  --site-fs-title: clamp(28px, 3.6vw, 44px);
+  --site-fs-subtitle: clamp(20px, 2.2vw, 26px);
+  --site-fs-lead: clamp(16px, 1.4vw, 20px);
+  --site-lh-display: 1.04;
+  --site-lh-title: 1.1;
+  --site-lh-body: 1.6;
+
+  // --- Motion: paleta de três durações + easing assinatura ---
+  // Personalidade Premium: sem overshoot, curva única em ~80% das transições.
+  --site-motion-quick: 180ms; // hover, press, troca de rótulo
+  --site-motion-base: 420ms; // reveal de seção, card
+  --site-motion-slow: 600ms; // hero
+  --site-ease: var(--ease); // cubic-bezier(0.4, 0, 0.2, 1)
+  --site-ease-out: var(--ease-out);
+  --site-ease-sine: cubic-bezier(0.37, 0, 0.63, 1);
+  --site-stagger: 70ms;
+  // Deslocamento de entrada padrão. Zerado sob prefers-reduced-motion (app.scss),
+  // o que transforma toda entrada em crossfade de opacidade sem tocar em cada regra.
+  --site-reveal-shift: 16px;
+  --site-parallax: 0px; // escrito em runtime por useParallax
+
+  // --- Ambiente ---
+  // Único gradiente frio do site, atrás do hero. Azul dessaturado a 10% sobre o
+  // piso da rampa: dá profundidade sem virar neon.
+  --site-ambient: radial-gradient(
+    100% 70% at 62% 8%,
+    color-mix(in srgb, #33578c 34%, transparent) 0%,
+    transparent 58%
+  );
+  --site-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  // Capas do mockup. São blocos abstratos de propósito: o site não estampa arte
+  // de jogo de terceiros e não finge uma captura de tela que não existe.
+  --site-tile-1: linear-gradient(160deg, #24303f 0%, #121821 100%);
+  --site-tile-2: linear-gradient(160deg, #3a2a2a 0%, #171012 100%);
+  --site-tile-3: linear-gradient(160deg, #23342e 0%, #101816 100%);
+  --site-tile-4: linear-gradient(160deg, #2e2a3d 0%, #14121c 100%);
+  --site-tile-5: linear-gradient(160deg, #3a3324 0%, #191510 100%);
+  // Contorno de imagem em superfície escura: branco puro a 10%, nunca um
+  // quase-preto tingido (pega a cor de baixo e lê como sujeira na borda).
+  --site-image-outline: 0 0 0 1px rgb(255 255 255 / 0.1);
+}

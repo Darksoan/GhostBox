@@ -66,6 +66,7 @@ import {
   readStoredSteamProfile,
   readStoredSteamAccountStats,
   readStoredStartupPage,
+  readStoredShowSteamGames,
   readStoredCloudProfileUpdatedAt,
   readStoredAutoRestoredCloudSaves,
   writeStoredAutoRestoredCloudSaves,
@@ -278,6 +279,8 @@ interface AppDataContextValue {
   steamPathInput: string;
   showSteamGames: boolean;
   steamAccountStats: SteamAccountStats | null;
+  /** App ids the account has a cloud save for — the GhostBox-owned game set. */
+  cloudSaveAppIds: Set<string>;
   profileHistoryGames: GhostBoxGame[];
   profileFavoriteGames: GhostBoxGame[];
   profileAddedLibraryGames: GhostBoxGame[];
@@ -367,14 +370,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [steamPathInput, setSteamPathInput] = useState(
     "C:\\Program Files (x86)\\Steam",
   );
-  // Steam account games are never auto-listed in the library.
-  const showSteamGames = false;
-  const setShowSteamGames = useCallback((_value: boolean) => {
-    writeStoredShowSteamGames(false);
+  const [showSteamGames, _setShowSteamGames] = useState<boolean>(() =>
+    readStoredShowSteamGames(),
+  );
+
+  const setShowSteamGames = useCallback((value: boolean) => {
+    _setShowSteamGames(value);
+    writeStoredShowSteamGames(value);
   }, []);
   const [steamAccountStats, setSteamAccountStats] =
     useState<SteamAccountStats | null>(() => readStoredSteamAccountStats());
   const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
+  const [cloudSaveAppIds, setCloudSaveAppIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
   const backupSettingsRef = useRef<BackupSettings | null>(
     defaultBackupSettings,
   );
@@ -1025,6 +1034,36 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     };
   }, [markInitialLoadStepComplete, queueBackupToast]);
 
+  // The cloud save list is the authoritative "games owned by this GhostBox
+  // account" set. Backup records change whenever a save is pushed, so they
+  // double as the refresh trigger.
+  useEffect(() => {
+    if (!accountUserId) {
+      setCloudSaveAppIds((current) => (current.size ? new Set<string>() : current));
+      return;
+    }
+
+    let cancelled = false;
+
+    void ghostboxApi
+      .listCloudSaves()
+      .then((saves) => {
+        if (cancelled) return;
+        const nextAppIds = new Set(saves.map((save) => save.appId));
+        setCloudSaveAppIds((current) =>
+          current.size === nextAppIds.size &&
+          [...nextAppIds].every((appId) => current.has(appId))
+            ? current
+            : nextAppIds,
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accountUserId, backupSettings]);
+
   useEffect(() => {
     const records = backupSettings?.backupRecords ?? {};
     const recordEntries = Object.entries(records);
@@ -1140,10 +1179,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeStoredStartupPage(initialPage);
   }, [initialPage]);
-
-  useEffect(() => {
-    writeStoredShowSteamGames(false);
-  }, []);
 
   useEffect(() => {
     writeStoredProfileHistoryGames(profileHistoryGames);
@@ -2403,6 +2438,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       steamPathInput,
       showSteamGames,
       steamAccountStats,
+      cloudSaveAppIds,
       profileHistoryGames: profileHistoryGamesWithPlaytime,
       profileFavoriteGames,
       profileAddedLibraryGames,
@@ -2455,6 +2491,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       steamPathInput,
       showSteamGames,
       steamAccountStats,
+      cloudSaveAppIds,
       profileHistoryGamesWithPlaytime,
       profileFavoriteGames,
       profileAddedLibraryGames,

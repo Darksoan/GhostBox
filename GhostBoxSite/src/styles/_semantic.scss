@@ -1,0 +1,69 @@
+// Tokens semânticos do site. É um subconjunto do arquivo do app
+// (`src/styles/_semantic.scss`): só os papéis que uma página institucional usa.
+// Nomes idênticos aos do launcher de propósito — o site é a mesma linguagem
+// visual, então um token com o mesmo nome tem de valer a mesma coisa nos dois.
+@use "primitives";
+
+:root {
+  // --- Superfície ---
+  --surface-canvas: var(--c-0);
+  --surface-panel: var(--c-1);
+  --surface-card: var(--c-1);
+  --surface-card-hover: var(--c-2);
+  --surface-raised: var(--c-3);
+  --surface-strong: var(--c-4);
+
+  // Overlays de interação: tinta translúcida sobre a superfície de repouso.
+  --surface-hover: var(--a-hover);
+  --surface-active: var(--a-active);
+
+  // --- Borda ---
+  --border-subtle: var(--b-0);
+  --border-default: var(--n-5);
+  --border-strong: var(--n-6);
+  --border-interactive: var(--n-7);
+
+  // --- Texto ---
+  --text-primary: var(--n-11);
+  --text-secondary: var(--n-9);
+  --text-tertiary: var(--n-8);
+  --icon-default: var(--n-10);
+
+  // --- Overlay / scrim ---
+  --overlay-subtle: var(--a-scrim-1);
+  --overlay-medium: var(--a-scrim-2);
+  --overlay-strong: var(--a-scrim-3);
+
+  // --- Status ---
+  --success: var(--green-500);
+  --danger: var(--red-500);
+
+  // --- Marca (cores próprias de serviços, fora da rampa) ---
+  --discord-brand: #5865f2;
+
+  // --- Dourado (só Premium) ---
+  --premium-gold: var(--gold-500);
+  --premium-gold-hover: var(--gold-400);
+  --premium-gold-ink: #070707;
+
+  // --- Tipografia: papéis do app, reusados no corpo de texto do site ---
+  --type-size-micro: var(--fs-100);
+  --type-size-caption: var(--fs-200);
+  --type-size-body: var(--fs-400);
+  --type-size-body-emphasis: var(--fs-500);
+  --type-size-section: var(--fs-600);
+
+  --type-line-micro: var(--lh-100);
+  --type-line-caption: var(--lh-200);
+  --type-line-body: var(--lh-400);
+  --type-line-body-emphasis: var(--lh-500);
+  --type-line-section: var(--lh-600);
+
+  --weight-regular: 400;
+  --weight-semibold: 600;
+
+  --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
+
+  // --- Foco ---
+  --focus-ring-color: var(--n-10);
+}
