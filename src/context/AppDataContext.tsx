@@ -27,7 +27,11 @@ import type {
 } from "../types";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { pushAppNotification } from "../lib/appNotifications";
-import type { CloudSave, GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
+import type {
+  CloudSave,
+  GamePlaytimeSnapshot,
+  SteamPathSelectionResult,
+} from "../lib/ghostboxApi.types";
 import {
   applyCloudProfileToLocal,
   buildCloudProfileSnapshot,
@@ -317,6 +321,8 @@ interface AppDataContextValue {
   ) => Promise<void>;
   handleMorrenusApiKeySave: (key: string) => Promise<void>;
   handleSelectSteamPath: () => Promise<void>;
+  /** `false` quando o path não serve — o modal deve continuar aberto. */
+  handleSubmitSteamPath: (steamPath: string) => Promise<boolean>;
 }
 
 const AppDataContext = createContext<AppDataContextValue | undefined>(
@@ -2324,10 +2330,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [appearance.language, showToast],
   );
 
-  const handleSelectSteamPath = useCallback(async () => {
-    setIsScanningSteamLibrary(true);
-    try {
-      const result = await ghostboxApi.selectSteamPath();
+  /**
+   * Aplica o path escolhido — pelo diálogo nativo ou digitado no modal — e
+   * escaneia a biblioteca. Retorna `false` quando o path não serve, para que o
+   * chamador possa manter o modal aberto com o que o usuário digitou.
+   */
+  const applySteamPathSelection = useCallback(
+    async (result: SteamPathSelectionResult | undefined) => {
       if (result?.status === "ok") {
         setSteamPathInput(result.steamPath);
         const scanResult = await ghostboxApi.scanSteamLibrary(result.steamPath);
@@ -2337,19 +2346,44 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             "Biblioteca Steam sincronizada",
             `${scanResult.games.length} jogos instalados encontrados.`,
           );
-        } else if (scanResult?.status === "missing") {
+          return true;
+        }
+        if (scanResult?.status === "missing") {
           showToast("Steam não encontrada", scanResult.message, "error");
         }
-        return;
+        return false;
       }
 
       if (result?.status === "invalid") {
         showToast("Caminho inválido", result.message, "error");
       }
+      return false;
+    },
+    [applySteamLibraryScanResult, showToast],
+  );
+
+  const handleSelectSteamPath = useCallback(async () => {
+    setIsScanningSteamLibrary(true);
+    try {
+      await applySteamPathSelection(await ghostboxApi.selectSteamPath());
     } finally {
       setIsScanningSteamLibrary(false);
     }
-  }, [applySteamLibraryScanResult, showToast]);
+  }, [applySteamPathSelection]);
+
+  const handleSubmitSteamPath = useCallback(
+    async (steamPath: string) => {
+      setIsScanningSteamLibrary(true);
+      try {
+        return await applySteamPathSelection(
+          await ghostboxApi.submitSteamPath(steamPath),
+        );
+      } finally {
+        setIsScanningSteamLibrary(false);
+      }
+    },
+    [applySteamPathSelection],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -2465,6 +2499,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,
+      handleSubmitSteamPath,
     }),
     [
       favoriteGames,
@@ -2513,6 +2548,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,
+      handleSubmitSteamPath,
     ],
   );
 

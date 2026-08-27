@@ -999,7 +999,7 @@ export function GameModal({
   const chipsPanelId = useId();
   const [isAchievementsCollapsed, setIsAchievementsCollapsed] = useState(false);
   const [achievementLoadState, setAchievementLoadState] = useState<
-    "idle" | "loading" | "ready" | "empty" | "unavailable"
+    "idle" | "loading" | "ready" | "empty" | "unavailable" | "rate-limited"
   >("idle");
   const [isChipsCollapsed, setIsChipsCollapsed] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
@@ -1064,10 +1064,11 @@ export function GameModal({
         (details.achievements?.total ?? 0) > 0;
       if (!hasIncoming) {
         setAchievementLoadState(
-          details.achievementMetadata?.status === "unavailable" ||
           details.achievementMetadata?.status === "rate-limited"
-            ? "unavailable"
-            : "empty"
+            ? "rate-limited"
+            : details.achievementMetadata?.status === "unavailable"
+              ? "unavailable"
+              : "empty"
         );
         return;
       }
@@ -1217,7 +1218,8 @@ export function GameModal({
   const shouldShowAchievementsSection =
     achievements.length > 0 ||
     achievementLoadState === "empty" ||
-    achievementLoadState === "unavailable";
+    achievementLoadState === "unavailable" ||
+    achievementLoadState === "rate-limited";
 
   const keyDerivatives = useMemo(() => {
     const logoCandidates = uniqueSources([...cachedLogoSources, ...logoSources]);
@@ -1822,13 +1824,17 @@ export function GameModal({
                             </div>
                           ) : (
                             <p className="modal__achievements-state">
-                              {achievementLoadState === "unavailable"
+                              {achievementLoadState === "rate-limited"
                                 ? appearance.language === "en"
-                                  ? "Steam achievements are temporarily unavailable. We'll keep the last cached data when available."
-                                  : "Conquistas da Steam temporariamente indisponíveis. Dados em cache serão mantidos quando existirem."
-                                : appearance.language === "en"
-                                  ? "No Steam achievements were found for this game yet."
-                                  : "Nenhuma conquista da Steam foi encontrada para este jogo por enquanto."}
+                                  ? "Steam is rate-limiting achievement requests right now. We'll retry automatically and keep the last cached data when available."
+                                  : "A Steam está limitando as requisições de conquistas agora. Vamos tentar de novo automaticamente e manter os dados em cache quando existirem."
+                                : achievementLoadState === "unavailable"
+                                  ? appearance.language === "en"
+                                    ? "Steam achievements are temporarily unavailable. We'll keep the last cached data when available."
+                                    : "Conquistas da Steam temporariamente indisponíveis. Dados em cache serão mantidos quando existirem."
+                                  : appearance.language === "en"
+                                    ? "No Steam achievements were found for this game yet."
+                                    : "Nenhuma conquista da Steam foi encontrada para este jogo por enquanto."}
                             </p>
                           )}
 

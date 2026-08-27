@@ -15,7 +15,14 @@ export function createRequestQueue(
    * uma promise para segurar a fila inteira até ela resolver. Nenhum slot é
    * ocupado durante a espera — a fila só fica parada.
    */
-  waitUntilReady?: () => Promise<void> | null
+  waitUntilReady?: () => Promise<void> | null,
+  /**
+   * Tempo máximo por tarefa antes de liberar o slot à força. Sem isso, uma
+   * tarefa que nunca resolve (request pendurada) prende um slot para sempre —
+   * com concorrência baixa, poucas tarefas travadas já entopem a fila inteira.
+   * A tarefa original continua rodando em segundo plano; só o slot é liberado.
+   */
+  timeoutMs?: number
 ) {
   let active = 0;
   let deferred = false;
@@ -55,10 +62,37 @@ export function createRequestQueue(
           } catch (error) {
             settled = Promise.reject(error);
           }
-          settled.then(resolve, reject).finally(() => {
+
+          let freed = false;
+          const free = () => {
+            if (freed) return;
+            freed = true;
             active -= 1;
             pump();
-          });
+          };
+
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          if (timeoutMs) {
+            timer = setTimeout(() => {
+              free();
+              reject(new Error("Request queue task timed out"));
+            }, timeoutMs);
+          }
+
+          settled.then(
+            (value) => {
+              if (freed) return;
+              clearTimeout(timer);
+              free();
+              resolve(value);
+            },
+            (error) => {
+              if (freed) return;
+              clearTimeout(timer);
+              free();
+              reject(error);
+            }
+          );
         });
         pump();
       });
@@ -72,4 +106,10 @@ export function createRequestQueue(
  * carga no worker. Segura durante a rolagem, quando os cards visíveis ainda
  * estão mudando e buscar detalhes deles seria desperdício.
  */
-export const gameCardEnrichmentQueue = createRequestQueue(6, pendingScrollIdle);
+const GAME_CARD_ENRICHMENT_TIMEOUT_MS = 15_000;
+
+export const gameCardEnrichmentQueue = createRequestQueue(
+  6,
+  pendingScrollIdle,
+  GAME_CARD_ENRICHMENT_TIMEOUT_MS
+);

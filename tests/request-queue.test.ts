@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createRequestQueue } from "../src/utils/requestQueue";
 
@@ -111,5 +111,55 @@ describe("createRequestQueue", () => {
     expect(calls).toBe(0);
     await queue.enqueue(() => "done");
     expect(calls).toBe(1);
+  });
+
+  it("frees the slot and rejects when a task hangs past the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const queue = createRequestQueue(1, undefined, 1000);
+      const hung = deferred();
+      const started: string[] = [];
+
+      const a = queue.enqueue(async () => {
+        started.push("a");
+        await hung.promise;
+      });
+      const b = queue.enqueue(() => {
+        started.push("b");
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(started).toEqual(["a"]);
+
+      await Promise.all([
+        vi.advanceTimersByTimeAsync(1000),
+        expect(a).rejects.toThrow("timed out"),
+      ]);
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(started).toEqual(["a", "b"]);
+      await b;
+
+      hung.resolve();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not double-settle a task that resolves right at the timeout boundary", async () => {
+    vi.useFakeTimers();
+    try {
+      const queue = createRequestQueue(1, undefined, 1000);
+      const gate = deferred<string>();
+
+      const task = queue.enqueue(() => gate.promise);
+      await vi.advanceTimersByTimeAsync(0);
+      gate.resolve("ok");
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(task).resolves.toBe("ok");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

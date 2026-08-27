@@ -38,11 +38,17 @@ pub fn start_local_achievement_monitor(
         return;
     }
 
+    let stop = Arc::new(AtomicBool::new(false));
     {
-        let guard = monitors().lock().unwrap_or_else(|error| error.into_inner());
+        // Checar e reservar a chave numa só seção crítica: duas chamadas
+        // concorrentes para o mesmo app_id não podem mais passar ambas pelo
+        // `contains_key` antes de qualquer inserir, o que deixava a thread da
+        // primeira chamada órfã (sobrescrita no map, sem handle de `stop`).
+        let mut guard = monitors().lock().unwrap_or_else(|error| error.into_inner());
         if guard.contains_key(&key) {
             return;
         }
+        guard.insert(key.clone(), RunningMonitor { stop: stop.clone() });
     }
 
     {
@@ -57,12 +63,6 @@ pub fn start_local_achievement_monitor(
             .unwrap_or_else(|error| error.into_inner())
             .insert(key.clone(), initial);
     }
-
-    let stop = Arc::new(AtomicBool::new(false));
-    monitors()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .insert(key.clone(), RunningMonitor { stop: stop.clone() });
 
     let app_handle = app.clone();
     let title = title.to_string();

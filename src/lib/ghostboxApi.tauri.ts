@@ -1375,6 +1375,16 @@ export const ghostboxApi = {
     );
   },
 
+  submitSteamPath(
+    steamPath: string,
+  ): Promise<SteamPathSelectionResult | undefined> {
+    return invokeOr<SteamPathSelectionResult | undefined>(
+      "steam_select_path",
+      { steamPath },
+      undefined,
+    );
+  },
+
   getStartupSettings(): Promise<StartupSettings | undefined> {
     return invokeOr<StartupSettings | undefined>(
       "app_get_startup_settings",

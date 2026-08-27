@@ -62,9 +62,11 @@ export function SteamPathModal({
             <p>
               {appearance.language === "en"
                 ? "I couldn't find the Steam installation in "
-                : "Nao encontrei a instalacao da Steam em "}
-              <strong>C:\Program Files (x86)\Steam</strong>. Cole abaixo o caminho
-              {appearance.language === "en" ? "Paste below the Steam folder or steamapps path." : "da pasta Steam ou da pasta steamapps."}
+                : "Não encontrei a instalação da Steam em "}
+              <strong>C:\Program Files (x86)\Steam</strong>
+              {appearance.language === "en"
+                ? ". Paste below the Steam folder or steamapps path."
+                : ". Cole abaixo o caminho da pasta Steam ou da pasta steamapps."}
             </p>
 
             {checkedPaths.length > 0 && (

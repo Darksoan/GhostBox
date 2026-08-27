@@ -1953,6 +1953,16 @@ pub fn steam_select_path(
 ) -> Result<serde_json::Value, String> {
     let selected_path = steam_path.trim();
     let Some(normalized_path) = normalize_steam_root_path(selected_path) else {
+        if let Err(error) = std::fs::read_dir(selected_path) {
+            if error.kind() == std::io::ErrorKind::PermissionDenied {
+                return Ok(serde_json::json!({
+                    "status": "invalid",
+                    "selectedPath": selected_path,
+                    "missingEntries": Vec::<String>::new(),
+                    "message": "Sem permissão para ler essa pasta. Escolha uma pasta acessível ou ajuste as permissões do Windows."
+                }));
+            }
+        }
         let missing_entries = vec![steamapps_path(std::path::Path::new(selected_path))
             .join("libraryfolders.vdf")
             .to_string_lossy()

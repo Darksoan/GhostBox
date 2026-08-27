@@ -430,9 +430,11 @@ export function PageRouter({
         onSubmit={async (value) => {
           setSteamPathModalLoading(true);
           try {
-            appData.setSteamPathInput(value);
-            await appData.handleSelectSteamPath();
-            setSteamPathModalOpen(false);
+            // Path recusado mantém o modal aberto: fechar aqui descartaria o
+            // que o usuário digitou e o obrigaria a redigitar para tentar de novo.
+            if (await appData.handleSubmitSteamPath(value)) {
+              setSteamPathModalOpen(false);
+            }
           } finally {
             setSteamPathModalLoading(false);
           }

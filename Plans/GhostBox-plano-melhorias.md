@@ -113,11 +113,24 @@ Módulos relevantes: `steam*`, `catalogue*`, `cdndownload`, `ludusavi`, `backup`
 
 ### Ações
 
-1. Validar path da Steam e estados de erro (instalação não encontrada, permissão, disco cheio).
-2. Revisar concorrência em download/CDN e em monitor de conquistas (evitar race e leak de handles).
+1. Validar path da Steam e estados de erro (instalação não encontrada, permissão, disco cheio). — *permissão negada tratada em `steam_select_path`; disco cheio (`ENOSPC`) ainda pendente*
+2. Revisar concorrência em download/CDN e em monitor de conquistas (evitar race e leak de handles). — *race do `achievement_monitor` corrigida; pendências do `cdndownload` abaixo*
 3. `externalBin: ludusavi` — documentar versão, atualização e fallback se o binário falhar.
 4. Patch de `tao` em `vendor/` — anotar por que existe e se ainda é necessário.
 5. CI/release só Windows: decidir se Linux/macOS entram no roadmap ou se o escopo oficial continua Windows-first.
+
+### Pendências de concorrência em `cdndownload.rs`
+
+Levantadas na Fase B e **não corrigidas**: exigem teste manual em Windows com download real, porque o efeito observável depende do timing do worker `steamkit`. Ordenadas por gravidade.
+
+| # | Local | Problema |
+|---|-------|----------|
+| C1 | `cdndownload.rs:1096-1113` | Worker morto durante `downloadDepot` é descartado (`*worker = None`) sem `kill()`/`wait()`. `Child::drop` não mata o processo no Rust — se ele não morreu sozinho, vira processo filho vazado. |
+| C2 | `cdndownload.rs:129-132` | `read_worker_event` usa `read_line` bloqueante **sem timeout**. Worker travado deixa o comando de download pendurado para sempre; o cancelamento só é consumido nos checkpoints do loop. |
+| C3 | `cdndownload.rs:970-984` | Nada impede duas invocações concorrentes de `cdndownload_download_game` para o mesmo `app_id`. Sem guard por app_id, as duas colidem em `active_download_processes` (uma `clear_active_download_process` apaga o estado da outra) e no mesmo `ChunkIndexGuard` / `install_path` — o comentário em `:1060-1063` já assume um único escritor, mas nada garante isso. |
+| C4 | `cdndownload.rs:31-45` | `shutdown_download_worker` mata o `Child` enquanto um download ativo ainda segura clones de `Arc<Mutex<stdin/stdout>>` obtidos fora do lock principal (`:975-980`). Não dá crash (vira `Err`/`worker-exited`), mas é race entre shutdown do app e download em andamento. |
+
+Também pendente, fora do `cdndownload`: `achievement_monitor.rs:71-91` faz `thread::spawn` sem guardar o `JoinHandle`; se `notify_new_unlocks` panicar, a thread morre em unwind e o cleanup do map (`:83-90`) não roda.
 
 ---
 
@@ -223,22 +236,24 @@ Páginas: Home, Library, Catalogue, Favorites, Downloads, Profile, Notifications
 
 ## Checklist rápido (copiar para issues)
 
-- [ ] F1 — não gravar ciclo incompleto + retry
-- [ ] F2 — history da mesma semana substitui topo
-- [ ] F3 — intercalar similares por fonte
-- [ ] F4 — guarda `inFlight` no wishlist cycle
-- [ ] F5 — corrigir teste do chevron / “ver mais”
-- [ ] F6 — filtrar placeholders do pool de detalhes
-- [ ] F7 — seed por índice de semana
-- [ ] F8 — skeleton com 3 tags
-- [ ] F9 — preencher só slots faltantes ao instalar jogo
-- [ ] Corrigir 2 testes pré-existentes (home-layout, typography-tokens)
-- [ ] Workflow CI (tsc + vitest + check-tokens)
-- [ ] README de produto + setup
-- [ ] AGENTS.md preenchido
+- [x] F1 — não gravar ciclo incompleto + retry
+- [x] F2 — history da mesma semana substitui topo
+- [x] F3 — intercalar similares por fonte
+- [x] F4 — guarda `inFlight` no wishlist cycle
+- [x] F5 — corrigir teste do chevron / “ver mais”
+- [x] F6 — filtrar placeholders do pool de detalhes
+- [x] F7 — seed por índice de semana
+- [x] F8 — skeleton com 3 tags
+- [x] F9 — preencher só slots faltantes ao instalar jogo
+- [x] Corrigir 2 testes pré-existentes (home-layout, typography-tokens)
+- [x] Workflow CI (tsc + vitest + check-tokens)
+- [x] README de produto + setup
+- [x] AGENTS.md preenchido
 - [ ] Revisar providers de manifest (links vivos)
-- [ ] Timeouts / cancelamento em requests
-- [ ] Erros claros de path Steam e Ludusavi
+- [x] Timeouts / cancelamento em requests — *timeout na `requestQueue`; cancelamento real por `AbortController` ainda pendente (hoje só flag `cancelled`)*
+- [x] Erros claros de path Steam — *permissão negada tratada; disco cheio pendente*
+- [ ] Erros claros de Ludusavi (binário ausente já tem mensagem; sem fallback)
+- [ ] Concorrência do `cdndownload` (C1–C4, ver seção 5)
 - [ ] Documentar workers e secrets
 - [ ] Rate limit / cache nos workers
 - [ ] Estados vazios/erro/loading nas páginas principais
