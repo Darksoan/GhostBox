@@ -976,7 +976,7 @@ struct SteamCallback {
 
 /// Opens Steam's OpenID page in the system browser and waits for the callback.
 ///
-/// Steam, unlike Discord and Google, accepts an arbitrary `return_to`, so the
+/// Steam, unlike Discord, accepts an arbitrary `return_to`, so the
 /// loopback port *is* the redirect target and nothing has to be bounced
 /// through the Worker.
 async fn run_steam_openid_flow(app: &tauri::AppHandle) -> Result<SteamCallback, String> {
@@ -1755,16 +1755,11 @@ pub async fn steam_connect_account(app: tauri::AppHandle) -> Result<serde_json::
 /// profile cache used to unlock metrics) goes away.
 #[tauri::command]
 pub async fn steam_disconnect_account(app: tauri::AppHandle) -> Result<(), String> {
-    // Steam is never the account's only connection in a way that matters here:
-    // it cannot sign anyone in on its own unless it was linked, and the Worker
-    // still applies the last-connection guard. Confirmed because the user
-    // already confirmed in the Connections panel.
-    let _ = crate::cloud_save::cloud_disconnect_connection(
-        app.clone(),
-        "steam".to_string(),
-        Some(true),
-    )
-    .await;
+    // The Worker enforces the at-least-one-linked-provider rule and refuses
+    // with `last_connection` when Steam is the only one. The error propagates
+    // so the UI can explain it, and the local profile cache stays: the cloud
+    // link this cache mirrors is still in place.
+    crate::cloud_save::cloud_disconnect_connection(app.clone(), "steam".to_string()).await?;
     remove_data_file(&app, STEAM_PROFILE_FILE)
 }
 

@@ -684,41 +684,6 @@ const rules: Rule[] = [
     },
   },
   {
-    pattern: /^DELETE FROM user_connections WHERE provider = 'google' AND provider_id = \? AND user_id <> \?/i,
-    run: ([providerId, userId], db) => {
-      const rows = db.rows("user_connections");
-      const kept = rows.filter(
-        (entry) =>
-          !(entry.provider === "google" && entry.provider_id === providerId && entry.user_id !== userId)
-      );
-      const changes = rows.length - kept.length;
-      rows.splice(0, rows.length, ...kept);
-      return { changes };
-    },
-  },
-  {
-    pattern: /^INSERT INTO user_connections \(user_id, provider, provider_id, metadata_json, linked_at\) VALUES \(\?, 'google'/i,
-    run: ([userId, providerId, metadataJson, linkedAt], db) => {
-      const existing = db
-        .rows("user_connections")
-        .find((entry) => entry.user_id === userId && entry.provider === "google");
-      if (existing) {
-        existing.provider_id = providerId;
-        existing.metadata_json = metadataJson;
-        existing.linked_at = linkedAt;
-        return { changes: 1 };
-      }
-      db.rows("user_connections").push({
-        user_id: userId,
-        provider: "google",
-        provider_id: providerId,
-        metadata_json: metadataJson,
-        linked_at: linkedAt,
-      });
-      return { changes: 1 };
-    },
-  },
-  {
     pattern: /^SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = \?/i,
     run: ([providerId], db) => {
       const row = db

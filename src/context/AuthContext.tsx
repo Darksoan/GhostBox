@@ -11,7 +11,6 @@ import { ghostboxApi } from "../lib/ghostboxApi";
 import type {
   GhostBoxAccount,
   LoginProvider,
-  OAuthSignupPending,
   RecoveryTicket,
 } from "../lib/ghostboxApi.types";
 
@@ -31,15 +30,20 @@ interface AuthContextValue {
     displayName?: string
   ) => Promise<void>;
   login: (identifier: string, password: string) => Promise<void>;
-  /** Resolves to the pending-signup payload when the provider account has no
-   * GhostBox account yet; `null` once a session is in place. Steam never
-   * returns a payload — it cannot create an account. */
-  loginWithProvider: (provider: LoginProvider) => Promise<OAuthSignupPending | null>;
-  completeOAuthSignup: (ticket: string, username: string, password: string) => Promise<void>;
+  /** Signs in through the linked provider. Accounts are created with email and
+   * password only, so a provider with no GhostBox account attached rejects
+   * with `provider_not_linked` / `steam_not_linked`. */
+  loginWithProvider: (provider: LoginProvider) => Promise<void>;
   logout: () => Promise<void>;
-  /** Step one of recovery: the provider proves the account. GhostBox sends no
-   * email, so this is the only way back into a forgotten password. */
-  startRecovery: (provider: LoginProvider) => Promise<RecoveryTicket>;
+  /** Step one of recovery via Steam: the OpenID callback proves the account
+   * and the worker answers with a token that can only set a password. */
+  startSteamRecovery: () => Promise<RecoveryTicket>;
+  /** Step one of recovery via Discord: the bot DMs a one-shot PIN to the
+   * Discord linked to the account the identifier names. The answer is uniform
+   * whether or not the identifier names an account. */
+  startDiscordRecovery: (identifier: string) => Promise<{ ok: boolean }>;
+  /** Step two of the Discord recovery: trades the PIN for the recovery token. */
+  confirmDiscordRecovery: (identifier: string, code: string) => Promise<RecoveryTicket>;
   /** Step two: sets the new password, signs every other device out, and leaves
    * this one signed in. */
   completeRecovery: (recoveryToken: string, newPassword: string) => Promise<void>;
@@ -152,8 +156,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithProvider = useCallback(async (provider: LoginProvider) => {
     const result = await ghostboxApi.loginWithProvider(provider);
-    if ("needsSignup" in result) return result;
-
     setAccount(result.account);
     setStatus("authenticated");
     try {
@@ -161,18 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Offline right after signing in: keep the session we just received.
     }
-    return null;
   }, [applyAccount]);
-
-  const completeOAuthSignup = useCallback(
-    async (ticket: string, username: string, password: string) => {
-      const session = await ghostboxApi.completeOAuthSignup(ticket, username, password);
-      setAccount(session.account);
-      setLinkedSteamId(null);
-      setStatus("authenticated");
-    },
-    [],
-  );
 
   const logout = useCallback(async () => {
     // Flip to anonymous first: signOutCloud wipes the account-scoped
@@ -184,8 +175,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await ghostboxApi.signOutCloud();
   }, []);
 
-  const startRecovery = useCallback(async (provider: LoginProvider) => {
-    return ghostboxApi.startRecovery(provider);
+  const startSteamRecovery = useCallback(() => ghostboxApi.startSteamRecovery(), []);
+
+  const startDiscordRecovery = useCallback((identifier: string) => {
+    return ghostboxApi.startDiscordRecovery(identifier);
+  }, []);
+
+  const confirmDiscordRecovery = useCallback((identifier: string, code: string) => {
+    return ghostboxApi.confirmDiscordRecovery(identifier, code);
   }, []);
 
   const completeRecovery = useCallback(
@@ -217,9 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       login,
       loginWithProvider,
-      completeOAuthSignup,
       logout,
-      startRecovery,
+      startSteamRecovery,
+      startDiscordRecovery,
+      confirmDiscordRecovery,
       completeRecovery,
       changePassword,
       refreshAccount,
@@ -234,9 +232,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       login,
       loginWithProvider,
-      completeOAuthSignup,
       logout,
-      startRecovery,
+      startSteamRecovery,
+      startDiscordRecovery,
+      confirmDiscordRecovery,
       completeRecovery,
       changePassword,
       refreshAccount,

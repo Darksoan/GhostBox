@@ -374,27 +374,10 @@ export type GhostBoxAccount = {
 /** Providers that sign in through the system browser. Steam is separate: it
  * takes its callback on the app's own loopback port, and it cannot create an
  * account because it reports no email address. */
-export type OAuthProvider = "discord" | "google";
+export type OAuthProvider = "discord";
 
 /** Every way into an account. */
 export type LoginProvider = OAuthProvider | "steam";
-
-export type ProviderProfile = {
-  email: string | null;
-  emailVerified: boolean;
-  username: string | null;
-  globalName: string | null;
-};
-
-/** Returned by `loginWithProvider` when the provider account has no GhostBox
- * account yet: the caller collects a password and finishes the signup with
- * the same ticket. */
-export type OAuthSignupPending = {
-  needsSignup: true;
-  ticket: string;
-  provider: OAuthProvider;
-  profile: ProviderProfile;
-};
 
 /** A proof that an account exists, good for exactly one thing: setting a new
  * password through `completeRecovery`. Never stored as a session. */

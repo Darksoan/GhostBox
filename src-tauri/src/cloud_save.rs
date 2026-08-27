@@ -750,9 +750,6 @@ fn format_auth_api_error(body: &str, status: u16) -> String {
             "discord_already_linked" => {
                 "Este Discord já está vinculado a uma conta GhostBox.".to_string()
             }
-            "discord_email_missing" => {
-                "O Discord não informou um e-mail. Cadastre-se com e-mail e senha.".to_string()
-            }
             "discord_not_linked" => {
                 "Vincule seu Discord nas configurações antes de verificar por lá.".to_string()
             }
@@ -767,6 +764,12 @@ fn format_auth_api_error(body: &str, status: u16) -> String {
             "invalid_code" => "Código incorreto.".to_string(),
             "code_expired" => "O código expirou. Peça um novo.".to_string(),
             "code_not_found" => "Nenhum código pendente. Peça um novo.".to_string(),
+            "steam_not_linked" | "provider_not_linked" => {
+                "Nenhuma conta GhostBox está vinculada a este provedor. Crie uma conta com e-mail e senha e vincule o provedor nas configurações.".to_string()
+            }
+            "last_connection" => {
+                "Este é o único vínculo da conta. Ele não pode ser removido: é a única forma de recuperar o acesso se você esquecer a senha.".to_string()
+            }
             other if !other.is_empty() => format!("Erro de autenticação ({other})."),
             _ => format!("Erro de autenticação (HTTP {status})."),
         };
@@ -840,7 +843,7 @@ pub async fn cloud_login(
 /// Providers whose sign-in goes out through the system browser.
 fn validate_oauth_provider(provider: &str) -> Result<&str, String> {
     match provider {
-        "discord" | "google" => Ok(provider),
+        "discord" => Ok(provider),
         _ => Err(format!("Provedor desconhecido: {provider}")),
     }
 }
@@ -922,10 +925,9 @@ async fn run_oauth_browser_flow(
     Ok(ticket)
 }
 
-/// Signs in (or starts a signup) through an OAuth provider.
-///
-/// Returns either the saved session, or `{ needsSignup: true, ticket, provider,
-/// profile }` for the caller to finish with `cloud_oauth_complete_signup`.
+/// Signs in through an OAuth provider. Accounts are created with email and
+/// password only, so a provider with no GhostBox account attached fails with
+/// `provider_not_linked` instead of opening a signup.
 #[tauri::command]
 pub async fn cloud_oauth_login(
     app: tauri::AppHandle,
@@ -941,49 +943,41 @@ pub async fn cloud_oauth_login(
     )
     .await?;
 
-    if result
-        .get("needsSignup")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-    {
-        // No account yet: hand the ticket back so the UI can collect a
-        // password and finish against the very same authorization.
-        let mut pending = result;
-        if let Some(object) = pending.as_object_mut() {
-            object.insert("ticket".to_string(), serde_json::json!(ticket));
-        }
-        return Ok(pending);
-    }
-
     save_cloud_session(&app, &result)?;
     Ok(result)
 }
 
-/// Recovers access to an account whose password is lost.
-///
-/// The provider proves the account; the Worker answers with a session that may
-/// do exactly one thing, and `cloud_recover_set_password` is that one thing.
+/// Step one of recovering a password through the linked Discord: the Worker's
+/// bot DMs a one-shot PIN to that Discord. The answer is uniform whether or
+/// not the identifier names an account, so the caller just tells the user to
+/// check their Discord messages.
 #[tauri::command]
-pub async fn cloud_oauth_recover(
-    app: tauri::AppHandle,
-    provider: String,
-) -> Result<serde_json::Value, String> {
-    let provider = validate_oauth_provider(&provider)?;
-    let ticket = run_oauth_browser_flow(&app, provider, "recover").await?;
-
-    // Deliberately not persisted: a recovery token is not a session, and
-    // storing it under the session key would make every other command send it
-    // and get a 403.
+pub async fn cloud_discord_recover_start(identifier: String) -> Result<serde_json::Value, String> {
     auth_json_request(
         auth_client(20)?
-            .post(format!("{}/auth/recover/exchange", cloud_api_url()))
-            .json(&serde_json::json!({ "ticket": ticket })),
+            .post(format!("{}/auth/recover/discord/start", cloud_api_url()))
+            .json(&serde_json::json!({ "identifier": identifier })),
     )
     .await
 }
 
-/// Finishes a recovery. `recovery_token` is what `cloud_oauth_recover` or
-/// `cloud_steam_recover` returned; the session that comes back is a full one
+/// Step two: trades the PIN for the narrow recovery session that
+/// `cloud_recover_set_password` accepts. Deliberately not persisted.
+#[tauri::command]
+pub async fn cloud_discord_recover_confirm(
+    identifier: String,
+    code: String,
+) -> Result<serde_json::Value, String> {
+    auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/recover/discord/confirm", cloud_api_url()))
+            .json(&serde_json::json!({ "identifier": identifier, "code": code })),
+    )
+    .await
+}
+
+/// Finishes a recovery. `recovery_token` is what `cloud_discord_recover_confirm`
+/// or `cloud_steam_recover` returned; the session that comes back is a full one
 /// and replaces whatever was stored.
 #[tauri::command]
 pub async fn cloud_recover_set_password(
@@ -996,29 +990,6 @@ pub async fn cloud_recover_set_password(
             .post(format!("{}/auth/recover/password", cloud_api_url()))
             .bearer_auth(recovery_token)
             .json(&serde_json::json!({ "newPassword": new_password })),
-    )
-    .await?;
-    save_cloud_session(&app, &session)?;
-    Ok(session)
-}
-
-#[tauri::command]
-pub async fn cloud_oauth_complete_signup(
-    app: tauri::AppHandle,
-    ticket: String,
-    username: String,
-    password: String,
-) -> Result<serde_json::Value, String> {
-    // The email is not sent: the Worker takes it from the ticket, so a client
-    // cannot claim someone else's address as provider-verified.
-    let session = auth_json_request(
-        auth_client(20)?
-            .post(format!("{}/auth/oauth/register", cloud_api_url()))
-            .json(&serde_json::json!({
-                "ticket": ticket,
-                "username": username,
-                "password": password,
-            })),
     )
     .await?;
     save_cloud_session(&app, &session)?;
@@ -1171,20 +1142,19 @@ pub async fn cloud_get_account(app: tauri::AppHandle) -> Result<Option<serde_jso
 pub async fn cloud_disconnect_connection(
     app: tauri::AppHandle,
     provider: String,
-    confirm: Option<bool>,
 ) -> Result<(), String> {
-    if provider != "steam" && provider != "discord" && provider != "google" {
+    if provider != "steam" && provider != "discord" {
         return Err("Conexão inválida.".to_string());
     }
     let token = session_token(&app)?;
-    // The Worker refuses to remove the account's last connection unless the
-    // caller confirms: with no recovery emails and no backup codes, that
-    // connection is the only way back into a forgotten password.
+    // The Worker refuses to remove the account's last connection on its own:
+    // with no recovery emails and no backup codes, that connection is the only
+    // way back into a forgotten password. There is no client flag that talks
+    // past the refusal — linking is mandatory, so at least one stays.
     auth_json_request(
         auth_client(15)?
             .delete(format!("{}/auth/connections/{}", cloud_api_url(), provider))
-            .bearer_auth(token)
-            .json(&serde_json::json!({ "confirm": confirm.unwrap_or(false) })),
+            .bearer_auth(token),
     )
     .await?;
     Ok(())

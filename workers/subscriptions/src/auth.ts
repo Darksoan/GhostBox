@@ -3,7 +3,7 @@
 // Firebase stores only the credential (uid/email/password hash); everything
 // else about the account — username, connections, subscription — lives in D1
 // keyed by the Firebase uid. GhostBox sends no email at all: identity is
-// proved through a linked provider (Discord, Google, Steam), never through an
+// proved through a linked provider (Discord, Steam), never through an
 // inbox.
 //
 // Mostly the public REST API (API key only). The one thing it cannot do is set
@@ -305,8 +305,8 @@ export async function insertAccount(
     email: string;
     username: string;
     displayName: string | null;
-    /** Discord signup only: the address came from Discord already verified,
-     * so the account starts confirmed and no email is ever sent. */
+    /** When a trusted source (a linked provider vouching for the address)
+     * already confirmed it, the account starts verified and no email is sent. */
     emailVerified?: boolean;
   }
 ) {

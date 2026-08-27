@@ -49,8 +49,6 @@ type Env = {
   DISCORD_GUILD_ID?: string;
   DISCORD_PREMIUM_ROLE_ID?: string;
   DISCORD_SYNC_TOKEN?: string;
-  GOOGLE_CLIENT_ID?: string;
-  GOOGLE_CLIENT_SECRET?: string;
   OAUTH_REDIRECT_URI?: string;
   ALLOWED_ORIGIN?: string;
   CLOUD_SESSION_SECRET?: string;
@@ -269,19 +267,19 @@ type DiscordUserResponse = {
 /** Providers that sign a user in through the browser hand-off. Steam is not
  * one of them: it accepts an arbitrary `return_to`, so the desktop app takes
  * its callback directly on the loopback port and never needs a ticket. */
-type OAuthProvider = "discord" | "google";
+type OAuthProvider = "discord";
 
 function isOAuthProvider(value: unknown): value is OAuthProvider {
-  return value === "discord" || value === "google";
+  return value === "discord";
 }
 
 /** What a provider told us about the person who just authorised. Normalised at
- * the edge so nothing downstream has to care whether it came from Discord's
- * `/users/@me` or a Google `id_token`. */
+ * the edge so nothing downstream has to care that it came from Discord's
+ * `/users/@me`. */
 type ProviderIdentity = {
   provider: OAuthProvider;
-  /** The provider's stable id. Google's `sub`, Discord's snowflake — never the
-   * email, which can be reassigned in a Workspace domain. */
+  /** The provider's stable id — Discord's snowflake, never the email, which
+   * can be reassigned by whoever controls the address' domain. */
   id: string;
   username: string | null;
   displayName: string | null;
@@ -421,9 +419,9 @@ async function verifyCloudToken(env: Env, request: Request): Promise<CloudSessio
   }
 }
 
-/** One redirect URI for every provider. Both Discord and Google only redirect
- * to a URI registered up front, so the desktop app cannot receive the callback
- * on its random loopback port — it lands here and gets bounced onward.
+/** One redirect URI for every provider. Discord only redirects to a URI
+ * registered up front, so the desktop app cannot receive the callback on its
+ * random loopback port — it lands here and gets bounced onward.
  *
  * `DISCORD_REDIRECT_URI` is still honoured for the Discord flow so existing
  * deployments keep working without touching the Discord app config. */
@@ -1174,14 +1172,7 @@ function oauthClient(env: Env, provider: OAuthProvider) {
       scope: "identify email",
     };
   }
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return null;
-  return {
-    clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
-    authorizeEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-    tokenEndpoint: "https://oauth2.googleapis.com/token",
-    scope: "openid email profile",
-  };
+  return null;
 }
 
 function buildAuthorizeUrl(
@@ -1199,14 +1190,9 @@ function buildAuthorizeUrl(
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", client.scope);
   url.searchParams.set("state", state);
-  if (provider === "discord") {
-    url.searchParams.set("prompt", "consent");
-  } else {
-    // Google hands back no refresh token and no account chooser otherwise, and
-    // an account chooser is the whole point when someone is recovering an
-    // account they may have registered under a different Google address.
-    url.searchParams.set("prompt", "select_account");
-  }
+  // Forces a fresh authorization on every sign-in instead of silently reusing
+  // whatever authorization the browser remembers from a previous session.
+  url.searchParams.set("prompt", "consent");
   return url.toString();
 }
 
@@ -1337,82 +1323,6 @@ function discordIdentity(user: DiscordUserResponse): ProviderIdentity {
   };
 }
 
-/** Reads the claims out of a Google `id_token` without verifying its
- * signature.
- *
- * That is sound here and only here: the token came back over TLS from
- * Google's own token endpoint, in an exchange authenticated with the client
- * secret, so there is no attacker position between the two. `iss` and `aud`
- * are still checked — a token minted for a *different* client is exactly the
- * confused-deputy case a signature check would not catch anyway. */
-function googleIdentityFromIdToken(idToken: string, clientId: string): ProviderIdentity | null {
-  const payload = idToken.split(".")[1];
-  if (!payload) return null;
-
-  let claims: {
-    iss?: string;
-    aud?: string;
-    sub?: string;
-    email?: string;
-    email_verified?: boolean | string;
-    name?: string;
-  };
-  try {
-    claims = JSON.parse(new TextDecoder().decode(base64UrlDecode(payload)));
-  } catch {
-    return null;
-  }
-
-  if (claims.iss !== "https://accounts.google.com" && claims.iss !== "accounts.google.com") return null;
-  if (claims.aud !== clientId) return null;
-  if (!claims.sub) return null;
-
-  const email = normalizeEmail(claims.email);
-  return {
-    provider: "google",
-    // `sub` and never the address: a Workspace admin can hand a departed
-    // employee's email to somebody else, and that somebody must not inherit
-    // the GhostBox account. `sub` is not reassigned.
-    id: claims.sub,
-    username: email ? email.split("@")[0] : null,
-    displayName: claims.name ?? null,
-    email,
-    emailVerified: claims.email_verified === true || claims.email_verified === "true",
-  };
-}
-
-async function exchangeGoogleCode(
-  env: Env,
-  request: Request,
-  code: string
-): Promise<{ identity: ProviderIdentity | null; error: string | null }> {
-  const client = oauthClient(env, "google");
-  if (!client) return { identity: null, error: "O login com Google não está configurado." };
-
-  const tokenResponse = await fetch(client.tokenEndpoint, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: client.clientId,
-      client_secret: client.clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: getOAuthRedirectUri(env, request, "google"),
-    }),
-  });
-  const token = await tokenResponse.json<{ id_token?: string; error_description?: string; error?: string }>();
-  if (!tokenResponse.ok || !token.id_token) {
-    return {
-      identity: null,
-      error: token.error_description || token.error || "Não foi possível validar a autorização do Google.",
-    };
-  }
-
-  const identity = googleIdentityFromIdToken(token.id_token, client.clientId);
-  if (!identity) return { identity: null, error: "A resposta do Google não pôde ser validada." };
-  return { identity, error: null };
-}
-
 /** Resolves whoever just authorised, whichever provider they used. The
  * provider's access token is read once here and never stored: the account row
  * only ever holds the provider id. */
@@ -1422,8 +1332,7 @@ async function exchangeOAuthCode(
   provider: OAuthProvider,
   code: string
 ): Promise<{ identity: ProviderIdentity | null; error: string | null }> {
-  if (provider === "google") return exchangeGoogleCode(env, request, code);
-
+  void provider;
   const exchanged = await exchangeDiscordCode(env, request, code);
   if (!exchanged.user) return { identity: null, error: exchanged.error };
   return { identity: discordIdentity(exchanged.user), error: null };
@@ -1441,7 +1350,6 @@ function discordEmailConfirms(user: DiscordUserResponse, accountEmail: string) {
 }
 
 const DISCORD_TICKET_TTL_SECONDS = 90;
-const DISCORD_SIGNUP_TTL_SECONDS = 15 * 60;
 
 async function createOAuthLoginTicket(
   env: Env,
@@ -1567,77 +1475,6 @@ async function writeDiscordLink(env: Env, userId: string, user: DiscordUserRespo
   }
 }
 
-/**
- * Attaches a Google account to `userId`, taking it away from any other
- * GhostBox account that still holds it.
- *
- * Simpler than the Discord case because Google has no second table and no
- * roles to sync — the connection row is the whole link. The claim-it-away
- * delete is still needed: `idx_user_connections_provider` is UNIQUE on
- * (provider, provider_id), so without it the insert throws.
- */
-async function writeGoogleLink(env: Env, userId: string, identity: ProviderIdentity) {
-  const now = nowIso();
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `DELETE FROM user_connections WHERE provider = 'google' AND provider_id = ? AND user_id <> ?`
-  ).bind(identity.id, userId).run();
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
-     VALUES (?, 'google', ?, ?, ?)
-     ON CONFLICT(user_id, provider) DO UPDATE SET
-       provider_id = excluded.provider_id,
-       metadata_json = excluded.metadata_json,
-       linked_at = excluded.linked_at`
-  )
-    .bind(
-      userId,
-      identity.id,
-      // The OAuth access token is deliberately absent: the id is all GhostBox
-      // ever needs, and a stored token is a credential waiting to leak.
-      JSON.stringify({
-        username: identity.username,
-        globalName: identity.displayName,
-        email: identity.email,
-        emailVerified: identity.emailVerified,
-      }),
-      now
-    )
-    .run();
-}
-
-async function handleGoogleLinkCallback(request: Request, env: Env, state: DiscordState, code: string) {
-  const userId = state.userId!;
-
-  const exchanged = await exchangeGoogleCode(env, request, code);
-  if (!exchanged.identity) return htmlResponse("Falha no Google", exchanged.error!, 502);
-
-  try {
-    await writeGoogleLink(env, userId, exchanged.identity);
-  } catch (error) {
-    console.error("Google link write failed", {
-      userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return htmlResponse("Vínculo não concluído", "Não foi possível salvar o vínculo com o Google. Tente novamente pelo GhostBox em instantes.", 500);
-  }
-
-  const account = await getAccountByUserId(env, userId);
-  let emailVerified = Boolean(account?.email_verified);
-  if (account && !emailVerified && providerEmailConfirms(exchanged.identity, account.email)) {
-    await markEmailVerified(env, userId);
-    emailVerified = true;
-  }
-
-  return htmlResponse(
-    "Google vinculado",
-    emailVerified
-      ? "Sua conta Google foi vinculada ao GhostBox e seu e-mail já está verificado. Você pode voltar ao app."
-      : "Sua conta Google foi vinculada ao GhostBox. Você já pode voltar ao app."
-  );
-}
-
 async function handleDiscordCallback(request: Request, env: Env) {
   const url = new URL(request.url);
   const state = await verifyDiscordState(env, url.searchParams.get("state"));
@@ -1653,8 +1490,6 @@ async function handleDiscordCallback(request: Request, env: Env) {
   if (state.purpose === "login" || state.purpose === "recover") {
     return handleOAuthLoginCallback(request, env, state, code);
   }
-
-  if (state.provider === "google") return handleGoogleLinkCallback(request, env, state, code);
 
   const userId = state.userId!;
 
@@ -3312,20 +3147,10 @@ function ticketIdentity(row: DiscordLoginTicketRow): ProviderIdentity {
   };
 }
 
-/** Attaches whichever provider a ticket came from. */
-async function writeProviderLink(env: Env, userId: string, identity: ProviderIdentity) {
-  if (identity.provider === "google") return writeGoogleLink(env, userId, identity);
-  return writeDiscordLink(env, userId, {
-    id: identity.id,
-    username: identity.username ?? undefined,
-    global_name: identity.displayName,
-    email: identity.email,
-    verified: identity.emailVerified,
-  });
-}
-
 /** Trades the single-use ticket the OAuth callback dropped on the app's
- * loopback port for either a session or a "finish signing up" payload. */
+ * loopback port for a session. Accounts are created with email and password
+ * only — a provider whose account has no GhostBox account attached gets
+ * `provider_not_linked`, never a signup. */
 async function handleDiscordExchange(request: Request, env: Env) {
   const body = await readJson(request);
   const row = await takeDiscordLoginTicket(env, body?.ticket);
@@ -3336,26 +3161,9 @@ async function handleDiscordExchange(request: Request, env: Env) {
   // the narrow scope `/auth/recover/exchange` exists to enforce.
   if (row.purpose === "recover") return jsonResponse({ error: "invalid_ticket" }, env, 400);
 
-  if (!row.user_id) {
-    // The ticket now has to survive the user picking a password, so widen the
-    // 90s hand-off window. It stays single-use either way.
-    await env.SUBSCRIPTION_DB.prepare(`UPDATE discord_login_tickets SET expires_at = ? WHERE ticket_hash = ?`)
-      .bind(new Date(Date.now() + DISCORD_SIGNUP_TTL_SECONDS * 1000).toISOString(), row.ticket_hash)
-      .run();
-
-    const identity = ticketIdentity(row);
-    const profile = {
-      email: identity.email,
-      emailVerified: identity.emailVerified,
-      username: identity.username,
-      globalName: identity.displayName,
-    };
-
-    // `discord` is repeated as `profile` under a provider-neutral name. Older
-    // app builds read `discord` and would break without it; new ones read
-    // `provider`/`profile` and work for Google too.
-    return jsonResponse({ needsSignup: true, provider: identity.provider, profile, discord: profile }, env);
-  }
+  // The answer is the same generic one for every unlinked Discord: signing in
+  // must not become a way to probe whether a Discord account exists anywhere.
+  if (!row.user_id) return jsonResponse({ error: "provider_not_linked" }, env, 404);
 
   await consumeDiscordLoginTicket(env, row.ticket_hash);
 
@@ -3373,80 +3181,6 @@ async function handleDiscordExchange(request: Request, env: Env) {
   const token = await issueSessionToken(env, fresh ?? account);
   await recordSecurityEvent(env, request, account.user_id, "login", row.provider);
   return jsonResponse({ token, account: publicAccount(fresh ?? account) }, env);
-}
-
-async function handleDiscordRegister(request: Request, env: Env) {
-  const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "register", 8, 3600)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-
-  const body = await readJson(request);
-  const row = await takeDiscordLoginTicket(env, body?.ticket);
-  if (!row) return jsonResponse({ error: "invalid_ticket" }, env, 400);
-  if (row.user_id) return jsonResponse({ error: "discord_already_linked" }, env, 409);
-  // Recovery proves an existing account. It must never open a signup.
-  if (row.purpose === "recover") return jsonResponse({ error: "invalid_ticket" }, env, 400);
-
-  const identity = ticketIdentity(row);
-
-  // The address comes from the ticket, never from the request body: a client
-  // that could choose it would be able to claim someone else's email as
-  // provider-verified.
-  const email = identity.email;
-  if (!email) return jsonResponse({ error: "discord_email_missing" }, env, 400);
-
-  const username = normalizeUsername(body?.username);
-  const password = body?.password;
-  if (!username) return jsonResponse({ error: "invalid_username" }, env, 400);
-  if (!validPassword(password)) return jsonResponse({ error: "weak_password" }, env, 400);
-
-  if (await getAccountByUsername(env, username)) return jsonResponse({ error: "username_taken" }, env, 409);
-  if (await getAccountByEmail(env, email)) return jsonResponse({ error: "email_already_registered" }, env, 409);
-
-  await recordAuthAttempt(env, ip, "register");
-
-  let firebaseSession;
-  try {
-    firebaseSession = await firebaseSignUp(env, email, password);
-  } catch (error) {
-    const mapped = mapFirebaseError(error);
-    return jsonResponse({ error: mapped.code }, env, mapped.status === 500 ? 500 : 400);
-  }
-
-  const emailVerified = identity.emailVerified;
-  try {
-    await insertAccount(env, {
-      userId: firebaseSession.localId,
-      email,
-      username,
-      displayName: identity.displayName || identity.username || username,
-      emailVerified,
-    });
-  } catch (error) {
-    await firebaseDeleteAccount(env, firebaseSession.idToken).catch(() => undefined);
-    console.warn("OAuth register: account insert failed", { error: error instanceof Error ? error.message : String(error) });
-    return jsonResponse({ error: "username_taken" }, env, 409);
-  }
-
-  try {
-    await writeProviderLink(env, firebaseSession.localId, identity);
-  } catch (error) {
-    // The account itself is fine and usable — only the link failed, and the
-    // user can retry it from Settings.
-    console.warn("OAuth register: link write failed", { userId: firebaseSession.localId, provider: identity.provider, error: error instanceof Error ? error.message : String(error) });
-  }
-
-  await consumeDiscordLoginTicket(env, row.ticket_hash);
-
-  // When the provider did not vouch for the address the account simply starts
-  // unverified, and Settings offers the Discord DM code. No email fallback.
-  const account = await getAccountByUserId(env, firebaseSession.localId);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 500);
-
-  const token = await issueSessionToken(env, account);
-
-  return jsonResponse(accountResponsePayload(account, token, firebaseSession.refreshToken), env, 201);
 }
 
 const DISCORD_CODE_TTL_SECONDS = 10 * 60;
@@ -3770,24 +3504,22 @@ async function handleClaimSteam(request: Request, env: Env) {
   return jsonResponse({ steamId, claimed: true }, env);
 }
 
-async function handleDisconnectProvider(request: Request, env: Env, provider: "steam" | "discord" | "google") {
+async function handleDisconnectProvider(request: Request, env: Env, provider: "steam" | "discord") {
   const auth = await requireSession(request, env);
   if (auth.response) return auth.response;
   const userId = auth.session!.userId;
 
   // GhostBox sends no email, so a linked provider is the only way back into an
-  // account whose password is forgotten — and there are no backup codes. Going
-  // to zero providers is therefore a decision, not a click: the app has to say
-  // so and send `confirm`.
+  // account whose password is forgotten — and there are no backup codes. The
+  // server refuses to let an account drop to zero providers, full stop: the
+  // "at least one linked provider" rule is enforced here, not in the UI, so no
+  // client flag can talk its way past it.
   const connections = await env.SUBSCRIPTION_DB.prepare(
     `SELECT provider FROM user_connections WHERE user_id = ?`
   ).bind(userId).all<{ provider: string }>();
   const remaining = (connections.results || []).filter((row) => row.provider !== provider);
   if (remaining.length === 0) {
-    const body = await readJson(request);
-    if (body?.confirm !== true) {
-      return jsonResponse({ error: "last_connection", requiresConfirmation: true }, env, 409);
-    }
+    return jsonResponse({ error: "last_connection" }, env, 409);
   }
 
   if (provider === "discord") {
@@ -3885,7 +3617,7 @@ async function recordSecurityEvent(
 /**
  * Signs in whoever owns the Steam account the OpenID callback proves.
  *
- * No ticket and no browser bounce: Steam, unlike Discord and Google, accepts
+ * No ticket and no browser bounce: Steam, unlike Discord, accepts
  * an arbitrary `return_to`, so the desktop app receives the callback straight
  * on its loopback port and posts the whole URL here.
  *
@@ -3986,6 +3718,153 @@ async function handleRecoverExchange(request: Request, env: Env) {
   );
 }
 
+// ---- Recovery via Discord PIN ----
+
+/** Per-account DM budget for recovery PINs. Whoever knows an identifier can
+ * only ring the linked Discord three times an hour — the anti-DM-bombing cap
+ * the per-IP limits alone cannot provide. */
+const DISCORD_RECOVER_DM_BUDGET = 3;
+
+/** Resolves the account an email-or-username identifier names, or `null`. */
+async function accountByIdentifier(env: Env, identifier: string) {
+  if (identifier.includes("@")) {
+    const email = normalizeEmail(identifier);
+    return email ? getAccountByEmail(env, email) : null;
+  }
+  const username = normalizeUsername(identifier);
+  return username ? getAccountByUsername(env, username) : null;
+}
+
+/** Step one of the Discord recovery: the bot DMs a one-shot PIN to the Discord
+ * linked to the account the identifier names.
+ *
+ * The answer is `{ ok: true }` for accounts that do not exist, for accounts
+ * with no Discord linked and for DMs that could not be delivered — same as it
+ * is for the happy path. Anything else would turn this endpoint into an
+ * account oracle and the DM into a way to probe who linked what. */
+async function handleDiscordRecoverStart(request: Request, env: Env) {
+  const ip = clientIp(request);
+  if (await tooManyAuthAttempts(env, ip, "recover_discord_call", 10, 3600)) {
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
+
+  const body = await readJson(request);
+  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
+  if (!identifier) return jsonResponse({ ok: true }, env);
+
+  const account = await accountByIdentifier(env, identifier);
+  if (!account) return jsonResponse({ ok: true }, env);
+
+  // Checked before the link lookup on purpose: an attacker must not be able to
+  // tell "no Discord linked" apart from "budget spent" by timing either.
+  if (await tooManyAuthAttempts(env, `user:${account.user_id}`, "recover_discord", DISCORD_RECOVER_DM_BUDGET, 3600)) {
+    return jsonResponse({ ok: true }, env);
+  }
+
+  const link = await getDiscordLink(env, account.user_id);
+  if (!link) return jsonResponse({ ok: true }, env);
+
+  // Shares the verification-code table: one pending code per account, and the
+  // newest request wins. The hash mixes in the account id, so a stolen row
+  // cannot be replayed against a different account.
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+  const now = Date.now();
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO discord_verification_codes (user_id, code_hash, discord_user_id, attempts, expires_at, created_at)
+     VALUES (?, ?, ?, 0, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       code_hash = excluded.code_hash,
+       discord_user_id = excluded.discord_user_id,
+       attempts = 0,
+       expires_at = excluded.expires_at,
+       created_at = excluded.created_at`
+  )
+    .bind(
+      account.user_id,
+      await sha256Hex(`${account.user_id}:${code}`),
+      link.discord_user_id,
+      new Date(now + DISCORD_CODE_TTL_SECONDS * 1000).toISOString(),
+      new Date(now).toISOString()
+    )
+    .run();
+
+  const dm = await discordDirectMessage(
+    env,
+    link.discord_user_id,
+    `Código para redefinir a senha da sua conta GhostBox: **${code}**.\nEle expira em 10 minutos. Se não foi você quem pediu, ignore esta mensagem.`
+  );
+  if (!dm.ok) {
+    // A code nobody received must not sit in the table answering guesses.
+    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`)
+      .bind(account.user_id).run();
+    console.warn("Discord recovery DM failed", { userId: account.user_id, reason: dm.reason });
+    return jsonResponse({ ok: true }, env);
+  }
+
+  await recordAuthAttempt(env, `user:${account.user_id}`, "recover_discord");
+  await recordSecurityEvent(env, request, account.user_id, "recover", "pin_requested");
+  return jsonResponse({ ok: true }, env);
+}
+
+/** Step two: the PIN proves whoever holds the linked Discord, and the reward is
+ * the same narrow recovery session the provider hand-off ends in — it can do
+ * exactly one thing, set a password. Every failure reads as `invalid_code` so
+ * the endpoint cannot confirm whether an identifier exists. */
+async function handleDiscordRecoverConfirm(request: Request, env: Env) {
+  const ip = clientIp(request);
+  if (await tooManyAuthAttempts(env, ip, "recover", 10, 3600)) {
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
+  await recordAuthAttempt(env, ip, "recover");
+
+  const body = await readJson(request);
+  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  if (!identifier || !/^[0-9]{6}$/.test(code)) return jsonResponse({ error: "invalid_code" }, env, 400);
+
+  const account = await accountByIdentifier(env, identifier);
+  if (!account) return jsonResponse({ error: "invalid_code" }, env, 400);
+
+  const row = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM discord_verification_codes WHERE user_id = ? LIMIT 1`
+  )
+    .bind(account.user_id)
+    .first<DiscordVerificationCodeRow>();
+
+  const dropCode = () =>
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`)
+      .bind(account.user_id).run();
+
+  if (row && Date.parse(row.expires_at) < Date.now()) {
+    await dropCode();
+    return jsonResponse({ error: "invalid_code" }, env, 400);
+  }
+  if (!row) return jsonResponse({ error: "invalid_code" }, env, 400);
+  if (row.attempts >= DISCORD_CODE_MAX_ATTEMPTS) {
+    await dropCode();
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
+
+  const expected = await sha256Hex(`${account.user_id}:${code}`);
+  if (!timingSafeEqual(expected, row.code_hash)) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE discord_verification_codes SET attempts = attempts + 1 WHERE user_id = ?`
+    ).bind(account.user_id).run();
+    return jsonResponse({ error: "invalid_code" }, env, 400);
+  }
+
+  await dropCode();
+  await recordSecurityEvent(env, request, account.user_id, "recover", "discord_pin");
+  return jsonResponse(
+    {
+      token: await issueRecoverySessionToken(env, account),
+      expiresInSeconds: RECOVERY_SESSION_TTL_SECONDS,
+      account: publicAccount(account),
+    },
+    env
+  );
+}
+
 /**
  * Sets a new password for a caller holding a recovery session.
  *
@@ -4065,7 +3944,6 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "POST" && url.pathname === "/auth/change-password") return handleChangePassword(request, env);
   if (request.method === "GET" && url.pathname === "/auth/discord/start") return handleDiscordLoginStart(request, env);
   if (request.method === "POST" && url.pathname === "/auth/discord/exchange") return handleDiscordExchange(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/discord/register") return handleDiscordRegister(request, env);
 
   // Provider-neutral entry points. `/auth/discord/*` above stays as an alias so
   // app builds shipped before this keep signing in.
@@ -4083,13 +3961,13 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
     return handleOAuthLinkStart(request, env, provider);
   }
   if (request.method === "POST" && url.pathname === "/auth/oauth/exchange") return handleDiscordExchange(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/oauth/register") return handleDiscordRegister(request, env);
   if (request.method === "GET" && url.pathname === "/oauth/callback") return handleDiscordCallback(request, env);
 
   if (request.method === "POST" && url.pathname === "/auth/steam/login") return handleSteamLogin(request, env);
   if (request.method === "POST" && url.pathname === "/auth/recover/exchange") return handleRecoverExchange(request, env);
   if (request.method === "POST" && url.pathname === "/auth/recover/password") return handleRecoverPassword(request, env);
-  if (request.method === "DELETE" && url.pathname === "/auth/connections/google") return handleDisconnectProvider(request, env, "google");
+  if (request.method === "POST" && url.pathname === "/auth/recover/discord/start") return handleDiscordRecoverStart(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/recover/discord/confirm") return handleDiscordRecoverConfirm(request, env);
   if (request.method === "POST" && url.pathname === "/auth/discord/send-code") return handleDiscordSendCode(request, env);
   if (request.method === "POST" && url.pathname === "/auth/discord/confirm-code") return handleDiscordConfirmCode(request, env);
   if (request.method === "GET" && url.pathname === "/auth/me") return handleMe(request, env);

@@ -218,11 +218,11 @@
   }
 }
 
-// Three providers side by side rather than stacked: they are peers — any of
-// them signs in, and any of them recovers the account.
+// Providers side by side rather than stacked: they are peers — any of them
+// signs in, and any of them recovers the account.
 .auth-form__providers {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 

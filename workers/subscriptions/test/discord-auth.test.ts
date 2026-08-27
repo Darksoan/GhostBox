@@ -23,7 +23,7 @@ function discordEnv(db: ReturnType<typeof fakeD1>, overrides: Record<string, unk
  * `purpose.provider.userId.port.appNonce.expiresAt.nonce.signature`. */
 async function oauthState(options: {
   purpose?: "login" | "recover" | "link";
-  provider?: "discord" | "google";
+  provider?: "discord";
   userId?: string;
   port?: number | string;
   appNonce?: string;
@@ -210,97 +210,33 @@ describe("POST /auth/discord/exchange", () => {
     expect(response.status).toBe(400);
   });
 
-  it("asks for a signup when the Discord account has no GhostBox account", async () => {
+  it("refuses to sign in a Discord nobody linked: accounts are born from email + password", async () => {
     discord = mockDiscordOAuth();
     const db = fakeD1();
 
     const ticket = await loginCallbackTicket(db);
-    const body = await worker
-      .fetch(exchangeRequest(ticket), discordEnv(db), executionContext)
-      .then((response) => response.json<any>());
+    const response = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
 
-    expect(body.needsSignup).toBe(true);
-    expect(body.discord).toMatchObject({ email: "ghost@example.com", emailVerified: true, username: "ghost" });
-    // Still unspent: the app finishes the signup against this same ticket.
+    expect(response.status).toBe(404);
+    expect(await response.json<any>()).toEqual({ error: "provider_not_linked" });
+    // Still unspent: the ticket is not a signup coupon, but it stays valid so
+    // the same authorization can link the account later from Settings.
     expect(db.rows("discord_login_tickets")[0].consumed_at).toBe(null);
   });
 });
 
 describe("POST /auth/discord/register", () => {
-  function registerRequest(ticket: string, body: Record<string, unknown> = {}) {
-    return new Request("https://worker.test/auth/discord/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ticket, username: "ghostuser", password: "hunter2hunter2", ...body }),
-    });
-  }
-
-  async function ticketForSignup(db: ReturnType<typeof fakeD1>) {
-    discord = mockDiscordOAuth();
-    const ticket = await loginCallbackTicket(db);
-    discord.restore();
-    discord = null;
-    return ticket;
-  }
-
-  it("creates an already-verified account and never sends a verification email", async () => {
-    const db = fakeD1();
-    const ticket = await ticketForSignup(db);
-
-    const firebase = mockStripe({
-      routes: {
-        "accounts:signUp": { localId: "user_new", idToken: "id_1", refreshToken: "refresh_1", email: "ghost@example.com" },
-      },
-    });
-    try {
-      const response = await worker.fetch(
-        registerRequest(ticket),
-        discordEnv(db, { FIREBASE_API_KEY: "firebase_key" }),
-        executionContext
-      );
-
-      expect(response.status).toBe(201);
-      const body = await response.json<any>();
-      expect(body.account.emailVerified).toBe(true);
-      expect(body.account.verifiedVia).toBe("email");
-      expect(firebase.calls.some((call) => call.includes("sendOobCode"))).toBe(false);
-      expect(db.rows("discord_links")).toEqual([
-        expect.objectContaining({ user_id: "user_new", discord_user_id: DISCORD_USER_ID }),
-      ]);
-      expect(db.rows("discord_login_tickets")[0].consumed_at).not.toBe(null);
-    } finally {
-      firebase.restore();
-    }
-  });
-
-  it("ignores an email supplied by the client and uses the one Discord signed off on", async () => {
-    const db = fakeD1();
-    const ticket = await ticketForSignup(db);
-
-    const firebase = mockStripe({
-      routes: {
-        "accounts:signUp": { localId: "user_new", idToken: "id_1", refreshToken: "refresh_1", email: "ghost@example.com" },
-      },
-    });
-    try {
-      await worker.fetch(
-        registerRequest(ticket, { email: "attacker@example.com" }),
-        discordEnv(db, { FIREBASE_API_KEY: "firebase_key" }),
-        executionContext
-      );
-      expect(db.rows("accounts")[0].email).toBe("ghost@example.com");
-    } finally {
-      firebase.restore();
-    }
-  });
-
-  it("refuses a ticket that already belongs to an account", async () => {
-    const db = fakeD1({ accounts: [account()], user_connections: [discordConnection()] });
-    const ticket = await ticketForSignup(db);
-
-    const response = await worker.fetch(registerRequest(ticket), discordEnv(db), executionContext);
-    expect(response.status).toBe(409);
-    expect(await response.json<any>()).toEqual({ error: "discord_already_linked" });
+  it("is gone: signing up through a provider is not a thing anymore", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/auth/discord/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ticket: "whatever", username: "ghostuser", password: "hunter2hunter2" }),
+      }),
+      discordEnv(fakeD1()),
+      executionContext
+    );
+    expect(response.status).toBe(404);
   });
 });
 

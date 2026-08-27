@@ -54,19 +54,15 @@ export function useDiscordLink() {
   }, []);
 
   /**
-   * `confirm` is what the worker demands when this is the account's last
-   * connection. GhostBox sends no recovery emails and issues no backup codes,
-   * so removing the last one means a forgotten password can never be
-   * recovered — the caller has to say that to the user and pass `true` only
-   * after they agree.
-   *
-   * Rejects with `last_connection` when the confirmation is still missing, so
-   * the caller can show the warning and retry.
+   * Rejects with `last_connection` when this is the account's only linked
+   * provider: GhostBox sends no recovery emails and issues no backup codes,
+   * so the worker never lets an account drop to zero providers. The caller
+   * shows the warning and nothing else can talk past the refusal.
    */
-  const disconnect = useCallback(async (confirm = false) => {
+  const disconnect = useCallback(async () => {
     setBusy(true);
     try {
-      await ghostboxApi.disconnectConnection("discord", confirm);
+      await ghostboxApi.disconnectConnection("discord");
       setStatus(null);
     } finally {
       setBusy(false);

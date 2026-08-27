@@ -95,40 +95,56 @@ function disconnectRequest(token: string, body?: Record<string, unknown>) {
 }
 
 describe("DELETE /auth/connections/discord", () => {
-  it("refuses to remove the last connection without an explicit confirmation", async () => {
-    // With no recovery emails and no backup codes, the last linked provider is
-    // the only way back into an account whose password is forgotten. Dropping
-    // it has to be a decision the app spelled out, not a stray click.
+  it("refuses to remove the last connection, with no opt-out", async () => {
+    // Linking is mandatory: with no recovery emails and no backup codes, the
+    // last linked provider is the only way back into a forgotten password. The
+    // refusal is final — no `confirm` flag on the client can talk past it.
     const db = linkedDb();
     const token = await sessionToken("user_1");
 
-    const response = await worker.fetch(disconnectRequest(token), makeEnv(db), executionContext);
+    const response = await worker.fetch(disconnectRequest(token, { confirm: true }), makeEnv(db), executionContext);
     expect(response.status).toBe(409);
-    expect(await response.json<any>()).toMatchObject({ error: "last_connection", requiresConfirmation: true });
+    expect(await response.json<any>()).toMatchObject({ error: "last_connection" });
     expect(db.rows("user_connections")).toHaveLength(1);
   });
 
-  it("unlinks Discord without touching the account session", async () => {
+  it("unlinks Discord without touching the account session, when another provider stays", async () => {
     // Regression: disconnecting Discord dropped the user to the login modal.
-    // Whatever the trigger was, the session must survive the round trip.
-    const db = linkedDb();
+    // Whatever the trigger was, the session must survive the round trip. A
+    // Steam connection is kept so the unlink is allowed.
+    const db = fakeD1({
+      accounts: [account()],
+      discord_links: [
+        {
+          steam_id: null,
+          user_id: "user_1",
+          discord_user_id: "discord_1",
+          discord_username: "ghost",
+          discord_global_name: "Ghost",
+          linked_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      user_connections: [
+        { user_id: "user_1", provider: "discord", provider_id: "discord_1", metadata_json: "{}", linked_at: "2026-01-01T00:00:00.000Z" },
+        { user_id: "user_1", provider: "steam", provider_id: "76561198000000001", metadata_json: "{}", linked_at: "2026-01-01T00:00:00.000Z" },
+      ],
+    });
     const token = await sessionToken("user_1");
     const env = makeEnv(db);
 
-    const disconnected = await worker.fetch(
-      disconnectRequest(token, { confirm: true }),
-      env,
-      executionContext
-    );
+    const disconnected = await worker.fetch(disconnectRequest(token), env, executionContext);
     expect(disconnected.status).toBe(200);
     expect(db.rows("discord_links")).toEqual([]);
-    expect(db.rows("user_connections")).toEqual([]);
+    expect(db.rows("user_connections")).toEqual([
+      expect.objectContaining({ provider: "steam", provider_id: "76561198000000001" }),
+    ]);
 
     const me = await worker.fetch(meRequest(token), env, executionContext);
     expect(me.status).toBe(200);
     const body = await me.json<any>();
     expect(body.account.userId).toBe("user_1");
-    expect(body.connections).toEqual([]);
+    expect(body.connections).toEqual([expect.objectContaining({ provider: "steam" })]);
   });
 });
 

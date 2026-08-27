@@ -50,7 +50,6 @@ import type {
   CloudSavePinnedResult,
   CloudSessionResult,
   LoginProvider,
-  OAuthSignupPending,
   RecoveryTicket,
   GhostBoxAccount,
   AccountMeResult,
@@ -289,19 +288,6 @@ export const ghostboxApi = {
   async getDiscordLinkUrl(): Promise<string | null> {
     try {
       const result = await invoke<{ url: string }>("discord_link_start", {});
-      return result?.url ?? null;
-    } catch {
-      return null;
-    }
-  },
-
-  /** Same hand-off as `getDiscordLinkUrl`, for attaching Google to the
-   * signed-in account. Worth surfacing: with no recovery emails, a second
-   * linked provider is what keeps a forgotten password from ending the
-   * account. */
-  async getGoogleLinkUrl(): Promise<string | null> {
-    try {
-      const result = await invoke<{ url: string }>("google_link_start", {});
       return result?.url ?? null;
     } catch {
       return null;
@@ -1150,39 +1136,39 @@ export const ghostboxApi = {
 
   /**
    * Opens the provider's sign-in flow in the system browser and waits for it.
-   * The session is saved by the Rust side; a `needsSignup` result means the
-   * provider account is not attached to any GhostBox account yet.
-   *
-   * Steam takes a different route — it cannot create an account, so it either
-   * signs in or reports `steam_not_linked`.
+   * The session is saved by the Rust side. Accounts are created with email and
+   * password only, so a provider with no GhostBox account attached rejects
+   * with `provider_not_linked` (Discord) or `steam_not_linked` (Steam).
    */
-  async loginWithProvider(
-    provider: LoginProvider,
-  ): Promise<CloudSessionResult | OAuthSignupPending> {
+  async loginWithProvider(provider: LoginProvider): Promise<CloudSessionResult> {
     if (provider === "steam") return invoke<CloudSessionResult>("cloud_steam_login", {});
-    return invoke<CloudSessionResult | OAuthSignupPending>("cloud_oauth_login", { provider });
-  },
-
-  async completeOAuthSignup(
-    ticket: string,
-    username: string,
-    password: string,
-  ): Promise<CloudSessionResult> {
-    return invoke<CloudSessionResult>("cloud_oauth_complete_signup", {
-      ticket,
-      username,
-      password,
-    });
+    return invoke<CloudSessionResult>("cloud_oauth_login", { provider });
   },
 
   /**
-   * Step one of recovering an account whose password is lost: the provider
-   * proves the account. Returns a token good only for `completeRecovery`,
+   * Step one of recovering a password through the linked Discord: the bot DMs
+   * a one-shot PIN to that Discord. The answer is uniform whether or not the
+   * identifier names an account.
+   */
+  async startDiscordRecovery(identifier: string): Promise<{ ok: boolean }> {
+    return invoke<{ ok: boolean }>("cloud_discord_recover_start", { identifier });
+  },
+
+  /**
+   * Step two: trades the PIN for a token good only for `completeRecovery`,
    * which is why it is not persisted as a session.
    */
-  async startRecovery(provider: LoginProvider): Promise<RecoveryTicket> {
-    if (provider === "steam") return invoke<RecoveryTicket>("cloud_steam_recover", {});
-    return invoke<RecoveryTicket>("cloud_oauth_recover", { provider });
+  async confirmDiscordRecovery(identifier: string, code: string): Promise<RecoveryTicket> {
+    return invoke<RecoveryTicket>("cloud_discord_recover_confirm", { identifier, code });
+  },
+
+  /**
+   * Step one of recovering an account whose password is lost through Steam:
+   * the Steam OpenID callback proves the account. Returns a token good only
+   * for `completeRecovery`, which is why it is not persisted as a session.
+   */
+  async startSteamRecovery(): Promise<RecoveryTicket> {
+    return invoke<RecoveryTicket>("cloud_steam_recover", {});
   },
 
   /** Step two: sets the new password and signs every other device out. */
@@ -1216,13 +1202,12 @@ export const ghostboxApi = {
   },
 
   /**
-   * `confirm` is required when this is the account's last connection: with no
-   * recovery emails and no backup codes, removing it leaves a forgotten
-   * password unrecoverable. The worker answers `last_connection` until the app
-   * has said so and the user agreed.
+   * The worker refuses to remove the account's last connection outright:
+   * with no recovery emails and no backup codes, that connection is the only
+   * way back into a forgotten password. Rejects with `last_connection`.
    */
-  async disconnectConnection(provider: LoginProvider, confirm = false): Promise<void> {
-    await invoke<void>("cloud_disconnect_connection", { provider, confirm });
+  async disconnectConnection(provider: LoginProvider): Promise<void> {
+    await invoke<void>("cloud_disconnect_connection", { provider });
   },
 
   // Cloud save calls propagate errors on purpose: the Rust side already

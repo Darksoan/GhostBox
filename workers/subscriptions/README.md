@@ -10,8 +10,7 @@ Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Str
 - `POST /auth/password-reset` — `{ identifier }`, always 200
 - `POST /auth/change-password` — Bearer, `{ currentPassword, newPassword }`
 - `GET /auth/discord/start?port=...` — no auth; returns `{ url }` for the desktop app's Discord sign-in, with the app's loopback port carried in the signed state
-- `POST /auth/discord/exchange` — no auth, `{ ticket }`; returns a session, or `{ needsSignup: true, discord }` when that Discord has no GhostBox account
-- `POST /auth/discord/register` — no auth, `{ ticket, username, password }`; the email comes from the ticket, never from the body
+- `POST /auth/discord/exchange` — no auth, `{ ticket }`; returns a session, or `{ error: "provider_not_linked" }` when that Discord has no GhostBox account (accounts are born from email + password only)
 - `POST /auth/discord/send-code` — Bearer; DMs a 6-digit code from the bot. Two per-IP budgets: 5 delivered codes/hour (anti-spam) and 20 calls/hour (bounds a permanently blocked DM). A blocked DM does not spend the delivered budget, so fixing the privacy setting and retrying works right away.
 - `POST /auth/discord/confirm-code` — Bearer, `{ code }`
 - `GET /auth/me` — Bearer
@@ -41,22 +40,25 @@ Four ways in, and any linked one is a complete login:
 | Route | Provider |
 |---|---|
 | `POST /auth/login` | password |
-| `GET /auth/oauth/:provider/start?port=&nonce=` → `GET /oauth/callback` → `POST /auth/oauth/exchange` | `discord`, `google` |
+| `GET /auth/oauth/:provider/start?port=&nonce=` → `GET /oauth/callback` → `POST /auth/oauth/exchange` | `discord` |
 | `POST /auth/steam/login` | Steam |
 
-Discord and Google only redirect to a pre-registered URI, so the browser lands on `/oauth/callback` here and the worker bounces a **single-use ticket** to the desktop app's loopback port. The ticket, not a session token, is what travels through the browser. The redirect echoes back the `nonce` the app generated: without it, any local process could reach the loopback port first and hand the app a ticket for its own account.
+Discord only redirects to a pre-registered URI, so the browser lands on `/oauth/callback` here and the worker bounces a **single-use ticket** to the desktop app's loopback port. The ticket, not a session token, is what travels through the browser. The redirect echoes back the `nonce` the app generated: without it, any local process could reach the loopback port first and hand the app a ticket for its own account.
 
-Steam is different on two counts. It accepts an arbitrary `return_to`, so the app takes the OpenID callback directly and posts it here for validation against `steamcommunity.com`. And it **cannot create an account** — it reports a SteamID and no address — so an unlinked SteamID gets `steam_not_linked`. Signing up is `/auth/register`, or Discord/Google via `/auth/oauth/register`.
+Steam is different on two counts. It accepts an arbitrary `return_to`, so the app takes the OpenID callback directly and posts it here for validation against `steamcommunity.com`. And it **cannot create an account** — it reports a SteamID and no address — so an unlinked SteamID gets `steam_not_linked`. **Accounts are created with email + password only**: a Discord or Steam with no GhostBox account attached gets `provider_not_linked` / `steam_not_linked`, never a signup.
 
 `/auth/claim-steam` migrates a pre-existing Steam-only account's subscription, cloud saves, profile and Discord link onto the new account the first time that Steam ID is connected.
 
 ## Recovery
 
-`POST /auth/recover/exchange` (a `recover` ticket, or a Steam callback) → `POST /auth/recover/password`.
+`POST /auth/recover/exchange` (a validated Steam callback) → `POST /auth/recover/password`, **or** `POST /auth/recover/discord/start` → `POST /auth/recover/discord/confirm` → `POST /auth/recover/password`.
+
+- **Steam**: the OpenID callback proves the account the same way login does.
+- **Discord**: the worker's bot DMs a one-shot PIN to the Discord linked to the account the identifier names; the PIN trades for the recovery session. `/start` answers the same way whether the identifier exists, has no Discord, or the DM failed — it must not become an account oracle, and a per-account budget stops the DM from being a harassment channel. Unlinked identifiers get a uniform `invalid_code` at `/confirm`.
 
 The exchange returns a **10-minute session scoped to `recovery`**, which `requireSession` rejects on every other route. Setting the password bumps `token_version`, so everything issued before — including the recovery token itself and whatever session prompted the recovery — stops working, and the caller gets a fresh full session back. A Discord DM goes out when one is linked; failing to send it never blocks the recovery.
 
-There is no `/auth/password-reset` and no backup codes: **losing every linked provider means losing the account.** `DELETE /auth/connections/:provider` refuses to remove the last one until the request carries `{"confirm": true}`.
+There is no `/auth/password-reset` and no backup codes: **losing every linked provider means losing the account.** Linking is mandatory, so `DELETE /auth/connections/:provider` refuses to remove the last one outright — no client flag can talk past it.
 
 ## Secrets
 
@@ -73,13 +75,9 @@ npx wrangler secret put SUPABASE_URL --config workers/subscriptions/wrangler.tom
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/subscriptions/wrangler.toml
 npx wrangler secret put FIREBASE_API_KEY --config workers/subscriptions/wrangler.toml
 npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_KEY --config workers/subscriptions/wrangler.toml
-npx wrangler secret put GOOGLE_CLIENT_ID --config workers/subscriptions/wrangler.toml
-npx wrangler secret put GOOGLE_CLIENT_SECRET --config workers/subscriptions/wrangler.toml
 ```
 
 `FIREBASE_SERVICE_ACCOUNT_KEY` is the service-account JSON, pasted verbatim (Project settings → Service accounts → Generate new private key). It is used for exactly one thing: minting a Firebase custom token during account recovery, because `accounts:update` needs an idToken and the only other ways to get one are the old password or an emailed reset code — and GhostBox sends no email. Everything else still runs on the public REST API.
-
-`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` come from a Google Cloud OAuth 2.0 **Web application** client. Register `https://<worker-host>/oauth/callback` as an authorised redirect URI, the same one Discord uses.
 
 `CLOUD_SESSION_SECRET` is **required** and has no fallback. It used to fall back to `DISCORD_OAUTH_STATE_SECRET` / `DISCORD_CLIENT_SECRET`, which made the key that forges any user's session the same one handed to Discord. It is also the panic button: **rotating it signs every user out at once**, on every device, immediately.
 

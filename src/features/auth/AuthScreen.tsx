@@ -4,19 +4,18 @@ import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
 import ghostLogo from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
-import googleIcon from "../../../Icons/google-icon-1.png";
 import steamIcon from "../../../Icons/steam-glyph.svg";
-import type { LoginProvider, OAuthSignupPending } from "../../lib/ghostboxApi.types";
+import type { LoginProvider } from "../../lib/ghostboxApi.types";
 import "./AuthScreen.scss";
 
-type View = "login" | "register" | "recover" | "recoverPassword" | "oauthSignup";
+type View = "login" | "register" | "recover" | "recoverDiscord" | "recoverPassword";
 
 /** Every way into an account, in the order the modal offers them. GhostBox
  * sends no email, so this list is also the complete list of ways back in after
- * a forgotten password. */
+ * a forgotten password. Steam cannot create an account; Discord signs in an
+ * existing link only. */
 const PROVIDERS: ReadonlyArray<{ id: LoginProvider; icon: string; labelKey: string }> = [
   { id: "discord", icon: discordIcon, labelKey: "auth.provider.discord" },
-  { id: "google", icon: googleIcon, labelKey: "auth.provider.google" },
   { id: "steam", icon: steamIcon, labelKey: "auth.provider.steam" },
 ];
 
@@ -35,20 +34,16 @@ function AuthTitle({ text }: { text: string }) {
   );
 }
 
-/** Provider usernames allow characters the GhostBox handle does not, so the
- * suggestion is filtered instead of rejected outright — the user only has to
- * fix it when nothing usable is left. */
-function suggestUsername(value: string | null): string {
-  return (value ?? "").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 20);
-}
-
+/** Accounts are created with email + password only — the providers sign in
+ * and recover, they never sign up. */
 export function AuthScreen() {
   const {
     login,
     register,
     loginWithProvider,
-    completeOAuthSignup,
-    startRecovery,
+    startSteamRecovery,
+    startDiscordRecovery,
+    confirmDiscordRecovery,
     completeRecovery,
     closeAuthModal,
   } = useAuth();
@@ -59,9 +54,11 @@ export function AuthScreen() {
   const [notice, setNotice] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const [oauthPending, setOauthPending] = useState<OAuthSignupPending | null>(null);
-  const [oauthUsername, setOauthUsername] = useState("");
-  const [oauthPassword, setOauthPassword] = useState("");
+  // Discord PIN recovery: the identifier names the GhostBox account, and the
+  // PIN arrives on the Discord linked to it.
+  const [recoverIdentifier, setRecoverIdentifier] = useState("");
+  const [recoverCode, setRecoverCode] = useState("");
+  const [recoverPinSent, setRecoverPinSent] = useState(false);
 
   // Held in memory only, never persisted as a session: it buys exactly one
   // call, and it expires in ten minutes.
@@ -171,33 +168,11 @@ export function AuthScreen() {
     setNotice("");
     setSubmitting(true);
     try {
-      const pending = await loginWithProvider(provider);
-      if (!pending) {
-        closeAuthModal();
-        return;
-      }
-      // The provider account is not attached to anything yet: collect a
-      // password so the account is a normal one, reachable by password too.
-      setOauthPending(pending);
-      setOauthUsername(suggestUsername(pending.profile.username));
-      setOauthPassword("");
-      setView("oauthSignup");
+      await loginWithProvider(provider);
     } catch (submitError) {
-      setError(errorMessage(submitError, t("auth.errors.auth_error")));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleOAuthSignupSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (submitting || !oauthPending) return;
-    setError("");
-    setSubmitting(true);
-    try {
-      await completeOAuthSignup(oauthPending.ticket, oauthUsername.trim(), oauthPassword);
-      closeAuthModal();
-    } catch (submitError) {
+      // A provider with no GhostBox account attached rejects with a message
+      // that points to email + password signup — account creation is never
+      // opened through a provider.
       setError(errorMessage(submitError, t("auth.errors.auth_error")));
     } finally {
       setSubmitting(false);
@@ -228,15 +203,59 @@ export function AuthScreen() {
     );
   }
 
-  /** Recovery step one. The provider proves the account; what comes back is a
-   * ten-minute token that can do nothing but set a password. */
+  /** Recovery step one. Steam proves the account through its OpenID callback;
+   * Discord goes to the PIN flow, where the bot DMs the code to the linked
+   * account. Either way what comes back is a ten-minute token that can do
+   * nothing but set a password. */
   async function handleRecoverClick(provider: LoginProvider) {
     if (submitting) return;
     setError("");
     setNotice("");
+    if (provider === "discord") {
+      setRecoverIdentifier("");
+      setRecoverCode("");
+      setRecoverPinSent(false);
+      setView("recoverDiscord");
+      return;
+    }
     setSubmitting(true);
     try {
-      const recovery = await startRecovery(provider);
+      const recovery = await startSteamRecovery();
+      setRecoveryToken(recovery.token);
+      setRecoveryUsername(recovery.account.username);
+      setRecoverPassword("");
+      setRecoverConfirm("");
+      setView("recoverPassword");
+    } catch (submitError) {
+      setError(errorMessage(submitError, t("auth.errors.auth_error")));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** Asks the bot to DM the recovery PIN. The answer is uniform for unknown
+   * identifiers — the user is simply told to check their Discord. */
+  async function handleRecoverDiscordSend() {
+    if (submitting || !recoverIdentifier.trim()) return;
+    setError("");
+    setNotice("");
+    setSubmitting(true);
+    try {
+      await startDiscordRecovery(recoverIdentifier.trim());
+      setRecoverPinSent(true);
+    } catch (submitError) {
+      setError(errorMessage(submitError, t("auth.errors.auth_error")));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRecoverDiscordConfirm() {
+    if (submitting || recoverCode.length !== 6) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      const recovery = await confirmDiscordRecovery(recoverIdentifier.trim(), recoverCode);
       setRecoveryToken(recovery.token);
       setRecoveryUsername(recovery.account.username);
       setRecoverPassword("");
@@ -434,8 +453,6 @@ export function AuthScreen() {
               {submitting ? t("auth.register.submitting") : t("auth.register.submit")}
             </button>
 
-            {providerButtons((provider) => void handleProviderClick(provider))}
-
             <p className="auth-form__switch">
               {t("auth.register.haveAccount")}{" "}
               <button type="button" onClick={() => switchView("login")}>
@@ -445,81 +462,84 @@ export function AuthScreen() {
           </form>
         )}
 
-        {view === "oauthSignup" && oauthPending && (
-          <form key={view} className="auth-form" onSubmit={handleOAuthSignupSubmit}>
-            <AuthTitle text={t("auth.oauthSignup.title")} />
-            <p className="auth-form__subtitle">{t("auth.oauthSignup.subtitle")}</p>
+        {view === "recoverDiscord" && (
+          <div key={view} className="auth-form">
+            <AuthTitle text={t("auth.recover.title")} />
+            <p className="auth-form__subtitle">{t("auth.recover.discordSubtitle")}</p>
 
             <label className="auth-field">
-              <span className="auth-field__label">{t("auth.register.emailLabel")}</span>
-              <input
-                className="auth-field__input"
-                type="email"
-                value={oauthPending.profile.email ?? ""}
-                readOnly
-                disabled
-              />
-              <span className="auth-field__hint">
-                {oauthPending.profile.emailVerified
-                  ? t("auth.oauthSignup.emailVerifiedHint")
-                  : t("auth.oauthSignup.emailUnverifiedHint")}
-              </span>
-            </label>
-
-            <label className="auth-field">
-              <span className="auth-field__label">{t("auth.register.usernameLabel")}</span>
+              <span className="auth-field__label">{t("auth.recover.discordIdentifierLabel")}</span>
               <input
                 className="auth-field__input"
                 type="text"
                 autoComplete="username"
                 autoFocus
-                value={oauthUsername}
-                onChange={(event) => setOauthUsername(event.target.value)}
-                placeholder={t("auth.register.usernamePlaceholder")}
-                pattern="[a-zA-Z0-9_]{3,20}"
-                required
+                value={recoverIdentifier}
+                onChange={(event) => setRecoverIdentifier(event.target.value)}
+                placeholder={t("auth.recover.discordIdentifierPlaceholder")}
+                disabled={recoverPinSent}
               />
-              <span className="auth-field__hint">{t("auth.register.usernameHint")}</span>
             </label>
 
-            <label className="auth-field">
-              <span className="auth-field__label">{t("auth.register.passwordLabel")}</span>
-              <div className="auth-field__password">
-                <input
-                  className="auth-field__input"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  value={oauthPassword}
-                  onChange={(event) => setOauthPassword(event.target.value)}
-                  placeholder={t("auth.register.passwordPlaceholder")}
-                  minLength={8}
-                  required
-                />
+            {!recoverPinSent ? (
+              <button
+                className="auth-form__submit"
+                type="button"
+                onClick={() => void handleRecoverDiscordSend()}
+                disabled={submitting || !recoverIdentifier.trim()}
+              >
+                {submitting ? <Loader2 className="auth-form__spinner" size={16} /> : null}
+                {submitting ? t("auth.recover.discordSending") : t("auth.recover.discordSend")}
+              </button>
+            ) : (
+              <>
+                <p className="auth-form__notice">{t("auth.recover.discordSent")}</p>
+
+                <label className="auth-field">
+                  <span className="auth-field__label">{t("auth.recover.discordCodeLabel")}</span>
+                  <input
+                    className="auth-field__input"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    autoFocus
+                    value={recoverCode}
+                    onChange={(event) => setRecoverCode(event.target.value.replace(/[^0-9]/g, ""))}
+                    placeholder={t("auth.recover.discordCodePlaceholder")}
+                    required
+                  />
+                </label>
+
+                {error && <p className="auth-form__error">{error}</p>}
+
+                <button
+                  className="auth-form__submit"
+                  type="button"
+                  onClick={() => void handleRecoverDiscordConfirm()}
+                  disabled={submitting || recoverCode.length !== 6}
+                >
+                  {submitting ? <Loader2 className="auth-form__spinner" size={16} /> : null}
+                  {submitting ? t("auth.recover.submitting") : t("auth.recover.discordConfirm")}
+                </button>
+
                 <button
                   type="button"
-                  className="auth-field__toggle"
-                  onClick={() => setShowPassword((current) => !current)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="auth-form__link"
+                  onClick={() => void handleRecoverDiscordSend()}
+                  disabled={submitting}
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {t("auth.recover.discordResend")}
                 </button>
-              </div>
-              <span className="auth-field__hint">{t("auth.oauthSignup.passwordHint")}</span>
-            </label>
-
-            {error && <p className="auth-form__error">{error}</p>}
-
-            <button className="auth-form__submit" type="submit" disabled={submitting}>
-              {submitting ? <Loader2 className="auth-form__spinner" size={16} /> : null}
-              {submitting ? t("auth.oauthSignup.submitting") : t("auth.oauthSignup.submit")}
-            </button>
+              </>
+            )}
 
             <p className="auth-form__switch">
-              <button type="button" onClick={() => switchView("login")}>
+              <button type="button" onClick={() => switchView("recover")}>
                 {t("auth.recover.backToLogin")}
               </button>
             </p>
-          </form>
+          </div>
         )}
 
         {view === "recover" && (

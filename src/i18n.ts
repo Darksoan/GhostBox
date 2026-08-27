@@ -374,7 +374,7 @@ const translations: Record<Language, TranslationTree> = {
       },
       register: {
         title: "Criar conta GhostBox",
-        subtitle: "Cadastre-se com e-mail e usuário. Steam fica opcional.",
+        subtitle: "Cadastre-se com e-mail e usuário. Depois, vincule o Discord ou a Steam para poder recuperar a conta.",
         emailLabel: "E-mail",
         emailPlaceholder: "nome@email.com",
         usernameLabel: "Usuário",
@@ -393,24 +393,24 @@ const translations: Record<Language, TranslationTree> = {
       provider: {
         divider: "ou",
         discord: "Discord",
-        google: "Google",
         steam: "Steam",
-      },
-      oauthSignup: {
-        title: "Concluir cadastro",
-        subtitle: "Escolha um nome de usuário e uma senha para sua conta GhostBox.",
-        emailVerifiedHint: "E-mail confirmado pelo provedor.",
-        emailUnverifiedHint: "O provedor não confirmou este e-mail. Você poderá confirmá-lo pelo Discord nas configurações.",
-        passwordHint: "Você também poderá entrar com usuário e senha.",
-        submit: "Criar conta",
-        submitting: "Criando conta...",
       },
       recover: {
         title: "Recuperar acesso",
         subtitle:
-          "O GhostBox não envia e-mails. Entre pelo provedor que você vinculou à conta e defina uma nova senha.",
+          "O GhostBox não envia e-mails. Use o Discord (enviamos um PIN para ele) ou a Steam já vinculados à conta.",
         noProviderHint:
           "Sem nenhum provedor vinculado não há como recuperar a conta. A Steam só funciona se já estiver vinculada.",
+        discordSubtitle: "O bot vai enviar um PIN para o Discord vinculado à sua conta GhostBox.",
+        discordIdentifierLabel: "Usuário ou e-mail da conta",
+        discordIdentifierPlaceholder: "usuário ou nome@email.com",
+        discordSend: "Enviar PIN pelo Discord",
+        discordSending: "Enviando...",
+        discordSent: "PIN enviado para o seu Discord. Ele expira em 10 minutos.",
+        discordCodeLabel: "PIN de 6 dígitos",
+        discordCodePlaceholder: "000000",
+        discordConfirm: "Confirmar PIN",
+        discordResend: "Reenviar PIN",
         setPasswordTitle: "Definir nova senha",
         setPasswordSubtitle: "Conta confirmada: {username}. Escolha a nova senha.",
         signsOutHint: "Isso encerra a sessão em todos os outros dispositivos.",
@@ -532,6 +532,8 @@ const translations: Record<Language, TranslationTree> = {
       connections: {
         title: "Conexões",
         description: "Conecte contas externas para desbloquear recursos opcionais.",
+        lastConnectionWarning:
+          "Este é o único provedor vinculado à conta e ele não pode ser removido: é a única forma de recuperar o acesso se você esquecer a senha.",
         steam: {
           title: "Steam",
           description: "Métricas, biblioteca e conquistas oficiais da sua conta Steam.",
@@ -554,16 +556,6 @@ const translations: Record<Language, TranslationTree> = {
           connecting: "Conectando...",
           disconnect: "Desconectar",
           disconnecting: "Desconectando...",
-          disconnectLastConfirm: "Desconectar mesmo assim",
-          disconnectLastWarning:
-            "Este é o único provedor vinculado. Sem ele, esquecer a senha significa perder a conta em definitivo — o GhostBox não envia e-mails de recuperação.",
-        },
-        google: {
-          title: "Google",
-          description:
-            "Vincule como segunda forma de entrar e de recuperar a conta caso esqueça a senha.",
-          connect: "Conectar Google",
-          connecting: "Abrindo navegador...",
         },
       },
       performance: {
@@ -1038,7 +1030,7 @@ const translations: Record<Language, TranslationTree> = {
       },
       register: {
         title: "Create a GhostBox account",
-        subtitle: "Sign up with email and username. Steam stays optional.",
+        subtitle: "Sign up with email and username. Then link Discord or Steam so the account can be recovered.",
         emailLabel: "Email",
         emailPlaceholder: "name@email.com",
         usernameLabel: "Username",
@@ -1057,24 +1049,24 @@ const translations: Record<Language, TranslationTree> = {
       provider: {
         divider: "or",
         discord: "Discord",
-        google: "Google",
         steam: "Steam",
-      },
-      oauthSignup: {
-        title: "Finish signing up",
-        subtitle: "Pick a username and a password for your GhostBox account.",
-        emailVerifiedHint: "Email confirmed by the provider.",
-        emailUnverifiedHint: "The provider has not confirmed this email. You can confirm it through Discord in settings.",
-        passwordHint: "You'll also be able to sign in with username and password.",
-        submit: "Create account",
-        submitting: "Creating account...",
       },
       recover: {
         title: "Recover access",
         subtitle:
-          "GhostBox sends no email. Sign in with the provider you linked to the account and set a new password.",
+          "GhostBox sends no email. Use the Discord (we DM a PIN to it) or Steam account already linked to yours.",
         noProviderHint:
           "With no linked provider there is no way to recover the account. Steam only works if it is already linked.",
+        discordSubtitle: "The bot will DM a PIN to the Discord linked to your GhostBox account.",
+        discordIdentifierLabel: "Account username or email",
+        discordIdentifierPlaceholder: "username or name@email.com",
+        discordSend: "Send PIN via Discord",
+        discordSending: "Sending...",
+        discordSent: "PIN sent to your Discord. It expires in 10 minutes.",
+        discordCodeLabel: "6-digit PIN",
+        discordCodePlaceholder: "000000",
+        discordConfirm: "Confirm PIN",
+        discordResend: "Resend PIN",
         setPasswordTitle: "Set a new password",
         setPasswordSubtitle: "Account confirmed: {username}. Choose the new password.",
         signsOutHint: "This signs you out on every other device.",
@@ -1196,6 +1188,8 @@ const translations: Record<Language, TranslationTree> = {
       connections: {
         title: "Connections",
         description: "Connect external accounts to unlock optional features.",
+        lastConnectionWarning:
+          "This is the account's only linked provider and it cannot be removed: it is the only way back in if you forget your password.",
         steam: {
           title: "Steam",
           description: "Official metrics, library and achievements from your Steam account.",
@@ -1218,16 +1212,6 @@ const translations: Record<Language, TranslationTree> = {
           connecting: "Connecting...",
           disconnect: "Disconnect",
           disconnecting: "Disconnecting...",
-          disconnectLastConfirm: "Disconnect anyway",
-          disconnectLastWarning:
-            "This is the only linked provider. Without it, forgetting your password means losing the account for good — GhostBox sends no recovery emails.",
-        },
-        google: {
-          title: "Google",
-          description:
-            "Link it as a second way to sign in, and to recover the account if you forget your password.",
-          connect: "Connect Google",
-          connecting: "Opening browser...",
         },
       },
       performance: {
