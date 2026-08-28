@@ -408,10 +408,7 @@ export function SubscriptionPlans({
 
         <div className="subscription-account__details-grid">
           <article className="subscription-account__panel">
-            <h4>
-              <CreditCard size={16} strokeWidth={2.15} aria-hidden="true" />
-              {copy("Pagamentos", "Payments")}
-            </h4>
+            <h4>{copy("Pagamentos", "Payments")}</h4>
             {payment ? (
               <ul className="subscription-account__payment-list">
                 <li>
@@ -437,10 +434,7 @@ export function SubscriptionPlans({
           </article>
 
           <article className="subscription-account__panel">
-            <h4>
-              <CloudUpload size={16} strokeWidth={2.15} aria-hidden="true" />
-              {copy("Jogos com backup em nuvem", "Games with cloud backup")}
-            </h4>
+            <h4>{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
             {recentBackups.length > 0 ? (
               <ul className="subscription-account__backup-list">
                 {recentBackups.map((game) => (

@@ -57,16 +57,18 @@ describe("Catalogue hover preview", () => {
     expect(component).not.toContain("catalogue.preview.publisher");
   });
 
-  it("holds the panel until its first screenshot decoded", () => {
+  it("holds the panel until all screenshots decoded and shows skeleton", () => {
     const component = readFileSync(
       "src/components/ui/CatalogueHoverPreview.tsx",
       "utf8"
     );
 
-    expect(component).toContain("MEDIA_REVEAL_TIMEOUT_MS");
     expect(component).toContain("isMediaReady");
-    // A classe de visível depende das duas condições.
-    expect(component).toContain("isVisible && isMediaReady");
+    expect(component).toContain("isShotsReady");
+    expect(component).toContain("readyScreenshotCount >= displayShots.length");
+    expect(component).toContain("slice(0, 3)");
+    expect(component).toContain("catalogue-hover-preview__shot--skeleton");
+    expect(component).toContain("skeleton");
   });
 
   it("keeps the panel mounted during exit and drives visibility via a class", () => {

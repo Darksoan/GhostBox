@@ -17,6 +17,7 @@ import {
 } from "../../utils/image";
 import { CatalogueListLoadingState } from "./LoadingStates";
 import { useSettings } from "../../context/settings";
+import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 
 // Espera a largura assentar antes de remedir os chips de gênero. Casado com o
 // tempo de assentamento de `utils/viewportResize`: o arrasto termina, o layout
@@ -67,6 +68,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   onGameContextMenu,
 }: CatalogueListItemProps) {
   const { appearance } = useSettings();
+  const isWindowMaximized = useWindowMaximized();
   const itemRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const rawHeaderSources = useMemo(() => gameCatalogueHeaderSources(game), [game]);
@@ -156,7 +158,9 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
       // Pelo menos uma: card estreito demais ainda mostra o rótulo principal em
       // vez de uma linha vazia.
-      const nextCount = Math.max(1, fittingCount);
+      // Maximizado: até 5 pills para não virar tapete de chips no card mais largo
+      const cappedCount = isWindowMaximized ? Math.min(fittingCount, 5) : fittingCount;
+      const nextCount = Math.max(1, cappedCount);
       setGenreDisplay((current) =>
         current.key === genreLabelsKey && current.count === nextCount
           ? current
@@ -199,7 +203,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       if (remeasureTimeoutId !== null) clearTimeout(remeasureTimeoutId);
       resizeObserver.disconnect();
     };
-  }, [genreLabelsKey, maxGenreLabels.length]);
+  }, [genreLabelsKey, isWindowMaximized, maxGenreLabels.length]);
 
   useEffect(() => {
     if (coverLoaded && coverSource) {

@@ -254,6 +254,7 @@ export function HomeTopRatedCardBodySkeleton() {
       <span className="home-top-rated-card__title-row">
         <span className="home-top-rated-card__title home-top-rated-card__title--skeleton skeleton" />
       </span>
+      <span className="home-top-rated-card__developer home-top-rated-card__developer--skeleton skeleton" />
     </span>
   );
 }

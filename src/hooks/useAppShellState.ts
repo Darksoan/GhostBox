@@ -20,6 +20,12 @@ export function useAppShellState(page: Page) {
   const [activeLibraryCollectionId, setActiveLibraryCollectionId] = useState<
     string | null
   >(null);
+  // A aba de coleção (page "favorites") também precisa do estado próprio: o
+  // perfil normaliza qualquer id fora de "overview"/"library"/"achievements" e
+  // das coleções do usuário, então "favorites" era zerado no mesmo tick e a
+  // sidebar perdia o destaque.
+  const [activeFavoritesCollectionId, setActiveFavoritesCollectionId] =
+    useState<string>("favorites");
 
   const debouncedQuery = useDebouncedValue(query, searchDebounceMs);
   const trimmedQuery = query.trim();
@@ -104,6 +110,8 @@ export function useAppShellState(page: Page) {
     setActiveProfileCollectionId,
     activeLibraryCollectionId,
     setActiveLibraryCollectionId,
+    activeFavoritesCollectionId,
+    setActiveFavoritesCollectionId,
     headerSearchSuggestions,
     hasNoHeaderSearchResults,
     shouldShowHeaderAppIdPrompt,

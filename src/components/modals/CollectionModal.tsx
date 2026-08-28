@@ -58,7 +58,7 @@ export function CollectionModal({
             <header className="collection-modal__header">
               <div>
                 <h3 id="collection-modal-title">{appearance.language === "en" ? "Create collection" : "Criar coleção"}</h3>
-                <p>{appearance.language === "en" ? "create a new collection to organize your games" : "crie uma nova coleção para organizar seus jogos"}</p>
+                <p>{appearance.language === "en" ? "Create a new collection to organize your games" : "Crie uma nova coleção para organizar seus jogos"}</p>
               </div>
 
               <button type="button" className="collection-modal__close" onClick={onClose} aria-label={appearance.language === "en" ? "Close" : "Fechar"}>

@@ -11,6 +11,10 @@ describe("Capas verticais — um único estilo de badge no hover", () => {
       expect(source).not.toContain("achievement-progress");
     }
 
-    expect(favorites).toContain("game-card__achievement-badges");
+    // A aba de coleção reusa o `GameCard` da biblioteca, que já desenha
+    // `game-card__achievement-badges` quando `showAchievements` está ligado.
+    const card = readFileSync("src/components/ui/GameCard.tsx", "utf8");
+    expect(card).toContain("game-card__achievement-badges");
+    expect(favorites).toContain("showAchievements");
   });
 });

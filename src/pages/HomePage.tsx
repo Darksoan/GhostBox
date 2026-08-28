@@ -458,8 +458,8 @@ function HomeCategoryCard({
 
 /**
  * Card de "Mais jogados": arte larga (`header.jpg`) e embaixo o nome do jogo
- * com a nota média (fire + nota) à direita — sem linha de pills. Superfície
- * própria com alvo de clique inteiro.
+ * com a nota média (fire + nota) à direita, e a desenvolvedora numa segunda
+ * linha — sem linha de pills. Superfície própria com alvo de clique inteiro.
  */
 function HomeTopRatedCard({
   game,
@@ -488,6 +488,9 @@ function HomeTopRatedCard({
   const ratingText = reviewScore
     ? ((reviewScore.percent / 100) * 5).toFixed(1)
     : null;
+  // Só a primeira desenvolvedora: a linha é fechada em uma altura e um título
+  // com três estúdios viraria reticências logo no primeiro nome.
+  const developerName = game.developers?.find((name) => name.trim()) ?? "";
 
   const handleClick = () => onOpenGame(game);
 
@@ -533,6 +536,10 @@ function HomeTopRatedCard({
             </span>
           ) : null}
         </span>
+        {/* Altura reservada mesmo sem desenvolvedora: o dado chega no
+            enriquecimento e um card que cresce depois remexeria a linha
+            inteira do carrossel. */}
+        <span className="home-top-rated-card__developer">{developerName}</span>
       </span>
     </div>
   );

@@ -76,12 +76,12 @@ export function TempFilesSection() {
       >
         {isClearing ? (
           <Loader2
-            size={14}
+            size={16}
             className="temp-files-section__spinner"
             aria-hidden="true"
           />
         ) : (
-          <Trash2 size={14} aria-hidden="true" />
+          <Trash2 size={16} aria-hidden="true" />
         )}
         {isClearing ? t("settings.tempFiles.clearing") : t("settings.tempFiles.clear")}
       </button>

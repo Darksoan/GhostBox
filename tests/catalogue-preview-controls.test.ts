@@ -101,14 +101,17 @@ describe("catalogue preview manual navigation", () => {
 
     // Sem controles manuais desde o redesign: o painel é só leitura. A
     // acessibilidade vive no rótulo da seção, no espelhamento hover↔foco e na
-    // visibilidade atrelada à mídia decodificada.
+    // visibilidade atrelada ao hover; as shots só revelam quando 100% decodificadas
+    // (skeleton até lá, sem progressivo).
     expect(component).toContain("aria-label={");
     expect(component).toContain("onFocusCapture={handlePreviewFocus}");
     expect(component).toContain("onBlurCapture={handlePreviewBlur}");
     expect(component).toContain("onPointerEnter={handlePreviewPointerEnter}");
     expect(component).toContain("onPointerLeave={handlePreviewPointerLeave}");
     expect(component).toContain("aria-hidden={!isPanelVisible}");
-    expect(component).toContain("isVisible && isMediaReady");
+    expect(component).toContain("isPanelVisible = isVisible");
+    expect(component).toContain("isShotsReady");
+    expect(component).toContain("catalogue-hover-preview__shot--skeleton");
   });
 });
 

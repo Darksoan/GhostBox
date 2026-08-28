@@ -128,10 +128,44 @@ describe("Typography tokens", () => {
       if (match) ramp[match[1]] = value;
     }
 
-    expect(ramp["100"]).toBe("12px");
+    expect(ramp["100"]).toBe("14px");
     expect(ramp["800"]).toBe("34px");
     expect(ramp["900"]).toBe("40px");
     expect(ramp["1000"]).toBe("48px");
+  });
+
+  it("keeps 14px as the floor of every text size in the app", () => {
+    const tokens = collectTokens();
+
+    // Piso único: nenhum degrau da rampa fixa e nenhum mínimo de clamp fluido
+    // pode cair abaixo de 14px — é o tamanho onde Inter ainda tem haste legível
+    // sobre as superfícies escuras do app.
+    for (const [token, value] of tokens) {
+      if (/^--fs-\d+$/.test(token)) {
+        expect(parseFloat(value), `${token} = ${value}`).toBeGreaterThanOrEqual(14);
+        continue;
+      }
+      if (!/^--type-size-fluid-/.test(token)) continue;
+      const minimum = value.match(/^clamp\(\s*([0-9.]+)px/)?.[1];
+      expect(minimum, `${token} = ${value}`).toBeDefined();
+      expect(parseFloat(minimum ?? "0"), `${token} = ${value}`).toBeGreaterThanOrEqual(14);
+    }
+  });
+
+  it("pairs the small steps with a line height that clears descenders", () => {
+    const tokens = collectTokens();
+
+    // 14px em interlinha de 16px dava razão 1,14 e apertava descendente nas
+    // linhas de altura fechada (pill, badge, metadado).
+    for (const [size, line] of [
+      ["--type-size-micro", "--type-line-micro"],
+      ["--type-size-caption", "--type-line-caption"],
+      ["--type-size-compact", "--type-line-compact"],
+    ]) {
+      const sizePx = parseFloat(resolveToken(size, tokens));
+      const linePx = parseFloat(resolveToken(line, tokens));
+      expect(linePx / sizePx, `${line} / ${size}`).toBeGreaterThanOrEqual(1.2);
+    }
   });
 
   it("defines paired line heights for every semantic size", () => {
@@ -195,7 +229,7 @@ describe("Typography tokens", () => {
     }
   });
 
-  it("gives compact metrics enough room for the 12px minimum", () => {
+  it("gives compact metrics enough room for the 14px minimum", () => {
     const source = readFileSync("src/app.scss", "utf8");
 
     expect(source).toContain("min-width: var(--space-8);");

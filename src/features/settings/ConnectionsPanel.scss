@@ -81,11 +81,12 @@
   align-items: center;
   gap: 6px;
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
   color: var(--text-muted);
 }
 
 .connection-card__connected-name {
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
 

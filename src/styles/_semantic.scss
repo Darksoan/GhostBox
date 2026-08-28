@@ -243,9 +243,10 @@
   --type-line-showcase: var(--lh-1000);
 
   // --- Tamanhos fluidos (único lugar onde clamp de tipografia é permitido) ---
-  --type-size-fluid-caption: clamp(13px, 1.1vw, 15px);
-  --type-size-fluid-meta: clamp(13px, 1.1vw, 15px);
-  --type-size-fluid-body: clamp(13px, 1.15vw, 16px);
+  // Mínimos dos clamps no mesmo piso de 14px da rampa fixa.
+  --type-size-fluid-caption: clamp(14px, 1.1vw, 15px);
+  --type-size-fluid-meta: clamp(14px, 1.1vw, 15px);
+  --type-size-fluid-body: clamp(14px, 1.15vw, 16px);
   --type-size-fluid-title: clamp(15px, 1.35vw, 20px);
   --type-size-fluid-section: clamp(18px, 2.4vw, 22px);
   --type-size-fluid-page: clamp(22px, 2.6vw, 30px);

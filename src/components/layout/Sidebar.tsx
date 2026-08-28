@@ -31,6 +31,7 @@ import {
   writeSidebarExpandedCollections,
 } from "../../utils/storage";
 import { primaryNavigation, secondaryNavigation } from "./navigationItems";
+import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 import avatarPlaceholder from "../../../Icons/userplaceholder.jpg";
 
 interface SidebarProps {
@@ -89,6 +90,7 @@ export const Sidebar = memo(function Sidebar({
   // mesma coreografia de entrada (`sidebar__mode-panel--forward`).
   const isModePage = isSettingsPage || isProfilePage;
   const activeProfileTabId = activeCollectionId ?? defaultProfileTabId;
+  const isMaximized = useWindowMaximized();
   const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(() => readSidebarCollectionsCollapsed());
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<Set<string>>(() => readSidebarExpandedCollections());
 
@@ -213,7 +215,7 @@ export const Sidebar = memo(function Sidebar({
   );
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isMaximized ? " sidebar--maximized" : ""}`}>
       <div className="sidebar__content">
         <SidebarProfile
           profile={steamProfile}

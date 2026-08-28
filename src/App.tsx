@@ -303,7 +303,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       navigate(newPage);
       shell.clearQuery();
       if (collectionId) {
-        shell.setActiveProfileCollectionId(collectionId);
+        // Cada superfície guarda a própria seleção: a aba de coleção não pode
+        // escrever no estado do perfil, que normaliza ids desconhecidos.
+        if (newPage === "favorites") {
+          shell.setActiveFavoritesCollectionId(collectionId);
+        } else if (newPage === "library") {
+          shell.setActiveLibraryCollectionId(collectionId);
+        } else {
+          shell.setActiveProfileCollectionId(collectionId);
+        }
       }
     },
     [clearOverlayForward, closeContentOverlay, navigate, saveScrollPosition, shell]
@@ -504,7 +512,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const activeCollectionId =
     page === "library"
       ? (shell.activeLibraryCollectionId ?? undefined)
-      : shell.activeProfileCollectionId;
+      : page === "favorites"
+        ? shell.activeFavoritesCollectionId
+        : shell.activeProfileCollectionId;
 
   return (
     <div className="ghostbox-shell">
@@ -560,7 +570,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             }}
             onBack={handleBack}
             onForward={handleForward}
-            onNavigateToNotifications={() => handleNavigate("notifications")}
             onClickPremium={() => {
               setSubscriptionModalOpen(true);
             }}
@@ -579,6 +588,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
               activeLibraryCollectionId={shell.activeLibraryCollectionId}
               setActiveLibraryCollectionId={shell.setActiveLibraryCollectionId}
+              activeFavoritesCollectionId={shell.activeFavoritesCollectionId}
               isMainPage={shell.isMainPage}
               contentRef={contentRef}
               steamPathModalLoading={steamPathModalLoading}

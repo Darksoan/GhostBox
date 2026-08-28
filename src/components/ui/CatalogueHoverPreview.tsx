@@ -11,8 +11,6 @@ import {
   pickDistinctScreenshotSources,
 } from "../../utils/cataloguePreview";
 
-const MEDIA_REVEAL_TIMEOUT_MS = 600;
-
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
   onPointerEnter?: () => void;
@@ -70,17 +68,17 @@ export function CatalogueHoverPreview({
   }, [game]);
 
   useEffect(() => {
-    if ((isVisible && isMediaReady) || typeof document === "undefined") return;
+    if (isVisible || typeof document === "undefined") return;
     const activeElement = document.activeElement;
     if (activeElement && previewRef.current?.contains(activeElement)) {
       (activeElement as HTMLElement).blur();
     }
-  }, [isVisible, isMediaReady]);
+  }, [isVisible]);
 
   const screenshotSources = useMemo(
     () =>
       displayedGame
-        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 2)
+        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 3)
         : [],
     [displayedGame]
   );
@@ -120,17 +118,10 @@ export function CatalogueHoverPreview({
       return;
     }
 
-    if (readyScreenshotCount > 0) {
+    // Sem progressivo: só libera quando 100% das shots decodificaram
+    if (readyScreenshotCount >= displayShots.length) {
       setIsMediaReady(true);
-      return;
     }
-
-    const timeoutId = window.setTimeout(
-      () => setIsMediaReady(true),
-      MEDIA_REVEAL_TIMEOUT_MS
-    );
-
-    return () => window.clearTimeout(timeoutId);
   }, [displayShots.length, displayedGame, isMediaReady, readyScreenshotCount]);
 
   const markScreenshotFailed = (source: string) => {
@@ -185,7 +176,8 @@ export function CatalogueHoverPreview({
   const developers = displayedGame.developers?.filter(Boolean) ?? [];
   const developerText = developers.join(", ");
 
-  const isPanelVisible = isVisible && isMediaReady;
+  const isPanelVisible = isVisible;
+  const isShotsReady = isMediaReady;
 
   return (
     <section
@@ -231,26 +223,66 @@ export function CatalogueHoverPreview({
       </div>
 
       <div className="catalogue-hover-preview__media-stack">
-        {displayShots.length > 0 ? (
-          displayShots.map((source, index) => (
-            <div key={source} className="catalogue-hover-preview__shot">
-              <img
-                className="catalogue-hover-preview__shot-image"
-                src={source}
-                alt=""
-                aria-hidden="true"
-                loading={index === 0 ? "eager" : "lazy"}
-                decoding="async"
-                fetchPriority={index === 0 ? "high" : "low"}
-                onLoad={(event) => {
-                  void markScreenshotReady(source, event.currentTarget);
-                }}
-                onError={() => markScreenshotFailed(source)}
-              />
-            </div>
-          ))
+        {isShotsReady ? (
+          displayShots.length > 0 ? (
+            displayShots.map((source, index) => (
+              <div key={source} className="catalogue-hover-preview__shot">
+                <img
+                  className="catalogue-hover-preview__shot-image"
+                  src={source}
+                  alt=""
+                  aria-hidden="true"
+                  loading={index === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  onLoad={(event) => {
+                    void markScreenshotReady(source, event.currentTarget);
+                  }}
+                  onError={() => markScreenshotFailed(source)}
+                />
+              </div>
+            ))
+          ) : (
+            <div className="catalogue-hover-preview__shot catalogue-hover-preview__shot--empty" />
+          )
         ) : (
-          <div className="catalogue-hover-preview__shot catalogue-hover-preview__shot--empty" />
+          <>
+            {(displayShots.length > 0 ? displayShots : Array.from({ length: 3 } as unknown as string[]))
+              .slice(0, 3)
+              .map((_, index) => (
+                <div
+                  key={`skeleton-${index}`}
+                  className="catalogue-hover-preview__shot catalogue-hover-preview__shot--skeleton skeleton"
+                  aria-hidden="true"
+                />
+              ))}
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                width: 0,
+                height: 0,
+                overflow: "hidden",
+                pointerEvents: "none",
+              }}
+            >
+              {displayShots.map((source, index) => (
+                <img
+                  key={source}
+                  src={source}
+                  alt=""
+                  aria-hidden="true"
+                  loading={index === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  onLoad={(event) => {
+                    void markScreenshotReady(source, event.currentTarget);
+                  }}
+                  onError={() => markScreenshotFailed(source)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </section>

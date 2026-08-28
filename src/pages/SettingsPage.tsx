@@ -13,8 +13,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
-import { useOverlay } from "../context/OverlayContext";
-import { createBackupToastFromRecord } from "../lib/backupNotifications";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
@@ -36,9 +34,6 @@ const SETTINGS_DRAFTS_STORAGE_KEY = "ghostbox:settings-drafts:v1";
 const LEGACY_EDEN_SETTINGS_DRAFTS_STORAGE_KEY = "eden:settings-drafts:v1";
 const LEGACY_SETTINGS_DRAFTS_STORAGE_KEY = "piratebox:settings-drafts:v1";
 const MORRENUS_DISCORD_URL = "https://discord.gg/hubcapsmanifest";
-// Jogo de exemplo do botão "testar toast de backup" (capsule real da Steam).
-const TEST_BACKUP_TOAST_APP_ID = "1139860";
-const TEST_BACKUP_TOAST_GAME_TITLE = "Mortal Shell";
 
 type SettingOption = {
   label: string;
@@ -242,7 +237,6 @@ export function SettingsPage({
   backupSettings,
 }: SettingsPageProps) {
   const { appearance, notifications, updateAppearance, updateNotifications, t } = useSettings();
-  const { showToast } = useOverlay();
   const activeTab = settingsTabs.find((tab) => tab.id === activeTabId) ?? settingsTabs[0];
   const [drafts, setDrafts] = useState<DraftsState>(() =>
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
@@ -255,30 +249,6 @@ export function SettingsPage({
     writeStoredDownloadsDir(picked);
     setDownloadsDir(picked);
   }, []);
-
-  const handleTestToast = useCallback(() => {
-    showToast(
-      t("settings.notifications.testToast.toastTitle"),
-      t("settings.notifications.testToast.toastMessage"),
-      "success",
-    );
-  }, [showToast, t]);
-
-  // Mesmo caminho do toast real de backup (createBackupToastFromRecord),
-  // com um registro sintético para pré-visualizar capsule e título.
-  const handleTestBackupToast = useCallback(() => {
-    const payload = createBackupToastFromRecord(
-      {
-        title: TEST_BACKUP_TOAST_GAME_TITLE,
-        lastBackupAt: new Date().toISOString(),
-        lastBackupSuccess: true,
-      },
-      TEST_BACKUP_TOAST_APP_ID,
-    );
-    showToast(payload.title, payload.message, payload.variant, {
-      imageSources: payload.imageSources,
-    });
-  }, [showToast]);
 
   useEffect(() => {
     const defaults = getDefaultDrafts(appearance.language, initialPage, startupSettings);
@@ -337,7 +307,7 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave, downloadsDir, handleSelectDownloadsDir, handleTestToast, handleTestBackupToast),
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave, downloadsDir, handleSelectDownloadsDir),
     [
       activeTab,
       appearance,
@@ -345,8 +315,6 @@ export function SettingsPage({
       downloadsDir,
       drafts,
       handleSelectDownloadsDir,
-      handleTestBackupToast,
-      handleTestToast,
       morrenusApiKey,
       notifications,
       onMorrenusApiKeyChange,
@@ -439,9 +407,7 @@ function buildTabOptions(
   onMorrenusApiKeyChange: (value: string) => void,
   onMorrenusApiKeyCheck: () => void,
   downloadsDir: string,
-  onSelectDownloadsDir: () => void,
-  onTestToast: () => void,
-  onTestBackupToast: () => void
+  onSelectDownloadsDir: () => void
 ) {
   if (activeTab.id === "general") {
     return [
@@ -573,20 +539,6 @@ function buildTabOptions(
         checked: notifications.inAppErrorToastsEnabled,
         disabled: !notifications.inAppToastsEnabled,
         onToggle: (next: boolean) => updateNotifications({ inAppErrorToastsEnabled: next }),
-      },
-      {
-        label: t("settings.notifications.testToast.label"),
-        description: t("settings.notifications.testToast.description"),
-        control: "button" as const,
-        value: t("settings.notifications.testToast.action"),
-        onClick: onTestToast,
-      },
-      {
-        label: t("settings.notifications.testBackupToast.label"),
-        description: t("settings.notifications.testBackupToast.description"),
-        control: "button" as const,
-        value: t("settings.notifications.testBackupToast.action"),
-        onClick: onTestBackupToast,
       },
     ];
   }

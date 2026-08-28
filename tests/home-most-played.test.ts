@@ -57,15 +57,16 @@ describe("Home most played rail", () => {
     expect(selectors).not.toContain(".home-top-rated-card__tag");
     expect(selectors).toContain(".home-top-rated-card__rating");
 
-    // Arte larga (header.jpg), aspecto 920×377 — não a hero capsule em
-    // retrato usada em iterações anteriores deste rail.
+    // Arte larga (header.jpg) no aspecto nativo 460×215 — não a hero capsule
+    // em retrato usada em iterações anteriores deste rail, nem o 920×377 do
+    // mock, que era achatado demais e recortava a capa.
     let artRuleText = "";
     stylesheet.walkRules(".home-top-rated-card__art", (rule) => {
       artRuleText += rule.toString();
     });
     expect(artRuleText).toContain("background-size: cover");
-    // O Sass normaliza `920 / 377` para `920/377` na saída.
-    expect(artRuleText).toContain("aspect-ratio: 920/377");
+    // O Sass normaliza `460 / 215` para `460/215` na saída.
+    expect(artRuleText).toContain("aspect-ratio: 460/215");
   });
 });
 

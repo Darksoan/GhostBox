@@ -269,8 +269,9 @@
       // painel acima.
       padding: 0 0 var(--space-4) calc(22px + var(--space-5));
       color: var(--text-tertiary);
-      // Caption (13px) e não micro (12px): o detalhe é texto de leitura, e a
-      // rampa reserva micro para badge/contador. `--lh-300` é o par da rampa e
+      // Caption e não micro: o detalhe é texto de leitura, e a rampa reserva
+      // micro para badge/contador — desde o piso único os dois degraus têm o
+      // mesmo tamanho, mas o papel semântico continua valendo. `--lh-300` é o par da rampa e
       // é o que a reserva de altura da lista assume.
       font-size: var(--type-size-caption);
       line-height: var(--lh-300);

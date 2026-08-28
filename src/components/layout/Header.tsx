@@ -1,5 +1,4 @@
 import {
-  Bell,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -30,20 +29,11 @@ import {
   useLoadableImageCover,
 } from "../../hooks/useCachedImageSources";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import {
-  appNotificationsChangedEvent,
-  getUnreadAppNotificationCount,
-  markAppNotificationsSeen,
-} from "../../lib/appNotifications";
 import type { SubscriptionPortalFlow, UpdateCheckResult } from "../../lib/ghostboxApi.types";
 import {
   gameSteamHeaderFirstSources,
   preloadGameModalAssetsThrottled,
 } from "../../utils/image";
-import {
-  readNotificationsLastSeenAt,
-  writeNotificationsLastSeenAt,
-} from "../../utils/storage";
 import { SearchSuggestionsLoadingState } from "../ui/LoadingStates";
 import { FeedbackModal } from "../modals/FeedbackModal";
 
@@ -128,7 +118,6 @@ interface HeaderProps {
   onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
   onForward: () => void;
-  onNavigateToNotifications?: () => void;
   onClickPremium?: () => void;
   onOpenSubscriptionPortal?: (flow: SubscriptionPortalFlow) => void;
 }
@@ -179,7 +168,6 @@ export const Header = memo(function Header({
   onSelectSuggestion,
   onBack,
   onForward,
-  onNavigateToNotifications,
   onClickPremium,
   onOpenSubscriptionPortal,
 }: HeaderProps) {
@@ -191,9 +179,7 @@ export const Header = memo(function Header({
   const [updatePercent, setUpdatePercent] = useState(0);
   const [updatePhase, setUpdatePhase] = useState<"download" | "install" | "error">("download");
   const [updateError, setUpdateError] = useState<string | null>(null);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isSubscriptionMenuOpen, setIsSubscriptionMenuOpen] = useState(false);
-  const lastSeenRef = useRef<number>(readNotificationsLastSeenAt());
   const subscriptionMenuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titlebarDragRef = useRef<{
@@ -256,34 +242,6 @@ export const Header = memo(function Header({
     },
     [isSearching, onSelectSuggestion, suggestions]
   );
-
-  const refreshUnreadNotifications = useCallback(() => {
-    if (page === "notifications") {
-      const now = Date.now();
-      lastSeenRef.current = now;
-      writeNotificationsLastSeenAt(now);
-      setUnreadNotificationCount(0);
-      return;
-    }
-    setUnreadNotificationCount(getUnreadAppNotificationCount());
-  }, [page]);
-
-  useEffect(() => {
-    refreshUnreadNotifications();
-    window.addEventListener(appNotificationsChangedEvent, refreshUnreadNotifications);
-    return () => {
-      window.removeEventListener(appNotificationsChangedEvent, refreshUnreadNotifications);
-    };
-  }, [refreshUnreadNotifications]);
-
-  // Entering the page clears the unread watermark.
-  useEffect(() => {
-    if (page !== "notifications") return;
-    const now = Date.now();
-    lastSeenRef.current = now;
-    markAppNotificationsSeen(now);
-    setUnreadNotificationCount(0);
-  }, [page]);
 
   useEffect(() => {
     if (!isSubscriptionMenuOpen) return;
@@ -718,32 +676,6 @@ export const Header = memo(function Header({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          className="header__icon-button header__notification-button"
-          aria-label={
-            unreadNotificationCount > 0
-              ? `${t("header.notifications")} (${unreadNotificationCount})`
-              : t("header.notifications")
-          }
-          onClick={() => {
-            const now = Date.now();
-            lastSeenRef.current = now;
-            markAppNotificationsSeen(now);
-            setUnreadNotificationCount(0);
-            onNavigateToNotifications?.();
-          }}
-        >
-          <Bell size={18} />
-          {unreadNotificationCount > 0 && (
-            <span className="header__notification-badge" aria-hidden="true">
-              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-            </span>
-          )}
-          <span className="header__tooltip">
-            {t("header.notifications")}
-          </span>
-        </button>
         <div
           className="header__search-shell"
           onBlur={handleBlur}

@@ -546,7 +546,7 @@ const translations: Record<Language, TranslationTree> = {
           connectedAsSuffix: ".",
           copyId: "Copiar ID da Steam",
           copiedId: "ID copiado",
-          showOnProfile: "Mostrar no perfil",
+          showOnProfile: "Mostrar dados Steam no perfil",
           showOnProfileDescription:
             "Exibe métricas e jogos da conta Steam no seu perfil GhostBox.",
         },
@@ -593,8 +593,7 @@ const translations: Record<Language, TranslationTree> = {
       library: {
         steamPath: {
           label: "Pasta da Steam",
-          description:
-            "Caminho usado para localizar jogos instalados pelo LuaTools.",
+          description: "Caminho da pasta da Steam usado para localizar jogos instalados.",
         },
         downloadsDir: {
           label: "Pasta de downloads",
@@ -1187,7 +1186,7 @@ const translations: Record<Language, TranslationTree> = {
           connectedAsSuffix: ".",
           copyId: "Copy Steam ID",
           copiedId: "ID copied",
-          showOnProfile: "Show on profile",
+          showOnProfile: "Show Steam data on profile",
           showOnProfileDescription:
             "Show metrics and games from your Steam account on your GhostBox profile.",
         },
@@ -1234,7 +1233,7 @@ const translations: Record<Language, TranslationTree> = {
       library: {
         steamPath: {
           label: "Steam folder",
-          description: "Path used to find games installed via LuaTools.",
+          description: "Path to the Steam folder used to locate installed games.",
         },
         downloadsDir: {
           label: "Downloads folder",

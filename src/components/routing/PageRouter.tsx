@@ -109,6 +109,7 @@ interface PageRouterProps {
   setActiveProfileCollectionId: (id: string | undefined) => void;
   activeLibraryCollectionId: string | null;
   setActiveLibraryCollectionId: (id: string | null) => void;
+  activeFavoritesCollectionId: string;
   isMainPage: boolean;
   contentRef: RefObject<HTMLElement>;
   steamPathModalLoading: boolean;
@@ -125,6 +126,7 @@ export function PageRouter({
   setActiveProfileCollectionId,
   activeLibraryCollectionId,
   setActiveLibraryCollectionId,
+  activeFavoritesCollectionId,
   isMainPage,
   contentRef,
   steamPathModalLoading,
@@ -292,10 +294,28 @@ export function PageRouter({
     }
 
     if (targetPage === "favorites") {
+      // A aba serve tanto os favoritos quanto qualquer coleção escolhida na
+      // sidebar; o id vem do estado próprio dessa superfície.
+      const selectedCollection = appData.userCollections.find(
+        (collection) => collection.id === activeFavoritesCollectionId,
+      );
+
       return (
         <LazyFavoritesPage
-          games={appData.favoriteGames}
+          games={
+            selectedCollection
+              ? (selectedCollection.games ?? [])
+              : appData.favoriteGames
+          }
           onOpenGame={openGame}
+          emptyTitle={
+            selectedCollection
+              ? appearance.language === "en"
+                ? "Empty collection"
+                : "Coleção vazia"
+              : undefined
+          }
+          activeSessionAppIds={appData.activeSessionAppIds}
           isActive={targetPage === page}
         />
       );

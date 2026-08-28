@@ -1329,8 +1329,8 @@ p {
   }
 
   &__game-icon {
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     flex-shrink: 0;
     object-fit: contain;
     border-radius: 0;
@@ -1340,7 +1340,7 @@ p {
     display: block;
     flex: 1 1 auto;
     @include mixins.truncate;
-    line-height: 16px;
+    line-height: 22px;
   }
 
   &__collection-game-button {
@@ -1353,7 +1353,7 @@ p {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    min-height: 28px;
+    min-height: 32px;
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-lg);
     @include mixins.ghost-button;
@@ -1370,8 +1370,8 @@ p {
     }
 
     .sidebar__game-icon {
-      width: 16px;
-      height: 16px;
+      width: 22px;
+      height: 22px;
       object-fit: contain;
       border-radius: var(--radius-xs);
 
@@ -1596,6 +1596,88 @@ p {
   &__level-value {
     display: block;
   }
+}
+
+/* Sidebar maximizada: janela com mais respiro, então hit-areas e tipografia
+   sobem um degrau. Mantém escala proporcional (280→312) e usa tokens existentes
+   para não furar a rampa. */
+.sidebar--maximized {
+  width: 312px;
+  min-width: 312px;
+}
+
+.sidebar--maximized .sidebar__content {
+  gap: var(--space-9);
+  padding: var(--space-9);
+}
+
+.sidebar--maximized .sidebar-profile {
+  min-height: 80px;
+}
+
+.sidebar--maximized .sidebar-profile__button {
+  min-height: 80px;
+  padding: var(--space-8);
+}
+
+.sidebar--maximized .sidebar-profile__button-content {
+  gap: var(--space-8);
+}
+
+.sidebar--maximized .sidebar-profile__avatar {
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+}
+
+.sidebar--maximized .sidebar__section-header {
+  min-height: 32px;
+}
+
+.sidebar--maximized .sidebar__section {
+  gap: var(--space-5);
+}
+
+.sidebar--maximized .sidebar__menu {
+  gap: var(--space-5);
+}
+
+.sidebar--maximized .sidebar__menu-item-button {
+  min-height: 42px;
+  padding: var(--space-5) var(--space-5);
+  gap: var(--space-6);
+}
+
+.sidebar--maximized .sidebar__menu-item-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar--maximized .sidebar__menu-item-label {
+  font-size: var(--type-size-body-emphasis);
+  line-height: var(--type-line-body-emphasis);
+}
+
+.sidebar--maximized .sidebar__add-button {
+  width: 32px;
+  height: 32px;
+}
+
+.sidebar--maximized .sidebar__collection-toggle-button {
+  width: 36px;
+  height: 36px;
+}
+
+.sidebar--maximized .sidebar__collection-game-button {
+  min-height: 36px;
+  padding: var(--space-4) var(--space-5);
+  gap: var(--space-5);
+}
+
+.sidebar--maximized .sidebar__collection-game-button .sidebar__game-icon,
+.sidebar--maximized .sidebar__game-icon {
+  width: 24px;
+  height: 24px;
 }
 
 .header {
@@ -2392,6 +2474,109 @@ p {
 
 }
 
+// Titlebar maximizada: header sutilmente maior para preencher janela cheia
+// Searchbar, subscriptions e controles sobem um degrau sem quebrar proporção
+.sidebar--maximized ~ .container .header,
+.app-main:has(.sidebar--maximized) .header {
+  --header-height: 56px;
+  --header-control: 40px;
+  --header-icon: 22px;
+  --header-gap: var(--space-5);
+  padding: 0 var(--space-8) 0 var(--space-12);
+}
+
+.sidebar--maximized ~ .container .header__nav-btn svg,
+.app-main:has(.sidebar--maximized) .header__nav-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.sidebar--maximized ~ .container .header__icon-button,
+.app-main:has(.sidebar--maximized) .header__icon-button,
+.sidebar--maximized ~ .container .header__notification-button,
+.app-main:has(.sidebar--maximized) .header__notification-button,
+.sidebar--maximized ~ .container .header__window-controls-update,
+.app-main:has(.sidebar--maximized) .header__window-controls-update {
+  width: var(--header-control);
+  height: var(--header-control);
+  min-width: var(--header-control);
+  min-height: var(--header-control);
+}
+
+.sidebar--maximized ~ .container .header__window-button,
+.app-main:has(.sidebar--maximized) .header__window-button {
+  width: 44px;
+  height: var(--header-control);
+  min-width: 44px;
+  min-height: var(--header-control);
+}
+
+.sidebar--maximized ~ .container .header__window-button svg,
+.app-main:has(.sidebar--maximized) .header__window-button svg,
+.sidebar--maximized ~ .container .header__icon-button svg,
+.app-main:has(.sidebar--maximized) .header__icon-button svg,
+.sidebar--maximized ~ .container .header__icon-button img,
+.app-main:has(.sidebar--maximized) .header__icon-button img,
+.sidebar--maximized ~ .container .header__feedback-icon,
+.app-main:has(.sidebar--maximized) .header__feedback-icon {
+  width: var(--header-icon);
+  height: var(--header-icon);
+}
+
+.sidebar--maximized ~ .container .header__search,
+.app-main:has(.sidebar--maximized) .header__search {
+  width: 220px;
+  height: var(--header-control);
+  min-height: var(--header-control);
+  max-height: var(--header-control);
+  gap: var(--space-5);
+  padding: 0 var(--space-6);
+}
+
+.sidebar--maximized ~ .container .header__search--focused,
+.app-main:has(.sidebar--maximized) .header__search--focused {
+  width: 270px;
+}
+
+.sidebar--maximized ~ .container .header__search input,
+.app-main:has(.sidebar--maximized) .header__search input {
+  font-size: var(--type-size-body);
+}
+
+.sidebar--maximized ~ .container .header__search > svg,
+.app-main:has(.sidebar--maximized) .header__search > svg {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.sidebar--maximized ~ .container .header__search-dropdown,
+.app-main:has(.sidebar--maximized) .header__search-dropdown {
+  width: 300px;
+}
+
+.sidebar--maximized ~ .container .header__premium-indicator,
+.app-main:has(.sidebar--maximized) .header__premium-indicator {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  padding: 0 var(--space-6);
+  gap: var(--space-4);
+  font-size: var(--type-size-body);
+}
+
+.sidebar--maximized ~ .container .header__premium-crown,
+.app-main:has(.sidebar--maximized) .header__premium-crown {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar--maximized ~ .container .header__section--actions,
+.app-main:has(.sidebar--maximized) .header__section--actions {
+  gap: var(--space-4);
+}
+
 .button {
   display: inline-flex;
   min-height: 38px;
@@ -2680,14 +2865,13 @@ p {
    compact) e com cor mais fraca — essas seções (Top rated, Recommended) são
    navegação de rolagem, não âncora de página como em outras abas. Sem
    subtítulo: a Home não anuncia mais o conteúdo do rail, o rail já mostra.
-   Peso e tracking alinhados ao mixin `eyebrow` (semibold + `--ls-100`): no
-   tamanho reduzido, uppercase sem peso perde definição de haste e lê "embaçado". */
+   Peso regular para leitura mais leve no uppercase reduzido. */
 .home-page .section-header__title {
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
   line-height: var(--type-line-compact);
   letter-spacing: var(--ls-100);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
   text-transform: uppercase;
 }
 
@@ -2834,6 +3018,14 @@ p {
   width: auto;
   margin-inline: calc(-1 * var(--home-page-inline-padding));
   padding-inline: 0;
+}
+
+/* Banner → primeira seção mais próximo: o gap padrão (--home-section-gap)
+   é 32–48px para respiro entre rails; entre banner full-bleed e o primeiro
+   rail o mesmo vão pesa demais e descola o topo do conteúdo. Metade do gap
+   (16–24px) mantém separação sem deixar o banner flutuar. */
+.home-page > .home-banner + * {
+  margin-top: calc(var(--home-section-gap) * -0.5);
 }
 
 .home-banner__frame {
@@ -3484,13 +3676,14 @@ p {
   }
 }
 
-/* Arte larga no topo (mesmo aspecto do mock 920×377). O painel recorta a parte
-   de baixo; os cantos superiores do card já são arredondados pelo próprio
-   painel, então a arte preenche a largura deixando o corte do raio visível. */
+/* Arte larga no topo, no aspecto nativo do `header.jpg` da Steam (460×215) — o
+   920×377 do mock era mais achatado que a arte e comia uma faixa em cima e
+   embaixo de toda capa. Com o slot na mesma proporção da imagem, o `cover` não
+   tem sobra para recortar. */
 .home-top-rated-card__art {
   display: block;
   width: 100%;
-  aspect-ratio: 920 / 377;
+  aspect-ratio: 460 / 215;
   background-color: var(--surface-canvas);
   background-position: center;
   background-repeat: no-repeat;
@@ -3529,6 +3722,29 @@ p {
   line-height: var(--type-line-body-emphasis);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Desenvolvedora, uma linha abaixo do nome e um degrau de cor abaixo dele. A
+   altura é fechada (`--type-line-compact`) e vale também quando o texto está
+   vazio: o dado só chega no enriquecimento e o card não pode crescer depois. */
+.home-top-rated-card__developer {
+  display: block;
+  overflow: hidden;
+  /* 5px: um passo abaixo do --space-3 (6px), fora da escala de propósito — o
+     nome e a desenvolvedora leem como um bloco só. */
+  margin-top: calc(var(--space-3) - 1px);
+  min-width: 0;
+  height: var(--type-line-compact);
+  color: var(--text-secondary);
+  font-size: var(--type-size-compact);
+  line-height: var(--type-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Placeholder da desenvolvedora: largura parcial, como o do título. */
+.home-top-rated-card__developer--skeleton {
+  width: 42%;
 }
 
 /* Nota média (fire + valor), ao lado direito do nome — mesmo padrão do preview
@@ -4081,6 +4297,26 @@ p {
   background:
     radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--icon-default) 24%, transparent), transparent 42%),
     linear-gradient(135deg, var(--surface-canvas), var(--surface-subtle));
+}
+
+/* Maximizada: capas encostavam na borda do dia (padding 10px + card 100% →
+   cover 100% colava no container). Redução sutil do respiro interno do dia e
+   da escala da capa deixa 1–2px extra por lado sem encolher demais. */
+.home-page--maximized .home-calendar-day {
+  padding: var(--space-6);
+}
+
+.home-page--maximized .home-calendar-card__cover {
+  --home-calendar-cover-scale: 0.48;
+}
+
+.home-page--maximized
+  .home-calendar-card:not(.home-calendar-card--empty):hover
+  .home-calendar-card__cover,
+.home-page--maximized
+  .home-calendar-card:not(.home-calendar-card--empty):focus-visible
+  .home-calendar-card__cover {
+  --home-calendar-cover-scale: 0.492;
 }
 
 @media (max-width: 720px) {
@@ -4666,7 +4902,7 @@ p {
   --subscription-backup-row-min: calc(var(--space-16) + var(--space-6));
   --subscription-backup-list-max: calc(var(--space-16) * 6 + var(--space-12));
   --subscription-status-size: calc(var(--space-10) + var(--space-2));
-  --subscription-backup-thumb-width: calc(var(--space-16) * 2);
+  --subscription-backup-thumb-width: calc(var(--subscription-backup-row-min) * 460 / 215);
 
   display: grid;
   gap: var(--space-6);
@@ -4881,7 +5117,7 @@ p {
     color: var(--text-primary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     transition:
       background-color var(--motion-fast) var(--ease),
       color var(--motion-fast) var(--ease),
@@ -4938,7 +5174,7 @@ p {
     padding: var(--space-7);
 
     svg {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
 
     span {
@@ -5123,11 +5359,13 @@ p {
     list-style: none;
 
     li {
-      display: flex;
+      display: grid;
+      grid-template-columns: var(--subscription-backup-thumb-width) minmax(0, 1fr) auto;
       align-items: center;
       gap: var(--space-6);
       min-height: var(--subscription-backup-row-min);
-      padding: var(--space-5) var(--space-6);
+      padding: 0 var(--space-6) 0 0;
+      overflow: hidden;
       border-radius: var(--radius-sm);
       background: var(--surface-raised);
     }
@@ -5151,12 +5389,14 @@ p {
   }
 
   &__backup-thumb {
-    flex: 0 0 auto;
     width: var(--subscription-backup-thumb-width);
+    height: var(--subscription-backup-row-min);
+    align-self: stretch;
     // Mesmo aspect ratio do header do catálogo (460/215) — cover em vez de
-    // stretch, então a imagem recorta ao invés de deformar.
+    // stretch, então a imagem recorta ao invés de deformar. Altura fixa
+    // encosta nas extremidades do card como na listagem de notificações.
     aspect-ratio: 460 / 215;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     background: var(--surface-popover);
     object-fit: cover;
 
@@ -5412,38 +5652,48 @@ p {
   }
 }
 
-.settings-input--grouped {
-  width: auto;
-  min-width: 0;
-  flex: 1;
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-}
-
 .settings-input-group {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   width: min(420px, 100%);
+  min-height: 40px;
+  background: var(--c-3);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: background-color var(--motion-fast) var(--ease);
+
+  &:hover {
+    background: var(--c-4);
+  }
+
+  &:focus-within {
+    background: var(--c-4);
+  }
 }
 
 .settings-input-group__confirm {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  min-height: 40px;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin: 0 var(--space-2) 0 var(--space-1);
   border: 0;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--c-3);
+  border-radius: var(--radius-xs);
+  background: transparent;
   color: var(--text-secondary);
-  font-weight: var(--weight-semibold);
   cursor: pointer;
-  transition:
-    background-color var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease);
+  transition: color var(--motion-fast) var(--ease);
 
   &:hover,
   &:focus-visible {
-    background: var(--c-4);
+    background: transparent;
+    color: var(--text-primary);
+  }
+
+  &:active {
+    background: transparent;
     color: var(--text-primary);
   }
 
@@ -5721,6 +5971,21 @@ p {
 
   &--clickable {
     cursor: pointer;
+  }
+}
+
+.settings-input.settings-input--grouped {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 40px;
+  background: transparent;
+  border-radius: 0;
+
+  &:hover,
+  &:focus,
+  &:focus-visible {
+    background: transparent;
   }
 }
 
@@ -6115,6 +6380,33 @@ p {
 
 }
 
+// Catálogo maximizado sem vazio lateral gigante: o cap de 1200px gerava
+// 200px+ de padding por lado em 1920px (230+ em 2560px). Ao maximizar, estica
+// para usar largura disponível — sobra só gutter, sem faixa vazia.
+.sidebar--maximized ~ .container .catalogue-page,
+.app-main:has(.sidebar--maximized) .catalogue-page {
+  --content-max-width: 100%;
+}
+
+// Janela manualmente larga (arrasto, não maximizada) também ganha cap maior
+@media (min-width: 1600px) {
+  .catalogue-page {
+    --content-max-width: 1480px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .catalogue-page {
+    --content-max-width: 1680px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .catalogue-page {
+    --content-max-width: 100%;
+  }
+}
+
 .deferred-page-placeholder {
   display: grid;
   height: 100%;
@@ -6383,8 +6675,9 @@ p {
 
   &__options {
     display: flex;
-    // Quatro opções de 34px + três gaps de 4px; restante rola internamente.
-    max-height: 148px;
+    // Antes 4 opções (148px). Minimizado precisa ver mais sem rolar tanto;
+    // maximizado ganha altura extra de viewport.
+    max-height: min(38vh, 300px);
     flex-direction: column;
     gap: var(--space-2);
     overflow: auto;
@@ -6533,6 +6826,13 @@ p {
   }
 }
 
+// Viewport do dropdown de filtros: minimizado já ganha ~2x (148→300px),
+// maximizado estica para ~10-11 opções visíveis sem rolar tanto
+.sidebar--maximized ~ .container .catalogue-filter-section__options,
+.app-main:has(.sidebar--maximized) .catalogue-filter-section__options {
+  max-height: min(50vh, 460px);
+}
+
 .catalogue-filter-option {
   position: relative;
   display: flex;
@@ -6671,6 +6971,10 @@ p {
 
   &__shot--empty {
     background: var(--surface-media-letterbox);
+  }
+
+  &__shot--skeleton {
+    background: var(--skeleton-fill);
   }
 
   &__shot-image {
@@ -6942,6 +7246,49 @@ input[type="search"]::-ms-reveal {
 .catalogue-list__item--hovered .catalogue-list__genre-chip {
   border-color: transparent;
   background: var(--pill-bg-hover);
+}
+
+// Maximizado: até 5 pills (fallback CSS, JS já capa) + tipografia
+// sutilmente maior para preencher card mais largo (content-cap 100%)
+// Título 14→15px, pill 26→28px, gap 6→8px — preenche sem virar tapete
+.sidebar--maximized ~ .container .catalogue-list__genres > .catalogue-list__genre-chip:nth-of-type(n+6),
+.app-main:has(.sidebar--maximized) .catalogue-list__genres > .catalogue-list__genre-chip:nth-of-type(n+6) {
+  display: none;
+}
+
+.sidebar--maximized ~ .container .catalogue-list__content strong,
+.app-main:has(.sidebar--maximized) .catalogue-list__content strong {
+  font-size: var(--type-size-body-emphasis);
+  line-height: var(--type-line-body-emphasis);
+}
+
+.sidebar--maximized ~ .container .catalogue-list__genre-chip,
+.app-main:has(.sidebar--maximized) .catalogue-list__genre-chip {
+  min-height: 28px;
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--type-size-fluid-caption);
+}
+
+.sidebar--maximized ~ .container .catalogue-list__genres,
+.app-main:has(.sidebar--maximized) .catalogue-list__genres {
+  gap: var(--space-4);
+  height: 28px;
+}
+
+.sidebar--maximized ~ .container .catalogue-list__content,
+.app-main:has(.sidebar--maximized) .catalogue-list__content {
+  gap: var(--space-5);
+}
+
+.sidebar--maximized ~ .container .catalogue-list__item,
+.app-main:has(.sidebar--maximized) .catalogue-list__item {
+  grid-template-columns: 232px minmax(0, 1fr) 88px;
+  min-height: 108px;
+}
+
+.sidebar--maximized ~ .container .catalogue-list__main,
+.app-main:has(.sidebar--maximized) .catalogue-list__main {
+  grid-template-columns: 232px minmax(0, 1fr);
 }
 
 .catalogue-list__actions {
@@ -7224,7 +7571,7 @@ input[type="search"]::-ms-reveal {
 .notifications-hub {
   &__header {
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     justify-content: space-between;
     gap: var(--space-8);
     padding: 0;
@@ -7327,6 +7674,14 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  &__toolbar {
+    display: flex;
+    justify-content: flex-end;
+    // O botão desce da titlebar e cola no primeiro item: o gap do
+    // `.notifications-page` já dá 16px até a lista, então a toolbar só
+    // alinha à direita sem empurrar mais.
+  }
+
   &__list {
     display: flex;
     flex-direction: column;
@@ -7335,13 +7690,18 @@ input[type="search"]::-ms-reveal {
 
 }
 
+/* Linha do feed: faixa de arte sangrando na borda esquerda, bloco de texto no
+   meio (título + mensagem) e o tempo relativo à direita. Altura fechada em 80px
+   porque a arte é que dita a linha — texto de duas linhas cabe dentro dela e
+   uma linha só não encolhe o card. */
 .app-notification {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: flex-start;
-  gap: var(--space-7);
-  min-height: 76px;
-  padding: var(--space-8);
+  grid-template-columns: 172px minmax(0, 1fr) auto;
+  align-items: center;
+  overflow: hidden;
+  gap: var(--space-8);
+  min-height: 80px;
+  padding: 0 var(--space-8) 0 0;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-option);
@@ -7351,14 +7711,60 @@ input[type="search"]::-ms-reveal {
     background: var(--surface-option-hover);
   }
 
-  &__icon {
+  /* A faixa sangra: sem padding do lado esquerdo, os cantos vêm do recorte do
+     card. Altura em `stretch` para a arte cobrir a linha inteira. */
+  &__media {
+    position: relative;
     display: grid;
-    width: 42px;
-    height: 42px;
+    overflow: hidden;
+    width: 172px;
+    height: 80px;
     place-items: center;
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: var(--surface-muted);
+    background: var(--surface-sunken);
+  }
+
+  &__art {
+    position: absolute;
+    inset: 0;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+
+  &__art--loaded {
+    animation: download-cover-in var(--motion-base) ease both;
+  }
+
+  /* Conquista e backup mostram um selo por cima: a arte vai para trás,
+     desfocada e escurecida, senão o ícone se perde no meio da capa. */
+  &__media--badge &__art {
+    /* Escurecimento leve: a 0.45 as capas escuras (a maioria) viravam uma
+       faixa preta e o selo parecia flutuar no vazio. O contraste do ícone quem
+       resolve é o próprio quadrado, que tem superfície própria. */
+    filter: blur(2px) brightness(0.72);
+    transform: scale(1.12);
+  }
+
+  &__badge {
+    position: relative;
+    display: grid;
+    width: 68px;
+    height: 68px;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-2);
+  }
+
+  /* Sem arte (sistema, conta): a faixa vira só o bloco de ícone, sem o quadrado
+     de 68px que só faz sentido sobre a capa. */
+  &__media--icon .app-notification__badge {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    background: transparent;
     color: var(--text-secondary);
   }
 
@@ -7366,40 +7772,58 @@ input[type="search"]::-ms-reveal {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-2);
+    padding: var(--space-6) 0;
   }
 
-  &__header {
+  /* Só o título da notificação: o nome do jogo vive na mensagem de baixo. */
+  &__title {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-6);
+    gap: var(--space-4);
+    min-width: 0;
+    margin: 0;
 
     strong {
       overflow: hidden;
+      flex: 0 1 auto;
       color: var(--text-primary);
       font-size: var(--type-size-body);
-      font-weight: var(--weight-regular);
+      font-weight: var(--weight-semibold);
       line-height: var(--type-line-body);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-
-    span {
-      flex: 0 0 auto;
-      color: var(--text-tertiary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-caption);
-    }
   }
 
-  p {
+  &__message {
+    overflow: hidden;
     margin: 0;
+    color: var(--text-primary);
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Coluna direita: tempo relativo e, quando existe, o botão de ação embaixo —
+     os dois cabem nos 80px sem esticar a linha. */
+  &__aside {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-6) 0;
+  }
+
+  &__time {
     color: var(--text-secondary);
     font-size: var(--type-size-body);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-body);
+    white-space: nowrap;
   }
 
   &__action {
@@ -7407,7 +7831,7 @@ input[type="search"]::-ms-reveal {
     align-items: center;
     gap: var(--space-3);
     width: max-content;
-    min-height: 32px;
+    min-height: 26px;
     padding: 0 var(--space-6);
     border: 1px solid var(--border);
     border-radius: var(--radius-pill);
@@ -7417,27 +7841,140 @@ input[type="search"]::-ms-reveal {
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--text-primary);
+    }
   }
 
-  &__status {
-    display: grid;
-    width: 26px;
-    height: 26px;
-    place-items: center;
+  /* Cabeça de grupo ganha a quarta coluna do botão de abrir. */
+  &--group-head {
+    grid-template-columns: 172px minmax(0, 1fr) auto auto;
+  }
+
+  /* Botão de abrir/fechar: contador + chevron. Alvo inteiro clicável, sem
+     pílula — a linha já é uma superfície. */
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    height: 32px;
+    padding: 0 var(--space-5);
     border: 0;
-    border-radius: var(--radius-pill);
-    background: var(--surface-muted);
+    border-radius: var(--radius-md);
+    background: transparent;
     color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      background var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
 
-    &--success {
-      background: var(--success-soft);
-      color: var(--success);
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-raised);
+      color: var(--text-primary);
     }
 
-    &--error {
-      background: var(--danger-soft);
-      color: var(--danger);
+    &:focus-visible {
+      outline: 2px solid var(--icon-default);
+      outline-offset: -2px;
     }
+  }
+
+  &__count {
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-semibold);
+    line-height: var(--type-line-caption);
+    white-space: nowrap;
+  }
+
+  /* Chevron gira meia volta no mesmo tempo da abertura do painel: é o único
+     sinal de estado que fica visível quando o grupo está fechado. */
+  &__chevron {
+    flex: 0 0 auto;
+    transition: transform var(--motion-base) var(--ease);
+  }
+
+  /* Linha filha: recuo à esquerda e superfície um degrau abaixo, para ler como
+     conteúdo do grupo e não como mais um item solto do feed. */
+  /* Linha filha não tem faixa de arte: some a primeira coluna e a linha fica
+     mais baixa, já que a altura de 80px vinha da capa. */
+  &--group-child {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 56px;
+    padding-left: var(--space-8);
+    background: var(--surface-raised);
+  }
+}
+
+/* Grupo de notificações do mesmo jogo. A abertura anima `grid-template-rows`
+   (0fr → 1fr): é o único jeito de transicionar altura automática sem medir o
+   painel no JS. */
+.app-notification-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+
+  &--open .app-notification__chevron {
+    transform: rotate(180deg);
+  }
+
+  &__panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    /* Saída mais curta que a entrada: quem fecha já decidiu. */
+    transition:
+      grid-template-rows var(--motion-base) var(--ease),
+      visibility 0s linear var(--motion-base);
+    visibility: hidden;
+  }
+
+  &--open &__panel {
+    grid-template-rows: 1fr;
+    transition:
+      grid-template-rows var(--motion-slow) var(--ease-out),
+      visibility 0s linear 0s;
+    visibility: visible;
+  }
+
+  &__panel-inner {
+    display: flex;
+    overflow: hidden;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-left: var(--space-9);
+  }
+
+  /* Stagger da abertura: cada linha entra 40ms depois da anterior, com teto de
+     240ms para grupos longos não virarem uma fila lenta. */
+  &--open .app-notification--group-child {
+    animation: app-notification-child-in var(--motion-base) var(--ease-out) both;
+    animation-delay: min(calc(var(--row-index, 0) * 40ms), 240ms);
+  }
+}
+
+@keyframes app-notification-child-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-notification__chevron,
+  .app-notification-group__panel,
+  .app-notification-group--open .app-notification-group__panel {
+    transition: none;
+  }
+
+  .app-notification-group--open .app-notification--group-child {
+    animation: none;
   }
 }
 
@@ -8461,8 +8998,11 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-6);
     width: auto;
     max-width: calc(100% - var(--space-8));
-    height: 30px;
-    padding: 0 var(--space-6);
+    /* Altura vinha travada em 30px com o texto encostando na borda de baixo.
+       Agora a caixa é o próprio conteúdo: padding vertical garante o respiro
+       em cima e embaixo, e os 30px viram piso, não teto. */
+    min-height: 30px;
+    padding: var(--space-3) var(--space-6);
     border: 0;
     border-radius: var(--radius-lg);
     background:
@@ -8477,7 +9017,9 @@ input[type="search"]::-ms-reveal {
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
-    line-height: 30px;
+    /* Interlinha do próprio degrau tipográfico: com 30px o line box passava da
+       altura da pílula e empurrava a linha para baixo. */
+    line-height: var(--type-line-caption);
     letter-spacing: var(--ls-200);
     white-space: nowrap;
     pointer-events: none;
@@ -8520,16 +9062,17 @@ input[type="search"]::-ms-reveal {
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
-    height: 18px;
     min-width: 0;
     white-space: nowrap;
+    line-height: var(--type-line-caption);
 
+    /* Sem altura fixa nem `padding-top: 1px`: o padding empurrava o line box
+       para fora da caixa de 18px e era o que deixava o número mais baixo que o
+       ícone ao lado. Centragem fica por conta do flex. */
     > span {
       display: inline-flex;
       align-items: center;
-      height: 18px;
-      padding-top: 1px;
-      line-height: 18px;
+      line-height: var(--type-line-caption);
     }
   }
 
@@ -9468,6 +10011,123 @@ html.no-backdrop-blur {
 
   &__actions {
     padding: 0 var(--space-9) var(--space-10);
+  }
+}
+
+/* Refino do modal de criar coleção. Um campo só não justifica os 640px da
+   caixa compartilhada com o modal da Steam — a largura passa a acompanhar o
+   conteúdo. Sem borda e sem ornamento: a hierarquia vem de tamanho, cor e do
+   degrau da rampa, o mesmo idioma que `.edit-profile-modal` já usa. */
+.collection-modal {
+  width: min(400px, calc(100vw - 48px));
+  box-shadow: var(--shadow-3);
+
+  &__header {
+    align-items: flex-start;
+    gap: var(--space-6);
+    padding: var(--space-9) var(--space-9) var(--space-7);
+
+    > div {
+      gap: var(--space-2);
+    }
+
+    h3 {
+      font-size: var(--type-size-body-emphasis);
+      font-weight: var(--weight-semibold);
+      line-height: var(--type-line-body-emphasis);
+      letter-spacing: var(--ls-500);
+    }
+
+    .collection-modal__close {
+      width: 28px;
+      height: 28px;
+      /* O `margin: -var(...)` do bloco compartilhado não é CSS válido, então o
+         botão nunca alinhou com a borda óptica do título. */
+      margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0;
+      border-radius: var(--radius-sm);
+      transition:
+        background var(--motion-fast) var(--ease),
+        color var(--motion-fast) ease;
+
+      &:hover {
+        background: var(--surface-modal-control);
+      }
+    }
+  }
+
+  &__content {
+    gap: var(--space-9);
+    padding: 0 var(--space-9) var(--space-9);
+  }
+
+  &__field {
+    gap: var(--space-4);
+
+    /* Rótulo é metadado do campo, não segundo título: desce para o papel
+       secundário e deixa o input ser o elemento com mais peso do corpo. */
+    span {
+      color: var(--text-secondary);
+      font-size: var(--type-size-compact);
+      line-height: var(--type-line-compact);
+    }
+
+    input {
+      height: 40px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: var(--surface-option);
+      transition: background var(--motion-fast) var(--ease);
+
+      &:hover {
+        background: var(--surface-option-hover);
+      }
+
+      &:focus,
+      &:focus-visible {
+        background: var(--surface-option-hover);
+        border: 0;
+        outline: none;
+      }
+    }
+  }
+
+  /* `.button--primary` não tem folha de estilo em lugar nenhum: o botão de
+     confirmar herdava a superfície e a cor de texto do botão neutro e lia como
+     a ação mais fraca das duas. O destaque vem do degrau da rampa + peso. */
+  &__actions {
+    gap: var(--space-3);
+
+    .button {
+      min-width: 96px;
+      border: 0;
+    }
+
+    .button:not(.button--primary) {
+      background: transparent;
+
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        background: var(--surface-modal-control);
+      }
+    }
+
+    .button--primary {
+      background: var(--surface-option-active);
+      color: var(--text-primary);
+      font-weight: var(--weight-semibold);
+
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        background: var(--surface-option-selected);
+        color: var(--text-primary);
+      }
+
+      &:disabled {
+        background: var(--surface-option);
+        color: var(--text-tertiary);
+        opacity: 1;
+      }
+    }
   }
 }
 
@@ -10682,9 +11342,11 @@ html.no-backdrop-blur {
     padding-bottom: 0;
   }
 
+  /* O `padding-bottom` zerado deixava a barra de rolagem da tira encostada na
+     seção seguinte — a tira precisa fechar antes do próximo bloco começar. */
   &__details-main > .gallery-slider__container .gallery-slider__preview {
     padding-top: var(--space-2);
-    padding-bottom: 0;
+    padding-bottom: var(--space-6);
   }
 
   &__sidebar-section-toggle {
@@ -12366,7 +13028,7 @@ html.no-backdrop-blur {
 }
 
 // Inter typography scale
-// Modal/sidebar section heads: 13px medium (title case, with icons)
+// Modal/sidebar section heads: caption medium (title case, with icons)
 .modal__chips-heading,
 .modal__achievements-heading,
 .modal__requirements-header {
@@ -12597,17 +13259,31 @@ button {
 
   .notifications-hub__header {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .notifications-hub__clear {
     width: 100%;
   }
 
-  .app-notification {
-    grid-template-columns: 38px minmax(0, 1fr);
+  .notifications-hub__toolbar {
+    justify-content: stretch;
+  }
 
-    &__status {
-      grid-column: 2;
+  /* Faixa de arte pela metade e tempo relativo colado no topo: em 720px os
+     172px da arte comiam a linha de texto inteira. */
+  .app-notification {
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    gap: var(--space-6);
+    padding-right: var(--space-6);
+
+    &__media {
+      width: 96px;
+    }
+
+    &__badge {
+      width: 52px;
+      height: 52px;
     }
   }
 
@@ -12677,15 +13353,28 @@ button {
     object-fit: cover;
   }
 
+  /* A tira rola sozinha e o modal encosta na barra lateral: sem recuo próprio,
+     a miniatura da ponta esquerda ficava colada nela. O `padding-inline` dá o
+     respiro em repouso, o `scroll-padding-inline` mantém esse respiro quando o
+     scroll leva um item para a borda, e a máscara dissolve o que está passando
+     em vez de deixá-lo cortado rente ao limite. */
   &__preview {
     width: 100%;
-    padding: var(--space-4) 0;
+    padding: var(--space-4) var(--space-6);
+    scroll-padding-inline: var(--space-6);
     height: auto;
     display: flex;
     position: relative;
     overflow-x: auto;
     overflow-y: hidden;
     gap: var(--space-3);
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--space-6),
+      #000 calc(100% - var(--space-6)),
+      transparent 100%
+    );
 
     &::-webkit-scrollbar-thumb {
       width: 20%;

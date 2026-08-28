@@ -107,7 +107,7 @@ export function AccountSection() {
               <span className="account-section__value">{account.email}</span>
               {verified ? (
                 <span className="account-section__verified">
-                  <ShieldCheck size={12} aria-hidden="true" />
+                  <ShieldCheck size={14} aria-hidden="true" />
                   {account.verifiedVia === "discord"
                     ? t("settings.general.account.verifiedViaDiscord")
                     : t("settings.general.account.verified")}
