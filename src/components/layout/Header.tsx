@@ -234,7 +234,9 @@ export const Header = memo(function Header({
   }, []);
 
   const handleDiscordClick = useCallback(() => {
-    void ghostboxApi.openExternalUrl(discordInviteUrl);
+    // `discordInviteUrl` é constante e está na allowlist; o catch existe só
+    // para o caso de o próprio opener do SO falhar.
+    void ghostboxApi.openExternalUrl(discordInviteUrl).catch(() => undefined);
   }, []);
 
   const handleChange = useCallback(

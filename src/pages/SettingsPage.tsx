@@ -601,7 +601,10 @@ function buildTabOptions(
             className="settings-option__label-link"
             aria-label={t("settings.download.morrenusApiKey.openLink")}
             onClick={() => {
-              void ghostboxApi.openExternal(MORRENUS_DISCORD_URL);
+              // URL constante e allowlistada; o catch cobre só falha do opener.
+              void ghostboxApi
+                .openExternalUrl(MORRENUS_DISCORD_URL)
+                .catch(() => undefined);
             }}
           >
             <ExternalLink size={13} aria-hidden="true" />

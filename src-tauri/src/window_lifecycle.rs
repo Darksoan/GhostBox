@@ -432,8 +432,27 @@ pub fn window_close(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Resu
     Ok(())
 }
 
+/// Domínios que o app pode abrir no navegador. Cada entrada casa com o próprio
+/// domínio e com seus subdomínios — `stripe.com` cobre `checkout.stripe.com` e
+/// `billing.stripe.com`, que são os hosts que o Checkout e o portal devolvem.
+///
+/// A lista é curta de propósito: a URL de destino quase sempre vem de fora
+/// (sessão da Stripe, OAuth do Discord, ação de uma notificação), então é ela
+/// que define o que o usuário vê no navegador.
+const ALLOWED_EXTERNAL_HOSTS: &[&str] = &[
+    "discord.com",
+    "discord.gg",
+    "stripe.com",
+    "steampowered.com",
+    "steamcommunity.com",
+    "github.com",
+    // Workers do próprio projeto (subscriptions, feedback, catalogue...).
+    "hella.workers.dev",
+];
+
 fn is_allowed_external_url(url: &str) -> bool {
     let trimmed = url.trim();
+    // `steam://` é entregue ao cliente Steam local, não ao navegador.
     if trimmed.starts_with("steam://") {
         return true;
     }
@@ -441,11 +460,24 @@ fn is_allowed_external_url(url: &str) -> bool {
     let Ok(parsed) = reqwest::Url::parse(trimmed) else {
         return false;
     };
+    // Só https: barra `javascript:`, `file:`, `data:` e os esquemas de
+    // configuração do Windows (`ms-settings:` e afins).
     if parsed.scheme() != "https" {
         return false;
     }
 
-    matches!(parsed.host_str(), Some("discord.gg" | "discord.com"))
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    // O ponto final de um FQDN (`discord.com.`) resolve para o mesmo host, mas
+    // não casaria na comparação literal.
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+
+    ALLOWED_EXTERNAL_HOSTS.iter().any(|allowed| {
+        // O ponto no sufixo é o que impede `notdiscord.com` de passar por
+        // `discord.com`.
+        host == *allowed || host.ends_with(&format!(".{allowed}"))
+    })
 }
 
 #[tauri::command]
@@ -458,4 +490,82 @@ pub fn shell_open_external(app: tauri::AppHandle, url: String) -> Result<(), Str
     app.opener()
         .open_url(url.trim(), None::<&str>)
         .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod external_url_tests {
+    use super::is_allowed_external_url;
+
+    #[test]
+    fn allows_the_hosts_the_app_actually_opens() {
+        for url in [
+            "https://discord.gg/Y7XTy5rKBc",
+            "https://discord.com/oauth2/authorize?client_id=1",
+            "https://checkout.stripe.com/c/pay/cs_test_123",
+            "https://billing.stripe.com/p/session/live_123",
+            "https://store.steampowered.com/app/2713000",
+            "https://steamcommunity.com/profiles/76561198000000000",
+            "https://github.com/Darksoan/GhostBox/releases",
+            "https://ghostbox-subscriptions.hella.workers.dev/oauth/callback",
+            "steam://rungameid/2713000",
+        ] {
+            assert!(is_allowed_external_url(url), "deveria permitir {url}");
+        }
+    }
+
+    #[test]
+    fn rejects_dangerous_schemes() {
+        for url in [
+            "javascript:alert(1)",
+            "file:///C:/Windows/System32/cmd.exe",
+            "data:text/html,<script>alert(1)</script>",
+            "ms-settings:windowsupdate",
+            "http://discord.com/oauth2/authorize",
+        ] {
+            assert!(!is_allowed_external_url(url), "deveria bloquear {url}");
+        }
+    }
+
+    #[test]
+    fn rejects_lookalike_hosts() {
+        // O sufixo precisa casar num limite de rótulo: um domínio que só
+        // *termina* com o texto permitido continua sendo de outra pessoa.
+        for url in [
+            "https://notdiscord.com/",
+            "https://discord.com.evil.example/",
+            "https://evil-stripe.com/",
+            "https://stripe.com.attacker.test/",
+            "https://githubb.com/",
+        ] {
+            assert!(!is_allowed_external_url(url), "deveria bloquear {url}");
+        }
+    }
+
+    #[test]
+    fn ignores_case_and_trailing_dot_in_the_host() {
+        assert!(is_allowed_external_url("https://Checkout.Stripe.COM/c/pay/1"));
+        assert!(is_allowed_external_url("https://discord.com./oauth2/authorize"));
+    }
+
+    #[test]
+    fn rejects_hosts_that_only_look_allowed_in_the_url_text() {
+        for url in [
+            // O host real é `evil.example`; `discord.com` aqui é userinfo.
+            "https://discord.com@evil.example/",
+            "https://discord.com:senha@evil.example/",
+            // Domínio permitido só no path, na query ou no fragmento.
+            "https://evil.example/discord.com",
+            "https://evil.example/?next=https://discord.com",
+            "https://evil.example/#discord.com",
+        ] {
+            assert!(!is_allowed_external_url(url), "deveria bloquear {url}");
+        }
+    }
+
+    #[test]
+    fn rejects_garbage_input() {
+        for url in ["", "   ", "not a url", "https://"] {
+            assert!(!is_allowed_external_url(url), "deveria bloquear {url:?}");
+        }
+    }
 }

@@ -210,20 +210,70 @@ fn current_timestamp_string() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
+/// Resolve `.` e `..` sem tocar no disco.
+///
+/// `canonicalize` só funciona para caminhos que já existem, e um destino de
+/// escrita normalmente ainda não existe. Sem essa normalização, o `..` chega
+/// intacto em `starts_with`, que compara componente a componente e não o
+/// interpreta: `C:\downloads\..\..\evil` "começa com" `C:\downloads` e passaria
+/// numa checagem de contenção.
+fn normalize_path_lexically(path: &std::path::Path) -> std::path::PathBuf {
+    use std::path::Component;
+
+    let mut normalized = std::path::PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            // `pop` devolve false na raiz, e aí o caminho simplesmente não sobe
+            // mais — quem chama continua vendo algo fora do diretório esperado.
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized
+}
+
+/// Compara contenção respeitando a sensibilidade a maiúsculas do sistema.
+///
+/// `Path::starts_with` compara componentes byte a byte. No Windows, onde o
+/// filesystem é case-insensitive, isso recusaria `c:\backups` contra
+/// `C:\Backups` — mesmo diretório, resposta errada.
+fn path_starts_with_or_equals(parent: &std::path::Path, child: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        let lowercased = |path: &std::path::Path| {
+            std::path::PathBuf::from(path.to_string_lossy().to_lowercase())
+        };
+        let parent = lowercased(parent);
+        let child = lowercased(child);
+        child == parent || child.starts_with(parent)
+    }
+    #[cfg(not(windows))]
+    {
+        child == parent || child.starts_with(parent)
+    }
+}
+
 pub(crate) fn is_path_inside_or_equal(
     parent_path: &std::path::Path,
     child_path: &std::path::Path,
 ) -> bool {
-    let parent = match parent_path.canonicalize() {
-        Ok(path) => path,
-        Err(_) => parent_path.to_path_buf(),
-    };
-    let child = match child_path.canonicalize() {
-        Ok(path) => path,
-        Err(_) => child_path.to_path_buf(),
+    // Os dois lados precisam ser normalizados do mesmo jeito: no Windows,
+    // `canonicalize` devolve caminho estendido (`\\?\C:\...`), que nunca casaria
+    // com o outro lado ainda cru. A normalização lexical também não resolve
+    // symlinks — mas, como ela é aplicada aos dois lados, a comparação continua
+    // coerente contra a mesma raiz não resolvida.
+    let (parent, child) = match (parent_path.canonicalize(), child_path.canonicalize()) {
+        (Ok(parent), Ok(child)) => (parent, child),
+        _ => (
+            normalize_path_lexically(parent_path),
+            normalize_path_lexically(child_path),
+        ),
     };
 
-    child == parent || child.starts_with(parent)
+    path_starts_with_or_equals(&parent, &child)
 }
 
 pub(crate) fn selected_backup_path(
@@ -1647,6 +1697,74 @@ pub fn run() {
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });
+}
+
+#[cfg(test)]
+mod path_containment_tests {
+    use super::is_path_inside_or_equal;
+    use std::path::Path;
+
+    #[test]
+    fn accepts_paths_under_the_root() {
+        let root = Path::new("C:/downloads");
+        for child in [
+            "C:/downloads",
+            "C:/downloads/game",
+            "C:/downloads/game/data/file.bin",
+            // `.` e um `..` que volta para dentro continuam dentro.
+            "C:/downloads/./game",
+            "C:/downloads/game/../other",
+        ] {
+            assert!(
+                is_path_inside_or_equal(root, Path::new(child)),
+                "deveria aceitar {child}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_traversal_out_of_the_root() {
+        let root = Path::new("C:/downloads");
+        for child in [
+            "C:/downloads/../evil",
+            "C:/downloads/../../evil",
+            "C:/downloads/game/../../evil",
+            "C:/other",
+            // Prefixo textual não é contenção: `downloads-evil` é outro diretório.
+            "C:/downloads-evil/game",
+        ] {
+            assert!(
+                !is_path_inside_or_equal(root, Path::new(child)),
+                "deveria recusar {child}"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ignores_casing_on_windows() {
+        // Raiz inexistente força o caminho lexical, que é onde a comparação
+        // byte a byte recusaria o mesmo diretório escrito com outra caixa.
+        assert!(is_path_inside_or_equal(
+            Path::new("C:/GhostBox-nao-existe/Backups"),
+            Path::new("c:/ghostbox-nao-existe/backups/480/save.bin")
+        ));
+    }
+
+    #[test]
+    fn rejects_traversal_even_when_the_target_does_not_exist_yet() {
+        // O caso que importa para escrita: `canonicalize` falha nos dois lados,
+        // então a normalização lexical é a única defesa.
+        let root = Path::new("C:/ghostbox-nao-existe/downloads");
+        assert!(!is_path_inside_or_equal(
+            root,
+            Path::new("C:/ghostbox-nao-existe/downloads/../../evil.exe")
+        ));
+        assert!(is_path_inside_or_equal(
+            root,
+            Path::new("C:/ghostbox-nao-existe/downloads/game/save.bin")
+        ));
+    }
 }
 
 #[cfg(test)]

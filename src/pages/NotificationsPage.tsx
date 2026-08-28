@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useSettings } from "../context/settings";
+import { useOverlay } from "../context/OverlayContext";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { requestNavigateToSettingsTab } from "../lib/appNavigation";
 import {
@@ -106,6 +107,7 @@ function NotificationRow({
 }) {
   const TypeIcon = notificationTypeIcons[item.type];
   const SeverityIcon = severityIcons[item.severity];
+  const { showToast } = useOverlay();
 
   return (
     <article className={`app-notification app-notification--${item.severity}`}>
@@ -132,7 +134,18 @@ function NotificationRow({
                 return;
               }
               if (item.action?.url) {
-                void ghostboxApi.openExternalUrl(item.action.url);
+                // A URL vem do payload da notificação, então pode não passar
+                // pela allowlist do Rust — avisar é melhor que o clique não
+                // fazer nada.
+                void ghostboxApi.openExternalUrl(item.action.url).catch(() => {
+                  showToast(
+                    language === "en" ? "Link blocked" : "Link bloqueado",
+                    language === "en"
+                      ? "This link points outside the addresses GhostBox is allowed to open."
+                      : "Este link aponta para fora dos endereços que o GhostBox pode abrir.",
+                    "error"
+                  );
+                });
               }
             }}
           >

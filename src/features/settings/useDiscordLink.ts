@@ -34,7 +34,14 @@ export function useDiscordLink() {
       const url = await ghostboxApi.getDiscordLinkUrl();
       if (!url) return null;
 
-      await ghostboxApi.openExternalUrl(url);
+      try {
+        await ghostboxApi.openExternalUrl(url);
+      } catch {
+        // Navegador não abriu (ou a URL não passou na allowlist): sem a volta
+        // do OAuth não há o que aguardar, e `null` já é o "cancelado" que os
+        // chamadores tratam.
+        return null;
+      }
 
       // The browser hand-off means we don't know when the user finishes
       // (or abandons) the OAuth flow, so poll for a while instead of a

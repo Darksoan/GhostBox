@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
@@ -275,12 +275,16 @@ async function invokeOr<T>(
 }
 
 export const ghostboxApi = {
+  /**
+   * Abre uma URL no navegador do sistema, passando pela allowlist do Rust
+   * (`is_allowed_external_url`). O destino quase sempre vem de fora — sessão da
+   * Stripe, OAuth do Discord, `action.url` de uma notificação — então a
+   * validação fica no comando Tauri, que é a fronteira que o webview não
+   * contorna. Sem fallback para `window.open`: ele abriria justamente as URLs
+   * que a allowlist acabou de recusar.
+   */
   async openExternalUrl(url: string): Promise<void> {
-    try {
-      await openUrl(url);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+    await invoke<void>("shell_open_external", { url });
   },
 
   /** Opens the browser for Discord OAuth; the returned URL already carries a
@@ -1716,9 +1720,5 @@ export const ghostboxApi = {
 
   close(): Promise<void> {
     return invokeOr<void>("window_close", {}, undefined);
-  },
-
-  openExternal(url: string): Promise<void> {
-    return invokeOr<void>("shell_open_external", { url }, undefined);
   },
 };
