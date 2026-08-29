@@ -13,17 +13,11 @@
   padding: var(--site-space-8);
   border-radius: var(--radius-md);
   background: var(--surface-card);
-  box-shadow: var(--site-hairline);
-  transition:
-    background-color var(--site-motion-quick) var(--site-ease),
-    box-shadow var(--site-motion-quick) var(--site-ease);
+  transition: background-color var(--site-motion-quick) var(--site-ease);
 }
 
 .features__card:hover {
   background: var(--surface-card-hover);
-  box-shadow:
-    var(--site-hairline),
-    var(--shadow-2);
 }
 
 .features__icon {

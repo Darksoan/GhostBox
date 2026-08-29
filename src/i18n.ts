@@ -175,8 +175,9 @@ const translations: Record<Language, TranslationTree> = {
         playingNow: "Mais jogados",
       },
       view: {
-        grid: "Ver como grade",
-        list: "Ver como lista",
+        label: "Método de visualização",
+        grid: "Grade",
+        list: "Listagem",
       },
       noResultsTitle: "Nenhum jogo corresponde aos filtros",
       noResultsDescription: "Tente remover um filtro ou limpar todos os filtros.",
@@ -817,8 +818,9 @@ const translations: Record<Language, TranslationTree> = {
         playingNow: "Most played",
       },
       view: {
-        grid: "View as grid",
-        list: "View as list",
+        label: "View mode",
+        grid: "Grid",
+        list: "List",
       },
       noResultsTitle: "No games match these filters",
       noResultsDescription: "Try removing a filter or clearing all filters.",

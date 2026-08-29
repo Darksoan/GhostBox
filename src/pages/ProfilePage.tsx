@@ -33,6 +33,7 @@ import {
 } from "../components/ui/LoadingStates";
 import { PaginationControls } from "../components/ui/PaginationControls";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
+import { useWindowMaximized } from "../hooks/useWindowMaximized";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import steamIcon from "../../Icons/steam-colored.svg";
@@ -480,6 +481,7 @@ export function ProfilePage({
   scrollElementRef,
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
+  const isMaximized = useWindowMaximized();
   const { account } = useAuth();
   const { setSubscriptionModalOpen } = useOverlay();
   const { showSteamGames, cloudSaveAppIds } = useAppData();
@@ -1565,6 +1567,40 @@ export function ProfilePage({
   const bannerImageSource = isBannerPlaceholder
     ? profileBannerPlaceholderSource
     : paintedBannerSource;
+  // A revelação só começa quando o próprio `<img>` da capa terminou de decodificar.
+  // Trocar `src` e classe no mesmo commit fazia a animação rodar enquanto o
+  // elemento ainda estava vazio: ela terminava antes do primeiro pixel e a capa
+  // "aparecia de uma vez", sem entrada.
+  const [revealedBannerSource, setRevealedBannerSource] = useState("");
+  const isBannerRevealed =
+    !isBannerPlaceholder && revealedBannerSource === paintedBannerSource;
+
+  const revealBannerImage = useCallback((image: HTMLImageElement | null) => {
+    if (!image) return;
+    const source = image.getAttribute("src") ?? "";
+    if (!source) return;
+    const paint = () => setRevealedBannerSource(source);
+
+    if (typeof image.decode !== "function") {
+      paint();
+      return;
+    }
+
+    void image.decode().then(paint, paint);
+  }, []);
+
+  // Cobre o caso em que o `src` já estava no cache do WebView e o `load` do
+  // elemento disparou antes do React anexar o handler.
+  const attachBannerImage = useCallback(
+    (image: HTMLImageElement | null) => {
+      if (image?.complete && image.naturalWidth > 0) revealBannerImage(image);
+    },
+    [revealBannerImage],
+  );
+
+  useEffect(() => {
+    if (isBannerPlaceholder) setRevealedBannerSource("");
+  }, [isBannerPlaceholder]);
 
   useEffect(() => {
     preloadProfileImages(steamProfile);
@@ -1687,12 +1723,16 @@ export function ProfilePage({
     []
   );
   const bannerPosition = normalizeBannerPosition(steamProfile?.bannerPosition);
+  // O zoom da capa entra como variável, não como `transform` direto: a entrada
+  // multiplica a mesma variável, então a animação e o enquadramento escolhido
+  // pelo usuário convivem (antes a animação sobrescrevia o `transform` inline e
+  // o zoom era descartado ao terminar).
   const bannerImageStyle: CSSProperties | undefined = isBannerPlaceholder
     ? undefined
-    : {
+    : ({
         objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
-        transform: `scale(${bannerPosition.scale})`,
-      };
+        "--profile-banner-scale": `${bannerPosition.scale}`,
+      } as CSSProperties);
 
   // Steam and Discord are optional enhancements, not a gate: the profile is
   // the GhostBox account's, so it renders on its own and the Steam-derived
@@ -1710,23 +1750,36 @@ export function ProfilePage({
         : `Nível ${steamLevel}`;
 
   return (
-    <section className="profile-page">
+    <section className={`profile-page${isMaximized ? " profile-page--maximized" : ""}`}>
       <header
-        className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}${isBannerPlaceholder ? " profile-page__content-box--placeholder" : ""}`}
+        className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}${isBannerRevealed ? "" : " profile-page__content-box--placeholder"}`}
       >
         {bannerImageSource && (
           <div
             className="profile-page__banner-viewport"
           >
+            {/* O placeholder fica embaixo até a capa revelar, para o logo sair
+                em fade cruzado em vez de sumir no meio da entrada. */}
             <img
-              className={`profile-page__banner-image${isBannerPlaceholder ? " profile-page__banner-image--placeholder" : ""}`}
-              src={bannerImageSource}
+              className={`profile-page__banner-image profile-page__banner-image--placeholder${isBannerRevealed ? " profile-page__banner-image--placeholder-hidden" : ""}`}
+              src={profileBannerPlaceholderSource}
               alt=""
+              aria-hidden="true"
               decoding="async"
-              loading="eager"
-              fetchPriority="high"
-              style={bannerImageStyle}
             />
+            {!isBannerPlaceholder && (
+              <img
+                ref={attachBannerImage}
+                className={`profile-page__banner-image${isBannerRevealed ? " profile-page__banner-image--revealed" : ""}`}
+                src={bannerImageSource}
+                alt=""
+                decoding="async"
+                loading="eager"
+                fetchPriority="high"
+                style={bannerImageStyle}
+                onLoad={(event) => revealBannerImage(event.currentTarget)}
+              />
+            )}
           </div>
         )}
         <div className="profile-page__background-overlay">

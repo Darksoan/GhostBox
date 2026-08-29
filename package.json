@@ -10,7 +10,6 @@
     "site:build": "vite build --config GhostBoxSite/vite.config.ts",
     "site:check": "tsc --project GhostBoxSite/tsconfig.json --noEmit",
     "site:games": "node GhostBoxSite/scripts/sync-games.mjs",
-    "site:shots": "node GhostBoxSite/scripts/optimize-shots.mjs",
     "dev:tauri": "vite",
     "build:tauri": "npm run build",
     "check:tokens": "node scripts/check-tokens.mjs",

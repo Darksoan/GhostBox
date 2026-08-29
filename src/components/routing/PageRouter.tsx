@@ -115,6 +115,7 @@ interface PageRouterProps {
   steamPathModalLoading: boolean;
   setSteamPathModalLoading: (loading: boolean) => void;
   onNavigateToCatalogue: () => void;
+  onNavigateToDownloads: () => void;
   steamProfile: SteamProfile | null;
 }
 
@@ -132,6 +133,7 @@ export function PageRouter({
   steamPathModalLoading,
   setSteamPathModalLoading,
   onNavigateToCatalogue,
+  onNavigateToDownloads,
   steamProfile,
 }: PageRouterProps) {
   const { appearance } = useSettings();
@@ -429,7 +431,7 @@ export function PageRouter({
         </div>
         {hasOverlay ? (
           <div className="page-stack__overlay">
-            <ContentOverlay page={page} />
+            <ContentOverlay page={page} onNavigateToDownloads={onNavigateToDownloads} />
           </div>
         ) : null}
       </div>

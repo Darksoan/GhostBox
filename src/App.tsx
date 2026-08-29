@@ -594,6 +594,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               steamPathModalLoading={steamPathModalLoading}
               setSteamPathModalLoading={setSteamPathModalLoading}
               onNavigateToCatalogue={() => handleNavigate("catalogue")}
+              onNavigateToDownloads={() => handleNavigate("downloads")}
               steamProfile={appData.steamProfile}
             />
           </section>

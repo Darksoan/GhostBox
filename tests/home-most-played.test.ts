@@ -29,6 +29,19 @@ describe("Home most played rail", () => {
     expect(hook).toContain("...(fixedTopRatedAppIds as readonly string[])");
   });
 
+  it("renders the card as skeleton while the enriched title has not arrived", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const cardStart = component.indexOf("function HomeTopRatedCard");
+    const cardEnd = component.indexOf("\nfunction ", cardStart);
+    const cardSource = component.slice(cardStart, cardEnd);
+
+    // O shelf nasce com o título provisório "Steam App <appid>"; até o
+    // enriquecimento resolver, o card é skeleton em vez de exibir o placeholder.
+    expect(cardSource).toContain("isSteamTitlePlaceholder(game.title, game.appId)");
+    expect(cardSource).toContain("home-top-rated-card__art skeleton");
+    expect(cardSource).toContain("<HomeTopRatedCardBodySkeleton />");
+  });
+
   it("lays out the card with header art, title and a fire rating on the right — no pills, no badge, no description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");

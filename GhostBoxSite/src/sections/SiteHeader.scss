@@ -4,7 +4,6 @@
   z-index: var(--z-header);
   background: color-mix(in srgb, var(--surface-canvas) 88%, transparent);
   backdrop-filter: blur(12px);
-  box-shadow: 0 1px 0 0 var(--surface-hover);
 }
 
 .site-header__bar {
@@ -69,8 +68,8 @@
 }
 
 .site-header__menu {
-  border-block-start: 1px solid var(--surface-hover);
-  background: var(--surface-canvas);
+  // Separação por degrau de superfície, sem borda decorativa.
+  background: var(--surface-panel);
 }
 
 .site-header__menu-nav {

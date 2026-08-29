@@ -1,4 +1,4 @@
-import { CircleCheck, Loader2, Trash2 } from "lucide-react";
+import { CircleCheck, Flame, Loader2, Trash2 } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -13,8 +13,10 @@ import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCac
 import {
   layeredImageStyle,
   gameCatalogueHeaderSources,
+  gameHeaderOnlySources,
   preloadGameModalAssets,
 } from "../../utils/image";
+import { getSteamReviewScore } from "../../utils/gameMetrics";
 import { CatalogueListLoadingState } from "./LoadingStates";
 import { useSettings } from "../../context/settings";
 import { useWindowMaximized } from "../../hooks/useWindowMaximized";
@@ -321,6 +323,178 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   );
 });
 
+/**
+ * Card da visualização em grade: mesmo markup e classes do card de
+ * "Mais jogados" da Home (`home-top-rated-card`), para reaproveitar o visual
+ * (arte larga no aspecto 460×215, nome + nota de review, desenvolvedora)
+ * sem duplicar estilos. As diferenças ficam por conta do contexto catálogo:
+ * capa com gate de IntersectionObserver, ação de "adicionado" flutuante,
+ * hover preview e menu de contexto.
+ */
+const CatalogueGridCard = memo(function CatalogueGridCard({
+  game,
+  isAdded,
+  isAdding = false,
+  isRemoving = false,
+  onOpenGame,
+  onHoverGame,
+  onRemoveGame,
+  onPreloadGame,
+  onHoverEnter,
+  onGameContextMenu,
+}: CatalogueListItemProps) {
+  const isEnglish = useSettings().appearance.language === "en";
+  const cardRef = useRef<HTMLElement | null>(null);
+  const [shouldLoadCover, setShouldLoadCover] = useState(false);
+  const rawHeaderSources = useMemo(() => gameHeaderOnlySources(game), [game]);
+  const headerSources = useCachedImageSources(shouldLoadCover ? rawHeaderSources : []);
+  const { source: coverSource, loaded: coverLoaded } =
+    useLoadableImageCover(headerSources);
+  // Mesma composição em camadas do card da Home: capa já carregada primeiro,
+  // candidatos restantes como fallback do `layeredImageStyle`.
+  const displayedCoverSources = useMemo(
+    () =>
+      coverLoaded && coverSource
+        ? [coverSource, ...rawHeaderSources.filter((source) => source !== coverSource)]
+        : rawHeaderSources,
+    [coverLoaded, coverSource, rawHeaderSources]
+  );
+  // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra
+  // de review, a razão volta 0 e viraria uma nota 0,0 falsa.
+  const reviewScore = getSteamReviewScore(game);
+  const ratingText = reviewScore
+    ? ((reviewScore.percent / 100) * 5).toFixed(1)
+    : null;
+  // Só a primeira desenvolvedora, como no card da Home: a linha é fechada em
+  // uma altura e um título com três estúdios viraria reticências logo no
+  // primeiro nome.
+  const developerName = game.developers?.find((name) => name.trim()) ?? "";
+
+  useEffect(() => {
+    if (shouldLoadCover) return;
+    const node = cardRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadCover(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadCover(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "420px 0px", threshold: 0.01 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldLoadCover]);
+
+  return (
+    <article
+      ref={cardRef}
+      className="catalogue-grid-card"
+      data-catalogue-game-id={game.id}
+      aria-busy={isAdding || isRemoving}
+      onContextMenu={(event) => {
+        if (!onGameContextMenu) return;
+        event.preventDefault();
+        onGameContextMenu(game, event.clientX, event.clientY);
+      }}
+    >
+      <button
+        type="button"
+        className="home-top-rated-card__hit"
+        aria-label={game.title}
+        onClick={() => onOpenGame(game)}
+        onFocus={() => {
+          onPreloadGame(game);
+          onHoverGame(game, { immediate: true, anchor: cardRef.current });
+        }}
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (!nextTarget || !event.currentTarget.contains(nextTarget as Node)) {
+            onHoverGame(null);
+          }
+        }}
+        onPointerEnter={(event) =>
+          onHoverEnter(game, cardRef.current, event.clientX, event.clientY)
+        }
+        onPointerLeave={() => onHoverGame(null)}
+      />
+      <span
+        className={`home-top-rated-card__art${
+          coverLoaded ? " home-top-rated-card__art--loaded" : ""
+        }`}
+        style={layeredImageStyle(displayedCoverSources, "")}
+        aria-hidden="true"
+      />
+      {isAdded && (
+        <div className="catalogue-grid-card__action">
+          <button
+            type="button"
+            className="catalogue-list__added-status"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemoveGame?.(game);
+            }}
+            disabled={!onRemoveGame || isRemoving}
+            aria-busy={isRemoving}
+            aria-label={
+              isEnglish ? `Remove ${game.title}` : `Remover ${game.title}`
+            }
+          >
+            {isRemoving ? (
+              <Loader2
+                size={20}
+                className="catalogue-list__remove-spinner"
+                aria-hidden="true"
+              />
+            ) : (
+              <>
+                <CircleCheck
+                  className="catalogue-list__added-check"
+                  size={20}
+                  aria-hidden="true"
+                />
+                <Trash2
+                  className="catalogue-list__added-trash"
+                  size={20}
+                  aria-hidden="true"
+                />
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      <span className="home-top-rated-card__body">
+        <span className="home-top-rated-card__title-row">
+          <span className="home-top-rated-card__title">{game.title}</span>
+          {ratingText ? (
+            <span
+              className="home-top-rated-card__rating"
+              aria-label={ratingText}
+            >
+              <Flame
+                size={16}
+                fill="currentColor"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span>{ratingText}</span>
+            </span>
+          ) : null}
+        </span>
+        <span className="home-top-rated-card__developer">{developerName}</span>
+      </span>
+    </article>
+  );
+});
+
 interface CatalogueListProps {
   games: GhostBoxGame[];
   viewMode?: "list" | "grid";
@@ -404,29 +578,46 @@ export function CatalogueList({
   // Sem virtualização de propósito: a página do catálogo entrega no máximo
   // `cataloguePageSize` (20) itens, e o gate de `IntersectionObserver` por linha
   // já evita carregar as capas fora da viewport.
+  const isGrid = viewMode === "grid";
   return (
     <div
-      className={`catalogue-list ${viewMode === "grid" ? "catalogue-list--grid" : ""}`}
+      className={`catalogue-list ${isGrid ? "catalogue-list--cards" : ""}`}
       ref={listRef}
       onPointerMove={(event) => {
         lastPointerRef.current = { x: event.clientX, y: event.clientY };
       }}
     >
-      {games.map((game) => (
-        <CatalogueListItem
-          game={game}
-          key={game.id}
-          isAdded={addedGameAppIds.has(game.appId)}
-          isAdding={addingGameId === game.id}
-          isRemoving={removingGameId === game.id}
-          onOpenGame={onOpenGame}
-          onHoverGame={onHoverGame}
-          onRemoveGame={onRemoveGame}
-          onPreloadGame={scheduleGamePreload}
-          onHoverEnter={handleHoverEnter}
-          onGameContextMenu={onGameContextMenu}
-        />
-      ))}
+      {games.map((game) =>
+        isGrid ? (
+          <CatalogueGridCard
+            game={game}
+            key={game.id}
+            isAdded={addedGameAppIds.has(game.appId)}
+            isAdding={addingGameId === game.id}
+            isRemoving={removingGameId === game.id}
+            onOpenGame={onOpenGame}
+            onHoverGame={onHoverGame}
+            onRemoveGame={onRemoveGame}
+            onPreloadGame={scheduleGamePreload}
+            onHoverEnter={handleHoverEnter}
+            onGameContextMenu={onGameContextMenu}
+          />
+        ) : (
+          <CatalogueListItem
+            game={game}
+            key={game.id}
+            isAdded={addedGameAppIds.has(game.appId)}
+            isAdding={addingGameId === game.id}
+            isRemoving={removingGameId === game.id}
+            onOpenGame={onOpenGame}
+            onHoverGame={onHoverGame}
+            onRemoveGame={onRemoveGame}
+            onPreloadGame={scheduleGamePreload}
+            onHoverEnter={handleHoverEnter}
+            onGameContextMenu={onGameContextMenu}
+          />
+        )
+      )}
     </div>
   );
 }

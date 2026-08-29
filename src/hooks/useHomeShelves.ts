@@ -248,10 +248,33 @@ export function useHomeShelves({
 
   // Featured rails arrive as bare seeds and catalogue rails lack the short
   // description, so every rail goes through the shared enrichment queue.
-  const recommended = useEnrichedGameCards(selection.recommended, shelfSizes.recommended);
-  const newReleases = useEnrichedGameCards(selection.newReleases, shelfSizes.newReleases);
-  const topSellers = useEnrichedGameCards(selection.topSellers, shelfSizes.topSellers);
-  const topRated = useEnrichedGameCards(selection.topRated, shelfSizes.topRated);
+  // Conquistas ficam de fora (`includeAchievements = false`): nenhum card da
+  // home exibe progresso e cada busca extra competiria pelo mesmo teto de 6
+  // slots da fila, empurrando título/tags/descrição dos cards visíveis.
+  const recommended = useEnrichedGameCards(
+    selection.recommended,
+    shelfSizes.recommended,
+    true,
+    false
+  );
+  const newReleases = useEnrichedGameCards(
+    selection.newReleases,
+    shelfSizes.newReleases,
+    true,
+    false
+  );
+  const topSellers = useEnrichedGameCards(
+    selection.topSellers,
+    shelfSizes.topSellers,
+    true,
+    false
+  );
+  const topRated = useEnrichedGameCards(
+    selection.topRated,
+    shelfSizes.topRated,
+    true,
+    false
+  );
 
   const shelves: HomeShelves = useMemo(() => {
     const noUpcoming = new Set<string>();

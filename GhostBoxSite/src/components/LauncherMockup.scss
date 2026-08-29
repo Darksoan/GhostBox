@@ -1,294 +1,13 @@
-// A janela é desenhada em pixels reais do app (1280×800) e reduzida por
-// `scale`. É o que mantém a fidelidade: 52px de titlebar continuam 52px, a
-// sidebar continua 280px e a capa continua 460×215 — igual ao launcher.
+// Recortes da interface flutuando sobre a página — sem moldura de janela.
+// Cada fragmento é um cartão elevado por sombra (a mesma elevação de popover
+// do launcher), nunca por borda; a separação interna vem de gap e degrau.
+
 .lm {
-  margin: 0;
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
   min-width: 0;
-}
-
-// --lm-scale e --lm-height vêm do ResizeObserver (useScaleToFit). O fallback
-// cobre o primeiro paint e o caso sem JS: 0.45 é a razão de uma coluna típica
-// de desktop (576px) para os 1280px de projeto.
-.lm__scaler {
-  --lm-scale: 0.45;
-  --lm-height: 360px;
-  position: relative;
-  width: 100%;
-  height: var(--lm-height);
-  overflow: hidden;
-  border-radius: var(--radius-md);
-  box-shadow:
-    var(--shadow-3),
-    var(--site-hairline);
-}
-
-// Fora do fluxo de propósito: `transform` não muda a caixa de layout, então uma
-// janela de 1280px em fluxo esticaria a coluna inteira numa tela de celular.
-.lm__window {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: 0;
-  width: 1280px;
-  height: 800px;
-  display: flex;
-  flex-direction: column;
-  transform: scale(var(--lm-scale));
-  transform-origin: top left;
-  background: var(--surface-canvas);
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1;
-}
-
-// --- Titlebar (--app-header-height: 52px) ---------------------------------
-// Fica à direita da sidebar, como no app: a sidebar sobe até o topo da janela.
-
-.lm__stage {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.lm__titlebar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 52px;
-  min-height: 52px;
-  padding: 0 12px 0 24px;
-  background: var(--surface-canvas);
-}
-
-.lm__nav-controls {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-}
-
-.lm__titlebar-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.lm__icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  color: var(--icon-default);
-}
-
-.lm__icon-button--disabled {
-  opacity: 0.35;
-}
-
-.lm__badge {
-  position: absolute;
-  inset-block-start: 5px;
-  inset-inline-end: 6px;
-  min-width: 13px;
-  height: 13px;
-  padding: 0 3px;
-  border-radius: var(--radius-pill);
-  background: var(--text-primary);
-  color: var(--surface-canvas);
-  font-size: 9px;
-  line-height: 13px;
-  text-align: center;
-}
-
-.lm__premium {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: var(--radius-md);
-  color: var(--premium-gold);
-  font-size: 14px;
-}
-
-.lm__premium-chevron {
-  color: var(--text-tertiary);
-}
-
-.lm__search {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: 200px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--text-secondary);
-}
-
-.lm__search-placeholder {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.lm__window-controls {
-  display: inline-flex;
-  margin-inline-start: 6px;
-}
-
-.lm__window-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 36px;
-  color: var(--icon-default);
-  opacity: 0.7;
-}
-
-// --- Sidebar (280px) ------------------------------------------------------
-
-.lm__body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.lm__sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: 280px;
-  min-width: 280px;
-  padding: 16px;
-  background: var(--surface-panel);
-}
-
-.lm__account {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-}
-
-.lm__avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(150deg, #3a4356 0%, #1a1e26 100%);
-}
-
-.lm__account-name {
-  font-size: 16px;
-}
-
-.lm__account-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid var(--danger);
-  border-radius: var(--radius-pill);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.lm__menu {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.lm__menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 8px;
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-}
-
-// Navegação clareia: repouso transparente, selecionado no teto da rampa.
-.lm__menu-item[data-active] {
-  background: var(--surface-strong);
-}
-
-.lm__menu-item--collection {
-  color: var(--text-secondary);
-}
-
-.lm__menu-label {
-  flex: 1;
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lm__count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--radius-pill);
-  background: var(--text-primary);
-  color: var(--surface-canvas);
-  font-size: 12px;
-  font-weight: var(--weight-regular);
-  line-height: 20px;
-  text-align: center;
-}
-
-// Seção de coleções fechada, como no app quando não há coleção expandida.
-.lm__section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  color: var(--text-tertiary);
-}
-
-.lm__section-title {
-  flex: 1;
-  font-size: 13px;
-  letter-spacing: var(--ls-100);
-  text-transform: uppercase;
-}
-
-.lm__section-add {
-  display: inline-flex;
-}
-
-// --- Conteúdo -------------------------------------------------------------
-
-.lm__content {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  background: var(--surface-canvas);
-  // A página continua abaixo da dobra da janela; o esmaecimento diz isso em vez
-  // de deixar a última fileira parecendo corte errado.
-  mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
-}
-
-.lm__page {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-
-.lm__page--padded {
-  padding-block-start: 12px;
 }
 
 .lm__art {
@@ -298,15 +17,39 @@
   object-fit: cover;
 }
 
-// --- Home -----------------------------------------------------------------
+// --- Fragmento flutuante ---------------------------------------------------
+
+.lm__frag {
+  background: var(--surface-panel);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.js .lm__frag {
+    animation: lm-rise var(--site-motion-base) var(--site-ease-out) both;
+    animation-delay: calc(var(--frag-i, 0) * 110ms);
+  }
+}
+
+@keyframes lm-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+// --- Início: banner + prateleira -------------------------------------------
 
 .lm__banner {
   position: relative;
-  width: 100%;
-  aspect-ratio: 1920 / 620;
-  max-height: 420px;
-  overflow: hidden;
-  background: var(--surface-panel);
+  width: min(680px, 100%);
+  aspect-ratio: 16 / 7;
 }
 
 .lm__banner-art {
@@ -317,34 +60,34 @@
   object-fit: cover;
 }
 
+// Scrim de legibilidade sobre a arte — funcional, como no player do app.
 .lm__banner-scrim {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(
-      to right,
-      rgb(0 0 0 / 0.86) 0%,
-      rgb(0 0 0 / 0.62) 34%,
-      rgb(0 0 0 / 0.08) 68%,
-      rgb(0 0 0 / 0) 100%
-    ),
-    linear-gradient(to top, rgb(0 0 0 / 0.7), rgb(0 0 0 / 0) 52%);
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.72) 0%,
+    rgb(0 0 0 / 0.28) 46%,
+    rgb(0 0 0 / 0) 72%
+  );
 }
 
+// O bloco de texto fica acima da faixa que a prateleira ocupa e recua à
+// direita para nunca correr por baixo dos dots do carrossel.
 .lm__banner-info {
   position: absolute;
-  inset-inline: 40px;
-  inset-block-end: 46px;
+  inset-inline: 20px;
+  inset-block-end: 56px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  padding-inline-end: 96px;
 }
 
 .lm__banner-title {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--ls-700);
-  line-height: 34px;
+  letter-spacing: var(--ls-600);
 }
 
 .lm__banner-description {
@@ -359,7 +102,7 @@
 
 .lm__banner-dots {
   position: absolute;
-  inset-inline-start: 40px;
+  inset-inline-end: 20px;
   inset-block-end: 20px;
   display: inline-flex;
   align-items: center;
@@ -378,60 +121,43 @@
   background: var(--text-primary);
 }
 
-.lm__shelf {
+// Prateleira flutuando por cima da borda inferior do banner.
+.lm__strip {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-inline: 48px;
-}
-
-// Título de prateleira do app: caixa alta, pequeno e discreto — a arte é que
-// tem de puxar o olho.
-.lm__shelf-title {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: var(--weight-regular);
-  letter-spacing: var(--ls-100);
-  line-height: 18px;
-  text-transform: uppercase;
-}
-
-.lm__shelf-rail {
-  position: relative;
-}
-
-.lm__shelf-track {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  z-index: 1;
+  width: max-content;
+  max-width: 100%;
+  margin-block-start: -36px;
+  margin-inline-start: 56px;
+  padding: 8px;
 }
 
-.lm__shelf-card {
+.lm__strip-card {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
-}
-
-.lm__shelf-cover {
-  display: block;
-  aspect-ratio: 460 / 215;
   overflow: hidden;
   border-radius: var(--radius-sm);
+  background: var(--surface-canvas);
 }
 
-.lm__shelf-body {
+.lm__strip-cover {
+  display: block;
+  width: 152px;
+  aspect-ratio: 460 / 215;
+  overflow: hidden;
+}
+
+.lm__strip-body {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 8px 10px;
 }
 
-.lm__shelf-name {
-  font-size: 15px;
+.lm__strip-name {
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -447,195 +173,87 @@
   white-space: nowrap;
 }
 
-.lm__rail-arrow {
-  position: absolute;
-  inset-inline-end: -30px;
-  inset-block-start: 40%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 40px;
-  color: var(--text-secondary);
-}
-
-// --- Chips ----------------------------------------------------------------
-
-.lm__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.lm__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  color: var(--text-secondary);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.lm__chip--sm {
-  height: 22px;
-  padding: 0 8px;
-}
-
-.lm__chip--active,
-.lm__chip[data-active] {
-  background: var(--surface-strong);
-  color: var(--text-primary);
-}
-
-.lm__chip-count {
-  min-width: 16px;
-  height: 16px;
-  border-radius: var(--radius-pill);
-  background: var(--text-primary);
-  color: var(--surface-canvas);
-  font-size: 10px;
-  font-weight: var(--weight-regular);
-  line-height: 16px;
-  text-align: center;
-}
-
-// --- Biblioteca -----------------------------------------------------------
-
-.lm__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-inline: 24px;
-}
+// --- Biblioteca: busca + grade de retratos ---------------------------------
+// A busca flutua meia-solta no canto do painel da grade: metade fora, metade
+// dentro da zona de respiro — nunca por cima da primeira capa.
 
 .lm__field {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  width: 240px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
+  z-index: 1;
+  width: 260px;
+  height: 38px;
+  margin-block-end: -48px;
+  margin-inline-start: 16px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.lm__field svg {
   color: var(--text-tertiary);
 }
 
-.lm__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(0, 200px));
-  justify-content: start;
-  gap: 12px;
-  padding-inline: 24px;
+.lm__placeholder {
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 
-.lm__card {
-  position: relative;
-  aspect-ratio: 600 / 900;
+.lm__covers {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  width: min(720px, 100%);
+  padding: 58px 10px 10px;
+}
+
+.lm__cover {
+  display: block;
+  aspect-ratio: 2 / 3;
   overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
+  border-radius: var(--radius-xs);
+  background: var(--surface-canvas);
 }
 
-.lm__card-badges {
-  position: absolute;
-  inset-inline: 8px;
-  inset-block-end: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  height: 30px;
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--black) 62%, transparent);
-  color: var(--text-primary);
-  font-size: 12px;
-}
+// --- Catálogo e perfil: linhas-cartão --------------------------------------
+// O agrupador não é um cartão: cada linha flutua sozinha, empilhada por gap.
 
-.lm__card-metric {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-// --- Catálogo -------------------------------------------------------------
-
-// Filtro do catálogo: gatilho de dropdown, não pill de seleção.
-.lm__filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.lm__filter svg {
-  color: var(--text-tertiary);
-}
-
-.lm__sort {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 200px;
-  height: 36px;
-  margin-inline-start: auto;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.lm__sort svg {
-  color: var(--text-tertiary);
-}
-
-.lm__catalogue {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  padding-inline: 24px;
-}
-
-.lm__list {
+.lm__rows {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: stretch;
+  gap: 6px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  width: min(560px, 100%);
 }
 
 .lm__row {
   display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
+  grid-template-columns: 176px minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-height: 84px;
-  padding-inline-end: 12px;
+  padding-inline-end: 14px;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-panel);
   background: var(--surface-panel);
+  box-shadow: var(--shadow-3);
 }
 
 .lm__row-cover {
   display: block;
-  width: 196px;
-  height: 84px;
+  align-self: stretch;
   overflow: hidden;
 }
 
-.lm__row-content {
+.lm__row-body {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 8px;
   min-width: 0;
 }
@@ -648,12 +266,49 @@
   text-overflow: ellipsis;
 }
 
-// Coluna de prévia: sem cartão próprio, como no app — título, estúdio e
-// capturas soltos sobre o canvas.
+.lm__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lm__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+// --- Catálogo: prévia flutuando sobre as linhas ----------------------------
+// A sobreposição é profunda de propósito: a borda direita das linhas fica
+// escondida atrás da prévia, então não aparece "costura" de painel cortado.
+
+.lm--catalogue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 0;
+}
+
+.lm--catalogue .lm__rows {
+  width: auto;
+}
+
 .lm__preview {
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  margin-block-start: 44px;
+  margin-inline-start: -148px;
+  padding: 14px;
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-3);
 }
 
 .lm__preview-head {
@@ -664,101 +319,90 @@
 }
 
 .lm__preview-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lm__preview-developer {
-  margin-block-end: 4px;
-  color: var(--text-secondary);
-  font-size: 13px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .lm__preview-shot {
+  display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
   border-radius: var(--radius-sm);
 }
 
-// --- Conquistas (visão geral do perfil) -----------------------------------
+// --- Perfil: métricas, progresso e toast -----------------------------------
 
-.lm__metrics {
+.lm__metricstrip {
   display: flex;
-  align-items: center;
-  gap: 32px;
-  padding-inline: 24px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 40px;
+  padding: 14px 20px;
 }
 
 .lm__metric {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .lm__metric strong {
-  font-size: 20px;
+  font-size: 26px;
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
 .lm__metric span {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.lm__activity {
-  display: flex;
-  flex-direction: column;
+.lm__row--activity .lm__row-body {
   gap: 10px;
-  padding-inline: 24px;
 }
 
-.lm__activity-card {
-  display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
-  align-items: center;
-  column-gap: 16px;
-  row-gap: 10px;
-  min-height: 84px;
-  padding-inline-end: 12px;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
-}
-
-.lm__activity-cover {
-  grid-row: 1 / -1;
-  display: block;
-  width: 196px;
-  height: 92px;
-  overflow: hidden;
-}
-
-.lm__activity-main {
+.lm__row-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding-block-start: 12px;
 }
 
-.lm__activity-title {
-  font-size: 14px;
-  font-weight: var(--weight-regular);
+.lm__row-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
 }
 
-.lm__activity-hours {
-  color: var(--text-secondary);
+.lm__row-hours {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lm__row-last {
+  color: var(--text-tertiary);
   font-size: 12px;
+  white-space: nowrap;
 }
 
-.lm__activity-progress {
-  display: grid;
-  grid-template-columns: auto auto minmax(120px, 320px);
+.lm__row-progress {
+  display: flex;
   align-items: center;
   gap: 10px;
-  padding-block-end: 12px;
+  width: 100%;
 }
 
 .lm__cup {
@@ -769,7 +413,7 @@
   color: var(--premium-gold);
 }
 
-.lm__activity-count {
+.lm__row-count {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -777,6 +421,7 @@
 
 .lm__track {
   display: block;
+  flex: 0 1 220px;
   height: 5px;
   overflow: hidden;
   border-radius: var(--radius-pill);
@@ -788,4 +433,86 @@
   height: 100%;
   border-radius: inherit;
   background: var(--text-primary);
+}
+
+.lm__row-more {
+  margin-inline-start: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// Toast de conquista 100%: o momento da seção, flutuando sobre as linhas.
+.lm__toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1;
+  width: max-content;
+  max-width: 100%;
+  margin-block-start: -24px;
+  margin-inline-start: 64px;
+  padding: 10px 16px 10px 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-3);
+}
+
+.lm__toast-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--premium-gold) 16%, transparent);
+  color: var(--premium-gold);
+}
+
+.lm__toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lm__toast-title {
+  font-size: 14px;
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lm__toast-line {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// --- Responsivo ------------------------------------------------------------
+
+@media (max-width: 720px) {
+  .lm__covers {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .lm__strip {
+    margin-inline-start: 24px;
+  }
+
+  .lm__toast {
+    margin-inline-start: 24px;
+  }
+
+  .lm--catalogue {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lm__preview {
+    margin-block-start: -24px;
+    margin-inline: 24px;
+  }
 }

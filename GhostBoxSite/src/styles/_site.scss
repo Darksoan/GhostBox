@@ -45,23 +45,7 @@
   --site-parallax: 0px; // escrito em runtime por useParallax
 
   // --- Ambiente ---
-  // Único gradiente frio do site, atrás do hero. Azul dessaturado a 10% sobre o
-  // piso da rampa: dá profundidade sem virar neon.
-  --site-ambient: radial-gradient(
-    100% 70% at 62% 8%,
-    color-mix(in srgb, #33578c 34%, transparent) 0%,
-    transparent 58%
-  );
-  --site-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-
-  // Capas do mockup. São blocos abstratos de propósito: o site não estampa arte
-  // de jogo de terceiros e não finge uma captura de tela que não existe.
-  --site-tile-1: linear-gradient(160deg, #24303f 0%, #121821 100%);
-  --site-tile-2: linear-gradient(160deg, #3a2a2a 0%, #171012 100%);
-  --site-tile-3: linear-gradient(160deg, #23342e 0%, #101816 100%);
-  --site-tile-4: linear-gradient(160deg, #2e2a3d 0%, #14121c 100%);
-  --site-tile-5: linear-gradient(160deg, #3a3324 0%, #191510 100%);
-  // Contorno de imagem em superfície escura: branco puro a 10%, nunca um
-  // quase-preto tingido (pega a cor de baixo e lê como sujeira na borda).
-  --site-image-outline: 0 0 0 1px rgb(255 255 255 / 0.1);
+  // Sem ambiente decorativo: o site segue o design.md do launcher — separação
+  // vem de salto de degrau de superfície e espaçamento, nunca de gradiente ou
+  // borda ornamental.
 }

@@ -12,6 +12,10 @@ export function useEnrichedGameCards(
   games: GhostBoxGame[],
   limit = 80,
   enabled = true,
+  /** Buscar também conquistas. Só quem renderiza progresso precisa; a Home
+   *  não tem nenhum card com barra de conquista, e cada busca extra ocupa um
+   *  slot da fila compartilhada atrasando título/tags dos cards visíveis. */
+  includeAchievements = true,
 ) {
   const requestedKeysRef = useRef(new Set<string>());
   const [detailsByAppId, setDetailsByAppId] = useState(
@@ -91,6 +95,7 @@ export function useEnrichedGameCards(
         loadGameStoreDetailsCached,
         gameKey
       );
+      if (!includeAchievements) return;
       enqueueDetails(
         game,
         `${gameKey}:achievements`,
@@ -108,7 +113,7 @@ export function useEnrichedGameCards(
         cancelAnimationFrame(frame);
       }
     };
-  }, [enabled, gamesKey, limit]);
+  }, [enabled, gamesKey, includeAchievements, limit]);
 
   return useMemo(
     () =>

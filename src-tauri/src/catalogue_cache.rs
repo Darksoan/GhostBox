@@ -1,6 +1,7 @@
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -13,6 +14,9 @@ const CATALOGUE_ENTRY_STALE_MAX_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 
 static SCHEDULER_STARTED: OnceLock<()> = OnceLock::new();
 static CATALOGUE_HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+// Refreshes em background já em andamento, por chave de cache: sem o dedupe,
+// cada card que resolve no mesmo boot relançaria a mesma busca.
+static BACKGROUND_REFRESH_IN_FLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 struct CatalogueCacheMeta {
@@ -290,6 +294,40 @@ async fn fetch_json_from_network(
     Ok((body, updated_at))
 }
 
+/// Relança a busca de uma entrada obsoleta em background, deduplicada por
+/// chave. Silencioso de propósito: nada de `CATALOGUE_CACHE_UPDATED_EVENT`
+/// aqui — o evento faz o frontend invalidar `["games"]`/`["home"]` inteiros,
+/// e um refresh card a card dispararia uma tempestade de refetch. A cópia
+/// nova simplesmente passa a ser servida na próxima leitura.
+fn spawn_background_cache_refresh(app: &AppHandle, url: reqwest::Url, cache_key: String) {
+    {
+        let Ok(mut in_flight) = BACKGROUND_REFRESH_IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new())).lock() else {
+            return;
+        };
+        if in_flight.contains(&cache_key) {
+            return;
+        }
+        in_flight.insert(cache_key.clone());
+    }
+
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok((body, updated_at)) = fetch_json_from_network(url).await {
+            let entry_key = cache_key.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                write_cache_entry(&app, &entry_key, updated_at, &body)
+            })
+            .await;
+        }
+        if let Ok(mut in_flight) = BACKGROUND_REFRESH_IN_FLIGHT
+            .get_or_init(|| Mutex::new(HashSet::new()))
+            .lock()
+        {
+            in_flight.remove(&cache_key);
+        }
+    });
+}
+
 pub async fn fetch_json_with_cache(
     app: &AppHandle,
     url: reqwest::Url,
@@ -307,6 +345,15 @@ pub async fn fetch_json_with_cache(
                 .flatten();
         if let Some(entry) = entry {
             if is_fresh(&entry) && is_valid_catalogue_response(&url, &entry.body) {
+                return Ok((entry.body, entry.updated_at, true));
+            }
+            // Stale-while-revalidate: a janela "fresh" é curta (30 min), então
+            // sem isso todo boot depois de meia hora bloqueava na rede antes de
+            // responder — cada card da home e o featured esperavam o worker de
+            // novo por um payload que quase nunca mudou. Dentro da janela
+            // stale (7 dias) responde do disco na hora e atualiza em background.
+            if is_usable_stale(&entry) && is_valid_catalogue_response(&url, &entry.body) {
+                spawn_background_cache_refresh(app, url, cache_key);
                 return Ok((entry.body, entry.updated_at, true));
             }
         }

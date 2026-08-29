@@ -1,10 +1,11 @@
 import { Check } from "lucide-react";
-import { AppShot } from "../components/AppShot";
+import { LauncherMockup } from "../components/LauncherMockup";
+import type { Language } from "../content/types";
 import { staggerDelay } from "../hooks/useReveal";
 import type { SiteContent } from "../content";
 import "./ShowcaseSection.scss";
 
-export function ShowcaseSection({ t }: { t: SiteContent }) {
+export function ShowcaseSection({ t, language }: { t: SiteContent; language: Language }) {
   return (
     <section className="showcase site-section" aria-labelledby="showcase-title">
       <div className="site-container">
@@ -30,7 +31,7 @@ export function ShowcaseSection({ t }: { t: SiteContent }) {
               </div>
 
               <div className="showcase__visual reveal" style={staggerDelay(1)}>
-                <AppShot variant={item.id} label={item.title} />
+                <LauncherMockup variant={item.id} label={item.title} language={language} />
               </div>
             </article>
           ))}

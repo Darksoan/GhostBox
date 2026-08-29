@@ -725,6 +725,7 @@ interface ModalActionsProps {
   isAdding: boolean;
   isInstalled: boolean;
   isDownloaded: boolean;
+  isDownloading: boolean;
   isAdded: boolean;
   isRemoving: boolean;
   isPlaying: boolean;
@@ -732,10 +733,13 @@ interface ModalActionsProps {
   isFavorite: boolean;
   isBackupOptionsOpen: boolean;
   language: string;
+  downloadingLabel: string;
+  cancelLabel: string;
   game: GhostBoxGame;
   onPlay: (game: GhostBoxGame) => void;
   onRemove: (game: GhostBoxGame) => void;
   onDownload: (game: GhostBoxGame) => void;
+  onCancelDownload: () => void;
   onQueue: (game: GhostBoxGame) => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onOpenBackupOptions: () => void;
@@ -745,6 +749,7 @@ const ModalActions = memo(function ModalActions({
   isAdding,
   isInstalled,
   isDownloaded,
+  isDownloading,
   isAdded,
   isRemoving,
   isPlaying,
@@ -752,10 +757,13 @@ const ModalActions = memo(function ModalActions({
   isFavorite,
   isBackupOptionsOpen,
   language,
+  downloadingLabel,
+  cancelLabel,
   game,
   onPlay,
   onRemove,
   onDownload,
+  onCancelDownload,
   onQueue,
   onToggleFavorite,
   onOpenBackupOptions,
@@ -797,16 +805,41 @@ const ModalActions = memo(function ModalActions({
         </button>
       )}
       {isInstalled && !isDownloaded && (
-        <button
-          type="button"
-          className="button button--primary modal__download-button"
-          onClick={() => onDownload(game)}
-        >
-          <Download size={20} strokeWidth={2.0} />
-          <span className="button__label modal__action-label">
-            {language === "en" ? "Download" : "Baixar"}
-          </span>
-        </button>
+        isDownloading ? (
+          <button
+            type="button"
+            className="button button--primary modal__download-button modal__download-button--live"
+            onClick={onCancelDownload}
+            aria-label={cancelLabel}
+          >
+            <span className="modal__download-face" aria-hidden="true">
+              <span className="modal__add-spinner modal__add-spinner--light" />
+              <span className="button__label modal__action-label">
+                {downloadingLabel}
+              </span>
+            </span>
+            <span
+              className="modal__download-face modal__download-face--cancel"
+              aria-hidden="true"
+            >
+              <X size={20} strokeWidth={2.0} />
+              <span className="button__label modal__action-label">
+                {cancelLabel}
+              </span>
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="button button--primary modal__download-button"
+            onClick={() => onDownload(game)}
+          >
+            <Download size={20} strokeWidth={2.0} />
+            <span className="button__label modal__action-label">
+              {language === "en" ? "Download" : "Baixar"}
+            </span>
+          </button>
+        )
       )}
       {isAdding ? (
         <div
@@ -931,6 +964,7 @@ interface GameModalProps {
   isAdded: boolean;
   isInstalled: boolean;
   isDownloaded: boolean;
+  isDownloading: boolean;
   isRemoving: boolean;
   isPlaying: boolean;
   isSessionActive?: boolean;
@@ -940,6 +974,7 @@ interface GameModalProps {
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
   onDownloadGame: (game: GhostBoxGame) => void | Promise<void>;
+  onCancelDownload: () => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onAddGameToCollection: (
     game: GhostBoxGame,
@@ -964,6 +999,7 @@ export function GameModal({
   isAdded,
   isInstalled,
   isDownloaded = false,
+  isDownloading,
   isRemoving,
   isPlaying,
   isSessionActive = false,
@@ -973,6 +1009,7 @@ export function GameModal({
   onQueueGame,
   onRemoveGame,
   onDownloadGame,
+  onCancelDownload,
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
@@ -1674,6 +1711,7 @@ export function GameModal({
                   isAdding={isAdding}
                   isInstalled={isInstalled}
                   isDownloaded={isDownloaded}
+                  isDownloading={isDownloading}
                   isAdded={isAdded}
                   isRemoving={isRemoving}
                   isPlaying={isPlaying}
@@ -1681,10 +1719,13 @@ export function GameModal({
                   isFavorite={isFavorite}
                   isBackupOptionsOpen={isBackupOptionsOpen}
                   language={appearance.language}
+                  downloadingLabel={t("downloads.statusDownloading")}
+                  cancelLabel={t("downloads.cancel")}
                   game={displayGame}
                   onPlay={onPlayGame}
                   onRemove={onRemoveGame}
                   onDownload={onDownloadGame}
+                  onCancelDownload={onCancelDownload}
                   onQueue={onQueueGame}
                   onToggleFavorite={onToggleFavorite}
                   onOpenBackupOptions={handleOpenBackupOptions}

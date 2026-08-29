@@ -3,7 +3,11 @@ import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import type { GhostBoxGame } from "../../data";
-import { enqueueDownload } from "../../lib/downloadManager";
+import {
+  deleteDownloadTaskFiles,
+  enqueueDownload,
+} from "../../lib/downloadManager";
+import { useGameDownloadTask } from "../../hooks/useGameDownloadTask";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { readStoredDownloadsDir, writeStoredDownloadsDir } from "../../utils/storage";
 import { PagePlaceholder } from "../ui/LoadingStates";
@@ -79,18 +83,24 @@ const LazyGameAchievementsPage = lazy(() =>
 
 interface ContentOverlayProps {
   page: Page;
+  onNavigateToDownloads: () => void;
 }
 
-export function ContentOverlay({ page }: ContentOverlayProps) {
+export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayProps) {
   const appData = useAppData();
-  const { appearance } = useSettings();
+  const { appearance, t } = useSettings();
   const {
     selectedGame,
     achievementsView,
     isGameModalExitPending,
     closeGame,
     openAchievements,
+    showToast,
   } = useOverlay();
+
+  const downloadTask = useGameDownloadTask(
+    selectedGame ? getGameAppId(selectedGame) : null,
+  );
 
   const animationsOff = appearance.reduceAllAnimations;
   const motionClass = animationsOff
@@ -220,6 +230,20 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
                  Rust sabe o `installdir` — ele resolve o appinfo e devolve o
                  caminho no evento `depot-plan`. Aqui so a raiz e conhecida. */
               enqueueDownload(mergedGame, downloadsRoot);
+              /* Download enfileirado: o usuário acompanha o progresso na aba
+                 Downloads, e o próprio goToPage fecha este modal ao navegar. */
+              onNavigateToDownloads();
+            }}
+            isDownloading={Boolean(downloadTask)}
+            onCancelDownload={() => {
+              if (!downloadTask) return;
+              deleteDownloadTaskFiles(downloadTask.id).catch(() => {
+                showToast(
+                  mergedGame.title,
+                  t("downloads.deleteError"),
+                  "error",
+                );
+              });
             }}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })

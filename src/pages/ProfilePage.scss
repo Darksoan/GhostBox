@@ -10,8 +10,17 @@
    * uma faixa vertical diferente da arte. Maximizar então não só aumentava a
    * capa como reenquadrava a imagem. Com altura constante, maximizar só revela
    * mais no eixo horizontal — que é o eixo que de fato cresceu.
+   *
+   * A exceção é o estado maximizado (`--maximized`): um único incremento
+   * discreto de altura, sem ligar a altura à largura, dá um pouco mais de
+   * respiro à capa sem reenquadrar a arte a cada resize.
    */
   --profile-cover-height: 272px;
+
+  /* Janela maximizada: a capa ganha um pouco mais de altura (ver nota acima). */
+  &--maximized {
+    --profile-cover-height: 288px;
+  }
 
   display: flex;
   flex-direction: column;
@@ -29,6 +38,9 @@
     background: transparent;
     contain: layout style;
     isolation: isolate;
+    /* Acompanha o fade da capa: o fundo do placeholder sai junto, sem piscar o
+       canvas embaixo da arte entrando. */
+    transition: background var(--motion-slow) var(--ease);
 
     &--empty {
       background: transparent;
@@ -97,6 +109,11 @@
   }
 
   &__banner-image {
+    /* Zoom escolhido pelo usuário x zoom da entrada, multiplicados: a entrada
+       anima só a sua própria variável e devolve o enquadramento intacto. */
+    --profile-banner-scale: 1;
+    --profile-banner-reveal-scale: 1.045;
+
     position: absolute;
     inset: 0;
     width: 100%;
@@ -105,20 +122,34 @@
     transform-origin: center;
     pointer-events: none;
     user-select: none;
-    opacity: 0.94;
-    animation: profile-banner-reveal var(--motion-slow) var(--ease) both;
+    /* Estado de partida: a capa só ganha opacidade quando o `<img>` avisa que
+       decodificou (classe `--revealed`), então a entrada nunca roda em cima de
+       um elemento ainda vazio. */
+    opacity: 0;
+    transform: scale(
+      calc(var(--profile-banner-scale) * var(--profile-banner-reveal-scale))
+    );
+    transition:
+      opacity var(--motion-slow) var(--ease),
+      transform var(--motion-slow) var(--ease);
+
+    &--revealed {
+      --profile-banner-reveal-scale: 1;
+      opacity: 0.94;
+    }
 
     &--placeholder {
       inset: 50% auto auto 50%;
       width: 88px;
       height: 88px;
       object-fit: contain;
+      opacity: 0.72;
       transform: translate(-50%, -50%);
-      animation: none;
+      transition: opacity var(--motion-base) var(--ease);
+    }
 
-      &[src] {
-        opacity: 0.72;
-      }
+    &--placeholder-hidden {
+      opacity: 0;
     }
   }
 
@@ -1514,6 +1545,13 @@
   .profile-page__hero-action-label {
     transition: none;
   }
+
+  /* Sem movimento: a capa ainda precisa aparecer, então some o zoom e a
+     transição, mas o estado revelado continua sendo o que pinta a arte. */
+  .profile-page__banner-image {
+    --profile-banner-reveal-scale: 1;
+    transition: none;
+  }
 }
 
 html.no-backdrop-blur .profile-page {
@@ -1583,18 +1621,6 @@ html.no-backdrop-blur .profile-page {
   to {
     opacity: 1;
     transform: translateX(0);
-  }
-}
-
-@keyframes profile-banner-reveal {
-  from {
-    opacity: 0;
-    transform: scale(1.045);
-  }
-
-  to {
-    opacity: 0.94;
-    transform: scale(1);
   }
 }
 

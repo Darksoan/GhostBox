@@ -412,6 +412,15 @@ export function getActiveDownloadCount(): number {
   ).length;
 }
 
+/**
+ * Tarefa viva (na fila, baixando ou pausada) de um jogo, ou `null` quando não
+ * há download em andamento para o appId. Histórico (completed/error) não conta.
+ */
+export function getLiveDownloadTaskByAppId(appId: string): DownloadTask | null {
+  ensureLiveTasksHydrated();
+  return liveTasks.find((task) => task.appId === appId) ?? null;
+}
+
 function updateLiveTask(appId: string, patch: Partial<DownloadTask>, immediate = false) {
   ensureLiveTasksHydrated();
   const index = liveTasks.findIndex((task) => task.appId === appId);

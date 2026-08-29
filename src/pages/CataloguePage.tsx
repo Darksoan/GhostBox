@@ -437,6 +437,11 @@ export function CataloguePage({
   const { t } = useSettings();
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  // Método de visualização da listagem (lista / grade). Estado local, no mesmo
+  // padrão do sort do catálogo (não persistido entre sessões).
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     game: GhostBoxGame;
     x: number;
@@ -469,18 +474,39 @@ export function CataloguePage({
   const sortLabel =
     sortOptions.find((option) => option.value === sort)?.label ?? "";
 
+  const viewOptions = useMemo(
+    () => [
+      { value: "list", label: t("catalogue.view.list") },
+      { value: "grid", label: t("catalogue.view.grid") },
+    ] as { value: "list" | "grid"; label: string }[],
+    [t]
+  );
+  const viewLabel =
+    viewOptions.find((option) => option.value === viewMode)?.label ?? "";
+
   useEffect(() => {
-    if (!sortDropdownOpen) return;
+    if (!sortDropdownOpen && !viewDropdownOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       if (
+        sortDropdownOpen &&
         sortDropdownRef.current &&
         !sortDropdownRef.current.contains(event.target as Node)
       ) {
         setSortDropdownOpen(false);
       }
+      if (
+        viewDropdownOpen &&
+        viewDropdownRef.current &&
+        !viewDropdownRef.current.contains(event.target as Node)
+      ) {
+        setViewDropdownOpen(false);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSortDropdownOpen(false);
+      if (event.key === "Escape") {
+        setSortDropdownOpen(false);
+        setViewDropdownOpen(false);
+      }
     };
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -488,7 +514,7 @@ export function CataloguePage({
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sortDropdownOpen]);
+  }, [sortDropdownOpen, viewDropdownOpen]);
 
   const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
@@ -589,6 +615,15 @@ export function CataloguePage({
     () => `${displayedPage}-${chunkOffset}-${visibleGames.map((game) => game.id).join("|")}`,
     [chunkOffset, displayedPage, visibleGames]
   );
+
+  // Jogo de reserva do preview: sem hover em nenhum card, a coluna do preview
+  // mostra um jogo aleatório da página em vez de ficar vazia. Escolhido uma
+  // vez por página (a seleção é estável entre renders e não re-sortia enquanto
+  // o usuário passa o mouse pelos cards).
+  const fallbackPreviewGame = useMemo(() => {
+    if (!visibleGames.length) return null;
+    return visibleGames[Math.floor(Math.random() * visibleGames.length)];
+  }, [visibleGamesCacheKey, visibleGames]);
 
   useEffect(() => {
     hoverPreviewRetention.cancelClear();
@@ -803,6 +838,50 @@ export function CataloguePage({
                   </div>
                 )}
               </div>
+              {/* Dropdown de visualização: alterna a listagem entre lista
+                  (horizontal) e grade de cards estilo "Mais jogados". Mesmo
+                  padrão do dropdown de ordenação ao lado. */}
+              <div
+                className={`settings-dropdown catalogue-page__view ${viewDropdownOpen ? "settings-dropdown--open" : ""}`}
+                ref={viewDropdownRef}
+              >
+                <button
+                  type="button"
+                  className="settings-dropdown__trigger"
+                  aria-haspopup="listbox"
+                  aria-expanded={viewDropdownOpen}
+                  aria-label={t("catalogue.view.label")}
+                  onClick={() => setViewDropdownOpen((open) => !open)}
+                >
+                  <span>{viewLabel}</span>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </button>
+                {viewDropdownOpen && (
+                  <div
+                    className="settings-dropdown__menu"
+                    role="listbox"
+                    aria-label={t("catalogue.view.label")}
+                  >
+                    {viewOptions
+                      .filter((option) => option.value !== viewMode)
+                      .map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="option"
+                          aria-selected={false}
+                          className="settings-dropdown__option"
+                          onClick={() => {
+                            setViewMode(option.value);
+                            setViewDropdownOpen(false);
+                          }}
+                        >
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
               {hasActiveFilters && (
                 <button
                   type="button"
@@ -844,6 +923,7 @@ export function CataloguePage({
             <div className="catalogue-page__list-container">
               <CatalogueList
                 games={visibleGames}
+                viewMode={viewMode}
                 onOpenGame={onOpenGame}
                 onHoverGame={handleHoverGame}
                 addedGameAppIds={addedGameAppIds}
@@ -898,7 +978,8 @@ export function CataloguePage({
           aria-label={t("catalogue.preview.columnLabel")}
         >
           <CatalogueHoverPreview
-            game={hoveredPreview}
+            game={hoveredPreview ?? fallbackPreviewGame}
+            onOpenGame={onOpenGame}
             onPointerEnter={handlePreviewPointerEnter}
             onPointerLeave={handlePreviewPointerLeave}
           />

@@ -1,6 +1,7 @@
 import { ArrowRight, Download } from "lucide-react";
-import { AppShot } from "../components/AppShot";
+import { LauncherMockup } from "../components/LauncherMockup";
 import { DOWNLOAD_URL } from "../content/links";
+import type { Language } from "../content/types";
 import { useParallax } from "../hooks/useParallax";
 import type { SiteContent } from "../content";
 import "./HeroSection.scss";
@@ -10,12 +11,11 @@ function heroDelay(step: number): React.CSSProperties {
   return { animationDelay: `${Math.min(step * 90, 360)}ms` };
 }
 
-export function HeroSection({ t }: { t: SiteContent }) {
+export function HeroSection({ t, language }: { t: SiteContent; language: Language }) {
   const mockupRef = useParallax<HTMLDivElement>(40);
 
   return (
     <section className="hero">
-      <div className="hero__ambient" aria-hidden="true" />
       <div className="site-container hero__inner">
         <div className="hero__copy">
           <p className="site-eyebrow hero__eyebrow hero__enter" style={heroDelay(0)}>
@@ -43,7 +43,7 @@ export function HeroSection({ t }: { t: SiteContent }) {
         </div>
 
         <div className="hero__mockup hero__enter" style={heroDelay(2)} ref={mockupRef}>
-          <AppShot variant="home" label={t.hero.mockupLabel} />
+          <LauncherMockup variant="home" label={t.hero.mockupLabel} language={language} />
         </div>
       </div>
     </section>

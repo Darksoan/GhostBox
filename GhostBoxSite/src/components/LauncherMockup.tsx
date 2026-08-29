@@ -1,42 +1,15 @@
-import {
-  Bell,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Crown,
-  Download,
-  Flame,
-  Folder,
-  Heart,
-  House,
-  Layers,
-  LayoutGrid,
-  Maximize2,
-  MessageSquare,
-  Minus,
-  Plus,
-  Search,
-  Settings,
-  Trophy,
-  X,
-} from "lucide-react";
+import { Flame, Search, Trophy } from "lucide-react";
 import {
   bannerGame,
   games,
   previewGame,
   type SiteGame,
 } from "../content/games.generated";
-import { useScaleToFit } from "../hooks/useScaleToFit";
-import type { Language } from "../content";
+import type { CSSProperties } from "react";
+import type { Language } from "../content/types";
 import "./LauncherMockup.scss";
 
 export type MockupVariant = "home" | "library" | "catalogue" | "achievements";
-
-// Geometria real da janela do launcher. Tudo dentro é desenhado nesses pixels e
-// depois reduzido em bloco — é o que mantém titlebar, sidebar e capas fiéis.
-const WINDOW_WIDTH = 1280;
-const WINDOW_HEIGHT = 800;
 
 interface LauncherMockupProps {
   variant: MockupVariant;
@@ -45,86 +18,79 @@ interface LauncherMockupProps {
   language: Language;
 }
 
-// Rótulos da própria interface do launcher, nos dois idiomas que o app suporta.
+// Rótulos da própria interface do launcher, nos dois idiomas que o app suporta
+// (mesmos textos de src/i18n.ts do launcher).
 const UI = {
   pt: {
-    home: "Início",
-    catalogue: "Catálogo",
-    library: "Biblioteca",
-    downloads: "Downloads",
-    settings: "Ajustes",
-    collections: "Coleções",
-    subscription: "Assinatura",
-    search: "Buscar jogos",
     searchLibrary: "Buscar na biblioteca",
-    mostPlayed: "Mais jogados",
-    exploreByCategory: "Explorar por categoria",
-    favorites: "Favoritos",
-    toFinish: "Para zerar",
-    coop: "Co-op",
-    filters: ["Gêneros", "Tags", "Desenvolvedoras", "Publicadoras", "Ano"],
-    sort: "Mais populares",
-    sortAchievements: "Mais conquistas",
     metrics: { games: "Jogos", achievements: "Conquistas", playtime: "Tempo total" },
     of: "de",
     played: "registradas",
+    lastPlayed: "jogado pela última vez em",
+    bigPlaytime: "1.848,1h",
   },
   en: {
-    home: "Home",
-    catalogue: "Catalogue",
-    library: "Library",
-    downloads: "Downloads",
-    settings: "Settings",
-    collections: "Collections",
-    subscription: "Subscription",
-    search: "Search games",
     searchLibrary: "Search your library",
-    mostPlayed: "Most played",
-    exploreByCategory: "Explore by category",
-    favorites: "Favorites",
-    toFinish: "To finish",
-    coop: "Co-op",
-    filters: ["Genres", "Tags", "Developers", "Publishers", "Year"],
-    sort: "Most popular",
-    sortAchievements: "Most achievements",
     metrics: { games: "Games", achievements: "Achievements", playtime: "Total playtime" },
     of: "of",
     played: "played",
+    lastPlayed: "last played on",
+    bigPlaytime: "1,848.1h",
   },
 } satisfies Record<Language, unknown>;
 
 type UiStrings = (typeof UI)["pt"];
 
-// Números de exibição: arte, títulos, estúdios, tags e notas vêm do catálogo
-// real; conquistas e horas são de uma biblioteca fictícia — não há usuário aqui.
-const LIBRARY_STATS = [
-  { unlocked: 45, total: 63, hours: "128h" },
-  { unlocked: 12, total: 40, hours: "32h" },
-  { unlocked: 63, total: 63, hours: "94h" },
-  { unlocked: 8, total: 51, hours: "11h" },
-  { unlocked: 27, total: 27, hours: "212h" },
-  { unlocked: 19, total: 44, hours: "56h" },
-  { unlocked: 4, total: 33, hours: "6h" },
-  { unlocked: 38, total: 38, hours: "141h" },
+// Números de exibição de uma biblioteca fictícia — não há usuário logado numa
+// landing. Horas e datas têm formato por idioma, como o app formata.
+const PROFILE_STATS = [
+  {
+    unlocked: 33,
+    total: 37,
+    hoursPt: "71,4h",
+    hoursEn: "71.4h",
+    lastPt: "25 de ago",
+    lastEn: "Aug 25",
+    more: 28,
+    perfect: false,
+  },
+  {
+    unlocked: 30,
+    total: 51,
+    hoursPt: "100,3h",
+    hoursEn: "100.3h",
+    lastPt: "19 de jul",
+    lastEn: "Jul 19",
+    more: 25,
+    perfect: false,
+  },
+  {
+    unlocked: 45,
+    total: 45,
+    hoursPt: "212h",
+    hoursEn: "212h",
+    lastPt: "12 de ago",
+    lastEn: "Aug 12",
+    more: 12,
+    perfect: true,
+  },
 ];
 
-const ACTIVITY_STATS = [
-  { unlocked: 63, total: 63, hours: "94h" },
-  { unlocked: 45, total: 63, hours: "128h" },
-  { unlocked: 19, total: 44, hours: "56h" },
-  { unlocked: 8, total: 51, hours: "11h" },
-];
+// Ordem de entrada de cada fragmento na cascata do painel.
+function frag(index: number): CSSProperties {
+  return { "--frag-i": index } as CSSProperties;
+}
 
-function Art({ game, className = "" }: { game: SiteGame; className?: string }) {
+function Art({ game, portrait = false }: { game: SiteGame; portrait?: boolean }) {
   return (
     <img
-      className={`lm__art ${className}`.trim()}
-      src={game.header}
+      className="lm__art"
+      src={portrait ? game.portrait : game.header}
       alt=""
       loading="lazy"
       decoding="async"
-      width={460}
-      height={215}
+      width={portrait ? 300 : 460}
+      height={portrait ? 450 : 215}
     />
   );
 }
@@ -139,100 +105,14 @@ function Rating({ value }: { value: string }) {
   );
 }
 
-function Titlebar({ t }: { t: UiStrings }) {
-  return (
-    <div className="lm__titlebar">
-      <div className="lm__nav-controls">
-        <span className="lm__icon-button lm__icon-button--disabled">
-          <ChevronLeft size={17} strokeWidth={2} />
-        </span>
-        <span className="lm__icon-button">
-          <ChevronRight size={17} strokeWidth={2} />
-        </span>
-      </div>
-
-      <div className="lm__titlebar-actions">
-        <span className="lm__icon-button">
-          <MessageSquare size={18} strokeWidth={1.5} />
-        </span>
-        <span className="lm__icon-button">
-          <img src="/discord.svg" alt="" width={18} height={18} />
-        </span>
-        <span className="lm__premium">
-          <Crown size={16} strokeWidth={1.5} />
-          {t.subscription}
-          <ChevronLeft size={13} strokeWidth={2} className="lm__premium-chevron" />
-        </span>
-        <span className="lm__icon-button">
-          <Bell size={18} strokeWidth={1.5} />
-        </span>
-        <span className="lm__search">
-          <Search size={16} strokeWidth={1.5} />
-          <span className="lm__search-placeholder">{t.search}</span>
-        </span>
-        <span className="lm__window-controls">
-          <span className="lm__window-button">
-            <Minus size={15} strokeWidth={1.5} />
-          </span>
-          <span className="lm__window-button">
-            <Maximize2 size={14} strokeWidth={1.5} />
-          </span>
-          <span className="lm__window-button">
-            <X size={15} strokeWidth={1.5} />
-          </span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function Sidebar({ variant, t }: { variant: MockupVariant; t: UiStrings }) {
-  const activeNav = variant === "achievements" ? "library" : variant;
-  const items = [
-    { icon: House, label: t.home, key: "home" },
-    { icon: LayoutGrid, label: t.catalogue, key: "catalogue" },
-    { icon: Layers, label: t.library, key: "library" },
-    { icon: Download, label: t.downloads, key: null },
-    { icon: Settings, label: t.settings, key: null },
-  ];
-
-  return (
-    <nav className="lm__sidebar">
-      <div className="lm__account">
-        <span className="lm__avatar" />
-        <span className="lm__account-name">Haya</span>
-        <span className="lm__account-badge">13</span>
-      </div>
-
-      <ul className="lm__menu">
-        {items.map((item) => (
-          <li key={item.label}>
-            <span className="lm__menu-item" data-active={item.key === activeNav || undefined}>
-              <item.icon size={18} strokeWidth={1.5} />
-              <span className="lm__menu-label">{item.label}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="lm__section-header">
-        <ChevronRight size={14} strokeWidth={2} />
-        <small className="lm__section-title">{t.collections}</small>
-        <span className="lm__section-add">
-          <Plus size={16} strokeWidth={1.5} />
-        </span>
-      </div>
-    </nav>
-  );
-}
-
-function HomeView({ t }: { t: UiStrings }) {
+// Início: banner do jogo em destaque com a prateleira de mais jogados
+// flutuando por cima da borda inferior.
+function HomePanels() {
   const shelf = games.slice(1, 4);
-  const explore = games.slice(4, 7);
 
   return (
-    <div className="lm__page">
-      <div className="lm__banner">
+    <>
+      <figure className="lm__frag lm__banner" style={frag(0)}>
         <img
           className="lm__banner-art"
           src={bannerGame.hero ?? bannerGame.header}
@@ -240,277 +120,215 @@ function HomeView({ t }: { t: UiStrings }) {
           loading="lazy"
           decoding="async"
         />
-        <span className="lm__banner-scrim" />
-        <div className="lm__banner-info">
+        <span className="lm__banner-scrim" aria-hidden="true" />
+        <figcaption className="lm__banner-info">
           <strong className="lm__banner-title">{bannerGame.title}</strong>
           {bannerGame.description ? (
             <span className="lm__banner-description">{bannerGame.description}</span>
           ) : null}
-        </div>
-        <span className="lm__banner-dots">
+        </figcaption>
+        <span className="lm__banner-dots" aria-hidden="true">
           <span className="lm__banner-dot lm__banner-dot--active" />
           <span className="lm__banner-dot" />
           <span className="lm__banner-dot" />
           <span className="lm__banner-dot" />
-          <span className="lm__banner-dot" />
         </span>
-      </div>
+      </figure>
 
-      <section className="lm__shelf">
-        <h3 className="lm__shelf-title">{t.mostPlayed}</h3>
-        <div className="lm__shelf-rail">
-          <div className="lm__shelf-track">
-            {shelf.map((game) => (
-              <article className="lm__shelf-card" key={game.appId}>
-                <span className="lm__shelf-cover">
-                  <Art game={game} />
-                </span>
-                <span className="lm__shelf-body">
-                  <span className="lm__shelf-name">{game.title}</span>
-                  <Rating value={game.rating} />
-                </span>
-              </article>
-            ))}
-          </div>
-          <span className="lm__rail-arrow">
-            <ChevronRight size={18} strokeWidth={2} />
-          </span>
-        </div>
-      </section>
-
-      <section className="lm__shelf">
-        <h3 className="lm__shelf-title">{t.exploreByCategory}</h3>
-        <div className="lm__shelf-track">
-          {explore.map((game) => (
-            <article className="lm__shelf-card" key={game.appId}>
-              <span className="lm__shelf-cover">
-                <Art game={game} />
-              </span>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function LibraryView({ t }: { t: UiStrings }) {
-  const shelf = games.slice(0, 12);
-
-  return (
-    <div className="lm__page lm__page--padded">
-      <div className="lm__toolbar">
-        <span className="lm__field">
-          <Search size={14} strokeWidth={1.5} />
-          <span className="lm__search-placeholder">{t.searchLibrary}</span>
-        </span>
-        <span className="lm__chips">
-          <span className="lm__chip lm__chip--active">
-            <Heart size={13} strokeWidth={2} />
-            {t.favorites}
-          </span>
-          <span className="lm__chip">
-            <Folder size={13} strokeWidth={2} />
-            {t.toFinish}
-          </span>
-          <span className="lm__chip">
-            <Folder size={13} strokeWidth={2} />
-            {t.coop}
-          </span>
-        </span>
-      </div>
-
-      <div className="lm__grid">
-        {shelf.map((game, index) => {
-          const stats = LIBRARY_STATS[index % LIBRARY_STATS.length];
-          return (
-            <article className="lm__card" key={game.appId}>
-              <img
-                className="lm__art"
-                src={game.portrait}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                width={300}
-                height={450}
-              />
-              <span className="lm__card-badges">
-                <span className="lm__card-metric">
-                  <Trophy size={13} strokeWidth={2} />
-                  {stats.unlocked} / {stats.total}
-                </span>
-                <span className="lm__card-metric">
-                  <Clock size={13} strokeWidth={2} />
-                  {stats.hours}
-                </span>
-              </span>
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function CatalogueView({ t }: { t: UiStrings }) {
-  const list = games.slice(0, 8);
-
-  return (
-    <div className="lm__page lm__page--padded">
-      <div className="lm__toolbar">
-        <span className="lm__chips">
-          {t.filters.map((filter) => (
-            <span className="lm__filter" key={filter}>
-              {filter}
-              <ChevronDown size={13} strokeWidth={2} />
+      <div className="lm__frag lm__strip" style={frag(1)}>
+        {shelf.map((game) => (
+          <span className="lm__strip-card" key={game.appId}>
+            <span className="lm__strip-cover">
+              <Art game={game} />
             </span>
-          ))}
-        </span>
-        <span className="lm__sort">
-          {t.sort}
-          <ChevronDown size={14} strokeWidth={2} />
-        </span>
-      </div>
-
-      <div className="lm__catalogue">
-        <div className="lm__list">
-          {list.map((game) => (
-            <article className="lm__row" key={game.appId}>
-              <span className="lm__row-cover">
-                <Art game={game} />
-              </span>
-              <span className="lm__row-content">
-                <strong className="lm__row-title">{game.title}</strong>
-                <span className="lm__chips">
-                  {game.tags.map((tag) => (
-                    <span className="lm__chip lm__chip--sm" key={tag}>
-                      {tag}
-                    </span>
-                  ))}
-                </span>
-              </span>
-            </article>
-          ))}
-        </div>
-
-        <aside className="lm__preview">
-          <span className="lm__preview-head">
-            <strong className="lm__preview-title">{previewGame.title}</strong>
-            <Rating value={previewGame.rating} />
+            <span className="lm__strip-body">
+              <span className="lm__strip-name">{game.title}</span>
+              <Rating value={game.rating} />
+            </span>
           </span>
-          <span className="lm__preview-developer">{previewGame.developer}</span>
-          {(previewGame.screenshots ?? []).map((shot) => (
-            <img
-              className="lm__preview-shot"
-              key={shot}
-              src={shot}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              width={640}
-              height={360}
-            />
-          ))}
-        </aside>
+        ))}
       </div>
-    </div>
+    </>
   );
 }
 
-function AchievementsView({ t }: { t: UiStrings }) {
-  const list = games.slice(0, 6);
+// Biblioteca: busca flutuando sobre a grade de retratos.
+function LibraryPanels({ t }: { t: UiStrings }) {
+  const shelf = games.slice(0, 6);
 
   return (
-    <div className="lm__page lm__page--padded">
-      <div className="lm__metrics">
+    <>
+      <span className="lm__frag lm__field" style={frag(0)}>
+        <Search size={14} strokeWidth={1.5} />
+        <span className="lm__placeholder">{t.searchLibrary}</span>
+      </span>
+      <div className="lm__frag lm__covers" style={frag(1)}>
+        {shelf.map((game) => (
+          <span className="lm__cover" key={game.appId}>
+            <Art game={game} portrait />
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// Catálogo: lista de linhas com a coluna de prévia flutuando por cima.
+function CataloguePanels() {
+  const list = games.slice(1, 4);
+  const previewShot = previewGame.screenshots?.[0];
+
+  return (
+    <>
+      <div className="lm__frag lm__rows" style={frag(0)}>
+        {list.map((game) => (
+          <span className="lm__row" key={game.appId}>
+            <span className="lm__row-cover">
+              <Art game={game} />
+            </span>
+            <span className="lm__row-body">
+              <strong className="lm__row-title">{game.title}</strong>
+              <span className="lm__chips">
+                {game.tags.slice(0, 3).map((tag) => (
+                  <span className="lm__chip" key={tag}>
+                    {tag}
+                  </span>
+                ))}
+              </span>
+            </span>
+          </span>
+        ))}
+      </div>
+
+      <figure className="lm__frag lm__preview" style={frag(1)}>
+        <figcaption className="lm__preview-head">
+          <strong className="lm__preview-title">{previewGame.title}</strong>
+          <Rating value={previewGame.rating} />
+        </figcaption>
+        <span className="lm__preview-developer">{previewGame.developer}</span>
+        {previewShot ? (
+          <img
+            className="lm__preview-shot"
+            src={previewShot}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            width={640}
+            height={360}
+          />
+        ) : null}
+      </figure>
+    </>
+  );
+}
+
+// Perfil: métricas da Steam, linhas de progresso e o toast de conquista
+// 100% flutuando por cima — o momento que a seção conta.
+function ProfilePanels({ t, language }: { t: UiStrings; language: Language }) {
+  const rows = games.slice(0, 2);
+  const toast = games[2];
+  const toastStats = PROFILE_STATS[2];
+  const toastHours = language === "pt" ? toastStats.hoursPt : toastStats.hoursEn;
+
+  return (
+    <>
+      <div className="lm__frag lm__metricstrip" style={frag(0)}>
         <span className="lm__metric">
-          <strong>142</strong>
+          <strong>135</strong>
           <span>{t.metrics.games}</span>
         </span>
         <span className="lm__metric">
-          <strong>3.842</strong>
+          <strong>456</strong>
           <span>{t.metrics.achievements}</span>
         </span>
         <span className="lm__metric">
-          <strong>1.284h</strong>
+          <strong>{t.bigPlaytime}</strong>
           <span>{t.metrics.playtime}</span>
-        </span>
-        <span className="lm__sort lm__sort--end">
-          {t.sortAchievements}
-          <ChevronDown size={14} strokeWidth={2} />
         </span>
       </div>
 
-      <div className="lm__activity">
-        {list.map((game, index) => {
-          const stats = ACTIVITY_STATS[index % ACTIVITY_STATS.length];
+      <div className="lm__frag lm__rows" style={frag(1)}>
+        {rows.map((game, index) => {
+          const stats = PROFILE_STATS[index];
           const percent = Math.round((stats.unlocked / stats.total) * 100);
-          const perfect = stats.unlocked >= stats.total;
+          const hours = language === "pt" ? stats.hoursPt : stats.hoursEn;
+          const last = language === "pt" ? stats.lastPt : stats.lastEn;
           return (
-            <article className="lm__activity-card" key={game.appId}>
-              <span className="lm__activity-cover">
+            <span className="lm__row lm__row--activity" key={game.appId}>
+              <span className="lm__row-cover">
                 <Art game={game} />
               </span>
-              <span className="lm__activity-main">
-                <strong className="lm__activity-title">{game.title}</strong>
-                <span className="lm__activity-hours">
-                  {stats.hours} {t.played}
+              <span className="lm__row-body">
+                <span className="lm__row-main">
+                  <strong className="lm__row-title">{game.title}</strong>
+                  <span className="lm__row-when">
+                    <strong className="lm__row-hours">
+                      {hours} {t.played}
+                    </strong>
+                    <small className="lm__row-last">
+                      {t.lastPlayed} {last}
+                    </small>
+                  </span>
+                </span>
+                <span className="lm__row-progress">
+                  <Trophy
+                    size={15}
+                    strokeWidth={2}
+                    className={stats.perfect ? "lm__cup lm__cup--perfect" : "lm__cup"}
+                  />
+                  <span className="lm__row-count">
+                    {stats.unlocked} {t.of} {stats.total}
+                  </span>
+                  <span className="lm__track">
+                    <span className="lm__track-fill" style={{ width: `${percent}%` }} />
+                  </span>
+                  <span className="lm__row-more">+{stats.more}</span>
                 </span>
               </span>
-              <span className="lm__activity-progress">
-                <Trophy
-                  size={16}
-                  strokeWidth={2}
-                  className={perfect ? "lm__cup lm__cup--perfect" : "lm__cup"}
-                />
-                <span className="lm__activity-count">
-                  {stats.unlocked} {t.of} {stats.total}
-                </span>
-                <span className="lm__track">
-                  <span className="lm__track-fill" style={{ width: `${percent}%` }} />
-                </span>
-              </span>
-            </article>
+            </span>
           );
         })}
       </div>
-    </div>
+
+      <figure className="lm__frag lm__toast" style={frag(2)}>
+        <span className="lm__toast-icon" aria-hidden="true">
+          <Trophy size={18} strokeWidth={2} />
+        </span>
+        <figcaption className="lm__toast-body">
+          <strong className="lm__toast-title">{toast.title}</strong>
+          <span className="lm__toast-line">
+            {toastStats.unlocked} {t.of} {toastStats.total} · {toastHours} {t.played}
+          </span>
+        </figcaption>
+      </figure>
+    </>
   );
 }
 
-const VIEWS: Record<MockupVariant, (props: { t: UiStrings }) => JSX.Element> = {
-  home: HomeView,
-  library: LibraryView,
-  catalogue: CatalogueView,
-  achievements: AchievementsView,
+const PANELS: Record<
+  MockupVariant,
+  (props: { t: UiStrings; language: Language }) => JSX.Element
+> = {
+  home: HomePanels,
+  library: LibraryPanels,
+  catalogue: CataloguePanels,
+  achievements: ProfilePanels,
 };
 
 /**
- * A janela do GhostBox reconstruída em DOM com a geometria real do app
- * (titlebar de 52px, sidebar de 280px, grade de 200px, capa 460×215, retrato
- * 600×900), desenhada em pixels de verdade e reduzida em bloco. Arte, títulos,
- * estúdios, tags e notas vêm do catálogo real — ver `scripts/sync-games.mjs`.
+ * Recortes da interface do GhostBox flutuando sobre a página: cada variante
+ * mostra só os elementos essenciais da aba citada pela seção — banner e
+ * prateleira (Início), busca e grade (Biblioteca), linhas e prévia (Catálogo),
+ * métricas, progresso e toast de conquista (Perfil). Arte, títulos, estúdios,
+ * tags e notas vêm do catálogo real — ver `scripts/sync-games.mjs`.
  */
 export function LauncherMockup({ variant, label, language }: LauncherMockupProps) {
-  const View = VIEWS[variant];
+  const Panels = PANELS[variant];
   const t = UI[language];
-  const scalerRef = useScaleToFit<HTMLDivElement>(WINDOW_WIDTH, WINDOW_HEIGHT);
 
   return (
-    <figure className="lm" role="img" aria-label={label} data-variant={variant}>
-      <div className="lm__scaler" ref={scalerRef}>
-        <div className="lm__window" aria-hidden="true">
-          <div className="lm__body">
-            <Sidebar variant={variant} t={t} />
-            <div className="lm__stage">
-              <Titlebar t={t} />
-              <div className="lm__content">
-                <View t={t} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </figure>
+    <div className={`lm lm--${variant}`} role="img" aria-label={label}>
+      <Panels t={t} language={language} />
+    </div>
   );
 }

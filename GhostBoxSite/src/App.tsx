@@ -45,8 +45,8 @@ export default function App() {
           <PolicyPage policy={t.policies[slug]} />
         ) : (
           <>
-            <HeroSection t={t} />
-            <ShowcaseSection t={t} />
+            <HeroSection t={t} language={language} />
+            <ShowcaseSection t={t} language={language} />
             <FeaturesSection t={t} />
             <SyncSection t={t} />
             <PremiumSection t={t} language={language} />

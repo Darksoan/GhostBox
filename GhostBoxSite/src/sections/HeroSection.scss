@@ -4,15 +4,6 @@
   overflow: clip;
 }
 
-.hero__ambient {
-  position: absolute;
-  inset: -20% 0 auto;
-  height: 120%;
-  background: var(--site-ambient);
-  pointer-events: none;
-  z-index: -1;
-}
-
 .hero__inner {
   display: grid;
   gap: clamp(32px, 5vw, 64px);
@@ -59,41 +50,11 @@
     align-items: center;
   }
 
-  // Sangra para fora da coluna: a janela some na borda em vez de terminar num
-  // corte reto, e o texto continua dentro do container. A largura extra também
-  // é o que deixa a interface em escala legível — a janela tem 1280px de
-  // projeto, então quanto mais estreita a caixa, menor fica cada rótulo.
+  // Sangra só até a margem livre do container: a janela é desenhada em DOM, então
+  // fica nítida em qualquer escala, e o corte para no fundo sem comer busca e
+  // controles de janela.
   .hero__mockup {
-    // Margem livre do container + 80px de corte deliberado na borda. Passar
-    // disso começaria a comer a busca e os controles de janela.
-    --hero-bleed: clamp(
-      80px,
-      calc(max(0px, (100vw - var(--site-max-width)) / 2) + 80px),
-      340px
-    );
-    width: calc(100% + var(--hero-bleed));
-    margin-inline-end: calc(var(--site-gutter) * -2);
-  }
-
-  // Com captura real, sangra só até a margem livre do container: o corte para
-  // no fundo, sem comer busca e controles de janela.
-  .hero__mockup:has(.shot) {
     width: calc(100% + max(0px, (100vw - var(--site-max-width)) / 2));
     margin-inline-end: calc(var(--site-gutter) * -1);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .hero__ambient {
-    animation: hero-breathe 8s var(--site-ease-sine) infinite alternate;
-  }
-}
-
-@keyframes hero-breathe {
-  from {
-    opacity: 0.75;
-  }
-  to {
-    opacity: 1;
   }
 }

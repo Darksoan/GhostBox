@@ -4233,19 +4233,24 @@ p {
 
   &:not(.home-calendar-card--empty):hover .home-calendar-card__cover,
   &:not(.home-calendar-card--empty):focus-visible .home-calendar-card__cover {
-    --home-calendar-cover-scale: 0.5125;
+    /* Zoom até a caixa exata do card: nunca passa de 100%, então o hover
+       também não vaza para o padding do dia. */
+    --home-calendar-cover-scale: 0.5;
   }
 }
 
 .home-calendar-card__cover {
   /*
    * The whole cover box zooms on hover, but it is prerendered at 200% and only
-   * ever scaled DOWN: rest = scale(0.5) (exactly the card box), hover = 0.5125
-   * (102.5%). Never upscales the rasterized paint, so no blur; it is a pure
-   * transform, so no per-frame relayout, so no jitter.
-   * Lengths that must survive the 0.5 scale are doubled below.
+   * ever scaled DOWN: rest = scale(0.49) (98% of the card box), hover = 0.5
+   * (exactly the card box). The cover never exceeds the card box, so fractional
+   * grid widths can't make its raster leak 1px past the card/day edge — at
+   * exactly 100% the composited rounding sometimes landed outside; at ≤100%
+   * it can only land inside. Never upscales the rasterized paint, so no blur;
+   * it is a pure transform, so no per-frame relayout, so no jitter.
+   * Lengths that must survive the scale are doubled below.
    */
-  --home-calendar-cover-scale: 0.5;
+  --home-calendar-cover-scale: 0.49;
   position: absolute;
   inset: auto;
   top: 50%;
@@ -4299,24 +4304,12 @@ p {
     linear-gradient(135deg, var(--surface-canvas), var(--surface-subtle));
 }
 
-/* Maximizada: capas encostavam na borda do dia (padding 10px + card 100% →
-   cover 100% colava no container). Redução sutil do respiro interno do dia e
-   da escala da capa deixa 1–2px extra por lado sem encolher demais. */
+/* Maximizada: o dia ganha um pouco mais de respiro interno. A capa já não
+   encosta na borda do card em nenhum modo — o descanso dela é 98% da caixa
+   (ver `.home-calendar-card__cover`), então não precisa mais do recuo extra
+   que antes era aplicado só aqui. */
 .home-page--maximized .home-calendar-day {
   padding: var(--space-6);
-}
-
-.home-page--maximized .home-calendar-card__cover {
-  --home-calendar-cover-scale: 0.48;
-}
-
-.home-page--maximized
-  .home-calendar-card:not(.home-calendar-card--empty):hover
-  .home-calendar-card__cover,
-.home-page--maximized
-  .home-calendar-card:not(.home-calendar-card--empty):focus-visible
-  .home-calendar-card__cover {
-  --home-calendar-cover-scale: 0.492;
 }
 
 @media (max-width: 720px) {
@@ -4344,6 +4337,21 @@ p {
   gap: var(--space-6);
   width: 100%;
   min-width: 0;
+}
+
+/* Maximizada: wishlist em duas colunas. Empilhada, cada card ocupava a largura
+   inteira e a citação da review passava de 200 caracteres por linha — medida de
+   leitura ruim justamente onde sobra espaço. Duas colunas resolvem as duas
+   coisas: a linha volta pra ~70 caracteres e a seção ocupa a largura. Guiado
+   pelo estado da janela (`.home-page--maximized`), não por largura de viewport:
+   só maximizar garante espaço real para a grade. */
+/* Sem `align-items: start`: os dois cards da linha são superfícies próprias e
+   alturas desencontradas leem como erro. Esticando, a sobra cai entre citação
+   e autor — o autor já ancora no fim por `margin-top: auto`. */
+.home-page--maximized .home-wishlist__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--home-category-gap);
 }
 
 .home-wishlist-card {
@@ -6341,6 +6349,42 @@ p {
     }
   }
 
+  /* Visualização (lista/grade) usa a mesma geometria da ordenação, mas sem
+     largura mínima: o gatilho fecha na largura do maior rótulo do menu. Sem o
+     override de padding, o gatilho cai no padding-left do dropdown base das
+     Settings e fica um vão vazio à esquerda do rótulo. O chevron vai para o
+     fluxo do flex com `gap`: com o gatilho estreito, o `right` absoluto do
+     dropdown base encostaria o ícone no rótulo. */
+  &__view {
+    min-width: 0;
+
+    .settings-dropdown__trigger {
+      gap: var(--space-3);
+      min-height: 36px;
+      padding: 0 var(--space-5);
+      border-radius: var(--radius-md);
+
+      span {
+        padding-right: 0;
+        padding-left: 0;
+        text-align: left;
+      }
+
+      svg {
+        position: static;
+      }
+    }
+
+    .settings-dropdown__menu {
+      border-radius: var(--radius-md);
+    }
+
+    .settings-dropdown__option {
+      min-height: 32px;
+      border-radius: var(--radius-md);
+    }
+  }
+
   /* Massa do gatilho de ordenação enquanto a página carrega: mesma geometria de
      `&__sort` (min-width) + `.settings-dropdown__trigger` (altura, raio). */
   &__sort-placeholder {
@@ -6977,6 +7021,28 @@ p {
     background: var(--skeleton-fill);
   }
 
+  /* Shot pronta é um botão: o clique abre o modal do jogo em preview. Reset de
+     botão para herdar a geometria do `__shot` e anel de foco dentro do recorte
+     (mesmo padrão do `home-top-rated-card__hit`). */
+  &__shot--link {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: var(--surface-media-letterbox);
+    cursor: pointer;
+    transition: filter var(--motion-fast) var(--ease);
+
+    &:hover {
+      filter: brightness(1.08);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--icon-default);
+      outline-offset: -2px;
+    }
+  }
+
   &__shot-image {
     display: block;
     width: 100%;
@@ -7348,6 +7414,53 @@ input[type="search"]::-ms-reveal {
 
 .catalogue-list__remove-spinner {
   animation: spin 0.8s linear infinite;
+}
+
+/* Grade de cards estilo "Mais jogados" da Home: os filhos usam as classes do
+   `.home-top-rated-card` (arte larga, nome + nota, desenvolvedora), então a
+   grade só define o trilhamento e a ação flutuante de "adicionado". O
+   `flex: 0 0 ...` herdado do card da Home não afeta filhos de grid. */
+.catalogue-list--cards {
+  display: grid;
+  /* Trilha fixa — ver comentário da `.game-grid`. */
+  grid-template-columns: repeat(auto-fill, minmax(0, 280px));
+  justify-content: center;
+  align-items: stretch;
+  gap: var(--space-4);
+
+  .catalogue-grid-card {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    border-radius: var(--radius-lg);
+    background: var(--surface-secondary);
+    transition: background var(--motion-base) var(--ease);
+
+    &:hover {
+      /* Mesmo degrau de hover do card da Home. */
+      background: var(--surface-option-hover);
+    }
+  }
+
+  /* Ação de "adicionado" flutua sobre a capa, no canto superior direito — o
+     alvo de clique do card (`home-top-rated-card__hit`, z-index 1) fica por
+     baixo dela. */
+  .catalogue-grid-card__action {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, black 45%, transparent);
+    color: var(--white);
+  }
 }
 
 /* Grade de capsules (header) em 3 colunas: o item vira um card vertical com a
@@ -9601,9 +9714,9 @@ border: 0;
     --pb-background-size-current: var(--pb-background-size) !important;
   }
 
-  /* Pins the personal-calendar cover box at its rest (100%) size. */
+  /* Pins the personal-calendar cover box at its rest (98%) size. */
   .home-calendar-card__cover {
-    --home-calendar-cover-scale: 0.5 !important;
+    --home-calendar-cover-scale: 0.49 !important;
   }
 
  .game-card__cover--loaded,
@@ -9730,22 +9843,9 @@ html.no-backdrop-blur {
     column-gap: var(--home-calendar-gap);
   }
 
-  .home-calendar-day {
-    padding-inline: 0;
-  }
-
-  /* Wishlist em duas colunas na janela larga. Empilhada, cada card ocupava a
-     largura inteira e a citação da review passava de 200 caracteres por linha —
-     medida de leitura ruim justamente onde sobra espaço. Duas colunas resolvem
-     as duas coisas: a linha volta pra ~70 caracteres e a seção ocupa a largura. */
-  /* Sem `align-items: start`: os dois cards da linha são superfícies próprias e
-     alturas desencontradas leem como erro. Esticando, a sobra cai entre citação
-     e autor — o autor já ancora no fim por `margin-top: auto`. */
-  .home-wishlist__list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: var(--home-category-gap);
-  }
+  /* O painel do dia mantém o padding-inline padrão (var(--space-5)) também na
+     janela larga: zerá-lo deixava a capa encostada na borda visível do painel
+     (a capa descansa a 98% da caixa do card, ver `.home-calendar-card__cover`). */
 
   .catalogue-page__results {
     max-width: 100%;
@@ -12170,6 +12270,36 @@ html.no-backdrop-blur {
     &:hover:not(:disabled),
     &:focus-visible {
       background: var(--c-4);
+    }
+  }
+
+  /* Download em andamento: o botão anuncia "Baixando" e, no hover/foco, troca
+     para "Cancelar" com a cor de destrutivo — o clique interrompe o download e
+     remove os arquivos parciais. As duas faces existem no DOM para a troca não
+     depender de JS; o nome acessível do botão já é "Cancelar". */
+  &__download-face {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  &__download-button--live {
+    .modal__download-face--cancel {
+      display: none;
+    }
+
+    &:hover:not(:disabled),
+    &:focus-visible {
+      background: color-mix(in srgb, var(--red) 60%, transparent);
+      color: var(--text-primary);
+
+      .modal__download-face {
+        display: none;
+      }
+
+      .modal__download-face--cancel {
+        display: inline-flex;
+      }
     }
   }
 

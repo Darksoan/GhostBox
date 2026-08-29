@@ -38,17 +38,13 @@ voltar a ser necessário, a function precisa ser adicionada em
   no conteúdo — `tests/site-content.test.ts` falha se aparecer.
 - **Conteúdo**: `src/content/pt.ts` e `en.ts`, com forma idêntica garantida por
   teste. Toda string da interface vive ali.
-- **Capturas de tela**: `src/components/AppShot.tsx` mostra a captura real do
-  launcher quando ela existe em `public/shots/`. Para adicionar ou trocar, salve
-  os PNGs em `GhostBoxSite/screenshots/` (`home.png`, `library.png`,
-  `catalogue.png`, `achievements.png`) e rode `npm run site:shots` — o script
-  gera webp em 1440px e 720px e regrava `src/content/shots.generated.ts`.
-- **Mockups (fallback)**: sem captura para uma variante, a janela é
-  reconstruída em DOM
-  (`src/components/LauncherMockup.tsx`) com a geometria real do app — titlebar
-  de 52px, sidebar de 280px, grade de 200px, capa 460×215, retrato 600×900. Tudo
-  é desenhado em pixels de verdade e reduzido em bloco por `scale`
-  (`src/hooks/useScaleToFit.ts`), então a proporção nunca distorce.
+- **Interface**: os recortes da janela do launcher são sempre desenhados em DOM
+  (`src/components/LauncherMockup.tsx`) — fragmentos flutuando sobre a página,
+  sem moldura de janela: banner e prateleira (Início), busca e grade
+  (Biblioteca), linhas e prévia (Catálogo), métricas, progresso e toast de
+  conquista (Perfil). Cada fragmento entra em cascata (`lm-rise`) e a elevação
+  vem só de sombra, nunca de borda. Arte, títulos, estúdios, tags e notas vêm
+  do catálogo real — ver `scripts/sync-games.mjs`.
 - **Arte e dados dos jogos**: vêm do catálogo real (worker
   `piratebox-catalogue`) e da descrição curta do `piratebox-steam-details`.
   Títulos, estúdios, gêneros, tags, capturas e a nota (proporção de reviews
@@ -74,6 +70,14 @@ não existe.
 Personalidade Premium: sem overshoot, uma curva (`--site-ease`) e três durações
 (`--site-motion-quick/base/slow`). Todo movimento vive dentro de
 `@media (prefers-reduced-motion: no-preference)`; sob redução de movimento o
-conteúdo nasce visível e parallax, respiro do gradiente e contagem de preço não
-rodam. Os estados escondidos de reveal também dependem de `html.js`, então a
-página continua legível sem JavaScript.
+conteúdo nasce visível e parallax e contagem de preço não rodam. Os estados
+escondidos de reveal também dependem de `html.js`, então a página continua
+legível sem JavaScript.
+
+## Regras visuais herdadas do launcher
+
+Nenhum gradiente decorativo e nenhuma borda ornamental: separação entre
+superfícies vem de salto de degrau na rampa (`--surface-canvas` → `--surface-panel`
+→ `--surface-raised` → `--surface-strong`) e de espaçamento, como manda o
+`design.md` do app. Sombras (`--shadow-*`) ficam só em mídia e janela flutuante;
+bordas existem apenas em anéis de foco e indicadores de status.

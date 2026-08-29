@@ -492,6 +492,19 @@ function HomeTopRatedCard({
   // com três estúdios viraria reticências logo no primeiro nome.
   const developerName = game.developers?.find((name) => name.trim()) ?? "";
 
+  // O shelf nasce com o título provisório "Steam App <appid>" e o nome real só
+  // chega no enriquecimento assíncrono. Enquanto isso, o card vira skeleton em
+  // vez de exibir o placeholder — a resolução chega card a card, então cada um
+  // sai do skeleton no momento em que os dados dele chegam.
+  if (isSteamTitlePlaceholder(game.title, game.appId)) {
+    return (
+      <div className="home-top-rated-card">
+        <span className="home-top-rated-card__art skeleton" />
+        <HomeTopRatedCardBodySkeleton />
+      </div>
+    );
+  }
+
   const handleClick = () => onOpenGame(game);
 
   return (
@@ -1706,22 +1719,27 @@ export function HomePage({
 
       try {
         const currentStoredCalendar = readStoredPersonalCalendar();
+
+        // Pool e wishlist em paralelo: a wishlist só alimenta as exclusões do
+        // planejamento, e o pool tem folga grande (120 candidatos para escolher
+        // 8) para absorver os jogos que acabarem excluídos. Serializar as duas
+        // viagens de rede atrasava a seção inteira sem ganho de precisão.
+        const wishlistPromise = steamProfile?.steamId
+          ? loadSteamWishlist(steamProfile.steamId).catch(() => [])
+          : null;
+
+        const pool = await loadHomePersonalCalendarPool(
+          new Set(libraryGameAppIds)
+        );
+        if (cancelled) return;
+
         const excludedGameIds = new Set(libraryGameAppIds);
-
-        if (steamProfile?.steamId) {
-          const wishlistItems = await loadSteamWishlist(steamProfile.steamId).catch(
-            () => []
-          );
-          wishlistItems.forEach((item) => {
-            const appId = item.appId.trim();
-            if (appId) excludedGameIds.add(appId);
-          });
-        }
-
+        const wishlistItems = wishlistPromise ? await wishlistPromise : [];
         if (cancelled) return;
-
-        const pool = await loadHomePersonalCalendarPool(excludedGameIds);
-        if (cancelled) return;
+        wishlistItems.forEach((item) => {
+          const appId = item.appId.trim();
+          if (appId) excludedGameIds.add(appId);
+        });
 
         // Each date keeps the games it was already assigned; only empty or
         // no-longer-available slots are re-picked, so a day is never swapped
@@ -1998,7 +2016,9 @@ export function HomePage({
   );
   const enrichedPersonalCalendarGames = useEnrichedGameCards(
     personalCalendarGames,
-    homePersonalCalendarEnrichmentLimit
+    homePersonalCalendarEnrichmentLimit,
+    true,
+    false
   );
   const homeContextMenuItems = useGameContextMenu({
     game: homeContextMenu?.game ?? null,

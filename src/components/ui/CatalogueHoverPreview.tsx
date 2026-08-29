@@ -13,12 +13,15 @@ import {
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
+  /** Clique em uma shot pronta abre o modal do jogo em preview. */
+  onOpenGame?: (game: GhostBoxGame) => void;
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
 }
 
 export function CatalogueHoverPreview({
   game,
+  onOpenGame,
   onPointerEnter,
   onPointerLeave,
 }: CatalogueHoverPreviewProps) {
@@ -226,7 +229,17 @@ export function CatalogueHoverPreview({
         {isShotsReady ? (
           displayShots.length > 0 ? (
             displayShots.map((source, index) => (
-              <div key={source} className="catalogue-hover-preview__shot">
+              <button
+                key={source}
+                type="button"
+                className="catalogue-hover-preview__shot catalogue-hover-preview__shot--link"
+                aria-label={
+                  isEnglish
+                    ? `Open ${displayedGame.title}`
+                    : `Abrir ${displayedGame.title}`
+                }
+                onClick={() => onOpenGame?.(displayedGame)}
+              >
                 <img
                   className="catalogue-hover-preview__shot-image"
                   src={source}
@@ -240,7 +253,7 @@ export function CatalogueHoverPreview({
                   }}
                   onError={() => markScreenshotFailed(source)}
                 />
-              </div>
+              </button>
             ))
           ) : (
             <div className="catalogue-hover-preview__shot catalogue-hover-preview__shot--empty" />
