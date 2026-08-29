@@ -249,6 +249,44 @@ pub fn parse_set_manifest_ids(lua: &str) -> BTreeMap<u32, u64> {
     manifests
 }
 
+/// Chaves de depot declaradas por `addappid(depot, flag, "hex")` em um `.lua`.
+///
+/// Espelho do regex do `OstKeyProvider` do worker: 64 hex, tres argumentos. A
+/// linha `addappid(appid)` (sem chave) e linhas comentadas nao contam. Quem usa
+/// isto decide se um depot tem como ser descriptografado — um depot so de
+/// `setManifestid` (tipicamente os redistribuiveis compartilhados do app 228980)
+/// nunca tem chave em lugar nenhum.
+pub fn parse_add_app_id_keys(lua: &str) -> BTreeMap<u32, String> {
+    let mut keys = BTreeMap::new();
+    for line in lua.lines() {
+        let line = line.trim();
+        if line.starts_with('-') {
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("addappid(") else {
+            continue;
+        };
+        let Some(end) = rest.find(')') else {
+            continue;
+        };
+        let mut arguments = rest[..end].split(',');
+        let Some(depot) = arguments
+            .next()
+            .and_then(|value| value.trim().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let Some(key) = arguments.next_back() else {
+            continue;
+        };
+        let key = key.trim().trim_matches('"').trim().to_ascii_lowercase();
+        if depot > 0 && key.len() == 64 && key.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            keys.insert(depot, key);
+        }
+    }
+    keys
+}
+
 /// Le o `<appid>.lua` do zip; sem ele, o primeiro `.lua` de nome numerico.
 ///
 /// Mesmo criterio de selecao de `crate::luatools::install_lua_tools_package`,
@@ -391,6 +429,158 @@ impl<'a> Selection<'a> {
 
 pub async fn best_package(app_id: &str, public: Option<&PublicApp>) -> Result<Candidate, String> {
     best_package_from(app_id, DEFAULT_SOURCES, public).await
+}
+
+/// Um `.manifest` obtido de uma fonte de pacote.
+pub struct FetchedManifest {
+    pub manifest_id: u64,
+    pub bytes: Vec<u8>,
+}
+
+/// Tamanho aceitavel para um `.manifest` de dentro de um pacote. Manifest real
+/// gira em torno de 1 MB; o teto so existe para um zip hostil nao encher a
+/// memoria declarando entracoes gigantes.
+const MAX_MANIFEST_ENTRY_BYTES: usize = 16 * 1024 * 1024;
+
+/// Busca, entre as fontes de pacote, os `.manifest` pedidos.
+///
+/// As fontes raw-lua (SteamTools, ManifestHub) vencem a selecao do
+/// `best_package` com frequencia — e nao trazem nenhum `.manifest`. Sem esta
+/// busca, o download desses jogos morria no worker com `FileNotFoundException`
+/// antes do primeiro chunk. Cada fonte util e consultada ate faltar nada,
+/// porque os zips carregam subconjuntos diferentes do catalogue de depots.
+///
+/// A fonte sem TLS continua sujeita a trava do `Selection`: pins que nao batem
+/// com o PICS (HTTPS) rejeitam o pacote inteiro. Um manifest trocado na rota
+/// nao executa nada — o pior caso e uma lista de chunks errada, e todo chunk
+/// baixado e conferido por Adler-32 antes de chegar ao disco.
+///
+/// Volta o mapa `depot -> manifest` do que foi achado e os erros por fonte,
+/// para o chamador poder dizer ao usuario por que algo faltou.
+pub async fn fetch_manifest_files(
+    app_id: &str,
+    wanted: &[(u32, u64)],
+    public: Option<&PublicApp>,
+) -> Result<(BTreeMap<u32, FetchedManifest>, Vec<String>), String> {
+    fetch_manifest_files_from(app_id, wanted, DEFAULT_SOURCES, public).await
+}
+
+pub async fn fetch_manifest_files_from(
+    app_id: &str,
+    wanted: &[(u32, u64)],
+    sources: &[ManifestSource],
+    public: Option<&PublicApp>,
+) -> Result<(BTreeMap<u32, FetchedManifest>, Vec<String>), String> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let wanted_names: std::collections::HashMap<String, (u32, u64)> = wanted
+        .iter()
+        .map(|(depot_id, manifest_id)| {
+            (
+                format!("{depot_id}_{manifest_id}.manifest"),
+                (*depot_id, *manifest_id),
+            )
+        })
+        .collect();
+
+    let mut found: BTreeMap<u32, FetchedManifest> = BTreeMap::new();
+    let mut errors: Vec<String> = Vec::new();
+
+    for source in sources {
+        if wanted.iter().all(|(depot_id, _)| found.contains_key(depot_id)) {
+            break;
+        }
+        // Fonte raw-lua nao tem `.manifest` dentro; contacta-la seria custo puro.
+        if matches!(source.format, PackageFormat::RawLua) {
+            continue;
+        }
+
+        let url = source_url(source, app_id);
+        if !validate_source_url(source, &url) {
+            errors.push(format!("{}: URL insegura", source.name));
+            continue;
+        }
+
+        let zip = match fetch_package(&client, source, &url, app_id).await {
+            Ok(zip) => zip,
+            Err(error) => {
+                errors.push(error);
+                continue;
+            }
+        };
+
+        // Mesma trava do `Selection`: fonte sem TLS so entra batendo com o PICS.
+        if !source.requires_tls
+            && package_score(&zip, app_id, public) == 0
+        {
+            errors.push(format!(
+                "{}: pacote sem TLS nao confere com o manifest publico; recusado",
+                source.name
+            ));
+            continue;
+        }
+
+        harvest_manifests_from_zip(&zip, &wanted_names, &mut found, &mut errors, source.name);
+    }
+
+    Ok((found, errors))
+}
+
+/// Quantos pins do `.lua` dentro do pacote batem com o gid publico do PICS.
+fn package_score(zip: &[u8], app_id: &str, public: Option<&PublicApp>) -> usize {
+    lua_from_zip(app_id, zip)
+        .map(|lua| score_against_public(&parse_set_manifest_ids(&lua), public))
+        .unwrap_or(0)
+}
+
+/// Extrai de um zip de pacote os `.manifest` pedidos que ainda faltam.
+fn harvest_manifests_from_zip(
+    zip: &[u8],
+    wanted_names: &std::collections::HashMap<String, (u32, u64)>,
+    found: &mut BTreeMap<u32, FetchedManifest>,
+    errors: &mut Vec<String>,
+    source_name: &str,
+) {
+    let Ok(mut archive) = zip::ZipArchive::new(std::io::Cursor::new(zip)) else {
+        errors.push(format!("{source_name}: resposta nao e um zip valido"));
+        return;
+    };
+
+    for index in 0..archive.len() {
+        let Ok(mut file) = archive.by_index(index) else {
+            continue;
+        };
+        let name = file
+            .name()
+            .replace('\\', "/")
+            .rsplit('/')
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        let Some((depot_id, manifest_id)) = wanted_names.get(&name).copied() else {
+            continue;
+        };
+        if found.contains_key(&depot_id) {
+            continue;
+        }
+
+        let mut bytes = Vec::new();
+        let mut limited =
+            std::io::Read::take(&mut file, MAX_MANIFEST_ENTRY_BYTES.saturating_add(1) as u64);
+        let read = std::io::Read::read_to_end(&mut limited, &mut bytes);
+        if read.is_err() || bytes.len() > MAX_MANIFEST_ENTRY_BYTES {
+            errors.push(format!(
+                "{source_name}: manifest {name} ilegivel ou maior que {} MB",
+                MAX_MANIFEST_ENTRY_BYTES / (1024 * 1024)
+            ));
+            continue;
+        }
+        found.insert(depot_id, FetchedManifest { manifest_id, bytes });
+    }
 }
 
 pub async fn best_package_from(
@@ -633,6 +823,91 @@ mod tests {
         assert_eq!(manifests.get(&367521), Some(&3820178394837330515));
         assert_eq!(manifests.get(&367522), Some(&6809616861563627670));
         assert_eq!(manifests.len(), 2);
+    }
+
+    const KEY_367521: &str = "de801b9b61e3385b333259cc0f04d2e5d976c4cb8f933cb859d75a4d0125a2a8";
+
+    #[test]
+    fn parses_depot_keys_from_addappid_lines() {
+        let lua = concat!(
+            "addappid(367520)\n",
+            "addappid( 367521 , 0 , \"{KEY_PLACEHOLDER}\" )\n",
+            "--addappid(367522,1,\"{KEY_PLACEHOLDER}\")\n",
+            "addappid(367523,1,\"deadbeef\")\n",
+            "addappid(367524,1)\n",
+        )
+        .replace("{KEY_PLACEHOLDER}", KEY_367521);
+
+        let keys = parse_add_app_id_keys(&lua);
+        // A linha do app em si (sem chave), a comentada e o hex curto nao contam.
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys.get(&367521).map(String::as_str), Some(KEY_367521));
+    }
+
+    fn wanted_names(pairs: &[(u32, u64)]) -> std::collections::HashMap<String, (u32, u64)> {
+        pairs
+            .iter()
+            .map(|(depot, manifest)| {
+                (format!("{depot}_{manifest}.manifest"), (*depot, *manifest))
+            })
+            .collect()
+    }
+
+    fn zip_with_lua_and_manifests(lua: &str, manifests: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
+            let options = zip::write::SimpleFileOptions::default();
+            writer
+                .start_file::<_, ()>(format!("{APP_ID}.lua"), options)
+                .unwrap();
+            writer.write_all(lua.as_bytes()).unwrap();
+            for (name, bytes) in manifests {
+                writer.start_file::<_, ()>(*name, options).unwrap();
+                writer.write_all(bytes).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        buffer
+    }
+
+    #[test]
+    fn harvests_only_the_requested_manifest_entries() {
+        let zip = zip_with_lua_and_manifests(
+            &format!("setManifestid(367521,\"{PUBLIC_GID}\")"),
+            &[
+                (format!("367521_{PUBLIC_GID}.manifest").as_str(), b"manifesto"),
+                ("367521_111.manifest", b"build velha"),
+                ("9_9.manifest", b"outro app"),
+            ],
+        );
+
+        let mut found = BTreeMap::new();
+        let mut errors = Vec::new();
+        harvest_manifests_from_zip(
+            &zip,
+            &wanted_names(&[(367521, PUBLIC_GID)]),
+            &mut found,
+            &mut errors,
+            "Sushi",
+        );
+
+        assert_eq!(found.len(), 1);
+        let entry = found.get(&367521).unwrap();
+        assert_eq!(entry.manifest_id, PUBLIC_GID);
+        assert_eq!(entry.bytes, b"manifesto");
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn a_plain_package_with_matching_pins_scores_against_the_public_gid() {
+        let app = public_app();
+        let current =
+            zip_with_lua_and_manifests(&format!("setManifestid(367521,\"{PUBLIC_GID}\")"), &[]);
+        let stale = zip_with_lua_and_manifests(&format!("setManifestid(367521,\"{OLD_GID}\")"), &[]);
+
+        assert_eq!(package_score(&current, APP_ID, Some(&app)), 1);
+        assert_eq!(package_score(&stale, APP_ID, Some(&app)), 0);
     }
 
     #[test]

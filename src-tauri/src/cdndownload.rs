@@ -176,6 +176,11 @@ fn find_poc_binary() -> Result<std::path::PathBuf, String> {
 pub enum DepotTier {
     /// O manifest do branch `public` ja esta no `depotcache`. Build atual.
     PublicFromCache,
+    /// O manifest do branch `public` nao estava em disco — fonte de pacote
+    /// raw-lua (SteamTools, ManifestHub) nao embute `.manifest` — e foi buscado
+    /// de um zip de pacote (Sushi/LuaTools) e gravado no `depotcache`. Build
+    /// atual.
+    PublicFromPackage,
     /// Nenhum manifest publico em disco; venceu o de maior `buildid` entre os
     /// que estao no `depotcache`.
     NewestInCache,
@@ -188,6 +193,7 @@ impl DepotTier {
     fn as_str(self) -> &'static str {
         match self {
             DepotTier::PublicFromCache => "public-from-cache",
+            DepotTier::PublicFromPackage => "public-from-package",
             DepotTier::NewestInCache => "newest-in-cache",
             DepotTier::LuaPinned => "lua-pinned",
         }
@@ -353,6 +359,87 @@ fn cached_depot_ids(steam_path: &str) -> Vec<u32> {
     ids.sort_unstable();
     ids.dedup();
     ids
+}
+
+/// Caminho do `.manifest` de um depot dentro do `depotcache` da Steam.
+fn depot_manifest_path(steam_path: &str, depot_id: u32, manifest_id: u64) -> PathBuf {
+    Path::new(steam_path)
+        .join("depotcache")
+        .join(format!("{depot_id}_{manifest_id}.manifest"))
+}
+
+/// Chaves de depot declaradas em TODOS os `.lua` do `config/stplug-in`.
+///
+/// O worker le as chaves do mesmo lugar (`OstKeyProvider` varre todos os luas):
+/// depot compartilhado — os redistribuiveis do app 228980 — pode vir com a
+/// chave no `.lua` de outro jogo que tambem o lista. A ordem dos arquivos nao
+/// importa porque a chave de um depot e unica por natureza.
+fn stplug_in_depot_keys(steam_path: &str) -> HashMap<u32, String> {
+    let mut keys = HashMap::new();
+    let Ok(entries) = std::fs::read_dir(Path::new(steam_path).join("config").join("stplug-in"))
+    else {
+        return keys;
+    };
+
+    let mut lua_paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("lua"))
+        })
+        .collect();
+    lua_paths.sort();
+
+    for path in lua_paths {
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        for (depot_id, key) in crate::manifest_sources::parse_add_app_id_keys(&contents) {
+            keys.entry(depot_id).or_insert(key);
+        }
+    }
+    keys
+}
+
+/// Manifests que valem ser buscados nas fontes de pacote, por depot.
+///
+/// Busca-se o gid publico quando o PICS o conhece — mesmo que haja um manifest
+/// velho em disco, porque baixar a build atual e melhor do que dezenas de GB
+/// atrasados. Sem PICS, so falta o que nao esta em disco.
+fn manifest_fetch_targets(steam_path: &str, depots: &[ResolvedDepot]) -> Vec<(u32, u64)> {
+    depots
+        .iter()
+        .filter(|depot| {
+            let on_disk = depot_manifest_path(steam_path, depot.depot_id, depot.manifest_id).is_file();
+            match depot.public_gid {
+                Some(public_gid) => depot.manifest_id != public_gid || !on_disk,
+                None => !on_disk,
+            }
+        })
+        .map(|depot| (depot.depot_id, depot.public_gid.unwrap_or(depot.manifest_id)))
+        .collect()
+}
+
+/// Troca o manifest resolvido de cada depot pelo que chegou das fontes.
+///
+/// O manifest buscado e sempre o alvo de `manifest_fetch_targets` (publico
+/// quando conhecido); quando ele e o publico, o depot passa a ser `current` e o
+/// aviso de build velha some junto.
+fn apply_fetched_manifests(
+    depots: &mut [ResolvedDepot],
+    fetched: &std::collections::BTreeMap<u32, crate::manifest_sources::FetchedManifest>,
+) {
+    for depot in depots.iter_mut() {
+        let Some(manifest) = fetched.get(&depot.depot_id) else {
+            continue;
+        };
+        depot.manifest_id = manifest.manifest_id;
+        if Some(manifest.manifest_id) == depot.public_gid {
+            depot.tier = DepotTier::PublicFromPackage;
+        }
+    }
 }
 
 /// Pasta padrão de downloads: sempre gravável, ao contrário de um caminho derivado
@@ -875,12 +962,149 @@ pub async fn cdndownload_download_game(
     };
 
     let public = crate::steam_pics::resolve_public_app(&steam_path, &app_id).await;
-    let resolved_depots = resolve_depots(&steam_path, &app_id, public.as_ref());
+    let mut resolved_depots = resolve_depots(&steam_path, &app_id, public.as_ref());
+
+    // Depot sem chave em nenhum `.lua` do stplug-in nao tem como ser
+    // descriptografado: sao os redistribuiveis compartilhados (ex.: depots do
+    // app 228980) que os pacotes listam com `setManifestid` mas sem `addappid`
+    // com chave. Antes eles derrubavam o download inteiro no worker
+    // (`no-depot-key` / manifest ausente); agora saem do plano com aviso — o
+    // jogo roda sem os instaladores que eles carregam.
+    let depot_keys = stplug_in_depot_keys(&steam_path);
+    let (keyed_depots, keyless_depots): (Vec<_>, Vec<_>) = resolved_depots
+        .into_iter()
+        .partition(|depot| depot_keys.contains_key(&depot.depot_id));
+    resolved_depots = keyed_depots;
+    if !keyless_depots.is_empty() {
+        app.emit(
+            "download-progress",
+            serde_json::json!({
+                "Type": "status",
+                "Status": "skipped-keyless-depots",
+                "AppId": app_id,
+                "Depots": keyless_depots
+                    .iter()
+                    .map(|depot| depot.depot_id)
+                    .collect::<Vec<_>>(),
+            }),
+        )
+        .ok();
+    }
+
     if resolved_depots.is_empty() {
         return Ok(serde_json::json!({
             "Type": "error",
             "Status": "no-depots",
-            "Message": format!("No depots found for app {app_id} in OST Lua or depotcache.")
+            "Message": format!("No depots with a depot key were found for app {app_id} in the OST Lua files.")
+        }));
+    }
+
+    // Manifest que falta em disco — ou cujo publico e mais novo que o de disco —
+    // sai das mesmas fontes de pacote do fluxo de adicao. Sem isto, jogo
+    // adicionado por fonte raw-lua (SteamTools, ManifestHub), que nao embute
+    // `.manifest` nenhum, morria no `inspectDepot` com `FileNotFoundException`.
+    let fetch_targets = manifest_fetch_targets(&steam_path, &resolved_depots);
+    let mut fetch_errors: Vec<String> = Vec::new();
+    if !fetch_targets.is_empty() {
+        app.emit(
+            "download-progress",
+            serde_json::json!({
+                "Type": "status",
+                "Status": "fetching-manifests",
+                "AppId": app_id,
+                "Depots": fetch_targets.iter().map(|(depot_id, _)| depot_id).collect::<Vec<_>>(),
+            }),
+        )
+        .ok();
+
+        match crate::manifest_sources::fetch_manifest_files(
+            &app_id,
+            &fetch_targets,
+            public.as_ref(),
+        )
+        .await
+        {
+            Ok((fetched, errors)) => {
+                fetch_errors = errors;
+                let mut installed: Vec<String> = Vec::new();
+                for (depot_id, manifest) in &fetched {
+                    let path = depot_manifest_path(&steam_path, *depot_id, manifest.manifest_id);
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    match std::fs::write(&path, &manifest.bytes) {
+                        Ok(()) => {
+                            installed.push(format!("{depot_id}_{}.manifest", manifest.manifest_id))
+                        }
+                        Err(error) => {
+                            fetch_errors.push(format!("depot {depot_id}: {error}"));
+                        }
+                    }
+                }
+                apply_fetched_manifests(&mut resolved_depots, &fetched);
+                app.emit(
+                    "download-progress",
+                    serde_json::json!({
+                        "Type": "status",
+                        "Status": "manifests-fetched",
+                        "AppId": app_id,
+                        "Fetched": installed,
+                        "Errors": fetch_errors,
+                    }),
+                )
+                .ok();
+            }
+            Err(error) => {
+                fetch_errors.push(error);
+                app.emit(
+                    "download-progress",
+                    serde_json::json!({
+                        "Type": "status",
+                        "Status": "manifest-fetch-failed",
+                        "AppId": app_id,
+                        "Errors": fetch_errors,
+                    }),
+                )
+                .ok();
+            }
+        }
+    }
+
+    // Depots sem manifest em disco depois da busca: ou o download falhava no
+    // worker com um `FileNotFoundException` criptico, ou ficava pendurado
+    // esperando evento que nao vinha. Melhor recusar aqui, com o diagnostico.
+    let missing_manifests: Vec<u32> = resolved_depots
+        .iter()
+        .filter(|depot| {
+            !depot_manifest_path(&steam_path, depot.depot_id, depot.manifest_id).is_file()
+        })
+        .map(|depot| depot.depot_id)
+        .collect();
+    if !missing_manifests.is_empty() {
+        let mut message = String::from(
+            "O manifest destes depots nao foi encontrado no depotcache nem nas fontes \
+             de pacotes: ",
+        );
+        message.push_str(
+            &missing_manifests
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        message.push_str(
+            ". Abra a Steam com o jogo adicionado para que ela baixe o manifest, \
+             ou tente novamente mais tarde.",
+        );
+        if !fetch_errors.is_empty() {
+            message.push_str(&format!(" Fontes: {}", fetch_errors.join("; ")));
+        }
+        return Ok(serde_json::json!({
+            "Type": "error",
+            "Status": "manifest-unavailable",
+            "AppId": app_id,
+            "Depots": missing_manifests,
+            "Message": message,
         }));
     }
 
@@ -913,9 +1137,9 @@ pub async fn cdndownload_download_game(
             let mut refusal = detail;
             refusal["Type"] = serde_json::json!("error");
             refusal["Message"] = serde_json::json!(
-                "O manifest mais novo disponivel em disco e anterior a build publica. \
-                 Abra a Steam com o jogo adicionado para ela baixar o manifest atual \
-                 para o depotcache, ou confirme para baixar a build antiga mesmo assim."
+                "O manifest mais novo disponivel em disco e anterior a build publica, \
+                 e as fontes de pacote nao devolveram a build atual. Tente novamente \
+                 mais tarde, ou confirme para baixar a build antiga mesmo assim."
             );
             return Ok(refusal);
         }
@@ -1005,18 +1229,26 @@ pub async fn cdndownload_download_game(
             }),
         )?;
 
-        let Some(inspected) = read_worker_event(&worker_stdout)? else {
-            clear_active_download_process(&app_id);
-            return Ok(serde_json::json!({
-                "Type": "error",
-                "Status": "worker-exited-during-inspection",
-                "Message": "steamkit worker exited while inspecting download manifests.",
-            }));
+        let inspected = loop {
+            let Some(value) = read_worker_event(&worker_stdout)? else {
+                clear_active_download_process(&app_id);
+                return Ok(serde_json::json!({
+                    "Type": "error",
+                    "Status": "worker-exited-during-inspection",
+                    "Message": "steamkit worker exited while inspecting download manifests.",
+                }));
+            };
+            match value.get("Type").and_then(|event_type| event_type.as_str()) {
+                Some("depot-inspected") => break value,
+                Some("error") | Some("cancelled") => {
+                    clear_active_download_process(&app_id);
+                    return Ok(value);
+                }
+                _ => {
+                    let _ = app.emit("download-progress", value);
+                }
+            }
         };
-        if inspected.get("Type").and_then(|value| value.as_str()) != Some("depot-inspected") {
-            clear_active_download_process(&app_id);
-            return Ok(inspected);
-        }
         depot_sizes.push(
             inspected
                 .get("TotalBytes")
@@ -1432,9 +1664,15 @@ mod tests {
 
     // --- Escolha do manifest por depot ---------------------------------------
 
-    use super::{pick_depot_manifest, resolve_depots, resolve_installed_build_id, DepotTier};
+    use super::{
+        apply_fetched_manifests, manifest_fetch_targets, pick_depot_manifest, resolve_depots,
+        resolve_installed_build_id, stplug_in_depot_keys, DepotTier, ResolvedDepot,
+    };
     use crate::steam_pics::{PicsSource, PublicApp, PublicDepot};
     use std::collections::BTreeMap;
+
+    const KEY_367521: &str =
+        "de801b9b61e3385b333259cc0f04d2e5d976c4cb8f933cb859d75a4d0125a2a8";
 
     /// `<root>/config/stplug-in/<appid>.lua` + `<root>/depotcache/*.manifest`.
     /// `cached` traz `(depot, manifest)` na ordem de gravacao, entao o ultimo
@@ -1579,6 +1817,98 @@ mod tests {
         assert_eq!(resolved.manifest_id, 42);
         assert_eq!(resolved.public_gid, None);
         assert!(resolved.is_current());
+    }
+
+    #[test]
+    fn stplug_in_keys_come_from_every_lua_and_ignore_keyless_lines() {
+        let lua = format!(
+            "addappid(367520)\naddappid( 367521 , 0 , \"{KEY_367521}\" )\n\
+             --addappid(367522,1,\"{KEY_367521}\")\naddappid(367523,1,\"deadbeef\")\n"
+        );
+        let root = fake_steam("367520", &lua, &[]);
+
+        let keys = stplug_in_depot_keys(&root.to_string_lossy());
+        let _ = std::fs::remove_dir_all(&root);
+
+        // A linha do app, a comentada e o hex curto nao contam como chave.
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys.get(&367521).map(String::as_str), Some(KEY_367521));
+    }
+
+    #[test]
+    fn manifest_targets_prefer_the_public_gid_and_skip_what_is_on_disk() {
+        let lua = format!(
+            "addappid(367521,1,\"{KEY_367521}\")\n--setManifestid(367521,\"{OLD_GID}\")\n\
+             addappid(367524,1,\"{KEY_367521}\")\n--setManifestid(367524,\"7\")\n\
+             addappid(367526,1,\"{KEY_367521}\")\n--setManifestid(367526,\"42\")\n"
+        );
+        let root = fake_steam("367520", &lua, &[(367521, OLD_GID), (367524, 7)]);
+        let app = public_app(vec![
+            depot(
+                367521,
+                Some("windows"),
+                &[("public", PUBLIC_GID), ("antiga", OLD_GID)],
+            ),
+            depot(367524, Some("windows"), &[("public", 7)]),
+            depot(367526, Some("windows"), &[("public", 0)]),
+        ]);
+
+        let depots = resolve_depots(&root.to_string_lossy(), "367520", Some(&app));
+        let targets = manifest_fetch_targets(&root.to_string_lossy(), &depots);
+        let _ = std::fs::remove_dir_all(&root);
+
+        // 367521 tem build velha em disco: o alvo e o gid publico.
+        // 367524 ja tem o publico em disco: nao busca nada.
+        // 367526 nao tem nada em disco e o PICS nao o conhece: o alvo e o pin.
+        assert_eq!(targets, vec![(367521, PUBLIC_GID), (367526, 42)]);
+    }
+
+    #[test]
+    fn a_fetched_public_manifest_upgrades_the_depot_and_clears_the_stale_flag() {
+        let mut depots = vec![ResolvedDepot {
+            depot_id: 367521,
+            manifest_id: OLD_GID,
+            tier: DepotTier::NewestInCache,
+            public_gid: Some(PUBLIC_GID),
+        }];
+        let mut fetched = BTreeMap::new();
+        fetched.insert(
+            367521u32,
+            crate::manifest_sources::FetchedManifest {
+                manifest_id: PUBLIC_GID,
+                bytes: b"manifest".to_vec(),
+            },
+        );
+
+        apply_fetched_manifests(&mut depots, &fetched);
+
+        assert_eq!(depots[0].manifest_id, PUBLIC_GID);
+        assert_eq!(depots[0].tier, DepotTier::PublicFromPackage);
+        assert!(depots[0].is_current());
+    }
+
+    #[test]
+    fn a_fetched_pinned_manifest_keeps_its_tier_when_pics_is_silent() {
+        let mut depots = vec![ResolvedDepot {
+            depot_id: 999,
+            manifest_id: 42,
+            tier: DepotTier::LuaPinned,
+            public_gid: None,
+        }];
+        let mut fetched = BTreeMap::new();
+        fetched.insert(
+            999u32,
+            crate::manifest_sources::FetchedManifest {
+                manifest_id: 42,
+                bytes: b"manifest".to_vec(),
+            },
+        );
+
+        apply_fetched_manifests(&mut depots, &fetched);
+
+        assert_eq!(depots[0].manifest_id, 42);
+        assert_eq!(depots[0].tier, DepotTier::LuaPinned);
+        assert!(depots[0].is_current());
     }
 
     #[test]

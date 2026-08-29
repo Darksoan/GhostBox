@@ -202,6 +202,35 @@ static async Task RunWorkerAsync()
                 {
                     await new SteamKitPocRunner(commandConfig, cancellation.Token).RunAsync();
                 }
+                catch (OperationCanceledException)
+                {
+                    // Cancelamento antes do `RunDownloadAsync` engolir a exceção:
+                    // sem este evento o Rust ficaria bloqueado lendo o stdout
+                    // para sempre.
+                    SteamKitPocRunner.WriteEvent(new ProgressEvent
+                    {
+                        Type = "cancelled",
+                        Status = "cancelled",
+                        AppId = commandConfig.AppId,
+                        DepotId = commandConfig.DepotId,
+                        OutputDir = commandConfig.OutputDir
+                    });
+                }
+                catch (Exception error)
+                {
+                    // Exceção fora dos handlers internos (manifest corrompido,
+                    // IO inesperado): o evento mantém o app informado em vez de
+                    // deixar a tarefa morta sem resposta.
+                    SteamKitPocRunner.WriteEvent(new ProgressEvent
+                    {
+                        Type = "error",
+                        Status = "worker-command-failed",
+                        Message = error.Message,
+                        AppId = commandConfig.AppId,
+                        DepotId = commandConfig.DepotId,
+                        OutputDir = commandConfig.OutputDir
+                    });
+                }
                 finally
                 {
                     WorkerState.ActiveDownloads.TryRemove(commandConfig.AppId, out _);

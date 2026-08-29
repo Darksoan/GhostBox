@@ -91,7 +91,7 @@ const translations: Record<Language, TranslationTree> = {
       failedFiles: "{count} arquivo(s) com falha",
       genericError: "Não foi possível concluir o download.",
       staleManifestDetail:
-        "O manifest disponível para o(s) depot(s) {depots} é anterior à build pública {buildId}. Abra a Steam com o jogo adicionado para ela baixar o manifest atual.",
+        "O manifest disponível para o(s) depot(s) {depots} é anterior à build pública {buildId}. Tente novamente mais tarde para buscar a build atual.",
       staleManifestDownloadAnyway: "Baixar build antiga mesmo assim",
       depotOf: "Depot {index} de {total}",
       details: {
@@ -738,7 +738,7 @@ const translations: Record<Language, TranslationTree> = {
       failedFiles: "{count} file(s) failed",
       genericError: "Could not complete the download.",
       staleManifestDetail:
-        "The manifest available for depot(s) {depots} predates public build {buildId}. Open Steam with the game added so it fetches the current manifest.",
+        "The manifest available for depot(s) {depots} predates public build {buildId}. Try again later to fetch the current build.",
       staleManifestDownloadAnyway: "Download the older build anyway",
       depotOf: "Depot {index} of {total}",
       details: {
