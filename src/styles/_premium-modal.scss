@@ -113,12 +113,25 @@
 
   // Centrado como a coluna da direita: com o piso de altura, ancorar no topo
   // deixaria toda a folga sobrando embaixo e as duas colunas desalinhadas.
+  //
+  // `margin: auto` nas pontas em vez de `justify-content: center`: quando a
+  // janela é baixa e o modal bate no `max-height`, o centrado puro distribui o
+  // estouro pelos dois lados e a metade de cima fica inalcançável até para o
+  // scroll do modal — o fim da lista aparecia cortado. Auto-margem centraliza
+  // com folga e, sem folga, recua o conteúdo para o topo, onde o scroll alcança.
   &__pitch {
     display: flex;
     flex-direction: column;
-    justify-content: center;
     gap: var(--space-5);
     padding: clamp(28px, 3.2vw, 44px);
+
+    > :first-child {
+      margin-top: auto;
+    }
+
+    > :last-child {
+      margin-bottom: auto;
+    }
   }
 
   &__eyebrow {
@@ -225,7 +238,7 @@
   }
 
   // Camada secundária: o chevron é o indicador de estado, então ele acompanha a
-  // altura em vez de girar antes dela.
+  // altura em vez de girar antes dela — mesma duração do painel (260ms).
   &__benefit-chevron {
     flex: 0 0 auto;
     margin-left: auto;
@@ -238,7 +251,7 @@
   &__benefit.is-open &__benefit-chevron {
     transform: rotate(180deg);
     transition:
-      transform 240ms var(--enter-ease),
+      transform 260ms var(--enter-ease),
       color var(--motion-fast) var(--ease);
   }
 
@@ -262,7 +275,12 @@
   // fechar, o texto sai primeiro e a altura desce sobre espaço vazio.
   &__benefit-panel {
     display: grid;
-    grid-template-rows: 0fr;
+    // `minmax(0, …)` e não `0fr` nu: o mínimo automático do `fr` deixa o
+    // padding do parágrafo vazar 8px em cada item fechado. Cinco vazamentos
+    // comem a reserva de altura e o detalhe aberto estoura o `overflow` da
+    // lista — a última linha do texto saía cortada. Piso 0 zera a linha
+    // fechada de verdade; o `overflow: hidden` abaixo clipa o conteúdo.
+    grid-template-rows: minmax(0, 0fr);
     // O `p` tem padding e `box-sizing: border-box` global, então sua caixa nunca
     // encolhe abaixo do padding: fechado ele sobrava 8px para fora da linha de
     // 0fr. Clipar aqui é o que faz o painel fechado medir zero de verdade — sem
@@ -288,27 +306,32 @@
       font-size: var(--type-size-caption);
       line-height: var(--lh-300);
       opacity: 0;
-      // Sem opacidade pura: o texto desliza os mesmos 4px de onde o rótulo
-      // está, para parecer que sai de baixo dele e não que materializa no vão.
-      transform: translateY(-4px);
+      // Sem slide aqui: o painel clipa o texto (`overflow: hidden` acima), e um
+      // texto que desliza para baixo atravessa a borda do clip enquanto o vão
+      // ainda abre — a última linha aparecia cortada. A emergência "de baixo do
+      // rótulo" fica por conta do clip que desce varrendo + do fade; texto
+      // estático nunca corta.
       transition:
         opacity 100ms var(--exit-ease),
-        transform 100ms var(--exit-ease),
         visibility 0s linear 180ms;
     }
   }
 
   &__benefit.is-open &__benefit-panel {
-    grid-template-rows: 1fr;
+    grid-template-rows: minmax(0, 1fr);
     transition: grid-template-rows 260ms var(--enter-ease);
 
     > p {
       visibility: visible;
       opacity: 1;
-      transform: none;
+      // Um gesto só com a altura, não uma segunda batida: o delay antigo de
+      // 80ms chegava tarde — com a curva de entrada, o vão já estava ~75%
+      // aberto e o texto aparecia num espaço vazio. Aos 40ms o clip ainda está
+      // descendo, e é ele que revela o texto estático de cima para baixo, com
+      // o fade acompanhando. Sem transform: qualquer deslize para baixo dentro
+      // de um painel clipado corta a última linha durante a abertura.
       transition:
-        opacity 180ms var(--enter-ease) 80ms,
-        transform 180ms var(--enter-ease) 80ms,
+        opacity 220ms var(--enter-ease) 40ms,
         visibility 0s;
     }
   }
@@ -318,9 +341,19 @@
   &__checkout {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    // Mesma técnica da coluna do argumento: auto-margem centraliza com folga e
+    // não distribui estouro para cima quando a janela é baixa.
     gap: var(--space-10);
     padding: clamp(28px, 3.2vw, 44px);
+
+    > :first-child {
+      margin-top: auto;
+    }
+
+    > :last-child {
+      margin-bottom: auto;
+    }
+
     background: var(--c-0);
   }
 

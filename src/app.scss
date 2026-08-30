@@ -1985,7 +1985,6 @@ p {
     &:hover,
     &:focus-visible {
       background: var(--surface-dropdown-menu);
-      color: var(--text-primary);
 
       .header__tooltip {
         opacity: 1;
@@ -2185,6 +2184,18 @@ p {
       color var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
 
+    &:hover {
+      background: var(--surface-titlebar-control-hover);
+    }
+
+    &:focus-within,
+    &--focused {
+      width: 240px;
+      background: var(--surface-titlebar-control-hover);
+      color: var(--text-primary);
+      opacity: 1;
+    }
+
     > svg {
       display: block;
       width: 16px;
@@ -2208,14 +2219,8 @@ p {
       line-height: 1;
 
       &::placeholder {
-        font-weight: var(--weight-semibold);
+        font-weight: var(--weight-regular);
       }
-    }
-
-    &--focused {
-      width: 240px;
-      color: var(--text-primary);
-      opacity: 1;
     }
   }
 
