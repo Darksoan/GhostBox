@@ -61,6 +61,20 @@ interface ProfileGameRecognitionOptions {
   requireSteamSignals?: boolean;
 }
 
+/**
+ * GhostBox-owned games (cloud save present) speak for the account even without
+ * local Steam signals — the playtime/achievement requirements only make sense
+ * for machine-local Steam games that the account may not own.
+ */
+export function getProfileGameRecognitionOptions(
+  shouldShowSteamContent: boolean,
+  isCloudOwnedGame: boolean,
+): ProfileGameRecognitionOptions {
+  return {
+    requireSteamSignals: shouldShowSteamContent && !isCloudOwnedGame,
+  };
+}
+
 /** Steam profile recognition: playtime + unlocked achievements, never software. */
 export function isRecognizedSteamProfileGame(
   game: GhostBoxGame,

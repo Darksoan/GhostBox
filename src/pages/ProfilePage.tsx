@@ -66,6 +66,7 @@ import {
 import { sortOverviewGames } from "../utils/overviewSort";
 import {
   getProfileAchievementTotal as getAchievementTotal,
+  getProfileGameRecognitionOptions,
   getProfileUnlockedAchievementCount as getUnlockedAchievementCount,
   getRicherProfileAchievementGame as getRicherAchievementGame,
   isProfileAchievementUnlocked as isAchievementUnlocked,
@@ -727,9 +728,14 @@ export function ProfilePage({
   const overviewPreloadGames = useMemo(() => {
     return profileGameBase
       .filter((game) =>
-        isRecognizedSteamProfileGame(game, getGamePlaytime(game), {
-          requireSteamSignals: shouldShowSteamContent,
-        }),
+        isRecognizedSteamProfileGame(
+          game,
+          getGamePlaytime(game),
+          getProfileGameRecognitionOptions(
+            shouldShowSteamContent,
+            cloudSaveAppIds.has(game.appId),
+          ),
+        ),
       )
       .sort((left, right) => {
         const lastPlayedDelta =
@@ -739,6 +745,7 @@ export function ProfilePage({
         return getGamePlaytime(right) - getGamePlaytime(left);
       });
   }, [
+    cloudSaveAppIds,
     profileGameBase,
     shouldShowSteamContent,
   ]);
@@ -864,9 +871,14 @@ export function ProfilePage({
         ),
       )
       .filter((game) =>
-        isRecognizedSteamProfileGame(game, getGamePlaytime(game), {
-          requireSteamSignals: shouldShowSteamContent,
-        }),
+        isRecognizedSteamProfileGame(
+          game,
+          getGamePlaytime(game),
+          getProfileGameRecognitionOptions(
+            shouldShowSteamContent,
+            cloudSaveAppIds.has(game.appId),
+          ),
+        ),
       );
   }, [
     cloudSaveAppIds,

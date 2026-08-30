@@ -1,17 +1,18 @@
 import {
-  ChevronDown,
   Check,
+  ChevronDown,
   Bell,
   Crown,
   ExternalLink,
   FolderCog,
+  HardDrive,
   Code2,
   Gauge,
   Link2,
   SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
@@ -25,6 +26,9 @@ import {
   settingsTabDescriptionKeys,
 } from "../features/settings/settingsTabsShared";
 import { ghostboxApi } from "../lib/ghostboxApi";
+import { normalizeDownloadsRoot } from "../lib/downloadManager";
+import type { SteamLibraryVolume } from "../lib/ghostboxApi.types";
+import { formatBytes } from "../utils/formatBytes";
 import { readStoredDownloadsDir, writeStoredDownloadsDir } from "../utils/storage";
 
 export type { SettingsTabId } from "../features/settings/settingsTabsShared";
@@ -241,14 +245,7 @@ export function SettingsPage({
   const [drafts, setDrafts] = useState<DraftsState>(() =>
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
   );
-  const [downloadsDir, setDownloadsDir] = useState(() => readStoredDownloadsDir());
-
-  const handleSelectDownloadsDir = useCallback(async () => {
-    const picked = await ghostboxApi.selectDownloadsDir();
-    if (!picked) return;
-    writeStoredDownloadsDir(picked);
-    setDownloadsDir(picked);
-  }, []);
+  const [downloadsDir] = useState(() => readStoredDownloadsDir());
 
   useEffect(() => {
     const defaults = getDefaultDrafts(appearance.language, initialPage, startupSettings);
@@ -307,14 +304,12 @@ export function SettingsPage({
             [key]: value,
           },
         }));
-      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave, downloadsDir, handleSelectDownloadsDir),
+      }, appearance, notifications, updateAppearance, updateNotifications, t, steamPath, onSelectSteamPath, morrenusApiKey, onMorrenusApiKeyChange, onMorrenusApiKeySave),
     [
       activeTab,
       appearance,
       backupSettings,
-      downloadsDir,
       drafts,
-      handleSelectDownloadsDir,
       morrenusApiKey,
       notifications,
       onMorrenusApiKeyChange,
@@ -376,6 +371,9 @@ export function SettingsPage({
               ))}
             </div>
           )}
+          {activeTab.id === "library" && (
+            <SteamLibrariesSection downloadsDir={downloadsDir} t={t} />
+          )}
           {activeTab.id === "performance" && <TempFilesSection />}
           {activeTab.id === "connections" && <ConnectionsPanel />}
           {activeTab.id === "subscription" && (
@@ -405,9 +403,7 @@ function buildTabOptions(
   onSelectSteamPath: () => void,
   morrenusApiKey: string,
   onMorrenusApiKeyChange: (value: string) => void,
-  onMorrenusApiKeyCheck: () => void,
-  downloadsDir: string,
-  onSelectDownloadsDir: () => void
+  onMorrenusApiKeyCheck: () => void
 ) {
   if (activeTab.id === "general") {
     return [
@@ -582,14 +578,6 @@ function buildTabOptions(
         value: steamPath,
         onClick: onSelectSteamPath,
       })),
-      {
-        label: t("settings.library.downloadsDir.label"),
-        description: t("settings.library.downloadsDir.description"),
-        control: "input" as const,
-        value: downloadsDir,
-        placeholder: t("settings.library.downloadsDir.placeholder"),
-        onClick: onSelectDownloadsDir,
-      },
     ];
   }
 
@@ -748,6 +736,98 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
         )}
       </div>
     </div>
+  );
+}
+
+function SteamLibrariesSection({
+  downloadsDir,
+  t,
+}: {
+  downloadsDir: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const [volumes, setVolumes] = useState<SteamLibraryVolume[] | null>(null);
+  const [selected, setSelected] = useState(downloadsDir);
+
+  useEffect(() => {
+    setSelected(downloadsDir);
+  }, [downloadsDir]);
+
+  useEffect(() => {
+    let disposed = false;
+    void ghostboxApi
+      .listSteamLibraries()
+      .then((list) => {
+        if (!disposed) setVolumes(list);
+      })
+      .catch(() => {
+        if (!disposed) setVolumes([]);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  const handleSelect = (path: string) => {
+    // A raiz gravada é a biblioteca em si: o Rust monta `steamapps\common\<jogo>`
+    // nela e a registra — o mesmo layout de qualquer biblioteca oficial.
+    const root = normalizeDownloadsRoot(path);
+    writeStoredDownloadsDir(root);
+    setSelected(root);
+  };
+
+  const driveTypeLabel = (type: string): string => {
+    if (type === "fixed") return t("settings.library.driveLocal");
+    if (type === "removable") return t("settings.library.driveRemovable");
+    if (type === "network") return t("settings.library.driveNetwork");
+    return t("settings.library.driveUnknown");
+  };
+
+  const libraryLabel = (volume: SteamLibraryVolume): string => {
+    const base = volume.Label || driveTypeLabel(volume.DriveType);
+    return volume.Drive ? `${base} (${volume.Drive})` : base || volume.Path;
+  };
+
+  return (
+    <section className="steam-libraries" aria-label={t("settings.library.steamLibraries.label")}>
+      <div className="steam-libraries__heading">
+        <h3>{t("settings.library.steamLibraries.label")}</h3>
+        <p>{t("settings.library.steamLibraries.description")}</p>
+      </div>
+      <div className="steam-libraries__list" role="listbox" aria-label={t("settings.library.steamLibraries.label")}>
+        {(volumes ?? []).map((volume) => {
+          const isSelected = normalizeDownloadsRoot(volume.Path) === selected;
+          return (
+            <button
+              key={volume.Path}
+              type="button"
+              role="option"
+              aria-selected={isSelected}
+              className={`steam-libraries__row ${isSelected ? "steam-libraries__row--selected" : ""}`}
+              onClick={() => handleSelect(volume.Path)}
+            >
+              <HardDrive size={16} strokeWidth={2} aria-hidden="true" />
+              <span className="steam-libraries__name">{libraryLabel(volume)}</span>
+              <span className="steam-libraries__space">
+                {t("settings.library.freeOf", {
+                  free: formatBytes(volume.FreeBytes),
+                  total: formatBytes(volume.TotalBytes),
+                })}
+              </span>
+              <span
+                className={`steam-libraries__check ${isSelected ? "steam-libraries__check--visible" : ""}`}
+                aria-hidden="true"
+              >
+                <Check size={14} strokeWidth={2.2} />
+              </span>
+            </button>
+          );
+        })}
+        {volumes !== null && volumes.length === 0 && (
+          <p className="steam-libraries__empty">{t("settings.library.steamLibrariesEmpty")}</p>
+        )}
+      </div>
+    </section>
   );
 }
 

@@ -60,7 +60,10 @@ import {
 } from "../utils/premiumNudge";
 import { readDownloadTasks } from "../lib/downloadManager";
 import { preloadGamePortraitSources } from "../utils/image";
-import { normalizeSteamGameTitles } from "../utils/steamTitles";
+import {
+  isSteamTitlePlaceholder,
+  normalizeSteamGameTitles,
+} from "../utils/steamTitles";
 
 import { mergeSteamAchievementsIntoGames } from "../utils/steamAchievementMerge";
 import {
@@ -92,6 +95,7 @@ import {
   getBackupRecordLatestKey,
   mergeGameDetailsPreservingAchievements,
   mergeBackupAchievementsIntoGame,
+  withBackupRecordLastPlayed,
   upsertProfileHistoryGame,
 } from "../lib/profileHistoryGames";
 import { showAchievementDesktopNotification } from "../lib/trayNotifications";
@@ -697,17 +701,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const applyBackupAchievementsToProfileHistory = useCallback(
     async (game: GhostBoxGame, backupPath?: string | null) => {
-      const backupDetails = await ghostboxApi.getBackupDetails(
-        game.appId,
-        backupPath,
-      );
-      if (!backupDetails?.achievements.length) return;
+      // Local details may not exist (backup made on another machine, moved
+      // outputPath, deleted file) — `backup_get_details` returns null then.
+      // The game still belongs to the profile because its save lives in the
+      // cloud, so it must enter the history even without achievements to merge.
+      const backupDetails = await ghostboxApi
+        .getBackupDetails(game.appId, backupPath)
+        .catch(() => null);
+
+      const trackedGame = backupDetails?.achievements.length
+        ? mergeBackupAchievementsIntoGame(game, backupDetails)
+        : game;
 
       setProfileHistoryGames((current) =>
-        upsertProfileHistoryGame(
-          current,
-          mergeBackupAchievementsIntoGame(game, backupDetails),
-        ),
+        upsertProfileHistoryGame(current, trackedGame),
       );
     },
     [],
@@ -1062,6 +1069,77 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? current
             : nextAppIds,
         );
+
+        // Fresh install / bundle login: the machine holds no local backup
+        // records, so the `backupSettings` -> `profileHistoryGames` bridge below
+        // never fires. A game that only lives in the cloud must still enter
+        // `profileHistoryGames`, otherwise `ProfilePage` (which only renders
+        // games from `addedLibraryGames` / `favoriteGames` / history) shows a
+        // bare local library instead of the account's real saves.
+        if (saves.length > 0) {
+          const latestByAppId = new Map<string, CloudSave>();
+          for (const save of saves) {
+            if (!save.appId) continue;
+            const existing = latestByAppId.get(save.appId);
+            if (
+              !existing ||
+              cloudSaveTimestamp(save) > cloudSaveTimestamp(existing)
+            ) {
+              latestByAppId.set(save.appId, save);
+            }
+          }
+
+          const knownAppIds = new Set<string>([
+            ...profileHistoryGamesRef.current.map((game) => game.appId),
+            ...addedLibraryGamesRef.current.map((game) => game.appId),
+            ...favoriteGamesRef.current.map((game) => game.appId),
+          ]);
+
+          let nextHistory = profileHistoryGamesRef.current;
+          let changed = false;
+
+          for (const [appId, save] of latestByAppId) {
+            if (knownAppIds.has(appId)) continue;
+
+            const rawTitle = (save.gameTitle || "").trim();
+            const title =
+              rawTitle && !isSteamTitlePlaceholder(rawTitle, appId)
+                ? rawTitle
+                : appId;
+            const fallback = createProfileHistoryFallbackGame(appId, title);
+            const withTime: GhostBoxGame = fallback.lastTimePlayed
+              ? fallback
+              : {
+                  ...fallback,
+                  lastTimePlayed: save.updatedAt || save.createdAt || null,
+                };
+
+            const manifestCount =
+              save.manifest?.profileProgress?.achievementCount;
+            const seededGame =
+              typeof manifestCount === "number" && manifestCount > 0
+                ? {
+                    ...withTime,
+                    achievements: {
+                      unlocked: withTime.achievements.unlocked,
+                      total: Math.max(
+                        withTime.achievements.total,
+                        manifestCount,
+                      ),
+                      progress: withTime.achievements.progress,
+                    },
+                  }
+                : withTime;
+
+            nextHistory = upsertProfileHistoryGame(nextHistory, seededGame);
+            knownAppIds.add(appId);
+            changed = true;
+          }
+
+          if (changed && !cancelled) {
+            setProfileHistoryGames(nextHistory);
+          }
+        }
       })
       .catch(() => undefined);
 
@@ -1096,7 +1174,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           knownGames.find((item) => item.appId === appId) ??
           createProfileHistoryFallbackGame(appId, record.title || appId);
 
-        await applyBackupAchievementsToProfileHistory(game).catch(() => undefined);
+        // The latest backup counts as recent activity when the game has no
+        // local last-played date (fresh install, saves only in the cloud).
+        await applyBackupAchievementsToProfileHistory(
+          withBackupRecordLastPlayed(game, record),
+        ).catch(() => undefined);
       }
     })();
 

@@ -29,7 +29,7 @@ const LIVE_FILE_NAME: &str = ".ghostbox-chunks.json";
 const LIVE_TEMP_FILE_NAME: &str = ".ghostbox-chunks.json.tmp";
 /// Fora de `steamapps\`, entao a Steam nunca ve estes arquivos — vale mesmo
 /// quando a raiz de downloads e uma biblioteca registrada.
-const STASH_DIR_NAME: &str = ".ghostbox";
+pub(crate) const STASH_DIR_NAME: &str = ".ghostbox";
 
 pub fn stash_dir(downloads_root: &Path) -> PathBuf {
     downloads_root.join(STASH_DIR_NAME)

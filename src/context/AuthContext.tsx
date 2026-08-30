@@ -157,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithProvider = useCallback(async (provider: LoginProvider) => {
     const result = await ghostboxApi.loginWithProvider(provider);
     setAccount(result.account);
+    if (result.steamId) setLinkedSteamId(result.steamId);
     setStatus("authenticated");
     try {
       applyAccount(await ghostboxApi.getAccount());

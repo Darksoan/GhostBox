@@ -14,6 +14,7 @@ import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
+import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import {
   getLoadedGameModalModule,
   loadGameModalModule,
@@ -226,10 +227,30 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
                 if (!downloadsRoot) return;
                 writeStoredDownloadsDir(downloadsRoot);
               }
+              let gameForDownload = mergedGame;
+              const downloadAppId = getGameAppId(mergedGame);
+              if (
+                downloadAppId &&
+                isSteamTitlePlaceholder(mergedGame.title, downloadAppId)
+              ) {
+                try {
+                  const details =
+                    (await ghostboxApi.getGameDetails(downloadAppId).catch(() => null)) ??
+                    (await ghostboxApi
+                      .getGameStoreDetails(downloadAppId, appearance.language)
+                      .catch(() => null));
+                  if (
+                    details?.title &&
+                    !isSteamTitlePlaceholder(details.title, downloadAppId)
+                  ) {
+                    gameForDownload = { ...mergedGame, title: details.title };
+                  }
+                } catch {}
+              }
               /* O destino final e `<root>\steamapps\common\<installdir>`, e so o
                  Rust sabe o `installdir` — ele resolve o appinfo e devolve o
                  caminho no evento `depot-plan`. Aqui so a raiz e conhecida. */
-              enqueueDownload(mergedGame, downloadsRoot);
+              enqueueDownload(gameForDownload, downloadsRoot);
               /* Download enfileirado: o usuário acompanha o progresso na aba
                  Downloads, e o próprio goToPage fecha este modal ao navegar. */
               onNavigateToDownloads();

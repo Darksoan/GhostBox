@@ -198,3 +198,18 @@ export function createProfileHistoryFallbackGame(
     pcRequirements: { minimum: [], recommended: [] },
   };
 }
+
+/**
+ * Backup dates double as "last activity" for games with no local play history:
+ * a fresh install (or a machine that only holds the cloud save) would
+ * otherwise show a game with no last-played date at all.
+ */
+export function withBackupRecordLastPlayed(
+  game: GhostBoxGame,
+  record: BackupSettings["backupRecords"][string]
+): GhostBoxGame {
+  if (game.lastTimePlayed) return game;
+  const lastBackupAt = record.entries?.[0]?.backupAt ?? record.lastBackupAt;
+  if (!lastBackupAt) return game;
+  return { ...game, lastTimePlayed: lastBackupAt };
+}

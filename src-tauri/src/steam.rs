@@ -1059,6 +1059,14 @@ pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Valu
 
     match result {
         Ok(session) => {
+            if let Err(error) = crate::cloud_save::save_cloud_session(&app, &session) {
+                write_http_response(
+                    &mut callback.stream,
+                    "400 Bad Request",
+                    &steam_login_page_html(false, "Not signed in."),
+                );
+                return Err(error);
+            }
             write_http_response(
                 &mut callback.stream,
                 "200 OK",
@@ -1822,10 +1830,16 @@ pub(crate) fn read_steam_library_paths(steam_path: &str) -> Vec<String> {
         return paths;
     };
 
+    // O próprio VDF lista a raiz da instalação como entrada "0" — a chave
+    // case-insensitive (e sem barra final) evita duplicar o C: na lista.
+    let key_for =
+        |value: &str| value.to_lowercase().trim_end_matches(['\\', '/']).to_string();
+
     for line in contents.lines() {
         if let Some(path) = parse_vdf_string_value(line, "path") {
-            if normalize_steam_root_path(&path).is_some() && !paths.iter().any(|item| item == &path)
-            {
+            let key = key_for(&path);
+            let already_listed = paths.iter().any(|item| key_for(item) == key);
+            if normalize_steam_root_path(&path).is_some() && !already_listed {
                 paths.push(path);
             }
         }
@@ -2158,4 +2172,136 @@ fn is_steam_process_running() -> bool {
 #[tauri::command]
 pub fn steam_is_running() -> bool {
     is_steam_process_running()
+}
+
+/// Bibliotecas Steam registradas (`libraryfolders.vdf` + a raiz da instalação),
+/// com rótulo do volume e espaço livre/total — a matéria-prima do seletor de
+/// destino de downloads, no formato do painel de Armazenamento da Steam.
+#[derive(serde::Serialize)]
+pub struct SteamLibraryVolume {
+    #[serde(rename = "Path")]
+    pub path: String,
+    /// Letra da unidade com dois-pontos (ex.: `E:`); vazio quando o path não é
+    /// uma unidade com letra.
+    #[serde(rename = "Drive")]
+    pub drive: String,
+    /// Rótulo do volume, quando o usuário nomeou o disco; vazio caso contrário.
+    #[serde(rename = "Label")]
+    pub label: String,
+    /// `fixed` | `removable` | `network` | `unknown` — o rótulo legível fica no
+    /// front-end, que tem o idioma.
+    #[serde(rename = "DriveType")]
+    pub drive_type: String,
+    #[serde(rename = "FreeBytes")]
+    pub free_bytes: u64,
+    #[serde(rename = "TotalBytes")]
+    pub total_bytes: u64,
+}
+
+#[tauri::command]
+pub fn steam_list_libraries(
+    app: tauri::AppHandle,
+    steam_path: Option<String>,
+) -> Vec<SteamLibraryVolume> {
+    let (resolved_path, _) = resolve_steam_path(&app, steam_path);
+    let Some(steam_path) = resolved_path else {
+        return Vec::new();
+    };
+
+    read_steam_library_paths(&steam_path)
+        .into_iter()
+        .map(|path| {
+            let mut volume = read_volume_info(&path);
+            volume.path = path;
+            volume
+        })
+        .collect()
+}
+
+/// Rótulo, tipo e espaço do volume que hospeda `path`. Best-effort: qualquer
+/// falha (path inacessível, unidade offline) devolve campos vazios/zero — a
+/// linha da biblioteca ainda aparece, só sem metadados.
+#[cfg(windows)]
+fn read_volume_info(path: &str) -> SteamLibraryVolume {
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetDiskFreeSpaceExW, GetDriveTypeW, GetVolumeInformationW,
+    };
+
+    // Constantes da API Win32 (GET_DRIVE_TYPE): valores estáveis e documentados.
+    const DRIVE_TYPE_REMOVABLE: u32 = 2;
+    const DRIVE_TYPE_FIXED: u32 = 3;
+    const DRIVE_TYPE_REMOTE: u32 = 4;
+
+    let drive = path
+        .get(0..2)
+        .filter(|prefix| prefix.as_bytes().get(1) == Some(&b':'))
+        .map(str::to_string)
+        .unwrap_or_default();
+
+    let wide = |value: &str| -> Vec<u16> { value.encode_utf16().chain(std::iter::once(0)).collect() };
+    // Rótulo e espaço são POR VOLUME: consultar pela raiz da unidade (com
+    // barra final) é a forma canônica — passar o caminho da biblioteca fazia o
+    // GetVolumeInformationW voltar vazio nas unidades secundárias.
+    let drive_root = wide(&format!("{drive}\\"));
+
+    let drive_type = unsafe {
+        match GetDriveTypeW(drive_root.as_ptr()) {
+            DRIVE_TYPE_FIXED => "fixed",
+            DRIVE_TYPE_REMOVABLE => "removable",
+            DRIVE_TYPE_REMOTE => "network",
+            _ => "unknown",
+        }
+    };
+
+    let mut label = [0u16; 261];
+    let label = unsafe {
+        if GetVolumeInformationW(
+            drive_root.as_ptr(),
+            label.as_mut_ptr(),
+            label.len() as u32,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        ) != 0
+        {
+            let len = label.iter().position(|unit| *unit == 0).unwrap_or(0);
+            String::from_utf16_lossy(&label[..len])
+        } else {
+            String::new()
+        }
+    };
+
+    let mut free_bytes: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    unsafe {
+        let _ = GetDiskFreeSpaceExW(
+            drive_root.as_ptr(),
+            std::ptr::null_mut(),
+            &mut total_bytes,
+            &mut free_bytes,
+        );
+    }
+
+    SteamLibraryVolume {
+        path: String::new(),
+        drive,
+        label,
+        drive_type: drive_type.to_string(),
+        free_bytes,
+        total_bytes,
+    }
+}
+
+#[cfg(not(windows))]
+fn read_volume_info(path: &str) -> SteamLibraryVolume {
+    SteamLibraryVolume {
+        path: String::new(),
+        drive: String::new(),
+        label: String::new(),
+        drive_type: "unknown".to_string(),
+        free_bytes: 0,
+        total_bytes: 0,
+    }
 }

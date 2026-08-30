@@ -1,17 +1,12 @@
-import { FolderOpen, FolderSearch, GripHorizontal, LoaderCircle, Pause, Play, Trash2, X } from "lucide-react";
+import { GripHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { DownloadDetailsModal } from "../components/modals/DownloadDetailsModal";
-import { useOverlay } from "../context/OverlayContext";
 import { useSettings } from "../context/settings";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import {
   downloadTasksChangedEvent,
-  pauseDownloadTask,
   readDownloadTasks,
-  removeDownloadTask,
-  resumeDownloadTask,
-  retryDownloadIgnoringStaleManifest,
   reorderQueuedTasks,
   reorderPausedTasks,
   reorderHistoryTasks,
@@ -22,9 +17,9 @@ import {
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { formatBytes, formatSpeed } from "../utils/formatBytes";
 import { layeredImageStyle } from "../utils/image";
+import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 
 const emptyImageSources: string[] = [];
-const minLaunchSpinnerMs = 700;
 
 function formatEta(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "--";
@@ -48,14 +43,7 @@ function formatDownloadTimestamp(timestamp: number | undefined, language: "pt" |
 function DownloadsHero({
   task,
   queuePosition,
-  onPause,
-  onResume,
   onOpen,
-  onOpenFolder,
-  onUninstall,
-  onLaunch,
-  onRetryStale,
-  launching,
   draggable,
   onDragStart,
   onDragOver,
@@ -66,14 +54,7 @@ function DownloadsHero({
 }: {
   task: DownloadTask;
   queuePosition: number | null;
-  onPause: (id: string) => void;
-  onResume: (id: string) => void;
   onOpen: (id: string) => void;
-  onOpenFolder: (task: DownloadTask) => void;
-  onUninstall: (id: string) => void;
-  onLaunch: (task: DownloadTask) => void;
-  onRetryStale: (id: string) => void;
-  launching: boolean;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -83,6 +64,47 @@ function DownloadsHero({
   isDragOver?: boolean;
 }) {
   const { appearance, t } = useSettings();
+  const [displayTitle, setDisplayTitle] = useState(task.title);
+  useEffect(() => {
+    if (!isSteamTitlePlaceholder(task.title, task.appId)) {
+      setDisplayTitle(task.title);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const details =
+          (await ghostboxApi.getGameDetails(task.appId).catch(() => null)) ??
+          (await ghostboxApi
+            .getGameStoreDetails(task.appId, appearance.language)
+            .catch(() => null));
+        if (
+          !cancelled &&
+          details?.title &&
+          !isSteamTitlePlaceholder(details.title, task.appId)
+        ) {
+          setDisplayTitle(details.title);
+          return;
+        }
+        if (cancelled) return;
+        try {
+          const result = await ghostboxApi.getGames({
+            query: task.appId,
+            limit: 5,
+          });
+          const match = result.games.find(
+            (game) =>
+              game.appId === task.appId &&
+              !isSteamTitlePlaceholder(game.title, game.appId),
+          );
+          if (!cancelled && match) setDisplayTitle(match.title);
+        } catch {}
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [task.appId, task.title, appearance.language]);
   const heroSources = useMemo(() => {
     const appId = task.appId;
     return [
@@ -119,9 +141,6 @@ function DownloadsHero({
               : "";
   const downloadedAt = formatDownloadTimestamp(task.startedAt ?? task.queuedAt, appearance.language);
   const showsProgress = task.status === "downloading" || task.status === "paused" || task.status === "queued";
-  const canPause = task.status === "downloading" || task.status === "queued";
-  const canResume = task.status === "paused";
-  const canRemove = task.status === "error";
 
   const metaItems = (
     showsProgress
@@ -142,12 +161,32 @@ function DownloadsHero({
           : []
   ).filter(Boolean);
 
+  const handleOpen = useCallback(() => {
+    if (isDragging) return;
+    onOpen(task.id);
+  }, [onOpen, task.id, isDragging]);
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen(task.id);
+      }
+    },
+    [onOpen, task.id],
+  );
+
   return (
     <section
       className={`downloads-hero downloads-hero--${task.status}${isDragging ? " downloads-hero--dragging" : ""}${isDragOver ? " downloads-hero--drag-over" : ""}`}
       onDragOver={onDragOver}
       onDrop={onDrop}
       data-drop-placement="hero"
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={handleKeyDown}
+      aria-label={t("downloads.details.open", { title: displayTitle })}
+      style={{ cursor: "pointer" }}
     >
       <span
         className={`downloads-hero__cover${headerLoaded && headerSource ? " downloads-hero__cover--loaded" : ""}`}
@@ -161,6 +200,7 @@ function DownloadsHero({
           draggable
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
+          onClick={(event) => event.stopPropagation()}
           aria-hidden="true"
         >
           <GripHorizontal size={14} strokeWidth={2} />
@@ -169,42 +209,8 @@ function DownloadsHero({
       <div className="downloads-hero__content">
         <div className="downloads-hero__top">
           <div className="downloads-hero__main">
-            <strong className="downloads-hero__title">{task.title}</strong>
+            <strong className="downloads-hero__title">{displayTitle}</strong>
             {statusLabel && <span className="downloads-hero__status-text">{statusLabel}</span>}
-          </div>
-
-          <div className="downloads-hero__actions">
-            {canPause && (
-              <button type="button" className="downloads-hero__action" onClick={() => onPause(task.id)} aria-label={t("downloads.pause")}>
-                <Pause size={18} strokeWidth={1.75} />
-              </button>
-            )}
-            {canResume && (
-              <button type="button" className="downloads-hero__action downloads-hero__action--primary" onClick={() => onResume(task.id)} aria-label={t("downloads.resume")}>
-                <Play size={18} strokeWidth={1.75} />
-              </button>
-            )}
-            {task.status === "completed" && (
-              <>
-                <button type="button" className="downloads-hero__action" onClick={() => onOpenFolder(task)} aria-label={t("downloads.openFolder")}>
-                  <FolderOpen size={18} strokeWidth={1.75} />
-                </button>
-                <button type="button" className="downloads-hero__action" onClick={() => onUninstall(task.id)} aria-label={t("downloads.uninstall")}>
-                  <Trash2 size={18} strokeWidth={1.75} />
-                </button>
-                <button type="button" className="downloads-hero__action downloads-hero__action--primary" onClick={() => onLaunch(task)} disabled={launching} aria-busy={launching} aria-label={t("downloads.launch")}>
-                  {launching ? <LoaderCircle className="downloads-hero__launch-spinner" size={18} strokeWidth={1.75} aria-hidden="true" /> : <Play size={18} strokeWidth={1.75} />}
-                </button>
-              </>
-            )}
-            {canRemove && (
-              <button type="button" className="downloads-hero__action" onClick={() => removeDownloadTask(task.id)} aria-label={t("downloads.remove")}>
-                <X size={18} strokeWidth={1.75} />
-              </button>
-            )}
-            <button type="button" className="downloads-hero__action" onClick={() => onOpen(task.id)} aria-label={t("downloads.details.open", { title: task.title })}>
-              <FolderSearch size={18} strokeWidth={1.75} />
-            </button>
           </div>
         </div>
 
@@ -225,16 +231,13 @@ function DownloadsHero({
         )}
 
         {task.staleManifest && (
-          <span className="downloads-hero__stale">
+          <span className="downloads-hero__stale" onClick={(event) => event.stopPropagation()}>
             <span className="downloads-hero__stale-detail">
               {t("downloads.staleManifestDetail", {
                 depots: task.staleManifest.depots.map((depot) => depot.depotId).join(", "),
                 buildId: task.staleManifest.publicBuildId || "--",
               })}
             </span>
-            <button type="button" className="downloads-hero__action" onClick={() => onRetryStale(task.id)}>
-              {t("downloads.staleManifestDownloadAnyway")}
-            </button>
           </span>
         )}
       </div>
@@ -244,11 +247,9 @@ function DownloadsHero({
 
 export function DownloadsPage() {
   const { t } = useSettings();
-  const { showToast } = useOverlay();
   const [tasks, setTasks] = useState<DownloadTask[]>(() => readDownloadTasks());
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [confirmDeleteOnOpen, setConfirmDeleteOnOpen] = useState(false);
-  const [launchingTaskId, setLaunchingTaskId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
@@ -267,44 +268,10 @@ export function DownloadsPage() {
     setSelectedTaskId(id);
   }, []);
 
-  const openUninstall = useCallback((id: string) => {
-    setConfirmDeleteOnOpen(true);
-    setSelectedTaskId(id);
-  }, []);
-
   const closeDetails = useCallback(() => {
     setSelectedTaskId(null);
     setConfirmDeleteOnOpen(false);
   }, []);
-
-  const openDownloadFolder = useCallback(
-    async (task: DownloadTask) => {
-      try {
-        await ghostboxApi.revealDownloadFolder(task.outputDir);
-      } catch {
-        showToast(t("downloads.openFolder"), t("downloads.openFolderError"), "error");
-      }
-    },
-    [showToast, t]
-  );
-
-  const launchDownload = useCallback(
-    async (task: DownloadTask) => {
-      if (launchingTaskId) return;
-      setLaunchingTaskId(task.id);
-      try {
-        await Promise.all([
-          ghostboxApi.launchDownloadedGame(task.appId, task.title, task.downloadsRoot, task.outputDir, task.installDir),
-          new Promise((resolve) => window.setTimeout(resolve, minLaunchSpinnerMs)),
-        ]);
-      } catch {
-        showToast(t("downloads.launch"), t("downloads.launchError"), "error");
-      } finally {
-        setLaunchingTaskId(null);
-      }
-    },
-    [launchingTaskId, showToast, t]
-  );
 
   // Hero = downloading active, fallback queued, fallback paused — banner sempre no topo, demais em headers abaixo
   const activeDownloading = tasks.find((t) => t.status === "downloading") ?? null;
@@ -479,14 +446,7 @@ export function DownloadsPage() {
               <DownloadsHero
                 task={heroTask}
                 queuePosition={heroTask.status === "queued" ? 1 : null}
-                onPause={pauseDownloadTask}
-                onResume={resumeDownloadTask}
                 onOpen={openDetails}
-                onOpenFolder={(t) => void openDownloadFolder(t)}
-                onUninstall={openUninstall}
-                onLaunch={(t) => void launchDownload(t)}
-                onRetryStale={retryDownloadIgnoringStaleManifest}
-                launching={launchingTaskId === heroTask.id}
                 draggable={Boolean(heroTask)}
                 onDragStart={(e) => handleDragStart(e, heroTask.id)}
                 onDragOver={(e) => handleDragOver(e, heroTask.id)}
@@ -511,14 +471,7 @@ export function DownloadsPage() {
                     key={task.id}
                     task={task}
                     queuePosition={tasks.filter((t) => t.status === "queued").findIndex((e) => e.id === task.id) + 1}
-                    onPause={pauseDownloadTask}
-                    onResume={resumeDownloadTask}
                     onOpen={openDetails}
-                    onOpenFolder={(t) => void openDownloadFolder(t)}
-                    onUninstall={openUninstall}
-                    onLaunch={(t) => void launchDownload(t)}
-                    onRetryStale={retryDownloadIgnoringStaleManifest}
-                    launching={launchingTaskId === task.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onDragOver={(e) => handleDragOver(e, task.id)}
@@ -545,14 +498,7 @@ export function DownloadsPage() {
                     key={task.id}
                     task={task}
                     queuePosition={null}
-                    onPause={pauseDownloadTask}
-                    onResume={resumeDownloadTask}
                     onOpen={openDetails}
-                    onOpenFolder={(t) => void openDownloadFolder(t)}
-                    onUninstall={openUninstall}
-                    onLaunch={(t) => void launchDownload(t)}
-                    onRetryStale={retryDownloadIgnoringStaleManifest}
-                    launching={launchingTaskId === task.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onDragOver={(e) => handleDragOver(e, task.id)}
@@ -579,14 +525,7 @@ export function DownloadsPage() {
                     key={task.id}
                     task={task}
                     queuePosition={null}
-                    onPause={pauseDownloadTask}
-                    onResume={resumeDownloadTask}
                     onOpen={openDetails}
-                    onOpenFolder={(t) => void openDownloadFolder(t)}
-                    onUninstall={openUninstall}
-                    onLaunch={(t) => void launchDownload(t)}
-                    onRetryStale={retryDownloadIgnoringStaleManifest}
-                    launching={launchingTaskId === task.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onDragOver={(e) => handleDragOver(e, task.id)}

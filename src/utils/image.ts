@@ -266,11 +266,32 @@ export function isLandscapeImageSource(source: string) {
   // included as `coverFallbacks` by the backend.
   const normalizedPath = pathname.replace(/\\/g, "/");
   return (
-    /(^|\/)(?:capsule_616x353|capsule_231x87|capsule_467x181)\.jpg$/.test(
+    /(^|\/)(?:header_2x|capsule_616x353|capsule_231x87|capsule_467x181)\.jpg$/.test(
       normalizedPath
     ) ||
     /(^|\/)hero_capsule(_2x)?\.jpg$/.test(normalizedPath) ||
     /(^|\/)library_hero(_2x)?\.jpg$/.test(normalizedPath)
+  );
+}
+
+/**
+ * Identifica as capsules verticais da biblioteca Steam, incluindo os aliases
+ * legados que ainda podem existir em tarefas de download persistidas.
+ */
+export function isPortraitLibraryImageSource(source: string) {
+  const normalizedSource = source.trim().toLowerCase();
+  if (!normalizedSource) return false;
+
+  let pathname = normalizedSource.split(/[?#]/)[0];
+
+  try {
+    pathname = new URL(normalizedSource).pathname.toLowerCase();
+  } catch {
+    // Fontes locais ou relativas ainda podem ser classificadas pelo nome.
+  }
+
+  return /(^|\/)(?:library_600x900(?:_2x)?|library_capsule(?:_2x)?)\.jpg$/.test(
+    pathname.replace(/\\/g, "/")
   );
 }
 

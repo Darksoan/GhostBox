@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Lock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
@@ -18,7 +18,6 @@ import { formatCompactPlaytime } from "../../utils/time";
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
 import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
-import { useSettings } from "../../context/settings";
 
 interface GameCardProps {
   game: GhostBoxGame;
@@ -38,7 +37,6 @@ export const GameCard = memo(function GameCard({
   showAchievements = false,
   libraryCoverFade = false,
 }: GameCardProps) {
-  const { t } = useSettings();
   const areMetricsUnlocked = useMetricsUnlocked();
   const cardRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
@@ -128,7 +126,7 @@ export const GameCard = memo(function GameCard({
     <article
       ref={cardRef}
       data-layout-id={game.id}
-      className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}`}
+      className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}${showLockedBadge ? " game-card--locked" : ""}`}
       style={gameStyle(game)}
       onClick={() => onOpenGame(game)}
       onFocus={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
@@ -148,16 +146,9 @@ export const GameCard = memo(function GameCard({
           portrait ? "auto 106%" : "100% 100%",
         )}
       >
-        {showLockedBadge ? (
-          <div
-            className="game-card__achievement-badges game-card__achievement-badges--locked"
-            aria-label={t("metrics.lockedAria")}
-          >
-            <Lock size={14} strokeWidth={2.0} aria-hidden="true" />
-            <span>{t("metrics.locked")}</span>
-          </div>
-        ) : (
-          showAchievementBadges && (
+        {showLockedBadge
+          ? null
+          : showAchievementBadges && (
             <div
               className="game-card__achievement-badges"
               aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
@@ -173,8 +164,7 @@ export const GameCard = memo(function GameCard({
                 <span>{compactPlaytime}</span>
               </span>
             </div>
-          )
-        )}
+          )}
       </div>
       <div className="game-card__backdrop">
         <div className="game-card__content">

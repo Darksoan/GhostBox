@@ -7,7 +7,6 @@ import {
   Heart,
   Image as ImageIcon,
   Languages,
-  Lock,
   Play,
   Settings,
   Tags as TagsIcon,
@@ -630,16 +629,12 @@ const AchievementIcon = memo(function AchievementIcon({
         // explícito em vez de deixar um retângulo escuro liso — que lê como
         // "a imagem não carregou", não como "isso está bloqueado".
         <span className="modal__achievement-fallback" aria-hidden="true">
-          {isUnlocked ? (
-            <Cup size={16} weight="Filled" strokeWidth={2.0} />
-          ) : (
-            <Lock size={16} strokeWidth={2.0} />
-          )}
+          <Cup size={16} weight="Filled" strokeWidth={2.0} />
         </span>
       )}
       {!imageFailed && !isUnlocked && (
         <span className="modal__achievement-lock-badge" aria-hidden="true">
-          <Lock size={14} strokeWidth={2.0} />
+          <Cup size={14} weight="Filled" strokeWidth={2.0} />
         </span>
       )}
       {tooltipPosition && typeof document !== "undefined"
@@ -1858,7 +1853,6 @@ export function GameModal({
                                   className="modal__achievements-locked-overlay"
                                   role="status"
                                 >
-                                  <Lock size={18} strokeWidth={2.0} aria-hidden="true" />
                                   <span>{t("metrics.lockedAchievements")}</span>
                                 </div>
                               )}

@@ -534,6 +534,138 @@ impl Drop for ChunkIndexGuard<'_> {
 /// Barreira para operacoes em uma instalacao: o alvo tem que estar ESTRITAMENTE
 /// dentro da raiz de downloads. Recebe caminhos ja canonicalizados, para que
 /// `..` tenha sido resolvido antes da comparacao.
+/// Normaliza a raiz de downloads quando ela já vive dentro de uma Steam Library.
+///
+/// O layout do GhostBox é `<raiz>\steamapps\common\<jogo>`. Quando a raiz
+/// escolhida já é `X\steamapps` ou `X\steamapps\common` — tipicamente a
+/// biblioteca oficial, ex. `E:\SteamLibrary\steamapps\common` — anexar de novo
+/// criava `...\steamapps\common\steamapps\common\<jogo>`, estrutura que a Steam
+/// nunca escaneia, e o jogo ficava eternamente "instalável". A raiz vira `X`:
+/// os arquivos caem exatamente onde a biblioteca oficial já os espera.
+pub(crate) fn normalize_library_root(raw: &Path) -> PathBuf {
+    let mut parts: Vec<std::ffi::OsString> = raw
+        .components()
+        .map(|component| component.as_os_str().to_os_string())
+        .collect();
+    while parts.len() >= 2 {
+        let last = parts[parts.len() - 1].to_string_lossy().to_lowercase();
+        let previous = parts[parts.len() - 2].to_string_lossy().to_lowercase();
+        if last == "common" && previous == "steamapps" {
+            parts.pop();
+            parts.pop();
+        } else if last == "steamapps" {
+            parts.pop();
+        } else {
+            break;
+        }
+    }
+    parts.iter().collect::<PathBuf>()
+}
+
+/// Sobe para a biblioteca de verdade uma instalação criada com a raiz aninhada.
+///
+/// Downloads feitos antes da normalização, com raiz tipo
+/// `E:\SteamLibrary\steamapps\common`, geraram `steamapps\` DENTRO do `common`
+/// da biblioteca oficial — ACF, jogos e depotcache num lugar que a Steam nunca
+/// lê. Esta rotina move cada peça (best-effort, sem sobrescrever nada que já
+/// exista no destino) e devolve quantos itens moveram.
+fn migrate_nested_library(raw_root: &Path, library_root: &Path) -> usize {
+    if raw_root == library_root {
+        return 0;
+    }
+    let nested_steamapps = raw_root.join("steamapps");
+    if !nested_steamapps.is_dir() {
+        return 0;
+    }
+    let real_steamapps = crate::steam_appmanifest::steamapps_dir(library_root);
+    if std::fs::create_dir_all(&real_steamapps).is_err() {
+        return 0;
+    }
+    let mut moved = 0usize;
+
+    // 1. ACFs: sem eles não há nada para o Steam reconhecer.
+    if let Ok(entries) = std::fs::read_dir(&nested_steamapps) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if !name.starts_with("appmanifest_") || !name.ends_with(".acf") {
+                continue;
+            }
+            let target = real_steamapps.join(entry.file_name());
+            if target.exists() {
+                continue;
+            }
+            if std::fs::rename(entry.path(), &target).is_ok() {
+                moved += 1;
+            }
+        }
+    }
+
+    // 2. Os jogos: `<aninhado>\common\<jogo>` -> `<biblioteca>\steamapps\common\<jogo>`.
+    let nested_common = nested_steamapps.join("common");
+    if nested_common.is_dir() {
+        let real_common = real_steamapps.join("common");
+        if std::fs::create_dir_all(&real_common).is_ok() {
+            if let Ok(entries) = std::fs::read_dir(&nested_common) {
+                for entry in entries.flatten() {
+                    let target = real_common.join(entry.file_name());
+                    if target.exists() {
+                        continue;
+                    }
+                    if move_dir_best_effort(&entry.path(), &target) {
+                        moved += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. depotcache: sem os manifestos, um "Verify Integrity" re-baixaria tudo.
+    let nested_depotcache = nested_steamapps.join("depotcache");
+    if nested_depotcache.is_dir() {
+        let real_depotcache = real_steamapps.join("depotcache");
+        if std::fs::create_dir_all(&real_depotcache).is_ok() {
+            if let Ok(entries) = std::fs::read_dir(&nested_depotcache) {
+                for entry in entries.flatten() {
+                    let target = real_depotcache.join(entry.file_name());
+                    if target.exists() {
+                        continue;
+                    }
+                    if std::fs::rename(entry.path(), &target).is_ok() {
+                        moved += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Stash de chunks da raiz antiga, se a nova não tiver um ainda.
+    let nested_stash = raw_root.join(crate::chunk_index::STASH_DIR_NAME);
+    let real_stash = library_root.join(crate::chunk_index::STASH_DIR_NAME);
+    if nested_stash.is_dir() && !real_stash.exists() && move_dir_best_effort(&nested_stash, &real_stash) {
+        moved += 1;
+    }
+
+    // 5. Casco vazio da estrutura aninhada, best-effort.
+    let _ = std::fs::remove_dir(&nested_depotcache);
+    let _ = std::fs::remove_dir(&nested_common);
+    let _ = std::fs::remove_dir(&nested_steamapps);
+
+    moved
+}
+
+/// Rename primeiro (mesmo volume, instantâneo); cruzando unidade, copia e apaga.
+fn move_dir_best_effort(source: &Path, target: &Path) -> bool {
+    if std::fs::rename(source, target).is_ok() {
+        return true;
+    }
+    if copy_dir_recursive(source, target).is_ok() {
+        let _ = std::fs::remove_dir_all(source);
+        return true;
+    }
+    false
+}
+
 fn ensure_inside_downloads_root(
     canonical_root: &Path,
     canonical_output: &Path,
@@ -682,7 +814,10 @@ fn delete_output_dir_blocking(
     // usuario nunca digita — vem do appinfo. Entao a checagem passa a ser de
     // CONTENCAO: qualquer pasta estritamente dentro da raiz de downloads serve,
     // e a raiz em si nunca. Cobre os dois formatos e continua barrando `..`.
-    let canonical_root = root_path
+    // A raiz e normalizada porque instalacoes antigas podem guardar saida no
+    // caminho aninhado — que fica DENTRO da raiz normalizada, então a contencao
+    // continua valendo.
+    let canonical_root = normalize_library_root(root_path)
         .canonicalize()
         .map_err(|error| format!("Downloads root is unavailable: {error}"))?;
     if !output_path.exists() {
@@ -839,6 +974,67 @@ pub fn cdndownload_sweep_roots(app: tauri::AppHandle, roots: Vec<String>) -> ser
     })
 }
 
+/// Re-registra um download concluido na biblioteca Steam — o reparo automatico
+/// do status "library-not-registered". O ACF ja esta em disco em
+/// `<root>\steamapps`; aqui so falta a entrada em `libraryfolders.vdf`, que a
+/// Steam pode ter descartado se saiu depois de uma escrita com o cliente aberto.
+/// Idempotente: registro ja valido e um no-op sem escrita.
+#[tauri::command]
+pub fn cdndownload_register_library(
+    app: tauri::AppHandle,
+    app_id: String,
+    downloads_root: String,
+    steam_path: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let app_id = app_id.trim().to_string();
+    let downloads_root = downloads_root.trim();
+    if app_id.is_empty() || downloads_root.is_empty() {
+        return Err("Library registration requires an app ID and a downloads root.".to_string());
+    }
+
+    let steam_path = match steam_path {
+        Some(path) if !path.trim().is_empty() => path,
+        _ => crate::resolve_steam_path(&app, None).0.ok_or_else(|| {
+            "Steam path not found. Configure Steam path in Library settings.".to_string()
+        })?,
+    };
+
+    // A raiz pode estar aninhada dentro de uma biblioteca oficial (downloads
+    // antigos). Migra ACF/jogos/depotcache do `steamapps` aninhado para a
+    // biblioteca de verdade antes de registrar — sem isto o Steam nunca lê.
+    let raw_root = PathBuf::from(downloads_root.trim_end_matches(['\\', '/']));
+    let library_root = normalize_library_root(&raw_root);
+    migrate_nested_library(&raw_root, &library_root);
+
+    if !crate::steam_appmanifest::appmanifest_path(&library_root, &app_id).is_file() {
+        return Err(format!(
+            "appmanifest_{app_id}.acf não existe em {} — o download não deixou uma instalação registrável.",
+            crate::steam_appmanifest::steamapps_dir(&library_root).display()
+        ));
+    }
+
+    let size_on_disk = crate::steam_appmanifest::read_size_on_disk(&library_root, &app_id);
+    crate::steam_appmanifest::register_library_folder(
+        &steam_path,
+        &library_root,
+        &app_id,
+        size_on_disk,
+    )?;
+
+    // A tarefa no front-end guarda a raiz como o usuário digitou; devolve o
+    // lugar de verdade para o histórico apontar para a instalação migrada.
+    let install_dir = crate::steam_appmanifest::read_install_dir(&library_root, &app_id);
+    Ok(serde_json::json!({
+        "Status": "ok",
+        "RequiresSteamRestart": crate::steam::steam_is_running(),
+        "DownloadsRoot": library_root.to_string_lossy(),
+        "OutputDir": crate::steam_appmanifest::install_dir_path(
+            &library_root,
+            &install_dir,
+        ).to_string_lossy(),
+    }))
+}
+
 /// Copia recursiva de diretorio para outro volume (fallback quando
 /// `std::fs::rename` nao consegue cruzar unidade). Nao e a operacao normal de
 /// instalacao, so roda em "mover instalacao" entre discos diferentes.
@@ -880,8 +1076,8 @@ pub fn cdndownload_move_install_dir(
         return Err("Move requires both old and new downloads roots.".into());
     }
 
-    let old_root = Path::new(old_root_str);
-    let new_root = Path::new(new_root_str);
+    let old_root = normalize_library_root(Path::new(old_root_str));
+    let new_root = normalize_library_root(Path::new(new_root_str));
     let canonical_old_root = old_root
         .canonicalize()
         .map_err(|error| format!("Old downloads root is unavailable: {error}"))?;
@@ -1154,7 +1350,10 @@ pub async fn cdndownload_download_game(
     // mesma pasta `steamapps\common\<installdir>`, que e como o Steam monta um
     // app. Gravar cada depot em `depot_<id>` separado — o comportamento antigo —
     // deixava o executavel enterrado e o Steam nunca reconhecia a instalacao.
-    let library_root = std::path::PathBuf::from(downloads_root.trim_end_matches(['\\', '/']));
+    // Raiz dentro de uma biblioteca oficial e desfeita antes de montar o caminho.
+    let library_root = normalize_library_root(&PathBuf::from(
+        downloads_root.trim_end_matches(['\\', '/']),
+    ));
     let app_info = crate::steam_appinfo::read_app_info(&steam_path, &app_id);
     let install_dir = crate::steam_appinfo::resolve_install_dir(
         app_info.as_ref(),
@@ -1541,14 +1740,100 @@ fn finalize_steam_integration(
         "CopiedManifests": copied_manifests,
         "SizeOnDisk": size_on_disk,
         "BuildId": build_id,
-        "RequiresSteamRestart": true,
+        // Com a Steam aberta ela pode reescrever libraryfolders.vdf ao sair e
+        // descartar a entrada — o reparo (`cdndownload_register_library`)
+        // reaplica ate o registro ficar.
+        "RequiresSteamRestart": crate::steam::steam_is_running(),
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ensure_inside_downloads_root;
-    use std::path::Path;
+    use super::{ensure_inside_downloads_root, migrate_nested_library, normalize_library_root};
+    use std::path::{Path, PathBuf};
+
+    fn temp_root(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "ghostbox-{tag}-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ))
+    }
+
+    #[test]
+    fn normalizes_a_root_inside_an_official_library() {
+        assert_eq!(
+            normalize_library_root(Path::new("E:\\SteamLibrary\\steamapps\\common")),
+            PathBuf::from("E:\\SteamLibrary")
+        );
+        assert_eq!(
+            normalize_library_root(Path::new("E:\\SteamLibrary\\steamapps")),
+            PathBuf::from("E:\\SteamLibrary")
+        );
+        // Case-insensitive e recorrente: aninhamento duplo some também.
+        assert_eq!(
+            normalize_library_root(Path::new("E:\\Lib\\SteamApps\\Common\\steamapps")),
+            PathBuf::from("E:\\Lib")
+        );
+        // Raiz normal passa intocada.
+        assert_eq!(
+            normalize_library_root(Path::new("E:\\GhostBoxDownloads")),
+            PathBuf::from("E:\\GhostBoxDownloads")
+        );
+    }
+
+    #[test]
+    fn migrates_a_nested_library_install_to_the_real_one() {
+        let root = temp_root("migrate");
+        let library = root.join("SteamLibrary");
+        // Raiz antiga do usuário: o common da biblioteca oficial.
+        let raw_root = library.join("steamapps").join("common");
+
+        let nested_steamapps = raw_root.join("steamapps");
+        let nested_game = nested_steamapps.join("common").join("Hollow Knight");
+        std::fs::create_dir_all(&nested_game).unwrap();
+        std::fs::write(nested_game.join("hollow_knight.exe"), b"fake").unwrap();
+        crate::steam_appmanifest::write_appmanifest(
+            &raw_root,
+            "367520",
+            "Hollow Knight",
+            "Hollow Knight",
+            "13214117",
+            &[(367521, 8_912_243_411_281_072_000, 1_234)],
+            9_999,
+            "76561198000000000",
+        )
+        .unwrap();
+        let nested_depotcache = nested_steamapps.join("depotcache");
+        std::fs::create_dir_all(&nested_depotcache).unwrap();
+        std::fs::write(
+            nested_depotcache.join("367521_manifest.manifest"),
+            b"fake",
+        )
+        .unwrap();
+        let nested_stash = raw_root.join(".ghostbox");
+        std::fs::create_dir_all(&nested_stash).unwrap();
+
+        assert_eq!(migrate_nested_library(&raw_root, &library), 4);
+
+        let real_steamapps = library.join("steamapps");
+        assert!(real_steamapps.join("appmanifest_367520.acf").is_file());
+        assert!(real_steamapps
+            .join("common")
+            .join("Hollow Knight")
+            .join("hollow_knight.exe")
+            .is_file());
+        assert!(real_steamapps
+            .join("depotcache")
+            .join("367521_manifest.manifest")
+            .is_file());
+        assert!(library.join(".ghostbox").is_dir());
+        // Casco aninhado saiu.
+        assert!(!nested_steamapps.exists());
+
+        // Sem nada a migrar na segunda passada.
+        assert_eq!(migrate_nested_library(&raw_root, &library), 0);
+    }
 
     /// Monta uma raiz fake com um `.tmp` de chunks órfão (antigo) e um recente,
     /// mais um ACF apontando para pasta que não existe e outro saudável.

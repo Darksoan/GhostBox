@@ -218,6 +218,20 @@ pub fn remove_appmanifest(library_root: &Path, app_id: &str) -> Result<bool, Str
     Ok(true)
 }
 
+/// `SizeOnDisk` declarado no ACF, para o registro da biblioteca reaproveitar o
+/// numero que o proprio manifest carrega. 0 quando o ACF nao existe ou nao
+/// parseia — o campo e informativo e a Steam recalcula no scan.
+pub fn read_size_on_disk(library_root: &Path, app_id: &str) -> u64 {
+    let Ok(contents) = std::fs::read_to_string(appmanifest_path(library_root, app_id)) else {
+        return 0;
+    };
+    contents
+        .lines()
+        .find_map(|line| crate::steam::parse_vdf_string_value(line, "SizeOnDisk"))
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
 /// Copia os `.manifest` usados para o `depotcache` da biblioteca de destino.
 /// Nao e obrigatorio para o jogo abrir, mas sem isso um "Verify integrity of
 /// game files" no Steam forca re-download completo.
@@ -243,6 +257,19 @@ pub fn copy_depot_manifests(
             source.is_file() && std::fs::copy(&source, destination.join(&file_name)).is_ok()
         })
         .count()
+}
+
+/// `installdir` declarado no ACF. Vazio quando o manifest não existe ou não
+/// declara o campo.
+pub fn read_install_dir(library_root: &Path, app_id: &str) -> String {
+    let Ok(contents) = std::fs::read_to_string(appmanifest_path(library_root, app_id)) else {
+        return String::new();
+    };
+    contents
+        .lines()
+        .find_map(|line| crate::steam::parse_vdf_string_value(line, "installdir"))
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// SteamID64 do usuario logado, para o campo `LastOwner`. Sem ele o Steam ainda
@@ -308,22 +335,16 @@ fn normalized_path_key(value: &str) -> String {
 /// Registra `library_root` como Steam Library em `libraryfolders.vdf` e garante
 /// que `app_id` conste no bloco `apps` dessa entrada.
 ///
-/// **Falha de proposito com a Steam aberta.** O cliente mantem o arquivo em
-/// memoria e o reescreve ao sair, entao qualquer alteracao feita com ele rodando
-/// e perdida silenciosamente — o pior modo de falha possivel aqui.
+/// Escreve mesmo com a Steam aberta: o cliente pode reescrever o arquivo ao
+/// sair e descartar a entrada, mas a entrada em disco é inofensiva e o reparo
+/// automático (`cdndownload_register_library`) reaplica até ficar. A decisão de
+/// quando registrar é do chamador — aqui é só a escrita consistente, com backup.
 pub fn register_library_folder(
     steam_path: &str,
     library_root: &Path,
     app_id: &str,
     size_on_disk: u64,
 ) -> Result<(), String> {
-    if crate::steam::steam_is_running() {
-        return Err(
-            "Feche a Steam antes de concluir o download: com o cliente aberto, a alteracao em libraryfolders.vdf e descartada ao sair."
-                .to_string(),
-        );
-    }
-
     let libraryfolders = Path::new(steam_path)
         .join("steamapps")
         .join("libraryfolders.vdf");
@@ -648,5 +669,69 @@ mod tests {
             normalized_path_key("E:/Games/"),
             normalized_path_key("e:\\games")
         );
+    }
+
+    fn sample_library_with_installed_app() -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-register-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        let steam = root.join("steam");
+        let library = root.join("downloads");
+        std::fs::create_dir_all(steam.join("steamapps")).unwrap();
+        let installed = install_dir_path(&library, "Hollow Knight");
+        std::fs::create_dir_all(&installed).unwrap();
+        // O ACF exige um executavel na pasta de instalacao (o Steam mostraria
+        // "instalado" sobre uma pasta vazia).
+        std::fs::write(installed.join("hollow_knight.exe"), b"fake").unwrap();
+        write_appmanifest(
+            &library,
+            "367520",
+            "Hollow Knight",
+            "Hollow Knight",
+            "13214117",
+            &[(367521, 8_912_243_411_281_072_000, 1_234)],
+            9_999,
+            "76561198000000000",
+        )
+        .unwrap();
+        std::fs::write(
+            steam.join("steamapps").join("libraryfolders.vdf"),
+            LIBRARYFOLDERS,
+        )
+        .unwrap();
+        (steam, library)
+    }
+
+    #[test]
+    fn registers_the_library_end_to_end_and_is_idempotent() {
+        let (steam, library) = sample_library_with_installed_app();
+
+        register_library_folder(steam.to_str().unwrap(), &library, "367520", 9_999)
+            .expect("registro deve passar com a Steam fora do caminho");
+        let vdf =
+            std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf")).unwrap();
+        // O path entra escapado no VDF (barra invertida dobrada).
+        let escaped_path = library.to_string_lossy().replace('\\', "\\\\");
+        assert!(vdf.contains(escaped_path.as_str()));
+        assert!(vdf.contains("\"367520\""));
+
+        // Segunda rodada: registro valido, nenhuma reescrita.
+        let before = std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf"))
+            .unwrap();
+        register_library_folder(steam.to_str().unwrap(), &library, "367520", 9_999)
+            .expect("re-registro deve ser no-op");
+        let after = std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf"))
+            .unwrap();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn reads_size_on_disk_from_the_manifest() {
+        let (steam, library) = sample_library_with_installed_app();
+        assert_eq!(read_size_on_disk(&library, "367520"), 9_999);
+        assert_eq!(read_size_on_disk(&library, "999999"), 0);
+        assert_eq!(read_size_on_disk(&steam, "367520"), 0);
     }
 }

@@ -1,7 +1,16 @@
 import { ghostboxApi } from "./ghostboxApi";
 import type { GhostBoxGame } from "../data";
-import { gameSteamHeaderFirstSources, getGameAppId } from "../utils/image";
-import { readStoredDownloadsDir } from "../utils/storage";
+import {
+  gameSteamHeaderFirstSources,
+  getGameAppId,
+  isPortraitLibraryImageSource,
+} from "../utils/image";
+import {
+  readStoredDownloadsDir,
+  readStoredFavoriteGames,
+  readStoredProfileHistoryGames,
+} from "../utils/storage";
+import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 
 type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
 
@@ -222,7 +231,10 @@ function normalizeTask(value: unknown): DownloadTask | null {
     coverUrl: typeof item.coverUrl === "string" ? item.coverUrl : "",
     headerSources: Array.isArray(item.headerSources)
       ? item.headerSources.filter(
-          (source): source is string => typeof source === "string" && source.length > 0,
+          (source): source is string =>
+            typeof source === "string" &&
+            source.length > 0 &&
+            !isPortraitLibraryImageSource(source),
         )
       : [],
     downloadsRoot: typeof item.downloadsRoot === "string"
@@ -282,6 +294,9 @@ function ensureLiveTasksHydrated() {
   if (liveTasksHydrated) return;
   liveTasksHydrated = true;
   liveTasks = readInitialLiveTasks();
+  if (typeof window !== "undefined") {
+    void Promise.resolve().then(() => hydratePlaceholderTitles());
+  }
 }
 
 function readHistoryTasks(): DownloadTask[] {
@@ -339,6 +354,100 @@ function notifyChanged(immediate = false) {
   if (immediate) flushStoredTasks();
   else scheduleStoredTasksWrite();
   window.dispatchEvent(new CustomEvent(downloadTasksChangedEvent));
+}
+
+function findLocalStoredTitle(appId: string): string | null {
+  try {
+    const fav = readStoredFavoriteGames().find((game) => game.appId === appId)?.title;
+    if (fav && !isSteamTitlePlaceholder(fav, appId)) return fav;
+  } catch {}
+  try {
+    const hist = readStoredProfileHistoryGames().find((game) => game.appId === appId)?.title;
+    if (hist && !isSteamTitlePlaceholder(hist, appId)) return hist;
+  } catch {}
+  return null;
+}
+
+function patchPlaceholderTitleForAppId(appId: string) {
+  const live = liveTasks.find((task) => task.appId === appId);
+  const historyTasks = readHistoryTasks();
+  const livePlaceholder = live ? isSteamTitlePlaceholder(live.title, appId) : false;
+  const historyPlaceholders = historyTasks.filter(
+    (task) => task.appId === appId && isSteamTitlePlaceholder(task.title, appId),
+  );
+  if (!livePlaceholder && historyPlaceholders.length === 0) return;
+
+  const localTitle = findLocalStoredTitle(appId);
+  if (localTitle) {
+    if (livePlaceholder) updateLiveTask(appId, { title: localTitle });
+    if (historyPlaceholders.length) {
+      const patched = historyTasks.map((task) =>
+        task.appId === appId && isSteamTitlePlaceholder(task.title, appId)
+          ? { ...task, title: localTitle }
+          : task,
+      );
+      writeHistoryTasks(patched);
+      notifyChanged(true);
+    }
+    return;
+  }
+
+  void (async () => {
+    try {
+      let resolved: string | null = null;
+      const details = await ghostboxApi.getGameDetails(appId).catch(() => null);
+      if (details?.title && !isSteamTitlePlaceholder(details.title, appId)) {
+        resolved = details.title;
+      }
+      if (!resolved) {
+        const store = await ghostboxApi.getGameStoreDetails(appId).catch(() => null);
+        if (store?.title && !isSteamTitlePlaceholder(store.title, appId)) {
+          resolved = store.title;
+        }
+      }
+      if (!resolved) {
+        try {
+          const result = await ghostboxApi.getGames({ query: appId, limit: 5 });
+          const match = result.games.find(
+            (game) => game.appId === appId && !isSteamTitlePlaceholder(game.title, appId),
+          );
+          if (match) resolved = match.title;
+        } catch {}
+      }
+      if (!resolved) return;
+      const currentLive = liveTasks.find((task) => task.appId === appId);
+      if (
+        currentLive &&
+        isSteamTitlePlaceholder(currentLive.title, appId)
+      ) {
+        updateLiveTask(appId, { title: resolved });
+      }
+      const currentHistory = readHistoryTasks();
+      let patched = false;
+      const patchedHistory = currentHistory.map((task) => {
+        if (task.appId === appId && isSteamTitlePlaceholder(task.title, appId)) {
+          patched = true;
+          return { ...task, title: resolved! };
+        }
+        return task;
+      });
+      if (patched) {
+        writeHistoryTasks(patchedHistory);
+        notifyChanged(true);
+      }
+    } catch {}
+  })();
+}
+
+function hydratePlaceholderTitles() {
+  const allTasks = [...liveTasks, ...readHistoryTasks()];
+  const seen = new Set<string>();
+  for (const task of allTasks) {
+    if (!isSteamTitlePlaceholder(task.title, task.appId)) continue;
+    if (seen.has(task.appId)) continue;
+    seen.add(task.appId);
+    patchPlaceholderTitleForAppId(task.appId);
+  }
 }
 
 function normalizeSteamIntegration(value: unknown): DownloadSteamIntegration | undefined {
@@ -577,7 +686,33 @@ async function finishActiveTask(result: Record<string, unknown>) {
 
   archiveTask(finished);
   notifyChanged(true);
+  // Se o registro na biblioteca Steam não gravou na conclusão (Steam aberta),
+  // o reparo entra na mesma hora — e o polling seguinte converge depois que
+  // o usuário fecha a Steam.
+  recheckSteamLibraryRegistrations();
   startNextQueuedTask();
+}
+
+/**
+ * Raiz dentro de uma biblioteca Steam volta para a raiz da biblioteca: escolher
+ * `X\steamapps` ou `X\steamapps\common` (ex.: a biblioteca oficial) não pode
+ * gerar `steamapps\common\steamapps\common\<jogo>` — estrutura que a Steam
+ * nunca escaneia. Espelha `normalize_library_root` no Rust.
+ */
+export function normalizeDownloadsRoot(root: string): string {
+  const current = root.trim().replace(/\//g, "\\").replace(/\\+$/, "");
+  let normalized = current;
+  for (;;) {
+    const lower = normalized.toLowerCase();
+    if (lower.endsWith("\\steamapps\\common")) {
+      normalized = normalized.slice(0, -"\\steamapps\\common".length);
+    } else if (lower.endsWith("\\steamapps")) {
+      normalized = normalized.slice(0, -"\\steamapps".length);
+    } else {
+      break;
+    }
+  }
+  return normalized;
 }
 
 /**
@@ -590,17 +725,27 @@ export function enqueueDownload(game: GhostBoxGame, downloadsRoot: string) {
   ensureLiveTasksHydrated();
   const appId = getGameAppId(game);
   if (!appId) return;
+  const root = normalizeDownloadsRoot(downloadsRoot);
+  if (!root) return;
   if (liveTasks.some((task) => task.appId === appId)) return;
+
+  let resolvedTitle = game.title?.trim() || `Steam App ${appId}`;
+  if (isSteamTitlePlaceholder(resolvedTitle, appId)) {
+    const localTitle = findLocalStoredTitle(appId);
+    if (localTitle) resolvedTitle = localTitle;
+  }
+
+  const hadPlaceholder = isSteamTitlePlaceholder(resolvedTitle, appId);
 
   liveTasks = [
     ...liveTasks,
     {
       id: appId,
       appId,
-      title: game.title,
+      title: resolvedTitle,
       coverUrl: game.coverUrl,
       headerSources: gameSteamHeaderFirstSources(game),
-      downloadsRoot,
+      downloadsRoot: root,
       outputDir: "",
       status: "queued",
       queuedAt: Date.now(),
@@ -612,6 +757,9 @@ export function enqueueDownload(game: GhostBoxGame, downloadsRoot: string) {
     },
   ];
   notifyChanged(true);
+  if (hadPlaceholder) {
+    patchPlaceholderTitleForAppId(appId);
+  }
   startNextQueuedTask();
 }
 
@@ -1064,14 +1212,23 @@ export function startDownloadManager(): () => void {
   engineStarted = true;
 
   sweepKnownDownloadRoots();
+  recheckSteamLibraryRegistrations();
 
   const unlisten = ghostboxApi.onDownloadProgress(applyProgressEvent);
   const stallWatcher = setInterval(clearStalledEstimates, stallWatchIntervalMs);
+  steamLibraryRepairTimer = window.setInterval(
+    recheckSteamLibraryRegistrations,
+    steamLibraryRepairIntervalMs,
+  );
 
   return () => {
     engineStarted = false;
     unlisten();
     clearInterval(stallWatcher);
+    if (steamLibraryRepairTimer !== null) {
+      clearInterval(steamLibraryRepairTimer);
+      steamLibraryRepairTimer = null;
+    }
     flushStoredTasks();
   };
 }
@@ -1095,4 +1252,92 @@ function sweepKnownDownloadRoots(): void {
   } catch {
     // Best-effort only.
   }
+}
+
+/**
+ * Reparo automático do registro na biblioteca Steam ("Steam: Pendente").
+ *
+ * O download pode concluir sem a entrada em `libraryfolders.vdf` — tipicamente
+ * com a Steam aberta, que reescreve o arquivo ao sair e descarta a entrada.
+ * Enquanto houver jogo concluído nessa situação, este ciclo reaplica o registro
+ * (idempotente no Rust) até gravar; o status então vira "Reconhecido" sem
+ * nenhuma ação do usuário. Tentativas com a Steam aberta são best-effort: o
+ * pior caso é a entrada ser descartada de novo e a próxima rodada regravar.
+ */
+const steamLibraryRepairIntervalMs = 60_000;
+let steamLibraryRepairInFlight = false;
+let steamLibraryRepairTimer: number | null = null;
+
+function repairableSteamIntegration(task: DownloadTask): boolean {
+  if (task.status !== "completed") return false;
+  // Raiz aninhada dentro de uma biblioteca oficial: mesmo com status "ok", o
+  // registro antigo apontava para o `steamapps` que a Steam nunca escaneia —
+  // re-registrar (com migração no Rust) é o que torna o jogo reconhecido.
+  const rawRoot = task.downloadsRoot.trim().replace(/\//g, "\\").replace(/\\+$/, "");
+  if (rawRoot && normalizeDownloadsRoot(rawRoot) !== rawRoot) return true;
+  return !task.steamIntegration || task.steamIntegration.status === "library-not-registered";
+}
+
+function patchSteamIntegration(
+  appId: string,
+  integration: DownloadSteamIntegration,
+  paths?: { downloadsRoot: string; outputDir: string },
+): void {
+  ensureLiveTasksHydrated();
+  let changed = false;
+  const apply = (task: DownloadTask): DownloadTask => {
+    if (task.appId !== appId || !repairableSteamIntegration(task)) return task;
+    changed = true;
+    return {
+      ...task,
+      steamIntegration: integration,
+      // O reparo pode migrar a instalação para fora de uma raiz aninhada —
+      // o histórico tem que apontar para o lugar de verdade.
+      downloadsRoot: paths?.downloadsRoot || task.downloadsRoot,
+      outputDir: paths?.outputDir || task.outputDir,
+    };
+  };
+  liveTasks = liveTasks.map(apply);
+  const history = readHistoryTasks();
+  const patchedHistory = history.map(apply);
+  if (!changed) return;
+  if (patchedHistory !== history) writeHistoryTasks(patchedHistory);
+  notifyChanged(true);
+}
+
+function recheckSteamLibraryRegistrations(): void {
+  if (steamLibraryRepairInFlight || typeof window === "undefined") return;
+  ensureLiveTasksHydrated();
+  const candidates = [...liveTasks, ...readHistoryTasks()].filter(repairableSteamIntegration);
+  if (!candidates.length) return;
+
+  steamLibraryRepairInFlight = true;
+  void (async () => {
+    try {
+      for (const task of candidates) {
+        try {
+          const result = await ghostboxApi.registerDownloadLibrary(task.appId, task.downloadsRoot);
+          if (result.Status === "ok") {
+            patchSteamIntegration(
+              task.id,
+              {
+                status: "ok",
+                requiresSteamRestart: result.RequiresSteamRestart === true,
+              },
+              {
+                downloadsRoot:
+                  typeof result.DownloadsRoot === "string" ? result.DownloadsRoot : "",
+                outputDir: typeof result.OutputDir === "string" ? result.OutputDir : "",
+              },
+            );
+          }
+        } catch {
+          // ACF ausente (instalação apagada) ou falha de escrita: segue
+          // pendente para a próxima rodada.
+        }
+      }
+    } finally {
+      steamLibraryRepairInFlight = false;
+    }
+  })();
 }

@@ -75,7 +75,7 @@ const translations: Record<Language, TranslationTree> = {
       cancel: "Cancelar",
       openFolder: "Abrir pasta",
       uninstall: "Desinstalar",
-      launch: "Iniciar",
+      launch: "Jogar",
       openFolderError: "Não foi possível abrir a pasta instalada.",
       launchError: "Não foi possível localizar ou iniciar o executável do jogo.",
       queuePosition: "Na fila — posição {position}",
@@ -96,7 +96,6 @@ const translations: Record<Language, TranslationTree> = {
       depotOf: "Depot {index} de {total}",
       details: {
         open: "Abrir detalhes de {title}",
-        close: "Fechar",
         allocated: "Espaço alocado",
         downloadedAt: "Baixado em",
         progress: "Progresso",
@@ -228,10 +227,10 @@ const translations: Record<Language, TranslationTree> = {
       empty: "Este jogo não possui conquistas.",
     },
     metrics: {
-      locked: "Conecte-se ao app para visualizar",
+      locked: "Faça login",
       lockedAchievements: "Conecte-se ao app para ver as conquistas",
       lockedAria:
-        "Conquistas e tempo de jogo bloqueados. Conecte-se ao app para visualizar.",
+        "Conquistas e tempo de jogo bloqueados. Faça login para visualizar.",
     },
     video: {
       player: "Player de vídeo",
@@ -458,7 +457,7 @@ const translations: Record<Language, TranslationTree> = {
         },
         library: {
           label: "Biblioteca",
-          description: "Origen Steam e licencias locais.",
+          description: "Origem Steam e licenças locais.",
         },
         connections: {
           label: "Conexões",
@@ -596,12 +595,18 @@ const translations: Record<Language, TranslationTree> = {
           label: "Pasta da Steam",
           description: "Caminho da pasta da Steam usado para localizar jogos instalados.",
         },
-        downloadsDir: {
-          label: "Pasta de downloads",
+        steamLibraries: {
+          label: "Bibliotecas Steam",
           description:
-            "Diretório onde os jogos baixados serão salvos. Vira uma biblioteca Steam.",
-          placeholder: "Nenhuma pasta selecionada",
+            "Escolha entre as bibliotecas registradas na Steam — a seleção vira o destino dos downloads.",
         },
+        steamLibrariesEmpty:
+          "Configure a pasta da Steam acima para listar as bibliotecas disponíveis.",
+        driveLocal: "Disco local",
+        driveRemovable: "Unidade removível",
+        driveNetwork: "Unidade de rede",
+        driveUnknown: "Disco",
+        freeOf: "{free} de {total} livres",
       },
       tempFiles: {
         title: "Arquivos temporários",
@@ -722,7 +727,7 @@ const translations: Record<Language, TranslationTree> = {
       cancel: "Cancel",
       openFolder: "Open folder",
       uninstall: "Uninstall",
-      launch: "Launch",
+      launch: "Play",
       openFolderError: "Could not open the installation folder.",
       launchError: "Could not locate or launch the game executable.",
       queuePosition: "Queued — position {position}",
@@ -743,7 +748,6 @@ const translations: Record<Language, TranslationTree> = {
       depotOf: "Depot {index} of {total}",
       details: {
         open: "Open details for {title}",
-        close: "Close",
         allocated: "Allocated space",
         downloadedAt: "Downloaded on",
         progress: "Progress",
@@ -870,10 +874,9 @@ const translations: Record<Language, TranslationTree> = {
       empty: "This game has no achievements.",
     },
     metrics: {
-      locked: "Log in to the app to view",
+      locked: "Log in",
       lockedAchievements: "Log in to the app to view achievements",
-      lockedAria:
-        "Achievements and playtime locked. Log in to the app to view.",
+      lockedAria: "Achievements and playtime locked. Log in to view.",
     },
     video: {
       player: "Video player",
@@ -1237,12 +1240,18 @@ const translations: Record<Language, TranslationTree> = {
           label: "Steam folder",
           description: "Path to the Steam folder used to locate installed games.",
         },
-        downloadsDir: {
-          label: "Downloads folder",
+        steamLibraries: {
+          label: "Steam libraries",
           description:
-            "Directory where downloaded games will be saved. It becomes a Steam library.",
-          placeholder: "No folder selected",
+            "Choose one of the libraries registered in Steam — the selection becomes the downloads destination.",
         },
+        steamLibrariesEmpty:
+          "Set the Steam folder above to list the available libraries.",
+        driveLocal: "Local disk",
+        driveRemovable: "Removable drive",
+        driveNetwork: "Network drive",
+        driveUnknown: "Disk",
+        freeOf: "{free} of {total} free",
       },
       tempFiles: {
         title: "Temporary files",

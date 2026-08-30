@@ -632,7 +632,7 @@ const SidebarProfile = memo(function SidebarProfile({
             <span className="sidebar-profile__title-row">
               <span className="sidebar-profile__button-title">
                 {profile?.displayName || account?.displayName || account?.username ||
-                  (appearance.language === "en" ? "Log in" : "Faça login")}
+                  (appearance.language === "en" ? "Log in" : "Fazer login")}
               </span>
               {isSteamConnected(profile) ? (
                 <span

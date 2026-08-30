@@ -368,7 +368,13 @@ pub(crate) fn normalize_steam_root_path(input: &str) -> Option<String> {
         return None;
     }
 
-    if is_valid_steam_path(&path) {
+    // Biblioteca válida = pasta que contém `steamapps`. Bibliotecas secundárias
+    // (outros discos) NÃO têm `libraryfolders.vdf` próprio — esse arquivo só
+    // existe na raiz da instalação da Steam. Exigi-lo aqui descartava toda
+    // unidade extra no parser do libraryfolders.vdf: só a raiz sobrevivia.
+    let has_steamapps = |candidate: &std::path::Path| candidate.join("steamapps").is_dir();
+
+    if has_steamapps(&path) {
         return Some(path.to_string_lossy().to_string());
     }
 
@@ -378,9 +384,7 @@ pub(crate) fn normalize_steam_root_path(input: &str) -> Option<String> {
         .is_some_and(|name| name.eq_ignore_ascii_case("steamapps"))
     {
         if let Some(parent) = path.parent() {
-            if is_valid_steam_path(parent) {
-                return Some(parent.to_string_lossy().to_string());
-            }
+            return Some(parent.to_string_lossy().to_string());
         }
     }
 
@@ -1660,6 +1664,7 @@ pub fn run() {
             steam::steam_select_path,
             steam::steam_scan_library,
             steam::steam_restart,
+            steam::steam_list_libraries,
             game_launch,
             playtime::game_get_playtimes,
             ghostbox_library::ghostbox_library_register_steam_game,
@@ -1675,6 +1680,7 @@ pub fn run() {
             cdndownload::cdndownload_launch_game,
             cdndownload::cdndownload_default_dir,
             cdndownload::cdndownload_sweep_roots,
+            cdndownload::cdndownload_register_library,
             storage_audit::storage_usage,
             storage_audit::clear_app_caches,
             storage_audit::clear_storage_category,
@@ -1822,5 +1828,48 @@ mod tests {
         assert!(!is_blocked_plan_backup_error(
             "Falha ao enviar o backup para a nuvem."
         ));
+    }
+}
+
+#[cfg(test)]
+mod normalize_steam_root_tests {
+    use super::normalize_steam_root_path;
+    use std::path::PathBuf;
+
+    fn temp_root(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "ghostbox-{tag}-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ))
+    }
+
+    /// Bibliotecas secundárias não têm `libraryfolders.vdf` próprio — só a
+    /// raiz da instalação da Steam tem. A validação não pode exigir o arquivo
+    /// dentro de cada biblioteca, senão todo disco extra é descartado.
+    #[test]
+    fn accepts_secondary_libraries_without_local_libraryfolders_vdf() {
+        let root = temp_root("steam-root");
+        let library = root.join("SteamLibrary");
+        std::fs::create_dir_all(library.join("steamapps").join("common")).unwrap();
+
+        assert_eq!(
+            normalize_steam_root_path(library.to_str().unwrap()).as_deref(),
+            Some(library.to_str().unwrap())
+        );
+        assert_eq!(
+            normalize_steam_root_path(library.join("steamapps").to_str().unwrap()).as_deref(),
+            Some(library.to_str().unwrap())
+        );
+
+        // Pasta sem `steamapps` não é biblioteca.
+        let other = root.join("Vazio");
+        std::fs::create_dir_all(&other).unwrap();
+        assert_eq!(normalize_steam_root_path(other.to_str().unwrap()), None);
+        // Caminho inexistente também não.
+        assert_eq!(
+            normalize_steam_root_path(root.join("Fantasma").to_str().unwrap()),
+            None
+        );
     }
 }

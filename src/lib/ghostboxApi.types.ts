@@ -266,6 +266,19 @@ export type SteamRestartResult = {
   error?: string;
 };
 
+/** Biblioteca Steam listada por `steam_list_libraries` (payload Rust PascalCase). */
+export type SteamLibraryVolume = {
+  Path: string;
+  /** Letra da unidade com dois-pontos (`E:`); vazio quando não se aplica. */
+  Drive: string;
+  /** Rótulo do volume nomeado pelo usuário; vazio quando sem rótulo. */
+  Label: string;
+  /** `fixed` | `removable` | `network` | `unknown`. */
+  DriveType: string;
+  FreeBytes: number;
+  TotalBytes: number;
+};
+
 export type SteamPathSelectionResult =
   | {
       status: "ok";

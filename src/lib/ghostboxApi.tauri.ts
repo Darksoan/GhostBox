@@ -30,6 +30,7 @@ import type {
   RemoveGameResult,
   StartupSettings,
   SteamRestartResult,
+  SteamLibraryVolume,
   SteamLibraryScanResult,
   SteamAccountStats,
   SteamPathSelectionResult,
@@ -893,6 +894,22 @@ export const ghostboxApi = {
     );
   },
 
+  /**
+   * Re-registra um download concluído na biblioteca Steam a partir do ACF que
+   * já está em disco. É o reparo do status "library-not-registered": a Steam
+   * pode descartar a entrada de `libraryfolders.vdf` quando sai depois de uma
+   * escrita com o cliente aberto. Idempotente — registro válido é no-op.
+   */
+  registerDownloadLibrary(
+    appId: string,
+    downloadsRoot: string,
+  ): Promise<Record<string, unknown>> {
+    return invoke<Record<string, unknown>>("cdndownload_register_library", {
+      appId,
+      downloadsRoot,
+    });
+  },
+
   async selectDownloadsDir(): Promise<string | null> {
     const selectedPath = await open({
       directory: true,
@@ -1342,6 +1359,19 @@ export const ghostboxApi = {
       "steam_restart",
       {},
       undefined,
+    );
+  },
+
+  /**
+   * Bibliotecas Steam registradas no `libraryfolders.vdf` (mais a raiz da
+   * instalação), com rótulo do volume e espaço livre/total. Lista vazia quando
+   * o caminho da Steam não está configurado ou não foi encontrado.
+   */
+  listSteamLibraries(steamPath?: string): Promise<SteamLibraryVolume[]> {
+    return invokeOr<SteamLibraryVolume[]>(
+      "steam_list_libraries",
+      { steamPath },
+      [],
     );
   },
 
