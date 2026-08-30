@@ -4,6 +4,7 @@ import type { GhostBoxGame } from "../../data";
 import { useGamesQuery } from "../../queries/games";
 import { useCachedImageSources, useLoadableImageState } from "../../hooks/useCachedImageSources";
 import { gamePortraitPreviewSources } from "../../utils/image";
+import { uniqueSources } from "../../utils/imageCache";
 
 const RAIL_COUNT = 6;
 // As capas dividem a largura do trilho por flex, então este número controla o
@@ -19,7 +20,21 @@ const CATALOGUE_FETCH_LIMIT = 240;
  * Steam é feita por hooks (manifesto + fallback de CDN) e hook não roda em loop.
  */
 function BackdropTile({ game }: { game: GhostBoxGame }) {
-  const rawSources = useMemo(() => gamePortraitPreviewSources(game), [game]);
+  const rawSources = useMemo(() => {
+    const proxyPortrait = game.coverUrl?.replace(
+      /\/header\.jpg(?:[?#].*)?$/i,
+      "/library_600x900.jpg",
+    );
+
+    return uniqueSources([
+      ...gamePortraitPreviewSources(game),
+      // O proxy do catálogo é a última tentativa estável: ele evita que um
+      // bloqueio/limite do CDN da Steam deixe toda a textura invisível.
+      proxyPortrait,
+      game.coverUrl,
+      ...(game.coverFallbacks ?? []),
+    ]);
+  }, [game]);
   const sources = useCachedImageSources(rawSources);
   const image = useLoadableImageState(sources);
 
@@ -62,13 +77,24 @@ export function SubscriptionBackdrop() {
 
     // Metacritic quando existe; senão a nota interna normalizada para a mesma
     // faixa de 0-100, para os dois critérios serem comparáveis.
-    const score = (game: GhostBoxGame) =>
-      game.metacriticScore ?? (game.rating > 0 ? game.rating * 20 : 0);
+    // O catálogo público serializa notas ausentes como `0`, não como `null`.
+    // Só valores positivos são notas reais; para os sem nota, preservamos a
+    // ordem popular do endpoint para o backdrop continuar com capas deslogado.
+    const score = (game: GhostBoxGame) => {
+      const metacritic = game.metacriticScore;
+      if (typeof metacritic === "number" && metacritic > 0) return metacritic;
+
+      const rating = game.rating;
+      if (typeof rating === "number" && rating > 0) return rating * 20;
+
+      return 0;
+    };
 
     return unique
-      .filter((game) => score(game) > 0)
-      .sort((a, b) => score(b) - score(a))
-      .slice(0, TILES_NEEDED);
+      .map((game, index) => ({ game, index, score: score(game) }))
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .slice(0, TILES_NEEDED)
+      .map(({ game }) => game);
   }, [catalogueQuery.data]);
 
   if (games.length === 0) return null;

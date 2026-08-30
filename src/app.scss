@@ -5047,21 +5047,51 @@ html.no-animations {
 }
 
 // Superfície de assinatura compartilhada entre a modal da titlebar e a aba
-// de assinatura dentro de Ajustes. Garante layout idêntico: zero padding,
-// chain flex para o conteúdo preencher a altura, painel elástico.
+// de assinatura dentro de Ajustes. Centralizada na viewport com backdrop de
+// capas igual ao modal `Seja premium` — a oferta não estica no topo, e sim
+// ocupa o centro com as capas como textura atrás do card.
 .subscription-surface {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 1 1 auto;
+  min-height: 100%;
   gap: 0;
   margin: 0;
-  padding: 0;
+  padding: var(--space-10);
+  overflow: hidden;
+  isolation: isolate;
 
   .settings-panel,
   .settings-panel__body {
-    flex: 1;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    flex: 1 1 auto;
     min-height: 0;
+  }
+
+  .settings-panel {
+    position: relative;
+    z-index: 1;
+  }
+
+  .settings-panel__body {
+    position: relative;
+  }
+
+  // O card e o resumo ficam acima do backdrop, na mesma pegada do diálogo.
+  .subscription-account,
+  .premium-offer--settings {
+    position: relative;
+    z-index: 1;
+    width: min(1000px, 100%);
+  }
+
+  .premium-offer--settings {
+    box-shadow: 0 48px 120px -48px var(--black);
+    max-height: min(760px, calc(100vh - var(--space-12) - var(--app-header-height)));
+    overflow: auto;
   }
 }
 

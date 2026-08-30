@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
+import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
@@ -343,6 +344,7 @@ export function SettingsPage({
       }`}
       aria-label={t("nav.settings")}
     >
+      {activeTab.id === "subscription" && <SubscriptionBackdrop />}
       <article
         className={`settings-panel${
           activeTab.id === "subscription" || activeTab.id === "connections"

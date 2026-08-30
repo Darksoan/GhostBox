@@ -582,6 +582,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     // bookkeeping, so the restore concludes the local data is already current
     // and never brings the avatar and banner back down.
     skipCloudProfileUploadCountRef.current = 2;
+    // Invalidate any Steam profile request still in flight (connect, linked
+    // restore, boot hydration): without this its write lands after the wipe
+    // below and repaints the signed-out sidebar with the previous profile.
+    steamProfileRequestSequenceRef.current += 1;
     steamProfileRef.current = null;
     setSteamProfile(null);
     setFavoriteGames([]);
@@ -856,6 +860,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch {
         return false;
       }
+      // The account can sign out while the snapshot is in flight; applying it
+      // afterwards would repaint the signed-out UI with the old profile.
+      if (accountUserIdRef.current !== accountId) return false;
       if (!remote) {
         cloudProfileRestoredUserIdRef.current = accountId;
         cloudProfilePendingUploadRef.current = true;
@@ -1383,6 +1390,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await ghostboxApi.restoreSteamAccount(steamId);
         if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
+        if (!accountUserIdRef.current) {
+          // The session ended while the restore was in flight, and Rust
+          // already re-wrote steam-profile.json before resolving: undo it so
+          // the signed-out state stays clean.
+          void ghostboxApi.clearLocalSteamProfile().catch(() => undefined);
+          return;
+        }
         // The Steam summary carries no banner and only the Steam avatar, and
         // this restore races the cloud-profile restore on sign-in. Writing it
         // raw overwrote the account's avatar and banner — in state, in
@@ -1412,9 +1426,29 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const requestId = ++steamProfileRequestSequenceRef.current;
 
-    void ghostboxApi
-      .getSteamProfile()
-      .then((profile) => {
+    const hydrate = async () => {
+      // steam-profile.json is account-scoped: with no session it is a leftover
+      // from a signed-out account (crashed logout, failed wipe), and painting
+      // it would put a profile on the login screen.
+      let session: Awaited<ReturnType<typeof ghostboxApi.getCloudSession>> = null;
+      try {
+        session = await ghostboxApi.getCloudSession();
+      } catch {
+        session = null;
+      }
+      if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
+
+      if (!session?.token) {
+        // Drop whatever the initial useState read from localStorage too.
+        steamProfileRef.current = null;
+        setSteamProfile(null);
+        writeStoredSteamProfile(null);
+        markInitialLoadStepComplete("steamProfile");
+        return;
+      }
+
+      try {
+        const profile = await ghostboxApi.getSteamProfile();
         if (cancelled || steamProfileRequestSequenceRef.current !== requestId)
           return;
 
@@ -1425,16 +1459,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           writeStoredSteamProfile(merged);
         }
         setSteamProfile(merged);
-      })
-      .catch(() => undefined)
-      .finally(() => {
+      } catch {
+        // A failed hydration is not a signed-out account; keep going without
+        // the disk profile rather than blocking the initial load.
+      } finally {
         if (
           !cancelled &&
           steamProfileRequestSequenceRef.current === requestId
         ) {
           markInitialLoadStepComplete("steamProfile");
         }
-      });
+      }
+    };
+
+    void hydrate();
 
     return () => {
       cancelled = true;
@@ -2208,7 +2246,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     try {
       const profile = await ghostboxApi.connectSteamAccount();
-      if (steamProfileRequestSequenceRef.current !== requestId) return;
+      if (steamProfileRequestSequenceRef.current !== requestId) {
+        // The request was invalidated (sign-out) after Rust may have already
+        // persisted the profile: undo that write.
+        if (!accountUserIdRef.current) {
+          void ghostboxApi.clearLocalSteamProfile().catch(() => undefined);
+        }
+        return;
+      }
 
       setIsCloudProfileRestoring(true);
       steamProfileRef.current = profile;

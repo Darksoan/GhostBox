@@ -1136,6 +1136,13 @@ export const ghostboxApi = {
     clearStoredAccountData();
   },
 
+  /** Wipes only the locally cached Steam profile (steam-profile.json), leaving
+   * the account session alone. Used to repair a profile that an in-flight
+   * Steam restore re-persisted after the session was torn down. */
+  clearLocalSteamProfile(): Promise<void> {
+    return invokeOr<void>("steam_clear_local_profile", {}, undefined);
+  },
+
   async registerAccount(
     email: string,
     username: string,

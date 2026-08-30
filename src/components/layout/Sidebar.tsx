@@ -548,26 +548,30 @@ const SidebarProfile = memo(function SidebarProfile({
   onOpenProfile,
 }: SidebarProfileProps) {
   const { appearance } = useSettings();
-  const { account } = useAuth();
+  const { account, status } = useAuth();
+  // The app stays mounted behind the login modal, and a Steam profile can
+  // briefly outlive a sign-out (in-flight restores, leftover disk cache).
+  // While anonymous the sidebar must never paint a profile.
+  const visibleProfile = status === "anonymous" ? null : profile;
   const avatarSources = useCachedImageSources(
-    profile?.avatarUrl ? [profile.avatarUrl] : []
+    visibleProfile?.avatarUrl ? [visibleProfile.avatarUrl] : []
   );
   const avatarSource = useLoadableImageSource(avatarSources);
   const shouldHoldSteamAvatar = Boolean(
     isCloudProfileRestoring &&
-      profile?.avatarUrl &&
-      !profile.avatarUrl.startsWith("data:") &&
-      !profile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
+      visibleProfile?.avatarUrl &&
+      !visibleProfile.avatarUrl.startsWith("data:") &&
+      !visibleProfile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
   );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
 
   useEffect(() => {
-    preloadProfileImages(profile);
-  }, [profile?.avatarUrl, profile?.bannerUrl]);
+    preloadProfileImages(visibleProfile);
+  }, [visibleProfile?.avatarUrl, visibleProfile?.bannerUrl]);
 
   useEffect(() => {
     let cancelled = false;
-    const steamId = profile?.steamId?.trim();
+    const steamId = visibleProfile?.steamId?.trim();
     if (!steamId) {
       setSteamLevel(null);
       return;
@@ -592,7 +596,7 @@ const SidebarProfile = memo(function SidebarProfile({
     return () => {
       cancelled = true;
     };
-  }, [profile?.steamId]);
+  }, [visibleProfile?.steamId]);
 
   const levelLabel =
     steamLevel === null
@@ -609,8 +613,8 @@ const SidebarProfile = memo(function SidebarProfile({
         type="button"
         className={`sidebar-profile__button ${isActive ? "sidebar-profile__button--active" : ""}`}
         onClick={onOpenProfile}
-        onMouseEnter={() => profile && preloadProfileImages(profile)}
-        onFocus={() => profile && preloadProfileImages(profile)}
+        onMouseEnter={() => visibleProfile && preloadProfileImages(visibleProfile)}
+        onFocus={() => visibleProfile && preloadProfileImages(visibleProfile)}
       >
         <div className="sidebar-profile__button-content">
           <span className="sidebar-profile__avatar" aria-hidden="true">
@@ -631,10 +635,11 @@ const SidebarProfile = memo(function SidebarProfile({
           <span className="sidebar-profile__button-information">
             <span className="sidebar-profile__title-row">
               <span className="sidebar-profile__button-title">
-                {profile?.displayName || account?.displayName || account?.username ||
+                {visibleProfile?.displayName || account?.displayName ||
+                  account?.username ||
                   (appearance.language === "en" ? "Log in" : "Fazer login")}
               </span>
-              {isSteamConnected(profile) ? (
+              {isSteamConnected(visibleProfile) ? (
                 <span
                   className="sidebar-profile__level"
                   title={levelLabel}
