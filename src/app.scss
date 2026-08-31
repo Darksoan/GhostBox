@@ -3670,6 +3670,10 @@ p {
   }
 }
 
+.home-page--maximized .home-top-rated-card {
+  flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+}
+
 /* Alvo de clique/foco do card inteiro — ver comentário acima do JSX
    (`HomeTopRatedCard`) sobre por que fica fora da árvore de conteúdo.
    `outline-offset` negativo, não positivo: o card pai recorta com
@@ -9504,9 +9508,7 @@ input[type="search"]::-ms-reveal {
   &__summary-metric {
     display: inline-flex;
     align-items: center;
-    /* Espaço ícone→texto ajustado para 2px (--space-1): compensa a folga óptica
-       do glifo do troféu e mantém o texto de conquistas e horas bem agrupado. */
-    gap: var(--space-1);
+    gap: 3px;
     white-space: nowrap;
     line-height: var(--type-line-caption);
 
@@ -10243,10 +10245,6 @@ html.no-backdrop-blur {
 
   .home-recommended__track .home-category-card {
     flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
-  }
-
-  .home-top-rated-card {
-    flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3);
   }
 
   .home-explore-card {

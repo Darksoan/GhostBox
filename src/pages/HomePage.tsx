@@ -121,9 +121,6 @@ const homePersonalCalendarPageSize = 120;
 const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 15;
 const homePersonalCalendarEnrichmentLimit = 6;
 const homeCalendarCoverLoadMargin = "360px 720px";
-// Below this rail width the fourth day no longer fits on one row, so it is
-// dropped instead of wrapping into an orphan row under the first column.
-const homePersonalCalendarWideMinWidth = 1040;
 const homePersonalCalendarNarrowDays = 3;
 const homeWishlistCycleSourceCount = 6;
 const homeWishlistSimilarPoolLimit = 16;
@@ -1017,35 +1014,10 @@ function HomeCalendarGameCardComponent({
 const HomeCalendarGameCard = memo(HomeCalendarGameCardComponent);
 
 // Tracks the rail's own width rather than the viewport so the column count
-// also reacts to the sidebar expanding/collapsing, not just window resizes.
-function useCalendarVisibleDays(
-  railRef: RefObject<HTMLDivElement | null>,
-  mounted: boolean
-) {
-  const [visibleDays, setVisibleDays] = useState(homePersonalCalendarDays);
-
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail || typeof ResizeObserver === "undefined") return;
-
-    const update = (width: number) => {
-      setVisibleDays(
-        width >= homePersonalCalendarWideMinWidth
-          ? homePersonalCalendarDays
-          : homePersonalCalendarNarrowDays
-      );
-    };
-
-    update(rail.getBoundingClientRect().width);
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) update(entry.contentRect.width);
-    });
-    observer.observe(rail);
-    return () => observer.disconnect();
-  }, [railRef, mounted]);
-
-  return visibleDays;
+function useCalendarVisibleDays(isMaximized: boolean) {
+  return isMaximized
+    ? homePersonalCalendarDays
+    : homePersonalCalendarNarrowDays;
 }
 
 function HomePersonalCalendar({
@@ -1054,6 +1026,7 @@ function HomePersonalCalendar({
   cycleStart,
   language,
   loading,
+  isMaximized,
   onOpenGame,
   onGameContextMenu,
 }: {
@@ -1062,13 +1035,14 @@ function HomePersonalCalendar({
   cycleStart: string;
   language: "pt" | "en";
   loading: boolean;
+  isMaximized: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const gamesPerDay = homePersonalCalendarGamesPerDay;
   const isVisible = games.length > 0 || loading;
-  const visibleDays = useCalendarVisibleDays(calendarRef, isVisible);
+  const visibleDays = useCalendarVisibleDays(isMaximized);
   const weekdays = getPersonalCalendarDates(
     language,
     cycleStart,
@@ -2073,6 +2047,7 @@ export function HomePage({
         cycleStart={personalCalendarCycleStart}
         language={appearance.language}
         loading={isLoadingPersonalCalendar}
+        isMaximized={isMaximized}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
