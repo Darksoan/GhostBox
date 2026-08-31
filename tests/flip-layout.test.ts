@@ -29,9 +29,12 @@ describe("useFlipLayout — motion design e reorganização de capas", () => {
 
   it("respeita prefers-reduced-motion e desativação de animações", () => {
     const source = readFileSync("src/hooks/useFlipLayout.ts", "utf8");
+    const motion = readFileSync("src/utils/motion.ts", "utf8");
 
-    expect(source).toContain("prefers-reduced-motion: reduce");
-    expect(source).toContain("no-animations");
-    expect(source).toContain("motionIsDisabled");
+    // A checagem mora no util compartilhado (também usado pelo preview do
+    // catálogo); o hook só decide se o FLIP roda.
+    expect(source).toContain("isMotionDisabled()");
+    expect(motion).toContain("prefers-reduced-motion: reduce");
+    expect(motion).toContain("no-animations");
   });
 });

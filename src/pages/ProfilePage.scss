@@ -757,8 +757,7 @@
   &__activity-card {
     --activity-cover-width: 196px;
     // O card acompanha o aspecto nativo da header capsule (460/215): a altura
-    // mínima é derivada da largura da capa, então a capa esticada nunca é
-    // recortada — mesmo comportamento dos cards do catálogo.
+    // da capa e do card são travadas para não haver sobra inferior.
     --activity-cover-height: calc(var(--activity-cover-width) * 215 / 460);
     position: relative;
     display: grid;
@@ -768,10 +767,10 @@
     row-gap: 0;
     align-items: stretch;
     min-width: 0;
-    min-height: var(--activity-cover-height);
+    height: var(--activity-cover-height);
     padding: 0;
     padding-right: var(--space-6);
-    overflow: visible;
+    overflow: hidden;
     border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-secondary);
@@ -787,6 +786,16 @@
 
     &--with-achievements {
       grid-template-rows: auto auto;
+    }
+
+    &:not(&--with-achievements) {
+      grid-template-rows: 1fr;
+
+      .profile-page__activity-main {
+        grid-row: 1 / -1;
+        align-self: center;
+        padding: 0;
+      }
     }
 
     &--placeholder {
@@ -847,26 +856,20 @@
     grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
     align-items: center;
     gap: var(--space-7);
-    min-height: var(--activity-cover-height);
+    height: var(--activity-cover-height);
     padding: 0;
     padding-right: var(--space-6);
     /* Sem opacidade: ela escurecia o fill do skeleton para fora da rampa. */
     opacity: 1;
   }
 
-  /*
-   * A capa mantém o aspecto nativo da header capsule (460/215) sem esticar:
-   * largura fixa + aspect-ratio travam o recorte, `background-size: cover`
-   * com `center` só preenche sem cortar o centro. Se o conteúdo da direita
-   * (linha de conquistas) for mais alto, o card cresce mas a capa fica no
-   * topo sem distorcer — igual ao comportamento mobile e aos cards do catálogo.
-   */
   &__activity-cover-button {
     grid-column: 1;
     grid-row: 1 / -1;
     display: block;
     width: var(--activity-cover-width);
-    align-self: start;
+    height: 100%;
+    align-self: stretch;
     min-height: 0;
     padding: 0;
     background: transparent;
@@ -884,7 +887,7 @@
     width: 100%;
     min-width: 0;
     min-height: 0;
-    padding: var(--space-6) 0 var(--space-3);
+    padding: var(--space-3) 0 var(--space-1);
     background: transparent;
     color: inherit;
     text-align: left;
@@ -894,7 +897,7 @@
   &__activity-game-cover {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
     aspect-ratio: 460 / 215;
     min-height: 0;
     flex: 0 0 auto;
@@ -974,8 +977,8 @@
     justify-content: space-between;
     gap: var(--space-6) var(--space-7);
     min-width: 0;
-    min-height: 40px;
-    padding: 0 0 var(--space-5);
+    min-height: 0;
+    padding: 0 0 var(--space-3);
     background: transparent;
   }
 
@@ -1742,6 +1745,7 @@ html.no-backdrop-blur .profile-page {
     &__activity-card--skeleton {
       --activity-cover-width: min(160px, 42vw);
       grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
+      height: auto;
     }
 
     /* Empilhado: a capa vira faixa do topo e volta a ter altura própria
@@ -1750,6 +1754,7 @@ html.no-backdrop-blur .profile-page {
       grid-row: 1;
       align-self: start;
       min-height: 0;
+      height: auto;
     }
 
     &__activity-game-cover {

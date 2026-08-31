@@ -1,18 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { isMotionDisabled } from "../utils/motion";
 
 // Tokens do sistema de movimento (motion design):
 // Duração base calibrada para reorganização de grid (220ms) e curva ease-out com
 // desaceleração suave (cubic-bezier(0.16, 1, 0.3, 1)).
 const FLIP_DURATION_MS = 220;
 const FLIP_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
-
-function motionIsDisabled(): boolean {
-  if (typeof window === "undefined") return true;
-  if (document.documentElement.classList.contains("no-animations")) return true;
-  return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
-  );
-}
 
 export function useFlipLayout<T extends HTMLElement>(
   layoutKey: string,
@@ -27,7 +20,7 @@ export function useFlipLayout<T extends HTMLElement>(
     const container = containerRef.current;
     if (!container) return;
 
-    if (!enabled || motionIsDisabled()) {
+    if (!enabled || isMotionDisabled()) {
       previousRectsRef.current = new Map();
       for (const animation of animationsRef.current.values()) {
         animation.cancel();

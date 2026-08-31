@@ -59,7 +59,7 @@ import {
 import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
 import { createSeedGame } from "../utils/gameSeed";
 import { gameCategoryScore, getGameTraits, normalizeGameTrait } from "../utils/gameTraits";
-import { getSteamReviewScore } from "../utils/gameMetrics";
+import { formatCompactCount, getSteamReviewScore } from "../utils/gameMetrics";
 import { steamRecommendedTagNames } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { formatCompactPlaytime } from "../utils/time";
@@ -105,9 +105,8 @@ const homeRecommendedHeroPreloadLimit = 8;
 // de skeletons, e com 3 a quarta coluna ficava vazia durante o carregamento.
 // Na janela estreita o quarto skeleton só fica fora da área visível do rail.
 const homeRecommendedCardCount = 4;
-// Cards de "Bem avaliados" visíveis por página do carrossel. Mesma contagem do
-// rail de recomendados — os dois rails compartilham a grade de colunas.
-const homeTopRatedCardCount = 4;
+// Cards de "Bem avaliados" visíveis por página do carrossel.
+const homeTopRatedCardCount = 3;
 // Teto do texto da descrição curta. O card fecha em duas linhas via
 // `-webkit-line-clamp`; o corte aqui garante reticências mesmo quando o
 // navegador não aplica as do clamp (texto de uma linha só, muito longo).
@@ -457,9 +456,10 @@ function HomeCategoryCard({
 }
 
 /**
- * Card de "Mais jogados": arte larga (`header.jpg`) e embaixo o nome do jogo
- * com a nota média (fire + nota) à direita, e a desenvolvedora numa segunda
- * linha — sem linha de pills. Superfície própria com alvo de clique inteiro.
+ * Card de "Bem avaliados": arte larga em header capsule da Steam (460×215,
+ * mesmo aspecto do card em grade do catálogo) e embaixo o nome do jogo com a
+ * nota média (fire + nota) à direita, e a desenvolvedora numa segunda linha —
+ * sem linha de pills. Superfície própria com alvo de clique inteiro.
  */
 function HomeTopRatedCard({
   game,
@@ -482,15 +482,18 @@ function HomeTopRatedCard({
         ...fallbackCoverSources.filter((source) => source !== coverSource),
       ]
     : fallbackCoverSources;
+  const { appearance, t } = useSettings();
   // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra de
   // review, a razão volta 0 e viraria uma nota 0,0 falsa.
   const reviewScore = getSteamReviewScore(game);
   const ratingText = reviewScore
     ? ((reviewScore.percent / 100) * 5).toFixed(1)
     : null;
-  // Só a primeira desenvolvedora: a linha é fechada em uma altura e um título
-  // com três estúdios viraria reticências logo no primeiro nome.
-  const developerName = game.developers?.find((name) => name.trim()) ?? "";
+
+  const reviewCount = Math.max(game.recommendations ?? 0, game.steamReviewCount ?? 0);
+  const reviewsText = reviewCount > 0
+    ? t("home.reviews", { count: formatCompactCount(reviewCount, appearance.language) })
+    : "";
 
   // O shelf nasce com o título provisório "Steam App <appid>" e o nome real só
   // chega no enriquecimento assíncrono. Enquanto isso, o card vira skeleton em
@@ -552,7 +555,7 @@ function HomeTopRatedCard({
         {/* Altura reservada mesmo sem desenvolvedora: o dado chega no
             enriquecimento e um card que cresce depois remexeria a linha
             inteira do carrossel. */}
-        <span className="home-top-rated-card__developer">{developerName}</span>
+        <span className="home-top-rated-card__developer">{reviewsText}</span>
       </span>
     </div>
   );

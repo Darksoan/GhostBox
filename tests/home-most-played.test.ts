@@ -8,8 +8,8 @@ describe("Home most played rail", () => {
   it("keeps the rail title localized", () => {
     const source = readFileSync("src/i18n.ts", "utf8");
 
-    expect(source).toContain('mostPlayed: "Mais jogados"');
-    expect(source).toContain('mostPlayed: "Most played"');
+    expect(source).toContain('mostPlayed: "Bem avaliados"');
+    expect(source).toContain('mostPlayed: "Top rated"');
   });
 
   it("drives the Top rated shelf from the fixed app id list", () => {
@@ -42,15 +42,16 @@ describe("Home most played rail", () => {
     expect(cardSource).toContain("<HomeTopRatedCardBodySkeleton />");
   });
 
-  it("lays out the card with header art, title and a fire rating on the right — no pills, no badge, no description", () => {
+  it("lays out the card with hero capsule art, title and a fire rating on the right — no pills, no badge, no description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");
     const cardEnd = component.indexOf("\nfunction ", cardStart);
     const cardSource = component.slice(cardStart, cardEnd);
 
-    // Header.jpg como arte, nome do jogo e nota média (fire à direita) — sem
+    // Header capsule (460×215) como arte, nome do jogo e nota média (fire à direita) — sem
     // badge de popularidade, sem descrição curta e sem linha de pills.
     expect(cardSource).toContain("gameHeaderOnlySources(game)");
+    expect(cardSource).not.toContain("gameHeroCapsuleOnlySources(game)");
     expect(cardSource).toContain("home-top-rated-card__title");
     expect(cardSource).toContain("home-top-rated-card__rating");
     expect(cardSource).not.toContain("home-top-rated-card__players");
@@ -70,9 +71,8 @@ describe("Home most played rail", () => {
     expect(selectors).not.toContain(".home-top-rated-card__tag");
     expect(selectors).toContain(".home-top-rated-card__rating");
 
-    // Arte larga (header.jpg) no aspecto nativo 460×215 — não a hero capsule
-    // em retrato usada em iterações anteriores deste rail, nem o 920×377 do
-    // mock, que era achatado demais e recortava a capa.
+    // Arte larga (header capsule) no aspecto nativo 460×215 — mesmo do card
+    // em grade do catálogo, sem recorte com `cover`.
     let artRuleText = "";
     stylesheet.walkRules(".home-top-rated-card__art", (rule) => {
       artRuleText += rule.toString();

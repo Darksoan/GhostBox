@@ -404,6 +404,35 @@ export function gameHeroCapsuleSources(game: GhostBoxGame) {
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
   ]);
 }
+/**
+ * Hero capsule (1920×620) para slots de arte larga, sem cair na library
+ * capsule: os fallbacks são apenas artes de paisagem (`capsule_616x353` /
+ * `header`), para o slot largo nunca receber a capa vertical da biblioteca
+ * (`library_600x900`). O host legado `cdn.cloudflare.steamstatic.com` vem
+ * primeiro porque publica hero_capsule para jogos antigos que a raiz
+ * `store_item_assets` não tem.
+ */
+export function gameHeroCapsuleOnlySources(game: GhostBoxGame) {
+  const appId = getGameAppId(game);
+
+  return uniqueSources([
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.akamai.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.steamstatic.com/steam/apps/${appId}/hero_capsule.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+  ]);
+}
 
 export function gameLogoSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);

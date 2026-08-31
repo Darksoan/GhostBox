@@ -839,7 +839,7 @@ export function CataloguePage({
                 )}
               </div>
               {/* Dropdown de visualização: alterna a listagem entre lista
-                  (horizontal) e grade de cards estilo "Mais jogados". Mesmo
+                  (horizontal) e grade de cards estilo "Bem avaliados". Mesmo
                   padrão do dropdown de ordenação ao lado. */}
               <div
                 className={`settings-dropdown catalogue-page__view ${viewDropdownOpen ? "settings-dropdown--open" : ""}`}

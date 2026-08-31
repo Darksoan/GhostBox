@@ -10,9 +10,14 @@ export const CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS = 120;
  */
 export const CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS = 420;
 
+// Mantido p/ compatibilidade; shots do preview não usam mais fade (troca direta).
+export const CATALOGUE_PREVIEW_SWAP_TRANSITION_MS = 180;
+
 // Matches --motion-base in src/styles/_primitives.scss so the panel's DOM
 // content lives exactly as long as its fade-out transition.
 export const CATALOGUE_PREVIEW_EXIT_TRANSITION_MS = 180;
+
+export const CATALOGUE_PREVIEW_PENDING_HOLD_MS = 250;
 
 /**
  * Debounces committing a hover target so scanning the list quickly (pointer

@@ -3607,10 +3607,9 @@ p {
   padding-inline: var(--home-content-inline-inset);
 }
 
-/* "Mais jogados": rail próprio em vez da grade. Três cards por página, fixo —
-   cada card leva arte larga (`header.jpg`) e, embaixo, nome do jogo e uma
-   linha fechada de pills; uma quarta coluna espremeria o bloco de texto a
-   ponto de o rótulo virar reticências cedo demais. */
+/* "Bem avaliados": rail próprio em vez da grade. Quatro cards por página, fixo —
+   cada card leva arte larga (header capsule 460×215 da Steam) e, embaixo, nome do jogo e
+   a desenvolvedora. */
 .home-top-rated {
   position: relative;
   @include mixins.section-column;
@@ -3693,10 +3692,9 @@ p {
   }
 }
 
-/* Arte larga no topo, no aspecto nativo do `header.jpg` da Steam (460×215) — o
-   920×377 do mock era mais achatado que a arte e comia uma faixa em cima e
-   embaixo de toda capa. Com o slot na mesma proporção da imagem, o `cover` não
-   tem sobra para recortar. */
+/* Arte larga no topo, no aspecto nativo da header capsule da Steam (460×215) —
+   mesmo aspecto usado no card em grade do catálogo (`CatalogueGridCard`).
+   Com o slot na mesma proporção da imagem, o `cover` preenche sem recortar. */
 .home-top-rated-card__art {
   display: block;
   width: 100%;
@@ -4548,6 +4546,8 @@ p {
     flex: 0 0 34px;
     width: 34px;
     height: 34px;
+    overflow: hidden;
+    border-radius: var(--radius-md);
     background: var(--surface-canvas);
     object-fit: cover;
   }
@@ -4589,6 +4589,7 @@ p {
 }
 
 .home-wishlist-card__player-review-avatar--skeleton {
+  border-radius: var(--radius-md);
   background: var(--skeleton-fill);
 }
 
@@ -6550,7 +6551,7 @@ html.no-animations {
      inteiramente a rampa de superfície do app. */
   &__sort {
     width: auto;
-    min-width: 190px;
+    min-width: 210px;
 
     .settings-dropdown__trigger {
       min-height: 36px;
@@ -6565,12 +6566,23 @@ html.no-animations {
     }
 
     .settings-dropdown__menu {
+      min-width: 100%;
+      width: max-content;
+      max-width: 280px;
+      left: 0;
+      right: auto;
       border-radius: var(--radius-md);
     }
 
     .settings-dropdown__option {
       min-height: 32px;
       border-radius: var(--radius-md);
+
+      span {
+        padding: 0 var(--space-4);
+        text-align: left;
+        white-space: nowrap;
+      }
     }
   }
 
@@ -6614,7 +6626,7 @@ html.no-animations {
      `&__sort` (min-width) + `.settings-dropdown__trigger` (altura, raio). */
   &__sort-placeholder {
     display: block;
-    width: 190px;
+    width: 210px;
     height: 36px;
     border-radius: var(--radius-md);
   }
@@ -7641,7 +7653,7 @@ input[type="search"]::-ms-reveal {
   animation: spin 0.8s linear infinite;
 }
 
-/* Grade de cards estilo "Mais jogados" da Home: os filhos usam as classes do
+/* Grade de cards estilo "Bem avaliados" da Home: os filhos usam as classes do
    `.home-top-rated-card` (arte larga, nome + nota, desenvolvedora), então a
    grade só define o trilhamento e a ação flutuante de "adicionado". O
    `flex: 0 0 ...` herdado do card da Home não afeta filhos de grid. */
@@ -10087,6 +10099,10 @@ border: 0;
     transition: none;
   }
 
+  .catalogue-hover-preview {
+    transition: none;
+  }
+
   .profile-page__game-grid.game-grid--cover-format-in .game-card {
     animation: none;
   }
@@ -10230,7 +10246,7 @@ html.no-backdrop-blur {
   }
 
   .home-top-rated-card {
-    flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+    flex: 0 0 calc((100% - var(--home-category-gap) * 2) / 3);
   }
 
   .home-explore-card {

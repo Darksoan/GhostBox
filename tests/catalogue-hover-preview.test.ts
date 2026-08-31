@@ -21,6 +21,25 @@ describe("Catalogue hover preview", () => {
     expect(selectors).toContain(".catalogue-hover-preview__shot-image");
     expect(mediaQueries).toContain("(prefers-reduced-motion: reduce)");
 
+    // Shots trocam sem fade: não há classe de swapping nem transição nas shots.
+    expect(selectors).not.toContain(
+      ".catalogue-hover-preview--swapping .catalogue-hover-preview__media-stack"
+    );
+    expect(
+      selectors.filter((selector) =>
+        selector.includes("catalogue-hover-preview--swapping")
+      )
+    ).toEqual([]);
+
+    // O painel ainda entra com fade; as shots não.
+    const mediaStackRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" &&
+        node.selector === ".catalogue-hover-preview__media-stack"
+    );
+    expect(mediaStackRule?.toString() ?? "").not.toContain("transition:");
+    expect(mediaStackRule?.toString() ?? "").not.toContain("opacity");
+
     const previewRule = stylesheet.nodes.find(
       (node) => node.type === "rule" && node.selector === ".catalogue-hover-preview"
     );
@@ -81,5 +100,49 @@ describe("Catalogue hover preview", () => {
     expect(component).toContain("catalogue-hover-preview--visible");
     expect(component).toContain("catalogue-hover-preview--hidden");
     expect(component).toContain("displayedGame");
+  });
+
+  it("swaps the content without fading and without flashing the placeholder", () => {
+    const component = readFileSync(
+      "src/components/ui/CatalogueHoverPreview.tsx",
+      "utf8"
+    );
+    const utils = readFileSync("src/utils/cataloguePreview.ts", "utf8");
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+
+    // Shots trocam sem fade: sem estado de swapping
+    expect(component).not.toContain("catalogue-hover-preview--swapping");
+    expect(component).not.toContain("CATALOGUE_PREVIEW_SWAP_TRANSITION_MS");
+    expect(component).not.toContain("isContentSwapping");
+    expect(component).not.toContain("isMotionDisabled()");
+    expect(component).toContain("setDisplayedGame(game)");
+
+    // Hold + stale: não pisca skeleton a cada troca
+    expect(component).toContain("pendingGame");
+    expect(component).toContain("pendingDisplayShots");
+    expect(component).toContain("prevDisplayShotsRef");
+    expect(component).toContain("showStale");
+    expect(component).toContain("catalogue-hover-preview__shot--stale");
+    expect(component).toContain("CATALOGUE_PREVIEW_PENDING_HOLD_MS");
+    expect(component).toContain("loadedImageSources");
+    expect(component).toContain("pendingHoldTimeoutRef");
+
+    // Painel mantém transição de saída; shots não têm animação.
+    expect(utils).toContain("CATALOGUE_PREVIEW_EXIT_TRANSITION_MS = 180");
+    expect(utils).toContain("CATALOGUE_PREVIEW_PENDING_HOLD_MS = 250");
+    const shotLinkRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "rule" &&
+        (node.selector === ".catalogue-hover-preview__shot--link" ||
+          node.selector === ".catalogue-hover-preview__shot--link, .catalogue-hover-preview__shot--empty")
+    );
+    // Se a regra foi removida, não há animação; se ainda existir, não contém fade.
+    if (shotLinkRule) {
+      expect(shotLinkRule.toString()).not.toContain("animation:");
+      expect(shotLinkRule.toString()).not.toContain("image-subtle-fade-in");
+    }
+    expect(compile("src/app.scss").css).not.toContain(
+      "catalogue-hover-preview--swapping"
+    );
   });
 });

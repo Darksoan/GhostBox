@@ -325,7 +325,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
 
 /**
  * Card da visualização em grade: mesmo markup e classes do card de
- * "Mais jogados" da Home (`home-top-rated-card`), para reaproveitar o visual
+ * "Bem avaliados" da Home (`home-top-rated-card`), para reaproveitar o visual
  * (arte larga no aspecto 460×215, nome + nota de review, desenvolvedora)
  * sem duplicar estilos. As diferenças ficam por conta do contexto catálogo:
  * capa com gate de IntersectionObserver, ação de "adicionado" flutuante,
