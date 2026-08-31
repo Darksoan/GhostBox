@@ -9,23 +9,73 @@
 
 use crate::util::escape_html;
 
-/// The page rendered in the user's browser once the callback lands. Kept
-/// deliberately plain — it is the last thing shown before they switch back to
-/// the app.
+/// The page rendered in the user's browser once the callback lands.
+/// Matches the Figma card: #0A0A0A backdrop, 520×348 #101010 card, 58px
+/// #1D2827 pill with `user-round-check` vector in #2FA06A.
 pub(crate) fn callback_page_html(success: bool, message: &str) -> String {
-    let text = if message.trim().is_empty() {
+    let raw = message.trim();
+    let mut title = if raw.is_empty() {
         if success {
-            "Connected."
+            "Conectado com sucesso!"
         } else {
-            "Not connected."
+            "Não conectado."
         }
     } else {
-        message.trim()
+        raw
     };
+    // Normaliza mensagens padrão de sucesso para o copy do Figma
+    if success {
+        match title {
+            "Autorizado. Volte ao GhostBox."
+            | "Signed in. Back to GhostBox."
+            | "Verified. Back to GhostBox."
+            | "Connected." => title = "Conectado com sucesso!",
+            _ => {}
+        }
+    }
+    let title_escaped = escape_html(title);
+    let (badge_class, icon_color, badge_style) = if success {
+        (
+            "success",
+            "#2FA06A",
+            "background: #1D2827;",
+        )
+    } else {
+        (
+            "error",
+            "#A3A3A3",
+            "background: #262626; box-shadow: none;",
+        )
+    };
+    // lucide `user-round-check` — 3 nodes, check path gets draw animation
+    let icon_svg = format!(
+        r##"<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{icon_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path class="gb-check" d="m16 19 2 2 4-4"/></svg>"##
+    );
 
     format!(
-        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><title>GhostBox</title><style>:root {{ color-scheme: dark; }} body {{ min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b0b0b; color: #d3d3d3; font: 500 24px \"Segoe UI\", system-ui, sans-serif; user-select: none; }} p {{ margin: 0; }}</style></head><body><p>{}</p></body></html>",
-        escape_html(text)
+        r##"<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>GhostBox — {title_escaped}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet"><style>
+:root{{color-scheme:dark}}
+*{{box-sizing:border-box}}
+html,body{{height:100%}}
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0A0A0A;color:#FAFAFA;font-family:"Inter",Inter,"Segoe UI",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;user-select:none}}
+.wrap{{width:100%;min-height:100vh;display:grid;place-items:center;padding:24px}}
+.card{{width:520px;max-width:100%;height:348px;max-height:90vh;background:#101010;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px 36px;text-align:center;will-change:transform,opacity;animation:gb-cardIn 360ms cubic-bezier(0.4,0,0.2,1) both}}
+.badge{{width:58px;height:58px;border-radius:50px;display:grid;place-items:center;flex-shrink:0;{badge_style} will-change:transform,opacity}}
+.badge.success{{animation:gb-badgePop 420ms cubic-bezier(0.175,0.885,0.32,1.275) 80ms both}}
+.badge.error{{animation:gb-badgePop 320ms cubic-bezier(0.4,0,0.2,1) 80ms both}}
+.badge.success .gb-check{{stroke-dasharray:22;stroke-dashoffset:22;animation:gb-checkDraw 340ms cubic-bezier(0.4,0,0.2,1) 340ms forwards}}
+.title{{margin:18px 0 0;color:#FAFAFA;font-size:24px;font-weight:400;line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;max-width:100%;animation:gb-textIn 300ms cubic-bezier(0.4,0,0.2,1) 140ms both}}
+.subtitle{{margin:10px 0 0;font-size:16px;line-height:1.4;animation:gb-textIn 300ms cubic-bezier(0.4,0,0.2,1) 200ms both}}
+.subtitle .muted{{color:#A3A3A3;font-weight:400}}
+.subtitle .brand{{color:#FAFAFA;font-weight:600}}
+.subtitle .sep{{color:#FAFAFA}}
+@keyframes gb-cardIn{{from{{opacity:0;transform:translateY(16px) scale(0.96)}} to{{opacity:1;transform:translateY(0) scale(1)}}}}
+@keyframes gb-badgePop{{0%{{opacity:0;transform:scale(0.72)}} 60%{{opacity:1;transform:scale(1.06)}} 100%{{opacity:1;transform:scale(1)}}}}
+@keyframes gb-textIn{{from{{opacity:0;transform:translateY(8px)}} to{{opacity:1;transform:translateY(0)}}}}
+@keyframes gb-checkDraw{{to{{stroke-dashoffset:0}}}}
+@media(max-width:560px){{.card{{height:auto;min-height:320px;padding:36px 20px}}}}
+@media(prefers-reduced-motion:reduce){{.card,.badge,.title,.subtitle{{animation:none !important;opacity:1 !important;transform:none !important}}.gb-check{{stroke-dasharray:none !important;stroke-dashoffset:0 !important;animation:none !important}}}}
+</style></head><body><div class="wrap"><div class="card" role="status" aria-live="polite"><div class="badge {badge_class}" aria-hidden="true">{icon_svg}</div><h1 class="title">{title_escaped}</h1><p class="subtitle"><span class="muted">Retorne ao</span><span class="sep"> </span><span class="brand">GhostBox</span></p></div></div></body></html>"##
     )
 }
 

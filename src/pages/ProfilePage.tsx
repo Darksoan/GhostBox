@@ -152,10 +152,11 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
     openGame();
   };
 
+  const hasAchievements = achievementTotal > 0;
   return (
     <article
       className={`profile-page__activity-card${
-        achievementTotal > 0 ? " profile-page__activity-card--with-achievements" : ""
+        hasAchievements ? " profile-page__activity-card--with-achievements" : ""
       }${isPerfect ? " profile-page__activity-card--perfect" : ""}`}
       role="button"
       tabIndex={0}
@@ -193,17 +194,19 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
           <span className="profile-page__activity-hours">
             {formatCompactPlaytime(getGamePlaytime(game))} {t("profile.played")}
           </span>
-          {statusLabel ? (
-            <span className="profile-page__activity-status">{statusLabel}</span>
-          ) : null}
+          <span
+            className={`profile-page__activity-status${
+              !statusLabel ? " profile-page__activity-status--placeholder" : ""
+            }`}
+          >
+            {statusLabel ?? t("profile.neverPlayed")}
+          </span>
         </span>
       </span>
 
-      {achievementTotal > 0 ? (
+      {hasAchievements ? (
         <div className="profile-page__activity-achievements">
-          <span
-            className="profile-page__activity-progress"
-          >
+          <span className="profile-page__activity-progress">
             <span className="profile-page__activity-progress-label">
               {isPerfect ? (
                 <CupStar
@@ -269,7 +272,31 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
             </div>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="profile-page__activity-achievements">
+          <span className="profile-page__activity-progress">
+            <span className="profile-page__activity-progress-label">
+              <Cup
+                className="profile-page__activity-cup-icon"
+                size={18}
+                weight="Filled"
+                strokeWidth={2.0}
+                color="var(--text-tertiary, var(--text-secondary))"
+                aria-hidden="true"
+              />
+            </span>
+            <span className="profile-page__activity-progress-count">
+              0 {t("profile.of")} 0
+            </span>
+            <span
+              className="profile-page__progress-track profile-page__progress-track--compact"
+              aria-hidden="true"
+            >
+              <span style={{ width: "0%" }} />
+            </span>
+          </span>
+        </div>
+      )}
     </article>
   );
 });
@@ -938,7 +965,14 @@ export function ProfilePage({
         ) {
           return false;
         }
-        if (remoteAchievementAppIds.has(game.appId)) return false;
+        // Jogos com save na nuvem precisam hidratar local mesmo com Steam visível:
+        // o `steamAccountStats` pode dizer 0/3 mas o backup local tem desbloqueios
+        // que só aparecem após `merge_game_achievement_details` (modal).
+        if (
+          remoteAchievementAppIds.has(game.appId) &&
+          !cloudSaveAppIds.has(game.appId)
+        )
+          return false;
         if ((failedUntil.get(game.appId) ?? 0) > now) return false;
         seenCandidateAppIds.add(game.appId);
         return true;
@@ -1120,6 +1154,7 @@ export function ProfilePage({
     achievementHistoryGames,
     achievementHydrationAttempt,
     addedLibraryGames,
+    cloudSaveAppIds,
     favoriteGames,
     shouldComputeOverviewData,
     shouldShowSteamContent,

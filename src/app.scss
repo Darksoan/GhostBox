@@ -415,30 +415,42 @@ body {
   background: var(--background-dark);
 }
 
-.app-splash__spinner,
-.app-splash--react .app-splash__spinner {
-  box-sizing: border-box;
+.app-splash__bar,
+.app-splash--react .app-splash__bar {
   position: relative;
-  width: 34px;
-  height: 34px;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 168px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
 }
 
-.app-splash--react .app-splash__spinner {
-  border: 1px solid transparent;
-  background: conic-gradient(
-    var(--text-strong) var(--app-splash-progress, 0%),
-    var(--border-subtle) 0
-  );
-  animation: none;
-  transition: background var(--motion-base) var(--ease);
-}
-
-.app-splash--react .app-splash__spinner::after {
+.app-splash__bar::before {
   content: "";
   position: absolute;
-  inset: 3px;
-  border-radius: var(--radius-circle);
-  background: var(--background-dark);
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--text-strong);
+  animation: app-splash-bar 1.2s var(--ease) infinite;
+}
+
+@keyframes app-splash-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-splash__bar::before {
+    animation-duration: 2.4s;
+  }
 }
 
 .update-splash {
@@ -9024,7 +9036,9 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.backdrop--download-details > .confirm-modal {
+.backdrop--download-details > .confirm-modal,
+.backdrop--confirm > .confirm-modal,
+.confirm-modal {
   background: var(--surface-modal);
 
   .confirm-modal__actions .button {
@@ -9039,13 +9053,16 @@ input[type="search"]::-ms-reveal {
     }
   }
 
-  .confirm-modal__actions .confirm-modal__confirm {
+  .confirm-modal__actions .confirm-modal__confirm,
+  .confirm-modal__actions .button--danger {
     background: color-mix(in srgb, var(--red) 40%, transparent);
     color: var(--text-primary);
   }
 
   .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
-  .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
+  .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled),
+  .confirm-modal__actions .button--danger:hover:not(:disabled),
+  .confirm-modal__actions .button--danger:focus-visible:not(:disabled) {
     background: color-mix(in srgb, var(--red) 60%, transparent);
     color: var(--text-primary);
   }
@@ -9130,7 +9147,7 @@ input[type="search"]::-ms-reveal {
    virar vazio simétrico à esquerda das capas. */
 .favorites-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(0, 176px));
+  grid-template-columns: repeat(auto-fill, minmax(0, 180px));
   justify-content: start;
   gap: var(--space-5);
 }
@@ -9409,14 +9426,18 @@ input[type="search"]::-ms-reveal {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: var(--space-6);
+    /* Folga entre as duas métricas (conquistas e tempo jogado): 10px garante
+       separação visual clara sem espremer os valores. */
+    gap: var(--space-5);
     width: auto;
-    max-width: calc(100% - var(--space-8));
+    /* Mais largura horizontal: antes reservava 16px por lado, agora 8px — o
+       badge acompanha a capa e "XXX / YYY  ZZZ" continua inteiro. */
+    max-width: calc(100% - var(--space-4));
     /* Altura vinha travada em 30px com o texto encostando na borda de baixo.
        Agora a caixa é o próprio conteúdo: padding vertical garante o respiro
        em cima e embaixo, e os 30px viram piso, não teto. */
     min-height: 30px;
-    padding: var(--space-3) var(--space-6);
+    padding: var(--space-3) var(--space-4);
     border: 0;
     border-radius: var(--radius-lg);
     background:
@@ -9471,8 +9492,9 @@ input[type="search"]::-ms-reveal {
   &__summary-metric {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-3);
-    min-width: 0;
+    /* Espaço ícone→texto ajustado para 2px (--space-1): compensa a folga óptica
+       do glifo do troféu e mantém o texto de conquistas e horas bem agrupado. */
+    gap: var(--space-1);
     white-space: nowrap;
     line-height: var(--type-line-caption);
 
@@ -9482,6 +9504,7 @@ input[type="search"]::-ms-reveal {
     > span {
       display: inline-flex;
       align-items: center;
+      white-space: nowrap;
       line-height: var(--type-line-caption);
     }
   }
@@ -9926,7 +9949,7 @@ border: 0;
   }
 
   &.game-grid--portrait {
-    --game-grid-track: 164px;
+    --game-grid-track: 180px;
   }
 
   &.game-grid--cover-format-out .game-card {
@@ -12141,8 +12164,7 @@ html.no-backdrop-blur {
     // Dessatura e escurece a arte real (não o ícone cinza da Steam, que já
     // chega quase sem contraste e some contra o fundo escuro do slot quando
     // filtrado de novo). Sem reduzir opacity: quem marca "bloqueada" aqui é
-    // o cadeado sobreposto (&__achievement-lock-badge) e a superfície de
-    // fundo, não a transparência.
+    // a dessaturação e a superfície de fundo do slot, não a transparência.
     &--locked img {
       filter: grayscale(1) brightness(0.55);
     }
@@ -12173,20 +12195,6 @@ html.no-backdrop-blur {
         z-index: var(--z-base);
       }
     }
-  }
-
-  // Cadeado sobreposto à arte real quando a conquista está bloqueada. O scrim
-  // atrás do ícone garante leitura mesmo sobre arte clara ou colorida.
-  &__achievement-lock-badge {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: inherit;
-    background: color-mix(in srgb, var(--background-dark) 40%, transparent);
-    color: var(--text-tertiary);
-    pointer-events: none;
   }
 
   // Placeholder para quando a conquista não tem arte nenhuma (nem colorida
@@ -14471,4 +14479,25 @@ button {
 .edit-profile-modal .button:not(.button--primary),
 .modal:not(.modal--details) .button:not(.button--primary) {
   color: var(--text-primary);
+}
+
+/* ── Uninstall confirm modal ──────────────────────────────────────── */
+/* Usa a caixa canônica `.collection-modal`; só o botão destrutivo tem
+   idioma próprio (vermelho translúcido), como nos confirm internos. */
+.uninstall-confirm-modal .collection-modal__actions .button--danger {
+  background: color-mix(in srgb, var(--red) 40%, transparent);
+  color: var(--text-primary);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: color-mix(in srgb, var(--red) 60%, transparent);
+    color: var(--text-primary);
+  }
+}
+
+.uninstall-confirm-modal__note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-size-compact);
+  line-height: var(--type-line-compact);
 }

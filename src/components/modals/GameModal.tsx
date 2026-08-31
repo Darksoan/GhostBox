@@ -512,7 +512,7 @@ const AchievementIcon = memo(function AchievementIcon({
     Number.isFinite(achievement.globalPercent) &&
     achievement.globalPercent <= 10;
   // A arte real (colorida) é sempre a primeira escolha, mesmo bloqueada: o
-  // estado de bloqueio é comunicado por filtro CSS + ícone de cadeado, não
+  // estado de bloqueio é comunicado por filtro CSS (dessaturação), não
   // trocando para o ícone cinza da Steam antes mesmo de tentar carregar —
   // isso é o que produzia os círculos pretos idênticos e ilegíveis.
   const preferredSource = achievement.icon || achievement.iconGray;
@@ -630,11 +630,6 @@ const AchievementIcon = memo(function AchievementIcon({
         // "a imagem não carregou", não como "isso está bloqueado".
         <span className="modal__achievement-fallback" aria-hidden="true">
           <Cup size={16} weight="Filled" strokeWidth={2.0} />
-        </span>
-      )}
-      {!imageFailed && !isUnlocked && (
-        <span className="modal__achievement-lock-badge" aria-hidden="true">
-          <Cup size={14} weight="Filled" strokeWidth={2.0} />
         </span>
       )}
       {tooltipPosition && typeof document !== "undefined"

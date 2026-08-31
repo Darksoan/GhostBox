@@ -196,6 +196,7 @@ const translations: Record<Language, TranslationTree> = {
       lastPlayed: "jogado pela última vez em",
       of: "de",
       noAchievements: "Sem conquistas",
+      neverPlayed: "Nunca jogado",
       currentlyInGame: "Em jogo",
       steamMetrics: "Métricas Steam",
       achievementUnlocked: "Conquista desbloqueada",
@@ -549,6 +550,9 @@ const translations: Record<Language, TranslationTree> = {
           showOnProfile: "Mostrar dados Steam no perfil",
           showOnProfileDescription:
             "Exibe métricas e jogos da conta Steam no seu perfil GhostBox.",
+          showInLibrary: "Mostrar jogos instalados no Steam",
+          showInLibraryDescription:
+            "Exibe os jogos instalados na sua biblioteca Steam na aba Biblioteca do GhostBox.",
         },
         discord: {
           title: "Discord",
@@ -640,11 +644,6 @@ const translations: Record<Language, TranslationTree> = {
           action: "Testar",
           toastTitle: "Ajustes salvos",
           toastMessage: "Este é um toast de teste do GhostBox.",
-        },
-        testBackupToast: {
-          label: "Testar toast de backup",
-          description: "Dispara o aviso de backup concluído com a capsule do jogo.",
-          action: "Testar",
         },
       },
       download: {
@@ -844,6 +843,7 @@ const translations: Record<Language, TranslationTree> = {
       lastPlayed: "last played on",
       of: "of",
       noAchievements: "No achievements",
+      neverPlayed: "Never played",
       currentlyInGame: "Currently In-Game",
       steamMetrics: "Steam metrics",
       achievementUnlocked: "Achievement unlocked",
@@ -1194,6 +1194,9 @@ const translations: Record<Language, TranslationTree> = {
           showOnProfile: "Show Steam data on profile",
           showOnProfileDescription:
             "Show metrics and games from your Steam account on your GhostBox profile.",
+          showInLibrary: "Show games installed in Steam",
+          showInLibraryDescription:
+            "Show games installed in your Steam library in the GhostBox Library tab.",
         },
         discord: {
           title: "Discord",
@@ -1284,11 +1287,6 @@ const translations: Record<Language, TranslationTree> = {
           action: "Test",
           toastTitle: "Settings saved",
           toastMessage: "This is a GhostBox test toast.",
-        },
-        testBackupToast: {
-          label: "Test backup toast",
-          description: "Fires the completed-backup alert with the game capsule.",
-          action: "Test",
         },
       },
       download: {

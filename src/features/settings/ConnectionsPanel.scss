@@ -213,9 +213,7 @@
 .connection-card__steam-options {
   display: flex;
   flex-direction: column;
-  padding: 14px 16px;
-  background: var(--surface-panel);
-  border-radius: var(--radius-panel);
+  gap: 8px;
   transition: opacity var(--motion-fast) var(--ease);
 }
 
@@ -223,12 +221,17 @@
   opacity: 0.52;
 }
 
+/* Cada opção é o próprio painel: mesmo surface/radius do card de conexão
+   acima, mas independentes — desligar uma não "sanguessa" na outra. */
 .connection-card__steam-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   min-width: 0;
+  padding: 14px 16px;
+  background: var(--surface-panel);
+  border-radius: var(--radius-panel);
 }
 
 .connection-card__steam-option-copy {

@@ -2025,7 +2025,16 @@ pub fn steam_scan_library(
         let steam_path_ref = stored_path.as_str();
         let games = ghostbox_library_games
             .into_iter()
-            .map(|game| merge_playtime_into_game(game, &playtimes))
+            .map(|mut game| {
+                // Mesmo critério do caminho com scan: jogo do registry sem
+                // fonte declarada (adds LuaTools antigos) é jogo do GhostBox.
+                if let Some(object) = game.as_object_mut() {
+                    object
+                        .entry("librarySource".to_string())
+                        .or_insert_with(|| serde_json::json!("ghostbox"));
+                }
+                merge_playtime_into_game(game, &playtimes)
+            })
             .map(|game| enrich_game_with_local_achievement_stats(&app, game, steam_path_ref))
             .collect::<Vec<_>>();
 

@@ -17,10 +17,14 @@ export function ConnectionsPanel() {
     handleDisconnectSteam,
     showSteamGames,
     setShowSteamGames,
+    showSteamLibraryGames,
+    setShowSteamLibraryGames,
   } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const steamVisibilityLabelId = useId();
   const steamVisibilityDescId = useId();
+  const steamLibraryLabelId = useId();
+  const steamLibraryDescId = useId();
   const discord = useDiscordLink();
   const [confirmingSteamDisconnect, setConfirmingSteamDisconnect] = useState(false);
   const [disconnectingSteam, setDisconnectingSteam] = useState(false);
@@ -199,6 +203,30 @@ export function ConnectionsPanel() {
                 onClick={() => {
                   if (!steamConnected) return;
                   setShowSteamGames(!showSteamGames);
+                }}
+              >
+                <span />
+              </button>
+            </div>
+
+            <div className="connection-card__steam-option">
+              <div className="connection-card__steam-option-copy">
+                <strong id={steamLibraryLabelId}>{t("settings.connections.steam.showInLibrary")}</strong>
+                <span id={steamLibraryDescId}>{t("settings.connections.steam.showInLibraryDescription")}</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showSteamLibraryGames}
+                aria-labelledby={steamLibraryLabelId}
+                aria-describedby={steamLibraryDescId}
+                disabled={!steamConnected}
+                className={`settings-switch${showSteamLibraryGames ? " settings-switch--on" : ""}${
+                  !steamConnected ? " settings-switch--disabled" : ""
+                }`}
+                onClick={() => {
+                  if (!steamConnected) return;
+                  setShowSteamLibraryGames(!showSteamLibraryGames);
                 }}
               >
                 <span />

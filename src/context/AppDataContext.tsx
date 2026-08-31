@@ -46,24 +46,20 @@ import {
   isSteamConnected,
   mergeSteamProfile,
 } from "../lib/steamProfile";
-import {
-  createBackupToastFromRecord,
-  getLatestChangedBackupRecord,
-  isAppFocused,
-  showDesktopBackupNotification,
-} from "../lib/backupNotifications";
+import { getLatestChangedBackupRecord } from "../lib/backupNotifications";
 import { isHiddenLibraryGame } from "../utils/filters";
 import {
   buildPremiumBackupNudgeNotification,
   hasSeenPremiumBackupNudge,
   markPremiumBackupNudgeSeen,
 } from "../utils/premiumNudge";
-import { readDownloadTasks } from "../lib/downloadManager";
+import { deleteDownloadTaskFiles, readDownloadTasks } from "../lib/downloadManager";
 import { preloadGamePortraitSources } from "../utils/image";
 import {
   isSteamTitlePlaceholder,
   normalizeSteamGameTitles,
 } from "../utils/steamTitles";
+import { UninstallConfirmModal } from "../components/modals/UninstallConfirmModal";
 
 import { mergeSteamAchievementsIntoGames } from "../utils/steamAchievementMerge";
 import {
@@ -74,6 +70,7 @@ import {
   readStoredSteamAccountStats,
   readStoredStartupPage,
   readStoredShowSteamGames,
+  readStoredShowSteamLibraryGames,
   readStoredCloudProfileUpdatedAt,
   readStoredAutoRestoredCloudSaves,
   writeStoredAutoRestoredCloudSaves,
@@ -84,6 +81,7 @@ import {
   writeStoredSteamAccountStats,
   writeStoredStartupPage,
   writeStoredShowSteamGames,
+  writeStoredShowSteamLibraryGames,
   writeStoredCloudProfileUpdatedAt,
 } from "../utils/storage";
 import {
@@ -102,7 +100,6 @@ import { showAchievementDesktopNotification } from "../lib/trayNotifications";
 import { useOverlay } from "./OverlayContext";
 import { useSettings } from "./settings";
 import { useAuth } from "./AuthContext";
-import type { BackupToastPayload } from "../lib/backupNotifications";
 
 type InitialLoadStep =
   | "backupRoot"
@@ -280,12 +277,14 @@ interface AppDataContextValue {
   addedLibraryGameAppIds: Set<string>;
   availableLibraryGameAppIds: Set<string>;
   playableGameAppIds: Set<string>;
+  installedSteamGameAppIds: Set<string>;
   backupSettings: BackupSettings | null;
   morrenusApiKey: string;
   startupSettings: StartupSettings | null;
   initialPage: StartupPage;
   steamPathInput: string;
   showSteamGames: boolean;
+  showSteamLibraryGames: boolean;
   steamAccountStats: SteamAccountStats | null;
   /** App ids the account has a cloud save for — the GhostBox-owned game set. */
   cloudSaveAppIds: Set<string>;
@@ -296,6 +295,11 @@ interface AppDataContextValue {
   toggleFavoriteGame: (game: GhostBoxGame) => void;
   queueGame: (game: GhostBoxGame) => Promise<void>;
   removeQueuedGame: (game: GhostBoxGame) => Promise<void>;
+  /** Shows confirmation modal; also offers to delete local files when available. */
+  requestRemoveGame: (game: GhostBoxGame) => void;
+  /** Removes from library AND deletes local install files (GhostBox CDN only). */
+  uninstallGame: (game: GhostBoxGame) => Promise<void>;
+
   handlePlayGame: (game: GhostBoxGame) => Promise<void>;
   setCustomExeGame: (
     game: GhostBoxGame,
@@ -320,6 +324,7 @@ interface AppDataContextValue {
   setInitialPage: Dispatch<SetStateAction<StartupPage>>;
   setSteamPathInput: (path: string) => void;
   setShowSteamGames: (value: boolean) => void;
+  setShowSteamLibraryGames: (value: boolean) => void;
   handleStartupSettingsChange: (
     settings: Partial<StartupSettings>,
   ) => Promise<void>;
@@ -388,6 +393,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     _setShowSteamGames(value);
     writeStoredShowSteamGames(value);
   }, []);
+  const [showSteamLibraryGames, _setShowSteamLibraryGames] = useState<boolean>(
+    () => readStoredShowSteamLibraryGames(),
+  );
+
+  const setShowSteamLibraryGames = useCallback((value: boolean) => {
+    _setShowSteamLibraryGames(value);
+    writeStoredShowSteamLibraryGames(value);
+  }, []);
   const [steamAccountStats, setSteamAccountStats] =
     useState<SteamAccountStats | null>(() => readStoredSteamAccountStats());
   const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
@@ -397,7 +410,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const backupSettingsRef = useRef<BackupSettings | null>(
     defaultBackupSettings,
   );
-  const pendingBackupToastRef = useRef<BackupToastPayload | null>(null);
   const steamProfileRequestSequenceRef = useRef(0);
   const gamePlaytimesRef = useRef<GamePlaytimeSnapshot>({});
   const cloudProfileSyncTimerRef = useRef<number | null>(null);
@@ -953,74 +965,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [hasPremiumCloudProfileAccess, pushCloudProfileSnapshot, rehydrateCollectionGames]);
 
   const queueBackupToast = useCallback(
-    (appId: string, record: BackupSettings["backupRecords"][string]) => {
+    (_appId: string, record: BackupSettings["backupRecords"][string]) => {
       const shouldNotify =
         record.lastBackupSuccess !== false
           ? notifications.backupSuccessEnabled
           : notifications.backupErrorEnabled;
       if (!shouldNotify) return;
 
-      const pendingToast = createBackupToastFromRecord(record, appId);
+      const isSuccess = record.lastBackupSuccess !== false;
+      const title = isSuccess
+        ? `${record.title} salvo com sucesso!`
+        : "Falha no backup";
+      const message = isSuccess
+        ? ""
+        : record.lastBackupError || `${record.title} não pôde ser salvo.`;
       const createdAt = Date.parse(record.lastBackupAt);
 
       pushAppNotification({
-        id: `backup:${record.title}:${record.lastBackupAt}:${record.lastBackupSuccess !== false ? "success" : "error"}`,
+        id: `backup:${record.title}:${record.lastBackupAt}:${isSuccess ? "success" : "error"}`,
         type: "backup",
-        severity: record.lastBackupSuccess !== false ? "success" : "error",
-        title: pendingToast.title,
-        message: pendingToast.message,
+        severity: isSuccess ? "success" : "error",
+        title,
+        message,
         createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
         game: { title: record.title },
       });
-
-      if (isAppFocused()) {
-        showToast(
-          pendingToast.title,
-          pendingToast.message,
-          pendingToast.variant,
-          { imageSources: pendingToast.imageSources },
-        );
-      } else {
-        pendingBackupToastRef.current = pendingToast;
-      }
-
-      const desktopEnabled =
-        record.lastBackupSuccess !== false
-          ? notifications.backupSuccessEnabled
-          : notifications.backupErrorEnabled;
-
-      showDesktopBackupNotification(
-        pendingToast,
-        notifications.desktopNotificationsEnabled && desktopEnabled,
-      );
     },
     [
       notifications.backupErrorEnabled,
       notifications.backupSuccessEnabled,
-      notifications.desktopNotificationsEnabled,
-      showToast,
     ],
   );
-
-  useEffect(() => {
-    const flushPendingBackupToast = () => {
-      if (!isAppFocused() || !pendingBackupToastRef.current) return;
-
-      const pendingToast = pendingBackupToastRef.current;
-      pendingBackupToastRef.current = null;
-      showToast(pendingToast.title, pendingToast.message, pendingToast.variant, {
-        imageSources: pendingToast.imageSources,
-      });
-    };
-
-    window.addEventListener("focus", flushPendingBackupToast);
-    document.addEventListener("visibilitychange", flushPendingBackupToast);
-
-    return () => {
-      window.removeEventListener("focus", flushPendingBackupToast);
-      document.removeEventListener("visibilitychange", flushPendingBackupToast);
-    };
-  }, [showToast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1517,6 +1492,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [addedLibraryGames],
   );
 
+  const installedSteamGameAppIds = useMemo(
+    () =>
+      new Set(
+        addedLibraryGames
+          .filter(
+            (game) =>
+              game.status === "installed" ||
+              game.librarySource === "steam-installed",
+          )
+          .flatMap((game) => [
+            game.appId,
+            game.id,
+            game.appId ? `steam-${game.appId}` : "",
+          ])
+          .filter(Boolean),
+      ),
+    [addedLibraryGames],
+  );
+
   const profileFavoriteGames = useMemo(
     () =>
       normalizeSteamGameTitles(favoriteGames, [
@@ -1716,9 +1710,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             headerUrl: game.heroUrl,
           },
         });
-        if (notifications.backupSuccessEnabled) {
-          showToast(title, message, "success");
-        }
       } catch (error) {
         // Auto-restore is best-effort: never block adding or launching a game.
         // Still log it — a silent catch here hid expired cloud sessions.
@@ -1727,12 +1718,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         autoRestoreInFlightAppIdsRef.current.delete(appId);
       }
     },
-    [
-      appearance.language,
-      hasPremiumCloudProfileAccess,
-      notifications.backupSuccessEnabled,
-      showToast,
-    ],
+    [appearance.language, hasPremiumCloudProfileAccess],
   );
 
   const queueGame = useCallback(
@@ -1993,6 +1979,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       removingGameId,
       showToast,
     ],
+  );
+
+  const [removeConfirmGame, setRemoveConfirmGame] = useState<GhostBoxGame | null>(null);
+
+  const requestRemoveGame = useCallback((game: GhostBoxGame) => {
+    setRemoveConfirmGame(game);
+  }, []);
+
+  const uninstallGame = useCallback(
+    async (game: GhostBoxGame) => {
+      const appId = game.appId || game.id.replace(/^steam-/, "");
+      const task = readDownloadTasks().find(
+        (t) => t.appId === appId && t.status === "completed",
+      );
+      if (task) {
+        // GhostBox-downloaded: remove library entry + delete local files.
+        await removeQueuedGame(game);
+        try {
+          await deleteDownloadTaskFiles(task.id);
+        } catch {
+          // File deletion failure is non-fatal; library entry already removed.
+        }
+      } else {
+        // Steam-installed: delegate to Steam's own uninstall dialog.
+        await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
+      }
+    },
+    [removeQueuedGame],
   );
 
   const handleGameDetailsLoaded = useCallback((details: GhostBoxGame) => {
@@ -2592,12 +2606,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGameAppIds,
       availableLibraryGameAppIds,
       playableGameAppIds,
+      installedSteamGameAppIds,
       backupSettings,
       morrenusApiKey,
       startupSettings,
       initialPage,
       steamPathInput,
       showSteamGames,
+      showSteamLibraryGames,
       steamAccountStats,
       cloudSaveAppIds,
       profileHistoryGames: profileHistoryGamesWithPlaytime,
@@ -2607,7 +2623,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       toggleFavoriteGame,
       queueGame,
       removeQueuedGame,
+      requestRemoveGame,
+      uninstallGame,
       handlePlayGame,
+
       setCustomExeGame,
       addGameToUserCollection,
       removeGameFromCollection,
@@ -2623,6 +2642,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setInitialPage,
       setSteamPathInput,
       setShowSteamGames,
+      setShowSteamLibraryGames,
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,
@@ -2646,12 +2666,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGameAppIds,
       availableLibraryGameAppIds,
       playableGameAppIds,
+      installedSteamGameAppIds,
       backupSettings,
       morrenusApiKey,
       startupSettings,
       initialPage,
       steamPathInput,
       showSteamGames,
+      showSteamLibraryGames,
       steamAccountStats,
       cloudSaveAppIds,
       profileHistoryGamesWithPlaytime,
@@ -2661,6 +2683,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       toggleFavoriteGame,
       queueGame,
       removeQueuedGame,
+      requestRemoveGame,
+      uninstallGame,
       handlePlayGame,
       setCustomExeGame,
       addGameToUserCollection,
@@ -2679,10 +2703,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ],
   );
 
+  const removeConfirmHasLocalInstall = removeConfirmGame
+    ? readDownloadTasks().some(
+        (t) =>
+          t.appId === (removeConfirmGame.appId || removeConfirmGame.id.replace(/^steam-/, "")) &&
+          t.status === "completed",
+      )
+    : false;
+
   return (
-    <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
+    <AppDataContext.Provider value={value}>
+      {children}
+      <UninstallConfirmModal
+        open={removeConfirmGame !== null}
+        gameTitle={removeConfirmGame?.title ?? ""}
+        hasLocalInstall={removeConfirmHasLocalInstall}
+        onCancel={() => setRemoveConfirmGame(null)}
+        onRemoveOnly={() => {
+          if (removeConfirmGame) void removeQueuedGame(removeConfirmGame);
+          setRemoveConfirmGame(null);
+        }}
+        onRemoveAndUninstall={() => {
+          if (removeConfirmGame) void uninstallGame(removeConfirmGame);
+          setRemoveConfirmGame(null);
+        }}
+      />
+    </AppDataContext.Provider>
   );
 }
+
 
 export function useAppData() {
   const context = useContext(AppDataContext);

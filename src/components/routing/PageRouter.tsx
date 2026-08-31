@@ -15,6 +15,7 @@ import { SteamPathModal } from "../modals/SteamPathModal";
 import { SubscriptionModal } from "../modals/SubscriptionModal";
 import { markPageLoaded } from "../../utils/loadedPages";
 import { preloadGameModalModule } from "../../utils/gameModalLoader";
+import { filterSteamLibraryGames } from "../../utils/libraryVisibility";
 
 const LazyHomePage = lazy(() =>
   import("../../pages/HomePage").then((m) => {
@@ -280,7 +281,10 @@ export function PageRouter({
     if (targetPage === "library") {
       return (
         <LazyLibraryPage
-          games={appData.addedLibraryGames}
+          games={filterSteamLibraryGames(
+            appData.addedLibraryGames,
+            appData.showSteamLibraryGames,
+          )}
           favoriteGames={appData.favoriteGames}
           loading={false}
           query={debouncedQuery}

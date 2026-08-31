@@ -113,11 +113,33 @@ export function highDensityHeaderSources(appId: string): string[] {
   ];
 }
 
+function isHeaderCapsuleImageSource(source: string) {
+  const normalizedSource = source.trim().toLowerCase();
+  if (!normalizedSource) return false;
+  let pathname = normalizedSource.split(/[?#]/)[0];
+  try {
+    pathname = new URL(normalizedSource).pathname;
+  } catch {
+    // non-URL still classified by filename
+  }
+  return /(^|\/)(?:header_2x|capsule_616x353|capsule_231x87|capsule_467x181)\.jpg$/.test(
+    pathname.replace(/\\/g, "/"),
+  );
+}
+
 export function gameHeaderOnlySources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
-  const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
+  const rawScreenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
+  // hero 3840×1240 / hero_capsule nunca podem ocupar slot de header 460×215
+  const screenshotFallback =
+    rawScreenshotFallback &&
+    !isHeroImageSource(rawScreenshotFallback) &&
+    !/(^|\/)hero_capsule(_2x)?\.jpg$/i.test(rawScreenshotFallback.split(/[?#]/)[0])
+      ? rawScreenshotFallback
+      : undefined;
   const customHeaderSources = [game.coverUrl, ...(game.coverFallbacks ?? [])].filter(
-    (source) => isHeaderImageSource(source) || isLandscapeImageSource(source)
+    (source) =>
+      isHeaderImageSource(source) || isHeaderCapsuleImageSource(source),
   );
 
   return uniqueSources([

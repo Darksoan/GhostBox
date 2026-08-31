@@ -22,6 +22,7 @@ import {
   startupPageStorageKey,
   profileHistoryGamesStorageKey,
   showSteamGamesStorageKey,
+  showSteamLibraryGamesStorageKey,
   personalCalendarStorageKey,
   steamWishlistRecommendationsStorageKey,
   steamWishlistReviewCacheStorageKey,
@@ -510,6 +511,28 @@ export function writeStoredShowSteamGames(value: boolean) {
 
   try {
     window.localStorage.setItem(showSteamGamesStorageKey, value ? "true" : "false");
+  } catch {
+    // Setting still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredShowSteamLibraryGames(): boolean {
+  if (typeof window === "undefined") return true;
+
+  try {
+    const raw = window.localStorage.getItem(showSteamLibraryGamesStorageKey);
+    if (raw === null) return true;
+    return raw === "true";
+  } catch {
+    return true;
+  }
+}
+
+export function writeStoredShowSteamLibraryGames(value: boolean) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(showSteamLibraryGamesStorageKey, value ? "true" : "false");
   } catch {
     // Setting still works during the session if localStorage is unavailable.
   }

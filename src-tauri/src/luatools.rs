@@ -311,6 +311,9 @@ fn library_game_from_luatools_add(
     if text_value(library_game.get("title")).is_empty() {
         library_game["title"] = serde_json::json!(title);
     }
+    // Depois do merge com o input: a provenência é do GhostBox, não do
+    // catálogo que originou o pedido.
+    library_game["librarySource"] = serde_json::json!("ghostbox");
 
     library_game
 }

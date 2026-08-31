@@ -57,25 +57,40 @@
         object-fit: contain;
       }
 
-      .app-splash__spinner {
+      .app-splash__bar {
+        position: relative;
+        overflow: hidden;
         box-sizing: border-box;
-        width: 34px;
-        height: 34px;
-        border: 2px solid var(--border-subtle);
-        border-top-color: var(--text-strong);
-        border-radius: 50%;
-        animation: app-splash-spin 0.8s linear infinite;
+        width: 168px;
+        height: 2px;
+        border-radius: 999px;
+        background: var(--border-subtle);
       }
 
-      @keyframes app-splash-spin {
-        to {
-          transform: rotate(360deg);
+      .app-splash__bar::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 40%;
+        border-radius: inherit;
+        background: var(--text-strong);
+        animation: app-splash-bar 1.2s ease-in-out infinite;
+      }
+
+      @keyframes app-splash-bar {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(250%);
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .app-splash__spinner {
-          animation-duration: 1.8s;
+        .app-splash__bar::before {
+          animation-duration: 2.4s;
         }
       }
     </style>
@@ -91,7 +106,7 @@
       <main class="app-splash" aria-label="Carregando interface">
         <div class="app-splash__content">
           <img class="app-splash__icon" src="./ghost-solid.png" alt="GhostBox" />
-          <div class="app-splash__spinner" aria-hidden="true"></div>
+          <div class="app-splash__bar" aria-hidden="true"></div>
         </div>
       </main>
     </div>

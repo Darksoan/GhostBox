@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
@@ -38,27 +38,16 @@ type OverlayForwardEntry =
   | { kind: "game"; game: GhostBoxGame }
   | { kind: "achievements"; view: NonNullable<AchievementsViewState> };
 
-function AppSplash({ progress }: { progress: number }) {
-  const spinnerStyle = {
-    ["--app-splash-progress"]: `${progress}%`,
-  } as CSSProperties;
-
+function AppSplash() {
   return (
     <main
       className="app-splash app-splash--react"
       aria-label="Carregando interface"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={progress}
       role="progressbar"
     >
       <div className="app-splash__content">
         <img className="app-splash__icon" src={ghostIconSource} alt="GhostBox" />
-        <div
-          className="app-splash__spinner"
-          style={spinnerStyle}
-          aria-hidden="true"
-        />
+        <div className="app-splash__bar" aria-hidden="true" />
       </div>
     </main>
   );
@@ -615,7 +604,7 @@ function AppShell() {
     <MetricsVisibilityProvider isAuthenticated={isAuthenticated}>
       <AppContent appData={appData} />
       {appData.isInitialLoading ? (
-        <AppSplash progress={appData.initialLoadingProgress} />
+        <AppSplash />
       ) : null}
     </MetricsVisibilityProvider>
   );

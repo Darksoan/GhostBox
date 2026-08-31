@@ -756,15 +756,19 @@
 
   &__activity-card {
     --activity-cover-width: 196px;
+    // O card acompanha o aspecto nativo da header capsule (460/215): a altura
+    // mínima é derivada da largura da capa, então a capa esticada nunca é
+    // recortada — mesmo comportamento dos cards do catálogo.
+    --activity-cover-height: calc(var(--activity-cover-width) * 215 / 460);
     position: relative;
     display: grid;
     grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
-    grid-template-rows: auto;
+    grid-template-rows: auto auto;
     column-gap: var(--space-8);
-    row-gap: var(--space-5);
-    align-items: center;
+    row-gap: 0;
+    align-items: stretch;
     min-width: 0;
-    min-height: 84px;
+    min-height: var(--activity-cover-height);
     padding: 0;
     padding-right: var(--space-6);
     overflow: visible;
@@ -783,6 +787,10 @@
 
     &--with-achievements {
       grid-template-rows: auto auto;
+    }
+
+    &--placeholder {
+      // mantém a mesma caixa das demais; só o conteúdo é mudo
     }
 
     &--perfect {
@@ -839,7 +847,7 @@
     grid-template-columns: var(--activity-cover-width) minmax(0, 1fr);
     align-items: center;
     gap: var(--space-7);
-    min-height: 84px;
+    min-height: var(--activity-cover-height);
     padding: 0;
     padding-right: var(--space-6);
     /* Sem opacidade: ela escurecia o fill do skeleton para fora da rampa. */
@@ -847,19 +855,19 @@
   }
 
   /*
-   * A capa ocupa a ALTURA INTEIRA do card. Antes ela era centralizada com uma
-   * `aspect-ratio` fixa (196px → 91.6px de altura): num card com a linha de
-   * conquistas o card passa de 120px e sobrava uma faixa do fundo em cima e
-   * embaixo da arte — a header do jogo não encostava nas bordas do card.
-   * Agora a célula estica e o recorte fica por conta do `background-size: cover`.
+   * A capa mantém o aspecto nativo da header capsule (460/215) sem esticar:
+   * largura fixa + aspect-ratio travam o recorte, `background-size: cover`
+   * com `center` só preenche sem cortar o centro. Se o conteúdo da direita
+   * (linha de conquistas) for mais alto, o card cresce mas a capa fica no
+   * topo sem distorcer — igual ao comportamento mobile e aos cards do catálogo.
    */
   &__activity-cover-button {
     grid-column: 1;
     grid-row: 1 / -1;
     display: block;
     width: var(--activity-cover-width);
-    align-self: stretch;
-    min-height: 84px;
+    align-self: start;
+    min-height: 0;
     padding: 0;
     background: transparent;
     cursor: inherit;
@@ -871,11 +879,12 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    align-self: center;
     gap: var(--space-6);
     width: 100%;
     min-width: 0;
     min-height: 0;
-    padding: var(--space-6) 0 0;
+    padding: var(--space-6) 0 var(--space-3);
     background: transparent;
     color: inherit;
     text-align: left;
@@ -885,8 +894,9 @@
   &__activity-game-cover {
     display: block;
     width: 100%;
-    height: 100%;
-    min-height: 84px;
+    height: auto;
+    aspect-ratio: 460 / 215;
+    min-height: 0;
     flex: 0 0 auto;
     border: 0;
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
@@ -950,6 +960,12 @@
     color: var(--text-secondary);
   }
 
+  &__activity-status--placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.85;
+    font-style: italic;
+  }
+
   &__activity-achievements {
     grid-column: 2;
     grid-row: 2;
@@ -958,8 +974,17 @@
     justify-content: space-between;
     gap: var(--space-6) var(--space-7);
     min-width: 0;
+    min-height: 40px;
     padding: 0 0 var(--space-5);
     background: transparent;
+  }
+
+  &__activity-achievements--placeholder {
+    opacity: 0.62;
+  }
+
+  &__activity-progress--placeholder {
+    opacity: 0.7;
   }
 
   &__activity-progress {
@@ -1037,6 +1062,10 @@
     // reduzir o peso visual da linha.
   }
 
+  &__activity-icons--placeholder {
+    opacity: 0.85;
+  }
+
   &__activity-icon {
     position: relative;
     display: grid;
@@ -1070,6 +1099,30 @@
       opacity: 1;
       transform: translate(-50%, -4px);
       visibility: visible;
+    }
+
+    &--placeholder {
+      background: var(--surface-strong);
+      border: 1px dashed var(--border-subtle);
+      outline: 0;
+      opacity: 0.85;
+
+      &::after {
+        content: "";
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-circle);
+        background: var(--text-tertiary);
+        opacity: 0.35;
+      }
+    }
+
+    // Conquista bloqueada: arte real, dessaturada e apagada.
+    &--locked {
+      img {
+        filter: grayscale(1);
+        opacity: 0.45;
+      }
     }
   }
 
@@ -1496,7 +1549,7 @@
 
   /* Só a largura da trilha; o `grid-template-columns` fixo vem da `.game-grid`. */
   &__game-grid.game-grid--portrait {
-    --game-grid-track: 164px;
+    --game-grid-track: 180px;
 
     grid-auto-rows: auto;
     gap: var(--space-7) var(--space-6);

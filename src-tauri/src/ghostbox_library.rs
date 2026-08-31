@@ -398,6 +398,98 @@ pub fn build_scan_games_with_plugins(
             .collect(),
     );
 
-    let games = merge_library_games(steam_games, ghostbox_library_games);
+    // A procedência do jogo adicionado pelo GhostBox precisa sobreviver ao
+    // merge: quando ele também está instalado, o stub do scan (instalado via
+    // Steam) vence e sairia sem marcador — ficando indistinguível de um
+    // install feito pela própria Steam. Entrada sem `librarySource` no
+    // registry (adds LuaTools antigos) conta como adicionada pelo GhostBox.
+    let mut registry_sources: HashMap<String, Value> = ghostbox_library_games
+        .iter()
+        .filter_map(|game| {
+            let app_id = extract_app_id(game);
+            if app_id.is_empty() {
+                return None;
+            }
+            let source = game
+                .get("librarySource")
+                .cloned()
+                .unwrap_or_else(|| json!("ghostbox"));
+            Some((app_id, source))
+        })
+        .collect();
+
+    let mut games = merge_library_games(steam_games, ghostbox_library_games);
+    for game in games.iter_mut() {
+        let app_id = extract_app_id(game);
+        if let Some(source) = registry_sources.remove(&app_id) {
+            if let Some(object) = game.as_object_mut() {
+                object.insert("librarySource".to_string(), source);
+            }
+        }
+    }
+
     (added_app_ids, games)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_scan_games_with_plugins;
+
+    #[test]
+    fn ghostbox_provenance_survives_an_installed_scan_stub() {
+        // Jogo adicionado pelo GhostBox e depois também visto como instalado
+        // pelo scan da Steam: o stub do scan vence no merge, mas a fonte tem
+        // que ser preservada — sem isso o toggle de jogos Steam não distingue
+        // install do GhostBox de install da própria Steam.
+        let installed = vec![serde_json::json!({
+            "appId": "620",
+            "id": "steam-620",
+            "title": "Portal 2",
+            "subtitle": "Instalado via Steam",
+            "status": "installed"
+        })];
+        let registry = vec![serde_json::json!({
+            "appId": "620",
+            "id": "steam-620",
+            "title": "Portal 2",
+            "subtitle": "Adicionado pelo GhostBox",
+            "status": "discover"
+        })];
+
+        let (_, games) = build_scan_games_with_plugins(installed, &[], registry);
+
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0]["status"], "installed");
+        assert_eq!(games[0]["librarySource"], "ghostbox");
+    }
+
+    #[test]
+    fn declared_source_in_the_registry_wins_over_the_ghostbox_default() {
+        let installed = Vec::new();
+        let registry = vec![serde_json::json!({
+            "appId": "730",
+            "id": "steam-730",
+            "title": "CS2",
+            "librarySource": "registered"
+        })];
+
+        let (_, games) = build_scan_games_with_plugins(installed, &[], registry);
+
+        assert_eq!(games[0]["librarySource"], "registered");
+    }
+
+    #[test]
+    fn pure_steam_installs_stay_unmarked() {
+        let installed = vec![serde_json::json!({
+            "appId": "570",
+            "id": "steam-570",
+            "title": "Dota 2",
+            "status": "installed"
+        })];
+
+        let (_, games) = build_scan_games_with_plugins(installed, &[], Vec::new());
+
+        assert_eq!(games.len(), 1);
+        assert!(games[0].get("librarySource").is_none());
+    }
 }
