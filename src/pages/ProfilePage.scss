@@ -691,7 +691,7 @@
     min-width: 0;
     color: var(--text-secondary);
     font-size: var(--type-size-compact);
-    line-height: 1;
+    line-height: var(--line-height-tight, 1.25);
     white-space: nowrap;
 
     strong {
@@ -709,6 +709,7 @@
       min-width: 0;
       text-overflow: ellipsis;
       letter-spacing: var(--ls-200);
+      line-height: inherit;
     }
   }
 
