@@ -5069,25 +5069,30 @@ html.no-animations {
 }
 
 // Superfície de assinatura compartilhada entre a modal da titlebar e a aba
-// de assinatura dentro de Ajustes. Centralizada na viewport com backdrop de
-// capas igual ao modal `Seja premium` — a oferta não estica no topo, e sim
-// ocupa o centro com as capas como textura atrás do card.
+// de assinatura dentro de Ajustes. Antes centralizada com backdrop de capas;
+// agora fluida: ocupa toda a altura/largura disponível e faz os cards
+// crescerem quando a janela é redimensionada, sem deixar vazios.
 .subscription-surface {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   flex: 1 1 auto;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   gap: 0;
   margin: 0;
-  padding: var(--space-10);
-  overflow: hidden;
+  padding: clamp(var(--space-6), 1.8vh, var(--space-10)) clamp(var(--space-6), 1.6vw, var(--space-10));
+  overflow: auto;
   isolation: isolate;
 
   .settings-panel,
   .settings-panel__body {
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
     width: 100%;
     flex: 1 1 auto;
     min-height: 0;
@@ -5096,24 +5101,47 @@ html.no-animations {
   .settings-panel {
     position: relative;
     z-index: 1;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .settings-panel__body {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
-  // O card e o resumo ficam acima do backdrop, na mesma pegada do diálogo.
+  // O card e o resumo preenchem a largura disponível e crescem com a janela.
   .subscription-account,
   .premium-offer--settings {
     position: relative;
     z-index: 1;
-    width: min(1000px, 100%);
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .premium-offer--settings {
     box-shadow: 0 48px 120px -48px var(--black);
-    max-height: min(760px, calc(100vh - var(--space-12) - var(--app-header-height)));
-    overflow: auto;
+    max-height: none;
+    height: auto;
+    flex: 1 1 auto;
+    overflow: visible;
+    align-self: center;
+  }
+
+  // Quando logado (conta Premium ativa) o backdrop de capas não deve aparecer:
+  // a textura compete com os cards de resumo e foi removida a pedido.
+  &:has(.subscription-account:not(.subscription-account--loading)) .subscription-backdrop {
+    display: none;
   }
 }
 
@@ -5134,17 +5162,21 @@ html.no-animations {
   --subscription-brand-size: var(--space-14);
   --subscription-brand-glyph: var(--space-9);
   --subscription-pill-height: var(--space-10);
-  --subscription-summary-min: calc(var(--space-16) * 2);
-  --subscription-panel-min: calc(var(--space-16) * 2 + var(--space-12));
+  --subscription-summary-min: clamp(calc(var(--space-16) * 1.5), 11vh, calc(var(--space-16) * 2 + var(--space-4)));
+  --subscription-panel-min: clamp(calc(var(--space-16) * 1.6), 14vh, calc(var(--space-16) * 2 + var(--space-12)));
   --subscription-payment-row-min: calc(var(--space-16) + var(--space-5));
   --subscription-backup-row-min: calc(var(--space-16) + var(--space-6));
-  --subscription-backup-list-max: calc(var(--space-16) * 6 + var(--space-12));
+  --subscription-backup-list-max: none;
   --subscription-status-size: calc(var(--space-10) + var(--space-2));
   --subscription-backup-thumb-width: calc(var(--subscription-backup-row-min) * 460 / 215);
 
-  display: grid;
-  gap: var(--space-6);
-  padding: var(--space-8) var(--space-9) var(--space-9);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(var(--space-6), 1.6vh, var(--space-8));
+  padding: clamp(var(--space-6), 1.6vh, var(--space-8)) clamp(var(--space-6), 1.2vw, var(--space-9)) clamp(var(--space-6), 1.6vh, var(--space-9));
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   border-radius: 0;
   background: transparent;
   color: var(--text-primary);
@@ -5327,20 +5359,24 @@ html.no-animations {
 
   &__summary-grid {
     display: grid;
-    gap: var(--space-5);
+    gap: clamp(var(--space-4), 1vw, var(--space-5));
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   &__details-grid {
     display: grid;
-    gap: var(--space-5);
+    gap: clamp(var(--space-4), 1.2vh, var(--space-5));
     grid-template-columns: 1fr;
+    flex: 1 1 auto;
+    min-height: 0;
+    align-content: start;
   }
 
   &__actions {
     display: grid;
     gap: var(--space-4);
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: auto;
   }
 
   &__action-button {
@@ -5478,11 +5514,16 @@ html.no-animations {
   }
 
   &__panel {
-    display: grid;
-    align-content: start;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-6);
     min-height: var(--subscription-panel-min);
     padding: var(--space-7) var(--space-8);
+
+    &:last-child {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
 
     &--wide {
       gap: var(--space-5);
@@ -5589,12 +5630,16 @@ html.no-animations {
 
   &__backup-list {
     display: grid;
-    gap: var(--space-4);
+    gap: clamp(var(--space-3), 0.9vh, var(--space-4));
     margin: 0;
     padding: 0;
-    max-height: var(--subscription-backup-list-max);
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     list-style: none;
+    align-content: stretch;
+    grid-auto-rows: minmax(var(--subscription-backup-row-min), 1fr);
 
     li {
       display: grid;
@@ -6533,6 +6578,7 @@ html.no-animations {
   }
 
   &__clear-filters {
+    flex: 0 0 auto;
     min-height: 32px;
     padding: 0 var(--space-4);
     border: 0;
@@ -6542,6 +6588,7 @@ html.no-animations {
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
+    white-space: nowrap;
   }
 
   &__clear-filters:hover,
@@ -6848,8 +6895,8 @@ html.no-animations {
       border-radius: var(--radius-pill);
       background: var(--text-primary);
       color: var(--surface-canvas);
-      font-size: var(--type-size-micro);
-      font-weight: var(--weight-semibold);
+      font-size: var(--type-size-compact);
+      font-weight: var(--weight-regular);
       font-variant-numeric: tabular-nums;
       line-height: 1;
     }
@@ -6939,22 +6986,22 @@ html.no-animations {
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
     outline: none;
+    box-shadow: none;
     user-select: text;
     padding: var(--space-5) var(--space-5);
-    transition: background var(--motion-fast) var(--ease);
 
     &::placeholder {
       color: var(--text-secondary);
       font-weight: var(--weight-regular);
     }
 
-    /* `--dropdown-option-hover` é o degrau #1a1a1a — mesmo passo que o resto do
-       dropdown usa em hover. O foco acompanha o hover: sem anel, é a única
-       marca de que o campo está ativo. */
     &:hover,
     &:focus,
     &:focus-visible {
-      background: var(--dropdown-option-hover);
+      border: 0;
+      outline: none;
+      box-shadow: none;
+      background: var(--surface-raised);
     }
   }
 
@@ -7125,13 +7172,16 @@ html.no-animations {
   min-width: 0;
   min-height: 34px;
   align-items: center;
-  gap: var(--space-5);
+  gap: 0;
   padding: var(--space-3) var(--space-5);
   @include mixins.ghost-button;
   font-size: var(--type-size-compact);
   font-weight: var(--weight-semibold);
   line-height: var(--type-line-compact);
-  transition: color var(--motion-fast) var(--ease);
+  transition:
+    color var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease),
+    gap var(--motion-base) var(--ease-out);
 
   input {
     position: absolute;
@@ -7149,20 +7199,28 @@ html.no-animations {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
+    width: 0;
     height: 16px;
     flex-shrink: 0;
-    border: 1px solid transparent;
+    border: 0;
     border-radius: var(--radius-sm);
-    background: var(--control-hover);
+    background: transparent;
     color: var(--surface-canvas);
+    opacity: 0;
+    transform: scale(0.62);
+    overflow: hidden;
+    will-change: width, opacity, transform;
     transition:
+      width var(--motion-base) var(--ease-out),
+      opacity var(--motion-fast) var(--ease),
+      transform var(--motion-base) var(--ease-out),
       background var(--motion-fast) var(--ease),
       border-color var(--motion-fast) var(--ease);
   }
 
   &:hover {
-    color: var(--text-primary);
+    background: var(--control-hover);
+    color: var(--text-secondary);
   }
 
   input:checked + &__box {
@@ -7175,12 +7233,29 @@ html.no-animations {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: transform var(--motion-base) var(--ease-out);
+    will-change: transform;
   }
 
   &:has(input:checked) {
+    gap: var(--space-5);
     border-color: transparent;
     background: var(--control-hover);
     color: var(--text-primary);
+  }
+
+  &:has(input:checked) &__box,
+  input:checked + &__box {
+    width: 16px;
+    opacity: 1;
+    transform: scale(1);
+    border: 1px solid transparent;
+    background: var(--control-hover);
+  }
+
+  &:has(input:checked) input:checked + &__box {
+    border-color: var(--text-primary);
+    background: var(--text-primary);
   }
 
   &:has(input:checked):hover {
@@ -9508,7 +9583,7 @@ input[type="search"]::-ms-reveal {
   &__summary-metric {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--space-1);
     white-space: nowrap;
     line-height: var(--type-line-caption);
 
@@ -9616,15 +9691,24 @@ input[type="search"]::-ms-reveal {
   position: fixed;
   right: var(--space-8);
   bottom: var(--space-8);
-  z-index: 10000;
+  z-index: var(--z-toast);
   width: min(420px, calc(100vw - 32px));
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-toast);
+  will-change: transform, opacity;
+  box-shadow: var(--shadow-2);
+  // Motion — aparição por arraste de baixo para cima (MD3 Emphasized)
+  // Primary: translateY + opacity + scale | Secondary: ícone | Ambient: sombra
+  animation: toast-in 380ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+
+  &--exiting {
+    animation: toast-out 220ms cubic-bezier(0.3, 0, 1, 1) both;
+  }
 
   &__content {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) 20px;
+    grid-template-columns: auto minmax(0, 1fr) 32px;
     align-items: center;
     gap: var(--space-6);
     padding: var(--space-8);
@@ -9632,6 +9716,8 @@ input[type="search"]::-ms-reveal {
 
   &__icon {
     color: var(--text-primary);
+    // Secondary layer — ícone chega 80ms depois do card
+    animation: toast-icon-in 360ms cubic-bezier(0.05, 0.7, 0.1, 1) 80ms both;
   }
 
   // Capsule (header) do jogo no lugar do check nos toasts de backup OK.
@@ -9691,7 +9777,54 @@ input[type="search"]::-ms-reveal {
     font-weight: var(--weight-regular);
   }
 
-  button {
+  // X espelha o launcher (header__window-button): 18px, stroke 1.75,
+  // 32px hit-area, ghost-button, opacity 0.7 → 1 no hover
+  &__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    margin: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    line-height: 0;
+    opacity: 0.7;
+    @include mixins.ghost-button;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease),
+      opacity var(--motion-fast) var(--ease);
+
+    svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+    }
+
+    &:hover {
+      color: var(--text-primary);
+      opacity: 1;
+    }
+
+    &:active {
+      opacity: 0.82;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+      opacity: 1;
+    }
+  }
+
+  // Fallback para qualquer button sem classe específica dentro do toast
+  button:not(.toast__close) {
     color: var(--text-primary);
     cursor: pointer;
   }
@@ -9701,6 +9834,57 @@ input[type="search"]::-ms-reveal {
     background: #fff;
     animation: toast-progress 6s linear forwards;
     transform-origin: left;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+@keyframes toast-icon-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+
+  .toast__icon {
+    animation: none;
+  }
+
+  .toast--exiting {
+    animation: none;
+    opacity: 0;
   }
 }
 
@@ -12461,13 +12645,13 @@ html.no-backdrop-blur {
   &__actions {
     position: absolute;
     right: clamp(10px, 2vw, 24px);
-    bottom: var(--space-9);
+    bottom: clamp(var(--space-9), 1.1vw + 10px, var(--space-10));
     z-index: var(--z-raised);
     display: flex;
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: var(--space-3);
+    gap: clamp(var(--space-3), 0.35vw + 4px, var(--space-4));
     margin-top: 0;
     padding: 0;
     background: transparent;
@@ -12511,10 +12695,10 @@ html.no-backdrop-blur {
   &__download-button {
     min-width: 0;
     width: fit-content;
-    min-height: 34px;
-    height: 34px;
-    gap: var(--space-3);
-    padding: 0 var(--space-6);
+    min-height: clamp(34px, 0.6vw + 27px, 38px);
+    height: clamp(34px, 0.6vw + 27px, 38px);
+    gap: clamp(var(--space-3), 0.35vw + 4px, var(--space-4));
+    padding: 0 clamp(var(--space-6), 0.6vw + 6px, var(--space-8));
     align-items: center;
     justify-content: center;
     text-align: center;
@@ -12533,8 +12717,8 @@ html.no-backdrop-blur {
   &__favorite-button {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: clamp(34px, 0.6vw + 27px, 38px);
+    height: clamp(34px, 0.6vw + 27px, 38px);
     padding: 0;
     cursor: pointer;
   }
@@ -12542,8 +12726,8 @@ html.no-backdrop-blur {
   &__gear-button {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: clamp(34px, 0.6vw + 27px, 38px);
+    height: clamp(34px, 0.6vw + 27px, 38px);
     padding: 0;
   }
 
@@ -12566,9 +12750,9 @@ html.no-backdrop-blur {
       transform var(--motion-fast) ease;
 
     svg {
-      width: 18px;
-      height: 18px;
-      flex: 0 0 18px;
+      width: clamp(18px, 0.28vw + 15px, 20px);
+      height: clamp(18px, 0.28vw + 15px, 20px);
+      flex: 0 0 clamp(18px, 0.28vw + 15px, 20px);
       transition: color var(--motion-base) ease;
     }
 
@@ -12692,6 +12876,72 @@ html.no-backdrop-blur {
     }
   }
 
+}
+
+/* ── Modal de jogo: botões escalam sutilmente em janela larga / maximizada ── */
+@media (min-width: 1280px) {
+  .modal__showcase-media {
+    height: clamp(340px, 50vh, 600px);
+  }
+}
+
+.modal--maximized .modal__actions,
+.sidebar--maximized ~ .container .modal__actions,
+.app-main:has(.sidebar--maximized) .modal__actions {
+  gap: var(--space-4);
+  bottom: var(--space-10);
+  right: clamp(16px, 1.8vw, 28px);
+}
+
+.modal--maximized .modal__play-button,
+.modal--maximized .modal__add-button,
+.modal--maximized .modal__remove-button,
+.modal--maximized .modal__download-button,
+.sidebar--maximized ~ .container .modal__play-button,
+.sidebar--maximized ~ .container .modal__add-button,
+.sidebar--maximized ~ .container .modal__remove-button,
+.sidebar--maximized ~ .container .modal__download-button,
+.app-main:has(.sidebar--maximized) .modal__play-button,
+.app-main:has(.sidebar--maximized) .modal__add-button,
+.app-main:has(.sidebar--maximized) .modal__remove-button,
+.app-main:has(.sidebar--maximized) .modal__download-button {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 var(--space-8);
+  gap: var(--space-4);
+}
+
+.modal--maximized .modal__favorite-button,
+.modal--maximized .modal__gear-button,
+.sidebar--maximized ~ .container .modal__favorite-button,
+.sidebar--maximized ~ .container .modal__gear-button,
+.app-main:has(.sidebar--maximized) .modal__favorite-button,
+.app-main:has(.sidebar--maximized) .modal__gear-button {
+  width: 38px;
+  height: 38px;
+}
+
+.modal--maximized .modal__play-button svg,
+.modal--maximized .modal__add-button svg,
+.modal--maximized .modal__remove-button svg,
+.modal--maximized .modal__download-button svg,
+.modal--maximized .modal__favorite-button svg,
+.modal--maximized .modal__gear-button svg,
+.sidebar--maximized ~ .container .modal__play-button svg,
+.sidebar--maximized ~ .container .modal__add-button svg,
+.sidebar--maximized ~ .container .modal__remove-button svg,
+.sidebar--maximized ~ .container .modal__download-button svg,
+.sidebar--maximized ~ .container .modal__favorite-button svg,
+.sidebar--maximized ~ .container .modal__gear-button svg,
+.app-main:has(.sidebar--maximized) .modal__play-button svg,
+.app-main:has(.sidebar--maximized) .modal__add-button svg,
+.app-main:has(.sidebar--maximized) .modal__remove-button svg,
+.app-main:has(.sidebar--maximized) .modal__download-button svg,
+.app-main:has(.sidebar--maximized) .modal__favorite-button svg,
+.app-main:has(.sidebar--maximized) .modal__gear-button svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
 }
 
 @keyframes spin {

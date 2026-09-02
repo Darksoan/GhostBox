@@ -16,8 +16,6 @@ import {
   Copy,
   Eye,
   EyeOff,
-  Camera,
-  Pencil,
 } from "lucide-react";
 import { Cup, CupStar } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
@@ -38,7 +36,7 @@ import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import steamIcon from "../../Icons/steam-colored.svg";
 import avatarPlaceholder from "../../Icons/userplaceholder.jpg";
-import { EditProfileModal } from "../components/modals/EditProfileModal";
+import { EditProfileTab } from "../components/profile/EditProfileTab";
 import "./ProfilePage.scss";
 import {
   useCachedImageSources,
@@ -55,7 +53,6 @@ import {
 } from "../utils/image";
 import { useSettings } from "../context/settings";
 import { useAuth } from "../context/AuthContext";
-import { useOverlay } from "../context/OverlayContext";
 import { useAppData } from "../context/AppDataContext";
 import { formatCompactPlaytime, parseLastPlayed } from "../utils/time";
 import { mergeGameCardData } from "../utils/gameCardData";
@@ -511,14 +508,11 @@ export function ProfilePage({
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
   const { account } = useAuth();
-  const { setSubscriptionModalOpen } = useOverlay();
   const { showSteamGames, cloudSaveAppIds } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
     useState("overview");
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
   const [renderedGameCount, setRenderedGameCount] = useState(40);
   const [expandedAchievementGameIds, setExpandedAchievementGameIds] = useState<Set<string>>(
     () => new Set()
@@ -569,20 +563,6 @@ export function ProfilePage({
   const scrollContentToTop = useCallback(() => {
     scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [scrollElementRef]);
-
-  // Capa é Premium (banner exige `requirePremiumSession`), avatar é livre:
-  // free pode editar foto de perfil; ao tentar capa, abre tela de assinatura.
-  const handleCoverAction = useCallback(async () => {
-    if (await ghostboxApi.isPremiumUser()) {
-      setIsCoverModalOpen(true);
-      return;
-    }
-    setSubscriptionModalOpen(true);
-  }, [setSubscriptionModalOpen]);
-
-  const handleEditProfileAction = useCallback(() => {
-    setIsEditModalOpen(true);
-  }, []);
 
   useEffect(() => {
     if (previousActiveCollectionIdRef.current === activeCollectionId) return;
@@ -645,6 +625,11 @@ export function ProfilePage({
         name: t("achievements.title"),
         count: 0,
       },
+      {
+        id: "editProfile",
+        name: t("profile.editProfile"),
+        count: 0,
+      },
     ];
   }, [addedLibraryGames.length, t]);
 
@@ -673,7 +658,8 @@ export function ProfilePage({
   );
   const isOverviewActive = activeCollection.id === "overview";
   const isAchievementsActive = activeCollection.id === "achievements";
-  const shouldBuildCollectionGameData = !isOverviewActive;
+  const isEditProfileActive = activeCollection.id === "editProfile";
+  const shouldBuildCollectionGameData = !isOverviewActive && !isEditProfileActive;
   const shouldComputeOverviewData = isOverviewActive
     ? isOverviewDataReady
     : isAchievementsActive;
@@ -1175,7 +1161,12 @@ export function ProfilePage({
   const visibleGames = useMemo(() => {
     const seen = new Set<string>();
 
-    if (activeCollection.id === "overview" || activeCollection.id === "achievements") return [];
+    if (
+      activeCollection.id === "overview" ||
+      activeCollection.id === "achievements" ||
+      activeCollection.id === "editProfile"
+    )
+      return [];
 
     if (activeCollection.id === "library") {
       const result: GhostBoxGame[] = [];
@@ -1830,23 +1821,9 @@ export function ProfilePage({
           </div>
         )}
         <div className="profile-page__background-overlay">
-          <button
-            type="button"
-            className="profile-page__hero-action profile-page__hero-action--banner"
-            onClick={() => void handleCoverAction()}
-            aria-label={t("profile.changeBanner")}
-          >
-            <Camera size={16} strokeWidth={2.25} aria-hidden="true" />
-            <span className="profile-page__hero-action-label">
-              {t("profile.changeBanner")}
-            </span>
-          </button>
           <div className="profile-page__identity">
-            <button
-              type="button"
-              className="profile-page__avatar-button"
-              onClick={() => void handleEditProfileAction()}
-              aria-label={t("profile.editProfile")}
+            <div
+              className="profile-page__avatar-frame"
             >
               {shouldHoldSteamAvatar ? (
                 <span className="profile-page__avatar-skeleton" />
@@ -1860,7 +1837,7 @@ export function ProfilePage({
                   referrerPolicy="no-referrer"
                 />
               )}
-            </button>
+            </div>
 
             <div className="profile-page__identity-content">
               <div className="profile-page__display-name-row">
@@ -1878,14 +1855,6 @@ export function ProfilePage({
                     </span>
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="profile-page__hero-action"
-                  onClick={() => void handleEditProfileAction()}
-                  aria-label={t("profile.editProfile")}
-                >
-                  <Pencil size={14} strokeWidth={2.25} aria-hidden="true" />
-                </button>
               </div>
               <div className="profile-page__steam-id-row">
                 {steamConnected && steamProfile ? (
@@ -2231,6 +2200,11 @@ export function ProfilePage({
                   title={t("profile.noAchievements")}
                 />
               )
+            ) : isEditProfileActive ? (
+              <EditProfileTab
+                profile={steamProfile}
+                onUpdateProfile={onUpdateProfile}
+              />
             ) : renderedGames.length > 0 ? (
                 <>
                   <GameGrid
@@ -2277,30 +2251,6 @@ export function ProfilePage({
         </main>
 
       </div>
-
-
-
-      <EditProfileModal
-        open={isEditModalOpen}
-        mode="profile"
-        profile={steamProfile}
-        onClose={() => setIsEditModalOpen(false)}
-        onSubmit={(name, avatar, banner, position) => {
-          onUpdateProfile(name, avatar, banner, position);
-          setIsEditModalOpen(false);
-        }}
-      />
-
-      <EditProfileModal
-        open={isCoverModalOpen}
-        mode="cover"
-        profile={steamProfile}
-        onClose={() => setIsCoverModalOpen(false)}
-        onSubmit={(name, avatar, banner, position) => {
-          onUpdateProfile(name, avatar, banner, position);
-          setIsCoverModalOpen(false);
-        }}
-      />
     </section>
   );
 }

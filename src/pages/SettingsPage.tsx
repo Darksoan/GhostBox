@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useAuth } from "../context/AuthContext";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
@@ -242,6 +243,7 @@ export function SettingsPage({
   backupSettings,
 }: SettingsPageProps) {
   const { appearance, notifications, updateAppearance, updateNotifications, t } = useSettings();
+  const { status } = useAuth();
   const activeTab = settingsTabs.find((tab) => tab.id === activeTabId) ?? settingsTabs[0];
   const [drafts, setDrafts] = useState<DraftsState>(() =>
     mergeDrafts(getDefaultDrafts(appearance.language, initialPage, startupSettings), readDrafts())
@@ -344,7 +346,7 @@ export function SettingsPage({
       }`}
       aria-label={t("nav.settings")}
     >
-      {activeTab.id === "subscription" && <SubscriptionBackdrop />}
+      {activeTab.id === "subscription" && status !== "authenticated" && <SubscriptionBackdrop />}
       <article
         className={`settings-panel${
           activeTab.id === "subscription" || activeTab.id === "connections"

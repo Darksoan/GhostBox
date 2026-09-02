@@ -1615,7 +1615,7 @@ export function GameModal({
           onClick={onClose}
         >
           <article
-            className="modal modal--details"
+            className={`modal modal--details${isMaximized ? " modal--maximized" : ""}`}
             style={gameStyle(displayGame)}
             onClick={(event) => event.stopPropagation()}
           >

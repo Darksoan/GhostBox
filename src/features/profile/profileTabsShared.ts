@@ -1,13 +1,14 @@
-import { Layers, User } from "lucide-react";
+import { Layers, User, UserPen } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { ElementType } from "react";
 
-export type ProfileTabId = "overview" | "library" | "achievements";
+export type ProfileTabId = "overview" | "library" | "achievements" | "editProfile";
 
 export const profileTabLabelKeys: Record<ProfileTabId, string> = {
   overview: "profile.overview",
   library: "profile.library",
   achievements: "achievements.title",
+  editProfile: "profile.editProfile",
 };
 
 type ProfileNavigationTab = {
@@ -20,6 +21,7 @@ export const profileNavigationTabs: ProfileNavigationTab[] = [
   { id: "overview", icon: User },
   { id: "library", icon: Layers },
   { id: "achievements", icon: Cup },
+  { id: "editProfile", icon: UserPen },
 ];
 
 export const defaultProfileTabId: ProfileTabId = "overview";

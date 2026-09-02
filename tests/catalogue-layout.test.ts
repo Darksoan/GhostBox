@@ -27,11 +27,14 @@ describe("Catalogue filter search layout", () => {
     expect(catalogueOverrideColors).not.toContain("var(--text-primary)");
   });
 
-  it("steps the filter searchbar up from its panel on hover and focus", () => {
+  it("keeps the filter searchbar flat on hover and focus without decorative border", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     let defaultBackground: string | undefined;
     let panelBackground: string | undefined;
     const interactiveBackgrounds: string[] = [];
+    const interactiveBorders: string[] = [];
+    const interactiveOutlines: string[] = [];
+    const interactiveShadows: string[] = [];
 
     stylesheet.walkRules((rule) => {
       if (rule.selector === ".catalogue-filter-section__search") {
@@ -50,12 +53,24 @@ describe("Catalogue filter search layout", () => {
         rule.walkDecls("background", (declaration) => {
           interactiveBackgrounds.push(declaration.value);
         });
+        rule.walkDecls("border", (declaration) => {
+          interactiveBorders.push(declaration.value);
+        });
+        rule.walkDecls("outline", (declaration) => {
+          interactiveOutlines.push(declaration.value);
+        });
+        rule.walkDecls("box-shadow", (declaration) => {
+          interactiveShadows.push(declaration.value);
+        });
       }
     });
 
-    // #151515 em repouso, #1a1a1a em hover/foco — degraus C3 e C4 da rampa.
     expect(defaultBackground).toBe("var(--surface-raised)");
-    expect(interactiveBackgrounds).toEqual(["var(--dropdown-option-hover)"]);
+    // Sem degrau em hover/foco — mantém mesmo background, sem borda decorativa.
+    expect(interactiveBackgrounds).toEqual(["var(--surface-raised)"]);
+    expect(interactiveBorders).toEqual(["0"]);
+    expect(interactiveOutlines).toEqual(["none"]);
+    expect(interactiveShadows).toEqual(["none"]);
     // O painel não pode empatar com o campo, senão o campo some no fundo.
     expect(panelBackground).not.toBe(defaultBackground);
   });

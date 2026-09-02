@@ -2,7 +2,6 @@ import { Check, ChevronDown } from "lucide-react";
 import {
   memo,
   useCallback,
-  useDeferredValue,
   useEffect,
   useId,
   useMemo,
@@ -22,7 +21,6 @@ import {
   cataloguePageSize,
 } from "../constants/catalogue";
 import {
-  getSelectedFilterCount,
   getYearRangeIndices,
   getYearsInRange,
   hasSelectedCatalogueFilters,
@@ -51,6 +49,10 @@ import {
   type CataloguePreviewPointer,
 } from "../utils/cataloguePreview";
 const maxVisibleFilterOptions = 160;
+
+function normalizeFilterText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
 
 function getFilterDisplayValue(
   _key: CatalogueFilterKey,
@@ -229,21 +231,27 @@ const CatalogueFilterSection = memo(function CatalogueFilterSection({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const contentId = useId();
   const [searchTerm, setSearchTerm] = useState("");
-  const deferredSearchTerm = useDeferredValue(searchTerm);
-  const normalizedSearchTerm = deferredSearchTerm.trim().toLowerCase();
+  const normalizedSearchTerm = useMemo(
+    () => normalizeFilterText(searchTerm.trim()),
+    [searchTerm]
+  );
   const selectedValueSet = useMemo(
     () => new Set(selectedValues),
     [selectedValues]
   );
-  const visibleValues = useMemo(
-    () =>
-      normalizedSearchTerm
-        ? values.filter((value) =>
-            value.toLowerCase().includes(normalizedSearchTerm)
-          )
-        : values,
-    [normalizedSearchTerm, values]
-  );
+  const visibleValues = useMemo(() => {
+    if (!normalizedSearchTerm) return values;
+    return values.filter((value) => {
+      if (normalizeFilterText(value).includes(normalizedSearchTerm))
+        return true;
+      const displayValue = getFilterDisplayValue(
+        filterKey,
+        value,
+        appearance.language
+      );
+      return normalizeFilterText(displayValue).includes(normalizedSearchTerm);
+    });
+  }, [appearance.language, filterKey, normalizedSearchTerm, values]);
   const renderedValues = useMemo(
     () => visibleValues.slice(0, maxVisibleFilterOptions),
     [visibleValues]
@@ -516,7 +524,6 @@ export function CataloguePage({
     };
   }, [sortDropdownOpen, viewDropdownOpen]);
 
-  const selectedFilterCount = getSelectedFilterCount(filters);
   const hasActiveFilters = hasSelectedCatalogueFilters(filters);
   const hasSearchQuery = Boolean(query.trim());
 
@@ -790,13 +797,6 @@ export function CataloguePage({
               ))}
             </div>
             <div className="catalogue-page__toolbar-actions">
-              <div className="catalogue-page__summary">
-                {selectedFilterCount > 0 && (
-                  <span>
-                    {t("catalogue.filters.selected", { count: selectedFilterCount })}
-                  </span>
-                )}
-              </div>
               <div
                 className={`settings-dropdown catalogue-page__sort ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
                 ref={sortDropdownRef}
