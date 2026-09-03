@@ -177,6 +177,13 @@ describe("playingNow sort", () => {
     expect(query.sql).toContain("EXISTS");
     expect(query.sql).toMatch(/WHERE steamspy_ccu > 0 AND/);
   });
+
+  it("uses the snapshot alias when SteamSpy data comes from KV", () => {
+    const request = parseSearch(new URL("https://example.com/catalogue/search?sort=playingNow"));
+    const query = searchConditions(request, true);
+    expect(query.sql).toContain("steamspy.sample_ccu > 0");
+    expect(query.sql).not.toContain("steamspy_ccu > 0");
+  });
 });
 
 describe("routes", () => {

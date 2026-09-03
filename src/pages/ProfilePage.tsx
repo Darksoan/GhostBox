@@ -1789,6 +1789,7 @@ export function ProfilePage({
 
   return (
     <section className={`profile-page${isMaximized ? " profile-page--maximized" : ""}`}>
+      {!isEditProfileActive && (
       <header
         className={`profile-page__content-box${bannerImageSource ? "" : " profile-page__content-box--empty"}${isBannerRevealed ? "" : " profile-page__content-box--placeholder"}`}
       >
@@ -1912,6 +1913,7 @@ export function ProfilePage({
           </div>
         </div>
       </header>
+      )}
 
       <div className="profile-page__content-section">
         <main className="profile-page__main">

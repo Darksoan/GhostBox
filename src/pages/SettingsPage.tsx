@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useOverlay } from "../context/OverlayContext";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
@@ -375,6 +376,7 @@ export function SettingsPage({
               ))}
             </div>
           )}
+          {activeTab.id === "notifications" && <NotificationsTestSection />}
           {activeTab.id === "library" && (
             <SteamLibrariesSection downloadsDir={downloadsDir} t={t} />
           )}
@@ -637,6 +639,53 @@ function buildTabOptions(
       value: option.valueKey ? t(option.valueKey) : option.value,
     };
   });
+}
+
+function NotificationsTestSection() {
+  const { t } = useSettings();
+  const { showToast, showAchievementToast } = useOverlay();
+
+  const handleTestToast = () => {
+    showToast(
+      t("settings.notifications.testToast.toastTitle"),
+      t("settings.notifications.testToast.toastMessage"),
+    );
+  };
+
+  const handleTestAchievementToast = () => {
+    showAchievementToast({
+      appId: "test",
+      gameTitle: "GhostBox",
+      title: t("settings.notifications.testAchievementToast.toastTitle"),
+      description: t("settings.notifications.testAchievementToast.toastDescription"),
+      iconUrl: "https://shared.fastly.steamstatic.com/community_assets/images/apps/2767030/1f41bfcaaa8e5416091f3ddd53d45ae9500c0355.jpg",
+    });
+  };
+
+  return (
+    <div className="settings-options">
+      <SettingRow
+        option={{
+          label: t("settings.notifications.testToast.label"),
+          description: t("settings.notifications.testToast.description"),
+          control: "button",
+          value: t("settings.notifications.testToast.action"),
+          onClick: handleTestToast,
+        }}
+        enterDelay="0.145s"
+      />
+      <SettingRow
+        option={{
+          label: t("settings.notifications.testAchievementToast.label"),
+          description: t("settings.notifications.testAchievementToast.description"),
+          control: "button",
+          value: t("settings.notifications.testAchievementToast.action"),
+          onClick: handleTestAchievementToast,
+        }}
+        enterDelay="0.18s"
+      />
+    </div>
+  );
 }
 
 function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?: string }) {

@@ -1,7 +1,12 @@
 import { cacheControl, cacheKey, canonicalSearchKey, cloudflareCacheControl, searchTtl } from "./cache";
-import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, invalidateCatalogueMetaCache, searchCatalogue } from "./catalogue";
+import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, searchCatalogue } from "./catalogue";
 import { rotationSeed } from "./ranking";
-import { fetchLivePlayerCount, refreshSteamSpySamples } from "./steamspy";
+import {
+  fetchLivePlayerCount,
+  getSteamSpySnapshot,
+  invalidateSteamSpySnapshotCache,
+  refreshSteamSpySnapshot,
+} from "./steamspy";
 import { FILTER_NAMES, type Env, type SearchRequest, type Sort } from "./types";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" };
@@ -167,19 +172,29 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const meta = await getCatalogueMeta(env.DB);
   if (url.pathname === "/catalogue/search") {
     const search = parseSearch(url);
+    const snapshot = !search.facetsOnly && env.STEAMSPY_SNAPSHOT
+      ? await getSteamSpySnapshot(env.STEAMSPY_SNAPSHOT)
+      : null;
     const ttl = searchTtl(search);
     const route = search.facetsOnly ? "facets" : "catalogue-search";
-    return cachedJson(canonicalSearchKey(search, meta.updatedAt, url.origin), route, meta.updatedAt, ttl, ctx, async () => {
+    const cacheUpdatedAt = !search.facetsOnly
+      ? `${meta.updatedAt}:${snapshot?.sampledAt ?? meta.steamspySampledAt}`
+      : meta.updatedAt;
+    return cachedJson(canonicalSearchKey(search, cacheUpdatedAt, url.origin), route, meta.updatedAt, ttl, ctx, async () => {
       const facets = search.includeFacets || search.facetsOnly
         ? await getCatalogueFacets(env.DB, meta.updatedAt)
         : undefined;
-      return { body: await searchCatalogue(env.DB, search, meta.total, url.origin, facets) };
+      return { body: await searchCatalogue(env.DB, search, meta.total, url.origin, facets, snapshot) };
     }, false);
   }
   if (url.pathname === "/home") {
-    return cachedJson(cacheKey("home", `${url.origin}:home`, meta.updatedAt), "home", meta.updatedAt, 3600, ctx, async () => {
+    const snapshot = env.STEAMSPY_SNAPSHOT
+      ? await getSteamSpySnapshot(env.STEAMSPY_SNAPSHOT)
+      : null;
+    const homeUpdatedAt = `${meta.updatedAt}:${snapshot?.sampledAt ?? meta.steamspySampledAt}`;
+    return cachedJson(cacheKey("home", `${url.origin}:home`, homeUpdatedAt), "home", meta.updatedAt, 3600, ctx, async () => {
       const facets = await getCatalogueFacets(env.DB, meta.updatedAt);
-      return { body: await getHome(env.DB, meta, url.origin, facets) };
+      return { body: await getHome(env.DB, meta, url.origin, facets, snapshot) };
     });
   }
   if (url.pathname === "/manifest") {
@@ -197,10 +212,13 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     // TTL de cinco minutos, o mesmo do sort "playingNow": o payload carrega uma
     // contagem de jogadores ao vivo, que numa janela de horas viraria número
     // parado. A amostra da SteamSpy entra na chave para o cron também invalidar.
-    const gameKey = cacheKey("game", `${url.origin}:${gameMatch[1]}`, `${meta.updatedAt}:${meta.steamspySampledAt}`);
+    const snapshot = env.STEAMSPY_SNAPSHOT
+      ? await getSteamSpySnapshot(env.STEAMSPY_SNAPSHOT)
+      : null;
+    const gameKey = cacheKey("game", `${url.origin}:${gameMatch[1]}`, `${meta.updatedAt}:${snapshot?.sampledAt ?? meta.steamspySampledAt}`);
     return cachedJson(gameKey, "game", meta.updatedAt, 300, ctx, async () => {
       const [game, livePlayerCount] = await Promise.all([
-        getGame(env.DB, gameMatch[1], url.origin),
+        getGame(env.DB, gameMatch[1], url.origin, snapshot ?? undefined),
         fetchLivePlayerCount(gameMatch[1]),
       ]);
       if (game === null) return { body: { error: "not found" }, status: 404 };
@@ -219,22 +237,15 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 }
 
 export default {
-  /**
-   * Cron da amostragem da SteamSpy: é o único lugar que grava as colunas
-   * `steamspy_ccu`/`steamspy_owners_max`, que o ingest não toca e que
-   * alimentam `playingNow`/`ownersEstimate` e o sort "playingNow".
-   */
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!env.STEAMSPY_SNAPSHOT) throw new Error("STEAMSPY_SNAPSHOT binding is required; D1 refresh is disabled");
+    const scheduled = new Date(event.scheduledTime);
+    if (scheduled.getUTCHours() !== 0 || scheduled.getUTCMinutes() > 44 || scheduled.getUTCMinutes() % 2 !== 0) return;
     ctx.waitUntil(
-      refreshSteamSpySamples(env.DB)
-        .then(({ page, samples, updated }) => {
-          // O cache do meta é por isolate e guarda o `steamspySampledAt` antigo,
-          // que é justamente o que invalida a chave da rota de detalhe.
-          invalidateCatalogueMetaCache();
-          console.log(`steamspy page ${page}: ${samples} samples, ${updated} rows updated`);
-        })
-        .catch((error) => {
-          console.error("steamspy refresh failed", error);
+      refreshSteamSpySnapshot(env.STEAMSPY_SNAPSHOT, event.scheduledTime)
+        .then(({ page, samples, published }) => {
+          if (published) invalidateSteamSpySnapshotCache();
+          console.log(`steamspy page ${page}: ${samples} samples, snapshot published=${published}`);
         }),
     );
   },

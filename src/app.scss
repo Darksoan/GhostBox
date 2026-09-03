@@ -2415,14 +2415,15 @@ p {
   }
 
   &__search-empty {
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr);
-    gap: var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
     padding: var(--space-6);
   }
 
   &__search-empty-icon {
-    align-self: center;
+    flex: 0 0 auto;
     color: var(--text-secondary);
   }
 
@@ -2447,13 +2448,7 @@ p {
 
   &__search-empty-content {
     min-width: 0;
-  }
-
-  &__search-empty-title {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    text-align: center;
   }
 
   &__search-empty-copy {
@@ -6508,20 +6503,25 @@ html.no-animations {
       pointer-events: none;
       user-select: none;
     }
+
+    .catalogue-list__item,
+    .catalogue-grid-card {
+      filter: brightness(0.55);
+    }
   }
 
-  /* O overlay cobre a área de resultados inteira, mas o spinner é `sticky`
+  /* O indicador ocupa a área de resultados, mas o spinner é `sticky`
      dentro dele: numa lista longa, um filho centrado por `place-items` cairia
      no meio da lista (fora da tela). O `sticky` prende o spinner ao meio do
-     que está visível conforme a página rola. */
+     que está visível conforme a página rola. O escurecimento fica restrito aos
+     cards acima, sem criar um bloco quadrado sobre o viewport. */
   &__refreshing {
     position: absolute;
     z-index: 2;
     display: grid;
     inset: 0;
     justify-items: center;
-    background: var(--overlay-medium);
-    border-radius: var(--radius-lg);
+    pointer-events: none;
   }
 
   &__refreshing .page-spinner-loading__spinner {
@@ -7176,7 +7176,7 @@ html.no-animations {
   padding: var(--space-3) var(--space-5);
   @include mixins.ghost-button;
   font-size: var(--type-size-compact);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
   line-height: var(--type-line-compact);
   transition:
     color var(--motion-fast) var(--ease),
@@ -9696,10 +9696,10 @@ input[type="search"]::-ms-reveal {
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-toast);
-  will-change: transform, opacity;
+  will-change: transform;
   box-shadow: var(--shadow-2);
-  // Motion — aparição por arraste de baixo para cima (MD3 Emphasized)
-  // Primary: translateY + opacity + scale | Secondary: ícone | Ambient: sombra
+  // A superfície permanece opaca durante toda a entrada para que sua cor não
+  // seja misturada com o conteúdo abaixo. O movimento continua no compositor.
   animation: toast-in 380ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
 
   &--exiting {
@@ -9716,8 +9716,9 @@ input[type="search"]::-ms-reveal {
 
   &__icon {
     color: var(--text-primary);
-    // Secondary layer — ícone chega 80ms depois do card
-    animation: toast-icon-in 360ms cubic-bezier(0.05, 0.7, 0.1, 1) 80ms both;
+    // Secondary layer — ícone chega 80ms depois do card e termina junto
+    // com ele, evitando um repaint perceptível depois da entrada.
+    animation: toast-icon-in 300ms cubic-bezier(0.05, 0.7, 0.1, 1) 80ms both;
   }
 
   // Capsule (header) do jogo no lugar do check nos toasts de backup OK.
@@ -9839,12 +9840,10 @@ input[type="search"]::-ms-reveal {
 
 @keyframes toast-in {
   from {
-    opacity: 0;
     transform: translateY(20px) scale(0.96);
   }
 
   to {
-    opacity: 1;
     transform: translateY(0) scale(1);
   }
 }
@@ -9883,6 +9882,168 @@ input[type="search"]::-ms-reveal {
   }
 
   .toast--exiting {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+// ─── Achievement toast (conquista desbloqueada) ────────────────────────────
+// Mockup: 1784×293 card em --c-1 (#101010) sobre canvas --c-0 (#0A0A0A),
+// ícone 256×256 com radius 15, título #FAFAFA e descrição #A3A3A3 em
+// Inter 64px. O slot de produção acompanha a altura do toast comum (40px de
+// conteúdo + 32px de padding, além da barra), mantendo a arte proporcional
+// sem criar um segundo padrão de altura.
+.achievement-toast-stack {
+  position: fixed;
+  right: var(--space-8);
+  bottom: var(--space-8);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(420px, calc(100vw - var(--space-12)));
+  pointer-events: none;
+}
+
+.achievement-toast {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-achievement-toast);
+  box-shadow: var(--shadow-2);
+  pointer-events: auto;
+  animation: toast-in 380ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  will-change: transform;
+
+  &--exiting {
+    animation: toast-out 220ms cubic-bezier(0.3, 0, 1, 1) both;
+  }
+
+  &__content {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--space-8);
+  }
+
+  &__media {
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--surface-canvas);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    // A entrada termina junto com o card (80ms de atraso + 300ms).
+    animation: toast-icon-in 300ms cubic-bezier(0.05, 0.7, 0.1, 1) 80ms both;
+
+    &--fallback {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      background: var(--skeleton-fill);
+      color: var(--text-secondary);
+    }
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  &__title {
+    @include mixins.truncate;
+    color: var(--text-primary);
+    font-size: var(--type-size-body);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-body);
+  }
+
+  &__description {
+    @include mixins.truncate;
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-caption);
+  }
+
+  &__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    margin: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    line-height: 0;
+    opacity: 0.7;
+    @include mixins.ghost-button;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease),
+      opacity var(--motion-fast) var(--ease);
+
+    svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+    }
+
+    &:hover {
+      color: var(--text-primary);
+      opacity: 1;
+    }
+
+    &:active {
+      opacity: 0.82;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+      opacity: 1;
+    }
+  }
+
+  &__progress {
+    height: 4px;
+    background: var(--text-primary);
+    animation: toast-progress 6s linear forwards;
+    transform-origin: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achievement-toast {
+    animation: none;
+  }
+
+  .achievement-toast__icon,
+  .achievement-toast--exiting .achievement-toast__icon {
+    animation: none;
+  }
+
+  .achievement-toast--exiting {
     animation: none;
     opacity: 0;
   }

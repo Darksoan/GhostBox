@@ -161,6 +161,24 @@ export function VideoPlayer({
     video.loop = loop;
   }, [loop, muted]);
 
+  useEffect(() => {
+    function pauseWhenWindowLosesFocus() {
+      videoRef.current?.pause();
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) pauseWhenWindowLosesFocus();
+    }
+
+    window.addEventListener("blur", pauseWhenWindowLosesFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("blur", pauseWhenWindowLosesFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   // Um vídeo novo reseta a leitura de progresso e o estado de player — sem
   // isso, trocar de trailer numa galeria com mais de um vídeo mostraria por
   // um instante o tempo/duração do vídeo anterior.

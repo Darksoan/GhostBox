@@ -465,7 +465,10 @@ export function steamAppIdsFromSources(sources: string[]) {
   ];
 }
 
-export function withCachedImageSources(sources: string[]) {
+export function withCachedImageSources(
+  sources: string[],
+  { requestManifests = true }: { requestManifests?: boolean } = {}
+) {
   // Only inject the resolved library capsule for portrait requests. Prepending
   // it for header/landscape lists (home calendar, catalogue rows, etc.) causes
   // the correct header to flash and then swap to a vertical cover.
@@ -477,7 +480,7 @@ export function withCachedImageSources(sources: string[]) {
     : "";
 
   const appIds = steamAppIdsFromSources(sources);
-  requestSteamAssetManifests(appIds);
+  if (requestManifests) requestSteamAssetManifests(appIds);
 
   // Enquanto o manifesto do jogo não chegou, uma capa horizontal no fim da
   // cadeia pintaria antes da vertical correta e depois trocaria na tela. Melhor
@@ -513,6 +516,12 @@ export function withCachedImageSources(sources: string[]) {
         ]);
       }),
     ]
+  );
+}
+
+export function getLoadedImageSource(sources: string[]) {
+  return withCachedImageSources(sources, { requestManifests: false }).find(
+    (source) => loadedImageSources.has(source)
   );
 }
 

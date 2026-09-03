@@ -34,9 +34,12 @@
   --surface-option-selected: var(--c-5);
   --surface-popover: var(--c-3);
   // Toast: flutua sobre qualquer página, então não pode contar com a superfície
-  // de baixo. Mesmo degrau do popover — separação vem do salto de rampa sobre o
-  // canvas, não de borda.
-  --surface-toast: var(--c-3);
+  // de baixo. Usa o token #101010 (C1); a separação vem do salto sobre o canvas,
+  // não de borda.
+  --surface-toast: var(--c-1);
+  // Toast de conquista (mockup): card de 1784×293 em #101010 (C1) sobre canvas
+  // #0A0A0A (C0) — um degrau acima do canvas, compartilhado com o toast comum.
+  --surface-achievement-toast: var(--c-1);
   // Menu da bandeja: item elevado sobre shell, sem misturar estados de popover.
   --surface-tray: var(--c-1);
   --surface-tray-item: transparent;

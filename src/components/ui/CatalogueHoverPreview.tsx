@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+} from "react";
 import { Flame } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
@@ -15,6 +22,7 @@ import {
 
 interface CatalogueHoverPreviewProps {
   game: GhostBoxGame | null;
+  paused?: boolean;
   /** Clique em uma shot pronta abre o modal do jogo em preview. */
   onOpenGame?: (game: GhostBoxGame) => void;
   onPointerEnter?: () => void;
@@ -23,6 +31,7 @@ interface CatalogueHoverPreviewProps {
 
 export function CatalogueHoverPreview({
   game,
+  paused = false,
   onOpenGame,
   onPointerEnter,
   onPointerLeave,
@@ -49,20 +58,18 @@ export function CatalogueHoverPreview({
     pendingGameRef.current = pendingGame;
   }, [pendingGame]);
 
-  // Guarda último preview pronto para servir como stale enquanto o próximo decodifica.
-  // Evita piscar skeleton a cada troca rápida.
-  const prevDisplayShotsRef = useRef<string[]>([]);
-  const prevGameRef = useRef<GhostBoxGame | null>(null);
-
   const screenshotSources = useMemo(
     () =>
       displayedGame
-        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 3)
+        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 1)
         : [],
-    [displayedGame]
+    [displayedGame?.screenshots]
   );
 
-  const resolvedScreenshotSources = useCachedImageSources(screenshotSources);
+  // O <img> baixa a shot; evita repetir o mesmo download pelo cache nativo.
+  const resolvedScreenshotSources = useCachedImageSources(screenshotSources, {
+    resolveUncached: false,
+  });
   const [failedScreenshotSources, setFailedScreenshotSources] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -71,7 +78,8 @@ export function CatalogueHoverPreview({
     () =>
       pickDistinctScreenshotSources(
         screenshotSources.map((source) => withCachedImageSources([source])),
-        failedScreenshotSources
+        failedScreenshotSources,
+        loadedImageSources
       ),
     [screenshotSources, resolvedScreenshotSources, failedScreenshotSources]
   );
@@ -82,12 +90,14 @@ export function CatalogueHoverPreview({
   const pendingScreenshotSources = useMemo(
     () =>
       pendingGame
-        ? withoutHeaderImageSources(pendingGame.screenshots ?? []).slice(0, 3)
+        ? withoutHeaderImageSources(pendingGame.screenshots ?? []).slice(0, 1)
         : [],
     [pendingGame]
   );
 
-  const pendingResolvedSources = useCachedImageSources(pendingScreenshotSources);
+  const pendingResolvedSources = useCachedImageSources(pendingScreenshotSources, {
+    resolveUncached: false,
+  });
 
   const [pendingReadyCount, setPendingReadyCount] = useState(0);
   const pendingReadySourcesRef = useRef<Set<string>>(new Set());
@@ -100,7 +110,8 @@ export function CatalogueHoverPreview({
     if (!pendingGame) return [];
     return pickDistinctScreenshotSources(
       pendingScreenshotSources.map((source) => withCachedImageSources([source])),
-      pendingFailedSources
+      pendingFailedSources,
+      loadedImageSources
     );
   }, [pendingScreenshotSources, pendingGame, pendingResolvedSources, pendingFailedSources]);
 
@@ -109,65 +120,56 @@ export function CatalogueHoverPreview({
   const [readyScreenshotCount, setReadyScreenshotCount] = useState(0);
   const readyScreenshotSourcesRef = useRef<Set<string>>(new Set());
   const screenshotSourceKey = screenshotSources.join("\n");
+  const screenshotGenerationRef = useRef(0);
+  const previousScreenshotSourceKeyRef = useRef(screenshotSourceKey);
+  if (previousScreenshotSourceKeyRef.current !== screenshotSourceKey) {
+    previousScreenshotSourceKeyRef.current = screenshotSourceKey;
+    screenshotGenerationRef.current += 1;
+  }
+  const screenshotGeneration = screenshotGenerationRef.current;
+  const pendingGenerationRef = useRef(0);
+  const previousPendingSourceKeyRef = useRef(pendingSourceKey);
+  if (previousPendingSourceKeyRef.current !== pendingSourceKey) {
+    previousPendingSourceKeyRef.current = pendingSourceKey;
+    pendingGenerationRef.current += 1;
+  }
+  const pendingGeneration = pendingGenerationRef.current;
 
   useEffect(() => {
-    if (displayShots.length === 0) {
-      readyScreenshotSourcesRef.current = new Set();
-      setReadyScreenshotCount(0);
-      setFailedScreenshotSources(new Set());
-      setIsMediaReady(true);
-      return;
-    }
-    const allLoaded = displayShots.every((src) => loadedImageSources.has(src));
-    if (allLoaded) {
-      readyScreenshotSourcesRef.current = new Set(displayShots);
-      setReadyScreenshotCount(displayShots.length);
-      setFailedScreenshotSources(new Set());
-      setIsMediaReady(true);
-      return;
-    }
     readyScreenshotSourcesRef.current = new Set();
     setReadyScreenshotCount(0);
-    setFailedScreenshotSources(new Set());
-    setIsMediaReady(false);
-  }, [screenshotSourceKey, displayShots]);
+    setIsMediaReady(screenshotSourceKey.length === 0);
+    setFailedScreenshotSources((current) =>
+      current.size === 0 ? current : new Set()
+    );
+  }, [screenshotSourceKey]);
+
+  useEffect(() => {
+    const readySources = new Set(
+      displayShots.filter((source) => loadedImageSources.has(source))
+    );
+    readyScreenshotSourcesRef.current = readySources;
+    setReadyScreenshotCount((current) =>
+      current === readySources.size ? current : readySources.size
+    );
+    const firstReady =
+      displayShots.length === 0 || readySources.has(displayShots[0]);
+    setIsMediaReady((current) =>
+      current === firstReady ? current : firstReady
+    );
+  }, [screenshotSourceKey, displayShots, readyScreenshotCount]);
 
   useEffect(() => {
     pendingReadySourcesRef.current = new Set();
     setPendingReadyCount(0);
-    setPendingFailedSources(new Set());
+    setPendingFailedSources((current) =>
+      current.size === 0 ? current : new Set()
+    );
   }, [pendingSourceKey]);
-
-  // Atualiza stale refs quando o displayed fica pronto
-  useEffect(() => {
-    if (isMediaReady && displayShots.length > 0) {
-      prevDisplayShotsRef.current = displayShots;
-      prevGameRef.current = displayedGame;
-    }
-    // Quando displayed tem 0 shots (vazio) também guarda para não piscar skeleton
-    if (isMediaReady && displayShots.length === 0 && displayedGame) {
-      prevDisplayShotsRef.current = [];
-      prevGameRef.current = displayedGame;
-    }
-  }, [isMediaReady, displayShots, displayedGame]);
-
-  useEffect(() => {
-    if (!displayedGame || isMediaReady) return;
-
-    if (displayShots.length === 0) {
-      setIsMediaReady(true);
-      return;
-    }
-
-    // Sem progressivo: só libera quando 100% das shots decodificaram
-    if (readyScreenshotCount >= displayShots.length) {
-      setIsMediaReady(true);
-    }
-  }, [displayShots.length, displayedGame, isMediaReady, readyScreenshotCount]);
 
   // Commit do pending quando pronto (fast-path cache incluso)
   useEffect(() => {
-    if (!pendingGame) return;
+    if (!pendingGame || paused) return;
 
     if (pendingDisplayShots.length === 0) {
       setDisplayedGame(pendingGame);
@@ -175,23 +177,23 @@ export function CatalogueHoverPreview({
       return;
     }
 
-    // Fast-path: todas as shots já estão em loadedImageSources -> commit síncrono
-    const allCached = pendingDisplayShots.every((src) => loadedImageSources.has(src));
-    if (allCached) {
+    // Fast-path: a primeira shot já está em cache -> commit síncrono.
+    const firstPending = pendingDisplayShots[0];
+    const firstReady =
+      Boolean(firstPending) &&
+      (loadedImageSources.has(firstPending) ||
+        pendingReadySourcesRef.current.has(firstPending));
+    if (firstReady) {
       setDisplayedGame(pendingGame);
       setPendingGame(null);
       return;
     }
 
-    if (pendingReadyCount >= pendingDisplayShots.length) {
-      setDisplayedGame(pendingGame);
-      setPendingGame(null);
-    }
-  }, [pendingGame, pendingDisplayShots, pendingReadyCount]);
+  }, [paused, pendingGame, pendingDisplayShots, pendingReadyCount]);
 
-  // Timeout fallback: se pending não resolveu em 250ms, comita mesmo assim e deixa stale
+  // Timeout fallback: se pending não resolveu em 250ms, comita mesmo assim.
   useEffect(() => {
-    if (!pendingGame) {
+    if (!pendingGame || paused) {
       if (pendingHoldTimeoutRef.current !== null) {
         clearTimeout(pendingHoldTimeoutRef.current);
         pendingHoldTimeoutRef.current = null;
@@ -213,9 +215,14 @@ export function CatalogueHoverPreview({
         pendingHoldTimeoutRef.current = null;
       }
     };
-  }, [pendingGame]);
+  }, [paused, pendingGame]);
 
-  const markScreenshotFailed = (source: string) => {
+  const markScreenshotFailed = (source: string, generation: number) => {
+    if (
+      generation !== screenshotGenerationRef.current ||
+      !cachedScreenshotSources.includes(source)
+    )
+      return;
     readyScreenshotSourcesRef.current.delete(source);
     setReadyScreenshotCount(readyScreenshotSourcesRef.current.size);
     setFailedScreenshotSources((currentFailed) => {
@@ -228,19 +235,29 @@ export function CatalogueHoverPreview({
 
   const markScreenshotReady = async (
     source: string,
-    image: HTMLImageElement
+    image: HTMLImageElement,
+    generation: number
   ) => {
     if (typeof image.decode === "function") {
       await image.decode().catch(() => undefined);
     }
-    if (!cachedScreenshotSources.includes(source)) return;
+    if (
+      generation !== screenshotGenerationRef.current ||
+      !cachedScreenshotSources.includes(source)
+    )
+      return;
     if (readyScreenshotSourcesRef.current.has(source)) return;
     loadedImageSources.add(source);
     readyScreenshotSourcesRef.current.add(source);
     setReadyScreenshotCount(readyScreenshotSourcesRef.current.size);
   };
 
-  const markPendingFailed = (source: string) => {
+  const markPendingFailed = (source: string, generation: number) => {
+    if (
+      generation !== pendingGenerationRef.current ||
+      !pendingDisplayShots.includes(source)
+    )
+      return;
     pendingReadySourcesRef.current.delete(source);
     setPendingReadyCount(pendingReadySourcesRef.current.size);
     setPendingFailedSources((currentFailed) => {
@@ -251,11 +268,19 @@ export function CatalogueHoverPreview({
     });
   };
 
-  const markPendingReady = async (source: string, image: HTMLImageElement) => {
+  const markPendingReady = async (
+    source: string,
+    image: HTMLImageElement,
+    generation: number
+  ) => {
     if (typeof image.decode === "function") {
       await image.decode().catch(() => undefined);
     }
-    if (!pendingDisplayShots.includes(source)) return;
+    if (
+      generation !== pendingGenerationRef.current ||
+      !pendingDisplayShots.includes(source)
+    )
+      return;
     if (pendingReadySourcesRef.current.has(source)) return;
     loadedImageSources.add(source);
     pendingReadySourcesRef.current.add(source);
@@ -314,8 +339,6 @@ export function CatalogueHoverPreview({
     exitTimeoutRef.current = setTimeout(() => {
       exitTimeoutRef.current = null;
       setDisplayedGame(null);
-      prevDisplayShotsRef.current = [];
-      prevGameRef.current = null;
     }, CATALOGUE_PREVIEW_EXIT_TRANSITION_MS);
 
     return () => {
@@ -370,12 +393,15 @@ export function CatalogueHoverPreview({
     : null;
   const developers = displayedGame.developers?.filter(Boolean) ?? [];
   const developerText = developers.join(", ");
-
   const isPanelVisible = isVisible;
   const isShotsReady = isMediaReady;
-  const hasStaleShots = prevDisplayShotsRef.current.length > 0;
-  const showStale = !isShotsReady && hasStaleShots && displayShots.length > 0;
-  const shotsToRender = isShotsReady ? displayShots : showStale ? prevDisplayShotsRef.current : displayShots;
+  const screenshotLoaderStyle = {
+    position: "absolute" as const,
+    width: 0,
+    height: 0,
+    overflow: "hidden" as const,
+    pointerEvents: "none" as const,
+  };
 
   return (
     <section
@@ -391,7 +417,7 @@ export function CatalogueHoverPreview({
           : `Preview de ${displayedGame.title}`
       }
       aria-hidden={!isPanelVisible}
-      aria-busy={showStale || !!pendingGame}
+      aria-busy={!isShotsReady || !!pendingGame}
       onPointerEnter={handlePreviewPointerEnter}
       onPointerLeave={handlePreviewPointerLeave}
       onFocusCapture={handlePreviewFocus}
@@ -422,169 +448,84 @@ export function CatalogueHoverPreview({
       </div>
 
       <div className="catalogue-hover-preview__media-stack">
-        {isShotsReady ? (
-          displayShots.length > 0 ? (
-            displayShots.map((source, index) => (
-              <button
-                key={source}
-                type="button"
-                className="catalogue-hover-preview__shot catalogue-hover-preview__shot--link"
-                aria-label={
-                  isEnglish
-                    ? `Open ${displayedGame.title}`
-                    : `Abrir ${displayedGame.title}`
-                }
-                onClick={() => onOpenGame?.(displayedGame)}
-              >
-                <img
-                  className="catalogue-hover-preview__shot-image"
-                  src={source}
-                  alt=""
-                  aria-hidden="true"
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  fetchPriority={index === 0 ? "high" : "low"}
-                  onLoad={(event) => {
-                    void markScreenshotReady(source, event.currentTarget);
-                  }}
-                  onError={() => markScreenshotFailed(source)}
-                />
-              </button>
-            ))
-          ) : (
-            <div className="catalogue-hover-preview__shot catalogue-hover-preview__shot--empty" />
-          )
-        ) : showStale ? (
-          <>
-            {shotsToRender.map((source) => (
-              <button
-                key={`stale-${source}`}
-                type="button"
-                className="catalogue-hover-preview__shot catalogue-hover-preview__shot--link catalogue-hover-preview__shot--stale"
-                aria-label={
-                  isEnglish
-                    ? `Open ${displayedGame.title}`
-                    : `Abrir ${displayedGame.title}`
-                }
-                onClick={() => onOpenGame?.(displayedGame)}
-                aria-busy="true"
-              >
-                <img
-                  className="catalogue-hover-preview__shot-image"
-                  src={source}
-                  alt=""
-                  aria-hidden="true"
-                  loading="eager"
-                  decoding="async"
-                />
-              </button>
-            ))}
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                width: 0,
-                height: 0,
-                overflow: "hidden",
-                pointerEvents: "none",
-              }}
-            >
-              {displayShots.map((source, index) => (
-                <img
-                  key={`stale-preload-${source}`}
-                  src={source}
-                  alt=""
-                  aria-hidden="true"
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  fetchPriority={index === 0 ? "high" : "low"}
-                  onLoad={(event) => {
-                    void markScreenshotReady(source, event.currentTarget);
-                  }}
-                  onError={() => markScreenshotFailed(source)}
-                />
-              ))}
-            </div>
-          </>
-        ) : displayShots.length > 0 ? (
-          <>
-            {Array.from({ length: 3 } as unknown as string[])
-              .slice(0, Math.min(3, displayShots.length || 3))
-              .map((_, index) => (
-                <div
-                  key={`skeleton-${index}`}
-                  className="catalogue-hover-preview__shot catalogue-hover-preview__shot--skeleton skeleton"
-                  aria-hidden="true"
-                />
-              ))}
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                width: 0,
-                height: 0,
-                overflow: "hidden",
-                pointerEvents: "none",
-              }}
-            >
-              {displayShots.map((source, index) => (
-                <img
-                  key={source}
-                  src={source}
-                  alt=""
-                  aria-hidden="true"
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  fetchPriority={index === 0 ? "high" : "low"}
-                  onLoad={(event) => {
-                    void markScreenshotReady(source, event.currentTarget);
-                  }}
-                  onError={() => markScreenshotFailed(source)}
-                />
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            {Array.from({ length: 3 } as unknown as string[]).map((_, index) => (
-              <div
-                key={`skeleton-${index}`}
-                className="catalogue-hover-preview__shot catalogue-hover-preview__shot--skeleton skeleton"
-                aria-hidden="true"
-              />
-            ))}
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                width: 0,
-                height: 0,
-                overflow: "hidden",
-                pointerEvents: "none",
-              }}
-            >
-              {displayShots.map((source, index) => (
-                <img
-                  key={source}
-                  src={source}
-                  alt=""
-                  aria-hidden="true"
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  fetchPriority={index === 0 ? "high" : "low"}
-                  onLoad={(event) => {
-                    void markScreenshotReady(source, event.currentTarget);
-                  }}
-                  onError={() => markScreenshotFailed(source)}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        {displayShots.length > 0
+          ? displayShots.map((source, index) => {
+              const isReady =
+                readyScreenshotSourcesRef.current.has(source) ||
+                loadedImageSources.has(source);
+              const showImage = isReady && (!paused || index === 0);
+              const loadSource = !isReady && !paused;
+
+              return (
+                <Fragment key={source}>
+                  {showImage ? (
+                    <button
+                      type="button"
+                      className="catalogue-hover-preview__shot catalogue-hover-preview__shot--link"
+                      aria-label={
+                        isEnglish
+                          ? `Open ${displayedGame.title}`
+                          : `Abrir ${displayedGame.title}`
+                      }
+                      onClick={() => onOpenGame?.(displayedGame)}
+                    >
+                      <img
+                        className="catalogue-hover-preview__shot-image"
+                        src={source}
+                        alt=""
+                        aria-hidden="true"
+                        loading={index === 0 ? "eager" : "lazy"}
+                        decoding="async"
+                        fetchPriority={index === 0 ? "high" : "low"}
+                        onLoad={(event) => {
+                          void markScreenshotReady(
+                            source,
+                            event.currentTarget,
+                            screenshotGeneration
+                          );
+                        }}
+                        onError={() =>
+                          markScreenshotFailed(source, screenshotGeneration)
+                        }
+                      />
+                    </button>
+                  ) : (
+                    <div
+                      className="catalogue-hover-preview__shot catalogue-hover-preview__shot--skeleton skeleton"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {loadSource && (
+                    <img
+                      src={source}
+                      alt=""
+                      aria-hidden="true"
+                      loading="eager"
+                      decoding="async"
+                      fetchPriority={index === 0 ? "high" : "low"}
+                      style={screenshotLoaderStyle}
+                      onLoad={(event) => {
+                        void markScreenshotReady(
+                          source,
+                          event.currentTarget,
+                          screenshotGeneration
+                        );
+                      }}
+                      onError={() =>
+                        markScreenshotFailed(source, screenshotGeneration)
+                      }
+                    />
+                  )}
+                </Fragment>
+              );
+            })
+          : (
+              <div className="catalogue-hover-preview__shot catalogue-hover-preview__shot--empty" />
+            )}
       </div>
 
       {/* Preload oculto do pendingGame: decodifica em background para hold */}
-      {pendingGame && pendingDisplayShots.length > 0 && (
+      {!paused && pendingGame && pendingDisplayShots.length > 0 && (
         <div
           aria-hidden="true"
           style={{
@@ -595,19 +536,24 @@ export function CatalogueHoverPreview({
             pointerEvents: "none",
           }}
         >
-          {pendingDisplayShots.map((source, index) => (
+          {pendingDisplayShots.slice(0, 1).map((source) => (
             <img
               key={`pending-${source}`}
               src={source}
               alt=""
               aria-hidden="true"
-              loading={index === 0 ? "eager" : "lazy"}
+              loading="eager"
               decoding="async"
-              fetchPriority={index === 0 ? "high" : "low"}
+              fetchPriority="high"
+              style={screenshotLoaderStyle}
               onLoad={(event) => {
-                void markPendingReady(source, event.currentTarget);
+                void markPendingReady(
+                  source,
+                  event.currentTarget,
+                  pendingGeneration
+                );
               }}
-              onError={() => markPendingFailed(source)}
+              onError={() => markPendingFailed(source, pendingGeneration)}
             />
           ))}
         </div>

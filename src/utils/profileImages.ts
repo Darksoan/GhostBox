@@ -1,3 +1,5 @@
+import { animatedImageMime, encodeAnimatedWebp } from "./animatedWebp";
+
 /**
  * Reamostragem e codificação das imagens de perfil antes de subir pra nuvem.
  *
@@ -183,12 +185,42 @@ export interface AvatarCropPosition {
   scale: number;
 }
 
-/** Recorte quadrado do avatar em `avatarSize`. 512 cobre com folga o maior
- *  destino (120 CSS px na página de perfil) mesmo em tela 2x/3x. */
+function drawAvatarCrop(
+  context: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  width: number,
+  height: number,
+  position: AvatarCropPosition,
+) {
+  const sourceSize = Math.min(width, height) / position.scale;
+  context.drawImage(
+    image,
+    ((width - sourceSize) * position.x) / 100,
+    ((height - sourceSize) * position.y) / 100,
+    sourceSize, sourceSize,
+    0, 0, context.canvas.width, context.canvas.height,
+  );
+}
+
+/** Avatar estático em 512px; animações preservam os quadros em até 256px / 1 MB. */
 export async function encodeAvatarDataUrl(
   source: string,
-  position: AvatarCropPosition
+  position: AvatarCropPosition,
+  signal?: AbortSignal,
 ): Promise<string> {
+  const mime = dataUrlMimeType(source);
+  if (!mime || mime === "image/gif" || mime === "image/webp" || mime === "application/octet-stream") {
+    const response = await fetch(source, { signal });
+    if (!response.ok) throw new Error("Profile image could not be loaded");
+    const data = new Uint8Array(await response.arrayBuffer());
+    const animationType = animatedImageMime(data);
+    if (animationType) {
+      const animated = await encodeAnimatedWebp(data, animationType, (context, frame) => {
+        drawAvatarCrop(context, frame, frame.displayWidth, frame.displayHeight, position);
+      }, signal);
+      if (animated) return animated;
+    }
+  }
   const image = await loadImage(source);
   const sourceSize =
     Math.min(image.naturalWidth, image.naturalHeight) / position.scale;
@@ -203,17 +235,7 @@ export async function encodeAvatarDataUrl(
 
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(
-    image,
-    ((image.naturalWidth - sourceSize) * position.x) / 100,
-    ((image.naturalHeight - sourceSize) * position.y) / 100,
-    sourceSize,
-    sourceSize,
-    0,
-    0,
-    avatarSize,
-    avatarSize
-  );
+  drawAvatarCrop(context, image, image.naturalWidth, image.naturalHeight, position);
 
   return encodeCanvas(canvas, avatarQuality).dataUrl;
 }

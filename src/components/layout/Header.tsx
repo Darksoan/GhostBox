@@ -724,11 +724,8 @@ export const Header = memo(function Header({
                   </ul>
                   {showAppIdPrompt ? (
                     <div className="header__search-empty header__search-empty--after-results">
-                      <Info className="header__search-empty-icon" size={16} aria-hidden="true" />
+                      <Info className="header__search-empty-icon" size={18} aria-hidden="true" />
                       <div className="header__search-empty-content">
-                        <p className="header__search-empty-title">
-                          {t("header.searchNoResultsTitle")}
-                        </p>
                         <p className="header__search-empty-copy">
                           {t("header.searchNoResultsAppIdHint")}
                         </p>
@@ -742,11 +739,8 @@ export const Header = memo(function Header({
                 </div>
               ) : (
                 <div className="header__search-empty">
-                  <Info className="header__search-empty-icon" size={16} aria-hidden="true" />
+                  <Info className="header__search-empty-icon" size={18} aria-hidden="true" />
                   <div className="header__search-empty-content">
-                    <p className="header__search-empty-title">
-                      {t("header.searchNoResultsTitle")}
-                    </p>
                     <p className="header__search-empty-copy">
                       {t("header.searchNoResultsAppIdHint")}
                     </p>

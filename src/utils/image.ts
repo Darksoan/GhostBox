@@ -542,7 +542,7 @@ export function preloadGameListAssets(
     ? roundRobinImageSources(sourcesByGame)
     : sourcesByGame.flat();
 
-  preloadImageSources(sources, {
+  return preloadImageSources(sources, {
     decode: options.decode,
     idle: options.idle ?? true,
     includeCached: options.nativeResolve === true,

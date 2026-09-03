@@ -1,6 +1,6 @@
 export const CATALOGUE_HOVER_PREVIEW_RETENTION_MS = 500;
 
-export const CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS = 120;
+export const CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS = 350;
 
 /**
  * Espera para hover que o usuário não pediu: trocar de aba faz o conteúdo subir
@@ -9,6 +9,8 @@ export const CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS = 120;
  * conquistas e resolução de screenshots — e tudo isso é requisição jogada fora.
  */
 export const CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS = 420;
+
+export const CATALOGUE_SCROLL_IDLE_DELAY_MS = 150;
 
 // Mantido p/ compatibilidade; shots do preview não usam mais fade (troca direta).
 export const CATALOGUE_PREVIEW_SWAP_TRANSITION_MS = 180;
@@ -156,13 +158,17 @@ export function getAdjacentReadyScreenshotSource(
  */
 export function pickDistinctScreenshotSources(
   candidateGroups: string[][],
-  failedSources: ReadonlySet<string> = new Set()
+  failedSources: ReadonlySet<string> = new Set(),
+  readySources: ReadonlySet<string> = new Set()
 ) {
   const picked: string[] = [];
   const seen = new Set<string>();
 
   for (const candidates of candidateGroups) {
     const candidate =
+      candidates.find(
+        (source) => readySources.has(source) && !failedSources.has(source) && !seen.has(source)
+      ) ??
       candidates.find(
         (source) => source && !failedSources.has(source) && !seen.has(source)
       ) ?? candidates.find((source) => source && !seen.has(source));

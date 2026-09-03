@@ -53,8 +53,6 @@ describe("catalogue hover settle delay", () => {
     const list = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
 
     expect(list).toContain("const movedByLayout = previous?.x === x && previous?.y === y");
-    // Preload de imagens também fica fora do caminho quando é o conteúdo que anda.
-    expect(list).toContain("if (!movedByLayout) scheduleGamePreload(game)");
     expect(list).toContain("settled: !movedByLayout");
     expect(list).toContain("onPointerMove");
   });

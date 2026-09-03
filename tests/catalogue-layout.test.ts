@@ -112,6 +112,25 @@ describe("Catalogue filter search layout", () => {
     expect(source).not.toContain("useCatalogueRecommendations");
     expect(source).not.toContain('className="catalogue-recommended"');
   });
+  it("pauses hover work during scroll and resumes over the card under the pointer", () => {
+    const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
+
+    expect(page).toContain("CATALOGUE_SCROLL_IDLE_DELAY_MS");
+    expect(page).toContain(
+      'addEventListener("scroll", handleScroll, { passive: true })'
+    );
+    expect(page).toContain("elementFromPoint(pointer.x, pointer.y)");
+    expect(page).toContain("paused={isCatalogueScrolling}");
+  });
+
+  it("releases the scroll pause and restores hover when the window regains focus", () => {
+    const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
+
+    expect(page).toContain('window.addEventListener("focus", resumeHoverAtPointer)');
+    expect(page).toContain('document.addEventListener("visibilitychange", handleVisibilityChange)');
+    expect(page).toContain("finishScroll();");
+    expect(page).toContain("handleHoverGame(game, { pointer })");
+  });
 });
 
 describe("Skeleton primitive", () => {

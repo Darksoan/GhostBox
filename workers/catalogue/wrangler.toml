@@ -2,17 +2,24 @@ name = "piratebox-catalogue"
 main = "src/index.ts"
 compatibility_date = "2026-07-19"
 
-# Uma página da SteamSpy por execução (ver STEAMSPY_MAX_PAGES): a API limita
-# `request=all` a uma chamada por minuto, e o ciclo das 20 páginas fecha em
-# cinco horas.
+# Uma página a cada dois minutos durante a janela UTC 00:00–00:38. As execuções
+# 00:40–00:44 consolidam/repetem a publicação do snapshot KV; fora dessa janela
+# não há chamadas nem gravações relacionadas à SteamSpy.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["0-44/2 0 * * *"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "piratebox-games"
 database_id = "38bcabba-004a-4e75-bef0-4a1c0559f52c"
 migrations_dir = "migrations"
+
+# Reuses the existing account KV namespace with a catalogue-specific key prefix.
+# Snapshot writes are batched by page rather than written once per game.
+[[kv_namespaces]]
+binding = "STEAMSPY_SNAPSHOT"
+id = "b5996f474a2a4196b375960235599e70"
+preview_id = "183f9da6fca2465a934a59a4c3a502bb"
 
 [observability]
 enabled = true

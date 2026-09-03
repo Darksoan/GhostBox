@@ -41,9 +41,11 @@ import {
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
-import { preloadGameListAssets } from "../utils/image";
+import { preloadGameListAssets, withoutHeaderImageSources } from "../utils/image";
+import { getLoadedImageSource } from "../utils/imageCache";
 import {
   CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS,
+  CATALOGUE_SCROLL_IDLE_DELAY_MS,
   createCatalogueHoverPreviewIntent,
   createCatalogueHoverPreviewRetention,
   type CataloguePreviewPointer,
@@ -461,14 +463,30 @@ export function CataloguePage({
   const [hoveredPreview, setHoveredPreview] = useState<GhostBoxGame | null>(
     null
   );
+  const [isCatalogueScrolling, setIsCatalogueScrolling] = useState(false);
+  const isCatalogueScrollingRef = useRef(false);
+  const scrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverPointerRef = useRef<CataloguePreviewPointer | null>(null);
+  const lastPreviewGameRef = useRef<GhostBoxGame | null>(null);
   const clearHoveredGame = useCallback(() => setHoveredPreview(null), []);
+  const commitHoveredPreview = useCallback((game: GhostBoxGame) => {
+    if (
+      isCatalogueScrollingRef.current ||
+      document.visibilityState === "hidden" ||
+      !document.hasFocus() ||
+      lastPreviewGameRef.current?.id === game.id
+    )
+      return;
+    lastPreviewGameRef.current = game;
+    setHoveredPreview(game);
+  }, []);
   const hoverPreviewRetention = useMemo(
     () => createCatalogueHoverPreviewRetention(clearHoveredGame),
     [clearHoveredGame]
   );
   const hoverPreviewIntent = useMemo(
-    () => createCatalogueHoverPreviewIntent<GhostBoxGame>(setHoveredPreview),
-    []
+    () => createCatalogueHoverPreviewIntent<GhostBoxGame>(commitHoveredPreview),
+    [commitHoveredPreview]
   );
   const sortOptions = useMemo(
     () =>
@@ -623,18 +641,20 @@ export function CataloguePage({
     [chunkOffset, displayedPage, visibleGames]
   );
 
-  // Jogo de reserva do preview: sem hover em nenhum card, a coluna do preview
-  // mostra um jogo aleatório da página em vez de ficar vazia. Escolhido uma
-  // vez por página (a seleção é estável entre renders e não re-sortia enquanto
-  // o usuário passa o mouse pelos cards).
+  // Reserva inicial do preview. Depois do primeiro hover confirmado, o último
+  // jogo visto passa a ser mantido quando o cursor sai do card.
   const fallbackPreviewGame = useMemo(() => {
     if (!visibleGames.length) return null;
     return visibleGames[Math.floor(Math.random() * visibleGames.length)];
   }, [visibleGamesCacheKey, visibleGames]);
 
+  const previewGame =
+    hoveredPreview ?? lastPreviewGameRef.current ?? fallbackPreviewGame;
+
   useEffect(() => {
     hoverPreviewRetention.cancelClear();
     hoverPreviewIntent.cancel();
+    lastPreviewGameRef.current = null;
     setHoveredPreview(null);
     setContextMenu(null);
   }, [displayedPage, hoverPreviewIntent, hoverPreviewRetention, visibleGamesCacheKey]);
@@ -660,8 +680,16 @@ export function CataloguePage({
       }
     ) => {
       if (game) {
+        if (options?.pointer) hoverPointerRef.current = options.pointer;
+        if (isCatalogueScrollingRef.current) {
+          hoverPreviewIntent.cancel();
+          return;
+        }
         hoverPreviewRetention.cancelClear();
-        if (options?.immediate) {
+        const loadedScreenshot = getLoadedImageSource(
+          withoutHeaderImageSources(game.screenshots ?? []).slice(0, 1)
+        );
+        if (options?.immediate || loadedScreenshot) {
           hoverPreviewIntent.showImmediately(game);
         } else {
           // Hover que veio do conteúdo se mexendo espera bem mais: assim a
@@ -677,11 +705,90 @@ export function CataloguePage({
         return;
       }
 
+      if (isCatalogueScrollingRef.current) return;
       hoverPreviewIntent.cancel();
       hoverPreviewRetention.scheduleClear();
     },
     [hoverPreviewIntent, hoverPreviewRetention]
   );
+
+  useEffect(() => {
+    const scrollElement = scrollElementRef?.current;
+    if (!scrollElement) return;
+
+    const finishScroll = () => {
+      if (scrollIdleTimeoutRef.current !== null) {
+        clearTimeout(scrollIdleTimeoutRef.current);
+        scrollIdleTimeoutRef.current = null;
+      }
+      isCatalogueScrollingRef.current = false;
+      setIsCatalogueScrolling((current) => (current ? false : current));
+    };
+
+    const resumeHoverAtPointer = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+
+      finishScroll();
+      const pointer = hoverPointerRef.current;
+      const hoveredElement =
+        pointer && typeof document !== "undefined"
+          ? document
+              .elementFromPoint(pointer.x, pointer.y)
+              ?.closest<HTMLElement>("[data-catalogue-game-id]")
+          : null;
+      const gameId = hoveredElement?.dataset.catalogueGameId;
+      const game = gameId
+        ? visibleGames.find((candidate) => candidate.id === gameId)
+        : undefined;
+
+      if (game) {
+        handleHoverGame(game, { pointer });
+      } else {
+        hoverPreviewRetention.scheduleClear();
+      }
+    };
+
+    const handleScroll = () => {
+      isCatalogueScrollingRef.current = true;
+      setIsCatalogueScrolling(true);
+      hoverPreviewIntent.cancel();
+      hoverPreviewRetention.cancelClear();
+
+      if (scrollIdleTimeoutRef.current !== null) {
+        clearTimeout(scrollIdleTimeoutRef.current);
+      }
+
+      scrollIdleTimeoutRef.current = setTimeout(resumeHoverAtPointer, CATALOGUE_SCROLL_IDLE_DELAY_MS);
+    };
+
+    const handleWindowBlur = () => {
+      hoverPreviewIntent.cancel();
+      hoverPreviewRetention.cancelClear();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        handleWindowBlur();
+        finishScroll();
+        return;
+      }
+      resumeHoverAtPointer();
+    };
+
+    scrollElement.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("focus", resumeHoverAtPointer);
+    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      scrollElement.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("focus", resumeHoverAtPointer);
+      window.removeEventListener("blur", handleWindowBlur);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      finishScroll();
+    };
+  }, [scrollElementRef, visibleGames, hoverPreviewIntent, hoverPreviewRetention, handleHoverGame]);
 
   const handlePreviewPointerEnter = useCallback(() => {
     hoverPreviewRetention.cancelClear();
@@ -692,18 +799,29 @@ export function CataloguePage({
   }, [hoverPreviewRetention]);
 
   useEffect(() => {
-    if (loading || !visibleGames.length) return;
+    if (loading || isCatalogueScrolling || !visibleGames.length) return;
 
-    preloadGameListAssets(visibleGames, {
+    const cancelVisiblePreload = preloadGameListAssets(visibleGames, {
       variant: "catalogueHeader",
       limit: 6,
     });
-    preloadGameListAssets(nextPageGames, {
+    const cancelNextPagePreload = preloadGameListAssets(nextPageGames, {
       variant: "catalogueHeader",
       limit: 6,
       idle: true,
     });
-  }, [loading, nextPageGames, visibleGames, visibleGamesCacheKey]);
+
+    return () => {
+      cancelVisiblePreload();
+      cancelNextPagePreload();
+    };
+  }, [
+    isCatalogueScrolling,
+    loading,
+    nextPageGames,
+    visibleGames,
+    visibleGamesCacheKey,
+  ]);
 
   // Estáveis de propósito: `CatalogueFilterSection` e `CatalogueListItem` são
   // `memo` e qualquer callback recriado por render anula a memoização — cada
@@ -945,10 +1063,10 @@ export function CataloguePage({
             />
           )}
 
-          {/* Overlay de recarga: escurece os resultados anteriores em vez de
-              trocá-los por skeleton, para a página não pular de altura entre
-              uma consulta e outra. O spinner é `sticky` (ver SCSS), então fica
-              centrado no que está visível mesmo numa lista longa. */}
+          {/* Indicador de recarga: os cards permanecem na tela, escurecidos, em
+              vez de trocar por skeleton e fazer a página pular de altura. O
+              spinner é `sticky` (ver SCSS), então fica centrado no que está
+              visível mesmo numa lista longa. */}
           {refreshing && (
             <div className="catalogue-page__refreshing" role="status">
               <span
@@ -978,7 +1096,8 @@ export function CataloguePage({
           aria-label={t("catalogue.preview.columnLabel")}
         >
           <CatalogueHoverPreview
-            game={hoveredPreview ?? fallbackPreviewGame}
+            game={previewGame}
+            paused={isCatalogueScrolling}
             onOpenGame={onOpenGame}
             onPointerEnter={handlePreviewPointerEnter}
             onPointerLeave={handlePreviewPointerLeave}

@@ -7,6 +7,7 @@ import {
   rotationSeed,
   type RotationEntry,
 } from "./ranking";
+import { steamSpySnapshotSample, type SteamSpySnapshot } from "./steamspy";
 
 const SOURCE = "cloudflare-d1";
 
@@ -81,7 +82,7 @@ function unique(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
-export function toGame(row: GameRow, origin: string) {
+export function toGame(row: GameRow, origin: string, snapshot?: SteamSpySnapshot | null) {
   const appId = String(row.app_id);
   const imageBase = `${origin}/images/steam/apps/${appId}`;
   const cdnBase = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`;
@@ -95,6 +96,9 @@ export function toGame(row: GameRow, origin: string) {
   const heroUrl = `${imageBase}/library_hero.jpg`;
   const subtitle = [genres.slice(0, 2).join(" / "), developers[0]].filter(Boolean).join(" - ");
 
+  const steamSpySample = snapshot == null
+    ? { ccu: row.steamspy_ccu, ownersMax: row.steamspy_owners_max }
+    : steamSpySnapshotSample(snapshot, appId) ?? { ccu: 0, ownersMax: 0 };
   return {
     appId,
     id: `steam-${appId}`,
@@ -129,8 +133,8 @@ export function toGame(row: GameRow, origin: string) {
     recommendations: row.recommendations,
     rankingScore: row.ranking_score,
     rankingTier: row.ranking_tier,
-    playingNow: row.steamspy_ccu || undefined,
-    ownersEstimate: row.steamspy_owners_max || undefined,
+    playingNow: steamSpySample.ccu || undefined,
+    ownersEstimate: steamSpySample.ownersMax || undefined,
     databaseAddedAt: row.updated_at,
   };
 }
@@ -361,12 +365,14 @@ export async function getCatalogueFacets(db: D1Database, updatedAt: string): Pro
   return facetsInFlight;
 }
 
-export function searchConditions(request: SearchRequest): { sql: string; bindings: unknown[] } {
+export function searchConditions(request: SearchRequest, useSteamSpySnapshot = false): { sql: string; bindings: unknown[] } {
   const clauses: string[] = [];
   const bindings: unknown[] = [];
   // "Jogando agora" is meaningless for the ~107k games with no SteamSpy sample
   // (steamspy_ccu = 0) — without this they'd fill the entire page with zeros.
-  if (request.sort === "playingNow") clauses.push("steamspy_ccu > 0");
+  if (request.sort === "playingNow") {
+    clauses.push(`${useSteamSpySnapshot ? "steamspy.sample_ccu" : "steamspy_ccu"} > 0`);
+  }
   const tokens = request.q.split(/\s+/).filter(Boolean);
   for (const token of tokens) {
     clauses.push("search_text LIKE ? ESCAPE '\\'");
@@ -460,18 +466,29 @@ export async function searchCatalogue(
   total: number,
   origin: string,
   facets?: Facets,
+  snapshot?: SteamSpySnapshot | null,
 ) {
   if (request.facetsOnly) {
     return { games: [], total, matched: total, limited: false, source: SOURCE, facets };
   }
-  const where = searchConditions(request);
+  const useSnapshot = Boolean(snapshot && request.sort === "playingNow");
+  const where = searchConditions(request, useSnapshot);
+  const snapshotJson = useSnapshot ? JSON.stringify(snapshot!.samples) : null;
+  const snapshotCte = useSnapshot
+    ? "WITH steamspy AS (SELECT key AS snapshot_app_id, CAST(json_extract(value, '$[0]') AS INTEGER) AS sample_ccu, CAST(json_extract(value, '$[1]') AS INTEGER) AS sample_owners FROM json_each(?)) "
+    : "";
+  const fromClause = useSnapshot
+    ? "FROM games JOIN steamspy ON steamspy.snapshot_app_id = games.app_id"
+    : "FROM games";
   const countQuery = () => (where.sql
-    ? db.prepare(`SELECT COUNT(*) AS matched FROM games ${where.sql}`).bind(...where.bindings).first<{ matched: number }>()
+    ? db.prepare(`${snapshotCte}SELECT COUNT(*) AS matched ${fromClause} ${where.sql}`)
+      .bind(...(useSnapshot ? [snapshotJson] : []), ...where.bindings)
+      .first<{ matched: number }>()
     : Promise.resolve({ matched: total }));
 
   if (rotates(request)) {
     const [pageRows, count] = await Promise.all([rotatedPageRows(db, request, where), countQuery()]);
-    const games = pageRows.map((row) => toGame(row, origin));
+    const games = pageRows.map((row) => toGame(row, origin, snapshot));
     const matched = Number(count?.matched ?? 0);
     return {
       games,
@@ -498,15 +515,15 @@ export async function searchCatalogue(
   } else if (request.sort === "recentlyAdded") {
     order = "updated_at DESC, CAST(app_id AS INTEGER) DESC";
   } else if (request.sort === "playingNow") {
-    order = "steamspy_ccu DESC, CAST(app_id AS INTEGER) ASC";
+    order = `${useSnapshot ? "steamspy.sample_ccu" : "steamspy_ccu"} DESC, CAST(games.app_id AS INTEGER) ASC`;
   }
   const rowLimit = request.limit + 1;
-  const rowsPromise = db.prepare(`SELECT ${GAME_COLUMNS} FROM games ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
-    .bind(...where.bindings, ...orderBindings, rowLimit, request.offset)
+  const rowsPromise = db.prepare(`${snapshotCte}SELECT ${GAME_COLUMNS} ${fromClause} ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
+    .bind(...(useSnapshot ? [snapshotJson] : []), ...where.bindings, ...orderBindings, rowLimit, request.offset)
     .all<GameRow>();
   const [rows, count] = await Promise.all([rowsPromise, countQuery()]);
   const pageRows = rows.results.slice(0, request.limit);
-  const games = pageRows.map((row) => toGame(row, origin));
+  const games = pageRows.map((row) => toGame(row, origin, snapshot));
   const matched = Number(count?.matched ?? 0);
   return {
     games,
@@ -518,12 +535,18 @@ export async function searchCatalogue(
   };
 }
 
-export async function getGame(db: D1Database, appId: string, origin: string): Promise<ReturnType<typeof toGame> | null> {
+export async function getGame(db: D1Database, appId: string, origin: string, snapshot?: SteamSpySnapshot | null): Promise<ReturnType<typeof toGame> | null> {
   const row = await db.prepare(`SELECT ${GAME_COLUMNS} FROM games WHERE app_id = ? LIMIT 1`).bind(appId).first<GameRow>();
-  return row ? toGame(row, origin) : null;
+  return row ? toGame(row, origin, snapshot) : null;
 }
 
-export async function getHome(db: D1Database, meta: CatalogueMeta, origin: string, facets: Facets) {
+export async function getHome(
+  db: D1Database,
+  meta: CatalogueMeta,
+  origin: string,
+  facets: Facets,
+  snapshot?: SteamSpySnapshot | null,
+) {
   const emptyFilters = Object.fromEntries(
     FILTER_NAMES.map((name) => [name, [] as string[]]),
   ) as unknown as Record<FilterName, string[]>;
@@ -537,8 +560,8 @@ export async function getHome(db: D1Database, meta: CatalogueMeta, origin: strin
     filters: emptyFilters,
   };
   const [popular, recent] = await Promise.all([
-    searchCatalogue(db, { ...base, limit: 20, sort: "popular" }, meta.total, origin),
-    searchCatalogue(db, { ...base, limit: 12, sort: "recentlyAdded" }, meta.total, origin),
+    searchCatalogue(db, { ...base, limit: 20, sort: "popular" }, meta.total, origin, undefined, snapshot),
+    searchCatalogue(db, { ...base, limit: 12, sort: "recentlyAdded" }, meta.total, origin, undefined, snapshot),
   ]);
   return {
     popular: popular.games,

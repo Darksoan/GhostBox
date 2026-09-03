@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 describe("Catalogue fallback preview", () => {
   const component = readFileSync("src/pages/CataloguePage.tsx", "utf8");
 
-  it("picks a random game from the visible page when no card is hovered", () => {
+  it("keeps the last confirmed hover when no card is hovered", () => {
     expect(component).toContain("fallbackPreviewGame");
-    expect(component).toContain("game={hoveredPreview ?? fallbackPreviewGame}");
+    expect(component).toContain("lastPreviewGameRef");
+    expect(component).toContain("hoveredPreview ?? lastPreviewGameRef.current ?? fallbackPreviewGame");
+    expect(component).toContain("commitHoveredPreview");
   });
 
   it("keeps the fallback stable per page instead of reshuffling per render", () => {

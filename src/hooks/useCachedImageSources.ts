@@ -37,7 +37,10 @@ function findReadySource(sources: string[]): string | null {
   return null;
 }
 
-export function useCachedImageSources(sources: string[]) {
+export function useCachedImageSources(
+  sources: string[],
+  { resolveUncached = true }: { resolveUncached?: boolean } = {}
+) {
   const currentKey = sources.join("\n");
   const sourceKeyRef = useRef<string>(currentKey);
 
@@ -76,7 +79,7 @@ export function useCachedImageSources(sources: string[]) {
         !isPredictableSteamAssetSource(source)
     );
 
-    if (unresolvedSources.length) {
+    if (resolveUncached && unresolvedSources.length) {
       Promise.all(
         unresolvedSources.map((source) => resolveCachedImageSource(source))
       ).then(() => {
@@ -90,7 +93,7 @@ export function useCachedImageSources(sources: string[]) {
       cancelled = true;
       unsubscribeManifest();
     };
-  }, [currentKey]);
+  }, [currentKey, resolveUncached]);
 
   return cachedSources;
 }

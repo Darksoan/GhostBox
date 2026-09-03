@@ -5,6 +5,42 @@ import {
   getAdjacentReadyScreenshotSource,
   pickDistinctScreenshotSources,
 } from "../src/utils/cataloguePreview";
+import {
+  getLoadedImageSource,
+  imageSourceCache,
+  loadedImageSources,
+} from "../src/utils/imageCache";
+import * as steamAssetManifest from "../src/utils/steamAssetManifest";
+
+describe("catalogue preview loaded image lookup", () => {
+  const source = "https://cdn.cloudflare.steamstatic.com/steam/apps/123/ss_preview_test.jpg";
+  const cachedSource = "asset://preview-test.jpg";
+
+  afterEach(() => {
+    imageSourceCache.delete(source);
+    loadedImageSources.delete(source);
+    loadedImageSources.delete(cachedSource);
+    vi.restoreAllMocks();
+  });
+
+  it("checks cold and loaded sources without requesting manifests", () => {
+    const request = vi.spyOn(steamAssetManifest, "requestSteamAssetManifests")
+      .mockImplementation(() => {});
+
+    expect(getLoadedImageSource([source])).toBeUndefined();
+    loadedImageSources.add(source);
+    expect(getLoadedImageSource([source])).toBe(source);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("uses a cached alternative only after it has loaded", () => {
+    imageSourceCache.set(source, cachedSource);
+    expect(getLoadedImageSource([source])).toBeUndefined();
+
+    loadedImageSources.add(cachedSource);
+    expect(getLoadedImageSource([source])).toBe(cachedSource);
+  });
+});
 
 describe("catalogue preview manual navigation", () => {
   it("advances to the next ready screenshot and wraps", () => {
@@ -93,6 +129,16 @@ describe("catalogue preview manual navigation", () => {
     ]);
   });
 
+  it("prefers a loaded alternative but excludes failed sources", () => {
+    const groups = [["shot", "shot-cached", "shot-cdn"]];
+    const ready = new Set(["shot-cached", "shot-cdn"]);
+
+    expect(pickDistinctScreenshotSources(groups, new Set(), ready))
+      .toEqual(["shot-cached"]);
+    expect(pickDistinctScreenshotSources(groups, new Set(["shot-cached"]), ready))
+      .toEqual(["shot-cdn"]);
+  });
+
   it("keeps the preview accessible with hover/focus retention wired to the parent", () => {
     const component = readFileSync(
       "src/components/ui/CatalogueHoverPreview.tsx",
@@ -147,6 +193,41 @@ describe("catalogue preview hover intent debounce", () => {
 
     expect(onShow).toHaveBeenCalledTimes(1);
     expect(onShow).toHaveBeenCalledWith("game-b");
+  });
+
+  it("does not start work for cards crossed in a sweep and commits only the final target", () => {
+    const startPreviewLoad = vi.fn();
+    const intent = createCatalogueHoverPreviewIntent<string>(startPreviewLoad);
+
+    for (let card = 0; card < 20; card += 1) {
+      intent.scheduleShow(`game-${card}`);
+      vi.advanceTimersByTime(150);
+      intent.cancel();
+    }
+    expect(startPreviewLoad).not.toHaveBeenCalled();
+
+    intent.scheduleShow("final-game");
+    vi.advanceTimersByTime(349);
+    expect(startPreviewLoad).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(startPreviewLoad).toHaveBeenCalledExactlyOnceWith("final-game");
+    intent.dispose();
+  });
+
+  it("discards pending work on loss of focus and allows a fresh selection on return", () => {
+    const startPreviewLoad = vi.fn();
+    const intent = createCatalogueHoverPreviewIntent<string>(startPreviewLoad);
+
+    intent.scheduleShow("before-blur");
+    vi.advanceTimersByTime(200);
+    intent.cancel();
+    vi.advanceTimersByTime(1000);
+    expect(startPreviewLoad).not.toHaveBeenCalled();
+
+    intent.scheduleShow("after-focus");
+    vi.advanceTimersByTime(350);
+    expect(startPreviewLoad).toHaveBeenCalledExactlyOnceWith("after-focus");
+    intent.dispose();
   });
 
   it("cancel prevents a pending target from firing", () => {

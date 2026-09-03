@@ -29,11 +29,21 @@ type ToastState = {
   imageSources?: string[];
 } | null;
 
+export type AchievementToastState = {
+  id: number;
+  appId: string;
+  gameTitle: string;
+  title: string;
+  description: string;
+  iconUrl?: string;
+};
+
 interface OverlayContextValue {
   selectedGame: GhostBoxGame | null;
   achievementsView: AchievementsViewState;
   isGameModalExitPending: boolean;
   toast: ToastState;
+  achievementToasts: AchievementToastState[];
   collectionModalOpen: boolean;
   steamPathModalOpen: boolean;
   subscriptionModalOpen: boolean;
@@ -52,6 +62,8 @@ interface OverlayContextValue {
     options?: { imageSources?: string[] },
   ) => void;
   dismissToast: () => void;
+  showAchievementToast: (payload: Omit<AchievementToastState, "id">) => void;
+  dismissAchievementToast: (id: number) => void;
   setCollectionModalOpen: (open: boolean) => void;
   setSteamPathModalOpen: (open: boolean) => void;
   setSubscriptionModalOpen: (open: boolean) => void;
@@ -71,6 +83,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     useState<AchievementsViewState>(null);
   const [isGameModalExitPending, setIsGameModalExitPending] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [achievementToasts, setAchievementToasts] = useState<AchievementToastState[]>([]);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
   const [steamPathModalOpen, setSteamPathModalOpen] = useState(false);
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
@@ -121,6 +134,32 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     const timeout = window.setTimeout(() => setToast(null), 6000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  const dismissAchievementToast = useCallback((id: number) => {
+    setAchievementToasts((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const showAchievementToast = useCallback(
+    (payload: Omit<AchievementToastState, "id">) => {
+      if (!notifications.inAppToastsEnabled) return;
+      if (!notifications.inAppSuccessToastsEnabled) return;
+      if (!notifications.achievementsEnabled) return;
+
+      toastIdRef.current += 1;
+      const id = toastIdRef.current;
+
+      setAchievementToasts((prev) => {
+        const next = [...prev, { id, ...payload }];
+        if (next.length > 3) next.shift();
+        return next;
+      });
+    },
+    [
+      notifications.achievementsEnabled,
+      notifications.inAppSuccessToastsEnabled,
+      notifications.inAppToastsEnabled,
+    ],
+  );
 
   const clearOverlayExitTimeout = useCallback(() => {
     if (gameModalExitTimeoutRef.current) {
@@ -218,6 +257,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       achievementsView,
       isGameModalExitPending,
       toast,
+      achievementToasts,
       collectionModalOpen,
       steamPathModalOpen,
       subscriptionModalOpen,
@@ -228,6 +268,8 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       closeAchievements,
       showToast,
       dismissToast,
+      showAchievementToast,
+      dismissAchievementToast,
       setCollectionModalOpen,
       setSteamPathModalOpen,
       setSubscriptionModalOpen,
@@ -240,6 +282,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       achievementsView,
       isGameModalExitPending,
       toast,
+      achievementToasts,
       collectionModalOpen,
       steamPathModalOpen,
       subscriptionModalOpen,
@@ -250,6 +293,8 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       closeAchievements,
       showToast,
       dismissToast,
+      showAchievementToast,
+      dismissAchievementToast,
     ],
   );
 

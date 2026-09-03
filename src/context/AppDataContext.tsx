@@ -339,7 +339,7 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(
 );
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { showToast, setCollectionModalOpen } = useOverlay();
+  const { showToast, showAchievementToast, setCollectionModalOpen } = useOverlay();
   const { appearance, notifications, t } = useSettings();
   const { account, linkedSteamId } = useAuth();
   const accountUserId = account?.userId ?? null;
@@ -1280,11 +1280,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ? "Achievement unlocked"
         : "Conquista desbloqueada";
 
+    const findAchievementDetail = (appId: string, name: string) => {
+      const pools = [
+        ...favoriteGamesRef.current,
+        ...addedLibraryGamesRef.current,
+        ...profileHistoryGamesRef.current,
+      ];
+      for (const game of pools) {
+        if (game.appId !== appId) continue;
+        const list = game.achievementList;
+        if (!list?.length) continue;
+        const found = list.find((entry) => entry.name === name || entry.title === name);
+        if (found) return found;
+      }
+      return null;
+    };
+
     return ghostboxApi.onLocalAchievementsUnlocked((payload) => {
       if (!notifications.achievementsEnabled) return;
 
       for (const [index, achievementName] of payload.achievements.entries()) {
         const message = `${payload.title}: ${achievementName}`;
+        const detail = findAchievementDetail(payload.appId, achievementName);
+        const toastTitle = detail?.title?.trim() || achievementName;
+        const toastDescription = detail?.description?.trim() || payload.title;
+        const iconUrl = detail?.icon || detail?.iconGray || undefined;
 
         pushAppNotification({
           id: `achievement:${payload.title}:${achievementName}:${Date.now()}:${index}`,
@@ -1301,12 +1321,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           message,
           notifications.desktopNotificationsEnabled,
         );
+
+        showAchievementToast({
+          appId: payload.appId,
+          gameTitle: payload.title,
+          title: toastTitle,
+          description: toastDescription,
+          iconUrl,
+        });
       }
     });
   }, [
     appearance.language,
     notifications.achievementsEnabled,
     notifications.desktopNotificationsEnabled,
+    showAchievementToast,
   ]);
 
   // Nudge único do evento Tauri `premium-backup-nudge`: o backend emite quando

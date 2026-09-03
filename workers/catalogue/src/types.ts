@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  /** Daily SteamSpy snapshots. The D1 columns remain the migration fallback. */
+  STEAMSPY_SNAPSHOT?: KVNamespace;
 }
 
 export const FILTER_NAMES = [

@@ -14,7 +14,6 @@ import {
   layeredImageStyle,
   gameCatalogueHeaderSources,
   gameHeaderOnlySources,
-  preloadGameModalAssets,
 } from "../../utils/image";
 import { getSteamReviewScore } from "../../utils/gameMetrics";
 import { CatalogueListLoadingState } from "./LoadingStates";
@@ -47,7 +46,6 @@ interface CatalogueListItemProps {
     }
   ) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
-  onPreloadGame: (game: GhostBoxGame) => void;
   onHoverEnter: (
     game: GhostBoxGame,
     anchor: HTMLElement | null,
@@ -65,7 +63,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   onOpenGame,
   onHoverGame,
   onRemoveGame,
-  onPreloadGame,
   onHoverEnter,
   onGameContextMenu,
 }: CatalogueListItemProps) {
@@ -236,7 +233,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
         aria-label={game.title}
         onClick={() => onOpenGame(game)}
         onFocus={() => {
-          onPreloadGame(game);
           onHoverGame(game, { immediate: true, anchor: itemRef.current });
         }}
         onBlur={(event) => {
@@ -248,7 +244,9 @@ export const CatalogueListItem = memo(function CatalogueListItem({
         onPointerEnter={(event) =>
           onHoverEnter(game, itemRef.current, event.clientX, event.clientY)
         }
-        onPointerLeave={() => onHoverGame(null)}
+        onPointerLeave={() => {
+          onHoverGame(null);
+        }}
       >
         <div
           className={`catalogue-list__cover ${displayedCoverSources.length ? "catalogue-list__cover--loaded" : ""}`}
@@ -339,7 +337,6 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   onOpenGame,
   onHoverGame,
   onRemoveGame,
-  onPreloadGame,
   onHoverEnter,
   onGameContextMenu,
 }: CatalogueListItemProps) {
@@ -412,7 +409,6 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
         aria-label={game.title}
         onClick={() => onOpenGame(game)}
         onFocus={() => {
-          onPreloadGame(game);
           onHoverGame(game, { immediate: true, anchor: cardRef.current });
         }}
         onBlur={(event) => {
@@ -424,7 +420,9 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
         onPointerEnter={(event) =>
           onHoverEnter(game, cardRef.current, event.clientX, event.clientY)
         }
-        onPointerLeave={() => onHoverGame(null)}
+        onPointerLeave={() => {
+          onHoverGame(null);
+        }}
       />
       <span
         className={`home-top-rated-card__art${
@@ -526,29 +524,9 @@ export function CatalogueList({
   onRemoveGame,
   onGameContextMenu,
 }: CatalogueListProps) {
-  const preloadTimeoutRef = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   // Última posição em que o cursor foi visto de fato se mexendo.
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
-
-  const scheduleGamePreload = useCallback((game: GhostBoxGame) => {
-    if (preloadTimeoutRef.current !== null) {
-      window.clearTimeout(preloadTimeoutRef.current);
-    }
-
-    preloadTimeoutRef.current = window.setTimeout(() => {
-      preloadTimeoutRef.current = null;
-      preloadGameModalAssets(game, 0, { nativeResolve: false });
-    }, 80);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (preloadTimeoutRef.current !== null) {
-        window.clearTimeout(preloadTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const handleHoverEnter = useCallback(
     (
@@ -560,19 +538,16 @@ export function CatalogueList({
       const previous = lastPointerRef.current;
       lastPointerRef.current = { x, y };
       // Cursor no mesmo pixel de antes com outro cartão embaixo: quem se moveu
-      // foi o conteúdo (troca de aba, lista assentando), não o usuário. Preload
-      // sai fora e o preview espera a poeira baixar — senão cada cartão que
-      // desliza sob o cursor vira uma rodada de requisições.
+      // foi o conteúdo (troca de aba, lista assentando), não o usuário.
       const movedByLayout = previous?.x === x && previous?.y === y;
 
-      if (!movedByLayout) scheduleGamePreload(game);
       onHoverGame(game, {
         anchor,
         pointer: { x, y },
         settled: !movedByLayout,
       });
     },
-    [onHoverGame, scheduleGamePreload]
+    [onHoverGame]
   );
 
   // Sem virtualização de propósito: a página do catálogo entrega no máximo
@@ -598,7 +573,6 @@ export function CatalogueList({
             onOpenGame={onOpenGame}
             onHoverGame={onHoverGame}
             onRemoveGame={onRemoveGame}
-            onPreloadGame={scheduleGamePreload}
             onHoverEnter={handleHoverEnter}
             onGameContextMenu={onGameContextMenu}
           />
@@ -612,7 +586,6 @@ export function CatalogueList({
             onOpenGame={onOpenGame}
             onHoverGame={onHoverGame}
             onRemoveGame={onRemoveGame}
-            onPreloadGame={scheduleGamePreload}
             onHoverEnter={handleHoverEnter}
             onGameContextMenu={onGameContextMenu}
           />

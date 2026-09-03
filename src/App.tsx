@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { Toast } from "./components/ui/Toast";
+import { AchievementToastStack } from "./components/ui/AchievementToast";
 import { PageRouter } from "./components/routing/PageRouter";
 import { useContentOverlayState } from "./components/routing/ContentOverlay";
 import { useAppNavigation } from "./hooks/useAppNavigation";
@@ -60,6 +61,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     openAchievements,
     toast,
     dismissToast,
+    achievementToasts,
+    dismissAchievementToast,
     selectedGame,
     achievementsView,
     isGameModalExitPending,
@@ -591,6 +594,11 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       </main>
 
       <Toast toast={toast} onClose={dismissToast} />
+      <AchievementToastStack
+        toasts={achievementToasts}
+        onDismiss={dismissAchievementToast}
+        offsetBottom={toast ? 84 : 0}
+      />
     </div>
   );
 }

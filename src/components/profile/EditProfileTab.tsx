@@ -13,6 +13,8 @@ import {
 } from "react";
 import type { SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
+import { useOverlay } from "../../context/OverlayContext";
+import { AnimatedAvatarError } from "../../utils/animatedWebp";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import {
   forgetCachedImageSource,
@@ -67,6 +69,9 @@ interface EditProfileTabProps {
 
 export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps) {
   const { appearance, t } = useSettings();
+  const { showToast } = useOverlay();
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const avatarEncodingRef = useRef<AbortController | null>(null);
   const [displayName, setDisplayName] = useState(() => profile?.displayName || "");
   const [avatarUrl, setAvatarUrl] = useState(() => profile?.avatarUrl || "");
   const [pendingAvatar, setPendingAvatar] = useState<{ source: string; type: string } | null>(null);
@@ -142,6 +147,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
 
   useEffect(() => {
     return () => {
+      avatarEncodingRef.current?.abort();
       if (saveSuccessTimeoutRef.current) {
         clearTimeout(saveSuccessTimeoutRef.current);
       }
@@ -171,31 +177,47 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
     if (!avatarUrl) return;
 
     setPendingAvatar({
-      source: avatarUrl,
+      source: avatarPreviewSource,
       type: avatarUrl.startsWith("data:image/png") ? "image/png" : "image/jpeg",
     });
     setAvatarCropPosition(defaultAvatarCropPosition);
-  }, [avatarUrl]);
+  }, [avatarUrl, avatarPreviewSource]);
 
   const handleAvatarCropCancel = useCallback(() => {
+    avatarEncodingRef.current?.abort();
+    avatarEncodingRef.current = null;
+    setIsProcessingAvatar(false);
     setPendingAvatar(null);
     setAvatarCropPosition(defaultAvatarCropPosition);
   }, []);
 
   const handleAvatarCropSave = useCallback(async () => {
-    if (!pendingAvatar) return;
-
+    if (!pendingAvatar || avatarEncodingRef.current) return;
+    const controller = new AbortController();
+    avatarEncodingRef.current = controller;
+    setIsProcessingAvatar(true);
     try {
-      setAvatarUrl(
-        await encodeAvatarDataUrl(pendingAvatar.source, avatarCropPosition)
+      const encoded = await encodeAvatarDataUrl(
+        pendingAvatar.source, avatarCropPosition, controller.signal,
       );
-    } catch {
-      setAvatarUrl(pendingAvatar.source);
+      if (controller.signal.aborted) return;
+      setAvatarUrl(encoded);
+      setPendingAvatar(null);
+      setAvatarCropPosition(defaultAvatarCropPosition);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        showToast(t("profile.profileAvatar"), t(
+          error instanceof AnimatedAvatarError && error.reason === "tooLarge"
+            ? "profile.avatarTooLarge" : "profile.avatarProcessingError",
+        ), "error");
+      }
+    } finally {
+      if (avatarEncodingRef.current === controller) {
+        avatarEncodingRef.current = null;
+        setIsProcessingAvatar(false);
+      }
     }
-
-    setPendingAvatar(null);
-    setAvatarCropPosition(defaultAvatarCropPosition);
-  }, [avatarCropPosition, pendingAvatar]);
+  }, [avatarCropPosition, pendingAvatar, showToast, t]);
 
   const handleBannerChange = useCallback(async () => {
     const input = document.createElement("input");
@@ -395,8 +417,10 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
               type="button"
               className="button button--outline"
               onClick={handleAvatarCropSave}
+              disabled={isProcessingAvatar}
+              aria-busy={isProcessingAvatar}
             >
-              {appearance.language === "en" ? "Apply" : "Aplicar"}
+              {isProcessingAvatar ? t("profile.processingAvatar") : appearance.language === "en" ? "Apply" : "Aplicar"}
             </button>
           </div>
         </section>
@@ -408,110 +432,73 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
           </div>
 
           <div className="profile-page__edit-form">
-            {/* Display Name */}
-            <div className="settings-option">
-              <div className="settings-option__copy">
-                <div className="settings-option__label">
-                  <strong>{t("profile.displayName")}</strong>
+            <div className="profile-page__edit-identity">
+              <div className="profile-page__edit-avatar-row">
+                <button
+                  type="button"
+                  className="profile-page__edit-avatar-btn"
+                  onClick={handleAvatarChange}
+                  aria-label={t("profile.changeAvatar")}
+                >
+                  <img
+                    src={avatarPreviewSource || avatarPlaceholder}
+                    alt=""
+                    decoding="async"
+                  />
+                  <span className="profile-page__edit-avatar-badge" aria-hidden="true">
+                    <Camera size={16} />
+                  </span>
+                </button>
+                <div className="profile-page__edit-field">
+                  <h4>{t("profile.profileAvatar")}</h4>
+                  <p>{t("profile.avatarFormatHelp")}</p>
+                  <div className="profile-page__edit-avatar-actions">
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={handleAvatarChange}
+                    >
+                      {t("profile.changeAvatar")}
+                    </button>
+                    {avatarUrl ? (
+                      <button
+                        type="button"
+                        className="button profile-page__edit-crop-btn"
+                        onClick={handleOpenAvatarCrop}
+                        title={t("profile.cropAvatar")}
+                        aria-label={t("profile.cropAvatar")}
+                      >
+                        <Crop size={16} aria-hidden="true" />
+                        <span>{t("profile.cropAvatar")}</span>
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <span>
-                  {appearance.language === "en"
-                    ? "The public name shown on your profile and leaderboards."
-                    : "O nome público exibido no seu perfil e classificações."}
-                </span>
               </div>
-              <div className="settings-option__control">
+              <div className="profile-page__edit-field profile-page__edit-name">
+                <label htmlFor="profile-display-name">{t("profile.displayName")}</label>
                 <input
-                  className="settings-input"
+                  id="profile-display-name"
+                  className="profile-page__edit-input"
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder={t("profile.displayNamePlaceholder")}
+                  aria-describedby="profile-display-name-help"
                   autoComplete="off"
                   spellCheck={false}
                 />
+                <p id="profile-display-name-help">{t("profile.displayNameHelp")}</p>
               </div>
             </div>
 
-            {/* Profile Avatar */}
-            <div className="settings-option profile-page__edit-avatar-row">
-              <div className="settings-option__copy">
-                <div className="settings-option__label">
-                  <strong>{t("profile.profileAvatar")}</strong>
-                </div>
-                <span>
-                  {appearance.language === "en"
-                    ? "Square image (JPG, PNG, GIF). Click the avatar to change it."
-                    : "Imagem quadrada (JPG, PNG, GIF). Clique no avatar para alterar."}
-                </span>
-              </div>
-              <div className="settings-option__control profile-page__edit-avatar-control">
-                <button
-                  type="button"
-                  className="edit-profile-modal__avatar-button profile-page__edit-avatar-btn"
-                  onClick={handleAvatarChange}
-                  aria-label={t("profile.profileAvatar")}
-                >
-                  <img
-                    src={avatarPreviewSource || avatarPlaceholder}
-                    alt="Avatar"
-                    decoding="async"
-                  />
-                  <div className="edit-profile-modal__avatar-overlay">
-                    <Camera size={20} />
-                  </div>
-                </button>
-                {avatarUrl ? (
-                  <button
-                    type="button"
-                    className="button button--outline profile-page__edit-crop-btn"
-                    onClick={handleOpenAvatarCrop}
-                    title={t("profile.cropAvatar")}
-                    aria-label={t("profile.cropAvatar")}
-                  >
-                    <Crop size={14} aria-hidden="true" />
-                    <span>{t("profile.cropAvatar")}</span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Banner Cover */}
             <div className="profile-page__edit-banner-section">
-              <div className="profile-page__edit-banner-header">
-                <div className="settings-option__copy">
-                  <div className="settings-option__label">
-                    <strong>{t("profile.bannerCover")}</strong>
-                  </div>
-                  <span>
-                    {appearance.language === "en"
-                      ? "Drag the preview to adjust position and use mouse wheel to zoom."
-                      : "Arraste a prévia para ajustar a posição e use a roda do mouse para aproximar."}
-                  </span>
-                </div>
-                <div className="profile-page__edit-banner-actions">
-                  <button
-                    type="button"
-                    className="button button--outline"
-                    onClick={handleBannerChange}
-                  >
-                    <ImageUp size={15} aria-hidden="true" />
-                    <span>{t("profile.changeBanner")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="button button--outline"
-                    onClick={handleBannerRemove}
-                    disabled={isBannerPlaceholder}
-                  >
-                    <Trash2 size={15} aria-hidden="true" />
-                    <span>{t("profile.removeBanner")}</span>
-                  </button>
-                </div>
+              <div className="profile-page__edit-field">
+                <h4>{t("profile.bannerCover")}</h4>
               </div>
 
               <div
-                className="edit-profile-modal__banner-button edit-profile-cover-modal__preview profile-page__edit-banner-preview"
+                className="profile-page__edit-banner-preview"
                 onPointerDown={handleBannerPointerDown}
                 onPointerMove={handleBannerPointerMove}
                 onPointerUp={handleBannerPointerEnd}
@@ -540,21 +527,41 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                 ) : (
                   <div className="edit-profile-modal__banner-placeholder" />
                 )}
-                <div className="edit-profile-cover-modal__preview-frame" aria-hidden="true" />
+              </div>
+              <div className="profile-page__edit-banner-toolbar">
+                <p>{t("profile.avatarCropHelp")}</p>
+                <div className="profile-page__edit-banner-actions">
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={handleBannerChange}
+                  >
+                    <ImageUp size={16} aria-hidden="true" />
+                    <span>{t("profile.changeBanner")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="button profile-page__edit-remove-btn"
+                    onClick={handleBannerRemove}
+                    disabled={isBannerPlaceholder}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    <span>{t("profile.removeBanner")}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Save Actions */}
             <div className="profile-page__edit-footer">
               {saveSuccess && (
-                <span className="profile-page__edit-success-tag">
+                <span className="profile-page__edit-success-tag" role="status">
                   <Check size={14} strokeWidth={2.5} aria-hidden="true" />
                   <span>{t("profile.changesSaved")}</span>
                 </span>
               )}
               <button
                 type="button"
-                className="button button--outline profile-page__edit-save-btn"
+                className="button button--primary profile-page__edit-save-btn"
                 disabled={!displayName.trim() || isSaving}
                 onClick={handleSave}
               >

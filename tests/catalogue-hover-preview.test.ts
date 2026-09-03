@@ -76,7 +76,7 @@ describe("Catalogue hover preview", () => {
     expect(component).not.toContain("catalogue.preview.publisher");
   });
 
-  it("holds the panel until all screenshots decoded and shows skeleton", () => {
+  it("renders only the first screenshot in the compact preview", () => {
     const component = readFileSync(
       "src/components/ui/CatalogueHoverPreview.tsx",
       "utf8"
@@ -84,8 +84,10 @@ describe("Catalogue hover preview", () => {
 
     expect(component).toContain("isMediaReady");
     expect(component).toContain("isShotsReady");
-    expect(component).toContain("readyScreenshotCount >= displayShots.length");
-    expect(component).toContain("slice(0, 3)");
+    expect(component).toContain("readySources.has(displayShots[0])");
+    expect(component).toContain("pendingDisplayShots.slice(0, 1)");
+    expect(component).toContain("paused?: boolean");
+    expect(component).toContain("slice(0, 1)");
     expect(component).toContain("catalogue-hover-preview__shot--skeleton");
     expect(component).toContain("skeleton");
   });
@@ -117,15 +119,15 @@ describe("Catalogue hover preview", () => {
     expect(component).not.toContain("isMotionDisabled()");
     expect(component).toContain("setDisplayedGame(game)");
 
-    // Hold + stale: não pisca skeleton a cada troca
+    // Hold + progressive loading: a troca só comita quando a primeira shot está pronta.
     expect(component).toContain("pendingGame");
     expect(component).toContain("pendingDisplayShots");
-    expect(component).toContain("prevDisplayShotsRef");
-    expect(component).toContain("showStale");
-    expect(component).toContain("catalogue-hover-preview__shot--stale");
     expect(component).toContain("CATALOGUE_PREVIEW_PENDING_HOLD_MS");
     expect(component).toContain("loadedImageSources");
     expect(component).toContain("pendingHoldTimeoutRef");
+    expect(component).toContain("screenshotGenerationRef");
+    expect(component).toContain("pendingGenerationRef");
+    expect(component).toContain("current.size === 0 ? current : new Set()");
 
     // Painel mantém transição de saída; shots não têm animação.
     expect(utils).toContain("CATALOGUE_PREVIEW_EXIT_TRANSITION_MS = 180");

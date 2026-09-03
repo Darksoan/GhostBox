@@ -3,6 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import type { SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
+import { useOverlay } from "../../context/OverlayContext";
+import { AnimatedAvatarError } from "../../utils/animatedWebp";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import {
   forgetCachedImageSource,
@@ -63,6 +65,16 @@ export function EditProfileModal({
   onSubmit,
 }: EditProfileModalProps) {
   const { appearance, t } = useSettings();
+  const { showToast } = useOverlay();
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const avatarEncodingRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    setIsProcessingAvatar(false);
+    return () => {
+      avatarEncodingRef.current?.abort();
+      avatarEncodingRef.current = null;
+    };
+  }, [open]);
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [pendingAvatar, setPendingAvatar] = useState<{ source: string; type: string } | null>(null);
@@ -170,11 +182,11 @@ export function EditProfileModal({
     if (!avatarUrl) return;
 
     setPendingAvatar({
-      source: avatarUrl,
+      source: avatarPreviewSource,
       type: avatarUrl.startsWith("data:image/png") ? "image/png" : "image/jpeg",
     });
     setAvatarCropPosition(defaultAvatarCropPosition);
-  }, [avatarUrl]);
+  }, [avatarUrl, avatarPreviewSource]);
 
   const handleBannerChange = useCallback(async () => {
     const input = document.createElement("input");
@@ -205,24 +217,40 @@ export function EditProfileModal({
   }, []);
 
   const handleAvatarCropCancel = useCallback(() => {
+    avatarEncodingRef.current?.abort();
+    avatarEncodingRef.current = null;
+    setIsProcessingAvatar(false);
     setPendingAvatar(null);
     setAvatarCropPosition(defaultAvatarCropPosition);
   }, []);
 
   const handleAvatarCropSave = useCallback(async () => {
-    if (!pendingAvatar) return;
-
+    if (!pendingAvatar || avatarEncodingRef.current) return;
+    const controller = new AbortController();
+    avatarEncodingRef.current = controller;
+    setIsProcessingAvatar(true);
     try {
-      setAvatarUrl(
-        await encodeAvatarDataUrl(pendingAvatar.source, avatarCropPosition)
+      const encoded = await encodeAvatarDataUrl(
+        pendingAvatar.source, avatarCropPosition, controller.signal,
       );
-    } catch {
-      setAvatarUrl(pendingAvatar.source);
+      if (controller.signal.aborted) return;
+      setAvatarUrl(encoded);
+      setPendingAvatar(null);
+      setAvatarCropPosition(defaultAvatarCropPosition);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        showToast(t("profile.profileAvatar"), t(
+          error instanceof AnimatedAvatarError && error.reason === "tooLarge"
+            ? "profile.avatarTooLarge" : "profile.avatarProcessingError",
+        ), "error");
+      }
+    } finally {
+      if (avatarEncodingRef.current === controller) {
+        avatarEncodingRef.current = null;
+        setIsProcessingAvatar(false);
+      }
     }
-
-    setPendingAvatar(null);
-    setAvatarCropPosition(defaultAvatarCropPosition);
-  }, [avatarCropPosition, pendingAvatar]);
+  }, [avatarCropPosition, pendingAvatar, showToast, t]);
 
   const handleSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
@@ -510,10 +538,11 @@ export function EditProfileModal({
                 <button
                   type={isAvatarCropMode ? "button" : "submit"}
                   className="button button--outline"
-                  disabled={!isAvatarCropMode && !displayName.trim()}
+                  disabled={isProcessingAvatar || (!isAvatarCropMode && !displayName.trim())}
+                  aria-busy={isProcessingAvatar}
                   onClick={isAvatarCropMode ? handleAvatarCropSave : undefined}
                 >
-                  {appearance.language === "en" ? "Save" : "Salvar"}
+                  {isProcessingAvatar ? t("profile.processingAvatar") : appearance.language === "en" ? "Save" : "Salvar"}
                 </button>
               </div>
             </div>
