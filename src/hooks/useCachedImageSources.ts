@@ -3,13 +3,15 @@ import {
   withCachedImageSources,
   resolveCachedImageSource,
   forgetCachedImageSource,
-  imageSourceCache,
+  getCachedImageSource,
   loadedImageSources,
+  markImageSourceLoaded,
   isPredictableSteamAssetSource,
   resolveSteamHeaderSource,
   resolveSteamLibraryCoverSource,
   steamAppIdFromImageSource,
   steamAppIdsFromSources,
+  touchCachedImageSource,
 } from "../utils/imageCache";
 import {
   isHeaderImageSource,
@@ -29,7 +31,7 @@ export interface LoadableImageState {
 function findReadySource(sources: string[]): string | null {
   for (const source of sources) {
     if (loadedImageSources.has(source)) return source;
-    const cachedSource = imageSourceCache.get(source);
+    const cachedSource = getCachedImageSource(source);
     if (cachedSource && loadedImageSources.has(cachedSource)) {
       return cachedSource;
     }
@@ -39,17 +41,20 @@ function findReadySource(sources: string[]): string | null {
 
 export function useCachedImageSources(
   sources: string[],
-  { resolveUncached = true }: { resolveUncached?: boolean } = {}
+  {
+    resolveUncached = true,
+    preserveSourceOrder = false,
+  }: { resolveUncached?: boolean; preserveSourceOrder?: boolean } = {}
 ) {
   const currentKey = sources.join("\n");
   const sourceKeyRef = useRef<string>(currentKey);
 
   const [cachedSources, setCachedSources] = useState(() =>
-    withCachedImageSources(sources)
+    withCachedImageSources(sources, { preserveSourceOrder })
   );
 
   const updateCachedSources = () => {
-    const nextSources = withCachedImageSources(sources);
+    const nextSources = withCachedImageSources(sources, { preserveSourceOrder });
     setCachedSources((currentSources) =>
       currentSources.join("\n") === nextSources.join("\n")
         ? currentSources
@@ -72,9 +77,15 @@ export function useCachedImageSources(
       if (!cancelled) updateCachedSources();
     }, steamAppIdsFromSources(sources));
 
+    // Mantém o LRU do cache em disco atualizado mesmo quando a resolução já
+    // veio do índice persistido e nenhum novo download foi necessário.
+    sources.forEach((source) => {
+      if (getCachedImageSource(source)) touchCachedImageSource(source);
+    });
+
     const unresolvedSources = sources.filter(
       (source) =>
-        !imageSourceCache.has(source) &&
+        !getCachedImageSource(source) &&
         !loadedImageSources.has(source) &&
         !isPredictableSteamAssetSource(source)
     );
@@ -93,7 +104,7 @@ export function useCachedImageSources(
       cancelled = true;
       unsubscribeManifest();
     };
-  }, [currentKey, resolveUncached]);
+  }, [currentKey, resolveUncached, preserveSourceOrder]);
 
   return cachedSources;
 }
@@ -110,6 +121,8 @@ type LoadableImageOptions = {
    * over the high-density art at the top.
    */
   preferOrder?: boolean;
+  /** Paint the first working source immediately, then try preferred upgrades. */
+  progressive?: boolean;
   /**
    * Muda de valor para refazer a cadeia de carregamento com as mesmas URLs
    * (voltou a ficar online, usuário pediu retry). Sem isso um erro de rede
@@ -129,6 +142,7 @@ export function useLoadableImageState(
   const lastGoodSourceRef = useRef<string>("");
   const failTimeoutMs = options.failTimeoutMs ?? 0;
   const preferOrder = options.preferOrder === true;
+  const progressive = options.progressive === true;
   const retryToken = options.retryToken ?? 0;
 
   const [state, setState] = useState<LoadableImageState>(() => {
@@ -142,7 +156,8 @@ export function useLoadableImageState(
 
   useEffect(() => {
     let cancelled = false;
-    let resolved = false;
+    let firstResolved = false;
+    let finished = false;
     let failTimer: ReturnType<typeof setTimeout> | null = null;
 
     const firstSource = sources[0] ?? "";
@@ -155,8 +170,8 @@ export function useLoadableImageState(
     }
 
     const fail = () => {
-      if (cancelled || resolved) return;
-      resolved = true;
+      if (cancelled || firstResolved || finished) return;
+      finished = true;
       if (failTimer !== null) {
         clearTimeout(failTimer);
         failTimer = null;
@@ -165,16 +180,24 @@ export function useLoadableImageState(
       setState({ source: "", loaded: false, failed: true });
     };
 
-    const commit = (source: string) => {
-      if (cancelled) return;
-      if (resolved) return;
-
-      resolved = true;
+    const finish = () => {
+      finished = true;
       if (failTimer !== null) {
         clearTimeout(failTimer);
         failTimer = null;
       }
-      loadedImageSources.add(source);
+    };
+
+    const commit = (source: string, index: number) => {
+      if (cancelled || finished) return;
+
+      if (!firstResolved) {
+        firstResolved = true;
+        if (!(progressive && index === 0)) finish();
+      } else {
+        finish();
+      }
+      markImageSourceLoaded(source);
       lastGoodSourceRef.current = source;
       setState({ source, loaded: true, failed: false });
     };
@@ -188,8 +211,8 @@ export function useLoadableImageState(
     // Synchronous shortcut: a source from this set already decoded before, so
     // paint it immediately (no reset, no extra Image() round-trip).
     const readySource = preferOrder ? null : findReadySource(sources);
-    if (readySource) {
-      commit(readySource);
+    if (readySource && !progressive) {
+      commit(readySource, sources.indexOf(readySource));
       return () => {
         cancelled = true;
       };
@@ -216,25 +239,29 @@ export function useLoadableImageState(
     });
 
     const loadSource = (index: number) => {
-      if (cancelled || resolved) return;
+      if (cancelled || finished) return;
       if (index >= sources.length) {
-        fail();
+        if (firstResolved) finish();
+        else fail();
         return;
       }
 
       const source = sources[index];
       if (!source) {
-        fail();
+        if (firstResolved) finish();
+        else fail();
         return;
       }
 
       if (typeof Image === "undefined") {
-        commit(source);
+        commit(source, index);
+        if (progressive && index === 0 && !finished) loadSource(index + 1);
         return;
       }
 
       if (loadedImageSources.has(source)) {
-        commit(source);
+        commit(source, index);
+        if (progressive && index === 0 && !finished) loadSource(index + 1);
         return;
       }
 
@@ -243,20 +270,24 @@ export function useLoadableImageState(
         // arquivo em disco de outra URL, o mapa persistido devolveria o mesmo
         // caminho morto no próximo boot e a imagem nunca mais se recuperaria.
         forgetCachedImageSource(source);
-        if (!cancelled && !resolved) loadSource(index + 1);
+        if (!cancelled && !finished) loadSource(index + 1);
       };
 
       const tryResolvedFallback = () => {
         const loadFallbackImage = (resolvedSource: string) => {
-          if (cancelled || resolved || !resolvedSource || resolvedSource === source) {
+          if (cancelled || finished || !resolvedSource || resolvedSource === source) {
             tryNextSource();
             return;
           }
 
           const fallbackImage = new Image();
           fallbackImage.decoding = "async";
+          fallbackImage.fetchPriority = progressive && index === 0 ? "high" : "low";
           fallbackImage.referrerPolicy = "no-referrer";
-          fallbackImage.onload = () => commit(resolvedSource);
+          fallbackImage.onload = () => {
+            commit(resolvedSource, index);
+            if (progressive && index === 0 && !finished) loadSource(index + 1);
+          };
           fallbackImage.onerror = tryNextSource;
           fallbackImage.src = resolvedSource;
         };
@@ -308,8 +339,12 @@ export function useLoadableImageState(
 
       const image = new Image();
       image.decoding = "async";
+      image.fetchPriority = progressive && index === 0 ? "high" : "low";
       image.referrerPolicy = "no-referrer";
-      image.onload = () => commit(source);
+      image.onload = () => {
+        commit(source, index);
+        if (progressive && index === 0 && !finished) loadSource(index + 1);
+      };
       image.onerror = tryResolvedFallback;
       image.src = source;
     };
@@ -322,7 +357,7 @@ export function useLoadableImageState(
         clearTimeout(failTimer);
       }
     };
-  }, [sourceKey, failTimeoutMs, preferOrder, retryToken]);
+  }, [sourceKey, failTimeoutMs, preferOrder, progressive, retryToken]);
 
   return state;
 }

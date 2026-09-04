@@ -8,6 +8,7 @@ import {
   type RotationEntry,
 } from "./ranking";
 import { steamSpySnapshotSample, type SteamSpySnapshot } from "./steamspy";
+import { cachedValue, countCacheKey } from "./cache";
 
 const SOURCE = "cloudflare-d1";
 
@@ -467,6 +468,7 @@ export async function searchCatalogue(
   origin: string,
   facets?: Facets,
   snapshot?: SteamSpySnapshot | null,
+  catalogueUpdatedAt = "unknown",
 ) {
   if (request.facetsOnly) {
     return { games: [], total, matched: total, limited: false, source: SOURCE, facets };
@@ -481,9 +483,13 @@ export async function searchCatalogue(
     ? "FROM games JOIN steamspy ON steamspy.snapshot_app_id = games.app_id"
     : "FROM games";
   const countQuery = () => (where.sql
-    ? db.prepare(`${snapshotCte}SELECT COUNT(*) AS matched ${fromClause} ${where.sql}`)
-      .bind(...(useSnapshot ? [snapshotJson] : []), ...where.bindings)
-      .first<{ matched: number }>()
+    ? cachedValue(
+      countCacheKey(request, `${catalogueUpdatedAt}:${snapshot?.sampledAt ?? "d1"}`, origin),
+      300,
+      () => db.prepare(`${snapshotCte}SELECT COUNT(*) AS matched ${fromClause} ${where.sql}`)
+        .bind(...(useSnapshot ? [snapshotJson] : []), ...where.bindings)
+        .first<{ matched: number }>(),
+    )
     : Promise.resolve({ matched: total }));
 
   if (rotates(request)) {

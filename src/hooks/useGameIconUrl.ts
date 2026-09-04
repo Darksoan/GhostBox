@@ -107,6 +107,30 @@ function notifyListeners() {
   listeners.forEach((listener) => listener());
 }
 
+export function clearGameIconUrlCache() {
+  cache.clear();
+  requestCache.clear();
+  queuedAppIds.clear();
+  backgroundAppIds.clear();
+  negativeCache.clear();
+  if (batchLoadTimeout) {
+    clearTimeout(batchLoadTimeout);
+    batchLoadTimeout = null;
+  }
+  if (storedCacheWriteTimeout) {
+    clearTimeout(storedCacheWriteTimeout);
+    storedCacheWriteTimeout = null;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(gameIconUrlCacheKey);
+    } catch {
+      // A limpeza do cache em disco não depende do localStorage.
+    }
+  }
+  notifyListeners();
+}
+
 function storeResolvedIcons(result: Record<string, string>) {
   let changed = false;
   const validResult: Record<string, string> = {};

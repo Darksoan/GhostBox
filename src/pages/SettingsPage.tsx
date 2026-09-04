@@ -46,7 +46,7 @@ type SettingOption = {
   label: string;
   labelAction?: ReactNode;
   description: string;
-  control: "toggle" | "select" | "button" | "input" | "text";
+  control: "toggle" | "select" | "button" | "input" | "text" | "range";
   value?: string;
   choices?: Array<{ label: string; value: string }>;
   onChange?: (value: string) => void;
@@ -57,6 +57,7 @@ type SettingOption = {
   enabled?: boolean;
   placeholder?: string;
   confirmAriaLabel?: string;
+  rangeValues?: number[];
 };
 
 type SettingChoiceDefinition = {
@@ -695,6 +696,8 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
   const isControlledToggle = typeof option.checked === "boolean";
   const [enabled, setEnabled] = useState(Boolean(option.enabled));
   const toggleValue = isControlledToggle ? Boolean(option.checked) : enabled;
+  const rangeValues = option.rangeValues ?? [];
+  const rangeIndex = Math.max(0, rangeValues.indexOf(Number(option.value)));
 
   return (
     <div
@@ -739,6 +742,39 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
               <span>{option.value}</span>
             </button>
           )
+        )}
+
+        {option.control === "range" && (
+          <div
+            className="settings-range"
+            style={{
+              ["--settings-range-progress" as string]: `${
+                (rangeIndex / Math.max(1, rangeValues.length - 1)) * 100
+              }%`,
+            }}
+          >
+            <input
+              id={id}
+              className="settings-range__input"
+              type="range"
+              min={0}
+              max={rangeValues.length - 1}
+              step={1}
+              value={rangeIndex}
+              list={`${id}-steps`}
+              aria-labelledby={labelId}
+              aria-describedby={descriptionId}
+              aria-valuetext={`${option.value}%`}
+              disabled={option.disabled}
+              onChange={(event) => option.onChange?.(String(rangeValues[Number(event.target.value)]))}
+            />
+            <datalist id={`${id}-steps`}>
+              {rangeValues.map((value, index) => (
+                <option key={value} value={index} label={`${value}%`} />
+              ))}
+            </datalist>
+            <output className="settings-range__value" htmlFor={id}>{option.value}%</output>
+          </div>
         )}
 
         {option.control === "input" && (

@@ -5881,6 +5881,72 @@ html.no-animations {
 }
 
 // Square-ish track + knob, matching the app's tool-like radii instead of an iOS pill.
+.settings-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  width: min(280px, 100%);
+
+  &__input {
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    margin: 0;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+
+    &::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: var(--radius-pill);
+      background: linear-gradient(
+        to right,
+        var(--text-primary) var(--settings-range-progress),
+        var(--toggle-track) var(--settings-range-progress)
+      );
+    }
+
+    &::-webkit-slider-thumb {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      margin-top: -8px;
+      border-radius: var(--radius-circle);
+      background: var(--text-primary);
+    }
+
+    &::-moz-range-track {
+      height: 8px;
+      border-radius: var(--radius-pill);
+      background: var(--toggle-track);
+    }
+
+    &::-moz-range-progress {
+      height: 8px;
+      border-radius: var(--radius-pill);
+      background: var(--text-primary);
+    }
+
+    &::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border: 0;
+      border-radius: var(--radius-circle);
+      background: var(--text-primary);
+    }
+
+    @include mixins.focus-ring;
+  }
+
+  &__value {
+    min-width: 4ch;
+    color: var(--text-secondary);
+    font-size: var(--type-size-compact);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+}
+
 .settings-switch {
   position: relative;
   width: 48px;
@@ -6395,12 +6461,13 @@ html.no-animations {
         opacity: 0.8;
       }
 
-      &:hover {
-        background: color-mix(in srgb, var(--red) 12%, transparent);
-        color: var(--red);
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        background: var(--danger);
+        color: var(--text-primary);
 
         svg {
-          color: var(--red);
+          color: var(--text-primary);
           opacity: 1;
         }
       }
@@ -6482,6 +6549,10 @@ html.no-animations {
     @media (max-width: 900px) {
       grid-template-columns: 1fr;
     }
+  }
+
+  &__content--grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* Rola no scroller compartilhado (`.container__content`) — a barra fica na
@@ -7738,9 +7809,7 @@ input[type="search"]::-ms-reveal {
    `flex: 0 0 ...` herdado do card da Home não afeta filhos de grid. */
 .catalogue-list--cards {
   display: grid;
-  /* Trilha fixa — ver comentário da `.game-grid`. */
-  grid-template-columns: repeat(auto-fill, minmax(0, 280px));
-  justify-content: center;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   align-items: stretch;
   gap: var(--space-4);
 
@@ -8462,65 +8531,36 @@ input[type="search"]::-ms-reveal {
     width: 100%;
   }
 
-  &__drop-active {
-    outline: 1px dashed var(--border-hover);
-    outline-offset: 2px;
-    border-radius: var(--radius-lg);
-  }
 }
 
 .downloads-hero {
+  --download-cover-width: 232px;
+  --download-cover-height: 108px;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
+  grid-template-rows: var(--download-cover-height);
+  column-gap: var(--space-8);
+  align-items: stretch;
   width: 100%;
-  height: 200px;
+  height: var(--download-cover-height);
+  min-width: 0;
+  padding-right: var(--space-6);
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
 
-  &--dragging {
-    opacity: 0.55;
-  }
-
-  &--drag-over {
-    outline: 2px solid var(--border-hover);
-    outline-offset: -2px;
-  }
-
-  &__grip {
-    position: absolute;
-    top: var(--space-2);
-    left: 50%;
-    z-index: 2;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 14px;
-    transform: translateX(-50%);
-    border-radius: var(--radius-pill);
-    color: rgb(255 255 255 / 0.3);
-    cursor: grab;
-    transition: color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
-
-    &:hover {
-      background: rgb(255 255 255 / 0.08);
-      color: rgb(255 255 255 / 0.6);
-    }
-
-    &:active {
-      cursor: grabbing;
-    }
-  }
-
   &__cover {
-    position: absolute;
-    inset: 0;
-    background-color: var(--surface-sunken);
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    width: var(--download-cover-width);
+    height: var(--download-cover-height);
+    min-height: 0;
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    background-color: var(--surface-media-letterbox);
     background-size: cover;
-    background-position: center top;
+    background-position: center;
     opacity: 0;
     transition: opacity var(--motion-base) var(--ease);
   }
@@ -8529,196 +8569,174 @@ input[type="search"]::-ms-reveal {
     opacity: 1;
   }
 
-  &__scrim {
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(90deg, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.5) 32%, transparent 62%),
-      linear-gradient(to top, rgb(0 0 0 / 0.9) 0%, rgb(0 0 0 / 0.42) 38%, transparent 62%);
-    pointer-events: none;
-  }
-
   &__content {
+    grid-column: 2;
+    grid-row: 1;
     position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-6);
+    z-index: 2;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 28px;
+    padding: var(--space-3) 0;
     min-width: 0;
+    min-height: 0;
+    pointer-events: none;
   }
 
   &__top {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-6);
     min-width: 0;
   }
 
-  &__top-right {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex: 0 0 auto;
-  }
-
-  &__main {
+  &__middle {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
     min-width: 0;
-    flex: 1 1 auto;
   }
 
   &__title {
+    transform: translateY(calc(var(--space-1) * 2));
     overflow: hidden;
-    color: #fff;
-    font-size: clamp(1.25rem, 2.4vw, 1.75rem);
-    font-weight: var(--weight-semibold);
-    line-height: 1.1;
+    color: var(--text-primary);
+    font-size: var(--type-size-body-emphasis);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-body);
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
     max-width: 100%;
-    text-shadow: 0 2px 14px rgb(0 0 0 / 0.6);
   }
 
   &__status-text {
     display: inline-flex;
     align-items: center;
-    color: rgb(255 255 255 / 0.65);
+    flex: 0 0 auto;
+    color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: 1;
+    font-weight: var(--weight-semibold);
+    line-height: var(--type-line-caption);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-100);
     white-space: nowrap;
   }
 
+  &__percent {
+    transform: translateY(calc(var(--space-1) * 2));
+    flex: 0 0 auto;
+    color: var(--text-primary);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__controls {
+    grid-row: 3;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-8);
+  }
+
   &__progress-track {
+    grid-column: 1;
+    grid-row: 1;
     display: block;
     width: 100%;
-    height: 3px;
+    height: 6px;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: rgb(255 255 255 / 0.18);
+    background: var(--surface-modal-control);
   }
 
   &__progress-track > span {
     display: block;
+    width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: #fff;
-    box-shadow: 0 0 8px rgb(255 255 255 / 0.45);
-    transition: width var(--motion-slow) var(--ease);
+    background: var(--text-primary);
+    transform-origin: 0 50%;
+    transition: transform var(--motion-slow) var(--ease-out);
   }
 
   &__meta {
+    min-width: 0;
+    max-width: 100%;
     display: flex;
-    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--space-3);
-    color: rgb(255 255 255 / 0.58);
+    color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
+    line-height: var(--type-line-caption);
+    font-variant-numeric: tabular-nums;
   }
 
   &__meta-item {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   &__actions {
-    position: absolute;
-    right: var(--space-2);
-    bottom: var(--space-2);
-    z-index: 2;
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     gap: var(--space-3);
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    justify-content: flex-end;
     align-items: center;
-    visibility: hidden;
-    transform: translateY(6px);
-    transition:
-      transform var(--motion-fast) var(--ease),
-      visibility 0s linear var(--motion-fast);
-    pointer-events: none;
-  }
-
-  &:hover &__actions,
-  &:focus-within &__actions {
-    visibility: visible;
-    transform: translateY(0);
     pointer-events: auto;
-    transition: transform var(--motion-base) var(--ease-out);
-  }
-
-  /* Sem hover (touch): ações ficam sempre visíveis, senão ficam inacessíveis. */
-  @media (hover: none) {
-    &__actions {
-      visibility: visible;
-      transform: none;
-      pointer-events: auto;
-      transition: none;
-    }
-
-    &__action {
-      opacity: 1;
-      transition: none;
-    }
   }
 
   &__action {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: 34px;
-    padding: 0 var(--space-4);
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     border: 0;
     border-radius: var(--radius-lg);
-    background: transparent;
-    color: #fff;
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
+    background: var(--surface-option);
+    color: var(--text-secondary);
     cursor: pointer;
+    transition:
+      background var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
+
+    &:hover:not(:disabled) {
+      background: var(--surface-option-hover);
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  &__action--danger:hover:not(:disabled),
+  &__action--danger:focus-visible:not(:disabled) {
+    background: var(--danger);
+    color: var(--text-primary);
+  }
+
+  &__toggle svg {
+    grid-area: 1 / 1;
     opacity: 0;
-    transition:
-      background var(--motion-fast) var(--ease),
-      transform var(--motion-fast) var(--ease),
-      opacity var(--motion-fast) var(--ease);
+    transition: opacity var(--motion-fast) var(--ease);
 
-    &:hover {
-      background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-    }
-
-    &:active {
-      transform: scale(0.96);
-      transition-duration: 0.08s;
-    }
-  }
-
-  &:hover &__action,
-  &:focus-within &__action {
-    opacity: 1;
-    transition:
-      background var(--motion-fast) var(--ease),
-      transform var(--motion-fast) var(--ease),
-      opacity var(--motion-base) var(--ease-out);
-  }
-
-  &__action--ghost {
-    background: transparent;
-
-    &:hover {
-      background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-    }
-  }
-
-  &__action--primary {
-    background: transparent;
-
-    &:hover {
-      background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    &[data-active="true"] {
+      opacity: 1;
     }
   }
 
@@ -8727,27 +8745,81 @@ input[type="search"]::-ms-reveal {
   }
 
   &__stale {
+    grid-column: 2;
+    grid-row: 2;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-3);
+    min-width: 0;
+    padding-bottom: var(--space-3);
   }
 
   &__stale-detail {
-    color: rgb(255 255 255 / 0.6);
+    color: var(--text-secondary);
     font-size: var(--type-size-caption);
+    overflow-wrap: anywhere;
   }
 
-  @media (max-width: 640px) {
-    &__top {
-      flex-direction: column;
-      align-items: flex-start;
+  @media (max-width: 900px) {
+    --download-cover-width: 184px;
+    --download-cover-height: 86px;
+
+    &__content {
+      padding: 0 0 var(--space-1);
+    }
+  }
+
+  @media (max-width: 720px) {
+    --download-cover-width: 160px;
+    --download-cover-height: 74px;
+    grid-template-rows: auto auto;
+    height: auto;
+    min-height: var(--download-cover-height);
+
+    &__content {
+      display: contents;
     }
 
-    &__actions {
-      left: var(--space-2);
-      width: auto;
-      justify-content: flex-start;
+    &__cover {
+      align-self: start;
+    }
+
+    &__top {
+      grid-column: 2;
+      grid-row: 1;
+      position: relative;
+      z-index: 2;
+      align-self: start;
+      padding-top: var(--space-3);
+    }
+
+    &__middle {
+      grid-column: 2;
+      grid-row: 1;
+      position: relative;
+      z-index: 2;
+      align-self: end;
+      padding-bottom: var(--space-3);
+    }
+
+    &__meta {
+      justify-content: flex-end;
+    }
+
+    &__controls {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      position: relative;
+      z-index: 2;
+      column-gap: var(--space-4);
+      padding: 0 0 var(--space-3) var(--space-6);
+    }
+
+    &__stale {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      padding-left: var(--space-6);
     }
   }
 }
@@ -8828,6 +8900,14 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-6);
   }
 
+  &__summary-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-width: 0;
+    flex: 1;
+  }
+
   &__summary-percent {
     color: var(--text-primary);
     font-size: var(--type-size-body-emphasis);
@@ -8843,6 +8923,8 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-4);
 
     h3 {
+      min-width: 0;
+      flex: 0 1 auto;
       margin: 0;
       overflow: hidden;
       color: var(--text-primary);
@@ -8883,40 +8965,19 @@ input[type="search"]::-ms-reveal {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Único ponto saturado do modal. O estado é o que a pessoa vem conferir e
-     estava escrito em cinza; o ponto carrega a cor, o texto continua sóbrio. */
+  /* O estado é a entrada da leitura do modal e continua sóbrio, sem indicador
+     decorativo adicional. */
   &__state {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-3);
+    flex: 0 0 auto;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-semibold);
     line-height: var(--type-line-caption);
     text-transform: uppercase;
     letter-spacing: var(--ls-100);
-
-    i {
-      width: 6px;
-      height: 6px;
-      flex: 0 0 auto;
-      border-radius: var(--radius-pill);
-      background: var(--text-primary);
-    }
-
-    &--done i {
-      background: var(--success);
-    }
-
-    &--error i {
-      background: var(--danger);
-    }
-
-    /* Baixando/na fila/pausado: o ponto pulsa devagar, para separar "em
-       andamento" de "parado" sem precisar de mais uma linha de texto. */
-    &--active i {
-      animation: download-state-pulse 1.8s var(--ease) infinite;
-    }
+    white-space: nowrap;
   }
 
   &__content {
@@ -8969,6 +9030,9 @@ input[type="search"]::-ms-reveal {
     display: grid;
     gap: var(--space-3);
     min-width: 0;
+    padding: var(--space-5) var(--space-6);
+    border-radius: var(--radius-sm);
+    background: var(--surface-option);
 
     span {
       color: var(--text-secondary);
@@ -9039,12 +9103,13 @@ input[type="search"]::-ms-reveal {
     .button--outline,
     .button--primary,
     .download-details-modal__danger {
-      color: var(--text-primary);
+      color: var(--text-secondary);
       background: var(--surface-option);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        background: var(--surface-option-active);
+        background: var(--surface-option-hover);
+        color: var(--text-primary);
       }
     }
   }
@@ -9053,7 +9118,7 @@ input[type="search"]::-ms-reveal {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-4);
-    padding: 0 var(--space-9) var(--space-9);
+    padding: var(--space-5) var(--space-9) var(--space-9);
   }
 
   /* Vale para "Cancelar download" e para o confirmar do diálogo: os dois usam
@@ -9067,7 +9132,7 @@ input[type="search"]::-ms-reveal {
     padding: 0 var(--space-7);
     border: 0;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--red) 40%, transparent);
+    background: var(--surface-option);
     color: var(--text-primary);
     cursor: pointer;
     font-weight: var(--weight-regular);
@@ -9077,13 +9142,79 @@ input[type="search"]::-ms-reveal {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      background: color-mix(in srgb, var(--red) 60%, transparent);
+      background: var(--danger);
       color: var(--text-primary);
     }
 
     &:disabled {
       cursor: default;
       opacity: 0.55;
+    }
+  }
+
+  &__actions > .button {
+    position: relative;
+    min-height: 38px;
+    padding: var(--space-4) calc(var(--space-7) + (18px + var(--space-3)) / 2);
+    border-radius: var(--radius-lg);
+    color: var(--text-secondary);
+    background: var(--surface-option);
+
+    > svg {
+      display: block;
+      position: absolute;
+      left: var(--space-7);
+      width: 18px;
+      height: 18px;
+      opacity: 0;
+      transition: opacity var(--motion-fast) var(--ease);
+    }
+
+    > span {
+      transition: transform var(--motion-base) var(--ease);
+    }
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-option-hover);
+      color: var(--text-primary);
+
+      > svg {
+        opacity: 1;
+      }
+
+      > span {
+        transform: translateX(calc((18px + var(--space-3)) / 2));
+      }
+    }
+
+    &.download-details-modal__toggle {
+      flex-shrink: 0;
+
+      > svg[data-active="false"] {
+        opacity: 0;
+      }
+
+      > span {
+        display: grid;
+        justify-items: center;
+
+        > span {
+          grid-area: 1 / 1;
+          white-space: nowrap;
+          transition: opacity var(--motion-fast) var(--ease);
+
+          &[aria-hidden="true"] {
+            opacity: 0;
+          }
+        }
+      }
+    }
+
+    &.download-details-modal__danger:hover:not(:disabled),
+    &.download-details-modal__danger:focus-visible:not(:disabled) {
+      background: var(--danger);
+      color: var(--text-primary);
     }
   }
 
@@ -9103,24 +9234,24 @@ input[type="search"]::-ms-reveal {
 
     .confirm-modal__actions .button {
       border: 0;
-      background: var(--surface-modal-control);
+      background: var(--surface-option);
       color: var(--text-secondary);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        background: var(--surface-modal-control-hover);
+        background: var(--surface-option-hover);
         color: var(--text-primary);
       }
     }
 
     .confirm-modal__actions .confirm-modal__confirm {
-      background: color-mix(in srgb, var(--red) 40%, transparent);
+      background: var(--surface-option);
       color: var(--text-primary);
     }
 
     .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
     .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
-      background: color-mix(in srgb, var(--red) 60%, transparent);
+      background: var(--danger);
       color: var(--text-primary);
     }
 
@@ -9134,27 +9265,30 @@ input[type="search"]::-ms-reveal {
 
   .confirm-modal__actions .button {
     border: 0;
-    background: var(--surface-modal-control);
+    background: var(--surface-option);
     color: var(--text-secondary);
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      background: var(--surface-modal-control-hover);
+      background: var(--surface-option-hover);
       color: var(--text-primary);
     }
   }
 
   .confirm-modal__actions .confirm-modal__confirm,
-  .confirm-modal__actions .button--danger {
-    background: color-mix(in srgb, var(--red) 40%, transparent);
+  .confirm-modal__actions .button--danger,
+  .confirm-modal__actions .game-settings-modal__confirm-danger {
+    background: var(--surface-option);
     color: var(--text-primary);
   }
 
   .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
   .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled),
   .confirm-modal__actions .button--danger:hover:not(:disabled),
-  .confirm-modal__actions .button--danger:focus-visible:not(:disabled) {
-    background: color-mix(in srgb, var(--red) 60%, transparent);
+  .confirm-modal__actions .button--danger:focus-visible:not(:disabled),
+  .confirm-modal__actions .game-settings-modal__confirm-danger:hover:not(:disabled),
+  .confirm-modal__actions .game-settings-modal__confirm-danger:focus-visible:not(:disabled) {
+    background: var(--danger);
     color: var(--text-primary);
   }
 
@@ -9192,17 +9326,6 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-@keyframes download-state-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.35;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   /* O palco entra sem subir e a arte sem assentar; o véu e a arte continuam
      aparecendo por opacidade, que é a transição que carrega significado. */
@@ -9216,10 +9339,6 @@ input[type="search"]::-ms-reveal {
     transition: opacity var(--motion-base) var(--ease);
   }
 
-  /* O ponto continua marcando o estado pela cor; só o batimento sai. */
-  .download-details-modal__state--active i {
-    animation: none;
-  }
 }
 
 /* Sem markup vivo hoje (a página de backup foi substituída pelo
@@ -10393,6 +10512,11 @@ border: 0;
 
   @include pb-disable-cover-zoom;
 
+  .downloads-hero__progress-track > span,
+  .downloads-hero__toggle svg {
+    transition: none;
+  }
+
   /* Pins the library portrait hover zoom at its rest size. */
   .game-card__cover {
     --pb-background-size-current: var(--pb-background-size) !important;
@@ -10468,6 +10592,13 @@ border: 0;
 
   .download-details-modal__hero-image {
     transition: none;
+  }
+
+  .download-details-modal__actions > .button.download-details-modal__toggle {
+    svg,
+    span {
+      transition: none;
+    }
   }
 }
 
@@ -12942,6 +13073,12 @@ html.no-backdrop-blur {
     }
   }
 
+  &__remove-button:hover:not(:disabled),
+  &__remove-button:focus-visible:not(:disabled) {
+    background: var(--danger);
+    color: var(--text-primary);
+  }
+
   &__favorite-button--active,
   &__gear-button--active {
     color: var(--text-primary);
@@ -12970,7 +13107,7 @@ html.no-backdrop-blur {
 
     &:hover:not(:disabled),
     &:focus-visible {
-      background: color-mix(in srgb, var(--red) 60%, transparent);
+      background: var(--danger);
       color: var(--text-primary);
 
       .modal__download-face {
@@ -13443,9 +13580,14 @@ html.no-backdrop-blur {
   color: inherit;
 }
 
+.game-settings-modal__action-button--danger {
+  background: var(--surface-option);
+}
+
 .game-settings-modal__action-button--danger:hover:not(:disabled),
 .game-settings-modal__action-button--danger:focus-visible:not(:disabled) {
-  color: var(--danger-hover);
+  background: var(--danger);
+  color: var(--text-primary);
 }
 
 .game-settings-modal__action-button:disabled {
@@ -13472,17 +13614,6 @@ html.no-backdrop-blur {
   width: auto;
   max-height: none;
   z-index: var(--z-raised);
-}
-
-.game-settings-modal__confirm-danger {
-  background: color-mix(in srgb, var(--red) 40%, transparent);
-  color: var(--text-primary);
-}
-
-.game-settings-modal__confirm-danger:hover:not(:disabled),
-.game-settings-modal__confirm-danger:focus-visible:not(:disabled) {
-  background: color-mix(in srgb, var(--red) 60%, transparent);
-  color: var(--text-primary);
 }
 
 @media (max-width: 600px) {
@@ -14909,13 +15040,28 @@ button {
 /* ── Uninstall confirm modal ──────────────────────────────────────── */
 /* Usa a caixa canônica `.collection-modal`; só o botão destrutivo tem
    idioma próprio (vermelho translúcido), como nos confirm internos. */
-.uninstall-confirm-modal .collection-modal__actions .button--danger {
-  background: color-mix(in srgb, var(--red) 40%, transparent);
+.uninstall-confirm-modal .collection-modal__header > div {
+  gap: var(--space-4);
+}
+
+.uninstall-confirm-modal .collection-modal__actions .button {
+  background: var(--surface-option);
   color: var(--text-primary);
 
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
-    background: color-mix(in srgb, var(--red) 60%, transparent);
+    background: var(--surface-option-hover);
+    color: var(--text-primary);
+  }
+}
+
+.uninstall-confirm-modal .collection-modal__actions .button--danger {
+  background: var(--surface-option);
+  color: var(--text-primary);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: var(--danger);
     color: var(--text-primary);
   }
 }

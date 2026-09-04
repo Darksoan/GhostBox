@@ -38,6 +38,7 @@ const listeners = new Map<() => void, Set<string> | null>();
 
 let flushHandle: number | null = null;
 let storageWriteHandle: number | null = null;
+let cacheGeneration = 0;
 let version = 0;
 
 /**
@@ -175,6 +176,7 @@ async function flushPendingAppIds() {
   const appIds = [...pendingAppIds];
   pendingAppIds.clear();
   if (!appIds.length) return;
+  const generation = cacheGeneration;
 
   // Só os appIds tocados por este lote precisam reavaliar. Quem estava
   // segurando o fallback horizontal por causa do pending entra aqui também,
@@ -183,6 +185,7 @@ async function flushPendingAppIds() {
 
   try {
     const manifests = await ghostboxApi.getSteamAssetManifests(appIds);
+    if (generation !== cacheGeneration) return;
     let changed = false;
     for (const [appId, urls] of Object.entries(manifests)) {
       if (!urls || !Object.keys(urls).length) continue;
@@ -204,6 +207,7 @@ async function flushPendingAppIds() {
       scheduleStorageWrite();
     }
   } catch {
+    if (generation !== cacheGeneration) return;
     // Falha de rede/IPC não é "jogo sem manifesto". Devolve os appIds à fila
     // até esgotar as tentativas; só então marca como resolvido para não deixar
     // a cadeia de fallback presa em pending para sempre.
@@ -219,6 +223,33 @@ async function flushPendingAppIds() {
   }
 
   notifyListeners(touchedAppIds);
+}
+
+/** Limpa o índice persistido e qualquer lote de manifesto em andamento. */
+export function clearSteamAssetManifestCache() {
+  cacheGeneration += 1;
+  if (flushHandle !== null && typeof window !== "undefined") {
+    window.clearTimeout(flushHandle);
+  }
+  if (storageWriteHandle !== null && typeof window !== "undefined") {
+    window.clearTimeout(storageWriteHandle);
+  }
+  flushHandle = null;
+  storageWriteHandle = null;
+  pendingAppIds.clear();
+  requestedAppIds.clear();
+  settledAppIds.clear();
+  attemptsByAppId.clear();
+  manifestByAppId.clear();
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // A limpeza do cache em disco continua válida mesmo sem localStorage.
+    }
+  }
+  version += 1;
+  for (const [listener] of listeners) listener();
 }
 
 /**

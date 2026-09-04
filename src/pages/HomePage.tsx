@@ -56,7 +56,11 @@ import {
   gameHeroSources,
   layeredImageStyle,
 } from "../utils/image";
-import { loadedImageSources, runWhenIdle } from "../utils/imageCache";
+import {
+  loadedImageSources,
+  markImageSourceLoaded,
+  runWhenIdle,
+} from "../utils/imageCache";
 import { createSeedGame } from "../utils/gameSeed";
 import { gameCategoryScore, getGameTraits, normalizeGameTrait } from "../utils/gameTraits";
 import { formatCompactCount, getSteamReviewScore } from "../utils/gameMetrics";
@@ -203,7 +207,7 @@ function preloadHomeRecommendedCover(game: GhostBoxGame) {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeout);
-      if (source) loadedImageSources.add(source);
+      if (source) markImageSourceLoaded(source);
       resolve();
     }
 

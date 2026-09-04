@@ -82,15 +82,17 @@ export function getPriorityScreenshotSources(
 
 export function gameCatalogueHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
-  const screenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];
+  const highDensitySources = highDensityHeaderSources(appId).filter((source) =>
+    /\/header_2x\.jpg(?:[?#].*)?$/i.test(source)
+  );
 
   return uniqueSources([
+    ...highDensitySources,
+    game.coverUrl,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    game.coverUrl,
-    ...(game.coverFallbacks ?? []).slice(0, 2),
-    screenshotFallback,
+    ...(game.coverFallbacks ?? []).filter(isHeaderImageSource).slice(0, 2),
   ]);
 }
 

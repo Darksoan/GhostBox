@@ -76,7 +76,7 @@ describe("Catalogue hover preview", () => {
     expect(component).not.toContain("catalogue.preview.publisher");
   });
 
-  it("renders only the first screenshot in the compact preview", () => {
+  it("renders up to three screenshots in the preview", () => {
     const component = readFileSync(
       "src/components/ui/CatalogueHoverPreview.tsx",
       "utf8"
@@ -87,7 +87,7 @@ describe("Catalogue hover preview", () => {
     expect(component).toContain("readySources.has(displayShots[0])");
     expect(component).toContain("pendingDisplayShots.slice(0, 1)");
     expect(component).toContain("paused?: boolean");
-    expect(component).toContain("slice(0, 1)");
+    expect(component).toContain("slice(0, 3)");
     expect(component).toContain("catalogue-hover-preview__shot--skeleton");
     expect(component).toContain("skeleton");
   });

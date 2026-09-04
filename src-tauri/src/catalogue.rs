@@ -2241,6 +2241,50 @@ pub async fn cache_get_image(app: tauri::AppHandle, url: String) -> String {
 }
 
 #[tauri::command]
+pub async fn cache_get_images(
+    app: tauri::AppHandle,
+    urls: Vec<String>,
+) -> std::collections::HashMap<String, String> {
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
+
+    let mut unique_urls = Vec::new();
+    let mut seen = HashSet::new();
+    for url in urls {
+        let trimmed = url.trim().to_string();
+        if trimmed.is_empty() || !seen.insert(trimmed.clone()) {
+            continue;
+        }
+        unique_urls.push(trimmed);
+    }
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
+    let mut jobs = tokio::task::JoinSet::new();
+    for url in unique_urls {
+        let permit = semaphore.clone().acquire_owned().await;
+        let app = app.clone();
+        jobs.spawn(async move {
+            let _permit = permit.ok();
+            let resolved = image_cache::cache_image_url(&app, &url).await;
+            (url, resolved)
+        });
+    }
+
+    let mut out = HashMap::new();
+    while let Some(result) = jobs.join_next().await {
+        if let Ok((url, resolved)) = result {
+            out.insert(url, resolved);
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub fn cache_touch_images(app: tauri::AppHandle, urls: Vec<String>) -> u64 {
+    image_cache::touch_cached_images(&app, &urls)
+}
+
+#[tauri::command]
 pub async fn cache_resolve_steam_library_asset(
     app: tauri::AppHandle,
     app_id: String,

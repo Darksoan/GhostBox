@@ -74,6 +74,8 @@ const translations: Record<Language, TranslationTree> = {
       resume: "Retomar",
       cancel: "Cancelar",
       openFolder: "Abrir pasta",
+      moveUp: "Mover para cima",
+      moveDown: "Mover para baixo",
       uninstall: "Desinstalar",
       launch: "Jogar",
       openFolderError: "Não foi possível abrir a pasta instalada.",
@@ -104,7 +106,7 @@ const translations: Record<Language, TranslationTree> = {
         steamPending: "Pendente",
         destination: "Pasta de destino",
         destinationPending: "Definida ao iniciar o download",
-        cancel: "Cancelar download",
+        cancel: "Cancelar",
         uninstall: "Desinstalar",
         confirmDelete: "Os arquivos baixados de {title} serão removidos permanentemente.",
         keepFiles: "Manter arquivos",
@@ -584,6 +586,10 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
+        coverQuality: {
+          label: "Qualidade das capas",
+          description: "Qualidade das capas do cat\u00e1logo: 50%, 80% ou 100%, independentemente do tamanho da janela.",
+        },
         reduceAllAnimations: {
           label: "Animações da interface",
           description: "Anima cards, telas e transições da interface.",
@@ -750,6 +756,8 @@ const translations: Record<Language, TranslationTree> = {
       resume: "Resume",
       cancel: "Cancel",
       openFolder: "Open folder",
+      moveUp: "Move up",
+      moveDown: "Move down",
       uninstall: "Uninstall",
       launch: "Play",
       openFolderError: "Could not open the installation folder.",
@@ -780,7 +788,7 @@ const translations: Record<Language, TranslationTree> = {
         steamPending: "Pending",
         destination: "Destination folder",
         destinationPending: "Set when the download starts",
-        cancel: "Cancel download",
+        cancel: "Cancel",
         uninstall: "Uninstall",
         confirmDelete: "Downloaded files for {title} will be permanently removed.",
         keepFiles: "Keep files",
@@ -1253,6 +1261,10 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       performance: {
+        coverQuality: {
+          label: "Cover quality",
+          description: "Catalogue cover quality: 50%, 80% or 100%, regardless of window size.",
+        },
         reduceAllAnimations: {
           label: "Interface animations",
           description: "Animates cards, screens, and interface transitions.",

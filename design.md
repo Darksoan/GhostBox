@@ -65,7 +65,7 @@ Paleta estrutural atual:
 
 - `--surface-canvas`: `#0b0b0b`, fundo principal do app.
 - `--surface-panel` / `--surface-sidebar` / `--surface-explore-card`: `#141414`, painéis e cards.
-- `--surface-raised` / `--surface-option-hover` / `--sidebar-option-hover`: `#1a1a1a`, áreas destacadas e hover.
+- `--surface-raised` / `--surface-option-hover` / `--sidebar-option-hover`: `#151515`, áreas destacadas e hover.
 - `--surface-popover` / `--surface-titlebar-control` / `--surface-modal-control-hover`: `#202020`, menus e controles.
 - `--surface-option-active` / `--sidebar-option-selected` / `--profile-dropdown-option-hover`: `#202020`, estados selecionados.
 - `--surface-modal`: `#0b0b0b`, base de modal dominado por mídia; `--surface-modal-control`: `#141414`.

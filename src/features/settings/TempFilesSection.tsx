@@ -5,6 +5,9 @@ import { useOverlay } from "../../context/OverlayContext";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import type { StorageCategoryId } from "../../lib/ghostboxApi.types";
 import { formatStorageSize } from "../../utils/formatBytes";
+import { clearGameIconUrlCache } from "../../hooks/useGameIconUrl";
+import { clearImageCacheState } from "../../utils/imageCache";
+import { clearSteamAssetManifestCache } from "../../utils/steamAssetManifest";
 import "./TempFilesSection.scss";
 
 // Espelha PURE_CACHE_CATEGORIES em src-tauri/src/storage_audit.rs: são as
@@ -38,6 +41,11 @@ export function TempFilesSection() {
     setIsClearing(true);
     try {
       const result = await ghostboxApi.clearAppCaches();
+      if (result.cleared.includes("images")) {
+        clearImageCacheState();
+        clearSteamAssetManifestCache();
+        clearGameIconUrlCache();
+      }
       showToast(
         result.failed.length > 0
           ? t("settings.tempFiles.errorTitle")

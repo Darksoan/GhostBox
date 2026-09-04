@@ -1,17 +1,20 @@
-import { GripHorizontal } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, FolderOpen, LoaderCircle, Pause, Play, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { EmptyState } from "../components/ui/LoadingStates";
-import { DownloadDetailsModal } from "../components/modals/DownloadDetailsModal";
+import { DownloadDeleteConfirmModal } from "../components/modals/DownloadDeleteConfirmModal";
 import { useSettings } from "../context/settings";
+import { useOverlay } from "../context/OverlayContext";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import {
   downloadTasksChangedEvent,
+  deleteDownloadTaskFiles,
   readDownloadTasks,
+  pauseDownloadTask,
+  resumeDownloadTask,
   reorderQueuedTasks,
   reorderPausedTasks,
   reorderHistoryTasks,
-  moveQueuedToPaused,
-  movePausedToQueued,
   type DownloadTask,
 } from "../lib/downloadManager";
 import { ghostboxApi } from "../lib/ghostboxApi";
@@ -20,6 +23,19 @@ import { layeredImageStyle } from "../utils/image";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 
 const emptyImageSources: string[] = [];
+const rememberedDownloadCovers = new Map<string, string>();
+
+function primaryDownloadTask(tasks: DownloadTask[]) {
+  return tasks.find((task) => task.status === "downloading")
+    ?? tasks.find((task) => task.status === "queued")
+    ?? tasks.find((task) => task.status === "paused")
+    ?? null;
+}
+
+function downloadCardElement(id: string) {
+  return Array.from(document.querySelectorAll<HTMLElement>("[data-download-id]"))
+    .find((element) => element.dataset.downloadId === id) ?? null;
+}
 
 function formatEta(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "--";
@@ -43,27 +59,22 @@ function formatDownloadTimestamp(timestamp: number | undefined, language: "pt" |
 function DownloadsHero({
   task,
   queuePosition,
-  onOpen,
-  draggable,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  isDragging,
-  isDragOver,
+  onRequestDelete,
+  reorderIndex,
+  reorderCount,
+  onMove,
 }: {
   task: DownloadTask;
   queuePosition: number | null;
-  onOpen: (id: string) => void;
-  draggable?: boolean;
-  onDragStart?: (e: React.DragEvent) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDrop?: (e: React.DragEvent) => void;
-  onDragEnd?: (e: React.DragEvent) => void;
-  isDragging?: boolean;
-  isDragOver?: boolean;
+  onRequestDelete: (task: DownloadTask) => void;
+  reorderIndex: number;
+  reorderCount: number;
+  onMove: (direction: "up" | "down") => void;
 }) {
   const { appearance, t } = useSettings();
+  const { showToast } = useOverlay();
+  const [launching, setLaunching] = useState(false);
+  const launchInFlight = useRef(false);
   const [displayTitle, setDisplayTitle] = useState(task.title);
   useEffect(() => {
     if (!isSteamTitlePlaceholder(task.title, task.appId)) {
@@ -105,23 +116,43 @@ function DownloadsHero({
       cancelled = true;
     };
   }, [task.appId, task.title, appearance.language]);
-  const heroSources = useMemo(() => {
+  const headerSources = useMemo(() => {
     const appId = task.appId;
-    return [
-      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
-      `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
-      `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
-      `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
-      `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-      `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-      `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-      `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
-      ...task.headerSources,
-    ];
+    return {
+      highDensity: [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
+        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
+        `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header_2x.jpg`,
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header_2x.jpg`,
+      ],
+      fallback: [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+        `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+        `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+        ...task.headerSources,
+      ],
+    };
   }, [task.appId, task.headerSources]);
-  const coverSources = useCachedImageSources(heroSources);
-  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(coverSources, { preferOrder: true });
-  const progressPercent =
+  const highDensitySources = useCachedImageSources(headerSources.highDensity);
+  const fallbackSources = useCachedImageSources(headerSources.fallback);
+  const coverSources = useMemo(
+    () => [...highDensitySources, ...fallbackSources],
+    [highDensitySources, fallbackSources],
+  );
+  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(coverSources);
+  useLayoutEffect(() => {
+    if (headerLoaded && headerSource) {
+      rememberedDownloadCovers.set(task.id, headerSource);
+    }
+  }, [headerLoaded, headerSource, task.id]);
+  const visibleHeaderSource = headerLoaded && headerSource
+    ? headerSource
+    : rememberedDownloadCovers.get(task.id) ?? "";
+  const isCompleted = task.status === "completed";
+  const canPause = task.status === "downloading" || task.status === "queued";
+  const canResume = task.status === "paused";
+  const progressPercent = isCompleted ? 100 :
     task.bytesTotal > 0 ? Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100)) : 0;
   const etaLabel =
     typeof task.estimatedSecondsRemaining === "number"
@@ -148,7 +179,6 @@ function DownloadsHero({
           `${formatBytes(task.bytesDownloaded)} / ${task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}`,
           task.status === "downloading" ? etaLabel : "",
           task.status === "downloading" ? formatSpeed(task.speedBytesPerSecond) : "",
-          `${progressPercent}%`,
         ]
       : task.status === "completed"
         ? [
@@ -161,86 +191,126 @@ function DownloadsHero({
           : []
   ).filter(Boolean);
 
-  const handleOpen = useCallback(() => {
-    if (isDragging) return;
-    onOpen(task.id);
-  }, [onOpen, task.id, isDragging]);
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        onOpen(task.id);
-      }
-    },
-    [onOpen, task.id],
-  );
+  const handleOpenFolder = async () => {
+    if (!task.outputDir) return;
+    try {
+      await ghostboxApi.revealDownloadFolder(task.outputDir);
+    } catch {
+      showToast(t("downloads.openFolder"), t("downloads.openFolderError"), "error");
+    }
+  };
+
+  const handleLaunch = async () => {
+    if (!isCompleted || launchInFlight.current) return;
+    launchInFlight.current = true;
+    setLaunching(true);
+    try {
+      await ghostboxApi.launchDownloadedGame(
+        task.appId, displayTitle, task.downloadsRoot, task.outputDir, task.installDir,
+      );
+    } catch {
+      showToast(t("downloads.launch"), t("downloads.launchError"), "error");
+    } finally {
+      launchInFlight.current = false;
+      setLaunching(false);
+    }
+  };
 
   return (
     <section
-      className={`downloads-hero downloads-hero--${task.status}${isDragging ? " downloads-hero--dragging" : ""}${isDragOver ? " downloads-hero--drag-over" : ""}`}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      data-drop-placement="hero"
-      role="button"
-      tabIndex={0}
-      onClick={handleOpen}
-      onKeyDown={handleKeyDown}
-      aria-label={t("downloads.details.open", { title: displayTitle })}
-      style={{ cursor: "pointer" }}
+      className={`downloads-hero downloads-hero--${task.status}`}
+      aria-label={displayTitle}
+      data-download-id={task.id}
     >
       <span
-        className={`downloads-hero__cover${headerLoaded && headerSource ? " downloads-hero__cover--loaded" : ""}`}
-        style={layeredImageStyle(headerLoaded && headerSource ? [headerSource] : emptyImageSources, "")}
+        className={`downloads-hero__cover${visibleHeaderSource ? " downloads-hero__cover--loaded" : ""}`}
+        style={layeredImageStyle(visibleHeaderSource ? [visibleHeaderSource] : emptyImageSources, "")}
         aria-hidden="true"
       />
-      <span className="downloads-hero__scrim" aria-hidden="true" />
-      {draggable && (
-        <span
-          className="downloads-hero__grip"
-          draggable
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onClick={(event) => event.stopPropagation()}
-          aria-hidden="true"
-        >
-          <GripHorizontal size={14} strokeWidth={2} />
-        </span>
-      )}
       <div className="downloads-hero__content">
         <div className="downloads-hero__top">
-          <div className="downloads-hero__main">
-            <strong className="downloads-hero__title">{displayTitle}</strong>
-            {statusLabel && <span className="downloads-hero__status-text">{statusLabel}</span>}
-          </div>
+          <strong className="downloads-hero__title">{displayTitle}</strong>
+          {(showsProgress || isCompleted) && (
+            <span className="downloads-hero__percent">{progressPercent}%</span>
+          )}
         </div>
 
-        {showsProgress && (
-          <span className="downloads-hero__progress-track" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
-            <span style={{ width: `${progressPercent}%` }} />
-          </span>
-        )}
-
-        {metaItems.length > 0 && (
-          <span className="downloads-hero__meta">
-            {metaItems.map((item) => (
-              <span key={item} className="downloads-hero__meta-item">
-                {item}
-              </span>
-            ))}
-          </span>
-        )}
-
-        {task.staleManifest && (
-          <span className="downloads-hero__stale" onClick={(event) => event.stopPropagation()}>
-            <span className="downloads-hero__stale-detail">
-              {t("downloads.staleManifestDetail", {
-                depots: task.staleManifest.depots.map((depot) => depot.depotId).join(", "),
-                buildId: task.staleManifest.publicBuildId || "--",
-              })}
+        <div className="downloads-hero__middle">
+          {statusLabel && <span className="downloads-hero__status-text">{statusLabel}</span>}
+          {metaItems.length > 0 && (
+            <span className="downloads-hero__meta">
+              {metaItems.map((item) => (
+                <span key={item} className="downloads-hero__meta-item" title={item}>{item}</span>
+              ))}
             </span>
-          </span>
-        )}
+          )}
+        </div>
+
+        <div className="downloads-hero__controls">
+          {(showsProgress || isCompleted) && (
+            <span className="downloads-hero__progress-track" role="progressbar"
+              aria-label={t("downloads.details.progress")}
+              aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
+              <span style={{ transform: `scaleX(${progressPercent / 100})` }} />
+            </span>
+          )}
+          <div className="downloads-hero__actions">
+            {(canPause || canResume) && (
+              <button type="button" className="downloads-hero__action downloads-hero__toggle"
+                onClick={() => canPause ? pauseDownloadTask(task.id) : resumeDownloadTask(task.id)}
+                aria-label={t(canPause ? "downloads.pause" : "downloads.resume")}
+                title={t(canPause ? "downloads.pause" : "downloads.resume")}>
+                <Pause size={18} strokeWidth={2} data-active={canPause} aria-hidden="true" />
+                <Play size={18} strokeWidth={2} data-active={canResume} aria-hidden="true" />
+              </button>
+            )}
+            {isCompleted && (
+              <button type="button" className="downloads-hero__action"
+                onClick={handleLaunch} disabled={launching}
+                aria-label={t("downloads.launch")} title={t("downloads.launch")} aria-busy={launching}>
+                {launching
+                  ? <LoaderCircle size={18} strokeWidth={2} className="downloads-hero__launch-spinner" aria-hidden="true" />
+                  : <Play size={18} strokeWidth={2} aria-hidden="true" />}
+              </button>
+            )}
+            <button type="button" className="downloads-hero__action"
+              onClick={handleOpenFolder} disabled={!task.outputDir}
+              aria-label={t("downloads.openFolder")} title={t("downloads.openFolder")}>
+              <FolderOpen size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button type="button" className="downloads-hero__action downloads-hero__action--danger"
+              onClick={() => onRequestDelete(task)}
+              aria-label={t("downloads.remove")} title={t("downloads.remove")}>
+              <Trash2 size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
+            {reorderCount > 1 && (
+              <>
+                <button type="button" className="downloads-hero__action"
+                  onClick={() => onMove("up")} disabled={reorderIndex <= 0}
+                  aria-label={t("downloads.moveUp")} title={t("downloads.moveUp")}>
+                  <ArrowUp size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <button type="button" className="downloads-hero__action"
+                  onClick={() => onMove("down")} disabled={reorderIndex >= reorderCount - 1}
+                  aria-label={t("downloads.moveDown")} title={t("downloads.moveDown")}>
+                  <ArrowDown size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
+      {task.staleManifest && (
+        <span className="downloads-hero__stale" onClick={(event) => event.stopPropagation()}>
+          <span className="downloads-hero__stale-detail">
+            {t("downloads.staleManifestDetail", {
+              depots: task.staleManifest.depots.map((depot) => depot.depotId).join(", "),
+              buildId: task.staleManifest.publicBuildId || "--",
+            })}
+          </span>
+        </span>
+      )}
     </section>
   );
 }
@@ -248,13 +318,46 @@ function DownloadsHero({
 export function DownloadsPage() {
   const { t } = useSettings();
   const [tasks, setTasks] = useState<DownloadTask[]>(() => readDownloadTasks());
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [confirmDeleteOnOpen, setConfirmDeleteOnOpen] = useState(false);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const tasksRef = useRef(tasks);
+  const [deleteTarget, setDeleteTarget] = useState<DownloadTask | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = useCallback(() => {
-    setTasks(readDownloadTasks());
+    const nextTasks = readDownloadTasks();
+    const currentHeroId = primaryDownloadTask(tasksRef.current)?.id;
+    const nextHeroId = primaryDownloadTask(nextTasks)?.id;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      || document.documentElement.classList.contains("no-animations");
+
+    if (currentHeroId === nextHeroId || reduceMotion) {
+      tasksRef.current = nextTasks;
+      setTasks(nextTasks);
+      return;
+    }
+
+    const previousRect = nextHeroId
+      ? downloadCardElement(nextHeroId)?.getBoundingClientRect()
+      : null;
+    tasksRef.current = nextTasks;
+    flushSync(() => setTasks(nextTasks));
+
+    const nextCard = nextHeroId ? downloadCardElement(nextHeroId) : null;
+    if (!previousRect || !nextCard) return;
+
+    const nextRect = nextCard.getBoundingClientRect();
+    const styles = getComputedStyle(document.documentElement);
+    const durationSeconds = Number.parseFloat(styles.getPropertyValue("--motion-slow"));
+    nextCard.animate(
+      [
+        { transform: `translate(${previousRect.left - nextRect.left}px, ${previousRect.top - nextRect.top}px)` },
+        { transform: "translate(0, 0)" },
+      ],
+      {
+        duration: Number.isFinite(durationSeconds) ? durationSeconds * 1000 : 300,
+        easing: styles.getPropertyValue("--ease-out").trim() || "ease-out",
+      },
+    );
   }, []);
 
   useEffect(() => {
@@ -263,172 +366,57 @@ export function DownloadsPage() {
     return () => window.removeEventListener(downloadTasksChangedEvent, refresh);
   }, [refresh]);
 
-  const openDetails = useCallback((id: string) => {
-    setConfirmDeleteOnOpen(false);
-    setSelectedTaskId(id);
-  }, []);
-
-  const closeDetails = useCallback(() => {
-    setSelectedTaskId(null);
-    setConfirmDeleteOnOpen(false);
-  }, []);
-
-  // Hero = downloading active, fallback queued, fallback paused — banner sempre no topo, demais em headers abaixo
+  // Primeiro card = download ativo; demais downloads seguem nas listas abaixo.
   const activeDownloading = tasks.find((t) => t.status === "downloading") ?? null;
   const firstQueued = tasks.filter((t) => t.status === "queued")[0] ?? null;
   const firstPaused = tasks.filter((t) => t.status === "paused")[0] ?? null;
   const heroTask = activeDownloading ?? firstQueued ?? firstPaused ?? null;
 
-  const queuedTasks = tasks.filter((t) => t.status === "queued").filter((t) => t.id !== heroTask?.id);
-  const pausedTasks = tasks.filter((t) => t.status === "paused").filter((t) => t.id !== heroTask?.id);
+  const allQueuedTasks = tasks.filter((t) => t.status === "queued");
+  const allPausedTasks = tasks.filter((t) => t.status === "paused");
+  const queuedTasks = allQueuedTasks.filter((t) => t.id !== heroTask?.id);
+  const pausedTasks = allPausedTasks.filter((t) => t.id !== heroTask?.id);
   const historyTasks = tasks.filter((t) => t.status === "completed" || t.status === "error");
 
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+  const handleMove = useCallback((task: DownloadTask, direction: "up" | "down") => {
+    const group = task.status === "queued"
+      ? tasks.filter((entry) => entry.status === "queued")
+      : task.status === "paused"
+        ? tasks.filter((entry) => entry.status === "paused")
+        : task.status === "completed" || task.status === "error"
+          ? tasks.filter((entry) => entry.status === "completed" || entry.status === "error")
+          : [];
+    const currentIndex = group.findIndex((entry) => entry.id === task.id);
+    const targetIndex = currentIndex + (direction === "up" ? -1 : 1);
+    if (currentIndex === -1 || targetIndex < 0 || targetIndex >= group.length) return;
 
-  const handleDragStart = useCallback((e: React.DragEvent, taskId: string) => {
-    setDraggedId(taskId);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", taskId);
+    if (task.status === "queued") reorderQueuedTasks(task.id, targetIndex);
+    else if (task.status === "paused") reorderPausedTasks(task.id, targetIndex);
+    else reorderHistoryTasks(task.id, targetIndex);
+  }, [tasks]);
+
+  const requestDelete = useCallback((task: DownloadTask) => {
+    setDeleteError("");
+    setDeleteTarget(task);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, overId: string | null) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverId(overId);
-  }, []);
+  const cancelDelete = useCallback(() => {
+    if (!deleting) setDeleteTarget(null);
+  }, [deleting]);
 
-  const handleDragLeave = useCallback(() => {
-    setDragOverId(null);
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedId(null);
-    setDragOverId(null);
-  }, []);
-
-  const handleDropOnCard = useCallback(
-    (e: React.DragEvent, targetTask: DownloadTask) => {
-      e.preventDefault();
-      const sourceId = draggedId ?? e.dataTransfer.getData("text/plain");
-      if (!sourceId || sourceId === targetTask.id) {
-        setDraggedId(null);
-        setDragOverId(null);
-        return;
-      }
-      const sourceTask = tasks.find((t) => t.id === sourceId);
-      if (!sourceTask) {
-        setDraggedId(null);
-        setDragOverId(null);
-        return;
-      }
-
-      // Same status reorder
-      if (sourceTask.status === targetTask.status) {
-        if (sourceTask.status === "queued") {
-          // Need index including hero? hero is at 0, queued list excludes hero. Map correctly.
-          const queuedAll = tasks.filter((t) => t.status === "queued");
-          const sourceIdx = queuedAll.findIndex((t) => t.id === sourceId);
-          const targetIdx = queuedAll.findIndex((t) => t.id === targetTask.id);
-          if (sourceIdx !== -1 && targetIdx !== -1) reorderQueuedTasks(sourceId, targetIdx);
-        } else if (sourceTask.status === "paused") {
-          const targetIdx = pausedTasks.findIndex((t) => t.id === targetTask.id);
-          reorderPausedTasks(sourceId, targetIdx);
-        } else if (sourceTask.status === "completed" || sourceTask.status === "error") {
-          const targetIdx = historyTasks.findIndex((t) => t.id === targetTask.id);
-          reorderHistoryTasks(sourceId, targetIdx);
-        } else if (sourceTask.status === "downloading") {
-          // single, ignore
-        }
-      } else {
-        // Cross status: queue <-> paused
-        if (sourceTask.status === "queued" && targetTask.status === "paused") {
-          const targetIdx = pausedTasks.findIndex((t) => t.id === targetTask.id);
-          moveQueuedToPaused(sourceId, targetIdx);
-        } else if (sourceTask.status === "paused" && targetTask.status === "queued") {
-          const queuedAll = tasks.filter((t) => t.status === "queued");
-          const targetIdx = queuedAll.findIndex((t) => t.id === targetTask.id);
-          // If target is hero (queued first) need to handle offset
-          // hero is excluded from queuedTasks, but queuedAll includes hero
-          movePausedToQueued(sourceId, targetIdx === -1 ? 0 : targetIdx);
-        } else if (sourceTask.status === "paused" && targetTask.status === "downloading") {
-          // dropping paused onto hero downloading - treat as move to queued front (hero fallback)
-          movePausedToQueued(sourceId, 0);
-        } else if (sourceTask.status === "queued" && targetTask.status === "downloading") {
-          // queued onto hero downloading - reorder queued? ignore
-        } else if (sourceTask.status === "queued" && (targetTask.status === "completed" || targetTask.status === "error")) {
-          // ignore cross to history
-        } else if ((sourceTask.status === "completed" || sourceTask.status === "error") && targetTask.status === "queued") {
-          // ignore
-        }
-      }
-
-      setDraggedId(null);
-      setDragOverId(null);
-    },
-    [draggedId, tasks, pausedTasks, historyTasks]
-  );
-
-  const handleDropOnHero = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const sourceId = draggedId ?? e.dataTransfer.getData("text/plain");
-      if (!sourceId || !heroTask || sourceId === heroTask.id) {
-        setDraggedId(null);
-        setDragOverId(null);
-        return;
-      }
-      const sourceTask = tasks.find((t) => t.id === sourceId);
-      if (!sourceTask) {
-        setDraggedId(null);
-        setDragOverId(null);
-        return;
-      }
-      if (sourceTask.status === "paused") {
-        movePausedToQueued(sourceId, 0);
-      } else if (sourceTask.status === "queued") {
-        const queuedAll = tasks.filter((t) => t.status === "queued");
-        const heroIdx = queuedAll.findIndex((t) => t.id === heroTask.id);
-        const sourceIdx = queuedAll.findIndex((t) => t.id === sourceId);
-        if (heroIdx !== -1 && sourceIdx !== -1) reorderQueuedTasks(sourceId, heroIdx);
-      }
-      setDraggedId(null);
-      setDragOverId(null);
-    },
-    [draggedId, tasks, heroTask]
-  );
-
-  const handleDropOnSection = useCallback(
-    (e: React.DragEvent, section: "queue" | "paused" | "history") => {
-      e.preventDefault();
-      const sourceId = draggedId ?? e.dataTransfer.getData("text/plain");
-      if (!sourceId) {
-        setDraggedId(null);
-        setDragOverId(null);
-        return;
-      }
-      const sourceTask = tasks.find((t) => t.id === sourceId);
-      if (!sourceTask) {
-        setDraggedId(null);
-        setDragOverId(null);
-        return;
-      }
-      if (section === "queue" && sourceTask.status === "paused") {
-        movePausedToQueued(sourceId, queuedTasks.length + (heroTask?.status === "queued" ? 1 : 0));
-      } else if (section === "paused" && sourceTask.status === "queued") {
-        moveQueuedToPaused(sourceId, pausedTasks.length);
-      } else if (section === "queue" && sourceTask.status === "queued") {
-        const queuedAll = tasks.filter((t) => t.status === "queued");
-        reorderQueuedTasks(sourceId, queuedAll.length - 1);
-      } else if (section === "paused" && sourceTask.status === "paused") {
-        reorderPausedTasks(sourceId, pausedTasks.length - 1);
-      } else if (section === "history" && (sourceTask.status === "completed" || sourceTask.status === "error")) {
-        reorderHistoryTasks(sourceId, historyTasks.length - 1);
-      }
-      setDraggedId(null);
-      setDragOverId(null);
-    },
-    [draggedId, tasks, queuedTasks.length, pausedTasks.length, historyTasks.length, heroTask]
-  );
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteDownloadTaskFiles(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : t("downloads.details.deleteError"));
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget, deleting, t]);
 
   const hasAnyTasks = tasks.length > 0;
 
@@ -437,48 +425,38 @@ export function DownloadsPage() {
       {hasAnyTasks ? (
         <div className="downloads-page__stack">
           {heroTask && (
-            <div
-              className={`downloads-page__hero-drop ${dragOverId === heroTask.id ? "downloads-page__drop-active" : ""}`}
-              onDragOver={(e) => handleDragOver(e, heroTask.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDropOnHero}
-            >
+            <div className="downloads-page__hero-drop">
               <DownloadsHero
                 task={heroTask}
                 queuePosition={heroTask.status === "queued" ? 1 : null}
-                onOpen={openDetails}
-                draggable={Boolean(heroTask)}
-                onDragStart={(e) => handleDragStart(e, heroTask.id)}
-                onDragOver={(e) => handleDragOver(e, heroTask.id)}
-                onDrop={(e) => handleDropOnCard(e, heroTask)}
-                onDragEnd={handleDragEnd}
-                isDragging={draggedId === heroTask.id}
-                isDragOver={dragOverId === heroTask.id}
+                onRequestDelete={requestDelete}
+                reorderIndex={heroTask.status === "queued"
+                  ? allQueuedTasks.findIndex((task) => task.id === heroTask.id)
+                  : heroTask.status === "paused"
+                    ? allPausedTasks.findIndex((task) => task.id === heroTask.id)
+                    : 0}
+                reorderCount={heroTask.status === "queued"
+                  ? allQueuedTasks.length
+                  : heroTask.status === "paused"
+                    ? allPausedTasks.length
+                    : 1}
+                onMove={(direction) => handleMove(heroTask, direction)}
               />
             </div>
           )}
 
           {queuedTasks.length > 0 && (
-            <div
-              className="downloads-page__section"
-              onDragOver={(e) => handleDragOver(e, "queue-section")}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnSection(e, "queue")}
-            >
+            <div className="downloads-page__section">
               <div className="downloads-page__list">
                 {queuedTasks.map((task) => (
                   <DownloadsHero
                     key={task.id}
                     task={task}
-                    queuePosition={tasks.filter((t) => t.status === "queued").findIndex((e) => e.id === task.id) + 1}
-                    onOpen={openDetails}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task.id)}
-                    onDragOver={(e) => handleDragOver(e, task.id)}
-                    onDrop={(e) => handleDropOnCard(e, task)}
-                    onDragEnd={handleDragEnd}
-                    isDragging={draggedId === task.id}
-                    isDragOver={dragOverId === task.id}
+                    queuePosition={allQueuedTasks.findIndex((entry) => entry.id === task.id) + 1}
+                    onRequestDelete={requestDelete}
+                    reorderIndex={allQueuedTasks.findIndex((entry) => entry.id === task.id)}
+                    reorderCount={allQueuedTasks.length}
+                    onMove={(direction) => handleMove(task, direction)}
                   />
                 ))}
               </div>
@@ -486,26 +464,17 @@ export function DownloadsPage() {
           )}
 
           {pausedTasks.length > 0 && (
-            <div
-              className="downloads-page__section"
-              onDragOver={(e) => handleDragOver(e, "paused-section")}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnSection(e, "paused")}
-            >
+            <div className="downloads-page__section">
               <div className="downloads-page__list">
                 {pausedTasks.map((task) => (
                   <DownloadsHero
                     key={task.id}
                     task={task}
                     queuePosition={null}
-                    onOpen={openDetails}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task.id)}
-                    onDragOver={(e) => handleDragOver(e, task.id)}
-                    onDrop={(e) => handleDropOnCard(e, task)}
-                    onDragEnd={handleDragEnd}
-                    isDragging={draggedId === task.id}
-                    isDragOver={dragOverId === task.id}
+                    onRequestDelete={requestDelete}
+                    reorderIndex={allPausedTasks.findIndex((entry) => entry.id === task.id)}
+                    reorderCount={allPausedTasks.length}
+                    onMove={(direction) => handleMove(task, direction)}
                   />
                 ))}
               </div>
@@ -513,26 +482,17 @@ export function DownloadsPage() {
           )}
 
           {historyTasks.length > 0 && (
-            <div
-              className="downloads-page__section"
-              onDragOver={(e) => handleDragOver(e, "history-section")}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnSection(e, "history")}
-            >
+            <div className="downloads-page__section">
               <div className="downloads-page__list">
-                {historyTasks.map((task) => (
+                {historyTasks.map((task, index) => (
                   <DownloadsHero
                     key={task.id}
                     task={task}
                     queuePosition={null}
-                    onOpen={openDetails}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task.id)}
-                    onDragOver={(e) => handleDragOver(e, task.id)}
-                    onDrop={(e) => handleDropOnCard(e, task)}
-                    onDragEnd={handleDragEnd}
-                    isDragging={draggedId === task.id}
-                    isDragOver={dragOverId === task.id}
+                    onRequestDelete={requestDelete}
+                    reorderIndex={index}
+                    reorderCount={historyTasks.length}
+                    onMove={(direction) => handleMove(task, direction)}
                   />
                 ))}
               </div>
@@ -542,8 +502,14 @@ export function DownloadsPage() {
       ) : (
         <EmptyState className="downloads-page__empty" title={t("downloads.emptyTitle")} />
       )}
-
-      <DownloadDetailsModal task={selectedTask} onClose={closeDetails} confirmDeleteOnOpen={confirmDeleteOnOpen} confirmationOnly={confirmDeleteOnOpen} />
+      <DownloadDeleteConfirmModal
+        open={Boolean(deleteTarget)}
+        gameTitle={deleteTarget?.title ?? ""}
+        deleting={deleting}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onCancel={cancelDelete}
+      />
     </section>
   );
 }

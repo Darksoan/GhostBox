@@ -1,4 +1,4 @@
-import { cacheControl, cacheKey, canonicalSearchKey, cloudflareCacheControl, searchTtl } from "./cache";
+import { cacheControl, cacheKey, cachedValue, canonicalSearchKey, cloudflareCacheControl, imageCacheControl, imageNegativeCacheControl, searchTtl } from "./cache";
 import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, searchCatalogue } from "./catalogue";
 import { rotationSeed } from "./ranking";
 import {
@@ -12,6 +12,18 @@ import { FILTER_NAMES, type Env, type SearchRequest, type Sort } from "./types";
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" };
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const ASSET_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+
+function isImmutableImageAsset(asset: string) {
+  return /^(?:ss_|[a-f0-9]{20,}\.)/i.test(asset);
+}
+
+function imageCacheHeaders(asset: string) {
+  const immutable = isImmutableImageAsset(asset);
+  return {
+    browser: imageCacheControl({ immutable }),
+    edge: cloudflareCacheControl(immutable ? 365 * 24 * 60 * 60 : 7 * 24 * 60 * 60),
+  };
+}
 
 function edgeCache(): Cache {
   return (caches as CacheStorage & { default: Cache }).default;
@@ -124,14 +136,25 @@ async function imageProxy(request: Request, appId: string, asset: string, ctx: E
   const hit = await edgeCache().match(key);
   if (hit) {
     const response = new Response(hit.body, hit);
-    response.headers.set("cache-control", cacheControl(7 * 24 * 60 * 60));
-    response.headers.set("cloudflare-cdn-cache-control", cloudflareCacheControl(7 * 24 * 60 * 60));
+    const negative = hit.headers.get("x-ghostbox-image-negative") === "1";
+    const cacheHeaders = imageCacheHeaders(asset);
+    response.headers.set("cache-control", negative ? imageNegativeCacheControl(response.status) : cacheHeaders.browser);
+    response.headers.set("cloudflare-cdn-cache-control", negative ? imageNegativeCacheControl(response.status) : cacheHeaders.edge);
     return response;
   }
   const upstream = await fetch(`https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/${asset}`, {
     headers: { accept: request.headers.get("accept") ?? "image/*" },
   });
-  if (!upstream.ok || !upstream.body) return json({ error: "image not found" }, upstream.status === 404 ? 404 : 502, { "cache-control": "private, no-store" });
+  if (!upstream.ok || !upstream.body) {
+    const status = upstream.status === 404 ? 404 : 502;
+    const response = json({ error: "image not found" }, status, {
+      "cache-control": imageNegativeCacheControl(status),
+      "cloudflare-cdn-cache-control": imageNegativeCacheControl(status),
+      "x-ghostbox-image-negative": "1",
+    });
+    ctx.waitUntil(edgeCache().put(key, response.clone()).catch(() => undefined));
+    return response;
+  }
   const length = Number(upstream.headers.get("content-length"));
   if (Number.isFinite(length) && length > MAX_IMAGE_BYTES) return json({ error: "image too large" }, 413, { "cache-control": "private, no-store" });
   let received = 0;
@@ -143,12 +166,13 @@ async function imageProxy(request: Request, appId: string, asset: string, ctx: E
     },
   }));
   const headers = new Headers(upstream.headers);
-  headers.set("cache-control", cacheControl(7 * 24 * 60 * 60));
-  headers.set("cloudflare-cdn-cache-control", cloudflareCacheControl(7 * 24 * 60 * 60));
+  const cacheHeaders = imageCacheHeaders(asset);
+  headers.set("cache-control", cacheHeaders.browser);
+  headers.set("cloudflare-cdn-cache-control", cacheHeaders.edge);
   headers.set("access-control-allow-origin", "*");
   const response = new Response(bounded, { status: upstream.status, headers });
   const stored = response.clone();
-  stored.headers.set("cache-control", "public, max-age=604800");
+  stored.headers.set("cache-control", cacheHeaders.edge);
   stored.headers.delete("cloudflare-cdn-cache-control");
   ctx.waitUntil(edgeCache().put(key, stored).catch(() => undefined));
   return response;
@@ -157,11 +181,13 @@ async function imageProxy(request: Request, appId: string, asset: string, ctx: E
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...JSON_HEADERS, "access-control-allow-methods": "GET, POST, OPTIONS" } });
   const url = new URL(request.url);
+  const metaKey = cacheKey("meta", url.origin, "v1");
 
   const ingestMatch = url.pathname.match(/^\/games\/(\d+)\/ingest$/);
   if (ingestMatch) {
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "POST, OPTIONS" });
     const result = await ingestSteamApp(env.DB, ingestMatch[1], url.origin);
+    if (result.ok) await edgeCache().delete(metaKey).catch(() => undefined);
     return json(result, result.ok ? 200 : 404, { "cache-control": "private, no-store" });
   }
 
@@ -169,7 +195,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const image = url.pathname.match(/^\/images\/steam\/apps\/(\d+)\/([^/]+)$/);
   if (image) return imageProxy(request, image[1], image[2], ctx);
 
-  const meta = await getCatalogueMeta(env.DB);
+  const gameMatch = url.pathname.match(/^\/games\/(\d+)$/);
+  if (!["/catalogue/search", "/home", "/manifest"].includes(url.pathname) && !gameMatch) {
+    return json({ error: "not found" }, 404, { "cache-control": "private, no-store" });
+  }
+  const meta = await cachedValue(metaKey, 300, () => getCatalogueMeta(env.DB));
   if (url.pathname === "/catalogue/search") {
     const search = parseSearch(url);
     const snapshot = !search.facetsOnly && env.STEAMSPY_SNAPSHOT
@@ -184,7 +214,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       const facets = search.includeFacets || search.facetsOnly
         ? await getCatalogueFacets(env.DB, meta.updatedAt)
         : undefined;
-      return { body: await searchCatalogue(env.DB, search, meta.total, url.origin, facets, snapshot) };
+      return { body: await searchCatalogue(env.DB, search, meta.total, url.origin, facets, snapshot, cacheUpdatedAt) };
     }, false);
   }
   if (url.pathname === "/home") {
@@ -207,7 +237,6 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       },
     }));
   }
-  const gameMatch = url.pathname.match(/^\/games\/(\d+)$/);
   if (gameMatch) {
     // TTL de cinco minutos, o mesmo do sort "playingNow": o payload carrega uma
     // contagem de jogadores ao vivo, que numa janela de horas viraria número

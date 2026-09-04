@@ -132,7 +132,11 @@ fn clear_category(app: &AppHandle, id: &str) -> Result<u64, String> {
 
     let freed = directory_size(&path);
     clear_directory_contents(&path)?;
-    Ok(freed)
+    if id == "images" {
+        Ok(freed + crate::image_cache::clear_image_cache_metadata(app))
+    } else {
+        Ok(freed)
+    }
 }
 
 #[tauri::command]
@@ -427,6 +431,5 @@ mod tests {
         std::fs::remove_dir_all(&root).ok();
     }
 }
-
 
 

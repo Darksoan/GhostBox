@@ -1,4 +1,4 @@
-import { FolderOpen, LoaderCircle, Pause, Play, Trash2 } from "lucide-react";
+import { FolderOpen, LoaderCircle, Pause, Play, Trash } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useOverlay } from "../../context/OverlayContext";
@@ -13,7 +13,7 @@ import {
 } from "../../lib/downloadManager";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { formatBytes } from "../../utils/formatBytes";
-import { isPortraitLibraryImageSource, layeredImageStyle } from "../../utils/image";
+import { isHeaderImageSource, isPortraitLibraryImageSource, layeredImageStyle } from "../../utils/image";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 
 const emptyImageSources: string[] = [];
@@ -155,13 +155,22 @@ export function DownloadDetailsModal({
     ];
     return [...capsuleHeaderSources, ...filteredTaskSources];
   }, [task?.appId, task?.coverUrl, task?.headerSources]);
+  const previewHeaderSources = useMemo(
+    () => [
+      ...modalHeaderSources.filter(isHeaderImageSource),
+      ...modalHeaderSources,
+    ],
+    [modalHeaderSources],
+  );
   const coverSources = useCachedImageSources(modalHeaderSources);
-  const { source: headerSource, loaded: headerLoaded } = useLoadableImageCover(
+  const previewSources = useCachedImageSources(previewHeaderSources);
+  const previewCover = useLoadableImageCover(previewSources);
+  const preferredCover = useLoadableImageCover(
     coverSources,
-    // Sem o `preferOrder`, o `header.jpg` que o card da lista já decodificou
-    // vencia o `header_2x` no topo da lista e o hero ficava com a arte de 460px.
     { preferOrder: true },
   );
+  const { source: headerSource, loaded: headerLoaded } =
+    preferredCover.loaded ? preferredCover : previewCover;
 
   useEffect(() => {
     setConfirmOpen(Boolean(task && confirmDeleteOnOpen));
@@ -318,15 +327,16 @@ export function DownloadDetailsModal({
               ela não teria contraste garantido. */}
           <section className="download-details-modal__summary" aria-label={t("downloads.details.progress")}>
             <div className="download-details-modal__summary-head">
-              <span className={`download-details-modal__state download-details-modal__state--${taskStateTone(task.status)}`}>
-                <i aria-hidden="true" />
-                {t(taskStatusKey(task.status))}
-              </span>
+              <div className="download-details-modal__summary-title">
+                <h3 id="download-details-title">{resolvedTitle}</h3>
+                <span className={`download-details-modal__state download-details-modal__state--${taskStateTone(task.status)}`}>
+                  {t(taskStatusKey(task.status))}
+                </span>
+              </div>
               {isActive && (
                 <strong className="download-details-modal__summary-percent">{taskProgressPercent(task)}%</strong>
               )}
             </div>
-            <h3 id="download-details-title">{resolvedTitle}</h3>
             {isActive && (
               <>
                 <div
@@ -349,21 +359,25 @@ export function DownloadDetailsModal({
           </section>
 
           <dl className="download-details-modal__facts">
-            <div>
-              <dt>{t("downloads.details.allocated")}</dt>
-              <dd>{formatBytes(taskAllocatedBytes(task))}</dd>
-            </div>
+            {isCompleted && (
+              <>
+                <div>
+                  <dt>{t("downloads.details.allocated")}</dt>
+                  <dd>{formatBytes(taskAllocatedBytes(task))}</dd>
+                </div>
             {/* Data e hora eram dois blocos para o mesmo instante — três colunas
                 existiam porque havia três vagas, não porque havia três fatos. */}
-            <div>
-              <dt>{t("downloads.details.downloadedAt")}</dt>
-              <dd>
-                {new Intl.DateTimeFormat(locale, {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                }).format(timestamp)}
-              </dd>
-            </div>
+                <div>
+                  <dt>{t("downloads.details.downloadedAt")}</dt>
+                  <dd>
+                    {new Intl.DateTimeFormat(locale, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(timestamp)}
+                  </dd>
+                </div>
+              </>
+            )}
             {/* A vaga liberada carrega o que a tela não dizia: depois de concluir,
                 se a Steam já enxerga o jogo. Enquanto baixa, o que falta mora no
                 HUD do hero, ao lado da barra — é pergunta de progresso, não ficha. */}
@@ -404,33 +418,6 @@ export function DownloadDetailsModal({
             </div>
           )}
 
-          {(canPause || canResume) && (
-            <div className="download-details-modal__inline-actions">
-              {canPause && (
-                <button
-                  type="button"
-                  className="button button--outline"
-                  onClick={handlePause}
-                  aria-label={t("downloads.pause")}
-                >
-                  <Pause size={16} strokeWidth={2} />
-                  {t("downloads.pause")}
-                </button>
-              )}
-              {canResume && (
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={handleResume}
-                  aria-label={t("downloads.resume")}
-                >
-                  <Play size={16} strokeWidth={2} />
-                  {t("downloads.resume")}
-                </button>
-              )}
-            </div>
-          )}
-
           {error && <p className="download-details-modal__error" role="alert">{error}</p>}
         </div>
 
@@ -441,9 +428,24 @@ export function DownloadDetailsModal({
             onClick={() => setConfirmOpen(true)}
             disabled={deleting || confirmOpen}
           >
-            <Trash2 size={15} aria-hidden="true" />
-            {actionLabel}
+            <Trash size={18} strokeWidth={2} aria-hidden="true" />
+            <span>{actionLabel}</span>
           </button>
+          {(canPause || canResume) && (
+            <button
+              type="button"
+              className="button button--outline download-details-modal__toggle"
+              onClick={canPause ? handlePause : handleResume}
+              aria-label={t(canPause ? "downloads.pause" : "downloads.resume")}
+            >
+              <Pause size={18} strokeWidth={2} data-active={canPause} aria-hidden="true" />
+              <Play size={18} strokeWidth={2} data-active={canResume} aria-hidden="true" />
+              <span>
+                <span aria-hidden={!canPause}>{t("downloads.pause")}</span>
+                <span aria-hidden={!canResume}>{t("downloads.resume")}</span>
+              </span>
+            </button>
+          )}
           {isCompleted && (
             <>
               <button
@@ -452,8 +454,8 @@ export function DownloadDetailsModal({
                 onClick={handleOpenFolder}
                 aria-label={t("downloads.openFolder")}
               >
-                <FolderOpen size={16} strokeWidth={2} />
-                {t("downloads.openFolder")}
+                <FolderOpen size={18} strokeWidth={2} aria-hidden="true" />
+                <span>{t("downloads.openFolder")}</span>
               </button>
               <button
                 type="button"
@@ -465,15 +467,15 @@ export function DownloadDetailsModal({
               >
                 {launching ? (
                   <LoaderCircle
-                    size={16}
+                    size={18}
                     strokeWidth={2}
                     className="download-details-modal__launch-spinner"
                     aria-hidden="true"
                   />
                 ) : (
-                  <Play size={16} strokeWidth={2} />
+                  <Play size={18} strokeWidth={2} aria-hidden="true" />
                 )}
-                {t("downloads.launch")}
+                <span>{t("downloads.launch")}</span>
               </button>
             </>
           )}

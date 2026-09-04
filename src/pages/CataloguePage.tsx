@@ -804,6 +804,7 @@ export function CataloguePage({
     const cancelVisiblePreload = preloadGameListAssets(visibleGames, {
       variant: "catalogueHeader",
       limit: 6,
+      idle: false,
     });
     const cancelNextPagePreload = preloadGameListAssets(nextPageGames, {
       variant: "catalogueHeader",
@@ -1012,7 +1013,11 @@ export function CataloguePage({
             </div>
       </div>
 
-      <div className="catalogue-page__content">
+      <div
+        className={`catalogue-page__content${
+          viewMode === "grid" ? " catalogue-page__content--grid" : ""
+        }`}
+      >
         <div
           className={`catalogue-page__results${
             refreshing ? " catalogue-page__results--refreshing" : ""
@@ -1091,18 +1096,20 @@ export function CataloguePage({
         {/* Coluna do preview: ocupa a faixa onde antes ficavam os filtros. Fica
             montada mesmo sem hover para a listagem não mudar de largura toda vez
             que o cursor entra e sai de um card. */}
-        <aside
-          className="catalogue-preview-column"
-          aria-label={t("catalogue.preview.columnLabel")}
-        >
-          <CatalogueHoverPreview
-            game={previewGame}
-            paused={isCatalogueScrolling}
-            onOpenGame={onOpenGame}
-            onPointerEnter={handlePreviewPointerEnter}
-            onPointerLeave={handlePreviewPointerLeave}
-          />
-        </aside>
+        {viewMode === "list" && (
+          <aside
+            className="catalogue-preview-column"
+            aria-label={t("catalogue.preview.columnLabel")}
+          >
+            <CatalogueHoverPreview
+              game={previewGame}
+              paused={isCatalogueScrolling}
+              onOpenGame={onOpenGame}
+              onPointerEnter={handlePreviewPointerEnter}
+              onPointerLeave={handlePreviewPointerLeave}
+            />
+          </aside>
+        )}
       </div>
 
       {contextMenu && contextMenuItems.length > 0 && (

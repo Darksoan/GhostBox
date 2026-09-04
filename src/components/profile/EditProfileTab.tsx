@@ -2,8 +2,8 @@ import {
   Camera,
   Crop,
   ImageUp,
-  Trash2,
-  Check,
+  createLucideIcon,
+  Trash,
 } from "lucide-react";
 import {
   useCallback,
@@ -26,6 +26,14 @@ import {
   encodeAvatarDataUrl,
   encodeBannerDataUrl,
 } from "../../utils/profileImages";
+
+// Lucide SaveCheck (ISC), ainda indisponível na versão instalada.
+const SaveCheck = createLucideIcon("SaveCheck", [
+  ["path", { d: "M12.5 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4v4.35", key: "outline" }],
+  ["path", { d: "m16 19 2 2 4-4", key: "check" }],
+  ["path", { d: "M17 15.13V14a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7", key: "label" }],
+  ["path", { d: "M7 3v4a1 1 0 0 0 1 1h7", key: "slot" }],
+]);
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 type AvatarCropPosition = { x: number; y: number; scale: number };
@@ -82,8 +90,6 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
     normalizeBannerPosition(profile?.bannerPosition)
   );
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const saveSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const avatarDragRef = useRef<{
     pointerId: number;
@@ -148,9 +154,6 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
   useEffect(() => {
     return () => {
       avatarEncodingRef.current?.abort();
-      if (saveSuccessTimeoutRef.current) {
-        clearTimeout(saveSuccessTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -342,17 +345,11 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
     setIsSaving(true);
     try {
       await onUpdateProfile(trimmedName, avatarUrl, bannerUrl, bannerPosition);
-      setSaveSuccess(true);
-      if (saveSuccessTimeoutRef.current) {
-        clearTimeout(saveSuccessTimeoutRef.current);
-      }
-      saveSuccessTimeoutRef.current = setTimeout(() => {
-        setSaveSuccess(false);
-      }, 2400);
+      showToast(t("profile.editProfile"), t("profile.changesSaved"), "success");
     } finally {
       setIsSaving(false);
     }
-  }, [avatarUrl, bannerPosition, bannerUrl, displayName, isSaving, onUpdateProfile]);
+  }, [avatarUrl, bannerPosition, bannerUrl, displayName, isSaving, onUpdateProfile, showToast, t]);
 
   const bannerPreviewStyle = bannerPreviewSource && !isBannerPlaceholder
     ? {
@@ -446,7 +443,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                     decoding="async"
                   />
                   <span className="profile-page__edit-avatar-badge" aria-hidden="true">
-                    <Camera size={16} />
+                    <Camera size={18} />
                   </span>
                 </button>
                 <div className="profile-page__edit-field">
@@ -458,7 +455,8 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                       className="button"
                       onClick={handleAvatarChange}
                     >
-                      {t("profile.changeAvatar")}
+                      <ImageUp size={18} aria-hidden="true" />
+                      <span>{t("profile.changeAvatar")}</span>
                     </button>
                     {avatarUrl ? (
                       <button
@@ -468,7 +466,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                         title={t("profile.cropAvatar")}
                         aria-label={t("profile.cropAvatar")}
                       >
-                        <Crop size={16} aria-hidden="true" />
+                        <Crop size={18} aria-hidden="true" />
                         <span>{t("profile.cropAvatar")}</span>
                       </button>
                     ) : null}
@@ -498,7 +496,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
               </div>
 
               <div
-                className="profile-page__edit-banner-preview"
+                className={`profile-page__edit-banner-preview${isBannerPlaceholder ? " profile-page__edit-banner-preview--placeholder" : ""}`}
                 onPointerDown={handleBannerPointerDown}
                 onPointerMove={handleBannerPointerMove}
                 onPointerUp={handleBannerPointerEnd}
@@ -536,7 +534,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                     className="button"
                     onClick={handleBannerChange}
                   >
-                    <ImageUp size={16} aria-hidden="true" />
+                    <ImageUp size={18} aria-hidden="true" />
                     <span>{t("profile.changeBanner")}</span>
                   </button>
                   <button
@@ -545,28 +543,20 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                     onClick={handleBannerRemove}
                     disabled={isBannerPlaceholder}
                   >
-                    <Trash2 size={16} aria-hidden="true" />
+                    <Trash size={18} aria-hidden="true" />
                     <span>{t("profile.removeBanner")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--primary profile-page__edit-save-btn"
+                    disabled={!displayName.trim() || isSaving}
+                    onClick={handleSave}
+                  >
+                    <SaveCheck size={18} aria-hidden="true" />
+                    <span>{isSaving ? t("profile.saving") : t("profile.saveChanges")}</span>
                   </button>
                 </div>
               </div>
-            </div>
-
-            <div className="profile-page__edit-footer">
-              {saveSuccess && (
-                <span className="profile-page__edit-success-tag" role="status">
-                  <Check size={14} strokeWidth={2.5} aria-hidden="true" />
-                  <span>{t("profile.changesSaved")}</span>
-                </span>
-              )}
-              <button
-                type="button"
-                className="button button--primary profile-page__edit-save-btn"
-                disabled={!displayName.trim() || isSaving}
-                onClick={handleSave}
-              >
-                {isSaving ? t("profile.saving") : t("profile.saveChanges")}
-              </button>
             </div>
           </div>
         </section>

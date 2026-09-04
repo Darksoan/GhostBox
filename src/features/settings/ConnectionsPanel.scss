@@ -198,16 +198,17 @@
 .connection-card__button--danger {
   color: var(--text-primary);
   border-color: transparent;
-  background: var(--surface-modal-control);
+  background: var(--surface-option);
 
-  &:hover:not(:disabled) {
-    color: var(--danger);
-    background: var(--danger-soft);
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--danger);
   }
 }
 
 .connection-card__button--confirming {
-  background: var(--danger-soft);
+  background: var(--danger);
 }
 
 .connection-card__steam-options {

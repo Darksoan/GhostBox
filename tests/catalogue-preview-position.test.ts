@@ -60,6 +60,16 @@ describe("catalogue preview column", () => {
     expect(asideBlock).toContain("CatalogueHoverPreview");
   });
 
+  it("hides the preview and expands results in grid mode", () => {
+    const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
+
+    expect(page).toContain('viewMode === "grid" ? " catalogue-page__content--grid"');
+    expect(page).toContain('viewMode === "list" && (');
+    expect(ruleFor(".catalogue-page__content--grid")?.toString()).toContain(
+      "grid-template-columns: minmax(0, 1fr)"
+    );
+  });
+
   it("still reports the hovered card so the list contract is unchanged", () => {
     const list = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
 

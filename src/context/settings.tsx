@@ -22,6 +22,7 @@ export interface AppearanceSettings {
   trailerQuality: "high" | "low";
   trailerAutoplay: boolean;
   imagePreloadConcurrency: 2 | 4 | 6;
+  coverQuality: 50 | 80 | 100;
   disablePageKeepAlive: boolean;
 }
 
@@ -56,6 +57,7 @@ const defaultAppearance: AppearanceSettings = {
   trailerQuality: "high",
   trailerAutoplay: true,
   imagePreloadConcurrency: 4,
+  coverQuality: 100,
   disablePageKeepAlive: false,
 };
 
@@ -97,6 +99,9 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
     trailerQuality: appearance.trailerQuality === "low" ? "low" : "high",
     trailerAutoplay,
     imagePreloadConcurrency,
+    coverQuality: appearance.coverQuality === 50 || appearance.coverQuality === 80
+      ? appearance.coverQuality
+      : 100,
     disablePageKeepAlive: appearance.disablePageKeepAlive === true,
   };
 }

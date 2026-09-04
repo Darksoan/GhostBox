@@ -12,7 +12,10 @@ import { useSettings } from "../../context/settings";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { withoutHeaderImageSources } from "../../utils/image";
 import { withCachedImageSources } from "../../utils/imageCache";
-import { loadedImageSources } from "../../utils/imageCache";
+import {
+  loadedImageSources,
+  markImageSourceLoaded,
+} from "../../utils/imageCache";
 import { getSteamReviewScore } from "../../utils/gameMetrics";
 import {
   CATALOGUE_PREVIEW_EXIT_TRANSITION_MS,
@@ -61,7 +64,7 @@ export function CatalogueHoverPreview({
   const screenshotSources = useMemo(
     () =>
       displayedGame
-        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 1)
+        ? withoutHeaderImageSources(displayedGame.screenshots ?? []).slice(0, 3)
         : [],
     [displayedGame?.screenshots]
   );
@@ -90,7 +93,7 @@ export function CatalogueHoverPreview({
   const pendingScreenshotSources = useMemo(
     () =>
       pendingGame
-        ? withoutHeaderImageSources(pendingGame.screenshots ?? []).slice(0, 1)
+        ? withoutHeaderImageSources(pendingGame.screenshots ?? []).slice(0, 3)
         : [],
     [pendingGame]
   );
@@ -247,7 +250,7 @@ export function CatalogueHoverPreview({
     )
       return;
     if (readyScreenshotSourcesRef.current.has(source)) return;
-    loadedImageSources.add(source);
+    markImageSourceLoaded(source);
     readyScreenshotSourcesRef.current.add(source);
     setReadyScreenshotCount(readyScreenshotSourcesRef.current.size);
   };
@@ -282,7 +285,7 @@ export function CatalogueHoverPreview({
     )
       return;
     if (pendingReadySourcesRef.current.has(source)) return;
-    loadedImageSources.add(source);
+    markImageSourceLoaded(source);
     pendingReadySourcesRef.current.add(source);
     setPendingReadyCount(pendingReadySourcesRef.current.size);
   };

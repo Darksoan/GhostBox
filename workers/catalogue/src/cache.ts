@@ -3,7 +3,43 @@ import type { SearchRequest } from "./types";
 
 export const CACHE_VERSION = "catalogue-v6-steamspy-samples";
 
-export type CacheRoute = "facets" | "search" | "game" | "home";
+export type CacheRoute = "facets" | "search" | "game" | "home" | "meta" | "count";
+
+const pendingValues = new Map<string, Promise<unknown>>();
+
+export async function cachedValue<T>(key: string, ttl: number, load: () => Promise<T>): Promise<T> {
+  if (typeof caches === "undefined") return load();
+  const cache = (caches as CacheStorage & { default: Cache }).default;
+  if (!cache) return load();
+  const hit = await cache.match(key).catch(() => undefined);
+  if (hit) {
+    try { return await hit.json<T>(); } catch { /* Reload malformed cache entries. */ }
+  }
+  const pending = pendingValues.get(key);
+  if (pending) return pending as Promise<T>;
+  const promise = (async () => {
+    const value = await load();
+    await cache.put(key, new Response(JSON.stringify(value), {
+      headers: { "content-type": "application/json", "cache-control": `public, max-age=${ttl}` },
+    })).catch(() => undefined);
+    return value;
+  })();
+  pendingValues.set(key, promise);
+  try { return await promise; } finally { pendingValues.delete(key); }
+}
+
+export function countCacheKey(request: SearchRequest, updatedAt: string, origin: string): string {
+  const normalized = {
+    ...request,
+    limit: 0,
+    offset: 0,
+    seed: 0,
+    includeFacets: false,
+    facetsOnly: false,
+    sort: request.sort === "playingNow" ? "playingNow" as const : "popular" as const,
+  };
+  return cacheKey("count", canonicalSearchKey(normalized, updatedAt, origin), updatedAt);
+}
 
 export function searchTtl(request: SearchRequest): number {
   if (request.facetsOnly) return 24 * 60 * 60;
@@ -46,4 +82,14 @@ export function cacheControl(ttl: number): string {
 
 export function cloudflareCacheControl(ttl: number): string {
   return `public, max-age=${ttl}, stale-while-revalidate=86400`;
+}
+
+export function imageCacheControl(options: { immutable?: boolean } = {}): string {
+  if (options.immutable) return "public, max-age=31536000, immutable";
+  return "public, max-age=86400, stale-while-revalidate=604800";
+}
+
+export function imageNegativeCacheControl(status: number): string {
+  const ttl = status === 404 ? 1800 : 30;
+  return `public, max-age=${ttl}, stale-while-revalidate=${ttl}`;
 }

@@ -1604,6 +1604,8 @@ pub fn run() {
             catalogue::app_is_steamtools_installed,
             catalogue::app_install_steamtools,
             catalogue::cache_get_image,
+            catalogue::cache_get_images,
+            catalogue::cache_touch_images,
             catalogue::cache_resolve_steam_library_asset,
             catalogue::cache_resolve_steam_library_assets_batch,
             steam_assets::steam_get_asset_manifests,

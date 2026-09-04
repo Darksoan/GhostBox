@@ -1,6 +1,7 @@
 import {
-  loadCachedImage,
+  loadCachedImages,
   resolveSteamLibraryAssetsBatch,
+  touchCachedImages,
 } from "../data";
 import {
   imageSourceCacheKey,
@@ -30,6 +31,74 @@ type SteamAssetBatchRequest = {
 };
 let steamAssetBatchQueue: SteamAssetBatchRequest[] = [];
 let steamAssetBatchScheduled = false;
+
+type ImageBatchRequest = {
+  source: string;
+  resolve: (source: string) => void;
+};
+let imageBatchQueue: ImageBatchRequest[] = [];
+let imageBatchScheduled = false;
+let imageCacheGeneration = 0;
+const imageTouchQueue = new Set<string>();
+let imageTouchScheduled = false;
+
+function flushImageTouchQueue() {
+  imageTouchScheduled = false;
+  if (!imageTouchQueue.size) return;
+  const sources = [...imageTouchQueue];
+  imageTouchQueue.clear();
+  void touchCachedImages(sources).catch(() => undefined);
+}
+
+export function touchCachedImageSource(source: string) {
+  if (!source || !/^https?:\/\//i.test(source)) return;
+  imageTouchQueue.add(source);
+  if (imageTouchScheduled) return;
+  imageTouchScheduled = true;
+  queueMicrotask(flushImageTouchQueue);
+}
+
+function flushImageBatchQueue() {
+  const queue = imageBatchQueue;
+  imageBatchQueue = [];
+  imageBatchScheduled = false;
+  if (!queue.length) return;
+  const generation = imageCacheGeneration;
+
+  const sources = uniqueSources(queue.map(({ source }) => source));
+  loadCachedImages(sources)
+    .then((results) => {
+      if (generation !== imageCacheGeneration) {
+        queue.forEach((request) => request.resolve(request.source));
+        return;
+      }
+      let changed = false;
+      for (const source of sources) {
+        const nextSource = results[source] || source;
+        if (nextSource !== source) {
+          imageSourceCache.set(source, nextSource);
+          changed = true;
+        }
+        queue
+          .filter((request) => request.source === source)
+          .forEach((request) => request.resolve(nextSource));
+      }
+      if (changed) scheduleStoredImageSourceCacheWrite();
+    })
+    .catch(() => {
+      queue.forEach((request) => request.resolve(request.source));
+    });
+}
+
+function resolveCachedImageBatched(source: string) {
+  return new Promise<string>((resolve) => {
+    imageBatchQueue.push({ source, resolve });
+    if (!imageBatchScheduled) {
+      imageBatchScheduled = true;
+      queueMicrotask(flushImageBatchQueue);
+    }
+  });
+}
 
 function flushSteamAssetBatchQueue() {
   const queue = steamAssetBatchQueue;
@@ -66,6 +135,18 @@ function resolveSteamLibraryAssetBatched(appId: string, fileName: string) {
 // removed on failure), this only holds sources we know decoded successfully,
 // so consumers can paint them synchronously without a flicker.
 export const loadedImageSources = new Set<string>();
+const loadedImageSourcesLimit = 4096;
+
+export function markImageSourceLoaded(source: string) {
+  if (!source) return;
+  loadedImageSources.delete(source);
+  loadedImageSources.add(source);
+  while (loadedImageSources.size > loadedImageSourcesLimit) {
+    const oldest = loadedImageSources.values().next().value as string | undefined;
+    if (!oldest) break;
+    loadedImageSources.delete(oldest);
+  }
+}
 
 type ImagePreloadOptions = {
   decode?: boolean;
@@ -307,6 +388,28 @@ function parseSteamAssetSource(source: string) {
   }
 }
 
+function imageSourceIdentity(source: string) {
+  const parsed = parseSteamAssetSource(source);
+  if (!parsed) return source;
+  const asset = normalizeSteamLibraryAssetName(parsed.asset.toLowerCase());
+  return `steam:${parsed.appId}:${asset}`;
+}
+
+function cachedImageSourceFor(source: string) {
+  const direct = imageSourceCache.get(source);
+  if (direct) return direct;
+  const identity = imageSourceIdentity(source);
+  if (identity === source) return "";
+  for (const [candidate, cachedSource] of imageSourceCache) {
+    if (imageSourceIdentity(candidate) === identity) return cachedSource;
+  }
+  return "";
+}
+
+export function getCachedImageSource(source: string) {
+  return cachedImageSourceFor(source);
+}
+
 export function steamAppIdFromImageSource(source: string) {
   return parseSteamAssetSource(source)?.appId ?? "";
 }
@@ -467,7 +570,10 @@ export function steamAppIdsFromSources(sources: string[]) {
 
 export function withCachedImageSources(
   sources: string[],
-  { requestManifests = true }: { requestManifests?: boolean } = {}
+  {
+    requestManifests = true,
+    preserveSourceOrder = false,
+  }: { requestManifests?: boolean; preserveSourceOrder?: boolean } = {}
 ) {
   // Only inject the resolved library capsule for portrait requests. Prepending
   // it for header/landscape lists (home calendar, catalogue rows, etc.) causes
@@ -496,15 +602,29 @@ export function withCachedImageSources(
   return uniqueSources(
     [
       ...(resolvedCoverSource ? [resolvedCoverSource] : []),
-      ...(resolvedHeaderSource ? [resolvedHeaderSource] : []),
+      ...(!preserveSourceOrder && resolvedHeaderSource ? [resolvedHeaderSource] : []),
       ...orderedSources.flatMap((source) => {
         const manifestSource = steamAssetManifestSourceFor(source);
-        const cachedSource = imageSourceCache.get(source);
+        const cachedSource = cachedImageSourceFor(source);
         const cdnFallback = steamCdnFallbackForSource(source);
         const shouldPrependCachedSource =
           cachedSource &&
           cachedSource !== source &&
           !isHigherDensityFallbackForStandardSteamAsset(source, cachedSource);
+        if (preserveSourceOrder) {
+          return uniqueSources([
+            ...(shouldPrependCachedSource ? [cachedSource] : []),
+            source,
+            ...(manifestSource ? [manifestSource] : []),
+            ...(preserveSourceOrder && resolvedHeaderSource && parseSteamAssetSource(source)?.asset.toLowerCase() === "header.jpg"
+              ? [resolvedHeaderSource]
+              : []),
+            ...(cdnFallback && cdnFallback !== source ? [cdnFallback] : []),
+            ...(!shouldPrependCachedSource && cachedSource && cachedSource !== source
+              ? [cachedSource]
+              : []),
+          ]);
+        }
         return uniqueSources([
           ...(manifestSource ? [manifestSource] : []),
           source,
@@ -537,15 +657,16 @@ export async function resolveCachedImageSource(
     return source;
   }
 
-  const cachedSource = imageSourceCache.get(source);
+  const cachedSource = cachedImageSourceFor(source);
   if (cachedSource) {
+    touchCachedImageSource(source);
     return cachedSource;
   }
 
   const pending = imageResolvePromises.get(source);
   if (pending) return pending;
 
-  const promise = loadCachedImage(source)
+  const promise = resolveCachedImageBatched(source)
     .then((nextSource) => {
       if (nextSource) {
         imageSourceCache.set(source, nextSource);
@@ -587,6 +708,42 @@ export function forgetCachedImageSource(source: string) {
   if (changed) scheduleStoredImageSourceCacheWrite();
 }
 
+/**
+ * Invalida o estado efemero quando o usuário limpa o cache de imagens. Sem
+ * isso o frontend continuava apontando para `asset://` removido até a próxima
+ * falha de carregamento.
+ */
+export function clearImageCacheState() {
+  imageCacheGeneration += 1;
+  imageSourceCache.clear();
+  imageResolvePromises.clear();
+  steamLibraryCoverSourceCache.clear();
+  steamLibraryCoverResolvePromises.clear();
+  steamHeaderSourceCache.clear();
+  steamHeaderResolvePromises.clear();
+  screenshotPreloadCache.clear();
+  loadedImageSources.clear();
+  imagePreloadPromises.clear();
+  imagePreloadFailures.clear();
+  imagePreloadQueue.length = 0;
+  imageBatchQueue = [];
+  imageBatchScheduled = false;
+  imageTouchQueue.clear();
+  imageTouchScheduled = false;
+
+  if (cancelPendingCacheWrite) {
+    cancelPendingCacheWrite();
+    cancelPendingCacheWrite = null;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(imageSourceCacheKey);
+    } catch {
+      // O cache em disco já foi limpo pelo Rust.
+    }
+  }
+}
+
 export function preloadBrowserImage(
   source: string,
   options: ImagePreloadOptions = {}
@@ -621,7 +778,7 @@ export function preloadBrowserImage(
           }
 
           imagePreloadFailures.delete(source);
-          loadedImageSources.add(source);
+          markImageSourceLoaded(source);
           resolve();
         };
         image.onerror = () => {

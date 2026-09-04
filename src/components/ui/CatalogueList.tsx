@@ -13,7 +13,6 @@ import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCac
 import {
   layeredImageStyle,
   gameCatalogueHeaderSources,
-  gameHeaderOnlySources,
 } from "../../utils/image";
 import { getSteamReviewScore } from "../../utils/gameMetrics";
 import { CatalogueListLoadingState } from "./LoadingStates";
@@ -70,11 +69,17 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   const isWindowMaximized = useWindowMaximized();
   const itemRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
-  const rawHeaderSources = useMemo(() => gameCatalogueHeaderSources(game), [game]);
-  const headerSources = useCachedImageSources(shouldLoadCover ? rawHeaderSources : []);
+  const rawHeaderSources = useMemo(
+    () => gameCatalogueHeaderSources(game),
+    [game],
+  );
+  const headerSources = useCachedImageSources(
+    shouldLoadCover ? rawHeaderSources : [],
+    { preserveSourceOrder: true },
+  );
   const { source: coverSource, loaded: coverLoaded } =
-    useLoadableImageCover(headerSources);
-  const previousCoverSourceRef = useRef(coverLoaded ? coverSource : "");
+    useLoadableImageCover(headerSources, { preferOrder: true });
+  const displayedCoverSource = coverLoaded ? coverSource : "";
   const isEnglish = appearance.language === "en";
   // Sem teto fixo de rótulos: a medição abaixo decide quantas pills cabem na
   // linha do card, em vez de cortar em 3 e depois derrubar para 2.
@@ -204,15 +209,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     };
   }, [genreLabelsKey, isWindowMaximized, maxGenreLabels.length]);
 
-  useEffect(() => {
-    if (coverLoaded && coverSource) {
-      previousCoverSourceRef.current = coverSource;
-    }
-  }, [coverLoaded, coverSource]);
-
-  const displayedCoverSource = coverLoaded
-    ? coverSource
-    : previousCoverSourceRef.current;
   const displayedCoverSources = displayedCoverSource ? [displayedCoverSource] : [];
 
   return (
@@ -340,22 +336,22 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   onHoverEnter,
   onGameContextMenu,
 }: CatalogueListItemProps) {
-  const isEnglish = useSettings().appearance.language === "en";
+  const { appearance } = useSettings();
+  const isEnglish = appearance.language === "en";
   const cardRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
-  const rawHeaderSources = useMemo(() => gameHeaderOnlySources(game), [game]);
-  const headerSources = useCachedImageSources(shouldLoadCover ? rawHeaderSources : []);
-  const { source: coverSource, loaded: coverLoaded } =
-    useLoadableImageCover(headerSources);
-  // Mesma composição em camadas do card da Home: capa já carregada primeiro,
-  // candidatos restantes como fallback do `layeredImageStyle`.
-  const displayedCoverSources = useMemo(
-    () =>
-      coverLoaded && coverSource
-        ? [coverSource, ...rawHeaderSources.filter((source) => source !== coverSource)]
-        : rawHeaderSources,
-    [coverLoaded, coverSource, rawHeaderSources]
+  const rawHeaderSources = useMemo(
+    () => gameCatalogueHeaderSources(game),
+    [game],
   );
+  const headerSources = useCachedImageSources(
+    shouldLoadCover ? rawHeaderSources : [],
+    { preserveSourceOrder: true },
+  );
+  const { source: coverSource, loaded: coverLoaded } =
+    useLoadableImageCover(headerSources, { preferOrder: true });
+  const displayedCoverSource = coverLoaded ? coverSource : "";
+  const displayedCoverSources = displayedCoverSource ? [displayedCoverSource] : [];
   // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra
   // de review, a razão volta 0 e viraria uma nota 0,0 falsa.
   const reviewScore = getSteamReviewScore(game);
@@ -426,7 +422,7 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
       />
       <span
         className={`home-top-rated-card__art${
-          coverLoaded ? " home-top-rated-card__art--loaded" : ""
+          displayedCoverSource ? " home-top-rated-card__art--loaded" : ""
         }`}
         style={layeredImageStyle(displayedCoverSources, "")}
         aria-hidden="true"

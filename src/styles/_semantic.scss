@@ -26,7 +26,7 @@
   // Superfícies de opção. Estados usam degraus nomeados da rampa, com seleção no
   // teto para manter feedback visível sem clarear paleta estrutural.
   --surface-option: var(--c-1);
-  --surface-option-hover: var(--c-2);
+  --surface-option-hover: var(--c-3);
   --surface-option-active: var(--c-4);
   // Estado de seleção forte (abas/segmented control ativas): opaco deliberadamente
   // acima do teto da rampa para dar contraste com a própria --surface-option-active
@@ -165,7 +165,7 @@
 
   // --- Status ---
   --red: #ff3c4c;
-  --danger: var(--red-500);
+  --danger: #781818;
   --danger-hover: var(--red-hover);
   // Anel do badge de nível Steam — vermelho próprio da Steam, não é estado de erro.
   --steam-level-ring: var(--red-600);

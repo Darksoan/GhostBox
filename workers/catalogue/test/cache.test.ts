@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cacheControl, canonicalSearchKey, cloudflareCacheControl, searchTtl } from "../src/cache";
+import { cacheControl, canonicalSearchKey, cloudflareCacheControl, imageCacheControl, imageNegativeCacheControl, searchTtl } from "../src/cache";
 import { GAME_COLUMNS, searchConditions, toGame } from "../src/catalogue";
 import { RANKING_ORDER } from "../src/ranking";
 import { normalizeSearchText, parseSearch } from "../src/index";
@@ -37,6 +37,10 @@ describe("cache TTL", () => {
     expect(cacheControl(86400)).toBe("public, max-age=300");
     expect(cloudflareCacheControl(86400)).toBe("public, max-age=86400, stale-while-revalidate=86400");
     expect(cacheControl(300)).not.toContain("s-maxage");
+    expect(imageCacheControl()).toBe("public, max-age=86400, stale-while-revalidate=604800");
+    expect(imageCacheControl({ immutable: true })).toBe("public, max-age=31536000, immutable");
+    expect(imageNegativeCacheControl(404)).toBe("public, max-age=1800, stale-while-revalidate=1800");
+    expect(imageNegativeCacheControl(502)).toBe("public, max-age=30, stale-while-revalidate=30");
   });
 });
 

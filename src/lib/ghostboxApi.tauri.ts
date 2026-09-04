@@ -716,6 +716,26 @@ export const ghostboxApi = {
     });
   },
 
+  getCachedImages(urls: string[]): Promise<Record<string, string>> {
+    if (!urls.length) return Promise.resolve({});
+    return invokeOr<Record<string, string>>("cache_get_images", { urls }, {}).then(
+      (results) =>
+        Object.fromEntries(
+          Object.entries(results).map(([url, result]) => [
+            url,
+            !result || result === url || /^https?:\/\//i.test(result)
+              ? result || url
+              : convertFileSrc(result),
+          ]),
+        ),
+    );
+  },
+
+  touchCachedImages(urls: string[]): Promise<void> {
+    if (!urls.length) return Promise.resolve();
+    return invokeOr<void>("cache_touch_images", { urls }, undefined);
+  },
+
   resolveSteamLibraryAsset(appId: string, fileName: string): Promise<string> {
     return invokeOr<string>(
       "cache_resolve_steam_library_asset",

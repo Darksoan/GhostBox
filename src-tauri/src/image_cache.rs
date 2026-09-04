@@ -1,8 +1,11 @@
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
+
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 
 const MAX_CACHED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const IMAGE_CACHE_MAX_AGE_MS: u128 = 30 * 24 * 60 * 60 * 1000;
@@ -15,11 +18,26 @@ static LIBRARY_ASSET_CACHE_WRITE_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock
 static LIBRARY_ASSET_CACHE_MEMO: OnceLock<
     std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>,
 > = OnceLock::new();
+static IMAGE_FETCH_LOCKS: OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+> = OnceLock::new();
 
 fn library_asset_cache_memo(
 ) -> &'static std::sync::Mutex<std::collections::HashMap<PathBuf, (SystemTime, serde_json::Value)>>
 {
     LIBRARY_ASSET_CACHE_MEMO.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+fn image_fetch_lock(url: &str) -> Arc<tokio::sync::Mutex<()>> {
+    let locks = IMAGE_FETCH_LOCKS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut guard = locks.lock().unwrap_or_else(|error| error.into_inner());
+    if guard.len() > 4096 {
+        guard.retain(|_, lock| Arc::strong_count(lock) > 1);
+    }
+    guard
+        .entry(cache_file_hash(url))
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
 }
 
 /// Um cliente com pool para todas as imagens. Antes cada capa construía um
@@ -104,6 +122,44 @@ fn hash_url(url: &str) -> String {
         .collect()
 }
 
+/// Hosts Steam diferentes e o proxy do catálogo podem apontar para o mesmo
+/// asset lógico. A identidade canônica evita uma cópia local por host.
+fn canonical_image_identity(url: &str) -> String {
+    if let Some((app_id, file_name)) = steam_asset_fallback_request(url) {
+        return format!("steam://{app_id}/{}", normalize_library_asset_name(&file_name));
+    }
+
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return url.to_string();
+    };
+    let parts = parsed
+        .path_segments()
+        .map(|segments| segments.collect::<Vec<_>>())
+        .unwrap_or_default();
+    let apps_index = parts
+        .windows(3)
+        .position(|window| window[0] == "images" && window[1] == "steam" && window[2] == "apps");
+    let Some(index) = apps_index else {
+        return url.to_string();
+    };
+    let Some(app_id) = parts.get(index + 3) else {
+        return url.to_string();
+    };
+    let Some(file_name) = parts.get(index + 4) else {
+        return url.to_string();
+    };
+    if !app_id.chars().all(|character| character.is_ascii_digit())
+        || !is_safe_library_asset_file_name(file_name)
+    {
+        return url.to_string();
+    }
+    format!("steam://{app_id}/{}", normalize_library_asset_name(file_name))
+}
+
+fn cache_file_hash(url: &str) -> String {
+    hash_url(&canonical_image_identity(url))
+}
+
 fn image_extension(url: &str, content_type: &str) -> &'static str {
     let content_type = content_type.to_ascii_lowercase();
     if content_type.contains("png") {
@@ -133,11 +189,13 @@ fn image_extension(url: &str, content_type: &str) -> &'static str {
 }
 
 fn existing_cached_file(directory: &Path, url: &str) -> Option<PathBuf> {
-    let hash = hash_url(url);
-    for extension in [".jpg", ".png", ".webp", ".img"] {
-        let candidate = directory.join(format!("{hash}{extension}"));
-        if candidate.is_file() {
-            return Some(candidate);
+    let hashes = [hash_url(url), cache_file_hash(url)];
+    for hash in hashes {
+        for extension in [".jpg", ".png", ".webp", ".img"] {
+            let candidate = directory.join(format!("{hash}{extension}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None
@@ -151,6 +209,40 @@ fn touch_cached_file(path: &Path) {
         return;
     };
     let _ = file.set_modified(SystemTime::now());
+}
+
+/// Substitui um arquivo temporario pelo destino. O `rename` da API padrao nao
+/// substitui um destino existente no Windows; remover o destino antes mantém
+/// o fluxo funcional em todas as plataformas. O temporario só é criado depois
+/// de a resposta estar completa, então um crash nunca deixa um hit parcial.
+fn replace_cached_file(temp_path: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        let source = temp_path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let target = destination
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let result = unsafe {
+            windows_sys::Win32::Storage::FileSystem::MoveFileExW(
+                source.as_ptr(),
+                target.as_ptr(),
+                windows_sys::Win32::Storage::FileSystem::MOVEFILE_REPLACE_EXISTING,
+            )
+        };
+        if result == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    std::fs::rename(temp_path, destination)
 }
 
 fn steam_asset_fallback_request(url: &str) -> Option<(String, String)> {
@@ -410,13 +502,54 @@ fn write_library_asset_cache_url(app: &AppHandle, app_id: &str, file_name: &str,
     if let Ok(contents) = serde_json::to_string(&cache) {
         let temp_path = path.with_extension("json.tmp");
         if std::fs::write(&temp_path, contents).is_ok() {
-            if std::fs::rename(&temp_path, &path).is_err() {
+            if replace_cached_file(&temp_path, &path).is_err() {
                 let _ = std::fs::remove_file(&temp_path);
             }
         } else {
             let _ = std::fs::remove_file(&temp_path);
         }
     }
+}
+
+/// Remove os indices de resolução que ficam fora de `cache/images` por
+/// compatibilidade com versões antigas. O frontend também limpa seus mapas
+/// efêmeros após a operação.
+pub fn clear_image_cache_metadata(app: &AppHandle) -> u64 {
+    let mut freed = 0;
+    for path in library_asset_cache_paths(app) {
+        let Ok(metadata) = std::fs::metadata(&path) else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        if std::fs::remove_file(&path).is_ok() {
+            freed += metadata.len();
+        }
+    }
+    if let Ok(mut memo) = library_asset_cache_memo().lock() {
+        memo.clear();
+    }
+    freed
+}
+
+pub fn touch_cached_images(app: &AppHandle, urls: &[String]) -> u64 {
+    let Ok(directory) = image_cache_directory(app) else {
+        return 0;
+    };
+    let mut touched = 0;
+    let mut seen = std::collections::HashSet::new();
+    for url in urls {
+        let url = url.trim();
+        if url.is_empty() || !seen.insert(url.to_string()) {
+            continue;
+        }
+        if let Some(path) = existing_cached_file(&directory, url) {
+            touch_cached_file(&path);
+            touched += 1;
+        }
+    }
+    touched
 }
 
 fn sanitize_library_asset_reference(value: &str, app_id: &str) -> Option<String> {
@@ -594,12 +727,20 @@ async fn fetch_and_cache_image(
         return None;
     }
 
-    let hash = hash_url(source_url);
+    let hash = cache_file_hash(source_url);
     let file_path = directory.join(format!(
         "{hash}{}",
         image_extension(source_url, &content_type)
     ));
-    std::fs::write(&file_path, bytes).ok()?;
+    let temp_path = directory.join(format!(".{hash}.{}.tmp", uuid::Uuid::new_v4().simple()));
+    if std::fs::write(&temp_path, bytes).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+        return None;
+    }
+    if replace_cached_file(&temp_path, &file_path).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+        return None;
+    }
     Some(file_path)
 }
 
@@ -650,10 +791,11 @@ async fn resolve_library_asset_url(
 ) -> Option<String> {
     for candidate_file_name in library_asset_file_candidates(file_name) {
         if let Some(cached_url) = read_library_asset_cache_url(app, app_id, candidate_file_name) {
-            if let Some(available_url) = available_library_asset_url(client, &cached_url).await {
-                write_library_asset_cache_url(app, app_id, file_name, &available_url);
-                write_library_asset_cache_url(app, app_id, candidate_file_name, &available_url);
-                return Some(available_url);
+            // O índice já foi escrito a partir de uma URL Steam válida. Evita
+            // um HEAD/GET por capa a cada boot; a própria cadeia do frontend
+            // testa a imagem e segue para o próximo fallback se ela mudou.
+            if is_safe_remote_https_url(&cached_url) {
+                return Some(cached_url);
             }
         }
 
@@ -783,6 +925,12 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
         return String::new();
     }
 
+    // Diferentes componentes podem pedir a mesma imagem antes do primeiro
+    // download terminar. Um lock por URL transforma esses misses concorrentes
+    // em um único fetch; quem chega depois encontra o arquivo pronto.
+    let fetch_lock = image_fetch_lock(url);
+    let _fetch_guard = fetch_lock.lock().await;
+
     let directory = match image_cache_directory(app) {
         Ok(directory) => directory,
         Err(_) => return String::new(),
@@ -799,9 +947,8 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
 
     if let Some((app_id, file_name)) = steam_asset_request.as_ref() {
         if let Some(cached_url) = read_library_asset_cache_url(app, app_id, file_name) {
-            if let Some(available_url) = available_library_asset_url(&client, &cached_url).await {
-                write_library_asset_cache_url(app, app_id, file_name, &available_url);
-                return available_url;
+            if is_safe_remote_https_url(&cached_url) {
+                return cached_url;
             }
         }
     }
@@ -876,5 +1023,33 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"image-bytes", "conteúdo intocado");
 
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn replacing_an_existing_cache_file_keeps_only_the_complete_payload() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-replace-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let destination = root.join("image.jpg");
+        let temporary = root.join(".image.tmp");
+        std::fs::write(&destination, b"old").unwrap();
+        std::fs::write(&temporary, b"complete").unwrap();
+
+        replace_cached_file(&temporary, &destination).unwrap();
+
+        assert_eq!(std::fs::read(&destination).unwrap(), b"complete");
+        assert!(!temporary.exists());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn steam_hosts_and_catalogue_proxy_share_one_cache_identity() {
+        let direct = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/413150/library_capsule.jpg";
+        let proxy = "https://catalogue.example/images/steam/apps/413150/library_600x900.jpg";
+        assert_eq!(canonical_image_identity(direct), canonical_image_identity(proxy));
+        assert_eq!(cache_file_hash(direct), cache_file_hash(proxy));
     }
 }
