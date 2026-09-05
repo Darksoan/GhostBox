@@ -1,7 +1,7 @@
 import {
   loadCachedImages,
+  loadStoredImages,
   resolveSteamLibraryAssetsBatch,
-  touchCachedImages,
 } from "../data";
 import {
   imageSourceCacheKey,
@@ -14,6 +14,7 @@ import {
 } from "./steamAssetManifest";
 
 export const imageSourceCache = new Map<string, string>();
+const imageIdentitySourceCache = new Map<string, string>();
 const imageResolvePromises = new Map<string, Promise<string>>();
 const screenshotPreloadCache = new Set<string>();
 const steamLibraryCoverSourceCache = new Map<string, string>();
@@ -39,23 +40,17 @@ type ImageBatchRequest = {
 let imageBatchQueue: ImageBatchRequest[] = [];
 let imageBatchScheduled = false;
 let imageCacheGeneration = 0;
-const imageTouchQueue = new Set<string>();
-let imageTouchScheduled = false;
 
-function flushImageTouchQueue() {
-  imageTouchScheduled = false;
-  if (!imageTouchQueue.size) return;
-  const sources = [...imageTouchQueue];
-  imageTouchQueue.clear();
-  void touchCachedImages(sources).catch(() => undefined);
+function storeCachedImageSource(source: string, cachedSource: string) {
+  imageSourceCache.set(source, cachedSource);
+  imageIdentitySourceCache.set(imageSourceIdentity(source), cachedSource);
 }
 
-export function touchCachedImageSource(source: string) {
-  if (!source || !/^https?:\/\//i.test(source)) return;
-  imageTouchQueue.add(source);
-  if (imageTouchScheduled) return;
-  imageTouchScheduled = true;
-  queueMicrotask(flushImageTouchQueue);
+function rebuildImageIdentitySourceCache() {
+  imageIdentitySourceCache.clear();
+  for (const [source, cachedSource] of imageSourceCache) {
+    imageIdentitySourceCache.set(imageSourceIdentity(source), cachedSource);
+  }
 }
 
 function flushImageBatchQueue() {
@@ -65,25 +60,45 @@ function flushImageBatchQueue() {
   if (!queue.length) return;
   const generation = imageCacheGeneration;
 
-  const sources = uniqueSources(queue.map(({ source }) => source));
-  loadCachedImages(sources)
-    .then((results) => {
+  const requestsBySource = new Map<string, ImageBatchRequest[]>();
+  for (const request of queue) {
+    const requests = requestsBySource.get(request.source) ?? [];
+    requests.push(request);
+    requestsBySource.set(request.source, requests);
+  }
+  const sources = [...requestsBySource.keys()];
+  const resolveResults = (
+    results: Record<string, string>,
+    resolvedSources: string[],
+  ) => {
       if (generation !== imageCacheGeneration) {
         queue.forEach((request) => request.resolve(request.source));
-        return;
+        return false;
       }
       let changed = false;
-      for (const source of sources) {
+      for (const source of resolvedSources) {
         const nextSource = results[source] || source;
         if (nextSource !== source) {
-          imageSourceCache.set(source, nextSource);
+          storeCachedImageSource(source, nextSource);
           changed = true;
         }
-        queue
-          .filter((request) => request.source === source)
-          .forEach((request) => request.resolve(nextSource));
+        requestsBySource
+          .get(source)
+          ?.forEach((request) => request.resolve(nextSource));
       }
       if (changed) scheduleStoredImageSourceCacheWrite();
+      return true;
+  };
+
+  loadStoredImages(sources)
+    .then((storedResults) => {
+      const hits = sources.filter((source) => Boolean(storedResults[source]));
+      if (!resolveResults(storedResults, hits)) return;
+      const misses = sources.filter((source) => !storedResults[source]);
+      if (!misses.length) return;
+      return loadCachedImages(misses).then((results) => {
+        resolveResults(results, misses);
+      });
     })
     .catch(() => {
       queue.forEach((request) => request.resolve(request.source));
@@ -151,6 +166,7 @@ export function markImageSourceLoaded(source: string) {
 type ImagePreloadOptions = {
   decode?: boolean;
   forceRetry?: boolean;
+  immediate?: boolean;
 };
 
 type IdleWindow = Window & {
@@ -228,11 +244,12 @@ function readStoredImageSourceCache() {
 
     Object.entries(parsed).forEach(([source, cachedSource]) => {
       if (typeof source === "string" && typeof cachedSource === "string") {
-        imageSourceCache.set(source, cachedSource);
+        storeCachedImageSource(source, cachedSource);
       }
     });
   } catch {
     imageSourceCache.clear();
+    imageIdentitySourceCache.clear();
   }
 }
 
@@ -244,8 +261,9 @@ function writeStoredImageSourceCache() {
       -imageSourceCacheLimit
     );
     imageSourceCache.clear();
+    imageIdentitySourceCache.clear();
     entries.forEach(([source, cachedSource]) =>
-      imageSourceCache.set(source, cachedSource)
+      storeCachedImageSource(source, cachedSource)
     );
     window.localStorage.setItem(
       imageSourceCacheKey,
@@ -288,7 +306,7 @@ export function uniqueSources(sources: unknown[]) {
 
 export function cssImageUrl(source: string) {
   try {
-    return `url("${encodeURI(source).replace(/"/g, "%22")}")`;
+    return `url(${JSON.stringify(source)})`;
   } catch {
     return "";
   }
@@ -358,7 +376,11 @@ function parseSteamAssetSource(source: string) {
       return { appId, asset };
     }
 
-    if (!/steamstatic\.com$/i.test(url.hostname)) return null;
+    if (
+      !/steamstatic\.com$/i.test(url.hostname) &&
+      url.hostname.toLowerCase() !== "steamcdn-a.akamaihd.net"
+    )
+      return null;
 
     const parts = url.pathname.split("/").filter(Boolean);
     const appsIndex = parts.findIndex(
@@ -398,12 +420,7 @@ function imageSourceIdentity(source: string) {
 function cachedImageSourceFor(source: string) {
   const direct = imageSourceCache.get(source);
   if (direct) return direct;
-  const identity = imageSourceIdentity(source);
-  if (identity === source) return "";
-  for (const [candidate, cachedSource] of imageSourceCache) {
-    if (imageSourceIdentity(candidate) === identity) return cachedSource;
-  }
-  return "";
+  return imageIdentitySourceCache.get(imageSourceIdentity(source)) ?? "";
 }
 
 export function getCachedImageSource(source: string) {
@@ -513,6 +530,10 @@ export function isPredictableSteamAssetSource(source: string) {
   return parseSteamAssetSource(source) !== null;
 }
 
+export function isStandardSteamHeaderSource(source: string) {
+  return parseSteamAssetSource(source)?.asset.toLowerCase() === "header.jpg";
+}
+
 function canResolveSteamLibraryAssetFallback(source: string) {
   const parsed = parseSteamAssetSource(source);
   if (!parsed) return false;
@@ -573,7 +594,12 @@ export function withCachedImageSources(
   {
     requestManifests = true,
     preserveSourceOrder = false,
-  }: { requestManifests?: boolean; preserveSourceOrder?: boolean } = {}
+    prioritizeCached = false,
+  }: {
+    requestManifests?: boolean;
+    preserveSourceOrder?: boolean;
+    prioritizeCached?: boolean;
+  } = {}
 ) {
   // Only inject the resolved library capsule for portrait requests. Prepending
   // it for header/landscape lists (home calendar, catalogue rows, etc.) causes
@@ -598,10 +624,18 @@ export function withCachedImageSources(
   const orderedSources = holdsLandscapeFallback
     ? sources.filter((source) => !isLandscapeCoverSource(source))
     : sources;
+  const prioritizedCachedSources = prioritizeCached
+    ? uniqueSources(
+        orderedSources
+          .map((source) => cachedImageSourceFor(source))
+          .filter(Boolean)
+      )
+    : [];
 
   return uniqueSources(
     [
       ...(resolvedCoverSource ? [resolvedCoverSource] : []),
+      ...prioritizedCachedSources,
       ...(!preserveSourceOrder && resolvedHeaderSource ? [resolvedHeaderSource] : []),
       ...orderedSources.flatMap((source) => {
         const manifestSource = steamAssetManifestSourceFor(source);
@@ -647,11 +681,12 @@ export function getLoadedImageSource(sources: string[]) {
 
 export async function resolveCachedImageSource(
   source: string,
-  options: { steamAssetFallback?: boolean } = {}
+  options: { steamAssetFallback?: boolean; cachePredictable?: boolean } = {}
 ) {
   if (!/^https?:\/\//i.test(source)) return source;
   if (
     isPredictableSteamAssetSource(source) &&
+    !options.cachePredictable &&
     !(options.steamAssetFallback && canResolveSteamLibraryAssetFallback(source))
   ) {
     return source;
@@ -659,7 +694,6 @@ export async function resolveCachedImageSource(
 
   const cachedSource = cachedImageSourceFor(source);
   if (cachedSource) {
-    touchCachedImageSource(source);
     return cachedSource;
   }
 
@@ -669,7 +703,7 @@ export async function resolveCachedImageSource(
   const promise = resolveCachedImageBatched(source)
     .then((nextSource) => {
       if (nextSource) {
-        imageSourceCache.set(source, nextSource);
+        storeCachedImageSource(source, nextSource);
         scheduleStoredImageSourceCacheWrite();
         return nextSource;
       }
@@ -705,7 +739,10 @@ export function forgetCachedImageSource(source: string) {
 
   loadedImageSources.delete(source);
   imageResolvePromises.delete(source);
-  if (changed) scheduleStoredImageSourceCacheWrite();
+  if (changed) {
+    rebuildImageIdentitySourceCache();
+    scheduleStoredImageSourceCacheWrite();
+  }
 }
 
 /**
@@ -716,6 +753,7 @@ export function forgetCachedImageSource(source: string) {
 export function clearImageCacheState() {
   imageCacheGeneration += 1;
   imageSourceCache.clear();
+  imageIdentitySourceCache.clear();
   imageResolvePromises.clear();
   steamLibraryCoverSourceCache.clear();
   steamLibraryCoverResolvePromises.clear();
@@ -728,8 +766,6 @@ export function clearImageCacheState() {
   imagePreloadQueue.length = 0;
   imageBatchQueue = [];
   imageBatchScheduled = false;
-  imageTouchQueue.clear();
-  imageTouchScheduled = false;
 
   if (cancelPendingCacheWrite) {
     cancelPendingCacheWrite();
@@ -766,9 +802,8 @@ export function preloadBrowserImage(
 
   screenshotPreloadCache.add(source);
 
-  const promise = enqueueImagePreload(
-    () =>
-      new Promise<void>((resolve, reject) => {
+  const load = () =>
+    new Promise<void>((resolve, reject) => {
         const image = new Image();
 
         image.decoding = "async";
@@ -787,8 +822,8 @@ export function preloadBrowserImage(
           reject(new Error(`Failed to preload image: ${source}`));
         };
         image.src = source;
-      })
-  )
+      });
+  const promise = (options.immediate ? load() : enqueueImagePreload(load))
     .catch(() => undefined)
     .finally(() => {
       imagePreloadPromises.delete(source);
@@ -805,6 +840,7 @@ export function preloadImageSources(
     includeCached?: boolean;
     idle?: boolean;
     limit?: number;
+    nativeFirst?: boolean;
   } = {}
 ) {
   const candidates = uniqueSources(sources).slice(
@@ -813,6 +849,16 @@ export function preloadImageSources(
   );
   const run = () => {
     candidates.forEach((source) => {
+      if (options.nativeFirst) {
+        void resolveCachedImageSource(source, { cachePredictable: true }).then(
+          (resolvedSource) =>
+            preloadBrowserImage(resolvedSource || source, {
+              ...options,
+              immediate: resolvedSource !== source,
+            })
+        );
+        return;
+      }
       void preloadBrowserImage(source, options);
       if (options.includeCached === false) return;
 

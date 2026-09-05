@@ -11,10 +11,8 @@ describe("Catalogue fallback preview", () => {
     expect(component).toContain("commitHoveredPreview");
   });
 
-  it("keeps the fallback stable per page instead of reshuffling per render", () => {
-    const memoStart = component.indexOf("const fallbackPreviewGame = useMemo(");
-    const memoEnd = component.indexOf("}, [visibleGamesCacheKey, visibleGames]);", memoStart);
-    expect(memoStart).toBeGreaterThan(-1);
-    expect(memoEnd).toBeGreaterThan(memoStart);
+  it("uses a deterministic fallback instead of reshuffling per render", () => {
+    expect(component).toContain("const fallbackPreviewGame = visibleGames[0] ?? null");
+    expect(component).not.toContain("Math.random()");
   });
 });

@@ -7,11 +7,11 @@ import {
   loadedImageSources,
   markImageSourceLoaded,
   isPredictableSteamAssetSource,
+  isStandardSteamHeaderSource,
   resolveSteamHeaderSource,
   resolveSteamLibraryCoverSource,
   steamAppIdFromImageSource,
   steamAppIdsFromSources,
-  touchCachedImageSource,
 } from "../utils/imageCache";
 import {
   isHeaderImageSource,
@@ -44,17 +44,27 @@ export function useCachedImageSources(
   {
     resolveUncached = true,
     preserveSourceOrder = false,
-  }: { resolveUncached?: boolean; preserveSourceOrder?: boolean } = {}
+    cacheSteamHeaders = false,
+    prioritizeCached = false,
+  }: {
+    resolveUncached?: boolean;
+    preserveSourceOrder?: boolean;
+    cacheSteamHeaders?: boolean;
+    prioritizeCached?: boolean;
+  } = {}
 ) {
   const currentKey = sources.join("\n");
   const sourceKeyRef = useRef<string>(currentKey);
 
   const [cachedSources, setCachedSources] = useState(() =>
-    withCachedImageSources(sources, { preserveSourceOrder })
+    withCachedImageSources(sources, { preserveSourceOrder, prioritizeCached })
   );
 
   const updateCachedSources = () => {
-    const nextSources = withCachedImageSources(sources, { preserveSourceOrder });
+    const nextSources = withCachedImageSources(sources, {
+      preserveSourceOrder,
+      prioritizeCached,
+    });
     setCachedSources((currentSources) =>
       currentSources.join("\n") === nextSources.join("\n")
         ? currentSources
@@ -77,22 +87,33 @@ export function useCachedImageSources(
       if (!cancelled) updateCachedSources();
     }, steamAppIdsFromSources(sources));
 
-    // Mantém o LRU do cache em disco atualizado mesmo quando a resolução já
-    // veio do índice persistido e nenhum novo download foi necessário.
-    sources.forEach((source) => {
-      if (getCachedImageSource(source)) touchCachedImageSource(source);
-    });
+    const unresolvedIdentities = new Set<string>();
+    const unresolvedSources = sources.filter((source) => {
+      if (
+        getCachedImageSource(source) ||
+        loadedImageSources.has(source) ||
+        (isPredictableSteamAssetSource(source) &&
+          !(cacheSteamHeaders && isStandardSteamHeaderSource(source)))
+      ) {
+        return false;
+      }
 
-    const unresolvedSources = sources.filter(
-      (source) =>
-        !getCachedImageSource(source) &&
-        !loadedImageSources.has(source) &&
-        !isPredictableSteamAssetSource(source)
-    );
+      const identity = isStandardSteamHeaderSource(source)
+        ? `steam-header:${steamAppIdFromImageSource(source)}`
+        : source;
+      if (unresolvedIdentities.has(identity)) return false;
+      unresolvedIdentities.add(identity);
+      return true;
+    });
 
     if (resolveUncached && unresolvedSources.length) {
       Promise.all(
-        unresolvedSources.map((source) => resolveCachedImageSource(source))
+        unresolvedSources.map((source) =>
+          resolveCachedImageSource(source, {
+            cachePredictable:
+              cacheSteamHeaders && isStandardSteamHeaderSource(source),
+          })
+        )
       ).then(() => {
         if (!cancelled) updateCachedSources();
       });
@@ -104,7 +125,13 @@ export function useCachedImageSources(
       cancelled = true;
       unsubscribeManifest();
     };
-  }, [currentKey, resolveUncached, preserveSourceOrder]);
+  }, [
+    currentKey,
+    resolveUncached,
+    preserveSourceOrder,
+    cacheSteamHeaders,
+    prioritizeCached,
+  ]);
 
   return cachedSources;
 }

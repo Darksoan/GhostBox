@@ -11,7 +11,8 @@ Fazer cada imagem remota ser resolvida, baixada, validada e armazenada uma unica
 - identidade de disco compartilhada entre hosts Steam e o proxy do Catalogo;
 - endpoint `cache_get_images` com deduplicacao e concorrencia limitada a quatro tarefas;
 - pre-resolucao frontend agrupada em um unico IPC por lote;
-- renovacao agrupada do LRU quando uma imagem persistida volta a ser usada;
+- indice O(1) para aliases no frontend, sem varrer o cache por card/fallback;
+- limite de 4.096 imagens decodificadas mantidas no cache de sessao;
 - limpeza sincronizada dos indices Rust, manifestos Steam, icones e mapas de sessao;
 - cache negativo e TTL separado para imagens versionadas no Worker;
 - testes Rust e Worker para as politicas novas.

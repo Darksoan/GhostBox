@@ -16,14 +16,11 @@ describe("Catalogue preview shot opens the game modal", () => {
     expect(page).toContain("onOpenGame={onOpenGame}");
   });
 
-  it("keeps skeletons and the empty state non-interactive", () => {
-    // Só a shot pronta vira botão; skeleton e vazio continuam `<div>`.
-    expect(component).toContain(
-      '<div className="catalogue-hover-preview__shot catalogue-hover-preview__shot--empty" />'
-    );
-    expect(component).toContain(
-      'className="catalogue-hover-preview__shot catalogue-hover-preview__shot--skeleton skeleton"'
-    );
+  it("keeps failed and empty slots non-interactive", () => {
+    // Só a shot pronta vira botão; slots esgotados continuam `<div>`.
+    expect(component).toContain("catalogue-hover-preview__shot--empty");
+    expect(component).toContain('shot.status === "ready" && shot.source');
+    expect(component).not.toContain("catalogue-hover-preview__shot--skeleton");
   });
 
   it("tracks the clickable shot in the stylesheet with semantic tokens", () => {

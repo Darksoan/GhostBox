@@ -28,6 +28,40 @@ const genresRemeasureDelayMs = 140;
 // mesmo tempo, em 20 cards. Nem a linha mais larga do card chega perto disso —
 // quem corta é a medição, não este número.
 const maxMeasuredGenreLabels = 16;
+const catalogueCoverRetryDelayMs = 1_200;
+const catalogueCoverMaxRetries = 2;
+
+function useStableCatalogueCoverSource(source: string, loaded: boolean) {
+  const [stableSource, setStableSource] = useState(() =>
+    loaded && source ? source : "",
+  );
+
+  useLayoutEffect(() => {
+    if (!loaded || !source) return;
+    setStableSource((current) => current || source);
+  }, [loaded, source]);
+
+  return stableSource;
+}
+
+function useRobustCatalogueCoverSource(sources: string[]) {
+  const [retryToken, setRetryToken] = useState(0);
+  const { source, loaded, failed } = useLoadableImageCover(sources, {
+    preferOrder: true,
+    retryToken,
+  });
+
+  useEffect(() => {
+    if (!failed || retryToken >= catalogueCoverMaxRetries) return;
+    const timeout = setTimeout(
+      () => setRetryToken((current) => current + 1),
+      catalogueCoverRetryDelayMs * (retryToken + 1),
+    );
+    return () => clearTimeout(timeout);
+  }, [failed, retryToken]);
+
+  return useStableCatalogueCoverSource(source, loaded);
+}
 
 interface CatalogueListItemProps {
   game: GhostBoxGame;
@@ -75,11 +109,13 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   );
   const headerSources = useCachedImageSources(
     shouldLoadCover ? rawHeaderSources : [],
-    { preserveSourceOrder: true },
+    {
+      preserveSourceOrder: true,
+      cacheSteamHeaders: true,
+      prioritizeCached: true,
+    },
   );
-  const { source: coverSource, loaded: coverLoaded } =
-    useLoadableImageCover(headerSources, { preferOrder: true });
-  const displayedCoverSource = coverLoaded ? coverSource : "";
+  const displayedCoverSource = useRobustCatalogueCoverSource(headerSources);
   const isEnglish = appearance.language === "en";
   // Sem teto fixo de rótulos: a medição abaixo decide quantas pills cabem na
   // linha do card, em vez de cortar em 3 e depois derrubar para 2.
@@ -245,9 +281,16 @@ export const CatalogueListItem = memo(function CatalogueListItem({
         }}
       >
         <div
-          className={`catalogue-list__cover ${displayedCoverSources.length ? "catalogue-list__cover--loaded" : ""}`}
-          style={layeredImageStyle(displayedCoverSources, "")}
-        />
+          className={`catalogue-list__cover${displayedCoverSource ? "" : " catalogue-list__cover--pending skeleton"}`}
+        >
+          {displayedCoverSource ? (
+            <span
+              className="catalogue-list__cover-image"
+              style={layeredImageStyle(displayedCoverSources, "")}
+              aria-hidden="true"
+            />
+          ) : null}
+        </div>
         <div className="catalogue-list__content">
           <strong>{game.title}</strong>
           <div className="catalogue-list__genres" ref={genresRef}>
@@ -346,11 +389,13 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   );
   const headerSources = useCachedImageSources(
     shouldLoadCover ? rawHeaderSources : [],
-    { preserveSourceOrder: true },
+    {
+      preserveSourceOrder: true,
+      cacheSteamHeaders: true,
+      prioritizeCached: true,
+    },
   );
-  const { source: coverSource, loaded: coverLoaded } =
-    useLoadableImageCover(headerSources, { preferOrder: true });
-  const displayedCoverSource = coverLoaded ? coverSource : "";
+  const displayedCoverSource = useRobustCatalogueCoverSource(headerSources);
   const displayedCoverSources = displayedCoverSource ? [displayedCoverSource] : [];
   // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra
   // de review, a razão volta 0 e viraria uma nota 0,0 falsa.
@@ -421,12 +466,18 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
         }}
       />
       <span
-        className={`home-top-rated-card__art${
-          displayedCoverSource ? " home-top-rated-card__art--loaded" : ""
+        className={`home-top-rated-card__art catalogue-grid-card__cover${
+          displayedCoverSource ? "" : " skeleton"
         }`}
-        style={layeredImageStyle(displayedCoverSources, "")}
         aria-hidden="true"
-      />
+      >
+        {displayedCoverSource ? (
+          <span
+            className="catalogue-grid-card__cover-image"
+            style={layeredImageStyle(displayedCoverSources, "")}
+          />
+        ) : null}
+      </span>
       {isAdded && (
         <div className="catalogue-grid-card__action">
           <button

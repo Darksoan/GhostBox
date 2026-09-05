@@ -1,62 +1,6 @@
 export const CATALOGUE_HOVER_PREVIEW_RETENTION_MS = 500;
 
-export const CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS = 350;
-
-/**
- * Espera para hover que o usuário não pediu: trocar de aba faz o conteúdo subir
- * sob um cursor parado, e cada cartão que passa por baixo dispara `pointerenter`.
- * Sem essa espera longa cada um desses vira um preview comitado — com busca de
- * conquistas e resolução de screenshots — e tudo isso é requisição jogada fora.
- */
-export const CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS = 420;
-
 export const CATALOGUE_SCROLL_IDLE_DELAY_MS = 150;
-
-// Mantido p/ compatibilidade; shots do preview não usam mais fade (troca direta).
-export const CATALOGUE_PREVIEW_SWAP_TRANSITION_MS = 180;
-
-// Matches --motion-base in src/styles/_primitives.scss so the panel's DOM
-// content lives exactly as long as its fade-out transition.
-export const CATALOGUE_PREVIEW_EXIT_TRANSITION_MS = 180;
-
-export const CATALOGUE_PREVIEW_PENDING_HOLD_MS = 250;
-
-/**
- * Debounces committing a hover target so scanning the list quickly (pointer
- * crossing many rows) doesn't thrash the preview panel. Callers pass the same
- * target repeatedly (once per rescheduled row); only the last one within the
- * delay window fires.
- */
-export function createCatalogueHoverPreviewIntent<T>(
-  onShow: (target: T) => void,
-  delayMs = CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS
-) {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const cancel = () => {
-    if (timeoutId === null) return;
-    clearTimeout(timeoutId);
-    timeoutId = null;
-  };
-
-  return {
-    scheduleShow(target: T, overrideDelayMs = delayMs) {
-      cancel();
-      timeoutId = setTimeout(() => {
-        timeoutId = null;
-        onShow(target);
-      }, overrideDelayMs);
-    },
-    showImmediately(target: T) {
-      cancel();
-      onShow(target);
-    },
-    cancel,
-    dispose() {
-      cancel();
-    },
-  };
-}
 
 export function createCatalogueHoverPreviewRetention(
   onClear: () => void,

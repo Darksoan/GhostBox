@@ -309,8 +309,8 @@ export async function loadCachedImages(urls: string[]): Promise<Record<string, s
   return ghostboxApi.getCachedImages(urls);
 }
 
-export async function touchCachedImages(urls: string[]): Promise<void> {
-  return ghostboxApi.touchCachedImages(urls);
+export async function loadStoredImages(urls: string[]): Promise<Record<string, string>> {
+  return ghostboxApi.getStoredImages(urls);
 }
 
 export async function resolveSteamLibraryAsset(

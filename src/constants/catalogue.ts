@@ -11,7 +11,7 @@ export const steamProfileStorageKey = "ghostbox:steam-profile:v1";
 export const steamAccountStatsStorageKey = "ghostbox:steam-account-stats:v1";
 export const cloudProfileUpdatedAtStorageKey = "ghostbox:cloud-profile-updated-at:v1";
 export const startupPageStorageKey = "ghostbox:startup-page:v1";
-export const imageSourceCacheKey = "ghostbox:image-source-cache:v1";
+export const imageSourceCacheKey = "ghostbox:image-source-cache:v2";
 const recentPlayedGamesStorageKey = "ghostbox:recent-played-games:v3";
 export const profileHistoryGamesStorageKey = "ghostbox:profile-history-games:v1";
 export const showSteamGamesStorageKey = "ghostbox:show-steam-games:v1";
@@ -38,7 +38,6 @@ const legacyStorageKeys: Record<string, string[]> = {
     "piratebox:cloud-profile-updated-at:v1",
   ],
   [startupPageStorageKey]: ["eden:startup-page:v1", "piratebox:startup-page:v1"],
-  [imageSourceCacheKey]: ["eden:image-source-cache:v1", "piratebox:image-source-cache:v1"],
   [recentPlayedGamesStorageKey]: ["eden:recent-played-games:v3", "piratebox:recent-played-games:v3"],
   [profileHistoryGamesStorageKey]: ["eden:profile-history-games:v1", "piratebox:profile-history-games:v1"],
   [showSteamGamesStorageKey]: ["eden:show-steam-games:v1", "piratebox:show-steam-games:v1"],

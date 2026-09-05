@@ -2280,8 +2280,16 @@ pub async fn cache_get_images(
 }
 
 #[tauri::command]
-pub fn cache_touch_images(app: tauri::AppHandle, urls: Vec<String>) -> u64 {
-    image_cache::touch_cached_images(&app, &urls)
+pub fn cache_lookup_images(
+    app: tauri::AppHandle,
+    urls: Vec<String>,
+) -> std::collections::HashMap<String, String> {
+    urls.into_iter()
+        .filter_map(|url| {
+            let resolved = image_cache::lookup_cached_image(&app, &url);
+            (!resolved.is_empty()).then_some((url, resolved))
+        })
+        .collect()
 }
 
 #[tauri::command]

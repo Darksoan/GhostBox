@@ -80,19 +80,75 @@ export function getPriorityScreenshotSources(
   );
 }
 
+/**
+ * A coluna do catálogo tem cerca de 300px: baixar a variante 1920×1080 da
+ * Steam para cada uma das três shots só aumenta rede e decode. A CDN já expõe
+ * a miniatura proporcional; uma variante 1280×720 fica como fallback.
+ */
+export function cataloguePreviewScreenshotSourceGroup(source: string) {
+  const normalizedSource = source.trim();
+  if (!normalizedSource || !isSteamScreenshotSource(normalizedSource)) {
+    return uniqueSources([normalizedSource]);
+  }
+
+  try {
+    const hostname = new URL(normalizedSource).hostname.toLowerCase();
+    const isSteamHost =
+      hostname === "steamcdn-a.akamaihd.net" ||
+      hostname.endsWith("steamstatic.com");
+    if (!isSteamHost) return uniqueSources([normalizedSource]);
+  } catch {
+    return uniqueSources([normalizedSource]);
+  }
+
+  const thumbnailSource = normalizedSource.replace(
+    /\.\d+x\d+\.(jpe?g|png|webp)(?=[?#]|$)/i,
+    ".600x338.$1"
+  );
+  const fallbackSource = normalizedSource.replace(
+    /\.\d+x\d+\.(jpe?g|png|webp)(?=[?#]|$)/i,
+    ".1280x720.$1"
+  );
+  return uniqueSources([thumbnailSource, fallbackSource]);
+}
+
+export function gameCataloguePreviewScreenshotSourceGroups(game: GhostBoxGame) {
+  return withoutHeaderImageSources(game.screenshots ?? [])
+    .slice(0, 3)
+    .map(cataloguePreviewScreenshotSourceGroup);
+}
+
+export function preloadCataloguePreviewAssets(
+  games: GhostBoxGame[],
+  options: { idle?: boolean; limit?: number } = {}
+) {
+  const sources = games
+    .slice(0, options.limit ?? 3)
+    .flatMap((game) =>
+      gameCataloguePreviewScreenshotSourceGroups(game).map(
+        ([thumbnailSource]) => thumbnailSource
+      )
+    );
+
+  return preloadImageSources(sources, {
+    decode: true,
+    idle: options.idle ?? true,
+    nativeFirst: true,
+  });
+}
+
 export function gameCatalogueHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
-  const highDensitySources = highDensityHeaderSources(appId).filter((source) =>
-    /\/header_2x\.jpg(?:[?#].*)?$/i.test(source)
-  );
+  const catalogueCoverSource = isHeaderImageSource(game.coverUrl)
+    ? game.coverUrl
+    : "";
 
   return uniqueSources([
-    ...highDensitySources,
-    game.coverUrl,
+    catalogueCoverSource,
+    `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    ...(game.coverFallbacks ?? []).filter(isHeaderImageSource).slice(0, 2),
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
   ]);
 }
 
@@ -190,7 +246,7 @@ function getGameListPreloadSources(
   game: GhostBoxGame,
   variant: NonNullable<GameListPreloadOptions["variant"]>,
   sourceLimit: number,
-  options: Pick<GameListPreloadOptions, "steamHeaderFirst">
+  options: Pick<GameListPreloadOptions, "steamHeaderFirst" | "nativeResolve">
 ) {
   if (variant === "portrait") {
     return gamePortraitPreviewSources(game).slice(0, sourceLimit);
@@ -204,6 +260,7 @@ function getGameListPreloadSources(
   }
 
   if (variant === "catalogueHeader") {
+    if (options.nativeResolve && game.coverUrl) return [game.coverUrl];
     return gameCatalogueHeaderSources(game).slice(0, sourceLimit);
   }
 
@@ -548,6 +605,7 @@ export function preloadGameListAssets(
     decode: options.decode,
     idle: options.idle ?? true,
     includeCached: options.nativeResolve === true,
+    nativeFirst: options.nativeResolve === true,
   });
 }
 

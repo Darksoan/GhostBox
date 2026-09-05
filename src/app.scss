@@ -3708,6 +3708,21 @@ p {
   animation: download-cover-in var(--motion-base) ease both;
 }
 
+.catalogue-grid-card__cover {
+  position: relative;
+  overflow: hidden;
+  background: var(--skeleton-fill);
+}
+
+.catalogue-grid-card__cover-image {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 1;
+}
+
 /* Corpo do card: o nome com a nota média à direita, numa única linha. O nome
    encolhe (reticências) e a nota é o único elemento fixo à direita. */
 .home-top-rated-card__body {
@@ -7352,21 +7367,6 @@ html.no-animations {
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
   box-shadow: var(--shadow-2);
-  transition:
-    opacity var(--motion-base) var(--ease-out),
-    transform var(--motion-base) var(--ease-out);
-
-  &--visible {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-  }
-
-  &--hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(6px);
-  }
 
   &__header {
     display: flex;
@@ -7402,10 +7402,6 @@ html.no-animations {
 
   &__shot--empty {
     background: var(--surface-media-letterbox);
-  }
-
-  &__shot--skeleton {
-    background: var(--skeleton-fill);
   }
 
   /* Shot pronta é um botão: o clique abre o modal do jogo em preview. Reset de
@@ -7481,12 +7477,6 @@ html.no-animations {
 @media (max-width: 900px) {
   .catalogue-hover-preview {
     display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .catalogue-hover-preview {
-    transition: none;
   }
 }
 
@@ -7616,25 +7606,30 @@ input[type="search"]::-ms-reveal {
 
 .catalogue-list__cover {
   --pb-cover-zoom-opacity: 0;
+  position: relative;
   width: 100%;
   height: 100%;
   aspect-ratio: 460 / 215;
+  overflow: hidden;
   border: none;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  background-color: var(--surface-canvas);
-  opacity: 0;
-  transition: opacity var(--motion-slow) ease;
+  background: var(--skeleton-fill);
   image-rendering: auto;
   background-attachment: local;
   background-blend-mode: normal;
 
-  &--loaded {
-    opacity: 1;
-  }
-
   &--skeleton {
     opacity: 1;
   }
+}
+
+.catalogue-list__cover-image {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 1;
 }
 
 .catalogue-list__item--skeleton {
@@ -10528,7 +10523,6 @@ border: 0;
   }
 
  .game-card__cover--loaded,
- .catalogue-list__cover--loaded,
  .favorites-grid__cover--loaded,
  .home-category-card__cover {
     animation: none;
@@ -12614,6 +12608,7 @@ html.no-backdrop-blur {
     display: grid;
     grid-template-columns: repeat(auto-fill, 42px);
     gap: var(--space-3);
+    justify-content: center;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -12874,7 +12869,7 @@ html.no-backdrop-blur {
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     transition:
       background-color var(--motion-base) var(--ease),
       color var(--motion-base) var(--ease);

@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  createCatalogueHoverPreviewIntent,
   getAdjacentReadyScreenshotSource,
   pickDistinctScreenshotSources,
 } from "../src/utils/cataloguePreview";
@@ -146,123 +145,15 @@ describe("catalogue preview manual navigation", () => {
     );
 
     // Sem controles manuais desde o redesign: o painel é só leitura. A
-    // acessibilidade vive no rótulo da seção, no espelhamento hover↔foco e na
-    // visibilidade atrelada ao hover; as shots só revelam quando 100% decodificadas
-    // (skeleton até lá, sem progressivo).
+    // acessibilidade vive no rótulo da seção e no espelhamento hover↔foco; as
+    // shots só trocam quando o lote inteiro terminou, inclusive fallbacks.
     expect(component).toContain("aria-label={");
     expect(component).toContain("onFocusCapture={handlePreviewFocus}");
     expect(component).toContain("onBlurCapture={handlePreviewBlur}");
-    expect(component).toContain("onPointerEnter={handlePreviewPointerEnter}");
-    expect(component).toContain("onPointerLeave={handlePreviewPointerLeave}");
-    expect(component).toContain("aria-hidden={!isPanelVisible}");
-    expect(component).toContain("isPanelVisible = isVisible");
-    expect(component).toContain("isShotsReady");
-    expect(component).toContain("catalogue-hover-preview__shot--skeleton");
-  });
-});
-
-describe("catalogue preview hover intent debounce", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("commits the target after the delay elapses", () => {
-    const onShow = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(onShow, 120);
-
-    intent.scheduleShow("game-a");
-    expect(onShow).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(120);
-    expect(onShow).toHaveBeenCalledWith("game-a");
-    expect(onShow).toHaveBeenCalledTimes(1);
-  });
-
-  it("replaces a pending target when scheduled again before it fires", () => {
-    const onShow = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(onShow, 120);
-
-    intent.scheduleShow("game-a");
-    vi.advanceTimersByTime(60);
-    intent.scheduleShow("game-b");
-    vi.advanceTimersByTime(120);
-
-    expect(onShow).toHaveBeenCalledTimes(1);
-    expect(onShow).toHaveBeenCalledWith("game-b");
-  });
-
-  it("does not start work for cards crossed in a sweep and commits only the final target", () => {
-    const startPreviewLoad = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(startPreviewLoad);
-
-    for (let card = 0; card < 20; card += 1) {
-      intent.scheduleShow(`game-${card}`);
-      vi.advanceTimersByTime(150);
-      intent.cancel();
-    }
-    expect(startPreviewLoad).not.toHaveBeenCalled();
-
-    intent.scheduleShow("final-game");
-    vi.advanceTimersByTime(349);
-    expect(startPreviewLoad).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1);
-    expect(startPreviewLoad).toHaveBeenCalledExactlyOnceWith("final-game");
-    intent.dispose();
-  });
-
-  it("discards pending work on loss of focus and allows a fresh selection on return", () => {
-    const startPreviewLoad = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(startPreviewLoad);
-
-    intent.scheduleShow("before-blur");
-    vi.advanceTimersByTime(200);
-    intent.cancel();
-    vi.advanceTimersByTime(1000);
-    expect(startPreviewLoad).not.toHaveBeenCalled();
-
-    intent.scheduleShow("after-focus");
-    vi.advanceTimersByTime(350);
-    expect(startPreviewLoad).toHaveBeenCalledExactlyOnceWith("after-focus");
-    intent.dispose();
-  });
-
-  it("cancel prevents a pending target from firing", () => {
-    const onShow = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(onShow, 120);
-
-    intent.scheduleShow("game-a");
-    intent.cancel();
-    vi.advanceTimersByTime(200);
-
-    expect(onShow).not.toHaveBeenCalled();
-  });
-
-  it("showImmediately bypasses the delay and cancels any pending target", () => {
-    const onShow = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(onShow, 120);
-
-    intent.scheduleShow("game-a");
-    intent.showImmediately("game-b");
-
-    expect(onShow).toHaveBeenCalledTimes(1);
-    expect(onShow).toHaveBeenCalledWith("game-b");
-
-    vi.advanceTimersByTime(200);
-    expect(onShow).toHaveBeenCalledTimes(1);
-  });
-
-  it("dispose cancels any pending target", () => {
-    const onShow = vi.fn();
-    const intent = createCatalogueHoverPreviewIntent<string>(onShow, 120);
-
-    intent.scheduleShow("game-a");
-    intent.dispose();
-    vi.advanceTimersByTime(200);
-
-    expect(onShow).not.toHaveBeenCalled();
+    expect(component).toContain("onPointerEnter={onPointerEnter}");
+    expect(component).toContain("onPointerLeave={onPointerLeave}");
+    expect(component).toContain("aria-busy={Boolean(pendingPreview)}");
+    expect(component).toContain("pendingPreview.shots.every(isSettled)");
+    expect(component).toContain("catalogue-hover-preview__shot--empty");
   });
 });

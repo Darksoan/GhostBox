@@ -201,6 +201,21 @@ fn existing_cached_file(directory: &Path, url: &str) -> Option<PathBuf> {
     None
 }
 
+pub fn lookup_cached_image(app: &AppHandle, url_value: &str) -> String {
+    let url = url_value.trim();
+    if url.is_empty() || !is_safe_remote_https_url(url) {
+        return String::new();
+    }
+    let Ok(directory) = image_cache_directory(app) else {
+        return String::new();
+    };
+    let Some(path) = existing_cached_file(&directory, url) else {
+        return String::new();
+    };
+    touch_cached_file(&path);
+    path.to_string_lossy().into_owned()
+}
+
 /// Renova o mtime de um arquivo de cache quando ele é acessado. A poda usa
 /// mtime como critério de idade; sem este toque ela seria FIFO (ordem de
 /// download) e evictaria imagens quentes antes de imagens esquecidas.
@@ -247,7 +262,10 @@ fn replace_cached_file(temp_path: &Path, destination: &Path) -> std::io::Result<
 
 fn steam_asset_fallback_request(url: &str) -> Option<(String, String)> {
     let parsed = reqwest::Url::parse(url).ok()?;
-    if !parsed.host_str()?.ends_with("steamstatic.com") {
+    let host = parsed.host_str()?;
+    if !host.ends_with("steamstatic.com")
+        && !host.eq_ignore_ascii_case("steamcdn-a.akamaihd.net")
+    {
         return None;
     }
 
@@ -531,25 +549,6 @@ pub fn clear_image_cache_metadata(app: &AppHandle) -> u64 {
         memo.clear();
     }
     freed
-}
-
-pub fn touch_cached_images(app: &AppHandle, urls: &[String]) -> u64 {
-    let Ok(directory) = image_cache_directory(app) else {
-        return 0;
-    };
-    let mut touched = 0;
-    let mut seen = std::collections::HashSet::new();
-    for url in urls {
-        let url = url.trim();
-        if url.is_empty() || !seen.insert(url.to_string()) {
-            continue;
-        }
-        if let Some(path) = existing_cached_file(&directory, url) {
-            touch_cached_file(&path);
-            touched += 1;
-        }
-    }
-    touched
 }
 
 fn sanitize_library_asset_reference(value: &str, app_id: &str) -> Option<String> {
@@ -945,16 +944,18 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
     let client = image_http_client().clone();
     let steam_asset_request = steam_asset_fallback_request(url);
 
+    if let Some(path) = fetch_and_cache_image(&client, &directory, url).await {
+        return path.to_string_lossy().into_owned();
+    }
+
     if let Some((app_id, file_name)) = steam_asset_request.as_ref() {
         if let Some(cached_url) = read_library_asset_cache_url(app, app_id, file_name) {
             if is_safe_remote_https_url(&cached_url) {
-                return cached_url;
+                if let Some(path) = fetch_and_cache_image(&client, &directory, &cached_url).await {
+                    return path.to_string_lossy().into_owned();
+                }
             }
         }
-    }
-
-    if let Some(path) = fetch_and_cache_image(&client, &directory, url).await {
-        return path.to_string_lossy().into_owned();
     }
 
     if let Some((app_id, file_name)) = steam_asset_request {
@@ -978,6 +979,9 @@ pub async fn cache_image_url(app: &AppHandle, url_value: &str) -> String {
         if let Some(fallback_url) =
             resolve_library_asset_url(app, &client, &app_id, &file_name).await
         {
+            if let Some(path) = fetch_and_cache_image(&client, &directory, &fallback_url).await {
+                return path.to_string_lossy().into_owned();
+            }
             return fallback_url;
         }
     }
@@ -1051,5 +1055,13 @@ mod tests {
         let proxy = "https://catalogue.example/images/steam/apps/413150/library_600x900.jpg";
         assert_eq!(canonical_image_identity(direct), canonical_image_identity(proxy));
         assert_eq!(cache_file_hash(direct), cache_file_hash(proxy));
+    }
+
+    #[test]
+    fn legacy_akamai_header_shares_the_standard_header_cache_identity() {
+        let legacy = "https://steamcdn-a.akamaihd.net/steam/apps/413150/header.jpg";
+        let current = "https://cdn.cloudflare.steamstatic.com/steam/apps/413150/header.jpg";
+        assert_eq!(canonical_image_identity(legacy), canonical_image_identity(current));
+        assert_eq!(cache_file_hash(legacy), cache_file_hash(current));
     }
 }
