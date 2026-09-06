@@ -32,3 +32,21 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Install subscriptions worker dependencies
+        run: npm --prefix workers/subscriptions ci
+
+      - name: Typecheck subscriptions worker
+        run: npm --prefix workers/subscriptions run typecheck
+
+      - name: Test subscriptions worker
+        run: npm --prefix workers/subscriptions test
+
+      - name: Install catalogue worker dependencies
+        run: npm --prefix workers/catalogue ci
+
+      - name: Typecheck catalogue worker
+        run: npm --prefix workers/catalogue run typecheck
+
+      - name: Test catalogue worker
+        run: npm --prefix workers/catalogue test

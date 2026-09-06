@@ -25,6 +25,12 @@ import {
 } from "./auth";
 import { base64Url, base64UrlDecode, hmacSha256, sha256Hex, timingSafeEqual } from "./crypto";
 import {
+  buildCloudProfilePayloads,
+  diffCloudProfileSnapshots,
+  normalizeIncomingSnapshot,
+  storedRowsToNormalizedSnapshot,
+} from "./cloudProfile";
+import {
   STRIPE_API_VERSION,
   planIdFromStripe,
   stripeInvoiceSubscriptionId,
@@ -787,6 +793,7 @@ async function resolveCachedPaymentMethod(env: Env, subscription: SubscriptionRo
     }
   }
 
+  const observedUpdatedAt = subscription.stripe_payment_method_updated_at ?? null;
   const resolved = await resolveStripePaymentMethod(env, subscription);
   const target = subscription.user_id
     ? { column: "user_id", value: subscription.user_id }
@@ -796,8 +803,8 @@ async function resolveCachedPaymentMethod(env: Env, subscription: SubscriptionRo
   if (target) {
     await env.SUBSCRIPTION_DB.prepare(
       `UPDATE subscriptions SET stripe_payment_method_json = ?, stripe_payment_method_updated_at = ?
-       WHERE ${target.column} = ?`
-    ).bind(resolved ? JSON.stringify(resolved) : null, nowIso(), target.value).run().catch(() => undefined);
+       WHERE ${target.column} = ? AND stripe_payment_method_updated_at IS ?`
+    ).bind(resolved ? JSON.stringify(resolved) : null, nowIso(), target.value, observedUpdatedAt).run().catch(() => undefined);
   }
   return resolved;
 }
@@ -811,7 +818,7 @@ async function invalidateCachedPaymentMethod(env: Env, userId?: string | null, s
   if (!target) return;
   await env.SUBSCRIPTION_DB.prepare(
     `UPDATE subscriptions SET stripe_payment_method_json = NULL, stripe_payment_method_updated_at = NULL
-     WHERE ${target.column} = ?`
+     WHERE ${target.column} = ? AND (stripe_payment_method_json IS NOT NULL OR stripe_payment_method_updated_at IS NOT NULL)`
   ).bind(target.value).run().catch(() => undefined);
 }
 
@@ -2202,13 +2209,6 @@ function normalizeCloudBannerPosition(value: unknown) {
   };
 }
 
-async function runD1Batch(database: D1Database, statements: D1PreparedStatement[]) {
-  const batchSize = 100;
-  for (let index = 0; index < statements.length; index += batchSize) {
-    await database.batch(statements.slice(index, index + batchSize));
-  }
-}
-
 function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
   if (!body || typeof body !== "object") {
     return { error: "invalid_profile_snapshot" as const };
@@ -2289,29 +2289,17 @@ function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
 }
 
 async function loadCloudProfileSnapshot(env: Env, userId: string) {
-  const profile = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_profile_cloud WHERE user_id = ? LIMIT 1`
-  ).bind(userId).first<UserProfileCloudRow>();
-
-  const collectionsResult = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_collections_cloud WHERE user_id = ? ORDER BY sort_order ASC, name ASC`
-  ).bind(userId).all<UserCollectionCloudRow>();
-  const collections = collectionsResult.results || [];
-
-  const gamesResult = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_collection_games_cloud WHERE user_id = ? ORDER BY sort_order ASC`
-  ).bind(userId).all<UserCollectionGameCloudRow>();
+  const { profile, collections, games, favorites } = await loadCloudProfileRows(
+    env.SUBSCRIPTION_DB,
+    userId
+  );
   const gamesByCollection = new Map<string, string[]>();
-  for (const row of gamesResult.results || []) {
+  for (const row of games) {
     const list = gamesByCollection.get(row.collection_id) || [];
     list.push(row.game_id);
     gamesByCollection.set(row.collection_id, list);
   }
-
-  const favoritesResult = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT game_id FROM user_favorite_games_cloud WHERE user_id = ? ORDER BY sort_order ASC`
-  ).bind(userId).all<UserFavoriteGameCloudRow>();
-  const favoriteGameIds = (favoritesResult.results || []).map((row) => row.game_id);
+  const favoriteGameIds = favorites.map((row) => row.game_id);
 
   if (!profile && collections.length === 0 && favoriteGameIds.length === 0) return null;
 
@@ -2336,6 +2324,27 @@ async function loadCloudProfileSnapshot(env: Env, userId: string) {
       name: collection.name,
       gameIds: gamesByCollection.get(collection.id) || [],
     })),
+  };
+}
+
+async function loadCloudProfileRows(database: D1Database, userId: string) {
+  const [profileResult, collectionsResult, gamesResult, favoritesResult] = await database.batch([
+    database.prepare(`SELECT * FROM user_profile_cloud WHERE user_id = ? LIMIT 1`).bind(userId),
+    database.prepare(
+      `SELECT * FROM user_collections_cloud WHERE user_id = ? ORDER BY sort_order ASC, name ASC`
+    ).bind(userId),
+    database.prepare(
+      `SELECT * FROM user_collection_games_cloud WHERE user_id = ? ORDER BY sort_order ASC`
+    ).bind(userId),
+    database.prepare(
+      `SELECT game_id FROM user_favorite_games_cloud WHERE user_id = ? ORDER BY sort_order ASC`
+    ).bind(userId),
+  ]);
+  return {
+    profile: (profileResult.results?.[0] as UserProfileCloudRow | undefined) || null,
+    collections: (collectionsResult.results || []) as UserCollectionCloudRow[],
+    games: (gamesResult.results || []) as UserCollectionGameCloudRow[],
+    favorites: (favoritesResult.results || []) as UserFavoriteGameCloudRow[],
   };
 }
 
@@ -2381,64 +2390,104 @@ async function handleCloudProfilePut(request: Request, env: Env) {
   const steamId = auth.session!.steamId || null;
   const { snapshot } = parsed;
   const now = snapshot.updatedAt;
+  const incoming = normalizeIncomingSnapshot(snapshot);
 
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO user_profile_cloud (
-       steam_id, user_id, display_name, avatar_url, banner_url,
-       banner_position_x, banner_position_y, banner_position_scale, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       steam_id = COALESCE(excluded.steam_id, user_profile_cloud.steam_id),
-       display_name = excluded.display_name,
-       avatar_url = excluded.avatar_url,
-       banner_url = excluded.banner_url,
-       banner_position_x = excluded.banner_position_x,
-       banner_position_y = excluded.banner_position_y,
-       banner_position_scale = excluded.banner_position_scale,
-       updated_at = excluded.updated_at`
-  ).bind(
-    steamId,
-    userId,
-    snapshot.displayName,
-    snapshot.avatarUrl,
-    snapshot.bannerUrl,
-    snapshot.bannerPosition.x,
-    snapshot.bannerPosition.y,
-    snapshot.bannerPosition.scale,
-    now
-  ).run();
-
-  const collectionStatements: D1PreparedStatement[] = [
-    env.SUBSCRIPTION_DB.prepare(
-      `DELETE FROM user_favorite_games_cloud WHERE user_id = ?`
-    ).bind(userId),
-    env.SUBSCRIPTION_DB.prepare(
-      `DELETE FROM user_collection_games_cloud WHERE user_id = ?`
-    ).bind(userId),
-    env.SUBSCRIPTION_DB.prepare(
-      `DELETE FROM user_collections_cloud WHERE user_id = ?`
-    ).bind(userId),
-  ];
-  for (const [collectionIndex, collection] of snapshot.collections.entries()) {
-    collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
-      `INSERT INTO user_collections_cloud (id, steam_id, user_id, name, sort_order, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(collection.id, steamId, userId, collection.name, collectionIndex, now));
-
-    for (const [gameIndex, gameId] of collection.gameIds.entries()) {
-      collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
-        `INSERT INTO user_collection_games_cloud (steam_id, user_id, collection_id, game_id, sort_order)
-         VALUES (?, ?, ?, ?, ?)`
-      ).bind(steamId, userId, collection.id, gameId, gameIndex));
-    }
+  const currentRows = await loadCloudProfileRows(env.SUBSCRIPTION_DB, userId);
+  const hasCurrentSnapshot = Boolean(
+    currentRows.profile ||
+    currentRows.collections.length ||
+    currentRows.games.length ||
+    currentRows.favorites.length
+  );
+  const current = hasCurrentSnapshot
+    ? storedRowsToNormalizedSnapshot(
+        currentRows.profile,
+        currentRows.collections,
+        currentRows.games,
+        currentRows.favorites
+      )
+    : null;
+  if (!diffCloudProfileSnapshots(current, incoming)) {
+    const profile = await loadCloudProfileSnapshot(env, userId);
+    return jsonResponse({ profile }, env);
   }
-  for (const [gameIndex, gameId] of snapshot.favoriteGameIds.entries()) {
-    collectionStatements.push(env.SUBSCRIPTION_DB.prepare(
+
+  const payloads = buildCloudProfilePayloads(incoming);
+  await env.SUBSCRIPTION_DB.batch([
+    env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_profile_cloud (
+         steam_id, user_id, display_name, avatar_url, banner_url,
+         banner_position_x, banner_position_y, banner_position_scale, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         steam_id = COALESCE(excluded.steam_id, user_profile_cloud.steam_id),
+         display_name = excluded.display_name,
+         avatar_url = excluded.avatar_url,
+         banner_url = excluded.banner_url,
+         banner_position_x = excluded.banner_position_x,
+         banner_position_y = excluded.banner_position_y,
+         banner_position_scale = excluded.banner_position_scale,
+         updated_at = excluded.updated_at`
+    ).bind(
+      steamId,
+      userId,
+      incoming.displayName,
+      incoming.avatarUrl,
+      incoming.bannerUrl,
+      incoming.bannerPosition.x,
+      incoming.bannerPosition.y,
+      incoming.bannerPosition.scale,
+      now
+    ),
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM user_favorite_games_cloud WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM json_each(?) j WHERE j.value = user_favorite_games_cloud.game_id)`
+    ).bind(userId, payloads.favoritesJson),
+    env.SUBSCRIPTION_DB.prepare(
       `INSERT INTO user_favorite_games_cloud (steam_id, user_id, game_id, sort_order)
-       VALUES (?, ?, ?, ?)`
-    ).bind(steamId, userId, gameId, gameIndex));
-  }
-  await runD1Batch(env.SUBSCRIPTION_DB, collectionStatements);
+       SELECT ?, ?, j.value, CAST(j.key AS INTEGER) FROM json_each(?) j
+       WHERE 1
+       ON CONFLICT(user_id, game_id) DO UPDATE SET
+         sort_order = excluded.sort_order,
+         steam_id = COALESCE(excluded.steam_id, user_favorite_games_cloud.steam_id)
+       WHERE user_favorite_games_cloud.sort_order IS NOT excluded.sort_order
+          OR (excluded.steam_id IS NOT NULL AND user_favorite_games_cloud.steam_id IS NOT excluded.steam_id)`
+    ).bind(steamId, userId, payloads.favoritesJson),
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM user_collection_games_cloud WHERE user_id = ? AND NOT EXISTS (
+         SELECT 1 FROM json_each(?) c, json_each(json_extract(c.value, '$.games')) g
+         WHERE json_extract(c.value, '$.id') = user_collection_games_cloud.collection_id
+           AND g.value = user_collection_games_cloud.game_id
+       )`
+    ).bind(userId, payloads.collectionsJson),
+    env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM user_collections_cloud WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM json_each(?) j WHERE json_extract(j.value, '$.id') = user_collections_cloud.id)`
+    ).bind(userId, payloads.collectionsJson),
+    env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_collections_cloud (id, steam_id, user_id, name, sort_order, updated_at)
+       SELECT json_extract(j.value, '$.id'), ?, ?, json_extract(j.value, '$.name'), CAST(json_extract(j.value, '$.o') AS INTEGER), ?
+       FROM json_each(?) j
+       WHERE 1
+       ON CONFLICT(user_id, id) DO UPDATE SET
+         name = excluded.name,
+         sort_order = excluded.sort_order,
+         steam_id = COALESCE(excluded.steam_id, user_collections_cloud.steam_id),
+         updated_at = excluded.updated_at
+       WHERE user_collections_cloud.name IS NOT excluded.name
+          OR user_collections_cloud.sort_order IS NOT excluded.sort_order
+          OR (excluded.steam_id IS NOT NULL AND user_collections_cloud.steam_id IS NOT excluded.steam_id)`
+    ).bind(steamId, userId, now, payloads.collectionsJson),
+    env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_collection_games_cloud (steam_id, user_id, collection_id, game_id, sort_order)
+       SELECT ?, ?, json_extract(c.value, '$.id'), g.value, CAST(g.key AS INTEGER)
+       FROM json_each(?) c, json_each(json_extract(c.value, '$.games')) g
+       WHERE 1
+       ON CONFLICT(user_id, collection_id, game_id) DO UPDATE SET
+         sort_order = excluded.sort_order,
+         steam_id = COALESCE(excluded.steam_id, user_collection_games_cloud.steam_id)
+       WHERE user_collection_games_cloud.sort_order IS NOT excluded.sort_order
+          OR (excluded.steam_id IS NOT NULL AND user_collection_games_cloud.steam_id IS NOT excluded.steam_id)`
+    ).bind(steamId, userId, payloads.collectionsJson),
+  ]);
 
   const profile = await loadCloudProfileSnapshot(env, userId);
   return jsonResponse({ profile }, env);

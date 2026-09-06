@@ -9,11 +9,6 @@ const STEAM_PLAYER_COUNT_URL =
  */
 export const STEAMSPY_MAX_PAGES = 20;
 
-/** Statements por `batch`: 1000 UPDATEs de uma vez estouram o limite do D1. */
-const UPDATE_CHUNK = 100;
-
-export const STEAMSPY_PAGE_KEY = "steamspyPage";
-export const STEAMSPY_SAMPLED_AT_KEY = "steamspySampledAt";
 const SNAPSHOT_ACTIVE_KEY = "catalogue:steamspy:active";
 const SNAPSHOT_PREVIOUS_KEY = "catalogue:steamspy:previous";
 const SNAPSHOT_KEY_PREFIX = "catalogue:steamspy:snapshot:";
@@ -249,69 +244,4 @@ export async function fetchLivePlayerCount(appId: string): Promise<number | null
   } catch {
     return null;
   }
-}
-
-async function readPageCursor(db: D1Database): Promise<number> {
-  const row = await db
-    .prepare("SELECT value FROM catalogue_meta WHERE key = ?")
-    .bind(STEAMSPY_PAGE_KEY)
-    .first<{ value: string }>();
-  const parsed = Number.parseInt(row?.value ?? "0", 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed % STEAMSPY_MAX_PAGES : 0;
-}
-
-function writeMeta(db: D1Database, key: string, value: string) {
-  return db
-    .prepare(
-      "INSERT INTO catalogue_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    )
-    .bind(key, value);
-}
-
-/**
- * Grava uma página de amostras da SteamSpy nas colunas `steamspy_*`.
- *
- * `UPDATE`, nunca `INSERT`: a SteamSpy lista o catálogo inteiro da Steam e o
- * ingest é quem decide o que entra na tabela — uma amostra não deve criar
- * jogo. Linhas que não existem simplesmente não casam no `WHERE`.
- */
-export async function applySteamSpySamples(
-  db: D1Database,
-  samples: SteamSpySample[],
-  sampledAt: number,
-): Promise<number> {
-  if (samples.length === 0) return 0;
-
-  let updated = 0;
-  for (let index = 0; index < samples.length; index += UPDATE_CHUNK) {
-    const chunk = samples.slice(index, index + UPDATE_CHUNK);
-    const results = await db.batch(
-      chunk.map((sample) =>
-        db
-          .prepare("UPDATE games SET steamspy_ccu = ?, steamspy_owners_max = ? WHERE app_id = ?")
-          .bind(sample.ccu, sample.ownersMax, sample.appId),
-      ),
-    );
-    for (const result of results) updated += result.meta?.changes ?? 0;
-  }
-
-  await writeMeta(db, STEAMSPY_SAMPLED_AT_KEY, new Date(sampledAt).toISOString()).run();
-  return updated;
-}
-
-/**
- * Uma página por execução do cron, com o cursor persistido no `catalogue_meta`:
- * a SteamSpy limita `request=all` a uma chamada por minuto, então varrer as 20
- * páginas de uma vez seria rejeitado. O ciclo inteiro fecha em algumas horas e
- * recomeça do topo, que é onde o CCU muda de verdade.
- */
-export async function refreshSteamSpySamples(
-  db: D1Database,
-  now = Date.now(),
-): Promise<{ page: number; samples: number; updated: number }> {
-  const page = await readPageCursor(db);
-  const samples = await fetchSteamSpyPage(page);
-  const updated = await applySteamSpySamples(db, samples, now);
-  await writeMeta(db, STEAMSPY_PAGE_KEY, String((page + 1) % STEAMSPY_MAX_PAGES)).run();
-  return { page, samples: samples.length, updated };
 }

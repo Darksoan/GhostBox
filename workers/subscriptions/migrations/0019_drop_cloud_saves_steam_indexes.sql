@@ -1,0 +1,12 @@
+-- Auditoria de índices de cloud_saves (set/2026):
+-- Leituras e retenção usam user_id em todos os caminhos de produção:
+-- listagem por app e global (ROW_NUMBER por user_id/app_id),
+-- prune por user_id/app_id, ownership por id+user_id, count por user_id/app_id.
+-- O fluxo de claim legado ainda atualiza por steam_id, então manter o índice
+-- menor (steam_id, updated_at). O índice steam_app é redundante para esse filtro;
+-- índices user_app e user_updated cobrem listagem, retenção e contagem.
+-- Validar após aplicar:
+-- PRAGMA index_list('cloud_saves');
+-- EXPLAIN QUERY PLAN SELECT ... WHERE user_id=? AND app_id=? ...;
+-- EXPLAIN QUERY PLAN SELECT ... WHERE user_id=? ...;
+DROP INDEX IF EXISTS idx_cloud_saves_steam_app;

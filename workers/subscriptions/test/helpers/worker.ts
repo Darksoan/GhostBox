@@ -53,12 +53,13 @@ export async function sessionToken(userId: string, expiresInSeconds = 3600, vers
   return `${payload}.${await hmacSha256(SESSION_SECRET, payload)}`;
 }
 
-type StripeRoute = (path: string) => unknown;
+type StripeRoute = (path: string) => unknown | Promise<unknown>;
 
 /**
  * Replaces global fetch with a Stripe stub. `routes` maps a path fragment to
  * the JSON body; `fail` makes every call reject, which is how the tests
- * simulate Stripe being unreachable mid-webhook.
+ * simulate Stripe being unreachable mid-webhook. Route functions may return a
+ * promise, which lets concurrency tests hold Stripe open with a deferred.
  */
 export function mockStripe(options: { routes?: Record<string, unknown>; fail?: boolean } = {}) {
   const calls: string[] = [];
@@ -71,7 +72,7 @@ export function mockStripe(options: { routes?: Record<string, unknown>; fail?: b
 
     for (const [fragment, body] of Object.entries(options.routes ?? {})) {
       if (url.includes(fragment)) {
-        const resolved = typeof body === "function" ? (body as StripeRoute)(url) : body;
+        const resolved = typeof body === "function" ? await (body as StripeRoute)(url) : body;
         return new Response(JSON.stringify(resolved), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -91,4 +92,14 @@ export function mockStripe(options: { routes?: Record<string, unknown>; fail?: b
       globalThis.fetch = original;
     },
   };
+}
+
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }

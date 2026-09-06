@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { fakeD1 } from "./helpers/fake-d1";
-import { executionContext, makeEnv, mockStripe, sessionToken } from "./helpers/worker";
+import { deferred, executionContext, makeEnv, mockStripe, sessionToken } from "./helpers/worker";
 
 const FUTURE = "2099-01-01T00:00:00.000Z";
 const PAST = "2020-01-01T00:00:00.000Z";
@@ -133,5 +133,145 @@ describe("GET /subscription/status", () => {
     );
 
     expect(response.status).toBe(401);
+  });
+
+  it("resolves two concurrent expired caches with a single winning write", async () => {
+    const expired = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+    const db = fakeD1({
+      subscriptions: [
+        subscription({
+          stripe_payment_method_json: null,
+          stripe_payment_method_updated_at: expired,
+        }),
+      ],
+    });
+    const firstGate = deferred<any>();
+    const secondGate = deferred<any>();
+    let calls = 0;
+    stripe = mockStripe({
+      routes: {
+        "/subscriptions/": () => {
+          calls += 1;
+          return calls === 1 ? firstGate.promise : secondGate.promise;
+        },
+        "/customers/": { invoice_settings: { default_payment_method: null } },
+      },
+    });
+
+    const first = status(db);
+    const second = status(db);
+    for (let attempt = 0; attempt < 100 && stripe.calls.length < 2; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(stripe.calls.length).toBe(2);
+
+    firstGate.resolve({
+      id: "sub_test_1",
+      default_payment_method: { type: "card", card: { brand: "visa", last4: "4242" } },
+    });
+    // Let the first writer land before the second resolves.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    secondGate.resolve({
+      id: "sub_test_1",
+      default_payment_method: { type: "card", card: { brand: "mastercard", last4: "5555" } },
+    });
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult.body.paymentMethod).toEqual({ type: "card", brand: "visa", last4: "4242" });
+    expect(secondResult.body.paymentMethod).toEqual({ type: "card", brand: "mastercard", last4: "5555" });
+
+    // Only the first conditional update alters the row; the loser sees zero writes.
+    const stored = db.rows("subscriptions")[0];
+    expect(JSON.parse(stored.stripe_payment_method_json)).toEqual({
+      type: "card",
+      brand: "visa",
+      last4: "4242",
+    });
+    const cacheWrites = db.execLog.filter((entry) =>
+      entry.sql.startsWith("UPDATE subscriptions SET stripe_payment_method_json = ?")
+    );
+    expect(cacheWrites).toHaveLength(2);
+    expect(cacheWrites[0].changes).toBe(1);
+    expect(cacheWrites[1].changes).toBe(0);
+  });
+
+  it("keeps a valid cache read-only", async () => {
+    const fresh = new Date().toISOString();
+    const cached = JSON.stringify({ type: "card", brand: "visa", last4: "4242" });
+    stripe = mockStripe({ routes: {} });
+    const db = fakeD1({
+      subscriptions: [
+        subscription({
+          stripe_payment_method_json: cached,
+          stripe_payment_method_updated_at: fresh,
+        }),
+      ],
+    });
+
+    const { body } = await status(db);
+
+    expect(body.paymentMethod).toEqual({ type: "card", brand: "visa", last4: "4242" });
+    expect(stripe.calls).toHaveLength(0);
+    expect(
+      db.executed.filter((sql) => sql.startsWith("UPDATE subscriptions SET stripe_payment_method_json"))
+    ).toHaveLength(0);
+  });
+
+  it("invalidating an already empty cache writes nothing", async () => {
+    stripe = mockStripe({
+      routes: {
+        "/billing_portal/sessions": { url: "https://portal.test/session" },
+      },
+    });
+    const db = fakeD1({ subscriptions: [subscription()] });
+    const token = await sessionToken("user_1");
+
+    const response = await worker.fetch(
+      new Request("https://worker.test/subscription/portal", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+      makeEnv(db),
+      executionContext
+    );
+
+    expect(response.status).toBe(200);
+    const invalidate = db.execLog.filter((entry) =>
+      entry.sql.startsWith("UPDATE subscriptions SET stripe_payment_method_json = NULL")
+    );
+    expect(invalidate).toHaveLength(1);
+    expect(invalidate[0].changes).toBe(0);
+    expect(invalidate[0].rowsWritten).toBe(0);
+  });
+
+  it("persists a genuinely changed card", async () => {
+    const expired = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+    stripe = mockStripe({
+      routes: {
+        "/subscriptions/": {
+          id: "sub_test_1",
+          default_payment_method: { type: "card", card: { brand: "amex", last4: "0005" } },
+        },
+      },
+    });
+    const db = fakeD1({
+      subscriptions: [
+        subscription({
+          stripe_payment_method_json: JSON.stringify({ type: "card", brand: "visa", last4: "4242" }),
+          stripe_payment_method_updated_at: expired,
+        }),
+      ],
+    });
+
+    const { body } = await status(db);
+
+    expect(body.paymentMethod).toEqual({ type: "card", brand: "amex", last4: "0005" });
+    const stored = db.rows("subscriptions")[0];
+    expect(JSON.parse(stored.stripe_payment_method_json)).toEqual({
+      type: "card",
+      brand: "amex",
+      last4: "0005",
+    });
   });
 });

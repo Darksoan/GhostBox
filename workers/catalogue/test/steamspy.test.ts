@@ -1,17 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  applySteamSpySamples,
   fetchLivePlayerCount,
   getSteamSpySnapshot,
   parseOwnersMax,
   refreshSteamSpySnapshot,
-  refreshSteamSpySamples,
   STEAMSPY_MAX_PAGES,
   toSteamSpySamples,
   steamSpySnapshotSample,
   invalidateSteamSpySnapshotCache,
 } from "../src/steamspy";
-import { cacheKey } from "../src/cache";
 import worker from "../src/index";
 
 afterEach(() => {
@@ -53,30 +50,6 @@ describe("steamspy payload parsing", () => {
     expect(toSteamSpySamples("nope")).toEqual([]);
   });
 });
-
-function fakeDb(cursor = "0") {
-  const statements: Array<{ sql: string; args: unknown[] }> = [];
-  const db = {
-    statements,
-    prepare(sql: string) {
-      const statement = {
-        sql,
-        args: [] as unknown[],
-        bind(...args: unknown[]) {
-          statement.args = args;
-          statements.push({ sql, args });
-          return statement;
-        },
-        first: async () => (sql.includes("SELECT value") ? { value: cursor } : null),
-        run: async () => ({ meta: { changes: 1 } }),
-      };
-      return statement;
-    },
-    batch: async (prepared: Array<{ args: unknown[] }>) =>
-      prepared.map(() => ({ meta: { changes: 1 } })),
-  };
-  return db as unknown as D1Database & { statements: typeof statements };
-}
 
 describe("steamspy ingestion", () => {
   function fakeKv(seed: Record<string, unknown> = {}) {
@@ -203,77 +176,54 @@ describe("steamspy ingestion", () => {
     expect(await getSteamSpySnapshot(kv)).toEqual(snapshot);
   });
 
-  it("uses the scheduled timestamp for a delayed cron and never writes D1", async () => {
+  it("uses the scheduled timestamp for a delayed cron and never touches D1", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const kv = fakeKv();
-    const prepare = vi.fn(() => { throw new Error("D1 must not be used"); });
+    let dbTouched = false;
+    const hostileDb = new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          dbTouched = true;
+          throw new Error(`D1 must not be used (saw ${String(prop)})`);
+        },
+      }
+    ) as unknown as D1Database;
     const pending: Promise<unknown>[] = [];
     const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ "1": { ccu: 1, owners: "0 .. 2" } })));
     vi.stubGlobal("fetch", fetchMock);
     await worker.scheduled(
       { scheduledTime: Date.parse("2026-08-23T00:04:00Z") } as ScheduledController,
-      { DB: { prepare } as unknown as D1Database, STEAMSPY_SNAPSHOT: kv },
+      { DB: hostileDb, STEAMSPY_SNAPSHOT: kv },
       { waitUntil: (promise: Promise<unknown>) => pending.push(promise) } as unknown as ExecutionContext,
     );
     await Promise.all(pending);
     expect(fetchMock.mock.calls[0][0]).toContain("page=2");
     expect(kv.values.has("catalogue:steamspy:page:2026-08-23:2")).toBe(true);
-    expect(prepare).not.toHaveBeenCalled();
-    await expect(worker.scheduled({} as ScheduledController, { DB: { prepare } as unknown as D1Database }, {} as ExecutionContext))
+    expect(dbTouched).toBe(false);
+
+    // Publication slot with all pages seeded must also stay KV-only.
+    const day = "2026-08-23";
+    for (let page = 0; page < STEAMSPY_MAX_PAGES; page += 1) {
+      kv.values.set(`catalogue:steamspy:page:${day}:${page}`, [
+        { appId: String(1000 + page), ccu: 10, ownersMax: 20 },
+      ]);
+    }
+    const publishPending: Promise<unknown>[] = [];
+    const publishFetch = vi.fn(async () => new Response(JSON.stringify({})),);
+    vi.stubGlobal("fetch", publishFetch);
+    await worker.scheduled(
+      { scheduledTime: Date.parse(`${day}T00:40:00.000Z`) } as ScheduledController,
+      { DB: hostileDb, STEAMSPY_SNAPSHOT: kv },
+      { waitUntil: (promise: Promise<unknown>) => publishPending.push(promise) } as unknown as ExecutionContext,
+    );
+    await Promise.all(publishPending);
+    expect(kv.values.get("catalogue:steamspy:active")).toBe(day);
+    expect(dbTouched).toBe(false);
+
+    await expect(worker.scheduled({} as ScheduledController, { DB: hostileDb }, {} as ExecutionContext))
       .rejects.toThrow("D1 refresh is disabled");
-    expect(prepare).not.toHaveBeenCalled();
-  });
-
-  it("only updates existing rows — a sample never inserts a game", async () => {
-    const db = fakeDb();
-    await applySteamSpySamples(
-      db,
-      [{ appId: "367520", ccu: 8421, ownersMax: 20000000 }],
-      Date.parse("2026-08-23T12:00:00.000Z"),
-    );
-
-    const writes = db.statements.filter((entry) => entry.sql.includes("games"));
-    expect(writes).toHaveLength(1);
-    expect(writes[0].sql).toContain("UPDATE games SET steamspy_ccu = ?, steamspy_owners_max = ?");
-    expect(writes[0].sql).not.toContain("INSERT");
-    expect(writes[0].args).toEqual([8421, 20000000, "367520"]);
-  });
-
-  it("records the sample timestamp so the game route's cache key moves", async () => {
-    const db = fakeDb();
-    await applySteamSpySamples(
-      db,
-      [{ appId: "367520", ccu: 1, ownersMax: 0 }],
-      Date.parse("2026-08-23T12:00:00.000Z"),
-    );
-
-    const metaWrite = db.statements.find((entry) => entry.args[0] === "steamspySampledAt");
-    expect(metaWrite?.args[1]).toBe("2026-08-23T12:00:00.000Z");
-
-    // Sem o timestamp na chave, a rota de detalhe serviria o `playingNow` de
-    // ontem: o `updatedAt` do catálogo não se move quando só o CCU muda.
-    expect(cacheKey("game", "origin:367520", "2026-01-01:never")).not.toBe(
-      cacheKey("game", "origin:367520", "2026-01-01:2026-08-23T12:00:00.000Z"),
-    );
-  });
-
-  it("advances the page cursor and wraps at the last page", async () => {
-    const fetchMock = vi.fn(
-      async (url: string) => new Response(JSON.stringify({ url }), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const db = fakeDb(String(STEAMSPY_MAX_PAGES - 1));
-    const result = await refreshSteamSpySamples(db, Date.parse("2026-08-23T12:00:00.000Z"));
-
-    expect(result.page).toBe(STEAMSPY_MAX_PAGES - 1);
-    expect(fetchMock.mock.calls[0][0]).toContain(`page=${STEAMSPY_MAX_PAGES - 1}`);
-    const cursorWrite = db.statements.find(
-      (entry) => entry.sql.startsWith("INSERT") && entry.args[0] === "steamspyPage",
-    );
-    expect(cursorWrite?.args[1]).toBe("0");
-
-    vi.unstubAllGlobals();
+    expect(dbTouched).toBe(false);
   });
 });
 

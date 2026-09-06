@@ -82,7 +82,7 @@ cargos Premium no Discord (`syncDiscordPremiumRoles`) e limpa registros velhos
 
 ### `catalogue`
 
-Só o binding `DB` (D1 `piratebox-games`). Cron a cada 15 minutos, uma página da SteamSpy por execução — a API limita `request=all` a uma chamada por minuto e o ciclo das 20 páginas fecha em cinco horas.
+Bindings `DB` (D1 `piratebox-games`, leituras do catálogo) e `STEAMSPY_SNAPSHOT` (KV). Cron diário `0-44/2 0 * * *` (00h00–00h44 UTC): coleta 20 páginas da SteamSpy e publica um snapshot imutável no KV. A rotina agendada nunca escreve no D1 — SteamSpy só persiste no KV; o D1 segue como fallback somente leitura para amostras antigas.
 
 ### `steam-details`
 

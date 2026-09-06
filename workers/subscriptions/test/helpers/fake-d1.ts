@@ -9,9 +9,16 @@
 
 export type Row = Record<string, any>;
 
-type Handler = (binds: any[], db: FakeD1) => { results?: Row[]; changes: number };
+type Handler = (binds: any[], db: FakeD1) => { results?: Row[]; changes: number; rowsWritten?: number };
 
 type Rule = { pattern: RegExp; run: Handler };
+
+export type ExecEntry = { sql: string; binds: any[]; changes: number; rowsWritten: number };
+export type BatchEntry = {
+  sqls: string[];
+  binds: any[][];
+  results: Array<{ changes: number; rowsWritten: number }>;
+};
 
 function normalize(sql: string) {
   return sql.replace(/\s+/g, " ").trim();
@@ -253,17 +260,39 @@ const rules: Rule[] = [
     },
   },
   {
-    pattern: /^UPDATE subscriptions SET stripe_payment_method_json = \?, stripe_payment_method_updated_at = \?/i,
-    run: ([json, updatedAt, value], db) => {
+    pattern: /^UPDATE subscriptions SET stripe_payment_method_json = NULL, stripe_payment_method_updated_at = NULL/i,
+    run: ([value], db) => {
       let changes = 0;
       for (const row of db.rows("subscriptions")) {
         if (row.user_id === value || row.steam_id === value) {
+          if (row.stripe_payment_method_json !== null || row.stripe_payment_method_updated_at !== null) {
+            row.stripe_payment_method_json = null;
+            row.stripe_payment_method_updated_at = null;
+            changes += 1;
+          }
+        }
+      }
+      return { changes, rowsWritten: changes };
+    },
+  },
+  {
+    pattern: /^UPDATE subscriptions SET stripe_payment_method_json = \?, stripe_payment_method_updated_at = \?/i,
+    run: ([json, updatedAt, value, observed], db) => {
+      let changes = 0;
+      const useCas = observed !== undefined;
+      for (const row of db.rows("subscriptions")) {
+        if (row.user_id === value || row.steam_id === value) {
+          if (useCas) {
+            const current = row.stripe_payment_method_updated_at ?? null;
+            if (current !== observed) continue;
+          }
           row.stripe_payment_method_json = json;
           row.stripe_payment_method_updated_at = updatedAt;
           changes += 1;
         }
       }
-      return { changes };
+      db.count("subscriptions.payment_cache");
+      return { changes, rowsWritten: changes };
     },
   },
   {
@@ -739,6 +768,203 @@ const rules: Rule[] = [
       return { results: row ? [row] : [], changes: 0 };
     },
   },
+
+  // ---- cloud profile reads ----
+  {
+    pattern: /^SELECT \* FROM user_profile_cloud WHERE user_id = \? LIMIT 1/i,
+    run: ([userId], db) => {
+      const row = db.rows("user_profile_cloud").find((entry) => entry.user_id === userId);
+      return { results: row ? [{ ...row }] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM user_collections_cloud WHERE user_id = \? ORDER BY sort_order ASC, name ASC/i,
+    run: ([userId], db) => {
+      const rows = db
+        .rows("user_collections_cloud")
+        .filter((entry) => entry.user_id === userId)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name).localeCompare(String(b.name)));
+      return { results: rows.map((row) => ({ ...row })), changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM user_collection_games_cloud WHERE user_id = \? ORDER BY sort_order ASC/i,
+    run: ([userId], db) => {
+      const rows = db
+        .rows("user_collection_games_cloud")
+        .filter((entry) => entry.user_id === userId)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      return { results: rows.map((row) => ({ ...row })), changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT game_id FROM user_favorite_games_cloud WHERE user_id = \? ORDER BY sort_order ASC/i,
+    run: ([userId], db) => {
+      const rows = db
+        .rows("user_favorite_games_cloud")
+        .filter((entry) => entry.user_id === userId)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      return { results: rows.map((row) => ({ game_id: row.game_id })), changes: 0 };
+    },
+  },
+
+  // ---- cloud profile set-based writes ----
+  {
+    pattern: /^INSERT INTO user_profile_cloud \(/i,
+    run: ([steamId, userId, displayName, avatarUrl, bannerUrl, x, y, scale, updatedAt], db) => {
+      const rows = db.rows("user_profile_cloud");
+      const existing = rows.find((entry) => entry.user_id === userId);
+      if (!existing) {
+        rows.push({
+          steam_id: steamId,
+          user_id: userId,
+          display_name: displayName,
+          avatar_url: avatarUrl,
+          banner_url: bannerUrl,
+          banner_position_x: x,
+          banner_position_y: y,
+          banner_position_scale: scale,
+          updated_at: updatedAt,
+        });
+        return { changes: 1, rowsWritten: 1 };
+      }
+      existing.steam_id = steamId ?? existing.steam_id;
+      existing.display_name = displayName;
+      existing.avatar_url = avatarUrl;
+      existing.banner_url = bannerUrl;
+      existing.banner_position_x = x;
+      existing.banner_position_y = y;
+      existing.banner_position_scale = scale;
+      existing.updated_at = updatedAt;
+      return { changes: 1, rowsWritten: 1 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM user_favorite_games_cloud WHERE user_id = \? AND NOT EXISTS \(SELECT 1 FROM json_each\(\?\)/i,
+    run: ([userId, favoritesJson], db) => {
+      const wanted = new Set<string>(JSON.parse(String(favoritesJson || "[]")));
+      const rows = db.rows("user_favorite_games_cloud");
+      const kept = rows.filter((entry) => entry.user_id !== userId || wanted.has(entry.game_id));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes, rowsWritten: changes };
+    },
+  },
+  {
+    pattern: /^INSERT INTO user_favorite_games_cloud \(steam_id, user_id, game_id, sort_order\)/i,
+    run: ([steamId, userId, favoritesJson], db) => {
+      const list = JSON.parse(String(favoritesJson || "[]")) as string[];
+      const rows = db.rows("user_favorite_games_cloud");
+      let changes = 0;
+      list.forEach((gameId, index) => {
+        const existing = rows.find((entry) => entry.user_id === userId && entry.game_id === gameId);
+        if (!existing) {
+          rows.push({ steam_id: steamId, user_id: userId, game_id: gameId, sort_order: index });
+          changes += 1;
+          return;
+        }
+        const steamChanged = steamId != null && existing.steam_id !== steamId;
+        if (existing.sort_order !== index || steamChanged) {
+          existing.sort_order = index;
+          if (steamId != null) existing.steam_id = steamId;
+          changes += 1;
+        }
+      });
+      return { changes, rowsWritten: changes };
+    },
+  },
+  {
+    pattern: /^DELETE FROM user_collection_games_cloud WHERE user_id = \? AND NOT EXISTS \(\s*SELECT 1 FROM json_each\(\?\)/i,
+    run: ([userId, collectionsJson], db) => {
+      const list = JSON.parse(String(collectionsJson || "[]")) as Array<{ id: string; games: string[] }>;
+      const wanted = new Set(list.flatMap((entry) => entry.games.map((gameId) => `${entry.id}|${gameId}`)));
+      const rows = db.rows("user_collection_games_cloud");
+      const kept = rows.filter(
+        (entry) => entry.user_id !== userId || wanted.has(`${entry.collection_id}|${entry.game_id}`)
+      );
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes, rowsWritten: changes };
+    },
+  },
+  {
+    pattern: /^DELETE FROM user_collections_cloud WHERE user_id = \? AND NOT EXISTS \(SELECT 1 FROM json_each\(\?\)/i,
+    run: ([userId, collectionsJson], db) => {
+      const list = JSON.parse(String(collectionsJson || "[]")) as Array<{ id: string }>;
+      const wanted = new Set(list.map((entry) => entry.id));
+      const rows = db.rows("user_collections_cloud");
+      const kept = rows.filter((entry) => entry.user_id !== userId || wanted.has(entry.id));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes, rowsWritten: changes };
+    },
+  },
+  {
+    pattern: /^INSERT INTO user_collections_cloud \(id, steam_id, user_id, name, sort_order, updated_at\)/i,
+    run: ([steamId, userId, updatedAt, collectionsJson], db) => {
+      const list = JSON.parse(String(collectionsJson || "[]")) as Array<{ id: string; name: string; o: number }>;
+      const rows = db.rows("user_collections_cloud");
+      let changes = 0;
+      for (const entry of list) {
+        const existing = rows.find((row) => row.user_id === userId && row.id === entry.id);
+        if (!existing) {
+          rows.push({
+            id: entry.id,
+            steam_id: steamId,
+            user_id: userId,
+            name: entry.name,
+            sort_order: entry.o,
+            updated_at: updatedAt,
+          });
+          changes += 1;
+          continue;
+        }
+        const steamChanged = steamId != null && existing.steam_id !== steamId;
+        if (existing.name !== entry.name || existing.sort_order !== entry.o || steamChanged) {
+          existing.name = entry.name;
+          existing.sort_order = entry.o;
+          if (steamId != null) existing.steam_id = steamId;
+          existing.updated_at = updatedAt;
+          changes += 1;
+        }
+      }
+      return { changes, rowsWritten: changes };
+    },
+  },
+  {
+    pattern: /^INSERT INTO user_collection_games_cloud \(steam_id, user_id, collection_id, game_id, sort_order\)/i,
+    run: ([steamId, userId, collectionsJson], db) => {
+      const collections = JSON.parse(String(collectionsJson || "[]")) as Array<{ id: string; games: string[] }>;
+      const list = collections.flatMap((collection) =>
+        collection.games.map((gameId, order) => ({ c: collection.id, g: gameId, o: order }))
+      );
+      const rows = db.rows("user_collection_games_cloud");
+      let changes = 0;
+      for (const entry of list) {
+        const existing = rows.find(
+          (row) => row.user_id === userId && row.collection_id === entry.c && row.game_id === entry.g
+        );
+        if (!existing) {
+          rows.push({
+            steam_id: steamId,
+            user_id: userId,
+            collection_id: entry.c,
+            game_id: entry.g,
+            sort_order: entry.o,
+          });
+          changes += 1;
+          continue;
+        }
+        const steamChanged = steamId != null && existing.steam_id !== steamId;
+        if (existing.sort_order !== entry.o || steamChanged) {
+          existing.sort_order = entry.o;
+          if (steamId != null) existing.steam_id = steamId;
+          changes += 1;
+        }
+      }
+      return { changes, rowsWritten: changes };
+    },
+  },
 ];
 
 export class FakeD1 {
@@ -746,6 +972,11 @@ export class FakeD1 {
   private counters = new Map<string, number>();
   /** Every statement executed, for assertions about what did or did not run. */
   readonly executed: string[] = [];
+  readonly execLog: ExecEntry[] = [];
+  readonly batches: BatchEntry[] = [];
+  private failPatterns: Array<{ pattern: RegExp; error: Error; once: boolean }> = [];
+  private failBatchIndex: number | null = null;
+  private failBatchError: Error | null = null;
 
   constructor(seed: Record<string, Row[]> = {}) {
     for (const [table, rows] of Object.entries(seed)) {
@@ -766,19 +997,43 @@ export class FakeD1 {
     return this.counters.get(key) ?? 0;
   }
 
+  failNext(pattern: RegExp, message = "injected D1 failure") {
+    this.failPatterns.push({ pattern, error: new Error(message), once: true });
+  }
+
+  failBatchAt(index: number, message = "injected batch failure") {
+    this.failBatchIndex = index;
+    this.failBatchError = new Error(message);
+  }
+
+  snapshotTables(): Map<string, Row[]> {
+    const copy = new Map<string, Row[]>();
+    for (const [table, rows] of this.tables.entries()) {
+      copy.set(table, rows.map((row) => ({ ...row })));
+    }
+    return copy;
+  }
+
+  restoreTables(snapshot: Map<string, Row[]>) {
+    this.tables = snapshot;
+  }
+
   prepare(sql: string) {
     const normalized = normalize(sql);
     const self = this;
     let binds: any[] = [];
 
-    const statement = {
+    const statement: any = {
+      __sql: normalized,
+      __binds: [] as any[],
       bind(...args: any[]) {
         binds = args;
+        statement.__binds = args;
         return statement;
       },
       async run() {
-        const { changes } = self.execute(normalized, binds);
-        return { success: true, meta: { changes } };
+        const { changes, rowsWritten } = self.execute(normalized, binds);
+        return { success: true, meta: { changes, rows_written: rowsWritten, rows_read: 0 } };
       },
       async first<T = Row>() {
         const { results } = self.execute(normalized, binds);
@@ -793,11 +1048,60 @@ export class FakeD1 {
     return statement;
   }
 
+  async batch(statements: any[]) {
+    const snapshot = this.snapshotTables();
+    const sqls: string[] = [];
+    const binds: any[][] = [];
+    const results: Array<{ changes: number; rowsWritten: number }> = [];
+    const batchResults: any[] = [];
+    try {
+      for (let index = 0; index < statements.length; index += 1) {
+        const entry = statements[index] as { __sql?: string; __binds?: any[] };
+        const sql = entry.__sql || "";
+        const args = entry.__binds || [];
+        sqls.push(sql);
+        binds.push(args);
+        if (this.failBatchIndex !== null && index === this.failBatchIndex && this.failBatchError) {
+          throw this.failBatchError;
+        }
+        const outcome = this.execute(sql, args);
+        const changes = outcome.changes ?? 0;
+        const rowsWritten = outcome.rowsWritten ?? changes;
+        results.push({ changes, rowsWritten });
+        batchResults.push({
+          success: true,
+          meta: { changes, rows_written: rowsWritten, rows_read: 0 },
+          results: outcome.results || [],
+        });
+      }
+      this.batches.push({ sqls, binds, results });
+      return batchResults;
+    } catch (error) {
+      this.restoreTables(snapshot);
+      throw error;
+    } finally {
+      this.failBatchIndex = null;
+      this.failBatchError = null;
+    }
+  }
+
   private execute(sql: string, binds: any[]) {
     this.executed.push(sql);
+    for (const failure of this.failPatterns) {
+      if (failure.pattern.test(sql)) {
+        if (failure.once) {
+          this.failPatterns = this.failPatterns.filter((entry) => entry !== failure);
+        }
+        throw failure.error;
+      }
+    }
     const rule = rules.find((entry) => entry.pattern.test(sql));
     if (!rule) throw new Error(`FakeD1: unhandled statement\n${sql}`);
-    return rule.run(binds, this);
+    const outcome = rule.run(binds, this);
+    const changes = outcome.changes ?? 0;
+    const rowsWritten = outcome.rowsWritten ?? changes;
+    this.execLog.push({ sql, binds: [...binds], changes, rowsWritten });
+    return { ...outcome, changes, rowsWritten };
   }
 }
 
