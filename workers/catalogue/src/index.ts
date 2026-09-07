@@ -1,6 +1,7 @@
 import { cacheControl, cacheKey, cachedValue, canonicalSearchKey, cloudflareCacheControl, imageCacheControl, imageNegativeCacheControl, searchTtl } from "./cache";
 import { getCatalogueFacets, getCatalogueMeta, getGame, getHome, ingestSteamApp, searchCatalogue } from "./catalogue";
 import { rotationSeed } from "./ranking";
+import { runSearchIndexBackfill, SEARCH_INDEX_CRON } from "./search-index";
 import {
   fetchLivePlayerCount,
   getSteamSpySnapshot,
@@ -186,8 +187,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const ingestMatch = url.pathname.match(/^\/games\/(\d+)\/ingest$/);
   if (ingestMatch) {
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "POST, OPTIONS" });
-    const result = await ingestSteamApp(env.DB, ingestMatch[1], url.origin);
-    if (result.ok) await edgeCache().delete(metaKey).catch(() => undefined);
+    const result = await ingestSteamApp(env.DB, ingestMatch[1], url.origin,
+      () => edgeCache().delete(metaKey).catch(() => undefined));
     return json(result, result.ok ? 200 : 404, { "cache-control": "private, no-store" });
   }
 
@@ -208,13 +209,24 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     const ttl = searchTtl(search);
     const route = search.facetsOnly ? "facets" : "catalogue-search";
     const cacheUpdatedAt = !search.facetsOnly
-      ? `${meta.updatedAt}:${snapshot?.sampledAt ?? meta.steamspySampledAt}`
+      ? `${meta.updatedAt}:${snapshot?.sampledAt ?? meta.steamspySampledAt}:${meta.searchIndexVersion || "legacy"}`
       : meta.updatedAt;
     return cachedJson(canonicalSearchKey(search, cacheUpdatedAt, url.origin), route, meta.updatedAt, ttl, ctx, async () => {
       const facets = search.includeFacets || search.facetsOnly
         ? await getCatalogueFacets(env.DB, meta.updatedAt)
         : undefined;
-      return { body: await searchCatalogue(env.DB, search, meta.total, url.origin, facets, snapshot, cacheUpdatedAt) };
+      return {
+        body: await searchCatalogue(
+          env.DB,
+          search,
+          meta.total,
+          url.origin,
+          facets,
+          snapshot,
+          `${meta.updatedAt}:${meta.searchIndexVersion || "legacy"}`,
+          meta.searchIndexVersion === "1",
+        ),
+      };
     }, false);
   }
   if (url.pathname === "/home") {
@@ -267,6 +279,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 
 export default {
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === SEARCH_INDEX_CRON) {
+      ctx.waitUntil(runSearchIndexBackfill(env.DB, event.scheduledTime).then((progress) => {
+        if (progress.status !== "leased" && progress.status !== "budget") console.log("search index", JSON.stringify(progress));
+      }));
+      return;
+    }
     if (!env.STEAMSPY_SNAPSHOT) throw new Error("STEAMSPY_SNAPSHOT binding is required; D1 refresh is disabled");
     const scheduled = new Date(event.scheduledTime);
     if (scheduled.getUTCHours() !== 0 || scheduled.getUTCMinutes() > 44 || scheduled.getUTCMinutes() % 2 !== 0) return;

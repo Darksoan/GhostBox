@@ -31,6 +31,8 @@ export interface SearchRequest {
 export interface CatalogueMeta {
   total: number;
   updatedAt: string;
+  /** Set only after the resumable FTS backfill has verified every game. */
+  searchIndexVersion: string;
   /**
    * Quando o cron da SteamSpy gravou amostras pela última vez. Separado de
    * `updatedAt` de propósito: o CCU muda de hora em hora e não deve invalidar

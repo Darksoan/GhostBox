@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "deploy:dry-run": "wrangler deploy --dry-run"
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "backfill:search-index": "node scripts/backfill-search-index.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260719.1",

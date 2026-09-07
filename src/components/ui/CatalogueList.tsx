@@ -598,7 +598,7 @@ export function CatalogueList({
   );
 
   // Sem virtualização de propósito: a página do catálogo entrega no máximo
-  // `cataloguePageSize` (20) itens, e o gate de `IntersectionObserver` por linha
+  // `cataloguePageSize` (21) itens, e o gate de `IntersectionObserver` por linha
   // já evita carregar as capas fora da viewport.
   const isGrid = viewMode === "grid";
   return (

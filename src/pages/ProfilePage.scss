@@ -1211,7 +1211,7 @@
   &__game-grid .game-card,
   &__game-grid .game-card__cover {
     border: 0 !important;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     outline: 0;
   }
 

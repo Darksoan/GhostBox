@@ -131,7 +131,8 @@ describe("production schema", () => {
     expect(query.sql).toContain("search_text LIKE ?");
     expect(query.sql).toContain("json_array_length(tags_json)");
     expect(query.sql).toContain("categories_json");
-    expect(query.sql).toContain("f.key < 12");
+    expect(query.sql).toContain("'$[11]'");
+    expect(query.sql).not.toContain("'$[12]'");
     expect(query.sql).toContain("release_year IN (?)");
     expect(query.bindings).toEqual(["%portal%", "%2%", "Puzzle", "2011"]);
   });

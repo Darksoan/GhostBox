@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
-import { getGame, searchCatalogue } from "../src/catalogue";
+import { getGame, searchCatalogue, searchIndexMatch } from "../src/catalogue";
 import { parseSearch } from "../src/index";
 import type { SteamSpySnapshot } from "../src/steamspy";
 
@@ -30,6 +30,10 @@ beforeAll(async () => {
     ranking_score REAL DEFAULT 0, ranking_tier INTEGER DEFAULT 0,
     steamspy_ccu INTEGER DEFAULT 0, steamspy_owners_max INTEGER DEFAULT 7
   )`).run();
+  await db.prepare(`CREATE VIRTUAL TABLE games_search USING fts5(
+    app_id UNINDEXED, text, genres, tags, developers, publishers, years,
+    tokenize = 'unicode61 remove_diacritics 2', prefix = '2 3 4'
+  )`).run();
   const seeds = [
     ["2", "Portal", "portal", '["Puzzle","Co-op"]', 1],
     ["10", "Portal 2", "portal 2", '["Puzzle"]', 0],
@@ -39,6 +43,12 @@ beforeAll(async () => {
   await db.batch(seeds.map((row) => db.prepare(
     "INSERT INTO games (app_id, name, search_text, categories_json, steamspy_ccu) VALUES (?, ?, ?, ?, ?)",
   ).bind(...row)));
+  await db.batch([
+    db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (2, '2', '2 portal', 'f616374696f6e', 'f70757a7a6c65 f636f2d6f70', '', '', 'f32303230')"),
+    db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (10, '10', '10 portal 2', 'f616374696f6e', 'f70757a7a6c65', '', '', 'f32303230')"),
+    db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (3, '3', '3 half life', 'f616374696f6e', 'f70757a7a6c65 f636f2d6f70', '', '', 'f32303230')"),
+    db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (4, '4', '4 portal zero', 'f616374696f6e', 'f70757a7a6c65', '', '', 'f32303230')"),
+  ]);
 }, 20_000);
 
 afterAll(async () => { await runtime?.dispose(); });
@@ -57,8 +67,11 @@ describe("snapshot queries in local D1", () => {
     const traced = { prepare(sql: string) { statements.push(sql); return db.prepare(sql); } } as D1Database;
     const result = await searchCatalogue(traced, parseSearch(new URL("https://example.com/catalogue/search?sort=playingNow&limit=200")), 4, "https://example.com", undefined, large);
     expect(result.matched).toBe(3);
-    const pageSql = statements.find((sql) => sql.includes("LIMIT ? OFFSET ?"))!;
-    const plan = await db.prepare(`EXPLAIN QUERY PLAN ${pageSql}`).bind(JSON.stringify(large.samples), 201, 0).all<{ detail: string }>();
+    const candidatesSql = statements.find((sql) => sql.includes("CROSS JOIN games"))!;
+    const positiveIds = Object.keys(large.samples).filter((id) => large.samples[id][0] > 0);
+    const measured = await db.prepare(candidatesSql).bind(JSON.stringify(positiveIds)).all();
+    expect(measured.meta.rows_read).toBeLessThan(25_000);
+    const plan = await db.prepare(`EXPLAIN QUERY PLAN ${candidatesSql}`).bind(JSON.stringify(positiveIds)).all<{ detail: string }>();
     expect(plan.results.some((row) => /SEARCH games .*app_id=/.test(row.detail))).toBe(true);
     expect(plan.results.some((row) => /^SCAN games/.test(row.detail))).toBe(false);
   });
@@ -90,6 +103,22 @@ describe("snapshot queries in local D1", () => {
     expect(empty.matched).toBe(2);
   });
 
+  it("uses FTS candidates for prefix text and every selected filter", async () => {
+    const request = parseSearch(new URL("https://example.com/catalogue/search?q=port&tags=Puzzle&tags=Co-op&years=2020&limit=20"));
+    const statements: string[] = [];
+    const traced = { prepare(sql: string) { statements.push(sql); return db.prepare(sql); } } as D1Database;
+    const result = await searchCatalogue(traced, request, 4, "https://example.com", undefined, null, "v1", true);
+    expect(result.games.map((game) => game.appId)).toEqual(["2"]);
+    const pageSql = statements.find((sql) => sql.includes("games_search MATCH" ) && sql.includes("LIMIT ? OFFSET ?"))!;
+    expect(pageSql).not.toContain("json_each");
+    expect(pageSql).not.toContain("search_text LIKE");
+    const plan = await db.prepare(`EXPLAIN QUERY PLAN ${pageSql}`)
+      .bind(searchIndexMatch(request), 21, 0)
+      .all<{ detail: string }>();
+    expect(plan.results.some((row) => /SCAN games$/i.test(row.detail))).toBe(false);
+    expect(plan.results.some((row) => /SEARCH games .*app_id/i.test(row.detail))).toBe(true);
+  });
+
   it("overlays statistics on other sorts and details, with a read-only D1 fallback", async () => {
     const normal = await search("sort=recentlyAdded&limit=200");
     expect(normal.games.find((game) => game.appId === "3")?.playingNow).toBe(30);
@@ -100,5 +129,33 @@ describe("snapshot queries in local D1", () => {
     expect(fallback.games[0].playingNow).toBe(900);
     const unchanged = await db.prepare("SELECT steamspy_ccu FROM games WHERE app_id = '10'").first<number>("steamspy_ccu");
     expect(unchanged).toBe(0);
+  });
+
+  it("keeps multiple years as OR and facet punctuation distinct", async () => {
+    const request = parseSearch(new URL("https://example.com/catalogue/search?q=port&years=2020&years=2021"));
+    const result = await searchCatalogue(db, request, 4, "https://example.com", undefined, null, "v1", true);
+    expect(result.matched).toBe(3);
+    const cpp = searchIndexMatch(parseSearch(new URL("https://example.com/?developers=C%2B%2B")));
+    const csharp = searchIndexMatch(parseSearch(new URL("https://example.com/?developers=C%23")));
+    expect(cpp).not.toBe(csharp);
+  });
+
+  it("combines FTS filters with a snapshot without rescanning its virtual rows", async () => {
+    const statements: string[] = [];
+    const traced = { prepare(sql: string) { statements.push(sql); return db.prepare(sql); } } as D1Database;
+    const request = parseSearch(new URL("https://example.com/?sort=playingNow&tags=Puzzle&tags=Co-op&limit=1&offset=1"));
+    const result = await searchCatalogue(traced, request, 4, "https://example.com", undefined, snapshot, "v1", true);
+    expect(result.matched).toBe(2);
+    expect(result.games.map((game) => game.appId)).toEqual(["3"]);
+    expect(statements.every((sql) => !sql.includes("json_each"))).toBe(true);
+  });
+
+  it("limits legacy tags to twelve entries without scanning a virtual table", async () => {
+    const { searchConditions } = await import("../src/catalogue");
+    const condition = searchConditions(parseSearch(new URL("https://example.com/?tags=Puzzle")));
+    const result = await db.prepare(`SELECT app_id FROM games ${condition.sql}`).bind(...condition.bindings).all();
+    expect(result.results).toHaveLength(4);
+    expect(result.meta.rows_read).toBeLessThanOrEqual(4);
+    expect(condition.sql).not.toContain("json_each");
   });
 });

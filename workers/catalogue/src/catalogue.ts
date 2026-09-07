@@ -8,14 +8,14 @@ import {
   type RotationEntry,
 } from "./ranking";
 import { steamSpySnapshotSample, type SteamSpySnapshot } from "./steamspy";
-import { cachedValue, countCacheKey } from "./cache";
+import { cachedValue, cacheKey, countCacheKey } from "./cache";
 
 const SOURCE = "cloudflare-d1";
 
-export const GAME_COLUMNS = `app_id, name, release_date, release_year, header_image,
-  developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
-  updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
-  metacritic_score, recommendations, ranking_score, ranking_tier, steamspy_ccu, steamspy_owners_max`;
+export const GAME_COLUMNS = `games.app_id, games.name, games.release_date, games.release_year, games.header_image,
+  games.developers_json, games.publishers_json, games.categories_json, games.genres_json, games.screenshots_json, games.tags_json,
+  games.updated_at, games.popularity_score, games.popularity_rank, games.steam_review_count, games.steam_positive_ratio,
+  games.metacritic_score, games.recommendations, games.ranking_score, games.ranking_tier, games.steamspy_ccu, games.steamspy_owners_max`;
 
 export const POPULAR_ORDER = RANKING_ORDER;
 
@@ -48,7 +48,6 @@ interface GameRow {
   steamspy_owners_max: number;
 }
 
-let facetsInFlight: Promise<Facets> | undefined;
 let metaCache: { expiresAt: number; promise: Promise<CatalogueMeta> } | undefined;
 
 type SteamStoreItem = {
@@ -145,12 +144,13 @@ async function metaValue(db: D1Database, key: string): Promise<string | null> {
 }
 
 async function readCatalogueMeta(db: D1Database): Promise<CatalogueMeta> {
-  const result = await db.prepare("SELECT key, value FROM catalogue_meta WHERE key IN ('totalGames', 'updatedAt', 'steamspySampledAt')").all<{ key: string; value: string }>();
+  const result = await db.prepare("SELECT key, value FROM catalogue_meta WHERE key IN ('totalGames', 'updatedAt', 'steamspySampledAt', 'searchIndexVersion')").all<{ key: string; value: string }>();
   const meta = new Map(result.results.map(({ key, value }) => [key, value]));
   const parsedTotal = Number.parseInt(meta.get("totalGames") ?? "0", 10);
   return {
     total: Number.isFinite(parsedTotal) ? parsedTotal : 0,
     updatedAt: meta.get("updatedAt") ?? "unknown",
+    searchIndexVersion: meta.get("searchIndexVersion") ?? "",
     steamspySampledAt: meta.get("steamspySampledAt") ?? "never",
   };
 }
@@ -170,7 +170,7 @@ export function invalidateCatalogueMetaCache() {
   metaCache = undefined;
 }
 
-function normalizeSearchText(value: string): string {
+export function normalizeSearchText(value: string): string {
   return value
     .trim()
     .normalize("NFD")
@@ -208,6 +208,75 @@ function listText(values: string[]): string {
   return values.length ? `\n${values.join("\n")}\n` : "";
 }
 
+export function facetToken(value: string): string {
+  const normalized = value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ");
+  if (!normalized) return "";
+  return `f${[...new TextEncoder().encode(normalized)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function facetTokens(values: string[]): string {
+  return [...new Set(values.map(facetToken).filter(Boolean))].join(" ");
+}
+
+export interface SearchDocument {
+  text: string;
+  genres: string;
+  tags: string;
+  developers: string;
+  publishers: string;
+  years: string;
+}
+
+export function searchDocument(
+  appId: string,
+  name: string,
+  developers: string[],
+  publishers: string[],
+  genres: string[],
+  tags: string[],
+  year: string,
+): SearchDocument {
+  return {
+    text: normalizeSearchText([appId, name, ...developers, ...publishers, ...genres, ...tags].join(" ")),
+    genres: facetTokens(genres),
+    tags: facetTokens(tags),
+    developers: facetTokens(developers),
+    publishers: facetTokens(publishers),
+    years: facetTokens(year ? [year] : []),
+  };
+}
+
+function emptyFacets(): Facets {
+  return Object.fromEntries(FILTER_NAMES.map((name) => [name, []])) as unknown as Facets;
+}
+
+function facetsFromGame(
+  developers: string[],
+  publishers: string[],
+  genres: string[],
+  tags: string[],
+  year: string,
+): Facets {
+  return { genres, tags, developers, publishers, years: year ? [year] : [] };
+}
+
+function mergeFacets(current: Facets, additions: Facets): Facets {
+  return Object.fromEntries(FILTER_NAMES.map((name) => [name,
+    [...new Set([...current[name], ...additions[name]])].sort((left, right) =>
+      name === "years" ? right.localeCompare(left) : left.localeCompare(right)),
+  ])) as Facets;
+}
+
+function parseFacets(value: string | null): Facets {
+  if (!value) return emptyFacets();
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return validFacets(parsed) ? parsed : emptyFacets();
+  } catch {
+    return emptyFacets();
+  }
+}
+
 async function fetchSteamStoreItem(appId: string): Promise<SteamStoreItem | null> {
   const url = new URL("https://store.steampowered.com/api/appdetails");
   url.searchParams.set("appids", appId);
@@ -226,8 +295,17 @@ async function fetchSteamStoreItem(appId: string): Promise<SteamStoreItem | null
   return result.data;
 }
 
-export async function ingestSteamApp(db: D1Database, appId: string, origin: string) {
+export async function ingestSteamApp(db: D1Database, appId: string, origin: string, onChanged?: () => Promise<unknown>) {
   if (!/^\d{1,10}$/.test(appId)) return { ok: false, error: "invalid_appid" };
+
+  const existing = await db.prepare("SELECT updated_at FROM games WHERE app_id = ? LIMIT 1")
+    .bind(appId)
+    .first<{ updated_at: number }>();
+  if (existing) {
+    const game = await getGame(db, appId, origin);
+    return { ok: true, appId, updatedAt: new Date(existing.updated_at).toISOString(), game };
+  }
+
   const data = await fetchSteamStoreItem(appId);
   if (!data) return { ok: false, error: "steam_app_not_found" };
 
@@ -245,44 +323,29 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
   const tags = genres.length ? genres : categories.slice(0, 12);
   const recommendations = Math.max(0, Math.trunc(data.recommendations?.total ?? 0));
   const metacriticScore = Math.max(0, Math.min(100, Math.trunc(data.metacritic?.score ?? 0)));
-  const searchText = normalizeSearchText([
-    appId,
-    name,
-    ...developers,
-    ...publishers,
-    ...genres,
-    ...categories,
-  ].join(" "));
-
-  await db.prepare(`INSERT INTO games (
+  const year = releaseYear(releaseDate);
+  const document = searchDocument(appId, name, developers, publishers, genres, tags, year);
+  document.text = normalizeSearchText([appId, name, ...developers, ...publishers, ...genres, ...categories].join(" "));
+  const [storedTotal, storedFacets] = await Promise.all([
+    metaValue(db, "totalGames"),
+    metaValue(db, "facets"),
+  ]);
+  const parsedTotal = Number.parseInt(storedTotal ?? "", 10);
+  const total = Number.isFinite(parsedTotal)
+    ? parsedTotal + 1
+    : Number((await db.prepare("SELECT COUNT(*) AS total FROM games").first<{ total: number }>())?.total ?? 0) + 1;
+  const nowFacets = mergeFacets(parseFacets(storedFacets), facetsFromGame(developers, publishers, genres, tags, year));
+  const gameStatement = db.prepare(`INSERT INTO games (
       app_id, name, release_date, release_year, release_sort, header_image,
       developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
       genres_text, tags_text, updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
       metacritic_score, recommendations, search_text
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?)
-    ON CONFLICT(app_id) DO UPDATE SET
-      name = excluded.name,
-      release_date = excluded.release_date,
-      release_year = excluded.release_year,
-      release_sort = excluded.release_sort,
-      header_image = excluded.header_image,
-      developers_json = excluded.developers_json,
-      publishers_json = excluded.publishers_json,
-      categories_json = excluded.categories_json,
-      genres_json = excluded.genres_json,
-      screenshots_json = excluded.screenshots_json,
-      tags_json = excluded.tags_json,
-      genres_text = excluded.genres_text,
-      tags_text = excluded.tags_text,
-      updated_at = excluded.updated_at,
-      metacritic_score = excluded.metacritic_score,
-      recommendations = excluded.recommendations,
-      search_text = excluded.search_text`)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?)`)
     .bind(
       appId,
       name,
       releaseDate,
-      releaseYear(releaseDate),
+      year,
       releaseSort(releaseDate),
       data.header_image?.trim() ?? "",
       JSON.stringify(developers),
@@ -296,19 +359,25 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
       now,
       metacriticScore,
       recommendations,
-      searchText,
-    )
-    .run();
-
-  const total = await db.prepare("SELECT COUNT(*) AS total FROM games").first<{ total: number }>();
+      document.text,
+    );
   const updatedAt = new Date(now).toISOString();
   await db.batch([
+    gameStatement,
+    db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(Number(appId), appId, document.text, document.genres, document.tags, document.developers, document.publishers, document.years),
     db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('totalGames', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-      .bind(String(total?.total ?? 0)),
+      .bind(String(total)),
     db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('updatedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(updatedAt),
+    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('facets', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(JSON.stringify(nowFacets)),
+    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('facetsUpdatedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .bind(updatedAt),
   ]);
   invalidateCatalogueMetaCache();
+  poolCache.clear();
+  await onChanged?.();
 
   const game = await getGame(db, appId, origin);
   return { ok: true, appId, updatedAt, game };
@@ -320,50 +389,10 @@ function validFacets(value: unknown): value is Facets {
     (value as Record<string, unknown[]>)[name].every((item) => typeof item === "string"));
 }
 
-async function calculateFacets(db: D1Database, updatedAt: string): Promise<Facets> {
-  const results = await db.batch([
-    db.prepare("SELECT DISTINCT CAST(j.value AS TEXT) AS value FROM games g, json_each(CASE WHEN json_valid(g.genres_json) THEN g.genres_json ELSE '[]' END) j WHERE j.value IS NOT NULL"),
-    db.prepare(`SELECT DISTINCT CAST(j.value AS TEXT) AS value
-      FROM games g, json_each(CASE
-        WHEN json_valid(g.tags_json) AND json_array_length(g.tags_json) > 0 THEN g.tags_json
-        WHEN json_valid(g.categories_json) THEN g.categories_json
-        ELSE '[]'
-      END) j
-      WHERE j.key < 12 AND j.value IS NOT NULL`),
-    db.prepare("SELECT DISTINCT CAST(j.value AS TEXT) AS value FROM games g, json_each(CASE WHEN json_valid(g.developers_json) THEN g.developers_json ELSE '[]' END) j WHERE j.value IS NOT NULL"),
-    db.prepare("SELECT DISTINCT CAST(j.value AS TEXT) AS value FROM games g, json_each(CASE WHEN json_valid(g.publishers_json) THEN g.publishers_json ELSE '[]' END) j WHERE j.value IS NOT NULL"),
-    db.prepare("SELECT DISTINCT release_year AS value FROM games WHERE release_year <> ''"),
-  ]);
-  const facets = Object.fromEntries(FILTER_NAMES.map((name, index) => {
-    const values = results[index].results
-      .map((row) => String((row as { value: unknown }).value).trim())
-      .filter(Boolean);
-    return [name, [...new Set(values)].sort((a, b) => name === "years" ? b.localeCompare(a) : a.localeCompare(b))];
-  })) as Facets;
-  await db.batch([
-    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('facets', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-      .bind(JSON.stringify(facets)),
-    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('facetsUpdatedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-      .bind(updatedAt),
-  ]);
-  return facets;
-}
-
-export async function getCatalogueFacets(db: D1Database, updatedAt: string): Promise<Facets> {
-  const [stored, storedUpdatedAt] = await Promise.all([
-    metaValue(db, "facets"),
-    metaValue(db, "facetsUpdatedAt"),
-  ]);
-  if (stored !== null && storedUpdatedAt === updatedAt) {
-    try {
-      const parsed: unknown = JSON.parse(stored);
-      if (validFacets(parsed)) return parsed;
-    } catch {
-      // Rebuild malformed metadata below.
-    }
-  }
-  facetsInFlight ??= calculateFacets(db, updatedAt).finally(() => { facetsInFlight = undefined; });
-  return facetsInFlight;
+export async function getCatalogueFacets(db: D1Database, _updatedAt: string): Promise<Facets> {
+  // Facets are materialized by ingestion/backfill. Rebuilding them per request
+  // used to be the largest source of D1 reads.
+  return parseFacets(await metaValue(db, "facets"));
 }
 
 export function searchConditions(request: SearchRequest, useSteamSpySnapshot = false): { sql: string; bindings: unknown[] } {
@@ -400,31 +429,67 @@ export function searchConditions(request: SearchRequest, useSteamSpySnapshot = f
           ELSE '[]'
         END`
       : columns[name];
-    const keyLimit = name === "tags" ? "f.key < 12 AND " : "";
-    const tests = values.map(() => `EXISTS (SELECT 1 FROM json_each(${jsonSource}) f WHERE ${keyLimit}lower(CAST(f.value AS TEXT)) = lower(?))`);
+    // The legacy tag filter only exposes twelve entries. Scalar extraction
+    // preserves that behavior without billing twelve virtual rows per game.
+    const tests = values.map(() => name === "tags"
+      ? `lower(?) IN (${Array.from({ length: 12 }, (_, index) => `lower(CAST(json_extract(${jsonSource}, '$[${index}]') AS TEXT))`).join(", ")})`
+      : `EXISTS (SELECT 1 FROM json_each(${jsonSource}) f WHERE lower(CAST(f.value AS TEXT)) = lower(?))`);
     clauses.push(`(${tests.join(" AND ")})`);
     bindings.push(...values);
   }
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", bindings };
 }
 
+function hasSearchCriteria(request: SearchRequest): boolean {
+  return request.q.length > 0 || FILTER_NAMES.some((name) => request.filters[name].length > 0);
+}
+
+export function searchIndexMatch(request: SearchRequest): string | null {
+  const terms = request.q.split(/\s+/).filter(Boolean).map((term) => `text:${term}*`);
+  for (const name of FILTER_NAMES) {
+    const filters: string[] = [];
+    for (const value of [...new Set(request.filters[name])]) {
+      const token = facetToken(value);
+      if (token) filters.push(`${name}:${token}`);
+    }
+    if (filters.length) terms.push(`(${filters.join(name === "years" ? " OR " : " AND ")})`);
+  }
+  return terms.length ? terms.join(" AND ") : null;
+}
+
+export function indexedSearchConditions(request: SearchRequest, useSteamSpySnapshot = false): { sql: string; bindings: unknown[] } {
+  const clauses: string[] = [];
+  const bindings: unknown[] = [];
+  if (request.sort === "playingNow") {
+    clauses.push(`${useSteamSpySnapshot ? "steamspy.sample_ccu" : "games.steamspy_ccu"} > 0`);
+  }
+  const match = searchIndexMatch(request);
+  if (match) {
+    clauses.push("games_search MATCH ?");
+    bindings.push(match);
+  }
+  return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", bindings };
+}
+
 type WhereClause = ReturnType<typeof searchConditions>;
 
-async function loadRotationPool(db: D1Database, seed: number, where: WhereClause): Promise<RotationEntry[]> {
+async function loadRotationPool(db: D1Database, seed: number, where: WhereClause, indexed: boolean): Promise<RotationEntry[]> {
   // Index-only walk over idx_games_ranking: ids and tiers, never full rows.
-  const rows = await db.prepare(`SELECT app_id, ranking_tier FROM games ${where.sql} ORDER BY ${RANKING_ORDER} LIMIT ?`)
+  const source = indexed ? "FROM games_search CROSS JOIN games ON games.app_id = games_search.app_id" : "FROM games";
+  const order = indexed ? "games.ranking_tier DESC, CAST(games.app_id AS INTEGER) ASC" : RANKING_ORDER;
+  const rows = await db.prepare(`SELECT games.app_id, games.ranking_tier ${source} ${where.sql} ORDER BY ${order} LIMIT ?`)
     .bind(...where.bindings, ROTATION_POOL_SIZE)
     .all<{ app_id: string; ranking_tier: number }>();
   const entries = rows.results.map((row) => ({ appId: String(row.app_id), tier: row.ranking_tier }));
   return rotatePool(entries, seed);
 }
 
-function rotationPool(db: D1Database, seed: number, where: WhereClause): Promise<RotationEntry[]> {
-  const key = JSON.stringify([seed, where.sql, where.bindings]);
+function rotationPool(db: D1Database, seed: number, where: WhereClause, indexed: boolean): Promise<RotationEntry[]> {
+  const key = JSON.stringify([seed, indexed, where.sql, where.bindings]);
   const now = Date.now();
   const cached = poolCache.get(key);
   if (cached && cached.expiresAt > now) return cached.promise;
-  const promise = loadRotationPool(db, seed, where).catch((error) => {
+  const promise = loadRotationPool(db, seed, where, indexed).catch((error) => {
     poolCache.delete(key);
     throw error;
   });
@@ -448,8 +513,9 @@ export function rotatedRowsSql(appIds: readonly string[]): string | null {
   return `SELECT ${GAME_COLUMNS} FROM games WHERE app_id IN (${safe.map((appId) => `'${appId}'`).join(", ")})`;
 }
 
-async function rotatedPageRows(db: D1Database, request: SearchRequest, where: WhereClause): Promise<GameRow[]> {
-  const pool = await rotationPool(db, request.seed, where);
+async function rotatedPageRows(db: D1Database, request: SearchRequest, where: WhereClause, indexed: boolean, revision: string): Promise<GameRow[]> {
+  const pool = await cachedValue(cacheKey("count", JSON.stringify(["rotation", request.seed, indexed, where]), revision), 3600,
+    () => rotationPool(db, request.seed, where, indexed));
   const slice = pool.slice(request.offset, request.offset + request.limit);
   const sql = rotatedRowsSql(slice.map((entry) => entry.appId));
   if (!sql) return [];
@@ -469,31 +535,61 @@ export async function searchCatalogue(
   facets?: Facets,
   snapshot?: SteamSpySnapshot | null,
   catalogueUpdatedAt = "unknown",
+  useSearchIndex = false,
 ) {
   if (request.facetsOnly) {
     return { games: [], total, matched: total, limited: false, source: SOURCE, facets };
   }
   const useSnapshot = Boolean(snapshot && request.sort === "playingNow");
-  const where = searchConditions(request, useSnapshot);
+  if (useSnapshot && !hasSearchCriteria(request)) {
+    const ids = await cachedValue(cacheKey("count", `playing-ids:${snapshot!.sampledAt}`, catalogueUpdatedAt), 3600, async () => {
+      const positiveIds = Object.entries(snapshot!.samples).filter(([, sample]) => sample[0] > 0).map(([id]) => id);
+      const rows = await db.prepare("SELECT games.app_id FROM json_each(?) AS sample CROSS JOIN games ON games.app_id = sample.value")
+        .bind(JSON.stringify(positiveIds)).all<{ app_id: string }>();
+      return rows.results.map((row) => row.app_id).sort((a, b) => snapshot!.samples[b][0] - snapshot!.samples[a][0] || Number(a) - Number(b));
+    });
+    const page = ids.slice(request.offset, request.offset + request.limit);
+    const sql = rotatedRowsSql(page);
+    const rows = sql ? (await db.prepare(sql).all<GameRow>()).results : [];
+    const byId = new Map(rows.map((row) => [row.app_id, row]));
+    const games = page.filter((id) => byId.has(id)).map((id) => toGame(byId.get(id)!, origin, snapshot));
+    return { games, total: ids.length, matched: ids.length, limited: request.offset + games.length < ids.length, source: SOURCE, ...(facets ? { facets } : {}) };
+  }
+  const indexed = useSearchIndex && hasSearchCriteria(request);
+  const where = indexed
+    ? indexedSearchConditions(request, useSnapshot)
+    : searchConditions(request, useSnapshot);
+  const snapshotCcu = indexed && useSnapshot
+    ? `COALESCE(json_extract(steamspy_data.samples, '$."' || games.app_id || '"[0]'), 0)`
+    : "steamspy.sample_ccu";
+  if (indexed && useSnapshot) where.sql = where.sql.replaceAll("steamspy.sample_ccu", snapshotCcu);
   const snapshotJson = useSnapshot ? JSON.stringify(snapshot!.samples) : null;
   const snapshotCte = useSnapshot
-    ? "WITH steamspy AS (SELECT key AS snapshot_app_id, CAST(json_extract(value, '$[0]') AS INTEGER) AS sample_ccu, CAST(json_extract(value, '$[1]') AS INTEGER) AS sample_owners FROM json_each(?)) "
+    ? indexed
+      ? "WITH steamspy_data AS (SELECT ? AS samples) "
+      : "WITH steamspy AS (SELECT key AS snapshot_app_id, CAST(json_extract(value, '$[0]') AS INTEGER) AS sample_ccu FROM json_each(?)) "
     : "";
+  const gamesSource = indexed
+    ? "games_search CROSS JOIN games ON games.app_id = games_search.app_id"
+    : "games";
   const fromClause = useSnapshot
-    ? "FROM games JOIN steamspy ON steamspy.snapshot_app_id = games.app_id"
-    : "FROM games";
+    ? indexed
+      ? `FROM ${gamesSource} CROSS JOIN steamspy_data`
+      : `FROM ${gamesSource} JOIN steamspy ON steamspy.snapshot_app_id = games.app_id`
+    : `FROM ${gamesSource}`;
+  const countFrom = indexed && !useSnapshot && request.sort !== "playingNow" ? "FROM games_search" : fromClause;
   const countQuery = () => (where.sql
     ? cachedValue(
-      countCacheKey(request, `${catalogueUpdatedAt}:${snapshot?.sampledAt ?? "d1"}`, origin),
-      300,
-      () => db.prepare(`${snapshotCte}SELECT COUNT(*) AS matched ${fromClause} ${where.sql}`)
+      countCacheKey(request, `${catalogueUpdatedAt}:${useSnapshot ? snapshot!.sampledAt : "d1"}`, origin),
+      request.sort === "playingNow" ? 300 : 86400,
+      () => db.prepare(`${snapshotCte}SELECT COUNT(*) AS matched ${countFrom} ${where.sql}`)
         .bind(...(useSnapshot ? [snapshotJson] : []), ...where.bindings)
         .first<{ matched: number }>(),
     )
     : Promise.resolve({ matched: total }));
 
   if (rotates(request)) {
-    const [pageRows, count] = await Promise.all([rotatedPageRows(db, request, where), countQuery()]);
+    const [pageRows, count] = await Promise.all([rotatedPageRows(db, request, where, indexed, catalogueUpdatedAt), countQuery()]);
     const games = pageRows.map((row) => toGame(row, origin, snapshot));
     const matched = Number(count?.matched ?? 0);
     return {
@@ -509,19 +605,23 @@ export async function searchCatalogue(
   const normalizedQuery = request.q.split(/\s+/).filter(Boolean).join(" ");
   const escapedQuery = normalizedQuery.replace(/[\\%_]/g, "\\$&");
   const orderBindings: unknown[] = [];
-  let order = POPULAR_ORDER;
+  let order = indexed ? "games.ranking_tier DESC, CAST(games.app_id AS INTEGER) ASC" : POPULAR_ORDER;
   if (normalizedQuery) {
-    order = `CASE
-      WHEN search_text = ? THEN 0
-      WHEN search_text LIKE ? ESCAPE '\\' THEN 1
-      WHEN search_text LIKE ? ESCAPE '\\' THEN 2
-      ELSE 3
-    END, LENGTH(name) ASC, name COLLATE NOCASE ASC`;
-    orderBindings.push(normalizedQuery, `${escapedQuery}%`, `%${escapedQuery}%`);
+    if (indexed) {
+      order = "bm25(games_search), LENGTH(games.name) ASC, games.name COLLATE NOCASE ASC";
+    } else {
+      order = `CASE
+        WHEN games.search_text = ? THEN 0
+        WHEN games.search_text LIKE ? ESCAPE '\\' THEN 1
+        WHEN games.search_text LIKE ? ESCAPE '\\' THEN 2
+        ELSE 3
+      END, LENGTH(games.name) ASC, games.name COLLATE NOCASE ASC`;
+      orderBindings.push(normalizedQuery, `${escapedQuery}%`, `%${escapedQuery}%`);
+    }
   } else if (request.sort === "recentlyAdded") {
-    order = "updated_at DESC, CAST(app_id AS INTEGER) DESC";
+    order = "games.updated_at DESC, CAST(games.app_id AS INTEGER) DESC";
   } else if (request.sort === "playingNow") {
-    order = `${useSnapshot ? "steamspy.sample_ccu" : "steamspy_ccu"} DESC, CAST(games.app_id AS INTEGER) ASC`;
+    order = `${useSnapshot ? snapshotCcu : "games.steamspy_ccu"} DESC, CAST(games.app_id AS INTEGER) ASC`;
   }
   const rowLimit = request.limit + 1;
   const rowsPromise = db.prepare(`${snapshotCte}SELECT ${GAME_COLUMNS} ${fromClause} ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)

@@ -36,6 +36,12 @@ describe("Catalogue view mode toggle", () => {
     expect(list).not.toContain("catalogue-list--grid");
   });
 
+  it("uses a page size that fills the three-column grid", () => {
+    const constants = readFileSync("src/constants/catalogue.ts", "utf8");
+
+    expect(constants).toContain("export const cataloguePageSize = 21;");
+  });
+
   it("tracks the cards grid in the stylesheet with semantic tokens only", () => {
     expect(stylesheet).toContain(".catalogue-list--cards");
     expect(stylesheet).toContain(".catalogue-grid-card__action");

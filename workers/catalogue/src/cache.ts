@@ -1,7 +1,7 @@
 import { rotates } from "./ranking";
 import type { SearchRequest } from "./types";
 
-export const CACHE_VERSION = "catalogue-v6-steamspy-samples";
+export const CACHE_VERSION = "catalogue-v8-d1-budget";
 
 export type CacheRoute = "facets" | "search" | "game" | "home" | "meta" | "count";
 

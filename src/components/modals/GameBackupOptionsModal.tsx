@@ -371,7 +371,7 @@ export function GameBackupOptionsModal({
   return createPortal(
     <div className="backdrop backdrop--profile" onClick={onClose}>
       <form
-        className="game-settings-modal"
+        className="game-settings-modal game-settings-modal--widgets"
         role="dialog"
         aria-modal="true"
         aria-labelledby="game-backup-modal-title"
@@ -407,7 +407,10 @@ export function GameBackupOptionsModal({
         </header>
 
         <div className="game-settings-modal__body">
-          <nav className="game-settings-modal__nav">
+          <nav
+            className="game-settings-modal__nav"
+            aria-label={copy("Seção de ajustes", "Settings section")}
+          >
             <button
               type="button"
               className={`game-settings-modal__nav-button ${activeSection === "organization" ? "game-settings-modal__nav-button--active" : ""}`}
