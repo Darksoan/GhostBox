@@ -89,6 +89,7 @@ describe("wishlist cycle", () => {
       selectedGames: [game("10"), game("11"), game("12"), game("13")],
       storedCycle: previous,
       cycleStart: new Date(2026, 7, 10, 14),
+      historyLimit: 7,
     });
     expect(cycle.history).toEqual([
       ["10", "11", "12", "13"],

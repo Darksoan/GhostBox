@@ -36,10 +36,18 @@ describe("Catalogue view mode toggle", () => {
     expect(list).not.toContain("catalogue-list--grid");
   });
 
-  it("uses a page size that fills the three-column grid", () => {
+  it("uses a page size that fills the fixed grid without orphans", () => {
     const constants = readFileSync("src/constants/catalogue.ts", "utf8");
 
-    expect(constants).toContain("export const cataloguePageSize = 21;");
+    expect(constants).toContain("export const cataloguePageSize = 20;");
+  });
+
+  it("keeps the cards grid on fixed 4 columns (cards grow when maximized)", () => {
+    expect(stylesheet).toContain("repeat(4, minmax(0, 1fr))");
+    expect(stylesheet).not.toContain("repeat(5, minmax(0, 1fr))");
+    expect(stylesheet).not.toContain(
+      ".catalogue-list--cards {\n  display: grid;\n  grid-template-columns: repeat(auto-fill"
+    );
   });
 
   it("tracks the cards grid in the stylesheet with semantic tokens only", () => {

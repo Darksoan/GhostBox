@@ -2,9 +2,9 @@ import type { GhostBoxGame } from "../data";
 import type { StoredSteamWishlistCycle } from "./storage";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 
-export const wishlistCycleAlgorithmVersion = "wishlist-cycle-v2";
-// One entry per past day: a game picked today stays out for a full week.
-export const homeWishlistCycleHistoryLimit = 7;
+export const wishlistCycleAlgorithmVersion = "wishlist-cycle-v3";
+// One entry per past day: keep two months of exposures before recycling games.
+export const homeWishlistCycleHistoryLimit = 60;
 
 type WishlistTraitInput = Iterable<string>;
 

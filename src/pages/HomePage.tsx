@@ -127,7 +127,7 @@ const homePersonalCalendarEnrichmentLimit = 6;
 const homeCalendarCoverLoadMargin = "360px 720px";
 const homePersonalCalendarNarrowDays = 3;
 const homeWishlistCycleSourceCount = 6;
-const homeWishlistSimilarPoolLimit = 16;
+const homeWishlistSimilarPoolLimit = 64;
 const homeWishlistCycleGameCount = 4;
 const homeWishlistReviewCacheMs = 7 * 24 * 60 * 60 * 1000;
 const homeWishlistRetryMs = 30 * 60 * 1000;
@@ -1721,6 +1721,10 @@ export function HomePage({
           const appId = item.appId.trim();
           if (appId) excludedGameIds.add(appId);
         });
+        const recentWishlist = readStoredSteamWishlistCycle();
+        if (recentWishlist && recentWishlist.steamId === steamProfile?.steamId) {
+          recentWishlist.history.flat().forEach((appId) => excludedGameIds.add(appId));
+        }
 
         // Each date keeps the games it was already assigned; only empty or
         // no-longer-available slots are re-picked, so a day is never swapped
@@ -1853,7 +1857,9 @@ export function HomePage({
         const cycleStart = hasFreshStoredCycle
           ? new Date(storedCycle.cycleStart)
           : getWishlistCycleStart();
-        const sourceOffset = getWishlistCycleIndex(cycleStart) % newAppIds.length;
+        const sourceOffset =
+          (getWishlistCycleIndex(cycleStart) * homeWishlistCycleSourceCount) %
+          newAppIds.length;
         const sourceAppIds = Array.from(
           { length: Math.min(homeWishlistCycleSourceCount, newAppIds.length) },
           (_, index) => newAppIds[(sourceOffset + index) % newAppIds.length]
@@ -1899,12 +1905,22 @@ export function HomePage({
         ).filter((game): game is GhostBoxGame => Boolean(game));
         if (cancelled) return;
 
-        const excludedAppIds = new Set([
+        const recentCalendar = readStoredPersonalCalendar();
+        const fixedExcludedAppIds = [
           ...newAppIds,
           ...libraryGameAppIds,
-          ...(storedCycle?.history ?? []).flat(),
+          ...(recentCalendar?.gameIds ?? []),
           ...retainedGames.map(homeGameAppId),
-        ]);
+        ];
+        const wishlistHistory = storedCycle?.history ?? [];
+        const calendarHistory = Object.values(recentCalendar?.monthGameIds ?? {}).flat();
+        const exclusionsFor = (historyDays: number, includeCalendarHistory: boolean) =>
+          new Set([
+            ...fixedExcludedAppIds,
+            ...wishlistHistory.slice(0, historyDays).flat(),
+            ...(includeCalendarHistory ? calendarHistory : []),
+          ]);
+        let excludedAppIds = exclusionsFor(homeWishlistCycleHistoryLimit, true);
         const sourceTraits = sourceGames.flatMap((game) => [...game.tags, ...game.genres]);
         const missingGameCount = homeWishlistCycleGameCount - retainedGames.length;
         let replacementGames = pickWishlistCycleGames(similarGames, {
@@ -1919,15 +1935,23 @@ export function HomePage({
             loadSteamRecommendedTagsForUser(steamProfile.steamId).catch(() => []),
           ]);
           if (cancelled) return;
-          replacementGames = pickWishlistCycleGames(
-            [...similarGames, ...popularResult.games],
-            {
+          const fallbackCandidates = [...similarGames, ...popularResult.games];
+          for (const [historyDays, includeCalendarHistory] of [
+            [homeWishlistCycleHistoryLimit, true],
+            [30, true],
+            [14, true],
+            [7, false],
+            [0, false],
+          ] as const) {
+            excludedAppIds = exclusionsFor(historyDays, includeCalendarHistory);
+            replacementGames = pickWishlistCycleGames(fallbackCandidates, {
               gameCount: missingGameCount,
               sourceTraits,
               userTraits: steamRecommendedTagNames(recommendedTags),
               excludedAppIds,
-            }
-          );
+            });
+            if (replacementGames.length === missingGameCount) break;
+          }
         }
 
         const selectedGames = [...retainedGames, ...replacementGames];

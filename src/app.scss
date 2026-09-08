@@ -2182,7 +2182,7 @@ p {
     margin: 0;
     padding: 0 var(--space-6);
     box-sizing: border-box;
-    border-radius: 0;
+    border-radius: var(--radius-md);
     background: var(--surface-titlebar-control);
     color: var(--text-secondary);
     font-weight: var(--weight-regular);
@@ -4603,7 +4603,7 @@ p {
   width: 100%;
 }
 
-.home-wishlist-card__player-review-avatar--skeleton {
+.home-wishlist-card__player-review-author .home-wishlist-card__player-review-avatar--skeleton {
   border-radius: var(--radius-md);
   background: var(--skeleton-fill);
 }
@@ -4660,7 +4660,7 @@ p {
   display: block;
   width: 82%;
   height: 12px;
-  border-radius: var(--radius-pill);
+  border-radius: 0;
   background: var(--skeleton-fill);
 
   &--title {
@@ -6760,6 +6760,26 @@ html.no-animations {
     }
   }
 
+  /* Topo do catálogo: texto/chevron fixos em secondary — hover, foco e
+     aberto trocam só a superfície, nunca clareiam para primary. */
+  &__sort .settings-dropdown__trigger:hover,
+  &__sort .settings-dropdown__trigger:focus-visible,
+  &__sort.settings-dropdown--open .settings-dropdown__trigger,
+  &__view .settings-dropdown__trigger:hover,
+  &__view .settings-dropdown__trigger:focus-visible,
+  &__view.settings-dropdown--open .settings-dropdown__trigger {
+    color: var(--text-secondary);
+  }
+
+  &__sort .settings-dropdown__trigger:hover svg,
+  &__sort .settings-dropdown__trigger:focus-visible svg,
+  &__sort.settings-dropdown--open .settings-dropdown__trigger svg,
+  &__view .settings-dropdown__trigger:hover svg,
+  &__view .settings-dropdown__trigger:focus-visible svg,
+  &__view.settings-dropdown--open .settings-dropdown__trigger svg {
+    color: var(--text-secondary);
+  }
+
   /* Massa do gatilho de ordenação enquanto a página carrega: mesma geometria de
      `&__sort` (min-width) + `.settings-dropdown__trigger` (altura, raio). */
   &__sort-placeholder {
@@ -6988,14 +7008,14 @@ html.no-animations {
       line-height: 1;
     }
 
-    &:hover strong,
+    /* Texto/chevron fixos em secondary em todos estados: nem hover nem
+       dropdown aberto clareiam. Só a superfície do container muda. */
     &[aria-expanded="true"] strong {
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
 
-    &:hover .catalogue-filter-section__chevron,
     &[aria-expanded="true"] .catalogue-filter-section__chevron {
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
   }
 
@@ -7009,10 +7029,11 @@ html.no-animations {
       color var(--motion-fast) var(--ease);
 
     /* Chevron aponta para baixo em repouso e vira para cima ao abrir — meia
-       volta, não o quarto de volta do acordeão que a barra lateral usava. */
+       volta, não o quarto de volta do acordeão que a barra lateral usava.
+       Cor fixa em secondary: abrir não clareia. */
     &--open {
       transform: rotate(180deg);
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
   }
 
@@ -7802,12 +7823,25 @@ input[type="search"]::-ms-reveal {
 /* Grade de cards estilo "Bem avaliados" da Home: os filhos usam as classes do
    `.home-top-rated-card` (arte larga, nome + nota, desenvolvedora), então a
    grade só define o trilhamento e a ação flutuante de "adicionado". O
-   `flex: 0 0 ...` herdado do card da Home não afeta filhos de grid. */
+   `flex: 0 0 ...` herdado do card da Home não afeta filhos de grid.
+   Contagem de colunas fixa de propósito (ver `.home-category__games`): com
+   `auto-fill` o maximizado caía em 5 colunas e o pageSize 21 deixava um card
+   solto na última linha. 4 colunas sempre — no maximizado os cards só
+   alargam com o container — e pageSize 20 fecha 5 linhas cheias; 2 e 1
+   colunas nos breakpoints estreitos também dividem 20. */
 .catalogue-list--cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   gap: var(--space-4);
+
+  @media (max-width: 1100px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 600px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
   .catalogue-grid-card {
     position: relative;
@@ -10240,7 +10274,9 @@ input[type="search"]::-ms-reveal {
   padding: 0 var(--library-inline-padding) var(--space-6) var(--library-inline-padding);
 
   .settings-dropdown {
-    width: min(210px, 100%);
+    // Mesma largura da capa portrait da grade (180px, 220px no maximizado):
+    // o trigger alinha com a primeira coluna.
+    width: min(180px, 100%);
   }
 
   .settings-dropdown__trigger {
@@ -10458,6 +10494,20 @@ border: 0;
       }
     }
   }
+}
+
+// Maximizado: capas portrait maiores, proporcionais à largura extra
+// (180px → 220px). Mesmo padrão dos outros ajustes de maximizado
+// (via `.sidebar--maximized`).
+.sidebar--maximized ~ .container .content-section--library .game-grid.game-grid--portrait,
+.app-main:has(.sidebar--maximized) .content-section--library .game-grid.game-grid--portrait {
+  --game-grid-track: 220px;
+}
+
+// Trigger de ordenação acompanha a capa: 220px no maximizado.
+.sidebar--maximized ~ .container .library-toolbar .settings-dropdown,
+.app-main:has(.sidebar--maximized) .library-toolbar .settings-dropdown {
+  width: min(220px, 100%);
 }
 
 .content-section--library > .empty-state {

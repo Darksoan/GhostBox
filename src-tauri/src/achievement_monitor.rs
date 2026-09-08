@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_notification::NotificationExt;
 
 pub const LOCAL_ACHIEVEMENTS_UNLOCKED_EVENT: &str = "local-achievements-unlocked";
 const POLL_INTERVAL_MS: u64 = 2000;
@@ -145,6 +146,17 @@ fn notify_new_unlocks(app: &AppHandle, app_id: &str, title: &str, steam_path: Op
     }
     *previous = current;
     drop(snapshots_guard);
+
+    if crate::settings::desktop_achievement_notifications_enabled(app) {
+        for achievement in &new_unlocks {
+            let _ = app
+                .notification()
+                .builder()
+                .title("GhostBox")
+                .body(format!("{title}: {achievement}"))
+                .show();
+        }
+    }
 
     let _ = app.emit(
         LOCAL_ACHIEVEMENTS_UNLOCKED_EVENT,

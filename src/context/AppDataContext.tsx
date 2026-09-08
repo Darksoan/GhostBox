@@ -96,7 +96,6 @@ import {
   withBackupRecordLastPlayed,
   upsertProfileHistoryGame,
 } from "../lib/profileHistoryGames";
-import { showAchievementDesktopNotification } from "../lib/trayNotifications";
 import { useOverlay } from "./OverlayContext";
 import { useSettings } from "./settings";
 import { useAuth } from "./AuthContext";
@@ -1316,12 +1315,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           game: { appId: payload.appId, title: payload.title },
         });
 
-        showAchievementDesktopNotification(
-          achievementUnlockedTitle,
-          message,
-          notifications.desktopNotificationsEnabled,
-        );
-
         showAchievementToast({
           appId: payload.appId,
           gameTitle: payload.title,
@@ -1334,7 +1327,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [
     appearance.language,
     notifications.achievementsEnabled,
-    notifications.desktopNotificationsEnabled,
     showAchievementToast,
   ]);
 

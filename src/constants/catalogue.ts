@@ -1,7 +1,7 @@
 import type { CatalogueFilters } from "../types";
 import type { GameDatabaseResult } from "../data";
 
-export const cataloguePageSize = 21;
+export const cataloguePageSize = 20;
 export const catalogueChunkPageCount = 10;
 export const catalogueChunkSize = cataloguePageSize * catalogueChunkPageCount;
 export const searchDebounceMs = 300;

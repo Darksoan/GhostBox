@@ -3,7 +3,8 @@ import type { StoredPersonalCalendar } from "./storage";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 import { gameTraitAppId, getGameTraitSet } from "./gameTraits";
 
-const personalCalendarAlgorithmVersion = "daily-v3";
+const personalCalendarAlgorithmVersion = "daily-v4";
+const personalCalendarHistoryMonths = 3;
 
 const personalCalendarWeekdayLabels = {
   pt: ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."],
@@ -189,31 +190,36 @@ export function planPersonalCalendar(
 
   dayKeys.forEach((dayKey, dayIndex) => {
     const monthKey = monthKeyForDate(dayDates[dayIndex]);
+    const recentUsedIds = new Set(
+      Object.values(storedCalendar?.monthGameIds ?? {}).flat()
+    );
     const monthUsedIds = new Set(storedCalendar?.monthGameIds[monthKey] ?? []);
     const dayList = dayGames.get(dayKey) ?? [];
 
     while (dayList.length < gamesPerDay) {
       const picked = selectedGames();
-      const ranked = candidates
-        .flatMap((game, index) => {
-          const key = personalCalendarGameKey(game);
-          if (usedKeys.has(key) || monthUsedIds.has(key)) return [];
+      const rank = (historyIds: Set<string>) => candidates
+          .flatMap((game, index) => {
+            const key = personalCalendarGameKey(game);
+            if (usedKeys.has(key) || historyIds.has(key)) return [];
 
-          return [
-            {
+            return [{
               game,
               index,
               overlapScore: getPersonalCalendarOverlapScore(game, picked),
               qualityScore: getCalendarGameQualityScore(game),
-            },
-          ];
-        })
-        .sort(
-          (left, right) =>
-            left.overlapScore - right.overlapScore ||
-            right.qualityScore - left.qualityScore ||
-            left.index - right.index
-        );
+            }];
+          })
+          .sort(
+            (left, right) =>
+              left.overlapScore - right.overlapScore ||
+              right.qualityScore - left.qualityScore ||
+              left.index - right.index
+          );
+      // Prefer the full rolling history; if the pool is exhausted, recycle only
+      // games from older months and still never repeat inside the current month.
+      let ranked = rank(recentUsedIds);
+      if (!ranked.length) ranked = rank(monthUsedIds);
 
       const next = ranked[0];
       if (!next) break;
@@ -257,10 +263,21 @@ export function createPersonalCalendar({
     if (ids.length) prunedDayGameIds[dayKey] = [...ids];
   });
 
+  const historyStart = new Date(cycleStartDate.getFullYear(), cycleStartDate.getMonth(), 1);
+  historyStart.setMonth(historyStart.getMonth() - (personalCalendarHistoryMonths - 1));
+  const oldestMonthKey = monthKeyForDate(historyStart);
+  const sortedWindowMonthKeys = [...windowMonthKeys].sort();
+  const newestMonthKey =
+    sortedWindowMonthKeys[sortedWindowMonthKeys.length - 1] ??
+    monthKeyForDate(cycleStartDate);
   const monthGameIds: Record<string, string[]> = {};
+  Object.entries(storedCalendar?.monthGameIds ?? {}).forEach(([monthKey, ids]) => {
+    if (monthKey >= oldestMonthKey && monthKey <= newestMonthKey) {
+      monthGameIds[monthKey] = [...ids];
+    }
+  });
   windowMonthKeys.forEach((monthKey) => {
-    const existingIds = storedCalendar?.monthGameIds[monthKey] ?? [];
-    monthGameIds[monthKey] = [...existingIds];
+    monthGameIds[monthKey] ??= [];
   });
 
   dayKeys.forEach((dayKey, index) => {

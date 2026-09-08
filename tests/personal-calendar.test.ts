@@ -126,6 +126,28 @@ describe("personal calendar", () => {
     expect(new Set(games.map((item) => item.appId)).size).toBe(games.length);
   });
 
+  it("avoids games shown in recent months", () => {
+    const today = new Date(2026, 8, 1);
+    const recentIds = Array.from({ length: 20 }, (_, index) => String(index + 1));
+    const storedCalendar = createPersonalCalendar({
+      dayGameIds: {},
+      storedCalendar: {
+        algorithmVersion: "daily-v4",
+        weekStart: new Date(2026, 7, 31).toISOString(),
+        cycleStart: new Date(2026, 7, 31).toISOString(),
+        expiresAt: today.toISOString(),
+        gameIds: [],
+        monthGameIds: { "2026-08": recentIds },
+        dayGameIds: {},
+      },
+      cycleStart: today,
+      days,
+    });
+
+    const result = plan(today, storedCalendar);
+    expect(result.games.every((item) => !recentIds.includes(item.appId))).toBe(true);
+  });
+
   it("rejects calendars from another algorithm version or past day", () => {
     const today = new Date(2026, 7, 21);
     const { dayGameIds } = plan(today, null);

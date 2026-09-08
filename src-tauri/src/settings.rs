@@ -29,6 +29,21 @@ pub(crate) fn default_notification_settings() -> serde_json::Value {
     })
 }
 
+pub(crate) fn desktop_achievement_notifications_enabled(app: &tauri::AppHandle) -> bool {
+    let settings = merge_object_defaults(
+        default_notification_settings(),
+        read_json_file(app, NOTIFICATION_SETTINGS_FILE).unwrap_or_else(|| serde_json::json!({})),
+    );
+    settings
+        .get("desktopNotificationsEnabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+        && settings
+            .get("achievementsEnabled")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true)
+}
+
 pub(crate) fn data_file_path(
     app: &tauri::AppHandle,
     file_name: &str,
