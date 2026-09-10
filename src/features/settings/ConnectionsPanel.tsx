@@ -1,9 +1,10 @@
-import { useEffect, useId, useState } from "react";
-import { Check, Copy, Link2, Loader2 } from "lucide-react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { Check, ChevronDown, Copy, Link2, Loader2 } from "lucide-react";
 import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
 import { useDiscordLink } from "./useDiscordLink";
 import { isSteamConnected } from "../../lib/steamProfile";
+import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
 import steamIcon from "../../../Icons/steam-glyph.svg";
 import discordIcon from "../../../Icons/discord.svg";
 import "./ConnectionsPanel.scss";
@@ -15,16 +16,8 @@ export function ConnectionsPanel() {
     isSteamSigningIn,
     handleConnectSteam,
     handleDisconnectSteam,
-    showSteamGames,
-    setShowSteamGames,
-    showSteamLibraryGames,
-    setShowSteamLibraryGames,
   } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
-  const steamVisibilityLabelId = useId();
-  const steamVisibilityDescId = useId();
-  const steamLibraryLabelId = useId();
-  const steamLibraryDescId = useId();
   const discord = useDiscordLink();
   const [confirmingSteamDisconnect, setConfirmingSteamDisconnect] = useState(false);
   const [disconnectingSteam, setDisconnectingSteam] = useState(false);
@@ -180,59 +173,6 @@ export function ConnectionsPanel() {
             </div>
           </section>
 
-          <div
-            className={`connection-card__steam-options${
-              steamConnected ? "" : " connection-card__steam-options--disabled"
-            }`}
-          >
-            <div className="connection-card__steam-option">
-              <div className="connection-card__steam-option-copy">
-                <strong id={steamVisibilityLabelId}>{t("settings.connections.steam.showOnProfile")}</strong>
-                <span id={steamVisibilityDescId}>{t("settings.connections.steam.showOnProfileDescription")}</span>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={showSteamGames}
-                aria-labelledby={steamVisibilityLabelId}
-                aria-describedby={steamVisibilityDescId}
-                disabled={!steamConnected}
-                className={`settings-switch${showSteamGames ? " settings-switch--on" : ""}${
-                  !steamConnected ? " settings-switch--disabled" : ""
-                }`}
-                onClick={() => {
-                  if (!steamConnected) return;
-                  setShowSteamGames(!showSteamGames);
-                }}
-              >
-                <span />
-              </button>
-            </div>
-
-            <div className="connection-card__steam-option">
-              <div className="connection-card__steam-option-copy">
-                <strong id={steamLibraryLabelId}>{t("settings.connections.steam.showInLibrary")}</strong>
-                <span id={steamLibraryDescId}>{t("settings.connections.steam.showInLibraryDescription")}</span>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={showSteamLibraryGames}
-                aria-labelledby={steamLibraryLabelId}
-                aria-describedby={steamLibraryDescId}
-                disabled={!steamConnected}
-                className={`settings-switch${showSteamLibraryGames ? " settings-switch--on" : ""}${
-                  !steamConnected ? " settings-switch--disabled" : ""
-                }`}
-                onClick={() => {
-                  if (!steamConnected) return;
-                  setShowSteamLibraryGames(!showSteamLibraryGames);
-                }}
-              >
-                <span />
-              </button>
-            </div>
-          </div>
         </div>
 
         <section className="connection-card">
@@ -287,6 +227,143 @@ export function ConnectionsPanel() {
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+export function SteamVisibilitySection() {
+  const { t } = useSettings();
+  const {
+    steamProfile,
+    showSteamGames,
+    setShowSteamGames,
+    showSteamLibraryGames,
+    setShowSteamLibraryGames,
+    hiddenProfileGameIds,
+    setProfileGameHidden,
+    profileAddedLibraryGames,
+    profileFavoriteGames,
+    profileHistoryGames,
+    steamAccountStats,
+  } = useAppData();
+  const steamConnected = isSteamConnected(steamProfile);
+  const steamVisibilityLabelId = useId();
+  const steamVisibilityDescId = useId();
+  const steamLibraryLabelId = useId();
+  const steamLibraryDescId = useId();
+  const hiddenGames = useMemo(() => {
+    const games = new Map<string, string>();
+    const candidates = [
+      ...profileAddedLibraryGames,
+      ...profileFavoriteGames,
+      ...profileHistoryGames,
+      ...buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
+    ];
+    for (const game of candidates) {
+      const appId = game.appId.trim();
+      const title = game.title.trim();
+      if (appId && title && title !== appId) games.set(appId, title);
+    }
+    return [...games]
+      .map(([appId, title]) => ({ appId, title }))
+      .sort((left, right) => left.title.localeCompare(right.title));
+  }, [
+    profileAddedLibraryGames,
+    profileFavoriteGames,
+    profileHistoryGames,
+    steamAccountStats?.ownedPlaytimes,
+  ]);
+
+  return (
+    <div className="steam-library-profile-options">
+      <div
+        className={`connection-card__steam-options${
+          steamConnected ? "" : " connection-card__steam-options--disabled"
+        }`}
+      >
+        <div className="connection-card__steam-option">
+        <div className="connection-card__steam-option-copy">
+          <strong id={steamVisibilityLabelId}>{t("settings.connections.steam.showOnProfile")}</strong>
+          <span id={steamVisibilityDescId}>{t("settings.connections.steam.showOnProfileDescription")}</span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showSteamGames}
+          aria-labelledby={steamVisibilityLabelId}
+          aria-describedby={steamVisibilityDescId}
+          disabled={!steamConnected}
+          className={`settings-switch${showSteamGames ? " settings-switch--on" : ""}${
+            !steamConnected ? " settings-switch--disabled" : ""
+          }`}
+          onClick={() => {
+            if (!steamConnected) return;
+            setShowSteamGames(!showSteamGames);
+          }}
+        >
+          <span />
+        </button>
+        </div>
+
+        <div className="connection-card__steam-option">
+        <div className="connection-card__steam-option-copy">
+          <strong id={steamLibraryLabelId}>{t("settings.connections.steam.showInLibrary")}</strong>
+          <span id={steamLibraryDescId}>{t("settings.connections.steam.showInLibraryDescription")}</span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showSteamLibraryGames}
+          aria-labelledby={steamLibraryLabelId}
+          aria-describedby={steamLibraryDescId}
+          disabled={!steamConnected}
+          className={`settings-switch${showSteamLibraryGames ? " settings-switch--on" : ""}${
+            !steamConnected ? " settings-switch--disabled" : ""
+          }`}
+          onClick={() => {
+            if (!steamConnected) return;
+            setShowSteamLibraryGames(!showSteamLibraryGames);
+          }}
+        >
+          <span />
+        </button>
+        </div>
+      </div>
+
+      <details className="hidden-profile-games">
+        <summary>
+          <span className="hidden-profile-games__copy">
+            <strong>{t("settings.library.hiddenProfileGames.label")}</strong>
+            <span>{t("settings.library.hiddenProfileGames.description")}</span>
+          </span>
+          <ChevronDown size={16} aria-hidden="true" />
+        </summary>
+        <div
+          className="hidden-profile-games__list"
+          role="group"
+          aria-label={t("settings.library.hiddenProfileGames.label")}
+        >
+          {hiddenGames.map((game) => {
+            const hidden = hiddenProfileGameIds.has(game.appId);
+            return (
+              <button
+                key={game.appId}
+                type="button"
+                role="checkbox"
+                aria-checked={hidden}
+                className={`hidden-profile-games__item${hidden ? " hidden-profile-games__item--selected" : ""}`}
+                onClick={() => setProfileGameHidden(game.appId, !hidden)}
+              >
+                <span>{game.title}</span>
+                <Check size={14} aria-hidden="true" />
+              </button>
+            );
+          })}
+          {hiddenGames.length === 0 && (
+            <p>{t("settings.library.hiddenProfileGames.empty")}</p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

@@ -136,4 +136,34 @@ describe("Page bottom spacing", () => {
       expect(shrink, `${selector} must not shrink below its content`).toBe("0");
     });
   });
+
+  it("keeps the game details modal scrollable below the narrow breakpoint", () => {
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const narrowRule = stylesheet.nodes.find(
+      (node) =>
+        node.type === "atrule" &&
+        node.name === "media" &&
+        node.params === "(max-width: 1200px)",
+    );
+
+    expect(narrowRule?.type).toBe("atrule");
+    const modalRule = narrowRule?.nodes?.find(
+      (node) => node.type === "rule" && node.selector === ".modal--details",
+    );
+    const declarations =
+      modalRule?.type === "rule"
+        ? modalRule.nodes
+            .filter((node) => node.type === "decl")
+            .map((node) => ({ prop: node.prop, value: node.value }))
+        : [];
+
+    expect(declarations).toContainEqual({ prop: "min-height", value: "100%" });
+    expect(declarations.some(({ prop }) => prop === "padding-bottom")).toBe(true);
+    expect(
+      declarations.some(({ prop, value }) => prop === "height" && value === "100%"),
+    ).toBe(false);
+    expect(
+      declarations.some(({ prop, value }) => prop === "overflow" && value === "hidden"),
+    ).toBe(false);
+  });
 });

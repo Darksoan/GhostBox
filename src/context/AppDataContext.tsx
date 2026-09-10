@@ -71,6 +71,7 @@ import {
   readStoredStartupPage,
   readStoredShowSteamGames,
   readStoredShowSteamLibraryGames,
+  readStoredHiddenProfileGameIds,
   readStoredCloudProfileUpdatedAt,
   readStoredAutoRestoredCloudSaves,
   writeStoredAutoRestoredCloudSaves,
@@ -82,6 +83,7 @@ import {
   writeStoredStartupPage,
   writeStoredShowSteamGames,
   writeStoredShowSteamLibraryGames,
+  writeStoredHiddenProfileGameIds,
   writeStoredCloudProfileUpdatedAt,
 } from "../utils/storage";
 import {
@@ -284,6 +286,7 @@ interface AppDataContextValue {
   steamPathInput: string;
   showSteamGames: boolean;
   showSteamLibraryGames: boolean;
+  hiddenProfileGameIds: Set<string>;
   steamAccountStats: SteamAccountStats | null;
   /** App ids the account has a cloud save for — the GhostBox-owned game set. */
   cloudSaveAppIds: Set<string>;
@@ -324,6 +327,7 @@ interface AppDataContextValue {
   setSteamPathInput: (path: string) => void;
   setShowSteamGames: (value: boolean) => void;
   setShowSteamLibraryGames: (value: boolean) => void;
+  setProfileGameHidden: (appId: string, hidden: boolean) => void;
   handleStartupSettingsChange: (
     settings: Partial<StartupSettings>,
   ) => Promise<void>;
@@ -400,6 +404,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     _setShowSteamLibraryGames(value);
     writeStoredShowSteamLibraryGames(value);
   }, []);
+  const [hiddenProfileGameIds, setHiddenProfileGameIds] = useState<Set<string>>(
+    () => new Set(readStoredHiddenProfileGameIds()),
+  );
   const [steamAccountStats, setSteamAccountStats] =
     useState<SteamAccountStats | null>(() => readStoredSteamAccountStats());
   const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
@@ -441,6 +448,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const cloudProfileRestoredUserIdRef = useRef<string | null>(null);
   const accountUserIdRef = useRef<string | null>(accountUserId);
   const cloudProfileFavoriteGameIdsRef = useRef<string[]>([]);
+  const hiddenProfileGameIdsRef = useRef(hiddenProfileGameIds);
   const [cloudProfileRestoreRetryTick, setCloudProfileRestoreRetryTick] =
     useState(0);
   const [completedInitialLoadSteps, setCompletedInitialLoadSteps] = useState<
@@ -808,6 +816,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         steamProfile: cloudProfile,
         favoriteGames: favoriteGamesRef.current,
         favoriteGameIds: cloudProfileFavoriteGameIdsRef.current,
+        hiddenProfileGameIds: [...hiddenProfileGameIdsRef.current],
         userCollections: userCollectionsRef.current,
       });
       const saved = await ghostboxApi.saveCloudProfileSnapshot(snapshot);
@@ -847,6 +856,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       void pushCloudProfileSnapshot();
     }, 1500);
   }, [markCloudProfileLocalUpdated, pushCloudProfileSnapshot]);
+
+  const setProfileGameHidden = useCallback(
+    (appId: string, hidden: boolean) => {
+      const normalized = appId.trim();
+      if (!normalized) return;
+      const current = hiddenProfileGameIdsRef.current;
+      if (current.has(normalized) === hidden) return;
+
+      const next = new Set(current);
+      if (hidden) next.add(normalized);
+      else next.delete(normalized);
+      hiddenProfileGameIdsRef.current = next;
+      setHiddenProfileGameIds(next);
+      writeStoredHiddenProfileGameIds(next);
+      scheduleCloudProfileSync();
+    },
+    [scheduleCloudProfileSync],
+  );
 
   const restoreCloudProfileFromRemote = useCallback(async (): Promise<boolean> => {
     if (cloudProfileRestoreInFlightRef.current) return false;
@@ -888,7 +915,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const localHasData =
         Boolean(currentProfile?.bannerUrl) ||
         favoriteGamesRef.current.length > 0 ||
-        userCollectionsRef.current.length > 0;
+        userCollectionsRef.current.length > 0 ||
+        hiddenProfileGameIdsRef.current.size > 0;
 
       if (
         localHasData &&
@@ -907,6 +935,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         snapshot: remote,
       });
       skipCloudProfileUploadCountRef.current = 2;
+      const restoredHiddenIds = new Set(applied.hiddenProfileGameIds);
+      hiddenProfileGameIdsRef.current = restoredHiddenIds;
+      setHiddenProfileGameIds(restoredHiddenIds);
+      writeStoredHiddenProfileGameIds(restoredHiddenIds);
       // Avatar, banner and display name are applied before the game list is
       // resolved: they are what the user looks for right after signing in, and
       // resolving the cloud games needs a network round trip per unknown game.
@@ -2635,6 +2667,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       steamPathInput,
       showSteamGames,
       showSteamLibraryGames,
+      hiddenProfileGameIds,
       steamAccountStats,
       cloudSaveAppIds,
       profileHistoryGames: profileHistoryGamesWithPlaytime,
@@ -2664,6 +2697,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setSteamPathInput,
       setShowSteamGames,
       setShowSteamLibraryGames,
+      setProfileGameHidden,
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,
@@ -2695,6 +2729,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       steamPathInput,
       showSteamGames,
       showSteamLibraryGames,
+      hiddenProfileGameIds,
       steamAccountStats,
       cloudSaveAppIds,
       profileHistoryGamesWithPlaytime,
@@ -2717,6 +2752,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleDisconnectSteam,
       handleRestartSteam,
       handleUpdateProfile,
+      setProfileGameHidden,
       handleStartupSettingsChange,
       handleMorrenusApiKeySave,
       handleSelectSteamPath,

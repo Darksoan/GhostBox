@@ -57,6 +57,7 @@ export type CloudProfileSnapshot = {
     bannerPosition: CloudProfileBannerPosition | null;
   };
   favoriteGameIds: string[];
+  hiddenProfileGameIds: string[];
   userCollections: CloudProfileCollection[];
 };
 
@@ -137,6 +138,7 @@ export function buildCloudProfileSnapshot(input: {
   > | null;
   favoriteGames: Array<{ id: string }>;
   favoriteGameIds?: string[];
+  hiddenProfileGameIds?: string[];
   userCollections: UserCollection[];
 }): CloudProfileSnapshot {
   const usedCollectionIds = new Set<string>();
@@ -173,6 +175,15 @@ export function buildCloudProfileSnapshot(input: {
         .filter(Boolean)
     )
   ).slice(0, MAX_FAVORITES);
+  const hiddenProfileGameIds = Array.from(
+    new Set(
+      (input.hiddenProfileGameIds ?? [])
+        .map((appId) => String(appId || "").trim())
+        .filter(Boolean),
+    ),
+  )
+    .slice(0, MAX_FAVORITES)
+    .sort();
 
   return {
     version: CLOUD_PROFILE_SCHEMA_VERSION,
@@ -184,6 +195,7 @@ export function buildCloudProfileSnapshot(input: {
       bannerPosition: compactBannerPosition(input.steamProfile?.bannerPosition),
     },
     favoriteGameIds,
+    hiddenProfileGameIds,
     userCollections: collections,
   };
 }
@@ -214,6 +226,17 @@ function expandCloudProfileSnapshot(
           )
         ).slice(0, MAX_FAVORITES)
       : [],
+    hiddenProfileGameIds: Array.isArray(snapshot.hiddenProfileGameIds)
+      ? Array.from(
+          new Set(
+            snapshot.hiddenProfileGameIds
+              .map((appId) => String(appId || "").trim())
+              .filter(Boolean),
+          ),
+        )
+          .slice(0, MAX_FAVORITES)
+          .sort()
+      : [],
     userCollections: Array.isArray(snapshot.userCollections)
       ? snapshot.userCollections
           .slice(0, MAX_COLLECTIONS)
@@ -241,6 +264,7 @@ export function applyCloudProfileToLocal(input: {
 }): {
   steamProfile: SteamProfile | null;
   favoriteGameIds: string[];
+  hiddenProfileGameIds: string[];
   userCollections: UserCollection[];
 } {
   const expanded = expandCloudProfileSnapshot(input.snapshot);
@@ -248,6 +272,7 @@ export function applyCloudProfileToLocal(input: {
     return {
       steamProfile: input.currentProfile,
       favoriteGameIds: [],
+      hiddenProfileGameIds: [],
       userCollections: [],
     };
   }
@@ -283,7 +308,12 @@ export function applyCloudProfileToLocal(input: {
     })
   );
 
-  return { steamProfile, favoriteGameIds: expanded.favoriteGameIds, userCollections };
+  return {
+    steamProfile,
+    favoriteGameIds: expanded.favoriteGameIds,
+    hiddenProfileGameIds: expanded.hiddenProfileGameIds,
+    userCollections,
+  };
 }
 
 export function isCloudSnapshotNewer(

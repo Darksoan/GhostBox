@@ -3,9 +3,10 @@ import {
   Folder,
   Heart,
   Pencil,
+  Search,
   Trash,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useDeferredValue, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
 import { ContextMenu } from "../ui/ContextMenu";
@@ -21,6 +22,7 @@ import { useSettings } from "../../context/settings";
 import { useAuth } from "../../context/AuthContext";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
+import { filterCollectionsByGameTitle } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
@@ -93,6 +95,9 @@ export const Sidebar = memo(function Sidebar({
   const isMaximized = useWindowMaximized();
   const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(() => readSidebarCollectionsCollapsed());
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<Set<string>>(() => readSidebarExpandedCollections());
+  const [isCollectionSearchOpen, setIsCollectionSearchOpen] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
+  const collectionSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     writeSidebarCollectionsCollapsed(isCollectionsCollapsed);
@@ -150,6 +155,10 @@ export const Sidebar = memo(function Sidebar({
       })),
     ];
   }, [deferredAddedLibraryGames, deferredFavoriteGames, userCollections, t]);
+
+  const visibleSidebarCollections = useMemo(() => {
+    return filterCollectionsByGameTitle(sidebarCollections, collectionSearchQuery);
+  }, [collectionSearchQuery, sidebarCollections]);
 
   const activeSessionGame = useMemo(() => {
     if (activeSessionAppIds.size === 0) return null;
@@ -213,6 +222,23 @@ export const Sidebar = memo(function Sidebar({
     },
     [onNavigate]
   );
+
+  const openCollectionSearch = useCallback(() => {
+    setIsCollectionSearchOpen(true);
+    setIsCollectionsCollapsed(false);
+  }, []);
+
+  const closeCollectionSearch = useCallback(() => {
+    setIsCollectionSearchOpen(false);
+    setCollectionSearchQuery("");
+  }, []);
+
+  useEffect(() => {
+    if (!isCollectionSearchOpen) return;
+
+    const frame = window.requestAnimationFrame(() => collectionSearchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isCollectionSearchOpen]);
 
   return (
     <aside className={`sidebar${isMaximized ? " sidebar--maximized" : ""}`}>
@@ -313,33 +339,70 @@ export const Sidebar = memo(function Sidebar({
 
         {!isModePage && (
           <section className="sidebar__collapsible-section sidebar__mode-panel sidebar__mode-panel--back sidebar__mode-panel--delayed">
-            <div className="sidebar__section-header">
-              <button
-                type="button"
-                className="sidebar__section-toggle"
-                aria-expanded={!isCollectionsCollapsed}
-                onClick={() => setIsCollectionsCollapsed((c) => !c)}
-                aria-label={isCollectionsCollapsed ? "Expandir coleções" : "Minimizar coleções"}
-              >
-                <ChevronRight
-                  size={14}
-                  strokeWidth={2.15}
-                  className={`sidebar__section-toggle-chevron${!isCollectionsCollapsed ? " sidebar__section-toggle-chevron--expanded" : ""}`}
-                />
-                <small className="sidebar__section-title">{t("sidebar.collections")}</small>
-              </button>
-              <button
-                type="button"
-                className="sidebar__add-button"
-                onClick={onCreateCollection}
-                aria-label={t("profile.createCollection")}
-              >
-                <span className="sidebar__add-icon" aria-hidden="true" />
-              </button>
+            <div className={`sidebar__section-header${isCollectionSearchOpen ? " sidebar__section-header--searching" : ""}`}>
+              <div className="sidebar__section-header-main">
+                <button
+                  type="button"
+                  className="sidebar__section-toggle"
+                  aria-expanded={!isCollectionsCollapsed}
+                  onClick={() => setIsCollectionsCollapsed((c) => !c)}
+                  aria-label={isCollectionsCollapsed ? "Expandir coleções" : "Minimizar coleções"}
+                  tabIndex={isCollectionSearchOpen ? -1 : 0}
+                  aria-hidden={isCollectionSearchOpen}
+                >
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={2.15}
+                    className={`sidebar__section-toggle-chevron${!isCollectionsCollapsed ? " sidebar__section-toggle-chevron--expanded" : ""}`}
+                  />
+                  <small className="sidebar__section-title">{t("sidebar.collections")}</small>
+                </button>
+                <label
+                  className={`sidebar__collection-search${isCollectionSearchOpen ? " sidebar__collection-search--open" : ""}`}
+                  aria-hidden={!isCollectionSearchOpen}
+                  onBlur={closeCollectionSearch}
+                >
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    ref={collectionSearchInputRef}
+                    type="search"
+                    value={collectionSearchQuery}
+                    onChange={(event) => setCollectionSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") closeCollectionSearch();
+                    }}
+                    placeholder={t("sidebar.collectionSearchPlaceholder")}
+                    tabIndex={isCollectionSearchOpen ? 0 : -1}
+                    aria-label={t("sidebar.collectionSearchPlaceholder")}
+                  />
+                </label>
+              </div>
+              <div className="sidebar__section-actions">
+                {!isCollectionSearchOpen && (
+                  <button
+                    type="button"
+                    className="sidebar__collection-search-button"
+                    onClick={openCollectionSearch}
+                    aria-label={t("sidebar.searchCollections")}
+                  >
+                    <Search size={16} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                )}
+                {!isCollectionSearchOpen && (
+                  <button
+                    type="button"
+                    className="sidebar__add-button"
+                    onClick={onCreateCollection}
+                    aria-label={t("profile.createCollection")}
+                  >
+                    <span className="sidebar__add-icon" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
             </div>
             {!isCollectionsCollapsed && (
               <ul className="sidebar__menu" >
-                {sidebarCollections.map((collection) => {
+                {visibleSidebarCollections.map((collection) => {
                   const isFavoritesCollection = collection.id === FAVORITES_COLLECTION_ID;
                   const isExpanded = expandedCollectionIds.has(collection.id);
                   const isActive =
@@ -446,6 +509,11 @@ export const Sidebar = memo(function Sidebar({
                     </li>
                   );
                 })}
+                {isCollectionSearchOpen && collectionSearchQuery.trim() && visibleSidebarCollections.length === 0 && (
+                  <li className="sidebar__collection-empty sidebar__collection-empty--search" role="status">
+                    {t("sidebar.noMatchingGames")}
+                  </li>
+                )}
               </ul>
             )}
           </section>

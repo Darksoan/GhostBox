@@ -90,6 +90,7 @@ describe("applyCloudProfileToLocal", () => {
           bannerPosition: null,
         },
         favoriteGameIds: [],
+        hiddenProfileGameIds: [],
         userCollections: [],
       },
     });
@@ -110,6 +111,7 @@ describe("applyCloudProfileToLocal", () => {
           bannerPosition: { x: 50, y: 50, scale: 1 },
         },
         favoriteGameIds: [],
+        hiddenProfileGameIds: [],
         userCollections: [],
       },
     });

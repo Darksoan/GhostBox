@@ -9,11 +9,13 @@ import {
   useState,
 } from "react";
 import type { GhostBoxGame } from "../../data";
-import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
+import { gameCatalogueHeaderSources } from "../../utils/image";
 import {
-  layeredImageStyle,
-  gameCatalogueHeaderSources,
-} from "../../utils/image";
+  cacheImageSourceAfterLoad,
+  forgetCachedImageSource,
+  markImageSourceLoaded,
+  withCachedImageSources,
+} from "../../utils/imageCache";
 import { getSteamReviewScore } from "../../utils/gameMetrics";
 import { CatalogueListLoadingState } from "./LoadingStates";
 import { useSettings } from "../../context/settings";
@@ -28,40 +30,68 @@ const genresRemeasureDelayMs = 140;
 // mesmo tempo, em 20 cards. Nem a linha mais larga do card chega perto disso —
 // quem corta é a medição, não este número.
 const maxMeasuredGenreLabels = 16;
-const catalogueCoverRetryDelayMs = 1_200;
-const catalogueCoverMaxRetries = 2;
 
-function useStableCatalogueCoverSource(source: string, loaded: boolean) {
-  const [stableSource, setStableSource] = useState(() =>
-    loaded && source ? source : "",
+/**
+ * Imagem crua do catálogo. O source escolhido fica congelado durante esta
+ * montagem: um miss pinta o `header.jpg` remoto e só depois grava seus bytes
+ * originais em segundo plano. Assim o primeiro paint nunca troca de bitmap;
+ * na próxima montagem/abertura, o mesmo arquivo vem direto do disco.
+ */
+const CatalogueHeaderImage = memo(function CatalogueHeaderImage({
+  game,
+}: {
+  game: GhostBoxGame;
+}) {
+  const rawSources = useMemo(() => gameCatalogueHeaderSources(game), [game]);
+  const sourceKey = rawSources.join("\n");
+  const sources = useMemo(
+    () =>
+      withCachedImageSources(rawSources, {
+        requestManifests: false,
+        preserveSourceOrder: true,
+        prioritizeCached: true,
+      }),
+    // `sourceKey` muda junto com o conteúdo; o mapa de cache pode mudar em
+    // segundo plano sem alterar este snapshot nem recarregar a imagem visível.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sourceKey]
   );
-
-  useLayoutEffect(() => {
-    if (!loaded || !source) return;
-    setStableSource((current) => current || source);
-  }, [loaded, source]);
-
-  return stableSource;
-}
-
-function useRobustCatalogueCoverSource(sources: string[]) {
-  const [retryToken, setRetryToken] = useState(0);
-  const { source, loaded, failed } = useLoadableImageCover(sources, {
-    preferOrder: true,
-    retryToken,
-  });
+  const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
-    if (!failed || retryToken >= catalogueCoverMaxRetries) return;
-    const timeout = setTimeout(
-      () => setRetryToken((current) => current + 1),
-      catalogueCoverRetryDelayMs * (retryToken + 1),
-    );
-    return () => clearTimeout(timeout);
-  }, [failed, retryToken]);
+    setSourceIndex(0);
+  }, [sourceKey]);
 
-  return useStableCatalogueCoverSource(source, loaded);
-}
+  const source = sources[sourceIndex] ?? "";
+  if (!source) return null;
+
+  return (
+    <img
+      className="catalogue-card__cover-image"
+      src={source}
+      width={460}
+      height={215}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+      aria-hidden="true"
+      onLoad={() => {
+        markImageSourceLoaded(source);
+        if (!/^https?:\/\//i.test(source)) return;
+
+        // O download para o cache começa depois que a imagem visível terminou
+        // de carregar. A fila compartilhada agrupa os cards e o backend limita
+        // a concorrência, sem disputar o primeiro paint do catálogo.
+        cacheImageSourceAfterLoad(source);
+      }}
+      onError={() => {
+        forgetCachedImageSource(source);
+        setSourceIndex((current) => current + 1);
+      }}
+    />
+  );
+});
 
 interface CatalogueListItemProps {
   game: GhostBoxGame;
@@ -102,20 +132,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   const { appearance } = useSettings();
   const isWindowMaximized = useWindowMaximized();
   const itemRef = useRef<HTMLElement | null>(null);
-  const [shouldLoadCover, setShouldLoadCover] = useState(false);
-  const rawHeaderSources = useMemo(
-    () => gameCatalogueHeaderSources(game),
-    [game],
-  );
-  const headerSources = useCachedImageSources(
-    shouldLoadCover ? rawHeaderSources : [],
-    {
-      preserveSourceOrder: true,
-      cacheSteamHeaders: true,
-      prioritizeCached: true,
-    },
-  );
-  const displayedCoverSource = useRobustCatalogueCoverSource(headerSources);
   const isEnglish = appearance.language === "en";
   // Sem teto fixo de rótulos: a medição abaixo decide quantas pills cabem na
   // linha do card, em vez de cortar em 3 e depois derrubar para 2.
@@ -128,8 +144,8 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     [game.genres, game.tags]
   );
   const genreLabelsKey = maxGenreLabels.join("\u0000");
-  const genresRef = useRef<HTMLDivElement | null>(null);
-  const genresMeasureRef = useRef<HTMLDivElement | null>(null);
+  const genresRef = useRef<HTMLSpanElement | null>(null);
+  const genresMeasureRef = useRef<HTMLSpanElement | null>(null);
   const lastGenresWidthRef = useRef<number | null>(null);
   // A linha visível nunca renderiza mais pills do que cabe: a contagem sai da
   // linha-espelho fora do fluxo. Antes o card pintava todas e recolhia depois
@@ -141,30 +157,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   const visibleGenreCount =
     genreDisplay.key === genreLabelsKey ? genreDisplay.count : 0;
   const renderedGenreLabels = maxGenreLabels.slice(0, visibleGenreCount);
-
-  useEffect(() => {
-    if (shouldLoadCover) return;
-    const node = itemRef.current;
-    if (!node) return;
-
-    if (typeof IntersectionObserver === "undefined") {
-      setShouldLoadCover(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setShouldLoadCover(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "420px 0px", threshold: 0.01 }
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [shouldLoadCover]);
 
   useLayoutEffect(() => {
     const container = genresRef.current;
@@ -245,12 +237,11 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     };
   }, [genreLabelsKey, isWindowMaximized, maxGenreLabels.length]);
 
-  const displayedCoverSources = displayedCoverSource ? [displayedCoverSource] : [];
 
   return (
     <article
       ref={itemRef}
-      className={`catalogue-list__item ${isAdding ? "catalogue-list__item--adding" : ""}`}
+      className={`catalogue-card catalogue-card--list${isAdding ? " catalogue-card--adding" : ""}`}
       data-catalogue-game-id={game.id}
       aria-busy={isAdding || isRemoving}
       onContextMenu={(event) => {
@@ -261,7 +252,7 @@ export const CatalogueListItem = memo(function CatalogueListItem({
     >
       <button
         type="button"
-        className="catalogue-list__main"
+        className="catalogue-card__button catalogue-card__button--list"
         aria-label={game.title}
         onClick={() => onOpenGame(game)}
         onFocus={() => {
@@ -280,49 +271,41 @@ export const CatalogueListItem = memo(function CatalogueListItem({
           onHoverGame(null);
         }}
       >
-        <div
-          className={`catalogue-list__cover${displayedCoverSource ? "" : " catalogue-list__cover--pending skeleton"}`}
-        >
-          {displayedCoverSource ? (
-            <span
-              className="catalogue-list__cover-image"
-              style={layeredImageStyle(displayedCoverSources, "")}
-              aria-hidden="true"
-            />
-          ) : null}
-        </div>
-        <div className="catalogue-list__content">
+        <span className="catalogue-card__cover" aria-hidden="true">
+          <CatalogueHeaderImage game={game} />
+        </span>
+        <span className="catalogue-card__list-content">
           <strong>{game.title}</strong>
-          <div className="catalogue-list__genres" ref={genresRef}>
+          <span className="catalogue-card__genres" ref={genresRef}>
             {renderedGenreLabels.map((tag, index) => (
-              <span className="catalogue-list__genre-chip" key={`${tag}-${index}`}>
+              <span className="catalogue-card__genre-chip" key={`${tag}-${index}`}>
                 {tag}
               </span>
             ))}
             {/* Linha-espelho: mesmas pills, fora do fluxo e invisível. Só ela
                 é medida — a linha de cima já nasce com a contagem certa. */}
-            <div
-              className="catalogue-list__genres-measure"
+            <span
+              className="catalogue-card__genres-measure"
               ref={genresMeasureRef}
               aria-hidden="true"
             >
               {maxGenreLabels.map((tag, index) => (
                 <span
-                  className="catalogue-list__genre-chip"
+                  className="catalogue-card__genre-chip"
                   key={`measure-${tag}-${index}`}
                 >
                   {tag}
                 </span>
               ))}
-            </div>
-          </div>
-        </div>
+            </span>
+          </span>
+        </span>
       </button>
       {isAdded && (
-        <div className="catalogue-list__actions">
+        <div className="catalogue-card__actions">
           <button
             type="button"
-            className="catalogue-list__added-status"
+            className="catalogue-card__added-status"
             onClick={(event) => {
               event.stopPropagation();
               onRemoveGame?.(game);
@@ -336,18 +319,18 @@ export const CatalogueListItem = memo(function CatalogueListItem({
             {isRemoving ? (
               <Loader2
                 size={20}
-                className="catalogue-list__remove-spinner"
+                className="catalogue-card__remove-spinner"
                 aria-hidden="true"
               />
             ) : (
               <>
                 <CircleCheck
-                  className="catalogue-list__added-check"
+                  className="catalogue-card__added-check"
                   size={20}
                   aria-hidden="true"
                 />
                 <Trash2
-                  className="catalogue-list__added-trash"
+                  className="catalogue-card__added-trash"
                   size={20}
                   aria-hidden="true"
                 />
@@ -360,14 +343,6 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   );
 });
 
-/**
- * Card da visualização em grade: mesmo markup e classes do card de
- * "Bem avaliados" da Home (`home-top-rated-card`), para reaproveitar o visual
- * (arte larga no aspecto 460×215, nome + nota de review, desenvolvedora)
- * sem duplicar estilos. As diferenças ficam por conta do contexto catálogo:
- * capa com gate de IntersectionObserver, ação de "adicionado" flutuante,
- * hover preview e menu de contexto.
- */
 const CatalogueGridCard = memo(function CatalogueGridCard({
   game,
   isAdded,
@@ -382,21 +357,6 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   const { appearance } = useSettings();
   const isEnglish = appearance.language === "en";
   const cardRef = useRef<HTMLElement | null>(null);
-  const [shouldLoadCover, setShouldLoadCover] = useState(false);
-  const rawHeaderSources = useMemo(
-    () => gameCatalogueHeaderSources(game),
-    [game],
-  );
-  const headerSources = useCachedImageSources(
-    shouldLoadCover ? rawHeaderSources : [],
-    {
-      preserveSourceOrder: true,
-      cacheSteamHeaders: true,
-      prioritizeCached: true,
-    },
-  );
-  const displayedCoverSource = useRobustCatalogueCoverSource(headerSources);
-  const displayedCoverSources = displayedCoverSource ? [displayedCoverSource] : [];
   // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra
   // de review, a razão volta 0 e viraria uma nota 0,0 falsa.
   const reviewScore = getSteamReviewScore(game);
@@ -408,34 +368,10 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   // primeiro nome.
   const developerName = game.developers?.find((name) => name.trim()) ?? "";
 
-  useEffect(() => {
-    if (shouldLoadCover) return;
-    const node = cardRef.current;
-    if (!node) return;
-
-    if (typeof IntersectionObserver === "undefined") {
-      setShouldLoadCover(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setShouldLoadCover(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "420px 0px", threshold: 0.01 }
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [shouldLoadCover]);
-
   return (
     <article
       ref={cardRef}
-      className="catalogue-grid-card"
+      className={`catalogue-card catalogue-card--grid${isAdding ? " catalogue-card--adding" : ""}`}
       data-catalogue-game-id={game.id}
       aria-busy={isAdding || isRemoving}
       onContextMenu={(event) => {
@@ -446,7 +382,7 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
     >
       <button
         type="button"
-        className="home-top-rated-card__hit"
+        className="catalogue-card__button catalogue-card__button--grid"
         aria-label={game.title}
         onClick={() => onOpenGame(game)}
         onFocus={() => {
@@ -464,25 +400,33 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
         onPointerLeave={() => {
           onHoverGame(null);
         }}
-      />
-      <span
-        className={`home-top-rated-card__art catalogue-grid-card__cover${
-          displayedCoverSource ? "" : " skeleton"
-        }`}
-        aria-hidden="true"
       >
-        {displayedCoverSource ? (
-          <span
-            className="catalogue-grid-card__cover-image"
-            style={layeredImageStyle(displayedCoverSources, "")}
-          />
-        ) : null}
-      </span>
+        <span className="catalogue-card__cover" aria-hidden="true">
+          <CatalogueHeaderImage game={game} />
+        </span>
+        <span className="catalogue-card__grid-body">
+          <span className="catalogue-card__title-row">
+            <span className="catalogue-card__title">{game.title}</span>
+            {ratingText ? (
+              <span className="catalogue-card__rating" aria-label={ratingText}>
+                <Flame
+                  size={16}
+                  fill="currentColor"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <span>{ratingText}</span>
+              </span>
+            ) : null}
+          </span>
+          <span className="catalogue-card__developer">{developerName}</span>
+        </span>
+      </button>
       {isAdded && (
-        <div className="catalogue-grid-card__action">
+        <div className="catalogue-card__actions catalogue-card__actions--overlay">
           <button
             type="button"
-            className="catalogue-list__added-status"
+            className="catalogue-card__added-status"
             onClick={(event) => {
               event.stopPropagation();
               onRemoveGame?.(game);
@@ -496,18 +440,18 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
             {isRemoving ? (
               <Loader2
                 size={20}
-                className="catalogue-list__remove-spinner"
+                className="catalogue-card__remove-spinner"
                 aria-hidden="true"
               />
             ) : (
               <>
                 <CircleCheck
-                  className="catalogue-list__added-check"
+                  className="catalogue-card__added-check"
                   size={20}
                   aria-hidden="true"
                 />
                 <Trash2
-                  className="catalogue-list__added-trash"
+                  className="catalogue-card__added-trash"
                   size={20}
                   aria-hidden="true"
                 />
@@ -516,26 +460,6 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
           </button>
         </div>
       )}
-      <span className="home-top-rated-card__body">
-        <span className="home-top-rated-card__title-row">
-          <span className="home-top-rated-card__title">{game.title}</span>
-          {ratingText ? (
-            <span
-              className="home-top-rated-card__rating"
-              aria-label={ratingText}
-            >
-              <Flame
-                size={16}
-                fill="currentColor"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <span>{ratingText}</span>
-            </span>
-          ) : null}
-        </span>
-        <span className="home-top-rated-card__developer">{developerName}</span>
-      </span>
     </article>
   );
 });
@@ -598,8 +522,8 @@ export function CatalogueList({
   );
 
   // Sem virtualização de propósito: a página do catálogo entrega no máximo
-  // `cataloguePageSize` (20) itens, e o gate de `IntersectionObserver` por linha
-  // já evita carregar as capas fora da viewport.
+  // `cataloguePageSize` (20) itens. As capas usam `<img>` nativo e são deixadas
+  // inteiramente a cargo do carregador do WebView.
   const isGrid = viewMode === "grid";
   return (
     <div

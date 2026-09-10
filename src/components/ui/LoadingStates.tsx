@@ -90,8 +90,8 @@ export function CatalogueListLoadingState({ count }: { count?: number }) {
   return (
     <div className="catalogue-list catalogue-list--skeleton" aria-hidden="true">
       {Array.from({ length: placeholderCount }, (_, index) => (
-        <article className="catalogue-list__item catalogue-list__item--skeleton" key={`catalogue-loading-${index}`}>
-          <div className="catalogue-list__cover catalogue-list__cover--skeleton skeleton" />
+        <article className="catalogue-card catalogue-card--list catalogue-card--skeleton" key={`catalogue-loading-${index}`}>
+          <div className="catalogue-card__cover catalogue-card__cover--skeleton skeleton" />
         </article>
       ))}
     </div>

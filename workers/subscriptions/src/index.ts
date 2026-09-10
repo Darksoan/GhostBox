@@ -189,6 +189,7 @@ type UserProfileCloudRow = {
   banner_position_x: number;
   banner_position_y: number;
   banner_position_scale: number;
+  hidden_game_ids: string | null;
   updated_at: string;
 };
 
@@ -233,6 +234,7 @@ type CloudProfileSnapshotInput = {
     } | null;
   } | null;
   favoriteGameIds?: unknown;
+  hiddenProfileGameIds?: unknown;
   userCollections?: unknown;
 };
 
@@ -243,6 +245,7 @@ const MAX_CLOUD_COLLECTION_NAME_LENGTH = 64;
 const MAX_CLOUD_COLLECTIONS = 100;
 const MAX_CLOUD_GAMES_PER_COLLECTION = 2000;
 const MAX_CLOUD_FAVORITES = 5000;
+const MAX_CLOUD_HIDDEN_PROFILE_GAMES = 5000;
 
 const CLOUD_URL_PREFIXES: Array<{ compact: string; expand: string }> = [
   { compact: "s-av:", expand: "https://avatars.cloudflare.steamstatic.com/" },
@@ -2232,6 +2235,16 @@ function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
         )
       )
     : [];
+  const hiddenProfileGameIds = Array.isArray(body.hiddenProfileGameIds)
+    ? Array.from(
+        new Set(
+          body.hiddenProfileGameIds
+            .map((appId) => (typeof appId === "string" ? appId.trim() : ""))
+            .filter(Boolean)
+            .slice(0, MAX_CLOUD_HIDDEN_PROFILE_GAMES)
+        )
+      ).sort()
+    : [];
 
   const rawCollections = Array.isArray(body.userCollections)
     ? (body.userCollections as CloudProfileCollectionInput[])
@@ -2283,6 +2296,7 @@ function parseCloudProfileSnapshot(body: CloudProfileSnapshotInput | null) {
       bannerUrl,
       bannerPosition,
       favoriteGameIds,
+      hiddenProfileGameIds,
       collections,
     },
   };
@@ -2319,6 +2333,16 @@ async function loadCloudProfileSnapshot(env: Env, userId: string) {
       },
     },
     favoriteGameIds,
+    hiddenProfileGameIds: (() => {
+      try {
+        const parsed = JSON.parse(profile?.hidden_game_ids || "[]");
+        return Array.isArray(parsed)
+          ? parsed.filter((appId): appId is string => typeof appId === "string")
+          : [];
+      } catch {
+        return [];
+      }
+    })(),
     userCollections: collections.map((collection) => ({
       id: collection.id,
       name: collection.name,
@@ -2417,8 +2441,9 @@ async function handleCloudProfilePut(request: Request, env: Env) {
     env.SUBSCRIPTION_DB.prepare(
       `INSERT INTO user_profile_cloud (
          steam_id, user_id, display_name, avatar_url, banner_url,
-         banner_position_x, banner_position_y, banner_position_scale, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         banner_position_x, banner_position_y, banner_position_scale,
+         hidden_game_ids, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          steam_id = COALESCE(excluded.steam_id, user_profile_cloud.steam_id),
          display_name = excluded.display_name,
@@ -2427,6 +2452,7 @@ async function handleCloudProfilePut(request: Request, env: Env) {
          banner_position_x = excluded.banner_position_x,
          banner_position_y = excluded.banner_position_y,
          banner_position_scale = excluded.banner_position_scale,
+         hidden_game_ids = excluded.hidden_game_ids,
          updated_at = excluded.updated_at`
     ).bind(
       steamId,
@@ -2437,6 +2463,7 @@ async function handleCloudProfilePut(request: Request, env: Env) {
       incoming.bannerPosition.x,
       incoming.bannerPosition.y,
       incoming.bannerPosition.scale,
+      payloads.hiddenProfileGameIdsJson,
       now
     ),
     env.SUBSCRIPTION_DB.prepare(

@@ -18,7 +18,7 @@ import { useOverlay } from "../context/OverlayContext";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
-import { ConnectionsPanel } from "../features/settings/ConnectionsPanel";
+import { ConnectionsPanel, SteamVisibilitySection } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
 import { TempFilesSection } from "../features/settings/TempFilesSection";
 import type { GhostBoxGame } from "../data";
@@ -379,7 +379,10 @@ export function SettingsPage({
           )}
           {activeTab.id === "notifications" && <NotificationsTestSection />}
           {activeTab.id === "library" && (
-            <SteamLibrariesSection downloadsDir={downloadsDir} t={t} />
+            <>
+              <SteamVisibilitySection />
+              <SteamLibrariesSection downloadsDir={downloadsDir} t={t} />
+            </>
           )}
           {activeTab.id === "performance" && <TempFilesSection />}
           {activeTab.id === "connections" && <ConnectionsPanel />}

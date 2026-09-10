@@ -12,6 +12,7 @@ export type NormalizedCloudProfileSnapshot = {
   bannerUrl: string | null;
   bannerPosition: NormalizedBannerPosition;
   favoriteGameIds: string[];
+  hiddenProfileGameIds: string[];
   collections: NormalizedCloudCollection[];
 };
 
@@ -22,6 +23,7 @@ export type StoredProfileRow = {
   banner_position_x: number | null;
   banner_position_y: number | null;
   banner_position_scale: number | null;
+  hidden_game_ids: string | null;
 };
 
 export type StoredCollectionRow = {
@@ -45,6 +47,7 @@ export type CloudProfileDiff = {
   favoritesAdded: string[];
   favoritesRemoved: string[];
   favoritesOrderChanged: boolean;
+  hiddenProfileGamesChanged: boolean;
   collectionsAdded: string[];
   collectionsRemoved: string[];
   collectionsChanged: string[];
@@ -57,6 +60,26 @@ function normalizeName(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeGameIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? Array.from(
+        new Set(
+          value
+            .map((gameId) => (typeof gameId === "string" ? gameId.trim() : ""))
+            .filter(Boolean)
+        )
+      ).sort()
+    : [];
+}
+
+function parseStoredGameIds(value: string | null | undefined): string[] {
+  try {
+    return normalizeGameIds(JSON.parse(value || "[]"));
+  } catch {
+    return [];
+  }
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -96,6 +119,7 @@ export function storedRowsToNormalizedSnapshot(
       scale: clampInt(profile?.banner_position_scale, 100, 300, 100),
     },
     favoriteGameIds: [...favorites.map((row) => row.game_id)],
+    hiddenProfileGameIds: parseStoredGameIds(profile?.hidden_game_ids),
     collections: orderedCollections.map((collection) => ({
       id: collection.id,
       name: collection.name,
@@ -110,6 +134,7 @@ export function normalizeIncomingSnapshot(snapshot: {
   bannerUrl: string | null;
   bannerPosition: NormalizedBannerPosition;
   favoriteGameIds: string[];
+  hiddenProfileGameIds?: string[];
   collections: Array<{ id: string; name: string; gameIds: string[] }>;
 }): NormalizedCloudProfileSnapshot {
   return {
@@ -122,6 +147,7 @@ export function normalizeIncomingSnapshot(snapshot: {
       scale: clampInt(snapshot.bannerPosition?.scale, 100, 300, 100),
     },
     favoriteGameIds: [...snapshot.favoriteGameIds],
+    hiddenProfileGameIds: normalizeGameIds(snapshot.hiddenProfileGameIds),
     collections: snapshot.collections.map((collection) => ({
       id: collection.id,
       name: collection.name,
@@ -148,6 +174,7 @@ export function diffCloudProfileSnapshots(
     bannerUrl: null,
     bannerPosition: { x: 50, y: 50, scale: 100 },
     favoriteGameIds: [],
+    hiddenProfileGameIds: [],
     collections: [],
   };
 
@@ -168,6 +195,10 @@ export function diffCloudProfileSnapshots(
     favoritesAdded.length === 0 &&
     favoritesRemoved.length === 0 &&
     !sameStringList(base.favoriteGameIds, incoming.favoriteGameIds);
+  const hiddenProfileGamesChanged = !sameStringList(
+    base.hiddenProfileGameIds,
+    incoming.hiddenProfileGameIds
+  );
 
   const currentCollections = new Map(base.collections.map((entry) => [entry.id, entry]));
   const incomingCollections = new Map(incoming.collections.map((entry) => [entry.id, entry]));
@@ -237,6 +268,7 @@ export function diffCloudProfileSnapshots(
     favoritesAdded,
     favoritesRemoved,
     favoritesOrderChanged,
+    hiddenProfileGamesChanged,
     collectionsAdded,
     collectionsRemoved,
     collectionsChanged,
@@ -250,6 +282,7 @@ export function diffCloudProfileSnapshots(
     diff.favoritesAdded.length === 0 &&
     diff.favoritesRemoved.length === 0 &&
     !diff.favoritesOrderChanged &&
+    !diff.hiddenProfileGamesChanged &&
     diff.collectionsAdded.length === 0 &&
     diff.collectionsRemoved.length === 0 &&
     diff.collectionsChanged.length === 0 &&
@@ -263,9 +296,11 @@ export function diffCloudProfileSnapshots(
 
 export function buildCloudProfilePayloads(snapshot: NormalizedCloudProfileSnapshot): {
   favoritesJson: string;
+  hiddenProfileGameIdsJson: string;
   collectionsJson: string;
 } {
   const favoritesJson = JSON.stringify(snapshot.favoriteGameIds);
+  const hiddenProfileGameIdsJson = JSON.stringify(snapshot.hiddenProfileGameIds);
   const collectionsJson = JSON.stringify(
     snapshot.collections.map((collection, index) => ({
       id: collection.id,
@@ -274,5 +309,5 @@ export function buildCloudProfilePayloads(snapshot: NormalizedCloudProfileSnapsh
       games: collection.gameIds,
     }))
   );
-  return { favoritesJson, collectionsJson };
+  return { favoritesJson, hiddenProfileGameIdsJson, collectionsJson };
 }

@@ -45,6 +45,10 @@ interface GallerySliderProps {
   language: string;
 }
 
+// Mantém sincronizado com transition do &__container-inner em app.scss
+// (--motion-emphasis). Folga garante salto após fim da transição.
+const TRACK_TRANSITION_MS = 450;
+
 export function GallerySlider({
   screenshots,
   movies,
@@ -53,8 +57,14 @@ export function GallerySlider({
 }: GallerySliderProps) {
   const { appearance } = useSettings();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Trilha estendida [cloneLast, ...itens, cloneFirst]: push de 100% até no
+  // wrap (anima até o clone, depois salta sem transição para o slide real).
+  const [trackIndex, setTrackIndex] = useState(1);
+  const [transitionEnabled, setTransitionEnabled] = useState(true);
   const viewportRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const jumpTimeout = useRef<number | null>(null);
+  const jumpPending = useRef(false);
 
   const mediaItems = useMemo(() => {
     const items: MediaItem[] = [];
@@ -89,21 +99,84 @@ export function GallerySlider({
     return items;
   }, [screenshots, movies, gameTitle, language, appearance.trailerQuality]);
 
+  const count = mediaItems.length;
+
+  const clearJump = useCallback(() => {
+    if (jumpTimeout.current !== null) {
+      window.clearTimeout(jumpTimeout.current);
+      jumpTimeout.current = null;
+    }
+    jumpPending.current = false;
+  }, []);
+
+  useEffect(() => clearJump, [clearJump]);
+
+  // Reativa transição após salto instantâneo (troca de track sem animar).
+  const reenableTransition = useCallback(() => {
+    jumpTimeout.current = window.setTimeout(() => {
+      setTransitionEnabled(true);
+      jumpTimeout.current = null;
+      jumpPending.current = false;
+    }, 50);
+  }, []);
+
+  // Salto entre clone e slide real com transição desligada (invisível:
+  // ambos mostram mesma mídia).
+  const snapToTrack = useCallback(
+    (track: number, selected: number) => {
+      setTransitionEnabled(false);
+      setTrackIndex(track);
+      setSelectedIndex(selected);
+      reenableTransition();
+    },
+    [reenableTransition]
+  );
+
   const scrollPrev = useCallback(() => {
-    setSelectedIndex((prev) =>
-      prev === 0 ? mediaItems.length - 1 : prev - 1
-    );
-  }, [mediaItems.length]);
+    if (count <= 1 || jumpPending.current) return;
+    if (selectedIndex === 0) {
+      jumpPending.current = true;
+      setTrackIndex(0);
+      jumpTimeout.current = window.setTimeout(() => {
+        snapToTrack(count, count - 1);
+      }, TRACK_TRANSITION_MS);
+    } else {
+      setTrackIndex(selectedIndex);
+      setSelectedIndex(selectedIndex - 1);
+    }
+  }, [count, selectedIndex, snapToTrack]);
 
   const scrollNext = useCallback(() => {
-    setSelectedIndex((prev) =>
-      prev === mediaItems.length - 1 ? 0 : prev + 1
-    );
-  }, [mediaItems.length]);
+    if (count <= 1 || jumpPending.current) return;
+    if (selectedIndex === count - 1) {
+      jumpPending.current = true;
+      setTrackIndex(count + 1);
+      jumpTimeout.current = window.setTimeout(() => {
+        snapToTrack(1, 0);
+      }, TRACK_TRANSITION_MS);
+    } else {
+      setTrackIndex(selectedIndex + 2);
+      setSelectedIndex(selectedIndex + 1);
+    }
+  }, [count, selectedIndex, snapToTrack]);
 
-  const scrollTo = useCallback((index: number) => {
-    setSelectedIndex(index);
-  }, []);
+  const scrollTo = useCallback(
+    (index: number) => {
+      if (count <= 1 || jumpPending.current || index === selectedIndex) return;
+      if (index === selectedIndex + 1) {
+        setTrackIndex(selectedIndex + 2);
+        setSelectedIndex(index);
+      } else if (index === selectedIndex - 1) {
+        setTrackIndex(selectedIndex);
+        setSelectedIndex(index);
+      } else {
+        // Salto longo de thumbnail: corte seco evita rewind pela tira toda.
+        jumpPending.current = true;
+        snapToTrack(index + 1, index);
+      }
+    },
+    [count, selectedIndex, snapToTrack]
+  );
 
   const scrollToPreview = useCallback(
     (index: number, event: React.MouseEvent<HTMLButtonElement>) => {
@@ -144,14 +217,66 @@ export function GallerySlider({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [scrollPrev, scrollNext]);
 
+  const renderMedia = (item: MediaItem, active: boolean, eager: boolean) => {
+    if (item.type === "video") {
+      return active ? (
+        <VideoPlayer
+          videoSrc={item.videoSrc!}
+          videoType={item.videoType}
+          poster={item.poster}
+          autoplay={appearance.trailerAutoplay}
+          loop
+          muted
+          controls
+          className="gallery-slider__media"
+          tabIndex={-1}
+        />
+      ) : (
+        <img
+          className="gallery-slider__media"
+          src={item.poster}
+          alt={item.alt}
+          loading="lazy"
+          decoding="async"
+        />
+      );
+    }
+    if (!eager) return null;
+    return (
+      <img
+        className="gallery-slider__media"
+        src={item.src}
+        alt={item.alt}
+        loading={active ? "eager" : "lazy"}
+        decoding="async"
+      />
+    );
+  };
+
   if (!mediaItems.length) {
     return null;
   }
 
+  const showClones = count > 1;
+
   return (
     <div className="gallery-slider__container">
       <div className="gallery-slider__viewport" ref={viewportRef}>
-        <div className="gallery-slider__container-inner">
+        <div
+          className={`gallery-slider__container-inner ${transitionEnabled ? "" : "gallery-slider__container-inner--instant"}`}
+          style={{
+            transform: `translateX(-${showClones ? trackIndex * 100 : 0}%)`,
+          }}
+        >
+          {showClones && (
+            <div
+              key="clone-last"
+              className="gallery-slider__slide"
+              aria-hidden="true"
+            >
+              {renderMedia(mediaItems[count - 1], false, true)}
+            </div>
+          )}
           {mediaItems.map((item, index) => {
             const isSelected = index === selectedIndex;
             const shouldRenderImage = Math.abs(index - selectedIndex) <= 1;
@@ -161,40 +286,19 @@ export function GallerySlider({
                 key={item.id}
                 className={`gallery-slider__slide ${isSelected ? "gallery-slider__slide--active" : ""}`}
               >
-                {item.type === "video" ? (
-                  isSelected ? (
-                    <VideoPlayer
-                      videoSrc={item.videoSrc!}
-                      videoType={item.videoType}
-                      poster={item.poster}
-                      autoplay={appearance.trailerAutoplay}
-                      loop
-                      muted
-                      controls
-                      className="gallery-slider__media"
-                      tabIndex={-1}
-                    />
-                  ) : (
-                    <img
-                      className="gallery-slider__media"
-                      src={item.poster}
-                      alt={item.alt}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  )
-                ) : shouldRenderImage ? (
-                  <img
-                    className="gallery-slider__media"
-                    src={item.src}
-                    alt={item.alt}
-                    loading={isSelected ? "eager" : "lazy"}
-                    decoding="async"
-                  />
-                ) : null}
+                {renderMedia(item, isSelected, shouldRenderImage)}
               </div>
             );
           })}
+          {showClones && (
+            <div
+              key="clone-first"
+              className="gallery-slider__slide"
+              aria-hidden="true"
+            >
+              {renderMedia(mediaItems[0], false, true)}
+            </div>
+          )}
         </div>
 
         {mediaItems.length > 1 && (

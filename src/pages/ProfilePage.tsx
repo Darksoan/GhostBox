@@ -45,7 +45,7 @@ import {
   useLoadableImageState,
 } from "../hooks/useCachedImageSources";
 import {
-  gameSteamHeaderFirstSources,
+  gameCatalogueHeaderSources,
   layeredImageStyle,
   preloadGameListAssets,
   preloadProfileImages,
@@ -125,7 +125,10 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
   t: (key: string) => string;
   onOpenGame: (game: GhostBoxGame) => void;
 }) {
-  const coverSources = useCachedImageSources(gameSteamHeaderFirstSources(game));
+  // Capa da atividade: header capsule estrito (460×215). Só `header.jpg` nos
+  // 4 hosts da Steam entra aqui — nada de capsule_616x353, hero ou screenshot,
+  // que têm proporção diferente e deformam/cortam errado no slot travado.
+  const coverSources = useCachedImageSources(gameCatalogueHeaderSources(game));
   const {
     source: headerSource,
     loaded: headerLoaded,
@@ -133,7 +136,7 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
 
   function preloadActivityCover() {
     preloadGameListAssets([displayGame], {
-      variant: "header",
+      variant: "catalogueHeader",
       limit: 1,
       idle: false,
       nativeResolve: false,
@@ -560,7 +563,7 @@ export function ProfilePage({
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
   const { account } = useAuth();
-  const { showSteamGames, cloudSaveAppIds } = useAppData();
+  const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
@@ -762,6 +765,7 @@ export function ProfilePage({
 
     const games = new Map<string, GhostBoxGame>();
     const addGame = (game: GhostBoxGame) => {
+      if (hiddenProfileGameIds.has(game.appId)) return;
       games.set(
         game.appId,
         getRicherAchievementGame(games.get(game.appId), game),
@@ -786,6 +790,7 @@ export function ProfilePage({
     addedLibraryGames,
     cloudSaveAppIds,
     favoriteGames,
+    hiddenProfileGameIds,
     shouldComputeOverviewData,
     shouldShowSteamContent,
     steamOwnedProfileGames,
@@ -820,14 +825,13 @@ export function ProfilePage({
     if (!isOverviewActive || overviewPreloadGames.length === 0) return;
 
     preloadGameListAssets(overviewPreloadGames, {
-      variant: "header",
+      variant: "catalogueHeader",
       limit: recentActivityPageSize,
       sourceLimit: 4,
       idle: false,
       decode: true,
       nativeResolve: false,
       roundRobin: true,
-      steamHeaderFirst: true,
     });
   }, [isOverviewActive, overviewPreloadGames]);
 
@@ -903,6 +907,7 @@ export function ProfilePage({
     // account unlocks so the local appcache monitor stays additive instead of
     // wiping profile-level achievement data for uninstalled games.
     for (const game of localAchievementGamesByAppId.values()) {
+      if (hiddenProfileGameIds.has(game.appId)) continue;
       const base = games.get(game.appId);
       // Same rule as `profileGameBase`: with Steam hidden, a local-only game
       // that the account does not own in the cloud must not enter the list.
@@ -948,6 +953,7 @@ export function ProfilePage({
       );
   }, [
     cloudSaveAppIds,
+    hiddenProfileGameIds,
     localAchievementGamesByAppId,
     profileGameBase,
     resolvedGameTitlesByAppId,
@@ -1502,25 +1508,23 @@ export function ProfilePage({
     }
 
     preloadGameListAssets(pagedRecentActivityGames, {
-      variant: "header",
+      variant: "catalogueHeader",
       limit: pagedRecentActivityGames.length,
       sourceLimit: 4,
       idle: false,
       decode: true,
       nativeResolve: false,
       roundRobin: true,
-      steamHeaderFirst: true,
     });
 
     if (nextRecentActivityGames.length > 0) {
       preloadGameListAssets(nextRecentActivityGames, {
-        variant: "header",
+        variant: "catalogueHeader",
         limit: nextRecentActivityGames.length,
         sourceLimit: 2,
         idle: true,
         nativeResolve: false,
         roundRobin: true,
-        steamHeaderFirst: true,
       });
     }
   }, [

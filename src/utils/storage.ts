@@ -23,6 +23,7 @@ import {
   profileHistoryGamesStorageKey,
   showSteamGamesStorageKey,
   showSteamLibraryGamesStorageKey,
+  hiddenProfileGameIdsStorageKey,
   personalCalendarStorageKey,
   steamWishlistRecommendationsStorageKey,
   steamWishlistReviewCacheStorageKey,
@@ -533,6 +534,37 @@ export function writeStoredShowSteamLibraryGames(value: boolean) {
 
   try {
     window.localStorage.setItem(showSteamLibraryGamesStorageKey, value ? "true" : "false");
+  } catch {
+    // Setting still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredHiddenProfileGameIds(): string[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return Array.from(
+      new Set(
+        storedStringArray(
+          JSON.parse(window.localStorage.getItem(hiddenProfileGameIdsStorageKey) ?? "[]"),
+        )
+          .map((appId) => appId.trim())
+          .filter(Boolean),
+      ),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function writeStoredHiddenProfileGameIds(appIds: Iterable<string>) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      hiddenProfileGameIdsStorageKey,
+      JSON.stringify(Array.from(new Set(appIds)).filter(Boolean).sort()),
+    );
   } catch {
     // Setting still works during the session if localStorage is unavailable.
   }

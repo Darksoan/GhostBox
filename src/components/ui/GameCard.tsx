@@ -1,5 +1,4 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Clock } from "lucide-react";
 import { Cup } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
@@ -14,7 +13,6 @@ import {
   preloadGameModalAssets,
 } from "../../utils/image";
 import { isAchievementUnlocked } from "../../utils/achievementStats";
-import { formatCompactPlaytime } from "../../utils/time";
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
 import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
@@ -106,13 +104,10 @@ export const GameCard = memo(function GameCard({
         achievementTotal,
       )
     : 0;
-  const playtimeInMilliseconds =
-    game.playTimeInMilliseconds ?? game.hours * 3_600_000;
-  const compactPlaytime =
-    playtimeInMilliseconds > 0
-      ? formatCompactPlaytime(playtimeInMilliseconds)
-      : "0h";
-  const showAchievementBadges = showAchievements;
+  const achievementProgress =
+    achievementTotal > 0
+      ? Math.round((achievementUnlocked / achievementTotal) * 100)
+      : 0;
   const showLockedBadge = showAchievements && !areMetricsUnlocked;
 
   const handleContextMenu = (event: React.MouseEvent) => {
@@ -140,31 +135,29 @@ export const GameCard = memo(function GameCard({
         style={layeredImageStyle(
           coverSources,
           "",
-          // `auto 100%` equals `cover` for every portrait source (all are 2:3 or
-          // wider), but unlike the `cover` keyword it interpolates on hover.
           portrait ? "auto 100%" : "100% 100%",
           portrait ? "auto 106%" : "100% 100%",
         )}
       >
-        {showLockedBadge
-          ? null
-          : showAchievementBadges && (
-            <div
-              className="game-card__achievement-badges"
-              aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${compactPlaytime} jogadas`}
-            >
-              <span className="game-card__summary-metric">
-                <Cup size={16} weight="Filled" strokeWidth={2.0} />
-                <span>
-                  {achievementUnlocked} / {achievementTotal}
-                </span>
+        {!showLockedBadge && showAchievements && (
+          <div
+            className="game-card__achievement-badges"
+            aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${achievementProgress}%`}
+          >
+            <span className="game-card__summary-metric">
+              <Cup size={16} weight="Filled" strokeWidth={2.0} />
+              <span>
+                {achievementUnlocked} / {achievementTotal}
               </span>
-              <span className="game-card__summary-metric">
-                <Clock size={16} strokeWidth={2.0} />
-                <span>{compactPlaytime}</span>
-              </span>
-            </div>
-          )}
+            </span>
+            <span className="game-card__achievement-percentage">
+              {achievementProgress}%
+            </span>
+            <span className="game-card__achievement-progress" aria-hidden="true">
+              <span style={{ width: `${achievementProgress}%` }} />
+            </span>
+          </div>
+        )}
       </div>
       <div className="game-card__backdrop">
         <div className="game-card__content">

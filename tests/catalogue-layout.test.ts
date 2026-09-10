@@ -86,7 +86,7 @@ describe("Catalogue filter search layout", () => {
   it("keeps catalogue cards keyboard-operable with a native primary button", () => {
     const source = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
 
-    expect(source).toContain('className="catalogue-list__main"');
+    expect(source).toContain('className="catalogue-card__button catalogue-card__button--list"');
     expect(source).toContain('type="button"');
     expect(source).not.toContain('role="button"');
   });
@@ -94,8 +94,9 @@ describe("Catalogue filter search layout", () => {
   it("keeps a dedicated action column at the narrow catalogue breakpoint", () => {
     const css = compile("src/app.scss").css;
 
-    expect(css).toContain("grid-template-columns: 140px minmax(0, 1fr) 48px");
-    expect(css).toContain(".catalogue-list__main");
+    expect(css).toContain("grid-template-columns: minmax(0, 1fr) 48px");
+    expect(css).toContain("grid-template-columns: 140px minmax(0, 1fr)");
+    expect(css).toContain(".catalogue-card__button--list");
   });
 
   it("renders accessible pagination semantics", () => {
@@ -127,7 +128,8 @@ describe("Catalogue filter search layout", () => {
   it("releases the scroll pause without selecting a new game on focus", () => {
     const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
 
-    expect(page).toContain('window.addEventListener("focus", finishScroll)');
+    expect(page).toContain("const handleWindowFocus = () => finishScroll();");
+    expect(page).toContain('window.addEventListener("focus", handleWindowFocus)');
     expect(page).toContain('document.addEventListener("visibilitychange", handleVisibilityChange)');
     expect(page).toContain("finishScroll();");
     expect(page).not.toContain("handleHoverGame(game, { pointer })");
@@ -181,10 +183,10 @@ describe("Skeleton primitive", () => {
     );
 
     expect(listState).toContain("catalogue-list--skeleton");
-    expect(listState).toContain("catalogue-list__cover--skeleton skeleton");
-    expect(listState).not.toContain("catalogue-list__content");
-    expect(listState).not.toContain("catalogue-list__genres");
-    expect(listState).not.toContain("catalogue-list__actions");
+    expect(listState).toContain("catalogue-card__cover--skeleton skeleton");
+    expect(listState).not.toContain("catalogue-card__list-content");
+    expect(listState).not.toContain("catalogue-card__genres");
+    expect(listState).not.toContain("catalogue-card__actions");
   });
 
   it("has no pulse/animate prop chain left in the catalogue loading path", () => {

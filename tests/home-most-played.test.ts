@@ -42,6 +42,21 @@ describe("Home most played rail", () => {
     expect(cardSource).toContain("<HomeTopRatedCardBodySkeleton />");
   });
 
+  it("reveals the Top rated carousel atomically after every title is enriched", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const shelfStart = component.indexOf("function HomeTopRatedShelf");
+    const shelfEnd = component.indexOf("\nfunction ", shelfStart);
+    const shelfSource = component.slice(shelfStart, shelfEnd);
+
+    // Os grupos seguintes não podem continuar trocando skeleton por texto
+    // depois que o usuário já começou a navegar pelo rail.
+    expect(shelfSource).toContain("const hasPendingTitles = shelf.games.some");
+    expect(shelfSource).toContain(
+      "isSteamTitlePlaceholder(game.title, game.appId)"
+    );
+    expect(shelfSource).toContain("if (!shelf.games.length || hasPendingTitles)");
+  });
+
   it("lays out the card with hero capsule art, title and a fire rating on the right — no pills, no badge, no description", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const cardStart = component.indexOf("function HomeTopRatedCard");

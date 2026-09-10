@@ -16,6 +16,7 @@ const recentPlayedGamesStorageKey = "ghostbox:recent-played-games:v3";
 export const profileHistoryGamesStorageKey = "ghostbox:profile-history-games:v1";
 export const showSteamGamesStorageKey = "ghostbox:show-steam-games:v1";
 export const showSteamLibraryGamesStorageKey = "ghostbox:show-steam-library-games:v1";
+export const hiddenProfileGameIdsStorageKey = "ghostbox:hidden-profile-game-ids:v1";
 export const personalCalendarStorageKey = "ghostbox:personal-calendar:v2";
 export const steamWishlistRecommendationsStorageKey = "ghostbox:steam-wishlist-recommendations:v1";
 export const steamWishlistReviewCacheStorageKey = "ghostbox:steam-wishlist-review-cache:v1";

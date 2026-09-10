@@ -218,6 +218,113 @@
   transition: opacity var(--motion-fast) var(--ease);
 }
 
+.steam-library-profile-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.hidden-profile-games {
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel);
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6);
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    > svg {
+      flex: 0 0 auto;
+      color: var(--text-secondary);
+      transition: transform var(--motion-fast) var(--ease);
+    }
+  }
+
+  &[open] summary > svg {
+    transform: rotate(180deg);
+  }
+
+  &__copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--space-1);
+
+    strong {
+      color: var(--text-strong);
+      font-size: var(--type-size-body);
+      font-weight: var(--weight-regular);
+    }
+
+    span {
+      color: var(--text-muted);
+      font-size: var(--type-size-caption);
+      line-height: 1.4;
+    }
+  }
+
+  &__list {
+    display: flex;
+    max-height: 280px;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: 0 var(--space-4) var(--space-4);
+    overflow-y: auto;
+
+    > p {
+      margin: 0;
+      padding: var(--space-3);
+      color: var(--text-muted);
+      font-size: var(--type-size-caption);
+    }
+  }
+
+  &__item {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--type-size-compact);
+    text-align: start;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-hover);
+    }
+
+    > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    > svg {
+      flex: 0 0 auto;
+      opacity: 0;
+    }
+
+    &--selected > svg {
+      opacity: 1;
+    }
+  }
+}
+
 .connection-card__steam-options--disabled {
   opacity: 0.52;
 }

@@ -283,6 +283,9 @@ const translations: Record<Language, TranslationTree> = {
     },
     sidebar: {
       collections: "Coleções",
+      searchCollections: "Pesquisar jogos nas coleções",
+      collectionSearchPlaceholder: "Pesquisar nas coleções",
+      noMatchingGames: "Nenhum jogo encontrado",
       restartSteam: "Reiniciar Steam",
       noGames: "Nenhum jogo",
     },
@@ -619,6 +622,11 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       library: {
+        hiddenProfileGames: {
+          label: "Ocultar jogos do perfil",
+          description: "Selecione os jogos que não devem aparecer em Overview e Conquistas.",
+          empty: "Nenhum jogo disponível.",
+        },
         steamPath: {
           label: "Pasta da Steam",
           description: "Caminho da pasta da Steam usado para localizar jogos instalados.",
@@ -959,6 +967,9 @@ const translations: Record<Language, TranslationTree> = {
     },
     sidebar: {
       collections: "Collections",
+      searchCollections: "Search games in collections",
+      collectionSearchPlaceholder: "Search collections",
+      noMatchingGames: "No games found",
       restartSteam: "Restart Steam",
       noGames: "No games",
     },
@@ -1294,6 +1305,11 @@ const translations: Record<Language, TranslationTree> = {
         },
       },
       library: {
+        hiddenProfileGames: {
+          label: "Hide games from profile",
+          description: "Select games that should not appear in Overview and Achievements.",
+          empty: "No games available.",
+        },
         steamPath: {
           label: "Steam folder",
           description: "Path to the Steam folder used to locate installed games.",

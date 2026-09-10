@@ -114,14 +114,90 @@ describe("Catalogue image quality", () => {
     expect(sources[0]).toBe("asset://localhost/cached-header.jpg");
   });
 
-  it("keeps the first loaded catalogue cover stable", () => {
+  it("renders the raw header in a native image without cover treatments", () => {
+    const component = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
+    const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
+    const stylesheet = readFileSync("src/app.scss", "utf8");
+    const imageRuleStart = stylesheet.indexOf(".catalogue-card__cover-image {");
+    const imageRule = stylesheet.slice(
+      imageRuleStart,
+      stylesheet.indexOf("}", imageRuleStart) + 1,
+    );
+
+    expect(component).toContain('className="catalogue-card__cover-image"');
+    expect(component).toContain("src={source}");
+    expect(component).toContain("width={460}");
+    expect(component).toContain("height={215}");
+    expect(component).not.toContain("useCachedImageSources");
+    expect(component).not.toContain("useLoadableImageCover");
+    expect(component).not.toContain("IntersectionObserver");
+    expect(component).not.toContain("home-top-rated-card__");
+    expect(component).toContain("withCachedImageSources(rawSources");
+    expect(component).toContain("requestManifests: false");
+    expect(component).toContain("preserveSourceOrder: true");
+    expect(component).toContain("prioritizeCached: true");
+    expect(component).toContain("cacheImageSourceAfterLoad(source)");
+    expect(component).toContain('loading="lazy"');
+    expect(component).toContain('decoding="async"');
+    expect(page).not.toContain("preloadGameListAssets");
+    expect(page).not.toContain('variant: "catalogueHeader"');
+    expect(imageRule).toContain("width: 100%");
+    expect(imageRule).toContain("height: auto");
+    for (const treatment of [
+      "background",
+      "filter",
+      "image-rendering",
+      "object-fit",
+      "opacity",
+      "transform",
+      "will-change",
+    ]) {
+      expect(imageRule).not.toContain(treatment);
+    }
+  });
+
+  it("keeps the catalogue header raster at the maximized size in windowed mode", () => {
+    const stylesheet = readFileSync("src/app.scss", "utf8");
+
+    expect(stylesheet).toContain(
+      "grid-template-columns: 232px minmax(0, 1fr)",
+    );
+    expect(stylesheet).not.toContain(
+      "grid-template-columns: 224px minmax(0, 1fr)",
+    );
+  });
+
+  it("stores the downloaded header bytes without resizing or recompressing", () => {
+    const backend = readFileSync("src-tauri/src/image_cache.rs", "utf8");
+    const start = backend.indexOf("async fn fetch_and_cache_image(");
+    const implementation = backend.slice(
+      start,
+      backend.indexOf("async fn request_image_url_available(", start),
+    );
+
+    expect(implementation).toContain("let bytes = response.bytes().await.ok()?");
+    expect(implementation).toContain("std::fs::write(&temp_path, bytes)");
+    expect(implementation).not.toContain(".resize(");
+    expect(implementation).not.toContain("encode(");
+  });
+
+  it("batches post-load catalogue cache writes without swapping the visible source", () => {
+    const cache = readFileSync("src/utils/imageCache.ts", "utf8");
     const component = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
 
-    expect(component).not.toContain("useLockedCoverSource");
-    expect(component).not.toContain("progressive:");
-    expect(component).toContain("useStableCatalogueCoverSource");
-    expect(component).toContain("setStableSource((current) => current || source)");
-    expect(component).toContain("catalogueCoverMaxRetries = 2");
-    expect(component).toContain("retryToken,");
+    expect(cache).toContain("const postLoadCacheSources = new Set<string>()");
+    expect(cache).toContain("cancelPostLoadCacheFlush = runWhenIdle");
+    expect(cache).toContain("const sources = [...postLoadCacheSources]");
+    expect(cache).toContain("resolveCachedImageSource(candidate, { cachePredictable: true })");
+    expect(component).not.toContain("setCachedSources");
+  });
+
+  it("does not keep the old catalogue cover pipeline", () => {
+    const component = readFileSync("src/components/ui/CatalogueList.tsx", "utf8");
+
+    expect(component).not.toContain("useStableCatalogueCoverSource");
+    expect(component).not.toContain("useRobustCatalogueCoverSource");
+    expect(component).not.toContain("catalogueCoverMaxRetries");
+    expect(component).not.toContain("retryToken");
   });
 });

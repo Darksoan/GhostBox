@@ -183,6 +183,8 @@ const imagePreloadQueue: Array<() => void> = [];
 let maxConcurrentImagePreloads = 4;
 const imagePreloadRetryDelayMs = 10_000;
 let activeImagePreloads = 0;
+const postLoadCacheSources = new Set<string>();
+let cancelPostLoadCacheFlush: (() => void) | null = null;
 
 export function setImagePreloadConcurrency(value: 2 | 4 | 6) {
   maxConcurrentImagePreloads = value;
@@ -232,6 +234,31 @@ export function runWhenIdle(callback: () => void, timeout = 1200) {
 
   const handle = window.setTimeout(callback, 0);
   return () => window.clearTimeout(handle);
+}
+
+/**
+ * Persiste imagens que o navegador já terminou de pintar.
+ *
+ * O source visível não é substituído quando o download nativo termina; o
+ * arquivo local só entra na próxima montagem. Todos os `onLoad` do mesmo
+ * período ocioso entram juntos em `cache_get_images`, reduzindo IPC e mantendo
+ * o limite de concorrência do backend.
+ */
+export function cacheImageSourceAfterLoad(source: string) {
+  if (!/^https?:\/\//i.test(source)) return;
+
+  postLoadCacheSources.add(source);
+  if (cancelPostLoadCacheFlush) return;
+
+  cancelPostLoadCacheFlush = runWhenIdle(() => {
+    cancelPostLoadCacheFlush = null;
+    const sources = [...postLoadCacheSources];
+    postLoadCacheSources.clear();
+
+    sources.forEach((candidate) => {
+      void resolveCachedImageSource(candidate, { cachePredictable: true });
+    });
+  });
 }
 
 function readStoredImageSourceCache() {
@@ -764,8 +791,14 @@ export function clearImageCacheState() {
   imagePreloadPromises.clear();
   imagePreloadFailures.clear();
   imagePreloadQueue.length = 0;
+  postLoadCacheSources.clear();
   imageBatchQueue = [];
   imageBatchScheduled = false;
+
+  if (cancelPostLoadCacheFlush) {
+    cancelPostLoadCacheFlush();
+    cancelPostLoadCacheFlush = null;
+  }
 
   if (cancelPendingCacheWrite) {
     cancelPendingCacheWrite();

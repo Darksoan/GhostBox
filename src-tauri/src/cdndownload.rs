@@ -17,6 +17,49 @@ const MAX_PARALLEL_CHUNKS: u32 = 32;
 static ACTIVE_DOWNLOAD_PROCESSES: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
 static CANCELLED_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static DOWNLOAD_WORKER: OnceLock<Mutex<Option<DownloadWorker>>> = OnceLock::new();
+static DEPOT_SIZE_CACHE: OnceLock<Mutex<HashMap<PathBuf, DepotSizeCacheEntry>>> = OnceLock::new();
+
+#[derive(Clone)]
+struct DepotSizeCacheEntry {
+    file_len: u64,
+    modified: SystemTime,
+    total_bytes: u64,
+}
+
+fn depot_size_cache() -> &'static Mutex<HashMap<PathBuf, DepotSizeCacheEntry>> {
+    DEPOT_SIZE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cached_depot_size(manifest_path: &Path) -> Option<u64> {
+    let metadata = std::fs::metadata(manifest_path).ok()?;
+    let modified = metadata.modified().ok()?;
+    let mut cache = depot_size_cache().lock().ok()?;
+    let entry = cache.get(manifest_path)?;
+    if entry.file_len == metadata.len() && entry.modified == modified {
+        return Some(entry.total_bytes);
+    }
+    cache.remove(manifest_path);
+    None
+}
+
+fn store_depot_size(manifest_path: &Path, total_bytes: u64) {
+    let Ok(metadata) = std::fs::metadata(manifest_path) else {
+        return;
+    };
+    let Ok(modified) = metadata.modified() else {
+        return;
+    };
+    if let Ok(mut cache) = depot_size_cache().lock() {
+        cache.insert(
+            manifest_path.to_path_buf(),
+            DepotSizeCacheEntry {
+                file_len: metadata.len(),
+                modified,
+                total_bytes,
+            },
+        );
+    }
+}
 
 struct DownloadWorker {
     child: Child,
@@ -1417,6 +1460,12 @@ pub async fn cdndownload_download_game(
             }));
         }
 
+        let manifest_path = depot_manifest_path(&steam_path, *depot_id, *manifest_id);
+        if let Some(total_bytes) = cached_depot_size(&manifest_path) {
+            depot_sizes.push(total_bytes);
+            continue;
+        }
+
         write_worker_command(
             &worker_stdin,
             &serde_json::json!({
@@ -1448,12 +1497,12 @@ pub async fn cdndownload_download_game(
                 }
             }
         };
-        depot_sizes.push(
-            inspected
-                .get("TotalBytes")
-                .and_then(|value| value.as_u64())
-                .unwrap_or(0),
-        );
+        let total_bytes = inspected
+            .get("TotalBytes")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        store_depot_size(&manifest_path, total_bytes);
+        depot_sizes.push(total_bytes);
     }
 
     let total_download_bytes: u64 = depot_sizes.iter().sum();
@@ -1749,7 +1798,10 @@ fn finalize_steam_integration(
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_inside_downloads_root, migrate_nested_library, normalize_library_root};
+    use super::{
+        cached_depot_size, ensure_inside_downloads_root, migrate_nested_library,
+        normalize_library_root, store_depot_size,
+    };
     use std::path::{Path, PathBuf};
 
     fn temp_root(tag: &str) -> PathBuf {
@@ -1758,6 +1810,23 @@ mod tests {
             std::process::id(),
             uuid::Uuid::new_v4().simple()
         ))
+    }
+
+    #[test]
+    fn depot_size_cache_reuses_unchanged_manifests_and_invalidates_changes() {
+        let root = temp_root("depot-size-cache");
+        std::fs::create_dir_all(&root).unwrap();
+        let manifest = root.join("123_456.manifest");
+        std::fs::write(&manifest, b"manifest").unwrap();
+
+        assert_eq!(cached_depot_size(&manifest), None);
+        store_depot_size(&manifest, 72_600_000_000);
+        assert_eq!(cached_depot_size(&manifest), Some(72_600_000_000));
+
+        std::fs::write(&manifest, b"changed-manifest").unwrap();
+        assert_eq!(cached_depot_size(&manifest), None);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

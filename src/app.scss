@@ -257,13 +257,6 @@
   border: 1px solid var(--border-subtle);
 }
 
-/* Melhorias globais para qualidade de imagem */
-img {
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: auto;
-  backface-visibility: hidden;
-}
-
 svg:not([stroke-width]):not([data-preserve-stroke]) {
   stroke-width: 2px;
 }
@@ -279,7 +272,6 @@ svg[stroke-width="1.8"] {
 }
 
 .game-card__cover,
-.catalogue-list__cover,
 .home-category-card__cover,
 .home-calendar-card__cover,
 .home-wishlist-card__cover,
@@ -293,7 +285,6 @@ svg[stroke-width="1.8"] {
 }
 
 .game-card__cover,
-.catalogue-list__cover,
 .home-category-card__cover,
 .home-calendar-card__cover,
 .home-wishlist-card__cover,
@@ -316,7 +307,6 @@ svg[stroke-width="1.8"] {
 }
 
 .game-card__cover::before,
-.catalogue-list__cover::before,
 .home-category-card__cover::before,
 .home-calendar-card__cover::before,
 .home-wishlist-card__cover::before,
@@ -625,7 +615,7 @@ input,
 .button,
 .sidebar__menu-item-label,
 .game-card__title,
-.catalogue-list__content,
+.catalogue-card__list-content,
 .settings-option__copy,
 .profile-page,
 .notifications-page,
@@ -729,7 +719,6 @@ p {
     scroll-behavior: auto;
 
     .game-card__cover::before,
-    .catalogue-list__cover::before,
     .home-category-card__cover::before,
     .home-calendar-card__cover::before,
     .home-wishlist-card__cover::before,
@@ -1050,7 +1039,22 @@ p {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--space-3);
     min-height: 28px;
+  }
+
+  &__section-header-main {
+    display: grid;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+  }
+
+  &__section-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   /* Section label: COLLECTIONS (canonical uppercase) */
@@ -1063,6 +1067,7 @@ p {
 
   &__section-toggle {
     display: inline-flex;
+    grid-area: 1 / 1;
     align-items: center;
     gap: var(--space-3);
     padding: 0;
@@ -1071,7 +1076,10 @@ p {
     color: var(--text-secondary);
     font-weight: var(--weight-regular);
     cursor: pointer;
-    transition: color var(--motion-fast) var(--ease);
+    transition:
+      color var(--motion-fast) var(--ease),
+      opacity var(--motion-base) var(--ease),
+      transform var(--motion-base) var(--ease);
 
     .sidebar__section-title {
       color: inherit;
@@ -1083,6 +1091,108 @@ p {
 
     &[aria-expanded="true"] {
       color: var(--text-primary);
+    }
+  }
+
+  &__collection-search {
+    display: inline-flex;
+    grid-area: 1 / 1;
+    width: 0;
+    min-width: 0;
+    height: 32px;
+    align-items: center;
+    gap: var(--space-4);
+    box-sizing: border-box;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background: var(--surface-titlebar-control);
+    color: var(--text-secondary);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-6px) scaleX(0.96);
+    transform-origin: left center;
+    transition:
+      width var(--motion-base) var(--ease-out),
+      padding var(--motion-base) var(--ease-out),
+      background-color var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease),
+      opacity var(--motion-base) var(--ease),
+      transform var(--motion-base) var(--ease-out);
+
+    &--open {
+      width: 100%;
+      padding: 0 var(--space-5);
+      background: var(--surface-titlebar-control-hover);
+      color: var(--text-primary);
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) scaleX(1);
+    }
+
+    &:hover,
+    &:focus-within {
+      background: var(--surface-titlebar-control-hover);
+      color: var(--text-primary);
+    }
+
+    > svg {
+      display: block;
+      width: 16px;
+      min-width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+    }
+
+    input {
+      width: 100%;
+      min-width: 0;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-weight: var(--weight-regular);
+      font-size: var(--type-size-compact);
+      line-height: 1;
+
+      &::placeholder {
+        color: var(--text-secondary);
+        font-weight: var(--weight-regular);
+      }
+    }
+  }
+
+  &__collection-search-button {
+    display: inline-grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    @include mixins.ghost-button;
+    color: var(--text-secondary);
+    transition:
+      color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface);
+      color: var(--text-primary);
+    }
+
+    svg {
+      display: block;
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  &__section-header--searching {
+    .sidebar__section-toggle {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-6px) scaleX(0.96);
     }
   }
 
@@ -1405,6 +1515,10 @@ p {
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
+
+    &--search {
+      padding-top: var(--space-5);
+    }
   }
 
   &__collection-more {
@@ -1424,6 +1538,14 @@ p {
   &__collection-game-button,
   &__collection-game-button * {
     cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__section-toggle,
+  .sidebar__collection-search,
+  .sidebar__collection-search-button {
+    transition: none;
   }
 }
 
@@ -3706,21 +3828,6 @@ p {
 
 .home-top-rated-card__art--loaded {
   animation: download-cover-in var(--motion-base) ease both;
-}
-
-.catalogue-grid-card__cover {
-  position: relative;
-  overflow: hidden;
-  background: var(--skeleton-fill);
-}
-
-.catalogue-grid-card__cover-image {
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-  opacity: 1;
 }
 
 /* Corpo do card: o nome com a nota média à direita, numa única linha. O nome
@@ -6583,25 +6690,19 @@ html.no-animations {
   }
 
   /* Enquanto a consulta seguinte não volta, os resultados anteriores ficam na
-     tela sob um scrim em vez de sumirem: trocar por skeleton faria a página
-     saltar de altura a cada mudança de filtro ou de página. */
+     tela em vez de sumirem: trocar por skeleton faria a página saltar de altura
+     a cada mudança de filtro ou de página. */
   &__results--refreshing {
     .catalogue-page__list-container {
       pointer-events: none;
       user-select: none;
-    }
-
-    .catalogue-list__item,
-    .catalogue-grid-card {
-      filter: brightness(0.55);
     }
   }
 
   /* O indicador ocupa a área de resultados, mas o spinner é `sticky`
      dentro dele: numa lista longa, um filho centrado por `place-items` cairia
      no meio da lista (fora da tela). O `sticky` prende o spinner ao meio do
-     que está visível conforme a página rola. O escurecimento fica restrito aos
-     cards acima, sem criar um bloco quadrado sobre o viewport. */
+     que está visível conforme a página rola. */
   &__refreshing {
     position: absolute;
     z-index: 2;
@@ -7534,33 +7635,22 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.catalogue-list__item {
+.catalogue-card {
   --catalogue-list-fade-color: color-mix(in srgb, black 20%, var(--background) 80%);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 84px;
-  display: grid;
-  grid-template-columns: 196px minmax(0, 1fr) 88px;
-  align-items: center;
-  gap: var(--space-8);
-  width: 100%;
-  min-height: 84px;
-  padding: 0;
-  padding-right: var(--space-6);
   position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
-  overflow: hidden;
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
   transition:
     border-color var(--motion-fast) var(--ease),
     background var(--motion-base) var(--ease);
-  isolation: isolate;
-
-  &:hover,
-  &--hovered {
+  &:hover {
     background: var(--surface-option-hover);
   }
 
@@ -7589,18 +7679,17 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.catalogue-list__main {
+.catalogue-card--list {
   display: grid;
-  grid-column: 1 / 3;
-  grid-template-columns: 196px minmax(0, 1fr);
-  /* O card externo tem `gap`, mas este grid interno recria as duas primeiras
-     colunas e sem gap próprio a capa do jogo encostava no título e nas pills.
-     Mesmo valor do card: a coluna de texto volta a alinhar com a de fora. */
-  gap: var(--space-8);
+  grid-template-columns: minmax(0, 1fr) 88px;
   align-items: center;
-  align-self: stretch;
-  min-width: 0;
-  min-height: 84px;
+  gap: var(--space-8);
+  padding-right: var(--space-6);
+}
+
+.catalogue-card__button {
+  display: block;
+  width: 100%;
   padding: 0;
   border: 0;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
@@ -7616,51 +7705,46 @@ input[type="search"]::-ms-reveal {
     outline-offset: -2px;
   }
 
-  input:focus-visible + &__box {
-    outline: 2px solid var(--icon-default);
-    outline-offset: 2px;
-  }
+}
+
+.catalogue-card__button--list {
+  display: grid;
+  grid-column: 1;
+  /* A largura não depende do estado da janela. O WebView2 cria o raster da
+     imagem no tamanho de pintura; alternar 224px no modo janela e 232px no
+     maximizado produzia duas nitidezes para o mesmo header.jpg. */
+  grid-template-columns: 232px minmax(0, 1fr);
+  align-self: stretch;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 0;
 }
 
 .home-category-card__cover {
   animation: none;
 }
 
-.catalogue-list__cover {
-  --pb-cover-zoom-opacity: 0;
-  position: relative;
+.catalogue-card__cover {
+  display: block;
   width: 100%;
-  height: 100%;
+}
+
+.catalogue-card__cover-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.catalogue-card__cover--skeleton {
   aspect-ratio: 460 / 215;
-  overflow: hidden;
-  border: none;
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  background: var(--skeleton-fill);
-  image-rendering: auto;
-  background-attachment: local;
-  background-blend-mode: normal;
-
-  &--skeleton {
-    opacity: 1;
-  }
 }
 
-.catalogue-list__cover-image {
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
-  opacity: 1;
-}
-
-.catalogue-list__item--skeleton {
-  content-visibility: visible;
+.catalogue-card--skeleton {
   cursor: default;
   pointer-events: none;
 }
 
-.catalogue-list__content {
+.catalogue-card__list-content {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -7681,7 +7765,7 @@ input[type="search"]::-ms-reveal {
 /* Altura fechada de uma pill: a contagem visível muda depois da medição e do
    resize, e sem altura fixa o card inteiro mudaria de altura junto.
    `overflow: hidden` recorta a linha-espelho, que é mais larga que o card. */
-.catalogue-list__genres {
+.catalogue-card__genres {
   position: relative;
   display: flex;
   height: var(--pill-height);
@@ -7693,7 +7777,7 @@ input[type="search"]::-ms-reveal {
 
 /* Fora do fluxo: existe só para medir. Não ocupa espaço, não é pintada e não
    recebe ponteiro — a linha visível acima é a única que o usuário vê. */
-.catalogue-list__genres-measure {
+.catalogue-card__genres-measure {
   position: absolute;
   top: 0;
   left: 0;
@@ -7704,16 +7788,15 @@ input[type="search"]::-ms-reveal {
   pointer-events: none;
 }
 
-.catalogue-list__genre-chip {
+.catalogue-card__genre-chip {
   flex: 0 0 auto;
   @include tag-chip;
   background: var(--pill-bg);
   border-color: transparent;
 }
 
-.catalogue-list__item:hover .catalogue-list__genre-chip,
-.catalogue-list__item:focus-within .catalogue-list__genre-chip,
-.catalogue-list__item--hovered .catalogue-list__genre-chip {
+.catalogue-card:hover .catalogue-card__genre-chip,
+.catalogue-card:focus-within .catalogue-card__genre-chip {
   border-color: transparent;
   background: var(--pill-bg-hover);
 }
@@ -7721,48 +7804,38 @@ input[type="search"]::-ms-reveal {
 // Maximizado: até 5 pills (fallback CSS, JS já capa) + tipografia
 // sutilmente maior para preencher card mais largo (content-cap 100%)
 // Título 14→15px, pill 26→28px, gap 6→8px — preenche sem virar tapete
-.sidebar--maximized ~ .container .catalogue-list__genres > .catalogue-list__genre-chip:nth-of-type(n+6),
-.app-main:has(.sidebar--maximized) .catalogue-list__genres > .catalogue-list__genre-chip:nth-of-type(n+6) {
+.sidebar--maximized ~ .container .catalogue-card__genres > .catalogue-card__genre-chip:nth-of-type(n+6),
+.app-main:has(.sidebar--maximized) .catalogue-card__genres > .catalogue-card__genre-chip:nth-of-type(n+6) {
   display: none;
 }
 
-.sidebar--maximized ~ .container .catalogue-list__content strong,
-.app-main:has(.sidebar--maximized) .catalogue-list__content strong {
+.sidebar--maximized ~ .container .catalogue-card__list-content strong,
+.app-main:has(.sidebar--maximized) .catalogue-card__list-content strong {
   font-size: var(--type-size-body-emphasis);
   line-height: var(--type-line-body-emphasis);
 }
 
-.sidebar--maximized ~ .container .catalogue-list__genre-chip,
-.app-main:has(.sidebar--maximized) .catalogue-list__genre-chip {
+.sidebar--maximized ~ .container .catalogue-card__genre-chip,
+.app-main:has(.sidebar--maximized) .catalogue-card__genre-chip {
   min-height: 28px;
   padding: var(--space-2) var(--space-6);
   font-size: var(--type-size-fluid-caption);
 }
 
-.sidebar--maximized ~ .container .catalogue-list__genres,
-.app-main:has(.sidebar--maximized) .catalogue-list__genres {
+.sidebar--maximized ~ .container .catalogue-card__genres,
+.app-main:has(.sidebar--maximized) .catalogue-card__genres {
   gap: var(--space-4);
   height: 28px;
 }
 
-.sidebar--maximized ~ .container .catalogue-list__content,
-.app-main:has(.sidebar--maximized) .catalogue-list__content {
+.sidebar--maximized ~ .container .catalogue-card__list-content,
+.app-main:has(.sidebar--maximized) .catalogue-card__list-content {
   gap: var(--space-5);
 }
 
-.sidebar--maximized ~ .container .catalogue-list__item,
-.app-main:has(.sidebar--maximized) .catalogue-list__item {
-  grid-template-columns: 232px minmax(0, 1fr) 88px;
-  min-height: 108px;
-}
-
-.sidebar--maximized ~ .container .catalogue-list__main,
-.app-main:has(.sidebar--maximized) .catalogue-list__main {
-  grid-template-columns: 232px minmax(0, 1fr);
-}
-
-.catalogue-list__actions {
+.catalogue-card__actions {
   display: inline-flex;
+  grid-column: 2;
   align-items: center;
   justify-content: center;
   gap: var(--space-4);
@@ -7771,7 +7844,7 @@ input[type="search"]::-ms-reveal {
   color: var(--text-primary);
 }
 
-.catalogue-list__added-status {
+.catalogue-card__added-status {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7782,7 +7855,7 @@ input[type="search"]::-ms-reveal {
   color: var(--text-primary);
 }
 
-.catalogue-list__added-status {
+.catalogue-card__added-status {
   position: relative;
   cursor: pointer;
 
@@ -7796,39 +7869,32 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.catalogue-list__added-check,
-.catalogue-list__added-trash {
+.catalogue-card__added-check,
+.catalogue-card__added-trash {
   position: absolute;
   inset: 2px;
 }
 
-.catalogue-list__added-trash {
+.catalogue-card__added-trash {
   opacity: 0;
 }
 
-.catalogue-list__added-status:hover:not(:disabled)
-  .catalogue-list__added-check {
+.catalogue-card__added-status:hover:not(:disabled)
+  .catalogue-card__added-check {
   opacity: 0;
 }
 
-.catalogue-list__added-status:hover:not(:disabled)
-  .catalogue-list__added-trash {
+.catalogue-card__added-status:hover:not(:disabled)
+  .catalogue-card__added-trash {
   opacity: 1;
 }
 
-.catalogue-list__remove-spinner {
+.catalogue-card__remove-spinner {
   animation: spin 0.8s linear infinite;
 }
 
-/* Grade de cards estilo "Bem avaliados" da Home: os filhos usam as classes do
-   `.home-top-rated-card` (arte larga, nome + nota, desenvolvedora), então a
-   grade só define o trilhamento e a ação flutuante de "adicionado". O
-   `flex: 0 0 ...` herdado do card da Home não afeta filhos de grid.
-   Contagem de colunas fixa de propósito (ver `.home-category__games`): com
-   `auto-fill` o maximizado caía em 5 colunas e o pageSize 21 deixava um card
-   solto na última linha. 4 colunas sempre — no maximizado os cards só
-   alargam com o container — e pageSize 20 fecha 5 linhas cheias; 2 e 1
-   colunas nos breakpoints estreitos também dividem 20. */
+/* Cards próprios do catálogo. Nenhuma classe visual da Home ou do pipeline de
+   capas é herdada aqui. */
 .catalogue-list--cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7843,102 +7909,95 @@ input[type="search"]::-ms-reveal {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .catalogue-grid-card {
-    position: relative;
-    display: flex;
-    overflow: hidden;
-    flex-direction: column;
-    min-width: 0;
-    height: 100%;
-    border-radius: var(--radius-lg);
-    background: var(--surface-secondary);
-    transition: background var(--motion-base) var(--ease);
+}
 
-    &:hover {
-      /* Mesmo degrau de hover do card da Home. */
-      background: var(--surface-option-hover);
-    }
-  }
+.catalogue-card--grid {
+  display: block;
+  min-width: 0;
+  height: 100%;
+  padding-right: 0;
+}
 
-  /* Ação de "adicionado" flutua sobre a capa, no canto superior direito — o
-     alvo de clique do card (`home-top-rated-card__hit`, z-index 1) fica por
-     baixo dela. */
-  .catalogue-grid-card__action {
-    position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
-    z-index: 2;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-1);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, black 45%, transparent);
-    color: var(--white);
+.catalogue-card__button--grid {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  border-radius: inherit;
+}
+
+.catalogue-card__grid-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  padding: var(--space-7) var(--space-6);
+}
+
+.catalogue-card__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.catalogue-card__title {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--type-size-body-emphasis);
+  font-weight: var(--weight-semibold);
+  line-height: var(--type-line-body-emphasis);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogue-card__developer {
+  display: block;
+  min-width: 0;
+  height: var(--type-line-compact);
+  margin-top: calc(var(--space-3) - 1px);
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--type-size-compact);
+  line-height: var(--type-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogue-card__rating {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--type-size-compact);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+
+  svg {
+    flex: 0 0 auto;
+    color: var(--text-primary);
   }
 }
 
-/* Grade de capsules (header) em 3 colunas: o item vira um card vertical com a
-   capa em cima e o texto abaixo; a ação de "adicionado" flutua sobre a capa. */
-.catalogue-list--grid {
-  display: grid;
-  /* Trilha fixa — ver comentário da `.game-grid`. */
-  grid-template-columns: repeat(auto-fill, minmax(0, 260px));
-  justify-content: center;
-  align-items: stretch;
-  gap: var(--space-4);
-
-  .catalogue-list__item {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 0;
-    height: 100%;
-    min-height: 0;
-    padding-right: 0;
-    contain-intrinsic-size: auto 240px;
-  }
-
-  .catalogue-list__main {
-    grid-column: auto;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(32px, 1fr);
-    align-items: start;
-    gap: var(--space-3);
-    height: 100%;
-    min-height: 0;
-    padding-bottom: var(--space-2);
-    border-radius: var(--radius-lg);
-  }
-
-  .catalogue-list__cover {
-    height: auto;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  }
-
-  .catalogue-list__content {
-    min-height: 32px;
-    padding-right: var(--space-4);
-    padding-left: var(--space-4);
-    padding-block: var(--space-1);
-    justify-content: center;
-    transform: none;
-  }
-
-  .catalogue-list__genres {
-    display: none;
-  }
-
-  .catalogue-list__actions {
-    position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
-    z-index: 2;
-    min-width: 0;
-    padding: var(--space-1);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, black 45%, transparent);
-    color: var(--white);
-  }
+.catalogue-card__actions--overlay {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  grid-column: auto;
+  min-width: 0;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, black 45%, transparent);
+  color: var(--white);
 }
 
 .pagination-controls {
@@ -8745,7 +8804,7 @@ input[type="search"]::-ms-reveal {
 
     &:hover:not(:disabled) {
       background: var(--surface-option-hover);
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
 
     &:focus-visible {
@@ -9578,10 +9637,12 @@ input[type="search"]::-ms-reveal {
     --game-grid-track: 260px;
   }
 
-  /* Um pouco acima do mínimo fluido antigo (180px): o badge de conquistas do
-     hover trunca com reticências quando o card fica estreito demais. */
+  /* Mesma largura-base compacta da prateleira do Hydra. As colunas continuam
+     fluidas e distribuem entre si o espaço restante da linha. */
   &--portrait {
-    --game-grid-track: 200px;
+    --game-grid-track: 180px;
+
+    grid-template-columns: repeat(auto-fill, minmax(var(--game-grid-track), 1fr));
   }
 
   &--no-padding {
@@ -9617,9 +9678,9 @@ input[type="search"]::-ms-reveal {
   isolation: isolate;
 
   .game-grid--portrait & {
-    aspect-ratio: 600 / 900;
+    aspect-ratio: 2 / 3;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     @include media-depth(md);
   }
 
@@ -9667,48 +9728,26 @@ input[type="search"]::-ms-reveal {
 
   &__achievement-badges {
     position: absolute;
-    left: 50%;
-    bottom: 10px;
+    right: 0;
+    bottom: var(--space-4);
+    left: 0;
     z-index: 2;
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
     align-items: center;
-    justify-content: center;
-    /* Folga entre as duas métricas (conquistas e tempo jogado): 10px garante
-       separação visual clara sem espremer os valores. */
-    gap: var(--space-5);
-    width: auto;
-    /* Mais largura horizontal: antes reservava 16px por lado, agora 8px — o
-       badge acompanha a capa e "XXX / YYY  ZZZ" continua inteiro. */
-    max-width: calc(100% - var(--space-4));
-    /* Altura vinha travada em 30px com o texto encostando na borda de baixo.
-       Agora a caixa é o próprio conteúdo: padding vertical garante o respiro
-       em cima e embaixo, e os 30px viram piso, não teto. */
-    min-height: 30px;
-    padding: var(--space-3) var(--space-4);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background:
-      linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--white) 10%, transparent) 0%,
-        color-mix(in srgb, var(--white) 5%, transparent) 42%,
-        color-mix(in srgb, var(--black) 12%, transparent) 100%
-      ),
-      color-mix(in srgb, var(--black) 28%, transparent);
+    gap: var(--space-2) var(--space-5);
+    padding: 0 var(--space-4);
     color: var(--text-primary);
-    font-size: var(--type-size-caption);
+    font-size: var(--type-size-body-emphasis);
     font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
-    /* Interlinha do próprio degrau tipográfico: com 30px o line box passava da
-       altura da pílula e empurrava a linha para baixo. */
     line-height: var(--type-line-caption);
     letter-spacing: var(--ls-200);
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    transform: translate3d(-50%, 8px, 0);
-    backdrop-filter: blur(18px) saturate(1.35);
-    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+    transform: translateY(8px);
     transition:
       opacity var(--motion-base) var(--ease),
       transform var(--motion-base) var(--ease);
@@ -9718,6 +9757,29 @@ input[type="search"]::-ms-reveal {
       flex: 0 0 auto;
       color: var(--text-primary);
     }
+  }
+
+  &__achievement-progress {
+    grid-column: 1 / -1;
+    display: block;
+    width: 100%;
+    height: 4px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--white) 15%, transparent);
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--text-primary);
+      opacity: 0.9;
+    }
+  }
+
+  &__achievement-percentage {
+    white-space: nowrap;
+    text-align: right;
   }
 
   &__achievement-badges--locked {
@@ -9772,7 +9834,7 @@ input[type="search"]::-ms-reveal {
   &:hover &__achievement-badges,
   &:focus-within &__achievement-badges {
     opacity: 1;
-    transform: translate3d(-50%, 0, 0);
+    transform: translateY(0);
   }
 
   &__backdrop {
@@ -9843,11 +9905,11 @@ input[type="search"]::-ms-reveal {
 
 }
 
-/* Capas verticais sem raio: o portrait (600/900) lê como pôster, não como
-   cartão — cantos vivos separam a arte da superfície. */
+/* O portrait segue a leitura de prateleira do Hydra: cantos discretamente
+   arredondados e a arte sempre recortada pela mesma caixa do card. */
 .game-grid--portrait .game-card,
 .game-grid--portrait .game-card__cover {
-  border-radius: 0;
+  border-radius: var(--radius-sm);
 }
 
 .toast {
@@ -10234,19 +10296,15 @@ input[type="search"]::-ms-reveal {
 .content-section--library .game-grid--portrait .game-card {
   --pb-cover-hover-scale: var(--pb-cover-rest-scale);
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   transition:
+    transform var(--motion-base) var(--ease),
     border-color var(--motion-base) ease,
     background var(--motion-base) var(--ease);
 }
 
-/*
- * Hover zoom by repainting the background at a larger size, not by
- * `transform: scale()` on the card: the card is a composited layer, so scaling
- * it resampled an already-rasterized bitmap and softened the art.
- */
 .content-section--library .game-grid--portrait .game-card__cover {
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   transition:
     background-size var(--motion-base) var(--ease),
     filter var(--motion-base) ease,
@@ -10476,6 +10534,7 @@ border: 0;
 
   &.game-grid--portrait {
     --game-grid-track: 180px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--game-grid-track), 1fr));
   }
 
   &.game-grid--cover-format-out .game-card {
@@ -10496,18 +10555,16 @@ border: 0;
   }
 }
 
-// Maximizado: capas portrait maiores, proporcionais à largura extra
-// (180px → 220px). Mesmo padrão dos outros ajustes de maximizado
-// (via `.sidebar--maximized`).
+// Maximizado: crescimento contido para a capa continuar esbelta como no Hydra.
 .sidebar--maximized ~ .container .content-section--library .game-grid.game-grid--portrait,
 .app-main:has(.sidebar--maximized) .content-section--library .game-grid.game-grid--portrait {
-  --game-grid-track: 220px;
+  --game-grid-track: 200px;
 }
 
-// Trigger de ordenação acompanha a capa: 220px no maximizado.
+// Trigger de ordenação acompanha a largura-base da capa no maximizado.
 .sidebar--maximized ~ .container .library-toolbar .settings-dropdown,
 .app-main:has(.sidebar--maximized) .library-toolbar .settings-dropdown {
-  width: min(220px, 100%);
+  width: min(200px, 100%);
 }
 
 .content-section--library > .empty-state {
@@ -10524,7 +10581,6 @@ border: 0;
   }
 
  .game-card__cover,
- .catalogue-list__cover,
  .home-category-card__cover,
  .home-calendar-card__cover,
  .home-wishlist-card__cover,
@@ -10540,9 +10596,6 @@ border: 0;
  .home-calendar-card:focus-visible .home-calendar-card__cover::before,
  .home-wishlist-card:hover .home-wishlist-card__cover::before,
  .home-wishlist-card:focus-within .home-wishlist-card__cover::before,
- .catalogue-list__item:hover .catalogue-list__cover::before,
-  .catalogue-list__item--hovered .catalogue-list__cover::before,
-  .catalogue-list__item:focus-within .catalogue-list__cover::before,
   .favorites-grid__item:hover .favorites-grid__cover::before,
   .favorites-grid__item:focus-within .favorites-grid__cover::before {
     transform: translate3d(-50%, -50%, 0) scale(var(--pb-cover-rest-scale)) !important;
@@ -10550,13 +10603,11 @@ border: 0;
   }
 
  .game-card__cover::before,
- .catalogue-list__cover::before,
  .home-category-card__cover::before,
  .home-calendar-card__cover::before,
  .home-wishlist-card__cover::before,
  .favorites-grid__cover::before,
  .container__content .game-card__cover::before,
- .container__content .catalogue-list__cover::before,
  .container__content .home-category-card__cover::before,
  .container__content .home-calendar-card__cover::before,
  .container__content .home-wishlist-card__cover::before,
@@ -10625,6 +10676,12 @@ border: 0;
   .settings-options .settings-option,
   .settings-panel__animated-block {
     animation: none;
+  }
+
+  .sidebar__section-toggle,
+  .sidebar__collection-search,
+  .sidebar__collection-search-button {
+    transition: none;
   }
 
   // Barra de controles do player de vídeo: aparece/some com prefers-reduced-motion
@@ -10745,15 +10802,6 @@ html.no-backdrop-blur {
     max-width: 100%;
   }
 
-  .catalogue-list__item {
-    grid-template-columns: 224px minmax(0, 1fr) 88px;
-    min-height: 104px;
-    contain-intrinsic-size: auto 104px;
-  }
-
-  .catalogue-list__main {
-    grid-template-columns: 224px minmax(0, 1fr);
-  }
 }
 
 /* Breakpoint próprio, mais largo que o resto da Home: em 1400px o container
@@ -13362,6 +13410,7 @@ html.no-backdrop-blur {
      do que isso comporta em tela de alta densidade. */
   width: min(720px, calc(100vw - (var(--space-10) * 2)));
   height: auto;
+  min-height: min(560px, calc(100vh - (var(--space-10) * 2)));
   max-height: min(760px, calc(100vh - (var(--space-10) * 2)));
   flex-direction: column;
   overflow: hidden;
@@ -14238,7 +14287,7 @@ html.no-animations {
   font-weight: var(--weight-regular);
 }
 
-.catalogue-list__content strong {
+.catalogue-card__list-content strong {
   font-weight: var(--weight-regular);
 }
 
@@ -14274,8 +14323,6 @@ button {
 
   .modal--details {
     min-height: 100%;
-    height: 100%;
-    overflow: hidden;
     padding-bottom: var(--space-6);
   }
 
@@ -14384,16 +14431,12 @@ button {
     flex-direction: column;
   }
 
-  .catalogue-list__item {
-    grid-template-columns: 140px minmax(0, 1fr) 48px;
+  .catalogue-card--list {
+    grid-template-columns: minmax(0, 1fr) 48px;
   }
 
-  .catalogue-list__main {
+  .catalogue-card__button--list {
     grid-template-columns: 140px minmax(0, 1fr);
-  }
-
-  .catalogue-list--grid .catalogue-list__main {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .modal__details {
@@ -14504,7 +14547,7 @@ button {
     height: auto;
     position: relative;
     overflow: hidden;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     max-height: 480px;
 
     @media (min-width: 1024px) {
@@ -14520,51 +14563,50 @@ button {
     display: flex;
     height: 100%;
     min-height: 0;
+    /* Push de 100%: trilha desliza inteira (duração espelha
+       TRACK_TRANSITION_MS no GallerySlider.tsx). */
+    transition: transform var(--motion-emphasis) var(--ease);
+    will-change: transform;
+
+    &--instant {
+      transition: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
   }
 
   &__slide {
     flex: 0 0 100%;
     min-width: 0;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
-
-    &--active {
-      display: flex;
-    }
   }
 
   &__media {
     width: 100%;
     height: 100%;
     display: block;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     object-fit: cover;
   }
 
-  /* A tira rola sozinha e o modal encosta na barra lateral: sem recuo próprio,
-     a miniatura da ponta esquerda ficava colada nela. O `padding-inline` dá o
-     respiro em repouso, o `scroll-padding-inline` mantém esse respiro quando o
-     scroll leva um item para a borda, e a máscara dissolve o que está passando
-     em vez de deixá-lo cortado rente ao limite. */
+  /* Tira alinhada com viewport acima: sem recuo lateral em repouso,
+     bordas começam mesmo ponto. */
   &__preview {
     width: 100%;
-    padding: var(--space-4) var(--space-6);
-    scroll-padding-inline: var(--space-6);
+    padding: var(--space-4) 0;
+    scroll-padding-inline: 0;
     height: auto;
     display: flex;
     position: relative;
     overflow-x: auto;
     overflow-y: hidden;
     gap: var(--space-3);
-    mask-image: linear-gradient(
-      to right,
-      transparent 0,
-      #000 var(--space-6),
-      #000 calc(100% - var(--space-6)),
-      transparent 100%
-    );
+    mask-image: none;
 
     &::-webkit-scrollbar-thumb {
       width: 20%;
@@ -14585,7 +14627,7 @@ button {
     transition:
       translate var(--motion-slow) ease-in-out,
       opacity var(--motion-base) ease;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     border: 0;
     overflow: hidden;
     position: relative;
@@ -14911,14 +14953,14 @@ button {
 
 /* Portrait game card skeleton – same ratio as real portrait card */
 .game-card--placeholder-portrait {
-  aspect-ratio: 600 / 900;
+  aspect-ratio: 2 / 3;
   border: 0;
   background: transparent;
 }
 
 .game-card--placeholder-portrait .game-card__cover {
-  aspect-ratio: 600 / 900;
-  border-radius: 0;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-sm);
 }
 
 /* Achievement badges skeleton inside cover (bottom center) */

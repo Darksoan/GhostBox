@@ -14,15 +14,62 @@
 //!    qualquer app. E HTTPS de proposito: `crate::manifest_sources` usa os gids
 //!    daqui para autorizar (ou recusar) pacote vindo de fonte sem TLS.
 
-use std::collections::BTreeMap;
-use std::time::Duration;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 const STEAMCMD_API_URL: &str = "https://api.steamcmd.net/v1/info/";
 const STEAMCMD_CONNECT_TIMEOUT_SECS: u64 = 5;
 const STEAMCMD_REQUEST_TIMEOUT_SECS: u64 = 12;
+/// A retomada de um download não precisa consultar novamente um estado PICS que
+/// acabou de ser usado para montar o mesmo plano. Sucessos vivem mais; falhas
+/// têm cache curto para evitar repetir o timeout durante pausa/retomada sem
+/// esconder uma recuperação da rede por muito tempo.
+const STEAMCMD_CACHE_SUCCESS_SECS: u64 = 5 * 60;
+const STEAMCMD_CACHE_FAILURE_SECS: u64 = 20;
 /// Um app grande (Cyberpunk, CS2) passa de 200 KB de JSON; 8 MB e folga larga
 /// sem deixar uma resposta hostil ocupar memoria a vontade.
 const MAX_STEAMCMD_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Clone)]
+struct SteamCmdPayloadCacheEntry {
+    cached_at: Instant,
+    payload: Option<serde_json::Value>,
+}
+
+static STEAMCMD_PAYLOAD_CACHE: OnceLock<Mutex<HashMap<String, SteamCmdPayloadCacheEntry>>> =
+    OnceLock::new();
+
+fn steamcmd_payload_cache() -> &'static Mutex<HashMap<String, SteamCmdPayloadCacheEntry>> {
+    STEAMCMD_PAYLOAD_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cached_steamcmd_payload(app_id: &str) -> Option<Option<serde_json::Value>> {
+    let mut cache = steamcmd_payload_cache().lock().ok()?;
+    let entry = cache.get(app_id)?;
+    let ttl = if entry.payload.is_some() {
+        Duration::from_secs(STEAMCMD_CACHE_SUCCESS_SECS)
+    } else {
+        Duration::from_secs(STEAMCMD_CACHE_FAILURE_SECS)
+    };
+    if entry.cached_at.elapsed() <= ttl {
+        return Some(entry.payload.clone());
+    }
+    cache.remove(app_id);
+    None
+}
+
+fn store_steamcmd_payload(app_id: &str, payload: Option<serde_json::Value>) {
+    if let Ok(mut cache) = steamcmd_payload_cache().lock() {
+        cache.insert(
+            app_id.to_string(),
+            SteamCmdPayloadCacheEntry {
+                cached_at: Instant::now(),
+                payload,
+            },
+        );
+    }
+}
 
 pub const PUBLIC_BRANCH: &str = "public";
 
@@ -232,24 +279,34 @@ async fn fetch_steamcmd_payload(app_id: &str) -> Option<serde_json::Value> {
         return None;
     }
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(STEAMCMD_CONNECT_TIMEOUT_SECS))
-        .timeout(Duration::from_secs(STEAMCMD_REQUEST_TIMEOUT_SECS))
-        .build()
-        .ok()?;
-    let response = client
-        .get(format!("{STEAMCMD_API_URL}{app_id}"))
-        .send()
-        .await
-        .ok()?;
-    if !response.status().is_success() {
-        return None;
+    if let Some(cached) = cached_steamcmd_payload(app_id) {
+        return cached;
     }
-    let bytes = response.bytes().await.ok()?;
-    if bytes.len() > MAX_STEAMCMD_RESPONSE_BYTES {
-        return None;
+
+    let payload = async {
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(STEAMCMD_CONNECT_TIMEOUT_SECS))
+            .timeout(Duration::from_secs(STEAMCMD_REQUEST_TIMEOUT_SECS))
+            .build()
+            .ok()?;
+        let response = client
+            .get(format!("{STEAMCMD_API_URL}{app_id}"))
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let bytes = response.bytes().await.ok()?;
+        if bytes.len() > MAX_STEAMCMD_RESPONSE_BYTES {
+            return None;
+        }
+        serde_json::from_slice(&bytes).ok()
     }
-    serde_json::from_slice(&bytes).ok()
+    .await;
+
+    store_steamcmd_payload(app_id, payload.clone());
+    payload
 }
 
 /// `{"status":"success","data":{"<appid>":{"depots":{...}}}}`.

@@ -46,6 +46,18 @@ describe("Home loading pipeline", () => {
     ).toBe(true);
   });
 
+  it("prioritizes the atomically revealed Top rated rail in the enrichment queue", () => {
+    const topRatedCall = shelvesHook.indexOf(
+      "const topRated = useEnrichedGameCards("
+    );
+    const recommendedCall = shelvesHook.indexOf(
+      "const recommended = useEnrichedGameCards("
+    );
+
+    expect(topRatedCall).toBeGreaterThan(-1);
+    expect(topRatedCall).toBeLessThan(recommendedCall);
+  });
+
   it("serves stale catalogue cache entries immediately and refreshes in background", () => {
     // A janela fresh é de 30 minutos; sem stale-while-revalidate, todo boot
     // depois disso bloqueava featured e cada card na rede antes de responder.

@@ -811,7 +811,7 @@ const rules: Rule[] = [
   // ---- cloud profile set-based writes ----
   {
     pattern: /^INSERT INTO user_profile_cloud \(/i,
-    run: ([steamId, userId, displayName, avatarUrl, bannerUrl, x, y, scale, updatedAt], db) => {
+    run: ([steamId, userId, displayName, avatarUrl, bannerUrl, x, y, scale, hiddenGameIds, updatedAt], db) => {
       const rows = db.rows("user_profile_cloud");
       const existing = rows.find((entry) => entry.user_id === userId);
       if (!existing) {
@@ -824,6 +824,7 @@ const rules: Rule[] = [
           banner_position_x: x,
           banner_position_y: y,
           banner_position_scale: scale,
+          hidden_game_ids: hiddenGameIds,
           updated_at: updatedAt,
         });
         return { changes: 1, rowsWritten: 1 };
@@ -835,6 +836,7 @@ const rules: Rule[] = [
       existing.banner_position_x = x;
       existing.banner_position_y = y;
       existing.banner_position_scale = scale;
+      existing.hidden_game_ids = hiddenGameIds;
       existing.updated_at = updatedAt;
       return { changes: 1, rowsWritten: 1 };
     },

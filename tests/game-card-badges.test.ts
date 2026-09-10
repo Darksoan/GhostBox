@@ -28,11 +28,13 @@ function blockOf(needle: string): string {
 }
 
 describe("badge de conquistas/horas das capas", () => {
-  it("enche a capa horizontalmente para contagens altas caberem sem espremer", () => {
+  it("mantém a faixa de conquistas alinhada com a largura da capa", () => {
     const badge = blockOf("&__achievement-badges {");
-    expect(badge).toContain("max-width: calc(100% - var(--space-4));");
-    expect(badge).toContain("gap: var(--space-5);");
-    expect(badge).toContain("padding: var(--space-3) var(--space-4);");
+    expect(badge).toContain("left: 0;");
+    expect(badge).toContain("right: 0;");
+    expect(badge).toContain("grid-template-columns: minmax(0, 1fr) auto;");
+    expect(badge).toContain("gap: var(--space-2) var(--space-5);");
+    expect(badge).toContain("padding: 0 var(--space-4);");
   });
 
   it("coloca o texto mais perto do ícone (gap ícone→texto menor)", () => {

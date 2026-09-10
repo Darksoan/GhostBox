@@ -500,6 +500,7 @@ export type CloudProfileSnapshot = {
     bannerPosition: CloudProfileBannerPosition | null;
   };
   favoriteGameIds: string[];
+  hiddenProfileGameIds: string[];
   userCollections: CloudProfileCollection[];
 };
 

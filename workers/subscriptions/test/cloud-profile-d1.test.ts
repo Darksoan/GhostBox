@@ -29,7 +29,7 @@ beforeAll(async () => {
     `CREATE TABLE user_profile_cloud (
       steam_id TEXT PRIMARY KEY, user_id TEXT, display_name TEXT, avatar_url TEXT,
       banner_url TEXT, banner_position_x INTEGER, banner_position_y INTEGER,
-      banner_position_scale INTEGER, updated_at TEXT
+      banner_position_scale INTEGER, hidden_game_ids TEXT NOT NULL DEFAULT '[]', updated_at TEXT
     )`,
     `CREATE UNIQUE INDEX idx_user_profile_cloud_user_id ON user_profile_cloud(user_id)`,
     `CREATE TABLE user_collections_cloud (
@@ -97,6 +97,7 @@ describe("cloud profile SQL in local D1", () => {
         bannerPosition: { x: 50, y: 50, scale: 1 },
       },
       favoriteGameIds: ["10", "20"],
+      hiddenProfileGameIds: ["30"],
       userCollections: [{ id: "col-1", name: "RPG", gameIds: ["10", "30"] }],
     };
 
@@ -106,6 +107,7 @@ describe("cloud profile SQL in local D1", () => {
       profile: {
         steamProfile: { displayName: "Ada" },
         favoriteGameIds: ["10", "20"],
+        hiddenProfileGameIds: ["30"],
         userCollections: [{ id: "col-1", name: "RPG", gameIds: ["10", "30"] }],
       },
     });
@@ -131,6 +133,7 @@ describe("cloud profile SQL in local D1", () => {
       updatedAt: "2026-09-02T00:00:00.000Z",
       steamProfile: null,
       favoriteGameIds: [],
+      hiddenProfileGameIds: [],
       userCollections: [],
     });
 

@@ -30,9 +30,12 @@
     var(--surface-canvas) 100%
   );
 
-  /* Janela maximizada: a capa ganha um pouco mais de altura (ver nota acima). */
+  /* Janela maximizada: a capa ganha altura de verdade (≈ +30%) para não
+     parecer uma faixa estreita na largura cheia. O conteúdo (avatar, nome,
+     badges) segue centralizado via justify-content do overlay, então mantém
+     a posição relativa à nova altura sem ajuste extra. */
   &--maximized {
-    --profile-cover-height: 328px;
+    --profile-cover-height: 408px;
   }
 
   display: flex;
@@ -1211,7 +1214,7 @@
   &__game-grid .game-card,
   &__game-grid .game-card__cover {
     border: 0 !important;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     outline: 0;
   }
 

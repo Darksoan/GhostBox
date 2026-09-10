@@ -575,8 +575,17 @@ function HomeTopRatedShelf({
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  if (!shelf.games.length) {
-    if (!shelf.loading) return null;
+  // A lista fixa nasce inteira com nomes provisórios e é enriquecida card a
+  // card. Revelar o rail parcialmente pronto deixava os próximos grupos ainda
+  // em skeleton; ao clicar no chevron, o usuário via esses placeholders
+  // virarem texto durante a rolagem. O shelf entra de uma vez só quando todos
+  // os títulos estão prontos, mantendo a navegação visualmente estável.
+  const hasPendingTitles = shelf.games.some((game) =>
+    isSteamTitlePlaceholder(game.title, game.appId)
+  );
+
+  if (!shelf.games.length || hasPendingTitles) {
+    if (!shelf.games.length && !shelf.loading) return null;
 
     return (
       <section className="home-top-rated" aria-label={title}>

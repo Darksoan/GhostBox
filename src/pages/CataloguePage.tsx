@@ -41,10 +41,7 @@ import {
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
-import {
-  preloadCataloguePreviewAssets,
-  preloadGameListAssets,
-} from "../utils/image";
+import { preloadCataloguePreviewAssets } from "../utils/image";
 import {
   CATALOGUE_SCROLL_IDLE_DELAY_MS,
   createCatalogueHoverPreviewRetention,
@@ -624,14 +621,6 @@ export function CataloguePage({
     () => games.slice(startIndex, startIndex + cataloguePageSize),
     [games, startIndex]
   );
-  const nextPageGames = useMemo(
-    () =>
-      games.slice(
-        startIndex + cataloguePageSize,
-        startIndex + cataloguePageSize * 2
-      ),
-    [games, startIndex]
-  );
   const visibleGamesCacheKey = useMemo(
     () => `${displayedPage}-${chunkOffset}-${visibleGames.map((game) => game.id).join("|")}`,
     [chunkOffset, displayedPage, visibleGames]
@@ -766,31 +755,17 @@ export function CataloguePage({
   useEffect(() => {
     if (loading || isCatalogueScrolling || !visibleGames.length) return;
 
-    const cancelVisiblePreload = preloadGameListAssets(visibleGames, {
-      variant: "catalogueHeader",
-      limit: visibleGames.length,
-      idle: false,
-      nativeResolve: true,
-    });
-    const cancelNextPagePreload = preloadGameListAssets(nextPageGames, {
-      variant: "catalogueHeader",
-      limit: 6,
-      idle: true,
-    });
     const cancelPreviewPreload = preloadCataloguePreviewAssets(visibleGames, {
       limit: 3,
       idle: true,
     });
 
     return () => {
-      cancelVisiblePreload();
-      cancelNextPagePreload();
       cancelPreviewPreload();
     };
   }, [
     isCatalogueScrolling,
     loading,
-    nextPageGames,
     visibleGames,
     visibleGamesCacheKey,
   ]);
@@ -1039,7 +1014,7 @@ export function CataloguePage({
             />
           )}
 
-          {/* Indicador de recarga: os cards permanecem na tela, escurecidos, em
+          {/* Indicador de recarga: os cards permanecem na tela em
               vez de trocar por skeleton e fazer a página pular de altura. O
               spinner é `sticky` (ver SCSS), então fica centrado no que está
               visível mesmo numa lista longa. */}

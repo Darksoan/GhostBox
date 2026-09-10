@@ -31,6 +31,7 @@ function body(overrides: Record<string, unknown> = {}) {
     updatedAt: "2026-09-01T00:00:00.000Z",
     steamProfile: { displayName: "Ada", avatarUrl: null, bannerUrl: null, bannerPosition: { x: 50, y: 50, scale: 1 } },
     favoriteGameIds: ["10", "20"],
+    hiddenProfileGameIds: [],
     userCollections: [{ id: "col-1", name: "RPG", gameIds: ["10", "30"] }],
     ...overrides,
   };
@@ -63,6 +64,7 @@ function seed() {
         banner_position_x: 50,
         banner_position_y: 50,
         banner_position_scale: 100,
+        hidden_game_ids: "[]",
         updated_at: "2026-08-01T00:00:00.000Z",
       },
     ],
@@ -119,6 +121,18 @@ describe("PUT /cloud-profile delta", () => {
     expect(collectionsDelete.changes).toBe(0);
     expect(collectionsUpsert.changes).toBe(0);
     expect(gamesUpsert.changes).toBe(0);
+  });
+
+  it("stores only hidden game app ids in the profile row", async () => {
+    const db = fakeD1(seed());
+    const { response, body: responseBody } = await putProfile(
+      db,
+      body({ hiddenProfileGameIds: ["30", "10", "30"] })
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.rows("user_profile_cloud")[0].hidden_game_ids).toBe('["10","30"]');
+    expect(responseBody.profile.hiddenProfileGameIds).toEqual(["10", "30"]);
   });
 
   it("inserts only the new favorite", async () => {

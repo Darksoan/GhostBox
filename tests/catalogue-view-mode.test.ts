@@ -23,13 +23,14 @@ describe("Catalogue view mode toggle", () => {
     expect(component).toContain("viewMode={viewMode}");
   });
 
-  it("renders grid mode with most-played style cards", () => {
+  it("renders grid mode with dedicated catalogue cards", () => {
     expect(list).toContain('viewMode = "list"');
     expect(list).toContain("CatalogueGridCard");
-    expect(list).toContain("home-top-rated-card__hit");
-    expect(list).toContain("home-top-rated-card__art");
-    expect(list).toContain("home-top-rated-card__rating");
-    expect(list).toContain("home-top-rated-card__developer");
+    expect(list).toContain("catalogue-card__button--grid");
+    expect(list).toContain("catalogue-card__cover");
+    expect(list).toContain("catalogue-card__rating");
+    expect(list).toContain("catalogue-card__developer");
+    expect(list).not.toContain("home-top-rated-card__");
     expect(list).toContain("catalogue-list--cards");
     // A grade própria do catálogo não deve reutilizar a grade de capsules
     // legada (`catalogue-list--grid`), que tem outro visual.
@@ -52,6 +53,6 @@ describe("Catalogue view mode toggle", () => {
 
   it("tracks the cards grid in the stylesheet with semantic tokens only", () => {
     expect(stylesheet).toContain(".catalogue-list--cards");
-    expect(stylesheet).toContain(".catalogue-grid-card__action");
+    expect(stylesheet).toContain(".catalogue-card__actions--overlay");
   });
 });

@@ -251,6 +251,15 @@ export function useHomeShelves({
   // Conquistas ficam de fora (`includeAchievements = false`): nenhum card da
   // home exibe progresso e cada busca extra competiria pelo mesmo teto de 6
   // slots da fila, empurrando título/tags/descrição dos cards visíveis.
+  // Top rated entra primeiro porque só é revelado quando o grupo inteiro está
+  // pronto; assim a estabilização atômica do rail não fica atrás das duas
+  // shelves maiores na fila compartilhada.
+  const topRated = useEnrichedGameCards(
+    selection.topRated,
+    shelfSizes.topRated,
+    true,
+    false
+  );
   const recommended = useEnrichedGameCards(
     selection.recommended,
     shelfSizes.recommended,
@@ -266,12 +275,6 @@ export function useHomeShelves({
   const topSellers = useEnrichedGameCards(
     selection.topSellers,
     shelfSizes.topSellers,
-    true,
-    false
-  );
-  const topRated = useEnrichedGameCards(
-    selection.topRated,
-    shelfSizes.topRated,
     true,
     false
   );
