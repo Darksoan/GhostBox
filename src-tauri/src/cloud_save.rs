@@ -50,7 +50,10 @@ fn cloud_temp_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> 
     Ok(path)
 }
 
-pub(crate) fn save_cloud_session(app: &tauri::AppHandle, session: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn save_cloud_session(
+    app: &tauri::AppHandle,
+    session: &serde_json::Value,
+) -> Result<(), String> {
     let payload = serde_json::to_string(session).map_err(|error| error.to_string())?;
     let encrypted = encrypt_secret_for_current_user(&payload)?;
     write_binary_file(app, CLOUD_SESSION_FILE, &encrypted)

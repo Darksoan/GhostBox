@@ -13518,26 +13518,105 @@ html.no-backdrop-blur {
   line-height: var(--type-line-caption);
 }
 
-.game-settings-modal__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.game-settings-modal__collection-list {
+  display: grid;
+  max-height: min(360px, 45vh);
+  gap: var(--space-2);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
-.game-settings-modal__chip {
-  display: inline-flex;
-  height: 24px;
+.game-settings-modal__collection-option {
+  position: relative;
+  display: flex;
+  min-width: 0;
   align-items: center;
-  padding: 0 var(--space-6);
-  border-radius: var(--radius-pill);
-  background: var(--surface-raised);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-sm);
+  background: var(--surface-option-hover);
   color: var(--text-secondary);
-  font-size: var(--type-size-caption);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__collection-option:hover {
+  background: var(--surface-option-active);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__collection-option--checked {
+  background: var(--surface-option-selected);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__collection-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.game-settings-modal__collection-check {
+  display: flex;
+  width: var(--space-5);
+  height: var(--space-5);
+  flex: 0 0 var(--space-5);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--surface-canvas);
+}
+
+.game-settings-modal__collection-option--checked
+  .game-settings-modal__collection-check {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+}
+
+.game-settings-modal__collection-option input:focus-visible
+  + .game-settings-modal__collection-check {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.game-settings-modal__collection-option:has(input:disabled) {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.game-settings-modal__collection-name {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--type-size-compact);
   font-weight: var(--weight-regular);
-  line-height: 1;
+  line-height: var(--type-line-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-settings-modal__collection-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+}
+
+.game-settings-modal__collection-actions .button {
+  min-height: 40px;
+  background: var(--surface-option-hover);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__collection-actions .button:hover:not(:disabled),
+.game-settings-modal__collection-actions .button:focus-visible:not(:disabled) {
+  background: var(--surface-option-active);
+  color: var(--text-primary);
 }
 
 /* Caminho de disco em bloco próprio: quebra em qualquer caractere e cabe em duas
@@ -13781,7 +13860,10 @@ html.no-backdrop-blur {
 }
 
 .game-settings-modal__candidate {
-  background: var(--surface-canvas);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--surface-option-hover);
 }
 
 .game-settings-modal__choice:hover,
@@ -13792,7 +13874,7 @@ html.no-backdrop-blur {
 
 .game-settings-modal__candidate:hover,
 .game-settings-modal__candidate:focus-visible {
-  background: var(--surface-option-hover);
+  background: var(--surface-option-active);
   color: var(--text-primary);
 }
 
@@ -13810,7 +13892,7 @@ html.no-backdrop-blur {
 }
 
 .game-settings-modal__candidate--active {
-  background: var(--surface-option-active);
+  background: var(--surface-option-selected);
   color: var(--text-primary);
 }
 
@@ -13837,15 +13919,22 @@ html.no-backdrop-blur {
   gap: var(--space-2);
 }
 
-.game-settings-modal__candidate > span {
-  display: flex;
+.game-settings-modal__candidate-text {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  text-align: left;
 }
 
-.game-settings-modal__candidate > span small {
+.game-settings-modal__candidate-text > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-settings-modal__candidate > .game-settings-modal__candidate-badge {
   flex: 0 0 auto;
   color: var(--text-primary);
 }

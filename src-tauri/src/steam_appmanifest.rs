@@ -718,12 +718,12 @@ mod tests {
         assert!(vdf.contains("\"367520\""));
 
         // Segunda rodada: registro valido, nenhuma reescrita.
-        let before = std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf"))
-            .unwrap();
+        let before =
+            std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf")).unwrap();
         register_library_folder(steam.to_str().unwrap(), &library, "367520", 9_999)
             .expect("re-registro deve ser no-op");
-        let after = std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf"))
-            .unwrap();
+        let after =
+            std::fs::read_to_string(steam.join("steamapps").join("libraryfolders.vdf")).unwrap();
         assert_eq!(before, after);
     }
 

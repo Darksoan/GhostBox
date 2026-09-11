@@ -1636,7 +1636,9 @@ fn game_create_shortcut(
         let target = std::path::PathBuf::from(&steam_path).join("steam.exe");
         (
             target.to_string_lossy().to_string(),
-            format!("-applaunch {app_id} {raw_arguments}").trim().to_string(),
+            format!("-applaunch {app_id} {raw_arguments}")
+                .trim()
+                .to_string(),
             steam_path,
         )
     };

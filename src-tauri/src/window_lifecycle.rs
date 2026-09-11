@@ -539,8 +539,12 @@ mod external_url_tests {
 
     #[test]
     fn ignores_case_and_trailing_dot_in_the_host() {
-        assert!(is_allowed_external_url("https://Checkout.Stripe.COM/c/pay/1"));
-        assert!(is_allowed_external_url("https://discord.com./oauth2/authorize"));
+        assert!(is_allowed_external_url(
+            "https://Checkout.Stripe.COM/c/pay/1"
+        ));
+        assert!(is_allowed_external_url(
+            "https://discord.com./oauth2/authorize"
+        ));
     }
 
     #[test]

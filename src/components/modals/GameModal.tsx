@@ -1959,8 +1959,13 @@ export function GameModal({
             gameTitle={displayGame?.title ?? ""}
             game={displayGame}
             customExePath={displayGame?.customExePath ?? ""}
+            isFavorite={isFavorite}
             userCollections={userCollections}
             onClose={() => setIsBackupOptionsOpen(false)}
+            onToggleFavorite={() => {
+              if (!displayGame) return;
+              onToggleFavorite(displayGame);
+            }}
             onAddGameToCollection={(collectionId) => {
               if (!displayGame) return;
               onAddGameToCollection?.(displayGame, collectionId);

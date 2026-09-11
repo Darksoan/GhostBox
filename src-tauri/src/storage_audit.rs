@@ -349,8 +349,8 @@ mod tests {
 
     #[test]
     fn clearing_a_missing_directory_is_success() {
-        let missing = std::env::temp_dir()
-            .join(format!("ghostbox-clear-{}", uuid::Uuid::new_v4().simple()));
+        let missing =
+            std::env::temp_dir().join(format!("ghostbox-clear-{}", uuid::Uuid::new_v4().simple()));
         // Não existe: clear é no-op de sucesso.
         clear_directory_contents(&missing).unwrap();
     }
@@ -431,5 +431,3 @@ mod tests {
         std::fs::remove_dir_all(&root).ok();
     }
 }
-
-

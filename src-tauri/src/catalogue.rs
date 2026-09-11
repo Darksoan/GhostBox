@@ -195,7 +195,9 @@ fn steam_controller_support(store_data: &Value) -> Option<String> {
         return direct.map(str::to_string);
     }
 
-    let categories = store_data.get("categories").and_then(|value| value.as_array())?;
+    let categories = store_data
+        .get("categories")
+        .and_then(|value| value.as_array())?;
     let has_category = |id: u64| {
         categories
             .iter()
@@ -838,10 +840,7 @@ fn steam_details_have_about(details: &Value) -> bool {
 fn steam_details_have_metric_fields(details: &Value) -> bool {
     let controller_support = text(details.get("controllerSupport"))
         .if_empty_then(|| text(details.get("controller_support")));
-    let has_controller = matches!(
-        controller_support.as_str(),
-        "full" | "partial" | "none"
-    );
+    let has_controller = matches!(controller_support.as_str(), "full" | "partial" | "none");
     let has_languages = !text(details.get("supportedLanguages"))
         .if_empty_then(|| text(details.get("supported_languages")))
         .is_empty();

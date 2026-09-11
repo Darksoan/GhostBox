@@ -29,7 +29,8 @@ fn library_asset_cache_memo(
 }
 
 fn image_fetch_lock(url: &str) -> Arc<tokio::sync::Mutex<()>> {
-    let locks = IMAGE_FETCH_LOCKS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let locks =
+        IMAGE_FETCH_LOCKS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
     let mut guard = locks.lock().unwrap_or_else(|error| error.into_inner());
     if guard.len() > 4096 {
         guard.retain(|_, lock| Arc::strong_count(lock) > 1);
@@ -126,7 +127,10 @@ fn hash_url(url: &str) -> String {
 /// asset lógico. A identidade canônica evita uma cópia local por host.
 fn canonical_image_identity(url: &str) -> String {
     if let Some((app_id, file_name)) = steam_asset_fallback_request(url) {
-        return format!("steam://{app_id}/{}", normalize_library_asset_name(&file_name));
+        return format!(
+            "steam://{app_id}/{}",
+            normalize_library_asset_name(&file_name)
+        );
     }
 
     let Ok(parsed) = reqwest::Url::parse(url) else {
@@ -153,7 +157,10 @@ fn canonical_image_identity(url: &str) -> String {
     {
         return url.to_string();
     }
-    format!("steam://{app_id}/{}", normalize_library_asset_name(file_name))
+    format!(
+        "steam://{app_id}/{}",
+        normalize_library_asset_name(file_name)
+    )
 }
 
 fn cache_file_hash(url: &str) -> String {
@@ -263,9 +270,7 @@ fn replace_cached_file(temp_path: &Path, destination: &Path) -> std::io::Result<
 fn steam_asset_fallback_request(url: &str) -> Option<(String, String)> {
     let parsed = reqwest::Url::parse(url).ok()?;
     let host = parsed.host_str()?;
-    if !host.ends_with("steamstatic.com")
-        && !host.eq_ignore_ascii_case("steamcdn-a.akamaihd.net")
-    {
+    if !host.ends_with("steamstatic.com") && !host.eq_ignore_ascii_case("steamcdn-a.akamaihd.net") {
         return None;
     }
 
@@ -1005,10 +1010,7 @@ mod tests {
         // Simula um arquivo antigo: mtime em 2001.
         let ancient = UNIX_EPOCH + Duration::from_secs(1_000_000_000);
         {
-            let file = std::fs::OpenOptions::new()
-                .write(true)
-                .open(&path)
-                .unwrap();
+            let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
             file.set_modified(ancient).unwrap();
         }
         let before = std::fs::metadata(&path)
@@ -1024,7 +1026,11 @@ mod tests {
             after > before,
             "touch deve renovar o mtime (antes: {before:?}, depois: {after:?})"
         );
-        assert_eq!(std::fs::read(&path).unwrap(), b"image-bytes", "conteúdo intocado");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"image-bytes",
+            "conteúdo intocado"
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -1053,7 +1059,10 @@ mod tests {
     fn steam_hosts_and_catalogue_proxy_share_one_cache_identity() {
         let direct = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/413150/library_capsule.jpg";
         let proxy = "https://catalogue.example/images/steam/apps/413150/library_600x900.jpg";
-        assert_eq!(canonical_image_identity(direct), canonical_image_identity(proxy));
+        assert_eq!(
+            canonical_image_identity(direct),
+            canonical_image_identity(proxy)
+        );
         assert_eq!(cache_file_hash(direct), cache_file_hash(proxy));
     }
 
@@ -1061,7 +1070,10 @@ mod tests {
     fn legacy_akamai_header_shares_the_standard_header_cache_identity() {
         let legacy = "https://steamcdn-a.akamaihd.net/steam/apps/413150/header.jpg";
         let current = "https://cdn.cloudflare.steamstatic.com/steam/apps/413150/header.jpg";
-        assert_eq!(canonical_image_identity(legacy), canonical_image_identity(current));
+        assert_eq!(
+            canonical_image_identity(legacy),
+            canonical_image_identity(current)
+        );
         assert_eq!(cache_file_hash(legacy), cache_file_hash(current));
     }
 }

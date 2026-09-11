@@ -1832,8 +1832,12 @@ pub(crate) fn read_steam_library_paths(steam_path: &str) -> Vec<String> {
 
     // O próprio VDF lista a raiz da instalação como entrada "0" — a chave
     // case-insensitive (e sem barra final) evita duplicar o C: na lista.
-    let key_for =
-        |value: &str| value.to_lowercase().trim_end_matches(['\\', '/']).to_string();
+    let key_for = |value: &str| {
+        value
+            .to_lowercase()
+            .trim_end_matches(['\\', '/'])
+            .to_string()
+    };
 
     for line in contents.lines() {
         if let Some(path) = parse_vdf_string_value(line, "path") {
@@ -2247,7 +2251,8 @@ fn read_volume_info(path: &str) -> SteamLibraryVolume {
         .map(str::to_string)
         .unwrap_or_default();
 
-    let wide = |value: &str| -> Vec<u16> { value.encode_utf16().chain(std::iter::once(0)).collect() };
+    let wide =
+        |value: &str| -> Vec<u16> { value.encode_utf16().chain(std::iter::once(0)).collect() };
     // Rótulo e espaço são POR VOLUME: consultar pela raiz da unidade (com
     // barra final) é a forma canônica — passar o caminho da biblioteca fazia o
     // GetVolumeInformationW voltar vazio nas unidades secundárias.

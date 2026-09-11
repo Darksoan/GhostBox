@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { translate } from "../src/i18n";
 
 describe("game settings modal", () => {
   const component = readFileSync(
     "src/components/modals/GameBackupOptionsModal.tsx",
+    "utf8",
+  );
+  const gameModal = readFileSync(
+    "src/components/modals/GameModal.tsx",
     "utf8",
   );
   const styles = readFileSync("src/app.scss", "utf8");
@@ -48,6 +53,77 @@ describe("game settings modal", () => {
     expect(component).toContain("gameSettings.sections.collections");
   });
 
+  it("shows Favorites and user collections as one vertical checklist", () => {
+    expect(component).toContain("const [draftIsFavorite, setDraftIsFavorite]");
+    expect(component).toContain(
+      'className="game-settings-modal__collection-list"',
+    );
+    expect(component).toContain(
+      't("gameSettings.collections.favorites")',
+    );
+    expect(component).toContain("userCollections.map((collection) =>");
+    expect(component).toContain("draftIsFavorite !== isFavorite");
+    expect(component).toContain("{collectionSelectionChanged && (");
+    expect(component).toContain("disabled={isSavingCollections}");
+    expect(component).toContain("await onToggleFavorite();");
+    expect(component).not.toContain("isCollectionPickerOpen");
+    expect(component).not.toContain("modal__collection-picker-backdrop");
+    expect(gameModal).toContain("isFavorite={isFavorite}");
+    expect(gameModal).toContain("onToggleFavorite(displayGame);");
+    expect(styles).toMatch(
+      /\.game-settings-modal__collection-list \{[\s\S]*?display:\s*grid;/,
+    );
+    expect(styles).toContain(
+      ".game-settings-modal__collection-option--checked",
+    );
+    expect(styles).toMatch(
+      /\.game-settings-modal__collection-actions \.button \{[\s\S]*?background:\s*var\(--surface-option-hover\);/,
+    );
+    expect(styles).toMatch(
+      /\.game-settings-modal__collection-actions \.button:hover:not\(:disabled\)[\s\S]*?background:\s*var\(--surface-option-active\);/,
+    );
+    for (const language of ["pt", "en"] as const) {
+      expect(
+        translate(language, "gameSettings.collections.favorites"),
+      ).not.toBe("gameSettings.collections.favorites");
+      expect(translate(language, "gameSettings.collections.save")).not.toBe(
+        "gameSettings.collections.save",
+      );
+    }
+  });
+
+  it("recognizes Steam installations without exposing the local move action", () => {
+    expect(component).toContain(
+      'const steamInstallPath = game?.installPath?.trim() ?? "";',
+    );
+    expect(component).toContain(
+      'const installationPath = installTask?.outputDir.trim() || steamInstallPath;',
+    );
+    expect(component).toContain('installationKind === "steam"');
+    expect(component).toContain(
+      '{installationKind === "ghostbox" && (',
+    );
+    expect(component).toContain(
+      'await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);',
+    );
+    expect(component).toContain(
+      ".revealDownloadFolder(installationPath)",
+    );
+    expect(component).toContain(
+      't("gameSettings.installation.steamUninstallOpened")',
+    );
+    for (const language of ["pt", "en"] as const) {
+      expect(
+        translate(language, "gameSettings.installation.steamInstalled"),
+      ).not.toBe("gameSettings.installation.steamInstalled");
+      expect(
+        translate(language, "gameSettings.installation.steamUninstallPrompt", {
+          title: "Cyberpunk 2077",
+        }),
+      ).toContain("Cyberpunk 2077");
+    }
+  });
+
   it("keeps launch data out of shell interpolation in the frontend contract", () => {
     const api = readFileSync("src/lib/ghostboxApi.tauri.ts", "utf8");
     expect(api).toContain("launchArguments");
@@ -66,11 +142,46 @@ describe("game settings modal", () => {
     expect(component).toContain("candidateState === \"error\"");
     expect(component).toContain('role="alert"');
     expect(component).toContain('t("gameSettings.launch.scanError")');
+    expect(component).toContain(
+      "for (const installPath of executableInstallPaths)",
+    );
+    expect(component).toContain("if (candidates.length === 0) continue;");
+    expect(component).toContain(
+      'setCandidateState(hasReadablePath ? "ready" : "error")',
+    );
+    expect(
+      component.split("requestId !== executableScanRequestRef.current").length,
+    ).toBeGreaterThan(3);
     expect(component).not.toContain(
       "    candidateState,\n    gameTitle,\n    launchMethod",
     );
   });
 
+  it("aligns candidate names to the left and keeps the recommended badge aside", () => {
+    expect(component).toContain(
+      'className="game-settings-modal__candidate-text"',
+    );
+    expect(component).not.toContain("<small>{candidate.relativePath}</small>");
+    expect(component).toContain(
+      'className="game-settings-modal__candidate-badge"',
+    );
+    expect(styles).toContain(".game-settings-modal__candidate-text {");
+    expect(styles).toContain(
+      ".game-settings-modal__candidate > .game-settings-modal__candidate-badge {",
+    );
+    expect(styles).toMatch(
+      /\.game-settings-modal__candidate-text \{[\s\S]*?text-align:\s*left;/,
+    );
+    expect(styles).toMatch(
+      /\.game-settings-modal__candidate \{[\s\S]*?display:\s*flex;[\s\S]*?align-items:\s*center;/,
+    );
+    expect(styles).toMatch(
+      /\.game-settings-modal__candidate \{[\s\S]*?background: var\(--surface-option-hover\)/,
+    );
+    expect(styles).toMatch(
+      /\.game-settings-modal__candidate:hover,[\s\S]*?background: var\(--surface-option-active\)/,
+    );
+  });
   it("keeps one desktop shortcut action and full-width launch arguments", () => {
     expect(component).toContain("createDesktopShortcut");
     expect(component).toContain('createGameShortcut(updated, "desktop")');

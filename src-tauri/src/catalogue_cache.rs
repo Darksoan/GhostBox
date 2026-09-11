@@ -301,7 +301,10 @@ async fn fetch_json_from_network(
 /// nova simplesmente passa a ser servida na próxima leitura.
 fn spawn_background_cache_refresh(app: &AppHandle, url: reqwest::Url, cache_key: String) {
     {
-        let Ok(mut in_flight) = BACKGROUND_REFRESH_IN_FLIGHT.get_or_init(|| Mutex::new(HashSet::new())).lock() else {
+        let Ok(mut in_flight) = BACKGROUND_REFRESH_IN_FLIGHT
+            .get_or_init(|| Mutex::new(HashSet::new()))
+            .lock()
+        else {
             return;
         };
         if in_flight.contains(&cache_key) {

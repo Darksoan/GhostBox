@@ -455,13 +455,19 @@ fn manifest_fetch_targets(steam_path: &str, depots: &[ResolvedDepot]) -> Vec<(u3
     depots
         .iter()
         .filter(|depot| {
-            let on_disk = depot_manifest_path(steam_path, depot.depot_id, depot.manifest_id).is_file();
+            let on_disk =
+                depot_manifest_path(steam_path, depot.depot_id, depot.manifest_id).is_file();
             match depot.public_gid {
                 Some(public_gid) => depot.manifest_id != public_gid || !on_disk,
                 None => !on_disk,
             }
         })
-        .map(|depot| (depot.depot_id, depot.public_gid.unwrap_or(depot.manifest_id)))
+        .map(|depot| {
+            (
+                depot.depot_id,
+                depot.public_gid.unwrap_or(depot.manifest_id),
+            )
+        })
         .collect()
 }
 
@@ -685,7 +691,10 @@ fn migrate_nested_library(raw_root: &Path, library_root: &Path) -> usize {
     // 4. Stash de chunks da raiz antiga, se a nova não tiver um ainda.
     let nested_stash = raw_root.join(crate::chunk_index::STASH_DIR_NAME);
     let real_stash = library_root.join(crate::chunk_index::STASH_DIR_NAME);
-    if nested_stash.is_dir() && !real_stash.exists() && move_dir_best_effort(&nested_stash, &real_stash) {
+    if nested_stash.is_dir()
+        && !real_stash.exists()
+        && move_dir_best_effort(&nested_stash, &real_stash)
+    {
         moved += 1;
     }
 
@@ -940,7 +949,10 @@ fn sweep_orphan_appmanifests(root: &Path) -> Vec<String> {
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().to_string();
-            let app_id = name.strip_prefix("appmanifest_")?.strip_suffix(".acf")?.to_string();
+            let app_id = name
+                .strip_prefix("appmanifest_")?
+                .strip_suffix(".acf")?
+                .to_string();
             if app_id.is_empty() || !app_id.chars().all(|character| character.is_ascii_digit()) {
                 return None;
             }
@@ -1394,9 +1406,8 @@ pub async fn cdndownload_download_game(
     // app. Gravar cada depot em `depot_<id>` separado — o comportamento antigo —
     // deixava o executavel enterrado e o Steam nunca reconhecia a instalacao.
     // Raiz dentro de uma biblioteca oficial e desfeita antes de montar o caminho.
-    let library_root = normalize_library_root(&PathBuf::from(
-        downloads_root.trim_end_matches(['\\', '/']),
-    ));
+    let library_root =
+        normalize_library_root(&PathBuf::from(downloads_root.trim_end_matches(['\\', '/'])));
     let app_info = crate::steam_appinfo::read_app_info(&steam_path, &app_id);
     let install_dir = crate::steam_appinfo::resolve_install_dir(
         app_info.as_ref(),
@@ -1875,11 +1886,7 @@ mod tests {
         .unwrap();
         let nested_depotcache = nested_steamapps.join("depotcache");
         std::fs::create_dir_all(&nested_depotcache).unwrap();
-        std::fs::write(
-            nested_depotcache.join("367521_manifest.manifest"),
-            b"fake",
-        )
-        .unwrap();
+        std::fs::write(nested_depotcache.join("367521_manifest.manifest"), b"fake").unwrap();
         let nested_stash = raw_root.join(".ghostbox");
         std::fs::create_dir_all(&nested_stash).unwrap();
 
@@ -1924,8 +1931,12 @@ mod tests {
         let stale_tmp = game_dir.join(".ghostbox-chunks.json.tmp");
         std::fs::write(&stale_tmp, b"{}").unwrap();
         {
-            let file = std::fs::OpenOptions::new().write(true).open(&stale_tmp).unwrap();
-            file.set_modified(stale_cutoff - std::time::Duration::from_secs(60)).unwrap();
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&stale_tmp)
+                .unwrap();
+            file.set_modified(stale_cutoff - std::time::Duration::from_secs(60))
+                .unwrap();
         }
         let fresh_tmp = game_dir.join("other").join(".ghostbox-chunks.json.tmp");
         std::fs::create_dir_all(fresh_tmp.parent().unwrap()).unwrap();
@@ -1944,14 +1955,19 @@ mod tests {
         )
         .unwrap();
 
-        let (temps, orphans) =
-            super::sweep_downloads_root(&root, stale_cutoff);
+        let (temps, orphans) = super::sweep_downloads_root(&root, stale_cutoff);
 
         assert_eq!(temps, 1, "apenas o .tmp antigo deve sair");
         assert!(fresh_tmp.is_file(), ".tmp recente deve permanecer");
         assert_eq!(orphans, vec!["999999".to_string()]);
-        assert!(!root.join("steamapps").join("appmanifest_999999.acf").exists());
-        assert!(root.join("steamapps").join("appmanifest_367520.acf").is_file());
+        assert!(!root
+            .join("steamapps")
+            .join("appmanifest_999999.acf")
+            .exists());
+        assert!(root
+            .join("steamapps")
+            .join("appmanifest_367520.acf")
+            .is_file());
 
         std::fs::remove_dir_all(&root).ok();
     }
@@ -2025,8 +2041,7 @@ mod tests {
     use crate::steam_pics::{PicsSource, PublicApp, PublicDepot};
     use std::collections::BTreeMap;
 
-    const KEY_367521: &str =
-        "de801b9b61e3385b333259cc0f04d2e5d976c4cb8f933cb859d75a4d0125a2a8";
+    const KEY_367521: &str = "de801b9b61e3385b333259cc0f04d2e5d976c4cb8f933cb859d75a4d0125a2a8";
 
     /// `<root>/config/stplug-in/<appid>.lua` + `<root>/depotcache/*.manifest`.
     /// `cached` traz `(depot, manifest)` na ordem de gravacao, entao o ultimo

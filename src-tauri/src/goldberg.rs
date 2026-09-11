@@ -340,11 +340,13 @@ mod tests {
 
         assert!(game_dir.join("steam_api64.dll").is_file());
         assert_eq!(
-            fs::read_to_string(game_dir.join("steam_settings/steam_appid.txt")).unwrap()
+            fs::read_to_string(game_dir.join("steam_settings/steam_appid.txt"))
+                .unwrap()
                 .trim(),
             "480"
         );
-        let user_ini = fs::read_to_string(game_dir.join("steam_settings/configs.user.ini")).unwrap();
+        let user_ini =
+            fs::read_to_string(game_dir.join("steam_settings/configs.user.ini")).unwrap();
         assert!(user_ini.contains("[user::saves]"));
         assert!(user_ini.contains(&saves_root().display().to_string()));
         let overlay_ini =
@@ -358,7 +360,3 @@ mod tests {
         fs::remove_dir_all(saves_root().join("480")).ok();
     }
 }
-
-
-
-

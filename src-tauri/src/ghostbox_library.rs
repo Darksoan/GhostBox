@@ -238,22 +238,62 @@ fn executable_is_noise(path: &Path) -> bool {
         "vcredist",
         "prerequisites",
     ];
-    let noisy_names = [
-        "unins",
-        "setup",
-        "crash",
-        "report",
-        "redist",
-        "unitycrashhandler",
-        "crashpad_handler",
-        "dxsetup",
-        "vc_redist",
-    ];
-
-    noisy_directories
+    if noisy_directories
         .iter()
         .any(|segment| normalized.split(['\\', '/']).any(|part| part == *segment))
-        || noisy_names.iter().any(|fragment| file_name.contains(fragment))
+    {
+        return true;
+    }
+
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+
+    // Installer/uninstaller binaries (Inno Setup `unins000.exe`, `setup.exe`,
+    // `setup_game.exe`, ...). Prefix-anchored so game titles that merely
+    // contain those letters keep passing the scan.
+    if ["unins", "setup"]
+        .iter()
+        .any(|prefix| stem.starts_with(prefix))
+    {
+        return true;
+    }
+
+    // Crash/bug reporter helpers. A bare `crash` or `report` substring is not
+    // enough on its own: legitimate game binaries such as
+    // `CrashBandicoot.exe` or `Reporter.exe` must survive the scan.
+    const CRASH_HELPER_FRAGMENTS: [&str; 15] = [
+        "crashhandler",
+        "crash_handler",
+        "crashreporter",
+        "crash_reporter",
+        "crashreport",
+        "crash_report",
+        "crashpad",
+        "crashsender",
+        "crash_sender",
+        "crashdump",
+        "crash_dump",
+        "bugreport",
+        "bug_report",
+        "errorreport",
+        "error_report",
+    ];
+    if CRASH_HELPER_FRAGMENTS
+        .iter()
+        .any(|fragment| stem.contains(fragment))
+    {
+        return true;
+    }
+
+    // Redistributable payloads are never the game itself.
+    // (`unitycrashhandler` and `crashpad_handler` are already covered by the
+    // crash-helper fragments above.)
+    ["redist", "dxsetup", "vc_redist"]
+        .iter()
+        .any(|fragment| file_name.contains(fragment))
 }
 
 const EXECUTABLE_SCAN_MAX_DEPTH: usize = 6;
@@ -694,6 +734,33 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0]["fileName"], "Portal2.exe");
         assert_eq!(candidates[0]["recommended"], true);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn executable_scan_keeps_game_titles_with_crash_or_report_words() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-executables-titles-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("CrashBandicoot.exe"), b"game").unwrap();
+        std::fs::write(root.join("Reporter.exe"), b"game").unwrap();
+        std::fs::write(root.join("crashhandler.exe"), b"helper").unwrap();
+        std::fs::write(root.join("CrashReporter.exe"), b"helper").unwrap();
+        std::fs::write(root.join("bugreport.exe"), b"helper").unwrap();
+
+        let candidates =
+            list_executables_blocking(root.to_string_lossy().as_ref(), "Crash Bandicoot Reporter")
+                .unwrap();
+
+        let names = candidates
+            .iter()
+            .filter_map(|candidate| candidate.get("fileName").and_then(|name| name.as_str()))
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"CrashBandicoot.exe"));
+        assert!(names.contains(&"Reporter.exe"));
+        assert_eq!(names.len(), 2);
         std::fs::remove_dir_all(root).ok();
     }
 

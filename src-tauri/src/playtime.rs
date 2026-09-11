@@ -343,8 +343,10 @@ pub(crate) fn run_automatic_backup_after_close(
         // Gate de plano ANTES de qualquer tentativa: backup é exclusivo do
         // Premium, e um usuário free NÃO pode gerar registro de falha nem
         // notificação de erro — só o nudge informativo único.
-        let decision =
-            decide_automatic_backup(crate::subscription::cached_is_premium(&app), has_cloud_session(&app));
+        let decision = decide_automatic_backup(
+            crate::subscription::cached_is_premium(&app),
+            has_cloud_session(&app),
+        );
 
         match decision {
             AutomaticBackupDecision::SkipBlockedByPlan => {
@@ -422,7 +424,8 @@ const PREMIUM_BACKUP_NUDGE_EVENT: &str = "premium-backup-nudge";
 /// é a flag em localStorage do frontend).
 const PREMIUM_NUDGE_DEBOUNCE_MS: u64 = 24 * 60 * 60 * 1000;
 
-static LAST_PREMIUM_NUDGE_AT: std::sync::OnceLock<std::sync::Mutex<u64>> = std::sync::OnceLock::new();
+static LAST_PREMIUM_NUDGE_AT: std::sync::OnceLock<std::sync::Mutex<u64>> =
+    std::sync::OnceLock::new();
 
 fn emit_premium_backup_nudge(app: &tauri::AppHandle) {
     let cell = LAST_PREMIUM_NUDGE_AT.get_or_init(|| std::sync::Mutex::new(0));

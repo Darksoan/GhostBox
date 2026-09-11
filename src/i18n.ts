@@ -49,6 +49,24 @@ const translations: Record<Language, TranslationTree> = {
         startMenuShortcutCreated: "Atalho criado no menu Iniciar.",
         shortcutError: "Não foi possível criar o atalho.",
       },
+      installation: {
+        steamInstalled: "Instalado pela Steam",
+        steamManaged: "Instalação gerenciada pela Steam.",
+        steamUninstallPrompt:
+          "A Steam será aberta para desinstalar \"{title}\". A entrada na biblioteca não será removida.",
+        openSteam: "Abrir Steam",
+        steamUninstallOpened: "Desinstalação aberta na Steam.",
+        steamUninstallError: "Não foi possível abrir a desinstalação na Steam.",
+      },
+      collections: {
+        description: "Onde este jogo aparece na sua biblioteca.",
+        selectionTitle: "Escolha as coleções",
+        selectionDescription:
+          "Marque Favoritos e todas as coleções em que este jogo deve aparecer.",
+        favorites: "Favoritos",
+        save: "Salvar alterações",
+        saveError: "Não foi possível atualizar as coleções.",
+      },
     },
     header: {
       back: "Voltar",
@@ -800,6 +818,24 @@ const translations: Record<Language, TranslationTree> = {
         desktopShortcutCreated: "Desktop shortcut created.",
         startMenuShortcutCreated: "Start menu shortcut created.",
         shortcutError: "Could not create the shortcut.",
+      },
+      installation: {
+        steamInstalled: "Installed through Steam",
+        steamManaged: "Installation managed by Steam.",
+        steamUninstallPrompt:
+          "Steam will open to uninstall \"{title}\". The library entry will not be removed.",
+        openSteam: "Open Steam",
+        steamUninstallOpened: "Uninstall opened in Steam.",
+        steamUninstallError: "Could not open the uninstall flow in Steam.",
+      },
+      collections: {
+        description: "Where this game appears in your library.",
+        selectionTitle: "Choose collections",
+        selectionDescription:
+          "Select Favorites and every collection where this game should appear.",
+        favorites: "Favorites",
+        save: "Save changes",
+        saveError: "Could not update the collections.",
       },
     },
     header: {

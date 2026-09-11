@@ -35,17 +35,9 @@ pub(crate) fn callback_page_html(success: bool, message: &str) -> String {
     }
     let title_escaped = escape_html(title);
     let (badge_class, icon_color, badge_style) = if success {
-        (
-            "success",
-            "#2FA06A",
-            "background: #1D2827;",
-        )
+        ("success", "#2FA06A", "background: #1D2827;")
     } else {
-        (
-            "error",
-            "#A3A3A3",
-            "background: #262626; box-shadow: none;",
-        )
+        ("error", "#A3A3A3", "background: #262626; box-shadow: none;")
     };
     // lucide `user-round-check` — 3 nodes, check path gets draw animation
     let icon_svg = format!(
@@ -193,13 +185,19 @@ mod tests {
         });
 
         // An injected ticket with a guessed (wrong) state.
-        let mut injected = get(port, "/oauth/callback?ticket=attacker_ticket&state=wrong_nonce");
+        let mut injected = get(
+            port,
+            "/oauth/callback?ticket=attacker_ticket&state=wrong_nonce",
+        );
         let mut response = String::new();
         let _ = injected.read_to_string(&mut response);
         assert!(response.starts_with("HTTP/1.1 404"), "got: {response}");
 
         // The genuine callback, arriving after, still gets through.
-        let _real = get(port, "/oauth/callback?ticket=real_ticket&state=expected_nonce");
+        let _real = get(
+            port,
+            "/oauth/callback?ticket=real_ticket&state=expected_nonce",
+        );
 
         let (url, _stream) = waiter.join().unwrap().unwrap();
         let ticket = url

@@ -491,7 +491,10 @@ pub async fn fetch_manifest_files_from(
     let mut errors: Vec<String> = Vec::new();
 
     for source in sources {
-        if wanted.iter().all(|(depot_id, _)| found.contains_key(depot_id)) {
+        if wanted
+            .iter()
+            .all(|(depot_id, _)| found.contains_key(depot_id))
+        {
             break;
         }
         // Fonte raw-lua nao tem `.manifest` dentro; contacta-la seria custo puro.
@@ -514,9 +517,7 @@ pub async fn fetch_manifest_files_from(
         };
 
         // Mesma trava do `Selection`: fonte sem TLS so entra batendo com o PICS.
-        if !source.requires_tls
-            && package_score(&zip, app_id, public) == 0
-        {
+        if !source.requires_tls && package_score(&zip, app_id, public) == 0 {
             errors.push(format!(
                 "{}: pacote sem TLS nao confere com o manifest publico; recusado",
                 source.name
@@ -847,9 +848,7 @@ mod tests {
     fn wanted_names(pairs: &[(u32, u64)]) -> std::collections::HashMap<String, (u32, u64)> {
         pairs
             .iter()
-            .map(|(depot, manifest)| {
-                (format!("{depot}_{manifest}.manifest"), (*depot, *manifest))
-            })
+            .map(|(depot, manifest)| (format!("{depot}_{manifest}.manifest"), (*depot, *manifest)))
             .collect()
     }
 
@@ -876,7 +875,10 @@ mod tests {
         let zip = zip_with_lua_and_manifests(
             &format!("setManifestid(367521,\"{PUBLIC_GID}\")"),
             &[
-                (format!("367521_{PUBLIC_GID}.manifest").as_str(), b"manifesto"),
+                (
+                    format!("367521_{PUBLIC_GID}.manifest").as_str(),
+                    b"manifesto",
+                ),
                 ("367521_111.manifest", b"build velha"),
                 ("9_9.manifest", b"outro app"),
             ],
@@ -904,7 +906,8 @@ mod tests {
         let app = public_app();
         let current =
             zip_with_lua_and_manifests(&format!("setManifestid(367521,\"{PUBLIC_GID}\")"), &[]);
-        let stale = zip_with_lua_and_manifests(&format!("setManifestid(367521,\"{OLD_GID}\")"), &[]);
+        let stale =
+            zip_with_lua_and_manifests(&format!("setManifestid(367521,\"{OLD_GID}\")"), &[]);
 
         assert_eq!(package_score(&current, APP_ID, Some(&app)), 1);
         assert_eq!(package_score(&stale, APP_ID, Some(&app)), 0);

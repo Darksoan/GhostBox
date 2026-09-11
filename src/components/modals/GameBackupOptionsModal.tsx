@@ -32,8 +32,10 @@ interface BackupOptionsModalProps {
   gameTitle: string;
   game: GhostBoxGame | null;
   customExePath: string;
+  isFavorite: boolean;
   userCollections: UserCollection[];
   onClose: () => void;
+  onToggleFavorite: () => void | Promise<void>;
   onAddGameToCollection: (collectionId: string) => void | Promise<void>;
   onRemoveGameFromCollection: (collectionId: string) => void | Promise<void>;
   onSetCustomExe?: (
@@ -53,8 +55,10 @@ export function GameBackupOptionsModal({
   gameTitle,
   game,
   customExePath,
+  isFavorite,
   userCollections,
   onClose,
+  onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
   onSetCustomExe,
@@ -67,10 +71,15 @@ export function GameBackupOptionsModal({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const resetKeyRef = useRef("");
   const executableScanRequestRef = useRef(0);
-  const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [draftCollectionIds, setDraftCollectionIds] = useState<Set<string>>(
-    () => new Set(),
+    () =>
+      new Set(
+        userCollections
+          .filter((collection) => collection.gameIds.includes(gameId))
+          .map((collection) => collection.id),
+      ),
   );
+  const [draftIsFavorite, setDraftIsFavorite] = useState(isFavorite);
   const [isSavingCollections, setIsSavingCollections] = useState(false);
   const [confirmUninstallOpen, setConfirmUninstallOpen] = useState(false);
   const [uninstallBusy, setUninstallBusy] = useState(false);
@@ -104,7 +113,13 @@ export function GameBackupOptionsModal({
       ),
     [gameId, userCollections],
   );
-  const collectionCount = currentCollectionIds.size;
+  const collectionCount = currentCollectionIds.size + (isFavorite ? 1 : 0);
+  const collectionSelectionChanged =
+    draftIsFavorite !== isFavorite ||
+    draftCollectionIds.size !== currentCollectionIds.size ||
+    [...draftCollectionIds].some(
+      (collectionId) => !currentCollectionIds.has(collectionId),
+    );
 
   const installTask = useMemo<DownloadTask | null>(() => {
     if (!open || !appId) return null;
@@ -114,6 +129,13 @@ export function GameBackupOptionsModal({
       ) ?? null
     );
   }, [open, appId]);
+  const steamInstallPath = game?.installPath?.trim() ?? "";
+  const installationKind = installTask
+    ? "ghostbox"
+    : steamInstallPath
+      ? "steam"
+      : null;
+  const installationPath = installTask?.outputDir.trim() || steamInstallPath;
   const executableInstallPaths = useMemo(() => {
     const seen = new Set<string>();
     return [installTask?.outputDir, game?.installPath].reduce<string[]>(
@@ -192,9 +214,9 @@ export function GameBackupOptionsModal({
     }
     if (resetKeyRef.current === gameId) return;
     resetKeyRef.current = gameId;
-    setIsCollectionPickerOpen(false);
     setIsSavingCollections(false);
     setDraftCollectionIds(currentCollectionIds);
+    setDraftIsFavorite(isFavorite);
     setConfirmUninstallOpen(false);
     setUninstallBusy(false);
     setMoveConfirmOpen(false);
@@ -208,25 +230,7 @@ export function GameBackupOptionsModal({
     setCandidateState("idle");
     setLaunchBusy(false);
     setShortcutBusy(false);
-  }, [currentCollectionIds, customExePath, game?.launchArguments, gameId, open]);
-
-  const collectionSummary = !userCollections.length
-    ? copy("Crie uma coleção primeiro.", "Create a collection first.")
-    : collectionCount === 0
-      ? copy(
-          "Este jogo ainda não está em nenhuma coleção.",
-          "This game is not in any collection yet.",
-        )
-      : collectionCount === 1
-        ? copy("Em 1 coleção.", "In 1 collection.")
-        : copy(
-            `Em ${collectionCount} coleções.`,
-            `In ${collectionCount} collections.`,
-          );
-
-  const activeCollections = userCollections.filter((collection) =>
-    currentCollectionIds.has(collection.id),
-  );
+  }, [currentCollectionIds, customExePath, game?.launchArguments, gameId, isFavorite, open]);
 
   // Linha de apoio da instalação: tamanho e data só entram quando a task tem o
   // dado; sem eles a frase vira um fato neutro em vez de "0 B · Invalid Date".
@@ -245,10 +249,7 @@ export function GameBackupOptionsModal({
 
   const sectionDescription: Record<SettingsSection, string> = {
     launch: t("gameSettings.launch.description"),
-    organization: copy(
-      "Onde este jogo aparece na sua biblioteca.",
-      "Where this game shows up in your library.",
-    ),
+    organization: t("gameSettings.collections.description"),
     installation: copy(
       "Onde os arquivos ficam no disco.",
       "Where the files live on disk.",
@@ -271,16 +272,11 @@ export function GameBackupOptionsModal({
         setMoveTargetRoot(null);
         return;
       }
-      if (isCollectionPickerOpen) {
-        if (isSavingCollections) return;
-        setIsCollectionPickerOpen(false);
-        return;
-      }
       onClose();
     };
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (confirmUninstallOpen || moveConfirmOpen || isCollectionPickerOpen) {
+      if (confirmUninstallOpen || moveConfirmOpen) {
         return;
       }
       if (
@@ -301,7 +297,6 @@ export function GameBackupOptionsModal({
   }, [
     open,
     onClose,
-    isCollectionPickerOpen,
     isSavingCollections,
     confirmUninstallOpen,
     uninstallBusy,
@@ -310,6 +305,7 @@ export function GameBackupOptionsModal({
   ]);
 
   const startMove = async () => {
+    if (!installTask) return;
     try {
       const target = await ghostboxApi.selectDownloadsDir();
       if (typeof target !== "string" || !target.trim()) return;
@@ -364,28 +360,39 @@ export function GameBackupOptionsModal({
   };
 
   const confirmUninstall = async () => {
-    if (!installTask || uninstallBusy) return;
+    if (!installationKind || uninstallBusy) return;
     setUninstallBusy(true);
     try {
-      await ghostboxApi.deleteDownloadOutputDir(
-        installTask.appId,
-        installTask.downloadsRoot,
-        installTask.outputDir,
-      );
-      removeDownloadTask(installTask.id);
-      showToast(
-        t("gameSettings.sections.installation"),
-        copy("Jogo desinstalado.", "Game uninstalled."),
-        "success",
-      );
+      if (installTask) {
+        await ghostboxApi.deleteDownloadOutputDir(
+          installTask.appId,
+          installTask.downloadsRoot,
+          installTask.outputDir,
+        );
+        removeDownloadTask(installTask.id);
+        showToast(
+          t("gameSettings.sections.installation"),
+          copy("Jogo desinstalado.", "Game uninstalled."),
+          "success",
+        );
+        onInstallationChanged?.();
+      } else {
+        await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
+        showToast(
+          t("gameSettings.sections.installation"),
+          t("gameSettings.installation.steamUninstallOpened"),
+          "info",
+        );
+      }
       setConfirmUninstallOpen(false);
-      onInstallationChanged?.();
     } catch (error) {
       showToast(
         t("gameSettings.sections.installation"),
         error instanceof Error
           ? error.message
-          : copy("Falha ao desinstalar.", "Uninstall failed."),
+          : installationKind === "steam"
+            ? t("gameSettings.installation.steamUninstallError")
+            : copy("Falha ao desinstalar.", "Uninstall failed."),
         "error",
       );
     } finally {
@@ -502,6 +509,39 @@ export function GameBackupOptionsModal({
     }
   };
 
+  const saveCollectionSelections = async () => {
+    if (!game || isSavingCollections || !collectionSelectionChanged) return;
+    const addedIds = [...draftCollectionIds].filter(
+      (collectionId) => !currentCollectionIds.has(collectionId),
+    );
+    const removedIds = [...currentCollectionIds].filter(
+      (collectionId) => !draftCollectionIds.has(collectionId),
+    );
+
+    setIsSavingCollections(true);
+    try {
+      if (draftIsFavorite !== isFavorite) {
+        await onToggleFavorite();
+      }
+      for (const collectionId of removedIds) {
+        await onRemoveGameFromCollection(collectionId);
+      }
+      for (const collectionId of addedIds) {
+        await onAddGameToCollection(collectionId);
+      }
+    } catch (error) {
+      showToast(
+        t("gameSettings.sections.collections"),
+        error instanceof Error
+          ? error.message
+          : t("gameSettings.collections.saveError"),
+        "error",
+      );
+    } finally {
+      setIsSavingCollections(false);
+    }
+  };
+
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
@@ -584,52 +624,76 @@ export function GameBackupOptionsModal({
                 className={`game-settings-modal__rows ${activeSection === "launch" ? "game-settings-modal__rows--launch" : ""}`}
               >
             {activeSection === "organization" && (
-            <section
-              className={`game-settings-modal__card ${!userCollections.length ? "game-settings-modal__card--disabled" : ""}`}
-            >
-              <div className="game-settings-modal__card-head">
-                <div className="game-settings-modal__card-copy">
-                  <strong>
-                    {userCollections.length
-                      ? collectionSummary
-                      : copy("Nenhuma coleção criada", "No collections yet")}
-                  </strong>
-                  <span>
-                    {userCollections.length
-                      ? copy(
-                          "Um jogo pode estar em várias coleções ao mesmo tempo.",
-                          "A game can sit in several collections at once.",
-                        )
-                      : copy(
-                          "Crie uma na barra lateral para organizar a biblioteca.",
-                          "Create one in the sidebar to organize your library.",
-                        )}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="game-settings-modal__action-button"
-                  onClick={() => {
-                    setDraftCollectionIds(currentCollectionIds);
-                    setIsCollectionPickerOpen(true);
-                  }}
-                  disabled={!userCollections.length}
-                >
-                  {copy("Gerenciar", "Manage")}
-                </button>
+            <section className="game-settings-modal__card">
+              <div className="game-settings-modal__card-copy">
+                <strong>{t("gameSettings.collections.selectionTitle")}</strong>
+                <span>{t("gameSettings.collections.selectionDescription")}</span>
               </div>
 
-              {activeCollections.length > 0 && (
-                <ul className="game-settings-modal__chips">
-                  {activeCollections.map((collection) => (
-                    <li
+              <div
+                className="game-settings-modal__collection-list"
+                role="group"
+                aria-label={t("gameSettings.collections.selectionTitle")}
+              >
+                <label
+                  className={`game-settings-modal__collection-option ${draftIsFavorite ? "game-settings-modal__collection-option--checked" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={draftIsFavorite}
+                    disabled={isSavingCollections}
+                    onChange={(event) => setDraftIsFavorite(event.target.checked)}
+                  />
+                  <span className="game-settings-modal__collection-check">
+                    {draftIsFavorite && <Check size={12} strokeWidth={2} aria-hidden="true" />}
+                  </span>
+                  <span className="game-settings-modal__collection-name">
+                    {t("gameSettings.collections.favorites")}
+                  </span>
+                </label>
+
+                {userCollections.map((collection) => {
+                  const checked = draftCollectionIds.has(collection.id);
+                  return (
+                    <label
                       key={collection.id}
-                      className="game-settings-modal__chip"
+                      className={`game-settings-modal__collection-option ${checked ? "game-settings-modal__collection-option--checked" : ""}`}
                     >
-                      {collection.name}
-                    </li>
-                  ))}
-                </ul>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={isSavingCollections}
+                        onChange={() => {
+                          setDraftCollectionIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(collection.id)) next.delete(collection.id);
+                            else next.add(collection.id);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span className="game-settings-modal__collection-check">
+                        {checked && <Check size={12} strokeWidth={2} aria-hidden="true" />}
+                      </span>
+                      <span className="game-settings-modal__collection-name">
+                        {collection.name}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {collectionSelectionChanged && (
+                <div className="game-settings-modal__collection-actions">
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    disabled={isSavingCollections}
+                    onClick={() => void saveCollectionSelections()}
+                  >
+                    {t("gameSettings.collections.save")}
+                  </button>
+                </div>
               )}
             </section>
             )}
@@ -702,13 +766,14 @@ export function GameBackupOptionsModal({
                             className={`game-settings-modal__candidate ${draftExePath === candidate.path ? "game-settings-modal__candidate--active" : ""}`}
                             onClick={() => setDraftExePath(candidate.path)}
                           >
-                            <span>
-                              {candidate.fileName}
-                              {candidate.recommended && (
-                                <small>{t("gameSettings.launch.recommended")}</small>
-                              )}
+                            <span className="game-settings-modal__candidate-text">
+                              <span>{candidate.fileName}</span>
                             </span>
-                            <small>{candidate.relativePath}</small>
+                            {candidate.recommended && (
+                              <small className="game-settings-modal__candidate-badge">
+                                {t("gameSettings.launch.recommended")}
+                              </small>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -791,21 +856,25 @@ export function GameBackupOptionsModal({
 
             {activeSection === "installation" && (
             <section
-              className={`game-settings-modal__card ${!installTask || moveBusy || uninstallBusy ? "game-settings-modal__card--disabled" : ""}`}
+              className={`game-settings-modal__card ${!installationKind || moveBusy || uninstallBusy ? "game-settings-modal__card--disabled" : ""}`}
             >
               <div className="game-settings-modal__card-head">
                 <div className="game-settings-modal__card-copy">
                   <strong>
-                    {installTask
+                    {installationKind === "ghostbox"
                       ? copy("Instalado neste PC", "Installed on this PC")
+                      : installationKind === "steam"
+                        ? t("gameSettings.installation.steamInstalled")
                       : copy(
                           "Nenhuma instalação local",
                           "No local installation",
                         )}
                   </strong>
                   <span>
-                    {installTask
+                    {installationKind === "ghostbox"
                       ? installSummary
+                      : installationKind === "steam"
+                        ? t("gameSettings.installation.steamManaged")
                       : copy(
                           "Baixe o jogo para mover ou desinstalar por aqui.",
                           "Download the game to move or uninstall it here.",
@@ -817,9 +886,9 @@ export function GameBackupOptionsModal({
                     type="button"
                     className="game-settings-modal__action-button"
                     onClick={() => {
-                      if (!installTask?.outputDir) return;
+                      if (!installationPath) return;
                       void ghostboxApi
-                        .revealDownloadFolder(installTask.outputDir)
+                        .revealDownloadFolder(installationPath)
                         .catch(() =>
                           showToast(
                             t("downloads.openFolder"),
@@ -828,25 +897,27 @@ export function GameBackupOptionsModal({
                           ),
                         );
                     }}
-                    disabled={!installTask?.outputDir || moveBusy || uninstallBusy}
+                    disabled={!installationPath || moveBusy || uninstallBusy}
                   >
                     <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />
                     {t("downloads.openFolder")}
                   </button>
-                  <button
-                    type="button"
-                    className="game-settings-modal__action-button"
-                    onClick={() => void startMove()}
-                    disabled={!installTask || moveBusy || uninstallBusy}
-                  >
-                    <FolderInput size={14} strokeWidth={2} aria-hidden="true" />
-                    {copy("Mover", "Move")}
-                  </button>
+                  {installationKind === "ghostbox" && (
+                    <button
+                      type="button"
+                      className="game-settings-modal__action-button"
+                      onClick={() => void startMove()}
+                      disabled={moveBusy || uninstallBusy}
+                    >
+                      <FolderInput size={14} strokeWidth={2} aria-hidden="true" />
+                      {copy("Mover", "Move")}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="game-settings-modal__action-button game-settings-modal__action-button--danger"
                     onClick={() => setConfirmUninstallOpen(true)}
-                    disabled={!installTask || moveBusy || uninstallBusy}
+                    disabled={!installationKind || moveBusy || uninstallBusy}
                   >
                     <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
                     {copy("Desinstalar", "Uninstall")}
@@ -854,9 +925,9 @@ export function GameBackupOptionsModal({
                 </div>
               </div>
 
-              {installTask?.outputDir && (
+              {installationPath && (
                 <p className="game-settings-modal__path">
-                  {installTask.outputDir}
+                  {installationPath}
                 </p>
               )}
             </section>
@@ -880,10 +951,14 @@ export function GameBackupOptionsModal({
               </header>
               <div className="confirm-modal__content">
                 <p>
-                  {copy(
-                    `Excluir permanentemente os arquivos instalados de "${gameTitle}"? A entrada na biblioteca não é removida.`,
-                    `Permanently delete the installed files for "${gameTitle}"? The library entry is not removed.`,
-                  )}
+                  {installationKind === "steam"
+                    ? t("gameSettings.installation.steamUninstallPrompt", {
+                        title: gameTitle,
+                      })
+                    : copy(
+                        `Excluir permanentemente os arquivos instalados de "${gameTitle}"? A entrada na biblioteca não é removida.`,
+                        `Permanently delete the installed files for "${gameTitle}"? The library entry is not removed.`,
+                      )}
                 </p>
               </div>
               <div className="confirm-modal__actions">
@@ -902,7 +977,11 @@ export function GameBackupOptionsModal({
                   onClick={() => void confirmUninstall()}
                   disabled={uninstallBusy}
                 >
-                  {appearance.language === "en" ? "Uninstall" : "Desinstalar"}
+                  {installationKind === "steam"
+                    ? t("gameSettings.installation.openSteam")
+                    : appearance.language === "en"
+                      ? "Uninstall"
+                      : "Desinstalar"}
                 </button>
               </div>
             </section>
@@ -956,107 +1035,6 @@ export function GameBackupOptionsModal({
           </main>
         </div>
 
-        {isCollectionPickerOpen && (
-          <div
-            className="modal__collection-picker-backdrop"
-            onClick={() => {
-              if (isSavingCollections) return;
-              setIsCollectionPickerOpen(false);
-            }}
-          >
-            <div
-              className="modal__collection-picker"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="game-collection-picker-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="modal__collection-picker-header">
-                <div>
-                  <h4 id="game-collection-picker-title">
-                    {appearance.language === "en"
-                      ? "Choose collections"
-                      : "Escolher coleções"}
-                  </h4>
-                  <span>{gameTitle}</span>
-                </div>
-              </header>
-
-              <div className="modal__collection-picker-list">
-                {userCollections.map((collection) => {
-                  const checked = draftCollectionIds.has(collection.id);
-                  return (
-                    <label
-                      key={collection.id}
-                      className="catalogue-filter-option modal__collection-picker-option"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={isSavingCollections}
-                        onChange={() => {
-                          setDraftCollectionIds((current) => {
-                            const next = new Set(current);
-                            if (next.has(collection.id))
-                              next.delete(collection.id);
-                            else next.add(collection.id);
-                            return next;
-                          });
-                        }}
-                      />
-                      <span className="catalogue-filter-option__box">
-                        {checked && <Check size={12} strokeWidth={2.0} />}
-                      </span>
-                      <span>{collection.name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              <footer className="modal__collection-picker-actions">
-                <button
-                  type="button"
-                  className="button button--outline"
-                  disabled={isSavingCollections}
-                  onClick={() => setIsCollectionPickerOpen(false)}
-                >
-                  {appearance.language === "en" ? "Cancel" : "Cancelar"}
-                </button>
-                <button
-                  type="button"
-                  className="button button--save"
-                  disabled={isSavingCollections}
-                  onClick={async () => {
-                    const addedIds = [...draftCollectionIds].filter(
-                      (collectionId) => !currentCollectionIds.has(collectionId),
-                    );
-                    const removedIds = [...currentCollectionIds].filter(
-                      (collectionId) => !draftCollectionIds.has(collectionId),
-                    );
-
-                    setIsSavingCollections(true);
-                    try {
-                      for (const collectionId of removedIds) {
-                        await onRemoveGameFromCollection(collectionId);
-                      }
-                      for (const collectionId of addedIds) {
-                        await onAddGameToCollection(collectionId);
-                      }
-                      setIsCollectionPickerOpen(false);
-                    } finally {
-                      setIsSavingCollections(false);
-                    }
-                  }}
-                >
-                  {isSavingCollections && (
-                    <Loader2 size={14} strokeWidth={2.15} aria-hidden="true" />
-                  )}
-                  {appearance.language === "en" ? "Save" : "Salvar"}
-                </button>
-              </footer>
-            </div>
-          </div>
-        )}
       </form>
     </div>,
     document.body,
