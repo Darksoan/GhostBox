@@ -156,8 +156,8 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
   return (
     <article
       className={`profile-page__activity-card${
-        hasAchievements ? " profile-page__activity-card--with-achievements" : ""
-      }${isPerfect ? " profile-page__activity-card--perfect" : ""}`}
+        isPerfect ? " profile-page__activity-card--perfect" : ""
+      }`}
       role="button"
       tabIndex={0}
       aria-label={displayTitle}
@@ -1977,7 +1977,6 @@ export function ProfilePage({
                 {steamConnected && (
                   <span
                     className="profile-page__level"
-                    title={steamLevelLabel}
                     aria-label={steamLevelLabel}
                   >
                     <span className="profile-page__level-value">

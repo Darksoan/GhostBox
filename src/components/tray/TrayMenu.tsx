@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, ExternalLink, Home, Layers, Power, Play, UserRound } from "lucide-react";
 import { Grid } from "reicon-react";
 import { ghostboxApi } from "../../lib/ghostboxApi";
@@ -52,9 +52,18 @@ export function TrayMenu() {
   const [launchingAppId, setLaunchingAppId] = useState<string | null>(null);
   const isEnglish = appearance.language === "en";
 
-  useEffect(() => {
+  const refreshGames = useCallback(() => {
     void ghostboxApi.getTrayLibraryGames().then(setGames);
   }, []);
+
+  useEffect(() => {
+    // Esta janela é pré-carregada antes de o scan da Steam terminar. Releia a
+    // biblioteca sempre que o menu for exibido para não manter apenas o
+    // fallback persistido do GhostBox capturado durante o preload.
+    refreshGames();
+    window.addEventListener("focus", refreshGames);
+    return () => window.removeEventListener("focus", refreshGames);
+  }, [refreshGames]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

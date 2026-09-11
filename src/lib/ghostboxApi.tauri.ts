@@ -14,6 +14,8 @@ import type {
   GameDatabaseRequest,
   GameDatabaseResult,
   GamePlaytimeSnapshot,
+  GameExecutableCandidate,
+  GameShortcutResult,
   SteamGameReviewsResult,
   SteamRecommendedTag,
   HomeResult,
@@ -822,10 +824,11 @@ export const ghostboxApi = {
   setCustomExe(
     game: GhostBoxGame,
     customExePath: string,
+    launchArguments = "",
   ): Promise<CustomExeResult> {
     return invokeOr<CustomExeResult>(
       "ghostbox_library_set_custom_exe",
-      { game, customExePath },
+      { game, customExePath, launchArguments },
       { success: false, error: "Não foi possível associar o executável." },
     );
   },
@@ -839,6 +842,23 @@ export const ghostboxApi = {
     });
 
     return typeof selectedPath === "string" ? selectedPath : null;
+  },
+
+  listGameExecutables(
+    installPath: string,
+    gameTitle: string,
+  ): Promise<GameExecutableCandidate[]> {
+    return invoke<GameExecutableCandidate[]>(
+      "ghostbox_library_list_executables",
+      { installPath, gameTitle },
+    );
+  },
+
+  createGameShortcut(
+    game: GhostBoxGame,
+    location: "desktop" | "start-menu",
+  ): Promise<GameShortcutResult> {
+    return invoke<GameShortcutResult>("game_create_shortcut", { game, location });
   },
 
   /**

@@ -240,7 +240,7 @@ function DownloadsHero({
           {metaItems.length > 0 && (
             <span className="downloads-hero__meta">
               {metaItems.map((item) => (
-                <span key={item} className="downloads-hero__meta-item" title={item}>{item}</span>
+                <span key={item} className="downloads-hero__meta-item">{item}</span>
               ))}
             </span>
           )}
@@ -258,8 +258,7 @@ function DownloadsHero({
             {(canPause || canResume) && (
               <button type="button" className="downloads-hero__action downloads-hero__toggle"
                 onClick={() => canPause ? pauseDownloadTask(task.id) : resumeDownloadTask(task.id)}
-                aria-label={t(canPause ? "downloads.pause" : "downloads.resume")}
-                title={t(canPause ? "downloads.pause" : "downloads.resume")}>
+                aria-label={t(canPause ? "downloads.pause" : "downloads.resume")}>
                 <Pause size={18} strokeWidth={2} data-active={canPause} aria-hidden="true" />
                 <Play size={18} strokeWidth={2} data-active={canResume} aria-hidden="true" />
               </button>
@@ -267,7 +266,7 @@ function DownloadsHero({
             {isCompleted && (
               <button type="button" className="downloads-hero__action"
                 onClick={handleLaunch} disabled={launching}
-                aria-label={t("downloads.launch")} title={t("downloads.launch")} aria-busy={launching}>
+                aria-label={t("downloads.launch")} aria-busy={launching}>
                 {launching
                   ? <LoaderCircle size={18} strokeWidth={2} className="downloads-hero__launch-spinner" aria-hidden="true" />
                   : <Play size={18} strokeWidth={2} aria-hidden="true" />}
@@ -275,24 +274,24 @@ function DownloadsHero({
             )}
             <button type="button" className="downloads-hero__action"
               onClick={handleOpenFolder} disabled={!task.outputDir}
-              aria-label={t("downloads.openFolder")} title={t("downloads.openFolder")}>
+              aria-label={t("downloads.openFolder")}>
               <FolderOpen size={18} strokeWidth={2} aria-hidden="true" />
             </button>
             <button type="button" className="downloads-hero__action downloads-hero__action--danger"
               onClick={() => onRequestDelete(task)}
-              aria-label={t("downloads.remove")} title={t("downloads.remove")}>
+              aria-label={t("downloads.remove")}>
               <Trash2 size={18} strokeWidth={2} aria-hidden="true" />
             </button>
             {reorderCount > 1 && (
               <>
                 <button type="button" className="downloads-hero__action"
                   onClick={() => onMove("up")} disabled={reorderIndex <= 0}
-                  aria-label={t("downloads.moveUp")} title={t("downloads.moveUp")}>
+                  aria-label={t("downloads.moveUp")}>
                   <ArrowUp size={18} strokeWidth={2} aria-hidden="true" />
                 </button>
                 <button type="button" className="downloads-hero__action"
                   onClick={() => onMove("down")} disabled={reorderIndex >= reorderCount - 1}
-                  aria-label={t("downloads.moveDown")} title={t("downloads.moveDown")}>
+                  aria-label={t("downloads.moveDown")}>
                   <ArrowDown size={18} strokeWidth={2} aria-hidden="true" />
                 </button>
               </>

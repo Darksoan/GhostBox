@@ -84,6 +84,10 @@ export type GhostBoxGame = {
    * `ghostbox-library.json` (backend Rust). Vazio ausente = launch padrão.
    */
   customExePath?: string;
+  /** Argumentos opcionais aplicados ao executável ou ao `steam -applaunch`. */
+  launchArguments?: string;
+  /** Pasta local resolvida pela leitura do appmanifest/download do GhostBox. */
+  installPath?: string;
   title: string;
   subtitle: string;
   status: GameStatus;

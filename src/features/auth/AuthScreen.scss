@@ -26,7 +26,7 @@
   flex: 0 0 auto;
   flex-direction: column;
   gap: 16px;
-  animation: auth-form-enter 0.24s cubic-bezier(0.2, 0.7, 0.2, 1) 0.05s both;
+  animation: none;
 }
 
 @keyframes auth-form-enter {

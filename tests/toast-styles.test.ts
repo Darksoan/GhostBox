@@ -78,25 +78,21 @@ describe("toast styles", () => {
   });
 
   it("keeps the status colour on the icon and the progress bar", () => {
-    expect(block).toMatch(/--error[\s\S]{0,200}color:\s*var\(--danger\)/);
+    expect(block).toMatch(/--error[\s\S]{0,200}color:\s*var\(--toast-error-icon\)/);
     expect(block).toMatch(/--success[\s\S]{0,200}color:\s*var\(--success\)/);
   });
 
-  it("finishes the icon entrance with the toast entrance", () => {
-    const iconAnimations = source.match(
-      /animation:\s*toast-icon-in\s+300ms[\s\S]*?80ms both;/g,
+  it("keeps toast text and icons free from decorative motion", () => {
+    expect(block).toMatch(/animation:\s*none/);
+    expect(block).not.toMatch(/animation:\s*toast-(?:in|out|icon-in)/);
+    expect(cssBlock(".achievement-toast")).not.toMatch(
+      /animation:\s*toast-(?:in|out|icon-in)/,
     );
-
-    // 80ms delay + 300ms duration = the parent toast's 380ms entrance.
-    expect(iconAnimations).toHaveLength(2);
-    expect(source).not.toMatch(/toast-icon-in\s+360ms/);
   });
 
-  it("keeps each toast surface opaque throughout its entrance", () => {
-    const entrance = cssBlock("@keyframes toast-in");
+  it("keeps each toast surface opaque", () => {
     const roots = [block, cssBlock(".achievement-toast")].map(directDeclarations);
 
-    expect(entrance).not.toMatch(/\bopacity\s*:/);
     for (const root of roots) {
       expect(root).not.toMatch(/\bopacity\s*:/);
       expect(root).not.toMatch(/will-change:[^;]*\bopacity\b/);
@@ -128,26 +124,48 @@ describe("toast surface token", () => {
   });
 });
 
-describe("achievement toast exit wiring", () => {
+describe("toast error icon token", () => {
+  it("uses the dedicated #cc2727 semantic color", () => {
+    const semantic = readFileSync(
+      new URL("../src/styles/_semantic.scss", import.meta.url),
+      "utf8",
+    );
+
+    expect(semantic).toMatch(/--toast-error-icon:\s*#cc2727;/);
+  });
+});
+
+describe("common toast lifecycle", () => {
+  const toastSource = readFileSync(
+    new URL("../src/components/ui/Toast.tsx", import.meta.url),
+    "utf8",
+  );
+  const overlaySource = readFileSync(
+    new URL("../src/context/OverlayContext.tsx", import.meta.url),
+    "utf8",
+  );
+
+  it("lets the provider remove the rendered toast after its cooldown", () => {
+    expect(overlaySource).toMatch(
+      /window\.setTimeout\(\(\) => setToast\(null\), 6000\)/,
+    );
+    expect(toastSource).toContain("if (!toast) return null");
+    expect(toastSource).not.toContain("setDisplayed");
+    expect(toastSource).not.toContain("TOAST_EXIT_MS");
+  });
+});
+
+describe("achievement toast lifecycle", () => {
   const achievementSource = readFileSync(
     new URL("../src/components/ui/AchievementToast.tsx", import.meta.url),
     "utf8",
   );
 
-  it("lets the toast animate before automatic dismissal", () => {
+  it("dismisses immediately when its cooldown ends", () => {
     expect(achievementSource).toMatch(
       /window\.setTimeout\(\s*handleClose,\s*ACHIEVEMENT_TOAST_DURATION_MS,?\s*\)/,
     );
-    expect(achievementSource).toMatch(
-      /window\.setTimeout\(\(\) => \{\s*onClose\(toast\.id\);\s*\}, ACHIEVEMENT_TOAST_EXIT_MS\)/,
-    );
-  });
-
-  it("uses the common exit animation and duration", () => {
-    const exitAnimation =
-      /&--exiting\s*\{\s*animation: toast-out 220ms cubic-bezier\(0\.3, 0, 1, 1\) both;/;
-
-    expect(toastBlock()).toMatch(exitAnimation);
-    expect(cssBlock(".achievement-toast")).toMatch(exitAnimation);
+    expect(achievementSource).toContain("onClose(toast.id)");
+    expect(achievementSource).not.toContain("ACHIEVEMENT_TOAST_EXIT_MS");
   });
 });

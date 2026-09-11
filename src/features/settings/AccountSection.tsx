@@ -192,7 +192,6 @@ export function AccountSection() {
                 className="account-section__icon"
                 onClick={() => void logout()}
                 aria-label={t("settings.general.account.signOut")}
-                title={t("settings.general.account.signOut")}
               >
                 <LogOut size={15} strokeWidth={2.25} aria-hidden="true" />
               </button>

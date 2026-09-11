@@ -106,6 +106,8 @@ interface PageRouterProps {
   page: Page;
   debouncedQuery: string;
   activeSettingsTabId: string;
+  settingsLibraryView: "overview" | "hidden-games";
+  onSettingsLibraryViewChange: (view: "overview" | "hidden-games") => void;
   activeProfileCollectionId?: string;
   setActiveProfileCollectionId: (id: string | undefined) => void;
   activeLibraryCollectionId: string | null;
@@ -124,6 +126,8 @@ export function PageRouter({
   page,
   debouncedQuery,
   activeSettingsTabId,
+  settingsLibraryView,
+  onSettingsLibraryViewChange,
   activeProfileCollectionId,
   setActiveProfileCollectionId,
   activeLibraryCollectionId,
@@ -331,6 +335,8 @@ export function PageRouter({
       return (
         <LazySettingsPage
           activeTabId={activeSettingsTabId as never}
+          libraryView={settingsLibraryView}
+          onLibraryViewChange={onSettingsLibraryViewChange}
           games={appData.addedLibraryGames}
           steamProfile={appData.steamProfile}
           initialPage={appData.initialPage}

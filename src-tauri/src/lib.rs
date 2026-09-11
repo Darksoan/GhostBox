@@ -1396,6 +1396,13 @@ pub(crate) fn launch_game_from_value(
         }));
     }
 
+    let launch_arguments = game
+        .get("launchArguments")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default();
+
     // Override de executável: quando o usuário associou um .exe personalizado a
     // este jogo, ignoramos `steam://rungameid` e abrimos o binário diretamente.
     // O monitor de playtime continua funcionando porque marca o processo via
@@ -1427,18 +1434,15 @@ pub(crate) fn launch_game_from_value(
         // do `ghostbox-library.json` poderia apontar para qualquer binário local.
         let install_path_raw = text_value(game.get("installPath"));
         if !install_path_raw.is_empty() {
-            if let Ok(canonical_install) =
-                std::path::Path::new(install_path_raw.trim()).canonicalize()
-            {
-                if !canonical_executable.starts_with(&canonical_install) {
-                    return Ok(serde_json::json!({
-                        "success": false,
-                        "appId": app_id,
-                        "error":
-                            "O executável personalizado está fora da pasta de instalação do jogo."
-                                .to_string()
-                    }));
-                }
+            let install_path = std::path::Path::new(install_path_raw.trim());
+            if !is_path_inside_or_equal(install_path, &canonical_executable) {
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "appId": app_id,
+                    "error":
+                        "O executável personalizado está fora da pasta de instalação do jogo."
+                            .to_string()
+                }));
             }
         }
 
@@ -1460,6 +1464,7 @@ pub(crate) fn launch_game_from_value(
             }
             command
         };
+        launch_command.args(parse_launch_arguments(launch_arguments));
         match launch_command.spawn() {
             Ok(_) => {
                 if playtime::mark_process_fallback_started(&app_id) {
@@ -1481,6 +1486,37 @@ pub(crate) fn launch_game_from_value(
                 "success": false,
                 "appId": app_id,
                 "error": format!("Could not launch custom executable: {error}")
+            })),
+        }
+    } else if !launch_arguments.is_empty() {
+        let Some(steam_path) = resolve_steam_path(&app, None).0 else {
+            return Ok(serde_json::json!({
+                "success": false,
+                "appId": app_id,
+                "error": "Steam installation was not found."
+            }));
+        };
+        let steam_executable = std::path::PathBuf::from(&steam_path).join("steam.exe");
+        let mut command = std::process::Command::new(steam_executable);
+        command
+            .current_dir(steam_path)
+            .arg("-applaunch")
+            .arg(&app_id)
+            .args(parse_launch_arguments(launch_arguments));
+        match command.spawn() {
+            Ok(_) => {
+                playtime::register_pending_steam_game(game.clone());
+                let _ = playtime::record_game_launch_playtime(&app, &app_id);
+                Ok(serde_json::json!({
+                    "success": true,
+                    "appId": app_id,
+                    "launchMethod": "steam-applaunch"
+                }))
+            }
+            Err(error) => Ok(serde_json::json!({
+                "success": false,
+                "appId": app_id,
+                "error": format!("Could not launch Steam: {error}")
             })),
         }
     } else {
@@ -1527,6 +1563,108 @@ pub(crate) fn launch_game_from_value(
             })),
         }
     }
+}
+
+pub(crate) fn parse_launch_arguments(input: &str) -> Vec<String> {
+    let mut arguments = Vec::new();
+    let mut current = String::new();
+    let mut characters = input.chars().peekable();
+    let mut quoted = false;
+
+    while let Some(character) = characters.next() {
+        match character {
+            '"' => quoted = !quoted,
+            '\\' if characters.peek() == Some(&'"') => {
+                characters.next();
+                current.push('"');
+            }
+            value if value.is_whitespace() && !quoted => {
+                if !current.is_empty() {
+                    arguments.push(std::mem::take(&mut current));
+                }
+            }
+            value => current.push(value),
+        }
+    }
+    if !current.is_empty() {
+        arguments.push(current);
+    }
+    arguments
+}
+
+#[tauri::command]
+fn game_create_shortcut(
+    app: tauri::AppHandle,
+    game: serde_json::Value,
+    location: String,
+) -> Result<serde_json::Value, String> {
+    let app_id = extract_app_id(&game);
+    let title = text_value(game.get("title"));
+    if app_id.is_empty() || title.is_empty() {
+        return Err("Game information is incomplete.".to_string());
+    }
+    if location != "desktop" && location != "start-menu" {
+        return Err("Unsupported shortcut location.".to_string());
+    }
+
+    let raw_arguments = text_value(game.get("launchArguments"));
+    let custom_executable = text_value(game.get("customExePath"));
+    let (target, arguments, working_directory) = if !custom_executable.is_empty() {
+        let executable = std::fs::canonicalize(&custom_executable)
+            .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
+        let install_path = text_value(game.get("installPath"));
+        if !install_path.is_empty()
+            && !is_path_inside_or_equal(std::path::Path::new(&install_path), &executable)
+        {
+            return Err(
+                "The custom executable is outside the game's installation folder.".to_string(),
+            );
+        }
+        let working_directory = executable
+            .parent()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default();
+        (
+            executable.to_string_lossy().to_string(),
+            raw_arguments,
+            working_directory,
+        )
+    } else {
+        let Some(steam_path) = resolve_steam_path(&app, None).0 else {
+            return Err("Steam installation was not found.".to_string());
+        };
+        let target = std::path::PathBuf::from(&steam_path).join("steam.exe");
+        (
+            target.to_string_lossy().to_string(),
+            format!("-applaunch {app_id} {raw_arguments}").trim().to_string(),
+            steam_path,
+        )
+    };
+
+    let script = r#"$shell = New-Object -ComObject WScript.Shell; $base = if ($args[0] -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }; $name = $args[1] -replace '[<>:\"/\\|?*]', '_'; $path = Join-Path $base ($name + '.lnk'); $shortcut = $shell.CreateShortcut($path); $shortcut.TargetPath = $args[2]; $shortcut.Arguments = $args[3]; $shortcut.WorkingDirectory = $args[4]; $shortcut.Save(); Write-Output $path"#;
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            script,
+        ])
+        .arg(&location)
+        .arg(&title)
+        .arg(&target)
+        .arg(&arguments)
+        .arg(&working_directory)
+        .output()
+        .map_err(|error| format!("Could not create shortcut: {error}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    Ok(serde_json::json!({
+        "success": true,
+        "path": String::from_utf8_lossy(&output.stdout).trim()
+    }))
 }
 
 #[tauri::command]
@@ -1672,6 +1810,8 @@ pub fn run() {
             playtime::game_get_playtimes,
             ghostbox_library::ghostbox_library_register_steam_game,
             ghostbox_library::ghostbox_library_set_custom_exe,
+            ghostbox_library::ghostbox_library_list_executables,
+            game_create_shortcut,
             luatools::luatools_add_game,
             luatools::luatools_remove_game,
             luatools_bootstrap::luatools_dependencies_status,
@@ -1831,6 +1971,20 @@ mod tests {
         assert!(!is_blocked_plan_backup_error(
             "Falha ao enviar o backup para a nuvem."
         ));
+    }
+
+    #[test]
+    fn launch_arguments_preserve_quoted_values_without_using_a_shell() {
+        assert_eq!(
+            parse_launch_arguments(r#"-windowed -path "C:\Games\My Game" -name "two words""#),
+            vec![
+                "-windowed",
+                "-path",
+                r#"C:\Games\My Game"#,
+                "-name",
+                "two words",
+            ]
+        );
     }
 }
 

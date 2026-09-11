@@ -18,7 +18,11 @@ import { useOverlay } from "../context/OverlayContext";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
-import { ConnectionsPanel, SteamVisibilitySection } from "../features/settings/ConnectionsPanel";
+import {
+  ConnectionsPanel,
+  HiddenProfileGamesSection,
+  SteamVisibilitySection,
+} from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
 import { TempFilesSection } from "../features/settings/TempFilesSection";
 import type { GhostBoxGame } from "../data";
@@ -215,6 +219,8 @@ export const settingsTabs: SettingsTab[] = [
 
 interface SettingsPageProps {
   activeTabId: SettingsTabId;
+  libraryView: "overview" | "hidden-games";
+  onLibraryViewChange: (view: "overview" | "hidden-games") => void;
   games: GhostBoxGame[];
   steamProfile: SteamProfile | null;
   initialPage: StartupPage;
@@ -231,6 +237,8 @@ interface SettingsPageProps {
 
 export function SettingsPage({
   activeTabId,
+  libraryView,
+  onLibraryViewChange,
   games,
   steamProfile,
   initialPage,
@@ -340,6 +348,7 @@ export function SettingsPage({
       }))
       .sort((left, right) => left.title.localeCompare(right.title));
   }, [backupSettings, games]);
+  const showingHiddenGames = activeTab.id === "library" && libraryView === "hidden-games";
 
   return (
     <section
@@ -357,7 +366,9 @@ export function SettingsPage({
         }`}
       >
         <div className="settings-panel__body">
-          {activeTab.id !== "subscription" && activeTab.id !== "connections" && (
+          {activeTab.id !== "subscription" &&
+            activeTab.id !== "connections" &&
+            !showingHiddenGames && (
             <div className="settings-page__header">
               <div>
                 <h3>{t(settingsTabLabelKeys[activeTab.id])}</h3>
@@ -366,7 +377,7 @@ export function SettingsPage({
             </div>
           )}
           {activeTab.id === "general" && <AccountSection />}
-          {options.length > 0 && (
+          {options.length > 0 && !showingHiddenGames && (
             <div className="settings-options">
               {options.map((option, index) => (
                 <SettingRow
@@ -378,11 +389,14 @@ export function SettingsPage({
             </div>
           )}
           {activeTab.id === "notifications" && <NotificationsTestSection />}
-          {activeTab.id === "library" && (
+          {activeTab.id === "library" && libraryView === "overview" && (
             <>
-              <SteamVisibilitySection />
+              <SteamVisibilitySection onOpenHiddenGames={() => onLibraryViewChange("hidden-games")} />
               <SteamLibrariesSection downloadsDir={downloadsDir} t={t} />
             </>
+          )}
+          {activeTab.id === "library" && libraryView === "hidden-games" && (
+            <HiddenProfileGamesSection />
           )}
           {activeTab.id === "performance" && <TempFilesSection />}
           {activeTab.id === "connections" && <ConnectionsPanel />}

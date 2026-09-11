@@ -306,6 +306,8 @@ interface AppDataContextValue {
   setCustomExeGame: (
     game: GhostBoxGame,
     customExePath: string,
+    launchArguments?: string,
+    options?: { showSuccessToast?: boolean },
   ) => Promise<GhostBoxGame | null>;
   addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
   removeGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
@@ -1296,6 +1298,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGames.map((game) => ({
         ...game,
         trayInstalled:
+          game.status === "installed" ||
           game.librarySource === "steam-installed" ||
           game.librarySource === "plugin" ||
           game.librarySource === "registered" ||
@@ -2109,10 +2112,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // comando grava direto em `ghostbox-library.json`. Retorna o jogo atualizado
   // ou null em falha (toast já mostrado).
   const setCustomExeGame = useCallback(
-    async (game: GhostBoxGame, customExePath: string): Promise<GhostBoxGame | null> => {
+    async (
+      game: GhostBoxGame,
+      customExePath: string,
+      launchArguments = "",
+      options?: { showSuccessToast?: boolean },
+    ): Promise<GhostBoxGame | null> => {
       const trimmed = customExePath.trim();
+      const trimmedArguments = launchArguments.trim();
       try {
-        const result = await ghostboxApi.setCustomExe(game, trimmed);
+        const result = await ghostboxApi.setCustomExe(
+          game,
+          trimmed,
+          trimmedArguments,
+        );
         if (!result.success) {
           showToast(
             appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
@@ -2125,6 +2138,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ...result.libraryGame,
           librarySource: result.libraryGame.librarySource ?? "registered",
           customExePath: trimmed || undefined,
+          launchArguments: trimmedArguments || undefined,
         });
 
         setScannedLibraryGames((current) =>
@@ -2136,16 +2150,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setAddedLibraryGameAppIds((current) =>
           new Set(current).add(libraryGame.appId),
         );
-        showToast(
-          appearance.language === "en" ? "Executable set" : "Executável definido",
-          trimmed
-            ? appearance.language === "en"
-              ? `${libraryGame.title} will launch from ${trimmed}.`
-              : `${libraryGame.title} iniciará a partir de ${trimmed}.`
-            : appearance.language === "en"
-              ? `${libraryGame.title} will launch via Steam again.`
-              : `${libraryGame.title} voltará a iniciar pela Steam.`,
-        );
+        if (options?.showSuccessToast !== false) {
+          showToast(
+            appearance.language === "en" ? "Executable set" : "Executável definido",
+            trimmed
+              ? appearance.language === "en"
+                ? `${libraryGame.title} will launch from ${trimmed}.`
+                : `${libraryGame.title} iniciará a partir de ${trimmed}.`
+              : appearance.language === "en"
+                ? `${libraryGame.title} will launch via Steam again.`
+                : `${libraryGame.title} voltará a iniciar pela Steam.`,
+          );
+        }
         return libraryGame;
       } catch (error) {
         const errorMessage = error instanceof Error

@@ -14,6 +14,7 @@ import {
   cacheImageSourceAfterLoad,
   forgetCachedImageSource,
   markImageSourceLoaded,
+  resolveSteamHeaderSource,
   withCachedImageSources,
 } from "../../utils/imageCache";
 import { getSteamReviewScore } from "../../utils/gameMetrics";
@@ -57,12 +58,20 @@ const CatalogueHeaderImage = memo(function CatalogueHeaderImage({
     [sourceKey]
   );
   const [sourceIndex, setSourceIndex] = useState(0);
+  const [resolvedFallbackSource, setResolvedFallbackSource] = useState("");
+  const fallbackRequestRef = useRef(0);
 
   useEffect(() => {
+    fallbackRequestRef.current += 1;
     setSourceIndex(0);
+    setResolvedFallbackSource("");
+
+    return () => {
+      fallbackRequestRef.current += 1;
+    };
   }, [sourceKey]);
 
-  const source = sources[sourceIndex] ?? "";
+  const source = sources[sourceIndex] ?? resolvedFallbackSource;
   if (!source) return null;
 
   return (
@@ -87,7 +96,31 @@ const CatalogueHeaderImage = memo(function CatalogueHeaderImage({
       }}
       onError={() => {
         forgetCachedImageSource(source);
-        setSourceIndex((current) => current + 1);
+        if (source === resolvedFallbackSource) {
+          setResolvedFallbackSource("");
+          return;
+        }
+
+        const nextIndex = sourceIndex + 1;
+        if (nextIndex < sources.length) {
+          setSourceIndex(nextIndex);
+          return;
+        }
+
+        // Jogos migrados para `store_item_assets` podem publicar somente a
+        // URL com hash. Resolver apenas depois dos fallbacks preserva o source
+        // do primeiro paint e evita trocar uma capa que já carregou.
+        setSourceIndex(sources.length);
+        const requestId = ++fallbackRequestRef.current;
+        void resolveSteamHeaderSource(game.appId).then((resolvedSource) => {
+          if (
+            requestId === fallbackRequestRef.current &&
+            resolvedSource &&
+            !sources.includes(resolvedSource)
+          ) {
+            setResolvedFallbackSource(resolvedSource);
+          }
+        });
       }}
     />
   );

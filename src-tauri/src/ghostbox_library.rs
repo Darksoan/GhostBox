@@ -1,5 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::AppHandle;
@@ -168,6 +169,7 @@ pub fn ghostbox_library_set_custom_exe(
     app: AppHandle,
     game: Value,
     custom_exe_path: String,
+    launch_arguments: String,
 ) -> Result<Value, String> {
     let app_id = extract_app_id(&game);
     let title = text_value(game.get("title"));
@@ -201,6 +203,15 @@ pub fn ghostbox_library_set_custom_exe(
         } else {
             object.insert("customExePath".to_string(), json!(path_trimmed.to_string()));
         }
+        let arguments_trimmed = launch_arguments.trim();
+        if arguments_trimmed.is_empty() {
+            object.remove("launchArguments");
+        } else {
+            object.insert(
+                "launchArguments".to_string(),
+                json!(arguments_trimmed.to_string()),
+            );
+        }
     }
 
     upsert_ghostbox_library_game(&app, library_game.clone())?;
@@ -209,6 +220,176 @@ pub fn ghostbox_library_set_custom_exe(
         "success": true,
         "libraryGame": library_game
     }))
+}
+
+fn executable_is_noise(path: &Path) -> bool {
+    let normalized = path.to_string_lossy().to_lowercase();
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    let noisy_directories = [
+        "_commonredist",
+        "commonredist",
+        "redist",
+        "redistributables",
+        "directx",
+        "vcredist",
+        "prerequisites",
+    ];
+    let noisy_names = [
+        "unins",
+        "setup",
+        "crash",
+        "report",
+        "redist",
+        "unitycrashhandler",
+        "crashpad_handler",
+        "dxsetup",
+        "vc_redist",
+    ];
+
+    noisy_directories
+        .iter()
+        .any(|segment| normalized.split(['\\', '/']).any(|part| part == *segment))
+        || noisy_names.iter().any(|fragment| file_name.contains(fragment))
+}
+
+const EXECUTABLE_SCAN_MAX_DEPTH: usize = 6;
+const EXECUTABLE_SCAN_MAX_DIRECTORIES: usize = 2_000;
+const EXECUTABLE_SCAN_MAX_ENTRIES: usize = 50_000;
+const EXECUTABLE_SCAN_MAX_CANDIDATES: usize = 200;
+const EXECUTABLE_SCAN_DEADLINE: Duration = Duration::from_secs(5);
+
+fn list_executables_blocking(install_path: &str, game_title: &str) -> Result<Vec<Value>, String> {
+    let root = std::fs::canonicalize(install_path.trim())
+        .map_err(|error| format!("Could not resolve installation folder: {error}"))?;
+    if !root.is_dir() {
+        return Err("Installation folder is unavailable.".to_string());
+    }
+    let title_words = game_title
+        .to_lowercase()
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let mut candidates = Vec::new();
+    let mut pending = VecDeque::from([(root.clone(), 0usize)]);
+    let started_at = Instant::now();
+    let mut directories_visited = 0usize;
+    let mut entries_seen = 0usize;
+    let mut hit_scan_limit = false;
+
+    'scan: while let Some((directory, depth)) = pending.pop_front() {
+        if started_at.elapsed() >= EXECUTABLE_SCAN_DEADLINE
+            || directories_visited >= EXECUTABLE_SCAN_MAX_DIRECTORIES
+        {
+            hit_scan_limit = true;
+            break;
+        }
+        directories_visited += 1;
+
+        let entries = match std::fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(_) if directory == root => {
+                return Err("Could not read the installation folder.".to_string());
+            }
+            Err(_) => continue,
+        };
+
+        for entry in entries {
+            if started_at.elapsed() >= EXECUTABLE_SCAN_DEADLINE
+                || entries_seen >= EXECUTABLE_SCAN_MAX_ENTRIES
+                || candidates.len() >= EXECUTABLE_SCAN_MAX_CANDIDATES
+            {
+                hit_scan_limit = true;
+                break 'scan;
+            }
+            let Ok(entry) = entry else { continue };
+            entries_seen += 1;
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else { continue };
+
+            // Symlinks and Windows junctions can escape the installation root or
+            // create cycles. Never traverse them during an automatic scan.
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                if depth < EXECUTABLE_SCAN_MAX_DEPTH && !executable_is_noise(&path) {
+                    pending.push_back((path, depth + 1));
+                }
+                continue;
+            }
+            if !file_type.is_file()
+                || !path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+                || executable_is_noise(&path)
+            {
+                continue;
+            }
+
+            let stem = path
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_lowercase();
+            let relative = path.strip_prefix(&root).unwrap_or(&path);
+            let size = entry.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+            let title_matches = title_words
+                .iter()
+                .filter(|word| word.len() >= 3 && stem.contains(word.as_str()))
+                .count() as i64;
+            let score = title_matches * 100 + (if depth <= 1 { 20 } else { 0 })
+                + ((size / (1024 * 1024)).min(50) as i64);
+            let reason = if title_matches > 0 {
+                "title-match"
+            } else if depth <= 1 {
+                "installation-root"
+            } else {
+                "executable"
+            };
+            candidates.push(json!({
+                "path": path.to_string_lossy(),
+                "relativePath": relative.to_string_lossy(),
+                "fileName": path.file_name().and_then(|value| value.to_str()).unwrap_or_default(),
+                "sizeBytes": size,
+                "score": score,
+                "reason": reason,
+            }));
+        }
+    }
+
+    if hit_scan_limit && candidates.is_empty() {
+        return Err("Executable scan exceeded its safe limits.".to_string());
+    }
+
+    candidates.sort_by(|left, right| {
+        let right_score = right.get("score").and_then(Value::as_i64).unwrap_or_default();
+        let left_score = left.get("score").and_then(Value::as_i64).unwrap_or_default();
+        right_score.cmp(&left_score).then_with(|| {
+            text_value(left.get("relativePath")).cmp(&text_value(right.get("relativePath")))
+        })
+    });
+    if let Some(first) = candidates.first_mut().and_then(Value::as_object_mut) {
+        first.insert("recommended".to_string(), json!(true));
+    }
+    Ok(candidates)
+}
+
+#[tauri::command]
+pub async fn ghostbox_library_list_executables(
+    install_path: String,
+    game_title: String,
+) -> Result<Vec<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        list_executables_blocking(&install_path, &game_title)
+    })
+    .await
+    .map_err(|error| format!("Executable scan failed: {error}"))?
 }
 
 pub fn remove_ghostbox_library_game(app: &AppHandle, app_id: &str) -> Result<(), String> {
@@ -433,7 +614,7 @@ pub fn build_scan_games_with_plugins(
 
 #[cfg(test)]
 mod tests {
-    use super::build_scan_games_with_plugins;
+    use super::{build_scan_games_with_plugins, list_executables_blocking};
 
     #[test]
     fn ghostbox_provenance_survives_an_installed_scan_stub() {
@@ -491,5 +672,108 @@ mod tests {
 
         assert_eq!(games.len(), 1);
         assert!(games[0].get("librarySource").is_none());
+    }
+
+    #[test]
+    fn executable_scan_prefers_the_game_and_ignores_installers() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-executables-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(root.join("_CommonRedist")).unwrap();
+        std::fs::write(root.join("Portal2.exe"), b"game").unwrap();
+        std::fs::write(root.join("setup.exe"), b"setup").unwrap();
+        std::fs::write(root.join("_CommonRedist").join("dxsetup.exe"), b"redist").unwrap();
+
+        let candidates = list_executables_blocking(
+            root.to_string_lossy().as_ref(),
+            "Portal 2",
+        )
+        .unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0]["fileName"], "Portal2.exe");
+        assert_eq!(candidates[0]["recommended"], true);
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn executable_scan_reaches_the_sixth_directory_level() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-executables-depth-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let nested = root.join("one").join("two").join("three").join("four").join("five").join("six");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("DeepGame.exe"), b"game").unwrap();
+
+        let candidates = list_executables_blocking(root.to_string_lossy().as_ref(), "Deep Game")
+            .unwrap();
+
+        assert_eq!(candidates[0]["fileName"], "DeepGame.exe");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn executable_scan_reports_an_unavailable_root() {
+        let missing = std::env::temp_dir().join(format!(
+            "ghostbox-missing-executables-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+
+        let error = list_executables_blocking(missing.to_string_lossy().as_ref(), "Missing")
+            .unwrap_err();
+
+        assert!(error.contains("Could not resolve installation folder"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn executable_scan_does_not_follow_directory_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-executables-links-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let outside = root.with_file_name(format!("{}-outside", root.display()));
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(outside.join("OutsideGame.exe"), b"game").unwrap();
+        symlink(&outside, root.join("linked")).unwrap();
+
+        let candidates = list_executables_blocking(root.to_string_lossy().as_ref(), "Outside Game")
+            .unwrap();
+
+        assert!(candidates.is_empty());
+        std::fs::remove_dir_all(root).ok();
+        std::fs::remove_dir_all(outside).ok();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn executable_scan_does_not_follow_directory_junctions() {
+        use std::os::windows::fs::symlink_dir;
+
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-executables-links-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let outside = root.with_file_name(format!("{}-outside", root.display()));
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(outside.join("OutsideGame.exe"), b"game").unwrap();
+        if symlink_dir(&outside, root.join("linked")).is_err() {
+            std::fs::remove_dir_all(root).ok();
+            std::fs::remove_dir_all(outside).ok();
+            return;
+        }
+
+        let candidates = list_executables_blocking(root.to_string_lossy().as_ref(), "Outside Game")
+            .unwrap();
+
+        assert!(candidates.is_empty());
+        std::fs::remove_dir_all(root).ok();
+        std::fs::remove_dir_all(outside).ok();
     }
 }

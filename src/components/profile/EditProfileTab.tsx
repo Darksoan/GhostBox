@@ -463,7 +463,6 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                         type="button"
                         className="button profile-page__edit-crop-btn"
                         onClick={handleOpenAvatarCrop}
-                        title={t("profile.cropAvatar")}
                         aria-label={t("profile.cropAvatar")}
                       >
                         <Crop size={18} aria-hidden="true" />

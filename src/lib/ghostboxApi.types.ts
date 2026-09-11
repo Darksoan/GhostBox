@@ -215,6 +215,21 @@ export type LaunchGameResult = {
   error?: string;
 };
 
+export type GameExecutableCandidate = {
+  path: string;
+  relativePath: string;
+  fileName: string;
+  sizeBytes: number;
+  score: number;
+  reason: "title-match" | "installation-root" | "executable";
+  recommended?: boolean;
+};
+
+export type GameShortcutResult = {
+  success: boolean;
+  path?: string;
+};
+
 export type LudusaviBackupPreviewGame = {
   id: string;
   appId: string;

@@ -895,14 +895,14 @@ p {
 }
 
 .content-overlay-enter {
-  animation: content-overlay-fade-in var(--motion-base) cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: none;
 }
 
 .content-overlay-exit {
   position: absolute;
   inset: 0;
   z-index: 1;
-  animation: content-overlay-fade-out 100ms ease-in both;
+  animation: none;
   pointer-events: none;
 }
 
@@ -961,7 +961,7 @@ p {
 }
 
 .sidebar__mode-panel {
-  animation: sidebar-mode-panel-in var(--motion-base) var(--ease) both;
+  animation: none;
 }
 
 .sidebar__mode-panel--forward {
@@ -973,7 +973,7 @@ p {
 }
 
 .sidebar__section.sidebar__mode-panel > .sidebar__menu > .sidebar__menu-item {
-  animation: sidebar-mode-item-in var(--motion-slow) var(--ease-out) both;
+  animation: none;
 }
 
 @for $i from 1 through 10 {
@@ -984,7 +984,7 @@ p {
 
 /* Blocos secundários chegam depois da cascata do menu principal. */
 .sidebar__mode-panel--delayed {
-  animation: sidebar-mode-block-in var(--motion-slow) var(--ease-out) 120ms both;
+  animation: none;
 }
 
 /* ─── Sidebar ─────────────────────────────────────────────────────────────── */
@@ -2048,7 +2048,7 @@ p {
     letter-spacing: 0;
     pointer-events: none;
     user-select: none;
-    animation: header-notification-badge-in var(--motion-base) var(--ease) both;
+    animation: none;
   }
 }
 
@@ -3240,7 +3240,7 @@ p {
   max-width: none;
   flex-direction: column;
   gap: var(--space-3);
-  animation: home-banner-info-in 0.32s var(--ease-out) 0.08s both;
+  animation: none;
 }
 
 .home-banner__frame[data-direction="-1"] .home-banner__info {
@@ -6303,7 +6303,7 @@ html.no-animations {
   background: var(--surface-dropdown-menu);
   overflow: hidden auto;
   transform-origin: top center;
-  animation: settings-dropdown-open var(--motion-fast) var(--ease);
+  animation: none;
 }
 
 .settings-dropdown__option {
@@ -6464,7 +6464,7 @@ html.no-animations {
   background: var(--sidebar-option-hover);
   border: 0;
   border-radius: var(--radius-md);
-  animation: context-menu-in 0.1s cubic-bezier(0.2, 0, 0, 1);
+  animation: none;
 
   &__list {
     list-style: none;
@@ -7156,7 +7156,7 @@ html.no-animations {
        `--surface-popover`. Mantendo os dois iguais o campo sumia no fundo. */
     background: var(--surface-panel);
     box-shadow: var(--shadow-2);
-    animation: catalogue-filter-panel-in var(--motion-fast) var(--ease-out) both;
+    animation: none;
   }
 
   /* Última pílula da barra: o painel ancora pela direita para não sair da
@@ -8541,8 +8541,7 @@ input[type="search"]::-ms-reveal {
   /* Stagger da abertura: cada linha entra 40ms depois da anterior, com teto de
      240ms para grupos longos não virarem uma fila lenta. */
   &--open .app-notification--group-child {
-    animation: app-notification-child-in var(--motion-base) var(--ease-out) both;
-    animation-delay: min(calc(var(--row-index, 0) * 40ms), 240ms);
+    animation: none;
   }
 }
 
@@ -8929,7 +8928,7 @@ input[type="search"]::-ms-reveal {
   /* Véu imersivo: o modal é a assinatura da tela enquanto aberto — mesmo papel
      do token que existe para isso, um degrau mais fundo que o scrim corrente. */
   background: var(--overlay-immersive);
-  animation: download-backdrop-in var(--motion-base) var(--ease-out) both;
+  animation: none;
 }
 
 .download-details-modal {
@@ -8954,7 +8953,7 @@ input[type="search"]::-ms-reveal {
      Dentro dele, a arte assenta de scale(1.04) para 1 quando carrega —
      o download é a arte em movimento, e a entrada reforça isso uma vez,
      sem coreografia espalhada pelo corpo. */
-  animation: download-stage-in var(--motion-emphasis) var(--ease-out) both;
+  animation: none;
 
   &__hero {
     position: relative;
@@ -9921,15 +9920,9 @@ input[type="search"]::-ms-reveal {
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-toast);
-  will-change: transform;
+  will-change: auto;
   box-shadow: var(--shadow-2);
-  // A superfície permanece opaca durante toda a entrada para que sua cor não
-  // seja misturada com o conteúdo abaixo. O movimento continua no compositor.
-  animation: toast-in 380ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
-
-  &--exiting {
-    animation: toast-out 220ms cubic-bezier(0.3, 0, 1, 1) both;
-  }
+  animation: none;
 
   &__content {
     display: grid;
@@ -9943,7 +9936,7 @@ input[type="search"]::-ms-reveal {
     color: var(--text-primary);
     // Secondary layer — ícone chega 80ms depois do card e termina junto
     // com ele, evitando um repaint perceptível depois da entrada.
-    animation: toast-icon-in 300ms cubic-bezier(0.05, 0.7, 0.1, 1) 80ms both;
+    animation: none;
   }
 
   // Capsule (header) do jogo no lugar do check nos toasts de backup OK.
@@ -9971,7 +9964,7 @@ input[type="search"]::-ms-reveal {
   // sobre informação que já estava dita duas vezes.
   &--error {
     .toast__icon {
-      color: var(--danger);
+      color: var(--toast-error-icon);
     }
   }
 
@@ -10063,55 +10056,6 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-@keyframes toast-in {
-  from {
-    transform: translateY(20px) scale(0.96);
-  }
-
-  to {
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes toast-out {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-}
-
-@keyframes toast-icon-in {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .toast {
-    animation: none;
-  }
-
-  .toast__icon {
-    animation: none;
-  }
-
-  .toast--exiting {
-    animation: none;
-    opacity: 0;
-  }
-}
-
 // ─── Achievement toast (conquista desbloqueada) ────────────────────────────
 // Mockup: 1784×293 card em --c-1 (#101010) sobre canvas --c-0 (#0A0A0A),
 // ícone 256×256 com radius 15, título #FAFAFA e descrição #A3A3A3 em
@@ -10138,12 +10082,8 @@ input[type="search"]::-ms-reveal {
   background: var(--surface-achievement-toast);
   box-shadow: var(--shadow-2);
   pointer-events: auto;
-  animation: toast-in 380ms cubic-bezier(0.05, 0.7, 0.1, 1) both;
-  will-change: transform;
-
-  &--exiting {
-    animation: toast-out 220ms cubic-bezier(0.3, 0, 1, 1) both;
-  }
+  animation: none;
+  will-change: auto;
 
   &__content {
     display: grid;
@@ -10170,7 +10110,7 @@ input[type="search"]::-ms-reveal {
     height: 100%;
     object-fit: cover;
     // A entrada termina junto com o card (80ms de atraso + 300ms).
-    animation: toast-icon-in 300ms cubic-bezier(0.05, 0.7, 0.1, 1) 80ms both;
+    animation: none;
 
     &--fallback {
       display: grid;
@@ -10255,22 +10195,6 @@ input[type="search"]::-ms-reveal {
     background: var(--text-primary);
     animation: toast-progress 6s linear forwards;
     transform-origin: left;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .achievement-toast {
-    animation: none;
-  }
-
-  .achievement-toast__icon,
-  .achievement-toast--exiting .achievement-toast__icon {
-    animation: none;
-  }
-
-  .achievement-toast--exiting {
-    animation: none;
-    opacity: 0;
   }
 }
 
@@ -12867,7 +12791,7 @@ html.no-backdrop-blur {
     transition:
       opacity var(--motion-fast) ease,
       transform var(--motion-fast) ease;
-    will-change: opacity, transform;
+    will-change: auto;
     text-rendering: optimizeLegibility;
 
     strong {
@@ -12894,7 +12818,7 @@ html.no-backdrop-blur {
       z-index: 20000;
       opacity: 1;
       transform: translate3d(-50%, -100%, 0);
-      animation: achievement-tooltip-fade-in var(--motion-base) var(--ease) both;
+      animation: none;
     }
   }
 
@@ -13380,24 +13304,20 @@ html.no-backdrop-blur {
 @keyframes game-settings-modal-in {
   from {
     opacity: 0;
-    transform: translateY(var(--space-5)) scale(0.985);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
-@keyframes game-settings-modal-card-in {
+@keyframes game-settings-section-in {
   from {
     opacity: 0;
-    transform: translateY(var(--space-3));
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -13405,13 +13325,9 @@ html.no-backdrop-blur {
   box-sizing: border-box;
   position: relative;
   display: flex;
-  /* Teto de resolução do hero: mesmo raciocínio do modal de downloads — o
-     `header.jpg` da Steam entrega 460×215, então a arte não pede mais largura
-     do que isso comporta em tela de alta densidade. */
-  width: min(720px, calc(100vw - (var(--space-10) * 2)));
-  height: auto;
-  min-height: min(560px, calc(100vh - (var(--space-10) * 2)));
-  max-height: min(760px, calc(100vh - (var(--space-10) * 2)));
+  width: min(900px, calc(100vw - (var(--space-10) * 2)));
+  height: min(620px, calc(100vh - (var(--space-10) * 2)));
+  max-height: min(620px, calc(100vh - (var(--space-10) * 2)));
   flex-direction: column;
   overflow: hidden;
   border: 0;
@@ -13420,59 +13336,7 @@ html.no-backdrop-blur {
   color: var(--text-primary);
   font-family: var(--font-sans);
   box-shadow: var(--shadow-3);
-  animation: game-settings-modal-in var(--motion-emphasis) var(--ease-out) both;
-}
-
-.game-settings-modal__hero {
-  position: relative;
-  width: 100%;
-  min-height: clamp(148px, 22vh, 220px);
-  max-height: 220px;
-  flex: 0 0 auto;
-  overflow: hidden;
-  background: var(--surface-media-letterbox);
-}
-
-.game-settings-modal__hero-image,
-.game-settings-modal__hero-shade {
-  position: absolute;
-  inset: 0;
-}
-
-.game-settings-modal__hero-image {
-  background-position: center;
-  background-size: cover;
-  opacity: 0;
-  transition: opacity var(--motion-base) var(--ease);
-}
-
-.game-settings-modal__hero-image--loaded {
-  opacity: 1;
-}
-
-.game-settings-modal__hero-shade {
-  background: linear-gradient(
-    to bottom,
-    transparent 45%,
-    color-mix(in srgb, var(--surface-modal-canvas) 88%, transparent) 82%,
-    var(--surface-modal-canvas) 100%
-  );
-}
-
-.game-settings-modal__hero-title {
-  position: absolute;
-  right: var(--space-9);
-  bottom: var(--space-7);
-  left: var(--space-9);
-  z-index: 1;
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--type-size-page);
-  font-weight: var(--weight-semibold);
-  line-height: var(--type-line-page);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  animation: none;
 }
 
 .game-settings-modal__close {
@@ -13536,8 +13400,7 @@ html.no-backdrop-blur {
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease),
-    transform var(--motion-fast) var(--ease);
+    color var(--motion-fast) var(--ease);
 }
 
 .game-settings-modal__nav-button svg {
@@ -13546,6 +13409,7 @@ html.no-backdrop-blur {
 }
 
 .game-settings-modal__nav-count {
+  margin-left: auto;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -13565,11 +13429,6 @@ html.no-backdrop-blur {
 
 .game-settings-modal__nav-button--active .game-settings-modal__nav-count {
   color: var(--text-secondary);
-}
-
-.game-settings-modal__nav-button:active:not(:disabled),
-.game-settings-modal__action-button:active:not(:disabled) {
-  transform: scale(0.96);
 }
 
 .game-settings-modal__nav-button:focus-visible,
@@ -13618,7 +13477,6 @@ html.no-backdrop-blur {
   padding: var(--space-7);
   border-radius: var(--radius-md);
   background: var(--surface-option);
-  animation: game-settings-modal-card-in var(--motion-base) var(--ease-out) both;
   transition:
     background-color var(--motion-fast) var(--ease),
     opacity var(--motion-fast) var(--ease);
@@ -13736,8 +13594,7 @@ html.no-backdrop-blur {
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease),
-    transform var(--motion-fast) var(--ease);
+    color var(--motion-fast) var(--ease);
 }
 
 .game-settings-modal__action-button:hover:not(:disabled),
@@ -13766,21 +13623,6 @@ html.no-backdrop-blur {
   opacity: 0.45;
 }
 
-.game-settings-modal__feedback {
-  display: grid;
-  grid-column: 2;
-  grid-row: 3;
-  gap: var(--space-1);
-  margin-top: 0;
-  color: var(--text-secondary);
-  font-size: var(--type-size-caption);
-  line-height: var(--type-line-caption);
-}
-
-.game-settings-modal__feedback [role="alert"] {
-  color: var(--danger-hover);
-}
-
 .game-settings-modal__confirm {
   position: absolute;
   inset: var(--space-8);
@@ -13789,10 +13631,315 @@ html.no-backdrop-blur {
   z-index: var(--z-raised);
 }
 
+.game-settings-modal__content > .game-settings-modal__close {
+  top: var(--space-6);
+  right: var(--space-7);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.game-settings-modal__content > .game-settings-modal__close:hover,
+.game-settings-modal__content > .game-settings-modal__close:focus-visible {
+  background: var(--surface-option-hover);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__body {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.game-settings-modal__sidebar {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  min-height: 100%;
+  align-self: stretch;
+  flex-direction: column;
+  background: var(--surface-sidebar);
+}
+
+.game-settings-modal__nav {
+  display: flex;
+  grid-column: auto;
+  grid-row: auto;
+  width: auto;
+  align-self: stretch;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-5);
+  border-radius: 0;
+  background: transparent;
+}
+
+.game-settings-modal__nav-button {
+  min-height: 42px;
+  height: auto;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  font-size: var(--type-size-body);
+}
+
+.game-settings-modal__nav-button:hover:not(.game-settings-modal__nav-button--active),
+.game-settings-modal__nav-button:focus-visible:not(.game-settings-modal__nav-button--active) {
+  background: var(--sidebar-option-hover);
+}
+
+.game-settings-modal__nav-button--active,
+.game-settings-modal__nav-button--active:hover,
+.game-settings-modal__nav-button--active:focus-visible {
+  background: var(--sidebar-option-active);
+}
+
+.game-settings-modal__content {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-8) var(--space-9);
+  overflow: hidden auto;
+}
+
+.game-settings-modal__section-view {
+  display: flex;
+  min-height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-7);
+  padding-right: var(--space-8);
+  animation: none;
+}
+
+.game-settings-modal__section-header {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.game-settings-modal__section-header h4,
+.game-settings-modal__section-header p {
+  margin: 0;
+}
+
+.game-settings-modal__section-header h4 {
+  color: var(--text-primary);
+  font-size: var(--type-size-page);
+  font-weight: var(--weight-semibold);
+  line-height: var(--type-line-page);
+}
+
+.game-settings-modal__section-header p {
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  line-height: var(--type-line-caption);
+}
+
+.game-settings-modal__rows {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.game-settings-modal__rows--launch {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.game-settings-modal__choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.game-settings-modal__choice,
+.game-settings-modal__candidate {
+  appearance: none;
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.game-settings-modal__choice {
+  background: var(--surface-option-hover);
+}
+
+.game-settings-modal__candidate {
+  background: var(--surface-canvas);
+}
+
+.game-settings-modal__choice:hover,
+.game-settings-modal__choice:focus-visible {
+  background: var(--surface-option-active);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__candidate:hover,
+.game-settings-modal__candidate:focus-visible {
+  background: var(--surface-option-hover);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__choice:focus-visible,
+.game-settings-modal__candidate:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+.game-settings-modal__choice--active,
+.game-settings-modal__choice--active:hover,
+.game-settings-modal__choice--active:focus-visible {
+  background: var(--surface-option-selected);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__candidate--active {
+  background: var(--surface-option-active);
+  color: var(--text-primary);
+}
+
+.game-settings-modal__choice span,
+.game-settings-modal__candidate span {
+  color: inherit;
+  font-size: var(--type-size-compact);
+  line-height: var(--type-line-compact);
+}
+
+.game-settings-modal__choice small,
+.game-settings-modal__candidate small,
+.game-settings-modal__empty-note,
+.game-settings-modal__loading-row,
+.game-settings-modal__field small {
+  color: var(--text-secondary);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-regular);
+  line-height: var(--type-line-caption);
+}
+
+.game-settings-modal__candidate-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.game-settings-modal__candidate > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.game-settings-modal__candidate > span small {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+}
+
+.game-settings-modal__empty-note {
+  margin: 0;
+}
+
+.game-settings-modal__loading-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.game-settings-modal__loading-row svg {
+  animation: spin var(--motion-slow) linear infinite;
+}
+
+.game-settings-modal__field {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.game-settings-modal__field .settings-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  outline: none;
+  background: var(--surface-option-hover);
+  cursor: text;
+}
+
+.game-settings-modal__field .settings-input:hover,
+.game-settings-modal__field .settings-input:focus,
+.game-settings-modal__field .settings-input:focus-visible {
+  border: 0;
+  outline: none;
+  background: var(--surface-option-active);
+  box-shadow: none;
+}
+
+.game-settings-modal__field > span {
+  color: var(--text-primary);
+  font-size: var(--type-size-compact);
+  line-height: var(--type-line-compact);
+}
+
+.game-settings-modal__launch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-6);
+}
+
+.game-settings-modal__launch-actions .button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.game-settings-modal__shortcut-button,
+.game-settings-modal__icon-button {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.game-settings-modal__shortcut-button:hover:not(:disabled),
+.game-settings-modal__shortcut-button:focus-visible:not(:disabled),
+.game-settings-modal__icon-button:hover:not(:disabled),
+.game-settings-modal__icon-button:focus-visible:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.game-settings-modal__shortcut-button:disabled,
+.game-settings-modal__shortcut-button:disabled:hover,
+.game-settings-modal__icon-button:disabled,
+.game-settings-modal__icon-button:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 600px) {
   .game-settings-modal {
     width: calc(100vw - (var(--space-10) * 2));
-    min-height: 320px;
   }
 
   .game-settings-modal__nav-count {
@@ -13802,21 +13949,29 @@ html.no-backdrop-blur {
   .game-settings-modal__body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
-    padding: var(--space-6);
+    gap: 0;
   }
 
+  .game-settings-modal__sidebar,
   .game-settings-modal__nav,
   .game-settings-modal__section-description,
-  .game-settings-modal__rows,
-  .game-settings-modal__feedback {
+  .game-settings-modal__rows {
     grid-column: auto;
     grid-row: auto;
   }
 
   .game-settings-modal__nav {
     flex-direction: row;
+    padding-bottom: var(--space-6);
     overflow-x: auto;
+  }
+
+  .game-settings-modal__content {
+    padding: var(--space-7);
+  }
+
+  .game-settings-modal__section-view {
+    padding-right: var(--space-8);
   }
 
   .game-settings-modal__nav-button {
@@ -13838,14 +13993,15 @@ html.no-backdrop-blur {
 
 @media (prefers-reduced-motion: reduce) {
   .game-settings-modal,
-  .game-settings-modal__card {
+  .game-settings-modal__section-view {
     animation: none;
   }
 
-  .game-settings-modal__hero-image,
   .game-settings-modal__card,
   .game-settings-modal__nav-button,
-  .game-settings-modal__action-button {
+  .game-settings-modal__action-button,
+  .game-settings-modal__choice,
+  .game-settings-modal__candidate {
     transition: none;
     transform: none;
   }
@@ -13853,14 +14009,15 @@ html.no-backdrop-blur {
 
 html.no-animations {
   .game-settings-modal,
-  .game-settings-modal__card {
+  .game-settings-modal__section-view {
     animation: none;
   }
 
-  .game-settings-modal__hero-image,
   .game-settings-modal__card,
   .game-settings-modal__nav-button,
-  .game-settings-modal__action-button {
+  .game-settings-modal__action-button,
+  .game-settings-modal__choice,
+  .game-settings-modal__candidate {
     transition: none;
     transform: none;
   }
@@ -13876,7 +14033,7 @@ html.no-animations {
 .collection-modal,
 .steam-path-modal,
 .modal__collection-picker {
-  animation: modal-content-fade-in var(--motion-fast) ease-out both;
+  animation: none;
 }
 
 @keyframes modal-backdrop-fade-in {

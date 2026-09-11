@@ -22,7 +22,7 @@ import { useSettings } from "../../context/settings";
 import { useAuth } from "../../context/AuthContext";
 import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCachedImageSources";
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
-import { filterCollectionsByGameTitle } from "../../utils/collectionSearch";
+import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
@@ -156,8 +156,9 @@ export const Sidebar = memo(function Sidebar({
     ];
   }, [deferredAddedLibraryGames, deferredFavoriteGames, userCollections, t]);
 
-  const visibleSidebarCollections = useMemo(() => {
-    return filterCollectionsByGameTitle(sidebarCollections, collectionSearchQuery);
+  const hasCollectionSearchQuery = collectionSearchQuery.trim().length > 0;
+  const matchingCollectionGames = useMemo(() => {
+    return searchCollectionGames(sidebarCollections, collectionSearchQuery);
   }, [collectionSearchQuery, sidebarCollections]);
 
   const activeSessionGame = useMemo(() => {
@@ -178,6 +179,8 @@ export const Sidebar = memo(function Sidebar({
   ]);
 
   const visibleSidebarIconGames = useMemo(() => {
+    if (hasCollectionSearchQuery) return matchingCollectionGames;
+
     const games = sidebarCollections.flatMap((collection) => {
       if (!expandedCollectionIds.has(collection.id)) return [];
       return collection.games.slice(0, SIDEBAR_COLLECTION_VISIBLE_GAME_LIMIT);
@@ -185,7 +188,13 @@ export const Sidebar = memo(function Sidebar({
 
     if (activeSessionGame) games.push(activeSessionGame);
     return games;
-  }, [activeSessionGame, expandedCollectionIds, sidebarCollections]);
+  }, [
+    activeSessionGame,
+    expandedCollectionIds,
+    hasCollectionSearchQuery,
+    matchingCollectionGames,
+    sidebarCollections,
+  ]);
 
   useEffect(() => {
     preloadGameIconUrls(visibleSidebarIconGames);
@@ -402,7 +411,31 @@ export const Sidebar = memo(function Sidebar({
             </div>
             {!isCollectionsCollapsed && (
               <ul className="sidebar__menu" >
-                {visibleSidebarCollections.map((collection) => {
+                {hasCollectionSearchQuery ? (
+                  matchingCollectionGames.map((game) => (
+                    <li key={game.id} className="sidebar__collection-game">
+                      <button
+                        type="button"
+                        className="sidebar__collection-game-button"
+                        onClick={() => onOpenGame(game)}
+                        onFocus={() => preloadGameModalAssetsThrottled(game)}
+                        onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          setCollectionGameContextMenu({
+                            collection: null,
+                            game,
+                            visible: true,
+                            position: { x: event.clientX, y: event.clientY },
+                          });
+                        }}
+                      >
+                        <SidebarGameItem game={game} />
+                      </button>
+                    </li>
+                  ))
+                ) : (
+                  sidebarCollections.map((collection) => {
                   const isFavoritesCollection = collection.id === FAVORITES_COLLECTION_ID;
                   const isExpanded = expandedCollectionIds.has(collection.id);
                   const isActive =
@@ -508,8 +541,9 @@ export const Sidebar = memo(function Sidebar({
                       )}
                     </li>
                   );
-                })}
-                {isCollectionSearchOpen && collectionSearchQuery.trim() && visibleSidebarCollections.length === 0 && (
+                  })
+                )}
+                {hasCollectionSearchQuery && matchingCollectionGames.length === 0 && (
                   <li className="sidebar__collection-empty sidebar__collection-empty--search" role="status">
                     {t("sidebar.noMatchingGames")}
                   </li>
@@ -710,7 +744,6 @@ const SidebarProfile = memo(function SidebarProfile({
               {isSteamConnected(visibleProfile) ? (
                 <span
                   className="sidebar-profile__level"
-                  title={levelLabel}
                   aria-label={levelLabel}
                 >
                   <span className="sidebar-profile__level-value">

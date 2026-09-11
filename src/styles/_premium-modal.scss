@@ -10,10 +10,10 @@
   padding: var(--space-10);
   background: color-mix(in srgb, var(--black) 76%, transparent);
   backdrop-filter: blur(10px);
-  animation: premium-modal-scrim-in 220ms var(--ease) both;
+  animation: none;
 
   &.premium-modal--closing {
-    animation: premium-modal-scrim-in var(--motion-base) var(--ease) reverse both;
+    animation: none;
   }
 }
 
@@ -95,12 +95,12 @@
   box-shadow: 0 48px 120px -48px var(--black);
   // O diálogo é o elemento pesado: entra em 320ms, sem overshoot; o conteúdo
   // entra atrás dele em cascata, com as curvas de `.premium-offer`.
-  animation: premium-modal-in 320ms var(--ease) both;
+  animation: none;
 
   &--closing {
     // Saída é mais curta que a entrada e o conteúdo não re-anima: quem fecha
     // já decidiu, não precisa ver a cascata de novo.
-    animation: premium-modal-in var(--motion-base) var(--ease) reverse both;
+    animation: none;
 
     .premium-modal__pitch > *:not(.premium-modal__benefits),
     .premium-modal__benefits li,
@@ -625,7 +625,7 @@
 .premium-modal__pitch > *:not(.premium-modal__benefits),
 .premium-modal__benefits li,
 .premium-modal__checkout > * {
-  animation: premium-modal-item-in 260ms var(--enter-ease, ease-out) both;
+  animation: none;
 }
 
 .premium-modal__pitch > *:not(.premium-modal__benefits) {
@@ -708,7 +708,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .premium-modal {
-    animation: premium-modal-scrim-in var(--motion-fast) var(--ease);
+    animation: none;
   }
 
   // Sem deslize: a marca aparece direto, mantendo o estado legível.

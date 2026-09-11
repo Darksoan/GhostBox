@@ -448,11 +448,11 @@
   }
 
   &__steam-id--revealed {
-    animation: steamid-reveal var(--motion-slow) var(--ease) both;
+    animation: none;
   }
 
   &__steam-id--hidden {
-    animation: steamid-hide var(--motion-base) var(--ease) both;
+    animation: none;
   }
 
   &__steam-id-toggle {
@@ -483,7 +483,7 @@
   &__steam-id-copy {
     position: relative;
     overflow: hidden;
-    animation: steamid-copy-enter var(--motion-slow) var(--ease) both;
+    animation: none;
   }
 
   &__steam-id-copy-icon {
@@ -767,20 +767,6 @@
     &:hover,
     &:focus-visible {
       background: var(--surface-option-hover);
-    }
-
-    &--with-achievements {
-      grid-template-rows: auto auto;
-    }
-
-    &:not(&--with-achievements) {
-      grid-template-rows: 1fr;
-
-      .profile-page__activity-main {
-        grid-row: 1 / -1;
-        align-self: center;
-        padding: 0;
-      }
     }
 
     &--placeholder {
@@ -1545,7 +1531,7 @@
     font-variant-numeric: tabular-nums;
     font-weight: var(--weight-regular);
     line-height: var(--type-line-micro);
-    animation: profile-achievement-percent-reveal var(--motion-emphasis) cubic-bezier(0.2, 0, 0, 1) both;
+    animation: none;
   }
 
   &__achievement-card-detail-row {
@@ -1822,14 +1808,6 @@ html.no-backdrop-blur .profile-page {
       height: auto;
       min-height: 0;
       aspect-ratio: 460 / 215;
-    }
-
-    &__activity-card--with-achievements {
-      grid-template-rows: auto auto auto;
-    }
-
-    &__activity-card--with-achievements &__activity-cover-button {
-      grid-row: 1 / 2;
     }
 
     &__activity-main {

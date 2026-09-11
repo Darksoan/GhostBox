@@ -118,6 +118,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   }, []);
 
   const shell = useAppShellState(page);
+  const [settingsLibraryView, setSettingsLibraryView] = useState<
+    "overview" | "hidden-games"
+  >("overview");
   // Marca `html.is-resizing` durante o arrasto da janela: transições ficam
   // suspensas e quem mede layout espera o resize assentar.
   useViewportResizeTracking();
@@ -380,6 +383,15 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       return;
     }
 
+    if (
+      page === "settings" &&
+      shell.activeSettingsTabId === "library" &&
+      settingsLibraryView === "hidden-games"
+    ) {
+      setSettingsLibraryView("overview");
+      return;
+    }
+
     clearOverlayForward();
     back();
   }, [
@@ -390,6 +402,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     closeGame,
     saveScrollPosition,
     selectedGame,
+    page,
+    settingsLibraryView,
     setOverlayForward,
     shell,
   ]);
@@ -428,6 +442,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   const handleSettingsTabChange = useCallback(
     (tabId: SettingsTabId) => {
+      setSettingsLibraryView("overview");
       shell.setActiveSettingsTabId(tabId);
     },
     [shell]
@@ -540,6 +555,9 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             canGoBack={
               isGameModalVisible ||
               isAchievementsViewVisible ||
+              (page === "settings" &&
+                shell.activeSettingsTabId === "library" &&
+                settingsLibraryView === "hidden-games") ||
               canGoBack
             }
             canGoForward={
@@ -576,6 +594,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               page={page}
               debouncedQuery={shell.debouncedQuery}
               activeSettingsTabId={shell.activeSettingsTabId}
+              settingsLibraryView={settingsLibraryView}
+              onSettingsLibraryViewChange={setSettingsLibraryView}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
               activeLibraryCollectionId={shell.activeLibraryCollectionId}

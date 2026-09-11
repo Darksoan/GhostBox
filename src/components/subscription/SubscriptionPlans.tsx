@@ -478,7 +478,7 @@ export function SubscriptionPlans({
                         return (
                           <span
                             className="subscription-account__backup-state subscription-account__backup-state--failed"
-                            title={game.lastBackupError || undefined}
+                            aria-label={game.lastBackupError || t("premium.lockedBackup.failedLabel")}
                           >
                             {t("premium.lockedBackup.failedLabel")}
                           </span>

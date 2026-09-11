@@ -136,6 +136,7 @@ describe("Catalogue image quality", () => {
     expect(component).toContain("requestManifests: false");
     expect(component).toContain("preserveSourceOrder: true");
     expect(component).toContain("prioritizeCached: true");
+    expect(component).toContain("resolveSteamHeaderSource(game.appId)");
     expect(component).toContain("cacheImageSourceAfterLoad(source)");
     expect(component).toContain('loading="lazy"');
     expect(component).toContain('decoding="async"');

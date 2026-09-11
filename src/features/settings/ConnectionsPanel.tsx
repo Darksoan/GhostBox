@@ -1,13 +1,106 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import { Check, ChevronDown, Copy, Link2, Loader2 } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ArrowDownAZ,
+  Check,
+  ChevronRight,
+  Copy,
+  EyeOff,
+  Link2,
+  Loader2,
+  Search,
+} from "lucide-react";
 import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
+import {
+  useCachedImageSources,
+  useLoadableImageState,
+} from "../../hooks/useCachedImageSources";
 import { useDiscordLink } from "./useDiscordLink";
 import { isSteamConnected } from "../../lib/steamProfile";
+import {
+  filterAndSortHiddenProfileGames,
+  getHiddenProfileGameInitial,
+  hasHiddenProfileGameEvidence,
+} from "../../utils/hiddenProfileGames";
+import { gameCatalogueHeaderSources } from "../../utils/image";
 import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
 import steamIcon from "../../../Icons/steam-glyph.svg";
 import discordIcon from "../../../Icons/discord.svg";
 import "./ConnectionsPanel.scss";
+
+const PROFILE_GAME_ALPHABET = Array.from(
+  { length: 26 },
+  (_, index) => String.fromCharCode(65 + index),
+);
+
+function HiddenProfileGameHeader({
+  sources,
+  title,
+  hidden,
+  onToggle,
+}: {
+  sources: string[];
+  title: string;
+  hidden: boolean;
+  onToggle: () => void;
+}) {
+  const itemRef = useRef<HTMLButtonElement | null>(null);
+  const [shouldLoadImage, setShouldLoadImage] = useState(false);
+  const cachedSources = useCachedImageSources(shouldLoadImage ? sources : []);
+  const image = useLoadableImageState(cachedSources);
+
+  useEffect(() => {
+    if (shouldLoadImage) return;
+    const item = itemRef.current;
+    if (!item) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoadImage(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoadImage(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "360px 0px", threshold: 0.01 },
+    );
+
+    observer.observe(item);
+    return () => observer.disconnect();
+  }, [shouldLoadImage]);
+
+  return (
+    <button
+      ref={itemRef}
+      type="button"
+      role="checkbox"
+      aria-checked={hidden}
+      aria-label={title}
+      className={`hidden-profile-games__item${hidden ? " hidden-profile-games__item--selected" : ""}`}
+      onClick={onToggle}
+    >
+      {image.loaded && image.source && (
+        <img
+          src={image.source}
+          alt=""
+          decoding="async"
+          draggable={false}
+        />
+      )}
+      <EyeOff size={24} strokeWidth={2} aria-hidden="true" />
+    </button>
+  );
+}
 
 export function ConnectionsPanel() {
   const { t } = useSettings();
@@ -114,11 +207,6 @@ export function ConnectionsPanel() {
                     className={`connection-card__copy${steamIdCopied ? " connection-card__copy--copied" : ""}`}
                     onClick={() => void onCopySteamIdClick(steamProfile.steamId)}
                     aria-label={
-                      steamIdCopied
-                        ? t("settings.connections.steam.copiedId")
-                        : t("settings.connections.steam.copyId")
-                    }
-                    title={
                       steamIdCopied
                         ? t("settings.connections.steam.copiedId")
                         : t("settings.connections.steam.copyId")
@@ -231,7 +319,11 @@ export function ConnectionsPanel() {
   );
 }
 
-export function SteamVisibilitySection() {
+export function SteamVisibilitySection({
+  onOpenHiddenGames,
+}: {
+  onOpenHiddenGames: () => void;
+}) {
   const { t } = useSettings();
   const {
     steamProfile,
@@ -239,40 +331,12 @@ export function SteamVisibilitySection() {
     setShowSteamGames,
     showSteamLibraryGames,
     setShowSteamLibraryGames,
-    hiddenProfileGameIds,
-    setProfileGameHidden,
-    profileAddedLibraryGames,
-    profileFavoriteGames,
-    profileHistoryGames,
-    steamAccountStats,
   } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const steamVisibilityLabelId = useId();
   const steamVisibilityDescId = useId();
   const steamLibraryLabelId = useId();
   const steamLibraryDescId = useId();
-  const hiddenGames = useMemo(() => {
-    const games = new Map<string, string>();
-    const candidates = [
-      ...profileAddedLibraryGames,
-      ...profileFavoriteGames,
-      ...profileHistoryGames,
-      ...buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
-    ];
-    for (const game of candidates) {
-      const appId = game.appId.trim();
-      const title = game.title.trim();
-      if (appId && title && title !== appId) games.set(appId, title);
-    }
-    return [...games]
-      .map(([appId, title]) => ({ appId, title }))
-      .sort((left, right) => left.title.localeCompare(right.title));
-  }, [
-    profileAddedLibraryGames,
-    profileFavoriteGames,
-    profileHistoryGames,
-    steamAccountStats?.ownedPlaytimes,
-  ]);
 
   return (
     <div className="steam-library-profile-options">
@@ -330,40 +394,230 @@ export function SteamVisibilitySection() {
         </div>
       </div>
 
-      <details className="hidden-profile-games">
-        <summary>
-          <span className="hidden-profile-games__copy">
-            <strong>{t("settings.library.hiddenProfileGames.label")}</strong>
-            <span>{t("settings.library.hiddenProfileGames.description")}</span>
-          </span>
-          <ChevronDown size={16} aria-hidden="true" />
-        </summary>
+      <button
+        type="button"
+        className="hidden-profile-games-link"
+        onClick={onOpenHiddenGames}
+      >
+        <span className="hidden-profile-games__copy">
+          <strong>{t("settings.library.hiddenProfileGames.label")}</strong>
+          <span>{t("settings.library.hiddenProfileGames.description")}</span>
+        </span>
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+export function HiddenProfileGamesSection() {
+  const { t } = useSettings();
+  const {
+    backupSettings,
+    cloudSaveAppIds,
+    hiddenProfileGameIds,
+    setProfileGameHidden,
+    profileAddedLibraryGames,
+    profileFavoriteGames,
+    profileHistoryGames,
+    steamAccountStats,
+  } = useAppData();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedInitial, setSelectedInitial] = useState("");
+  const [hoveredAlphabetIndex, setHoveredAlphabetIndex] = useState<number | null>(null);
+  // A ordem é uma fotografia do momento em que a subaba foi aberta. Alterar a
+  // visibilidade atualiza o card imediatamente, mas só reagrupa na próxima entrada.
+  const entryHiddenGameIdsRef = useRef(new Set(hiddenProfileGameIds));
+  const titleId = useId();
+  const allGames = useMemo(() => {
+    const backupGameIds = new Set([
+      ...Object.entries(backupSettings?.backupRecords ?? {})
+        .filter(([, record]) =>
+          record.lastBackupSuccess === true ||
+          Boolean(record.lastBackupPath) ||
+          Boolean(record.entries?.length),
+        )
+        .map(([appId]) => appId),
+      ...cloudSaveAppIds,
+    ]);
+    const personalMetricGameIds = new Set([
+      ...(steamAccountStats?.recentAchievements ?? []).map((entry) => entry.appId),
+      ...(steamAccountStats?.achievements ?? [])
+        .filter((summary) => summary.achievements.some((achievement) => achievement.unlocked))
+        .map((summary) => summary.appId),
+    ]);
+    const uniqueGames = new Map<
+      string,
+      { appId: string; title: string; sources: string[]; hasEvidence: boolean }
+    >();
+    const candidates = [
+      ...profileAddedLibraryGames,
+      ...profileFavoriteGames,
+      ...profileHistoryGames,
+      ...buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
+    ];
+
+    for (const game of candidates) {
+      const appId = game.appId.trim();
+      const title = game.title.trim();
+      if (!appId || !title || title === appId) continue;
+
+      const sources = gameCatalogueHeaderSources(game);
+      const hasEvidence = hasHiddenProfileGameEvidence(
+        game,
+        backupGameIds,
+        personalMetricGameIds,
+      );
+      const current = uniqueGames.get(appId);
+      if (current) {
+        current.sources = [...new Set([...current.sources, ...sources])];
+        current.hasEvidence ||= hasEvidence;
+      } else {
+        uniqueGames.set(appId, { appId, title, sources, hasEvidence });
+      }
+    }
+
+    return [...uniqueGames.values()]
+      .filter((game) => game.hasEvidence)
+      .map((game) => ({
+        appId: game.appId,
+        title: game.title,
+        sources: game.sources,
+      }));
+  }, [
+    backupSettings?.backupRecords,
+    cloudSaveAppIds,
+    profileAddedLibraryGames,
+    profileFavoriteGames,
+    profileHistoryGames,
+    steamAccountStats,
+  ]);
+  const availableInitials = useMemo(
+    () => new Set(allGames.map((game) => getHiddenProfileGameInitial(game.title))),
+    [allGames],
+  );
+  const activeInitial = hoveredAlphabetIndex === null
+    ? selectedInitial
+    : PROFILE_GAME_ALPHABET[hoveredAlphabetIndex];
+  const games = useMemo(
+    () => filterAndSortHiddenProfileGames(
+      allGames,
+      entryHiddenGameIdsRef.current,
+      searchQuery,
+      activeInitial,
+    ),
+    [activeInitial, allGames, searchQuery],
+  );
+  return (
+    <section className="hidden-profile-games-page" aria-labelledby={titleId}>
+      <div className="hidden-profile-games-page__header">
+        <div>
+          <h3 id={titleId}>{t("settings.library.hiddenProfileGames.label")}</h3>
+          <p>{t("settings.library.hiddenProfileGames.description")}</p>
+        </div>
+        <label className="hidden-profile-games-page__search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            value={searchQuery}
+            onFocus={() => {
+              setSelectedInitial("");
+              setHoveredAlphabetIndex(null);
+            }}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setSelectedInitial("");
+              setHoveredAlphabetIndex(null);
+            }}
+            placeholder={t("settings.library.hiddenProfileGames.searchPlaceholder")}
+            aria-label={t("settings.library.hiddenProfileGames.searchPlaceholder")}
+          />
+        </label>
+      </div>
+
+      <div className="hidden-profile-games-page__browser">
+        <nav
+          className={`hidden-profile-games-page__alphabet${hoveredAlphabetIndex !== null ? " is-previewing" : ""}`}
+          aria-label={t("settings.library.hiddenProfileGames.alphabetLabel")}
+        >
+          <button
+            type="button"
+            className="hidden-profile-games-page__alphabet-reset"
+            aria-pressed={!activeInitial}
+            aria-label={t("settings.library.hiddenProfileGames.clearAlphabetFilter")}
+            onClick={() => {
+              setSelectedInitial("");
+              setHoveredAlphabetIndex(null);
+            }}
+          >
+            <ArrowDownAZ size={17} aria-hidden="true" />
+          </button>
+          {PROFILE_GAME_ALPHABET.map((letter, index) => {
+            const selected = selectedInitial === letter;
+            const available = availableInitials.has(letter);
+            const hovered = hoveredAlphabetIndex === index;
+            const hoverDistance = hoveredAlphabetIndex === null
+              ? 0
+              : Math.abs(hoveredAlphabetIndex - index);
+            const proximityClass = hoverDistance >= 1 && hoverDistance <= 3
+              ? ` is-nearby-${hoverDistance}`
+              : "";
+            return (
+              <button
+                key={letter}
+                type="button"
+                className={`${hovered ? "is-hovered" : ""}${proximityClass}`}
+                aria-pressed={selected}
+                aria-label={t(
+                  selected
+                    ? "settings.library.hiddenProfileGames.clearLetterFilter"
+                    : "settings.library.hiddenProfileGames.filterByLetter",
+                  { letter },
+                )}
+                disabled={!available}
+                onMouseEnter={() => {
+                  setHoveredAlphabetIndex(index);
+                  setSelectedInitial(letter);
+                  setSearchQuery("");
+                }}
+                onFocus={() => {
+                  setHoveredAlphabetIndex(index);
+                  setSelectedInitial(letter);
+                  setSearchQuery("");
+                }}
+              >
+                <span aria-hidden="true" />
+                <strong>{letter}</strong>
+              </button>
+            );
+          })}
+        </nav>
+
         <div
           className="hidden-profile-games__list"
           role="group"
           aria-label={t("settings.library.hiddenProfileGames.label")}
         >
-          {hiddenGames.map((game) => {
+          {games.map((game) => {
             const hidden = hiddenProfileGameIds.has(game.appId);
             return (
-              <button
+              <HiddenProfileGameHeader
                 key={game.appId}
-                type="button"
-                role="checkbox"
-                aria-checked={hidden}
-                className={`hidden-profile-games__item${hidden ? " hidden-profile-games__item--selected" : ""}`}
-                onClick={() => setProfileGameHidden(game.appId, !hidden)}
-              >
-                <span>{game.title}</span>
-                <Check size={14} aria-hidden="true" />
-              </button>
+                sources={game.sources}
+                title={game.title}
+                hidden={hidden}
+                onToggle={() => setProfileGameHidden(game.appId, !hidden)}
+              />
             );
           })}
-          {hiddenGames.length === 0 && (
-            <p>{t("settings.library.hiddenProfileGames.empty")}</p>
+          {games.length === 0 && (
+            <p>
+              {searchQuery.trim() || activeInitial
+                ? t("settings.library.hiddenProfileGames.noResults")
+                : t("settings.library.hiddenProfileGames.empty")}
+            </p>
           )}
         </div>
-      </details>
-    </div>
+      </div>
+    </section>
   );
 }

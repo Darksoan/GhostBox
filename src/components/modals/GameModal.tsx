@@ -327,7 +327,7 @@ const GameLanguageSection = memo(function GameLanguageSection({
           <div className="modal__languages-list">
             {parsedLanguages.map((lang) => (
               <div className="modal__languages-row" key={lang.language}>
-                <span className="modal__languages-name" title={lang.language}>
+                <span className="modal__languages-name">
                   {lang.language}
                 </span>
                 <span className="modal__languages-cell">
@@ -978,6 +978,8 @@ interface GameModalProps {
   onSetCustomExe?: (
     game: GhostBoxGame,
     customExePath: string,
+    launchArguments?: string,
+    options?: { showSuccessToast?: boolean },
   ) => Promise<GhostBoxGame | null>;
   onDetailsLoaded?: (game: GhostBoxGame) => void;
   onViewAchievements?: (game: GhostBoxGame) => void;
@@ -1967,9 +1969,14 @@ export function GameModal({
               if (!displayGame) return;
               onRemoveGameFromCollection(displayGame, collectionId);
             }}
-            onSetCustomExe={async (exePath) => {
+            onSetCustomExe={async (exePath, launchArguments, options) => {
               if (!displayGame) return null;
-              return onSetCustomExe?.(displayGame, exePath) ?? null;
+              return onSetCustomExe?.(
+                displayGame,
+                exePath,
+                launchArguments,
+                options,
+              ) ?? null;
             }}
           />
         </Suspense>

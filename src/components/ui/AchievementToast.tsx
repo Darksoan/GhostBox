@@ -4,7 +4,6 @@ import { useSettings } from "../../context/settings";
 import type { AchievementToastState } from "../../context/OverlayContext";
 
 const ACHIEVEMENT_TOAST_DURATION_MS = 6000;
-const ACHIEVEMENT_TOAST_EXIT_MS = 220;
 
 interface AchievementToastProps {
   toast: AchievementToastState;
@@ -13,24 +12,18 @@ interface AchievementToastProps {
 
 export function AchievementToast({ toast, onClose }: AchievementToastProps) {
   const { appearance } = useSettings();
-  const [exiting, setExiting] = useState(false);
   const [iconFailed, setIconFailed] = useState(false);
-  const exitingRef = useRef(false);
+  const closedRef = useRef(false);
   const autoDismissTimerRef = useRef<number | null>(null);
-  const exitTimerRef = useRef<number | null>(null);
 
   const handleClose = useCallback(() => {
-    if (exitingRef.current) return;
-    exitingRef.current = true;
-    setExiting(true);
+    if (closedRef.current) return;
+    closedRef.current = true;
     if (autoDismissTimerRef.current !== null) {
       window.clearTimeout(autoDismissTimerRef.current);
       autoDismissTimerRef.current = null;
     }
-    if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current);
-    exitTimerRef.current = window.setTimeout(() => {
-      onClose(toast.id);
-    }, ACHIEVEMENT_TOAST_EXIT_MS);
+    onClose(toast.id);
   }, [onClose, toast.id]);
 
   useEffect(() => {
@@ -44,17 +37,13 @@ export function AchievementToast({ toast, onClose }: AchievementToastProps) {
         window.clearTimeout(autoDismissTimerRef.current);
         autoDismissTimerRef.current = null;
       }
-      if (exitTimerRef.current !== null) {
-        window.clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
     };
   }, [handleClose]);
 
   const showIcon = Boolean(toast.iconUrl) && !iconFailed;
 
   return (
-    <div className={`achievement-toast${exiting ? " achievement-toast--exiting" : ""}`}>
+    <div className="achievement-toast">
       <div className="achievement-toast__content">
         <div className="achievement-toast__media">
           {showIcon ? (
