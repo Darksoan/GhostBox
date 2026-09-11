@@ -5,6 +5,7 @@ import { ContextMenu } from "../components/ui/ContextMenu";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
+import { useAppData } from "../context/AppDataContext";
 import { preloadGameListAssets } from "../utils/image";
 
 interface FavoritesPageProps {
@@ -32,6 +33,7 @@ export function FavoritesPage({
   // hover vêm de `.content-section--library .game-grid--portrait`, então a
   // seção precisa carregar essas classes e o mesmo `GameGrid`.
   const collectionGames = useEnrichedGameCards(games, 80, isActive);
+  const { refreshGameAchievements } = useAppData();
 
   const contextMenuItems = useGameContextMenu({
     game: contextMenu?.game ?? null,
@@ -70,6 +72,7 @@ export function FavoritesPage({
         games={collectionGames}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
+        onHoverGame={refreshGameAchievements}
         dense
         portrait
         showAchievements

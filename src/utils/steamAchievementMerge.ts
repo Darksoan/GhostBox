@@ -161,3 +161,40 @@ export function mergeSteamAchievementsIntoGames(
     mergeSteamAchievementsIntoGame(game, stats, index),
   );
 }
+
+function gameMatchesAppId(
+  game: GhostBoxGame,
+  appId: string,
+  id: string,
+) {
+  if (appId && game.appId === appId) return true;
+  return Boolean(id) && game.id === id;
+}
+
+/**
+ * Aplica detalhes de conquistas recém-carregados (hover da capa, mesma fusão
+ * por união do modal) às listas que guardam cópias do jogo. Devolve a mesma
+ * referência quando nada casa, para não provocar re-render à toa.
+ */
+export function applyAchievementDetailsToGames(
+  games: GhostBoxGame[],
+  details: Pick<GhostBoxGame, "appId" | "id" | "achievements" | "achievementList">,
+): GhostBoxGame[] {
+  const appId = details.appId?.trim() ?? "";
+  const id = details.id?.trim() ?? "";
+  if (!appId && !id) return games;
+  if (
+    (details.achievementList?.length ?? 0) === 0 &&
+    (details.achievements?.total ?? 0) === 0
+  ) {
+    return games;
+  }
+
+  let changed = false;
+  const next = games.map((game) => {
+    if (!gameMatchesAppId(game, appId, id)) return game;
+    changed = true;
+    return mergeAchievementDetailsIntoGame(game, details);
+  });
+  return changed ? next : games;
+}

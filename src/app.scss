@@ -9773,6 +9773,9 @@ input[type="search"]::-ms-reveal {
       border-radius: inherit;
       background: var(--text-primary);
       opacity: 0.9;
+      // O badge chega com 0 até o recheck de conquistas resolver: sem
+      // transição o preenchimento saltava quando o número atualizava.
+      transition: width var(--motion-base) var(--ease);
     }
   }
 

@@ -42,6 +42,13 @@ describe("badge de conquistas/horas das capas", () => {
     expect(summary).toContain("gap: var(--space-1);");
   });
 
+  it("anima o enchimento da barra quando a contagem atualiza no hover", () => {
+    const progress = blockOf("&__achievement-progress {");
+    expect(progress).toContain(
+      "transition: width var(--motion-base) var(--ease);",
+    );
+  });
+
   it("renderiza texto completo sem reticências nas contagens", () => {
     const summary = blockOf("&__summary-metric {");
 

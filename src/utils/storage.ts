@@ -14,6 +14,10 @@ import type {
 // Type-only dependency in the other direction, so this stays acyclic at runtime.
 import { homeWishlistCycleHistoryLimit } from "./wishlistCycle";
 import {
+  isLibrarySourceFilter,
+  type LibrarySourceFilter,
+} from "./librarySourceFilter";
+import {
   favoriteGamesStorageKey,
   userCollectionsStorageKey,
   steamProfileStorageKey,
@@ -29,6 +33,7 @@ import {
   steamWishlistReviewCacheStorageKey,
   recentLibrarySessionLimit,
   librarySortStorageKey,
+  librarySourceFilterStorageKey,
   overviewSortStorageKey,
   notificationsLastSeenStorageKey,
   autoRestoredCloudSavesStorageKey,
@@ -38,6 +43,7 @@ import {
 } from "../constants/catalogue";
 
 export type LibrarySortBy = "title" | "recent" | "playtime";
+export type { LibrarySourceFilter } from "./librarySourceFilter";
 export type OverviewSortBy = "recent" | "playtime" | "title" | "achievements" | "perfect";
 
 export type StoredPersonalCalendar = {
@@ -886,6 +892,27 @@ export function writeStoredLibrarySortBy(sortBy: LibrarySortBy) {
 
   try {
     window.localStorage.setItem(librarySortStorageKey, sortBy);
+  } catch {
+    // The setting still works during the session if localStorage is unavailable.
+  }
+}
+
+export function readStoredLibrarySourceFilter(): LibrarySourceFilter {
+  if (typeof window === "undefined") return "all";
+
+  try {
+    const stored = window.localStorage.getItem(librarySourceFilterStorageKey);
+    return isLibrarySourceFilter(stored) ? stored : "all";
+  } catch {
+    return "all";
+  }
+}
+
+export function writeStoredLibrarySourceFilter(filter: LibrarySourceFilter) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(librarySourceFilterStorageKey, filter);
   } catch {
     // The setting still works during the session if localStorage is unavailable.
   }

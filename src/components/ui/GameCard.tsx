@@ -21,6 +21,8 @@ interface GameCardProps {
   game: GhostBoxGame;
   onOpenGame: (game: GhostBoxGame) => void;
   onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+  /** Recheck de conquistas da conta ao hover/focus da capa. */
+  onHoverGame?: (game: GhostBoxGame) => void;
   portrait?: boolean;
   showAchievements?: boolean;
   active?: boolean;
@@ -31,6 +33,7 @@ export const GameCard = memo(function GameCard({
   game,
   onOpenGame,
   onContextMenu,
+  onHoverGame,
   portrait = false,
   showAchievements = false,
   libraryCoverFade = false,
@@ -117,6 +120,14 @@ export const GameCard = memo(function GameCard({
     }
   };
 
+  // Hover/focus da capa: além de adiantar os assets do modal, reverifica as
+  // conquistas (conta + schema) para o badge não ficar preso no 0 até o
+  // modal abrir. O dedupe mora no refresh (inFlight + 1/appId/versão stats).
+  const handleHoverEnrich = () => {
+    preloadGameModalAssets(game, 0, { nativeResolve: false });
+    if (showAchievements && !showLockedBadge) onHoverGame?.(game);
+  };
+
   return (
     <article
       ref={cardRef}
@@ -124,10 +135,8 @@ export const GameCard = memo(function GameCard({
       className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}${showLockedBadge ? " game-card--locked" : ""}`}
       style={gameStyle(game)}
       onClick={() => onOpenGame(game)}
-      onFocus={() => preloadGameModalAssets(game, 0, { nativeResolve: false })}
-      onMouseEnter={() =>
-        preloadGameModalAssets(game, 0, { nativeResolve: false })
-      }
+      onFocus={handleHoverEnrich}
+      onMouseEnter={handleHoverEnrich}
       onContextMenu={handleContextMenu}
     >
       <div
@@ -176,6 +185,7 @@ interface GameGridProps {
   dense?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+  onHoverGame?: (game: GhostBoxGame) => void;
   portrait?: boolean;
   showAchievements?: boolean;
   activeSessionAppIds?: Set<string>;
@@ -189,6 +199,7 @@ export function GameGrid({
   dense = false,
   onOpenGame,
   onGameContextMenu,
+  onHoverGame,
   portrait = false,
   showAchievements = false,
   activeSessionAppIds = new Set(),
@@ -256,6 +267,7 @@ export function GameGrid({
           game={game}
           onOpenGame={onOpenGame}
           onContextMenu={onGameContextMenu}
+          onHoverGame={onHoverGame}
           portrait={portrait}
           showAchievements={showAchievements}
           active={activeSessionAppIds.has(game.appId)}

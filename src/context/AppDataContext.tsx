@@ -61,7 +61,11 @@ import {
 } from "../utils/steamTitles";
 import { UninstallConfirmModal } from "../components/modals/UninstallConfirmModal";
 
-import { mergeSteamAchievementsIntoGames } from "../utils/steamAchievementMerge";
+import {
+  applyAchievementDetailsToGames,
+  mergeSteamAchievementsIntoGame,
+  mergeSteamAchievementsIntoGames,
+} from "../utils/steamAchievementMerge";
 import {
   readStoredFavoriteGames,
   readStoredProfileHistoryGames,
@@ -294,6 +298,12 @@ interface AppDataContextValue {
   profileFavoriteGames: GhostBoxGame[];
   profileAddedLibraryGames: GhostBoxGame[];
   handleGameDetailsLoaded: (details: GhostBoxGame) => void;
+  /**
+   * Recheck leve do hover da capa: busca os detalhes de conquistas do jogo,
+   * funde com as conquistas da conta e espalha pelas listas locais para o
+   * badge atualizar sem abrir o modal. Dedupe por appId + versão das stats.
+   */
+  refreshGameAchievements: (game: GhostBoxGame) => void;
   toggleFavoriteGame: (game: GhostBoxGame) => void;
   queueGame: (game: GhostBoxGame) => Promise<void>;
   removeQueuedGame: (game: GhostBoxGame) => Promise<void>;
@@ -633,8 +643,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [steamProfile]);
 
+  // Guarda do recheck de conquistas no hover: um request por appId por vez
+  // (hover/focus disparam juntos) e um refresh por versão das stats da conta.
+  const achievementHoverInFlightRef = useRef(new Set<string>());
+  const achievementHoverRefreshedRef = useRef(new Set<string>());
+
   useEffect(() => {
     steamAccountStatsRef.current = steamAccountStats;
+    // Stats novas podem trazer desbloqueios que o último refresh não viu.
+    achievementHoverRefreshedRef.current.clear();
   }, [steamAccountStats]);
 
   useEffect(() => {
@@ -2077,6 +2094,53 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const refreshGameAchievements = useCallback((game: GhostBoxGame) => {
+    const appId = game.appId?.trim() ?? "";
+    if (!appId) return;
+    if (achievementHoverInFlightRef.current.has(appId)) return;
+
+    const stats = steamAccountStatsRef.current;
+    const refreshKey = `${appId}::${stats?.steamId ?? ""}:${stats?.fetchedAt ?? 0}`;
+    if (achievementHoverRefreshedRef.current.has(refreshKey)) return;
+    achievementHoverInFlightRef.current.add(appId);
+
+    void loadGameAchievementDetailsCached(game.appId || game.id)
+      .then((details) => {
+        if (!details) return;
+        const matches = (candidate: GhostBoxGame) =>
+          candidate.appId === appId || candidate.id === game.id;
+        const applyWithAccount = (games: GhostBoxGame[]) => {
+          if (!games.some(matches)) return games;
+          const merged = applyAchievementDetailsToGames(games, details);
+          const target = merged === games ? games : merged;
+          if (!stats) return target;
+          return target.map((candidate) =>
+            matches(candidate)
+              ? mergeSteamAchievementsIntoGame(candidate, stats)
+              : candidate,
+          );
+        };
+        setAddedLibraryGames((current) => applyWithAccount(current));
+        setFavoriteGames((current) => applyWithAccount(current));
+        setProfileHistoryGames((current) => {
+          if (!current.some(matches)) return current;
+          return current.map((candidate) =>
+            matches(candidate)
+              ? mergeSteamAchievementsIntoGame(
+                  mergeGameDetailsPreservingAchievements(candidate, details),
+                  stats,
+                )
+              : candidate,
+          );
+        });
+        achievementHoverRefreshedRef.current.add(refreshKey);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        achievementHoverInFlightRef.current.delete(appId);
+      });
+  }, []);
+
   const handlePlayGame = useCallback(
     async (game: GhostBoxGame) => {
       setLaunchingGameId(game.id);
@@ -2690,6 +2754,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       profileFavoriteGames,
       profileAddedLibraryGames,
       handleGameDetailsLoaded,
+      refreshGameAchievements,
       toggleFavoriteGame,
       queueGame,
       removeQueuedGame,
@@ -2752,6 +2817,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       profileFavoriteGames,
       profileAddedLibraryGames,
       handleGameDetailsLoaded,
+      refreshGameAchievements,
       toggleFavoriteGame,
       queueGame,
       removeQueuedGame,

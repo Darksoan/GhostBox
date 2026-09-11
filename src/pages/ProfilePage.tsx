@@ -563,7 +563,7 @@ export function ProfilePage({
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
   const { account } = useAuth();
-  const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds } = useAppData();
+  const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
@@ -2373,6 +2373,7 @@ export function ProfilePage({
                     animateLayout
                     onOpenGame={onOpenGame}
                     onGameContextMenu={handleGameContextMenu}
+                    onHoverGame={refreshGameAchievements}
                     showAchievements
                     activeSessionAppIds={activeSessionAppIds}
                   />

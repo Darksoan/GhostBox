@@ -7,12 +7,19 @@ import { EmptyState } from "../components/ui/LoadingStates";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
+import { useAppData } from "../context/AppDataContext";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import { sortLibraryGames } from "../utils/librarySort";
 import {
+  filterByLibrarySource,
+  type LibrarySourceFilter,
+} from "../utils/librarySourceFilter";
+import {
   readStoredLibrarySortBy,
+  readStoredLibrarySourceFilter,
   writeStoredLibrarySortBy,
+  writeStoredLibrarySourceFilter,
   type LibrarySortBy,
 } from "../utils/storage";
 
@@ -20,6 +27,17 @@ const sortOptions: Array<{ value: LibrarySortBy; pt: string; en: string }> = [
   { value: "title", pt: "Título (A-Z)", en: "Title (A-Z)" },
   { value: "recent", pt: "Jogados Recentemente", en: "Recently Played" },
   { value: "playtime", pt: "Mais jogados", en: "Most Played" },
+];
+
+const sourceFilterOptions: Array<{
+  value: LibrarySourceFilter;
+  pt: string;
+  en: string;
+}> = [
+  { value: "all", pt: "Todos", en: "All" },
+  { value: "installed", pt: "Instalados", en: "Installed" },
+  { value: "steam", pt: "Steam", en: "Steam" },
+  { value: "ghostbox", pt: "Ghostbox", en: "Ghostbox" },
 ];
 
 function addLibraryGameKey(
@@ -81,8 +99,12 @@ export function LibraryPage({
   isActive = true,
 }: LibraryPageProps) {
   const { appearance } = useSettings();
+  const { refreshGameAchievements } = useAppData();
   const [sortBy, setSortBy] = useState<LibrarySortBy>(() =>
     readStoredLibrarySortBy(),
+  );
+  const [sourceFilter, setSourceFilter] = useState<LibrarySourceFilter>(() =>
+    readStoredLibrarySourceFilter(),
   );
   const [internalActiveCollectionId, setInternalActiveCollectionId] = useState<
     string | null
@@ -126,12 +148,19 @@ export function LibraryPage({
   }, [changeActiveCollection, selectedCollectionId, userCollections]);
 
   const baseLibraryGames = useMemo(() => {
+    // O filtro de origem (Todos/Instalados/Steam/Ghostbox) aplica primeiro e
+    // compõe com favoritos/coleções via AND: quem filtra por coleção vê só os
+    // jogos daquela coleção que também passam na origem selecionada.
+    const sourceFilteredGames = filterByLibrarySource(
+      visibleGames,
+      sourceFilter,
+    );
     // A biblioteca é a fonte do que esta aba mostra: favoritos e coleções
     // FILTRAM o que já está aqui. Antes as duas listas eram somadas ao mapa
     // antes do filtro, então ligar a chip trazia títulos que não estão na
     // biblioteca — e desligá-la fazia esses títulos sumirem.
     const gamesByKey = new Map<string, GhostBoxGame>();
-    visibleGames.forEach((game) => {
+    sourceFilteredGames.forEach((game) => {
       gamesByKey.set(game.appId || game.id, game);
     });
 
@@ -145,7 +174,7 @@ export function LibraryPage({
       });
     };
 
-    let filteredGames = visibleGames;
+    let filteredGames = sourceFilteredGames;
 
     if (favoritesOnly) {
       mergeDetails(favoriteGames);
@@ -187,6 +216,7 @@ export function LibraryPage({
     favoritesOnly,
     language,
     sortBy,
+    sourceFilter,
     userCollections,
     visibleGames,
   ]);
@@ -195,22 +225,38 @@ export function LibraryPage({
     const option = sortOptions.find((o) => o.value === sortBy);
     return option ? option[language] : option!.en;
   }, [language, sortBy]);
+  const sourceLabel = useMemo(() => {
+    const option = sourceFilterOptions.find((o) => o.value === sourceFilter);
+    return option ? option[language] : option!.en;
+  }, [language, sourceFilter]);
 
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  const sourceDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!sortDropdownOpen) return;
+    if (!sortDropdownOpen && !sourceDropdownOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         sortDropdownRef.current &&
-        !sortDropdownRef.current.contains(event.target as Node)
+        !sortDropdownRef.current.contains(target)
       ) {
         setSortDropdownOpen(false);
       }
+      if (
+        sourceDropdownRef.current &&
+        !sourceDropdownRef.current.contains(target)
+      ) {
+        setSourceDropdownOpen(false);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSortDropdownOpen(false);
+      if (event.key === "Escape") {
+        setSortDropdownOpen(false);
+        setSourceDropdownOpen(false);
+      }
     };
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -218,7 +264,7 @@ export function LibraryPage({
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sortDropdownOpen]);
+  }, [sortDropdownOpen, sourceDropdownOpen]);
 
   const handleGameContextMenu = useCallback((game: GhostBoxGame, x: number, y: number) => {
     setContextMenu({ game, x, y });
@@ -233,6 +279,10 @@ export function LibraryPage({
   useEffect(() => {
     writeStoredLibrarySortBy(sortBy);
   }, [sortBy]);
+
+  useEffect(() => {
+    writeStoredLibrarySourceFilter(sourceFilter);
+  }, [sourceFilter]);
 
   useEffect(() => {
     if (isActive && !loading)
@@ -283,6 +333,45 @@ export function LibraryPage({
                       onClick={() => {
                         setSortBy(option.value);
                         setSortDropdownOpen(false);
+                      }}
+                    >
+                      <span>{option[language]}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          <div
+            className={`settings-dropdown ${sourceDropdownOpen ? "settings-dropdown--open" : ""}`}
+            ref={sourceDropdownRef}
+          >
+            <button
+              type="button"
+              className="settings-dropdown__trigger"
+              aria-haspopup="listbox"
+              aria-expanded={sourceDropdownOpen}
+              onClick={() => setSourceDropdownOpen((current) => !current)}
+            >
+              <span>{sourceLabel}</span>
+              <ChevronDown size={14} />
+            </button>
+            {sourceDropdownOpen && (
+              <div
+                className="settings-dropdown__menu"
+                role="listbox"
+                aria-label={language === "en" ? "Source" : "Origem"}
+              >
+                {sourceFilterOptions
+                  .filter((option) => option.value !== sourceFilter)
+                  .map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`settings-dropdown__option ${option.value === sourceFilter ? "settings-dropdown__option--active" : ""}`}
+                      onClick={() => {
+                        setSourceFilter(option.value);
+                        setSourceDropdownOpen(false);
                       }}
                     >
                       <span>{option[language]}</span>
@@ -346,6 +435,7 @@ export function LibraryPage({
           games={libraryGames}
           onOpenGame={onOpenGame}
           onGameContextMenu={handleGameContextMenu}
+          onHoverGame={refreshGameAchievements}
           dense
           portrait
           showAchievements
