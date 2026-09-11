@@ -380,12 +380,8 @@ export function SteamVisibilitySection({
           aria-checked={showSteamLibraryGames}
           aria-labelledby={steamLibraryLabelId}
           aria-describedby={steamLibraryDescId}
-          disabled={!steamConnected}
-          className={`settings-switch${showSteamLibraryGames ? " settings-switch--on" : ""}${
-            !steamConnected ? " settings-switch--disabled" : ""
-          }`}
+          className={`settings-switch${showSteamLibraryGames ? " settings-switch--on" : ""}`}
           onClick={() => {
-            if (!steamConnected) return;
             setShowSteamLibraryGames(!showSteamLibraryGames);
           }}
         >

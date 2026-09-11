@@ -1901,6 +1901,7 @@ fn parse_app_manifest(path: &std::path::Path) -> Option<serde_json::Value> {
     Some(serde_json::json!({
         "appId": app_id,
         "id": format!("steam-{app_id}"),
+        "librarySource": "steam-installed",
         "title": name,
         "subtitle": "Instalado via Steam",
         "status": "installed",

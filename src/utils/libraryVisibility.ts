@@ -1,17 +1,21 @@
 import type { GhostBoxGame } from "../data";
 
-/** Procedências que marcam jogo adicionado/gerenciado pelo GhostBox
- * (registry `ghostbox-library.json`). O scan da Steam não marca os jogos
- * que só existem nele — ausência de fonte é o sinal de "veio da Steam". */
-const GHOSTBOX_LIBRARY_SOURCES: ReadonlySet<string> = new Set([
-  "ghostbox",
-  "plugin",
-  "registered",
-]);
+export function mergeSteamOwnedLibraryGames(
+  localGames: GhostBoxGame[],
+  ownedGames: GhostBoxGame[],
+) {
+  const gamesByAppId = new Map<string, GhostBoxGame>();
+  ownedGames.forEach((game) => gamesByAppId.set(game.appId || game.id, game));
+  localGames.forEach((game) => gamesByAppId.set(game.appId || game.id, game));
+  return [...gamesByAppId.values()];
+}
 
 function isSteamLibraryGame(game: GhostBoxGame) {
+  // Scans antigos não persistiam a procedência dos manifestos Steam.
   return (
-    !game.librarySource || !GHOSTBOX_LIBRARY_SOURCES.has(game.librarySource)
+    !game.librarySource ||
+    game.librarySource === "steam-installed" ||
+    game.librarySource === "steam-owned"
   );
 }
 

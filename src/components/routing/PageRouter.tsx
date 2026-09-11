@@ -15,7 +15,11 @@ import { SteamPathModal } from "../modals/SteamPathModal";
 import { SubscriptionModal } from "../modals/SubscriptionModal";
 import { markPageLoaded } from "../../utils/loadedPages";
 import { preloadGameModalModule } from "../../utils/gameModalLoader";
-import { filterSteamLibraryGames } from "../../utils/libraryVisibility";
+import {
+  filterSteamLibraryGames,
+  mergeSteamOwnedLibraryGames,
+} from "../../utils/libraryVisibility";
+import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
 
 const LazyHomePage = lazy(() =>
   import("../../pages/HomePage").then((m) => {
@@ -158,6 +162,20 @@ export function PageRouter({
   const { hasOverlay } = useContentOverlayState();
 
   const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
+  const visibleLibraryGames = useMemo(() => {
+    const ownedGames = buildSteamOwnedGamesFromPlaytimes(
+      appData.steamAccountStats?.ownedPlaytimes ?? [],
+      {},
+    );
+    return filterSteamLibraryGames(
+      mergeSteamOwnedLibraryGames(appData.addedLibraryGames, ownedGames),
+      appData.showSteamLibraryGames,
+    );
+  }, [
+    appData.addedLibraryGames,
+    appData.showSteamLibraryGames,
+    appData.steamAccountStats?.ownedPlaytimes,
+  ]);
   const [mountedPages, setMountedPages] = useState<Set<Page>>(() =>
     resolveMountedPages({
       current: new Set<Page>(),
@@ -285,10 +303,7 @@ export function PageRouter({
     if (targetPage === "library") {
       return (
         <LazyLibraryPage
-          games={filterSteamLibraryGames(
-            appData.addedLibraryGames,
-            appData.showSteamLibraryGames,
-          )}
+          games={visibleLibraryGames}
           favoriteGames={appData.favoriteGames}
           loading={false}
           query={debouncedQuery}

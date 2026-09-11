@@ -509,6 +509,7 @@ pub fn steam_plugin_fallback_game(app_id: &str, title: &str) -> Value {
     json!({
         "appId": app_id,
         "id": format!("steam-{app_id}"),
+        "librarySource": "plugin",
         "title": display_title,
         "subtitle": "Biblioteca Steam",
         "status": "discover",
@@ -599,6 +600,13 @@ pub fn build_scan_games_with_plugins(
         .collect::<HashSet<_>>();
 
     let mut steam_games = installed_games;
+    for game in steam_games.iter_mut() {
+        if let Some(object) = game.as_object_mut() {
+            object
+                .entry("librarySource".to_string())
+                .or_insert_with(|| json!("steam-installed"));
+        }
+    }
     for app_id in plugin_app_ids {
         if installed_app_ids.contains(app_id.as_str()) {
             continue;
@@ -700,7 +708,7 @@ mod tests {
     }
 
     #[test]
-    fn pure_steam_installs_stay_unmarked() {
+    fn pure_steam_installs_keep_their_declared_source() {
         let installed = vec![serde_json::json!({
             "appId": "570",
             "id": "steam-570",
@@ -711,7 +719,15 @@ mod tests {
         let (_, games) = build_scan_games_with_plugins(installed, &[], Vec::new());
 
         assert_eq!(games.len(), 1);
-        assert!(games[0].get("librarySource").is_none());
+        assert_eq!(games[0]["librarySource"], "steam-installed");
+    }
+
+    #[test]
+    fn plugin_fallback_is_kept_as_a_ghostbox_game() {
+        let (_, games) = build_scan_games_with_plugins(Vec::new(), &["1250".into()], Vec::new());
+
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0]["librarySource"], "plugin");
     }
 
     #[test]

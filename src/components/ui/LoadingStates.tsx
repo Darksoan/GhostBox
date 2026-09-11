@@ -539,7 +539,7 @@ function LibraryPageLoadingState() {
           </div>
         </div>
       </div>
-      <GameGridLoadingState dense portrait count={8} showAchievements libraryCoverFade />
+      <GameGridLoadingState dense portrait count={8} libraryCoverFade />
     </section>
   );
 }

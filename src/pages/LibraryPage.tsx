@@ -340,7 +340,7 @@ export function LibraryPage({
       </div>
 
       {loading ? (
-        <GameGridLoadingState dense count={8} portrait showAchievements libraryCoverFade />
+        <GameGridLoadingState dense count={8} portrait libraryCoverFade />
       ) : libraryGames.length > 0 ? (
         <GameGrid
           games={libraryGames}

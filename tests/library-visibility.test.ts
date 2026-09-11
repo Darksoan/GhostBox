@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { GhostBoxGame } from "../src/data";
-import { filterSteamLibraryGames } from "../src/utils/libraryVisibility";
+import {
+  filterSteamLibraryGames,
+  mergeSteamOwnedLibraryGames,
+} from "../src/utils/libraryVisibility";
 
 function game(
   librarySource: GhostBoxGame["librarySource"],
@@ -21,8 +24,7 @@ function game(
 
 describe("filterSteamLibraryGames", () => {
   const games = [
-    // Scan da Steam: instalado via appmanifest (sem fonte), stub possuído e
-    // fallback de plugin sem entrada no registry.
+    // Scan atual, scan antigo sem fonte e stub possuído da conta Steam.
     game(undefined, "570", { subtitle: "Instalado via Steam" }),
     game("steam-owned", "440"),
     game("steam-installed", "620"),
@@ -42,6 +44,31 @@ describe("filterSteamLibraryGames", () => {
       "1001",
       "730",
       "1250",
+    ]);
+  });
+});
+
+describe("mergeSteamOwnedLibraryGames", () => {
+  it("inclui jogos possuídos que não estão instalados", () => {
+    const localGames = [game("steam-installed", "620")];
+    const ownedGames = [
+      game("steam-owned", "620"),
+      game("steam-owned", "570", { status: "discover" }),
+    ];
+
+    expect(
+      mergeSteamOwnedLibraryGames(localGames, ownedGames).map((g) => g.id),
+    ).toEqual(["620", "570"]);
+  });
+
+  it("mantém entrada local quando jogo possuído também está instalado", () => {
+    const installed = game("steam-installed", "620", {
+      installPath: "C:\\Steam\\Portal 2",
+    });
+    const owned = game("steam-owned", "620", { status: "discover" });
+
+    expect(mergeSteamOwnedLibraryGames([installed], [owned])).toEqual([
+      installed,
     ]);
   });
 });
