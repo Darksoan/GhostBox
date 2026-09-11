@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../src/app.scss", import.meta.url), "utf8");
+const componentSource = readFileSync(
+  new URL("../src/components/ui/GameCard.tsx", import.meta.url),
+  "utf8",
+);
 
 /** Retorna o bloco `{ ... }` que segue o primeiro `needle`, com o seletor. */
 function blockOf(needle: string): string {
@@ -28,6 +32,14 @@ function blockOf(needle: string): string {
 }
 
 describe("badge de conquistas/horas das capas", () => {
+  it("usa o resumo da conta como piso mesmo quando o schema já tem lista", () => {
+    expect(componentSource).toContain("getUnlockedAchievementCount(game)");
+    expect(componentSource).toContain("getAchievementTotal(game)");
+    expect(componentSource).not.toContain(
+      "achievementListTotal > 0",
+    );
+  });
+
   it("mantém a faixa de conquistas alinhada com a largura da capa", () => {
     const badge = blockOf("&__achievement-badges {");
     expect(badge).toContain("left: 0;");
@@ -44,8 +56,12 @@ describe("badge de conquistas/horas das capas", () => {
 
   it("anima o enchimento da barra quando a contagem atualiza no hover", () => {
     const progress = blockOf("&__achievement-progress {");
+    expect(progress).toContain("transform-origin: left center;");
     expect(progress).toContain(
-      "transition: width var(--motion-base) var(--ease);",
+      "transition: transform var(--motion-base) var(--ease);",
+    );
+    expect(componentSource).toContain(
+      "transform: `scaleX(${achievementProgress / 100})`",
     );
   });
 

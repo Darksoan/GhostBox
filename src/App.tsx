@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
@@ -117,7 +117,19 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     setCanForwardOverlay(Boolean(entry));
   }, []);
 
-  const shell = useAppShellState(page);
+  const localHeaderGames = useMemo(
+    () => [
+      ...appData.addedLibraryGames,
+      ...appData.favoriteGames,
+      ...appData.profileHistoryGames,
+    ],
+    [
+      appData.addedLibraryGames,
+      appData.favoriteGames,
+      appData.profileHistoryGames,
+    ],
+  );
+  const shell = useAppShellState(page, { localGames: localHeaderGames });
   const [settingsLibraryView, setSettingsLibraryView] = useState<
     "overview" | "hidden-games"
   >("overview");

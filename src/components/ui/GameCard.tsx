@@ -12,7 +12,10 @@ import {
   gameStyle,
   preloadGameModalAssets,
 } from "../../utils/image";
-import { isAchievementUnlocked } from "../../utils/achievementStats";
+import {
+  getAchievementTotal,
+  getUnlockedAchievementCount,
+} from "../../utils/achievementStats";
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
 import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
@@ -89,23 +92,12 @@ export const GameCard = memo(function GameCard({
     : previousCoverSourceRef.current;
   const coverSources = coverSource ? [coverSource] : [];
 
-  const achievementListTotal = showAchievements
-    ? (game.achievementList?.length ?? 0)
-    : 0;
-  const achievementTotal = showAchievements
-    ? Math.max(
-        achievementListTotal,
-        game.achievements.total,
-        game.achievements.unlocked,
-      )
-    : 0;
+  // Lista de schema pode chegar antes dos flags pessoais. O resumo da conta
+  // continua sendo piso da contagem; usar só a lista fazia 1/34 virar 0/34 no
+  // card até o modal executar sua fusão completa.
+  const achievementTotal = showAchievements ? getAchievementTotal(game) : 0;
   const achievementUnlocked = showAchievements
-    ? Math.min(
-        achievementListTotal > 0
-          ? (game.achievementList ?? []).filter(isAchievementUnlocked).length
-          : game.achievements.unlocked,
-        achievementTotal,
-      )
+    ? Math.min(getUnlockedAchievementCount(game), achievementTotal)
     : 0;
   const achievementProgress =
     achievementTotal > 0
@@ -163,7 +155,7 @@ export const GameCard = memo(function GameCard({
               {achievementProgress}%
             </span>
             <span className="game-card__achievement-progress" aria-hidden="true">
-              <span style={{ width: `${achievementProgress}%` }} />
+              <span style={{ transform: `scaleX(${achievementProgress / 100})` }} />
             </span>
           </div>
         )}

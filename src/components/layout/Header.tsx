@@ -233,14 +233,16 @@ export const Header = memo(function Header({
 
   const handleSearchKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key !== "Enter" || isSearching) return;
+      if (event.key !== "Enter") return;
+      // Resultado local é instantâneo: Enter abre a primeira sugestão mesmo
+      // com o remoto ainda carregando (antes bloqueava e parecia "sem resultado").
       const firstSuggestion = suggestions[0];
       if (!firstSuggestion) return;
       event.preventDefault();
       setFocused(false);
       onSelectSuggestion(firstSuggestion);
     },
-    [isSearching, onSelectSuggestion, suggestions]
+    [onSelectSuggestion, suggestions]
   );
 
   useEffect(() => {

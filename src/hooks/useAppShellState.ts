@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import type { GhostBoxGame } from "../data";
 import type { Page } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
 import { useDebouncedValue } from "./useDebouncedValue";
@@ -7,7 +8,70 @@ import { searchDebounceMs } from "../constants/catalogue";
 
 const steamAppIdPattern = /^\d{2,10}$/;
 
-export function useAppShellState(page: Page) {
+export function normalizeHeaderSearchText(value: string) {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function gameMatchesHeaderQuery(game: GhostBoxGame, normalizedQuery: string) {
+  if (!normalizedQuery) return false;
+  const title = normalizeHeaderSearchText(game.title ?? "");
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1) {
+    const compactTitle = title.replace(/\s+/g, "");
+    const allInTitle = tokens.every(
+      (token) => title.includes(token) || compactTitle.includes(token.replace(/\s+/g, "")),
+    );
+    if (allInTitle) return true;
+  } else if (title.includes(normalizedQuery)) {
+    return true;
+  }
+  const digits = normalizedQuery.replace(/\D/g, "");
+  if (digits) {
+    const appId = game.appId?.trim() ?? "";
+    if (appId && appId.includes(digits)) return true;
+    const id = game.id?.trim().toLowerCase() ?? "";
+    if (id && id.includes(digits)) return true;
+  }
+  const id = game.id?.trim().toLowerCase() ?? "";
+  if (id && id.includes(normalizedQuery)) return true;
+  return false;
+}
+
+export function mergeHeaderSearchSuggestions(
+  localGames: GhostBoxGame[],
+  remoteGames: GhostBoxGame[],
+  query: string,
+  limit = 6,
+) {
+  const normalizedQuery = normalizeHeaderSearchText(query);
+  if (!normalizedQuery) return [];
+  const seen = new Set<string>();
+  const merged: GhostBoxGame[] = [];
+  const push = (game: GhostBoxGame) => {
+    const key = game.appId?.trim() || game.id?.trim() || game.title?.trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    if (merged.length < limit) merged.push(game);
+  };
+  for (const game of localGames) {
+    if (gameMatchesHeaderQuery(game, normalizedQuery)) push(game);
+    if (merged.length >= limit) break;
+  }
+  for (const game of remoteGames) {
+    push(game);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}
+
+export function useAppShellState(
+  page: Page,
+  options: { localGames?: GhostBoxGame[] } = {},
+) {
   const [query, setQuery] = useState("");
   const [activeSettingsTabId, setActiveSettingsTabId] =
     useState<SettingsTabId>("general");
@@ -53,20 +117,59 @@ export function useAppShellState(page: Page) {
     [headerSearchQuery.data?.games, isSearchLoading, trimmedDebouncedQuery]
   );
 
+  // Busca local é síncrona e imediata: mostra a biblioteca mesmo quando o
+  // catálogo remoto falha ou ainda não indexou o jogo (ex: FragPunk aberto
+  // no modal mas ausente do /catalogue/search).
+  const localHeaderSearchSuggestions = useMemo(() => {
+    if (page === "catalogue" || !trimmedQuery) return [];
+    const normalized = normalizeHeaderSearchText(trimmedQuery);
+    if (!normalized) return [];
+    const localGames = options.localGames ?? [];
+    const matched: GhostBoxGame[] = [];
+    const seen = new Set<string>();
+    for (const game of localGames) {
+      if (!gameMatchesHeaderQuery(game, normalized)) continue;
+      const key = game.appId?.trim() || game.id?.trim() || game.title?.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      matched.push(game);
+      if (matched.length >= 6) break;
+    }
+    return matched;
+  }, [options.localGames, page, trimmedQuery]);
+
+  const mergedBaseSuggestions = useMemo(() => {
+    // Local já vem filtrado pela query imediata (sem debounce) para resposta
+    // instantânea; remoto vem do debounce. Dedupe por appId/id, local primeiro.
+    const seen = new Set<string>();
+    const merged: GhostBoxGame[] = [];
+    for (const game of [
+      ...localHeaderSearchSuggestions,
+      ...baseHeaderSearchSuggestions,
+    ]) {
+      const key = game.appId?.trim() || game.id?.trim() || game.title?.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(game);
+      if (merged.length >= 6) break;
+    }
+    return merged;
+  }, [baseHeaderSearchSuggestions, localHeaderSearchSuggestions]);
+
   const hasNoHeaderSearchResults =
     page !== "catalogue" &&
     Boolean(trimmedQuery) &&
     trimmedQuery === trimmedDebouncedQuery &&
     !isSearchLoading &&
     headerSearchQuery.isFetched &&
-    baseHeaderSearchSuggestions.length === 0;
+    mergedBaseSuggestions.length === 0;
   const shouldShowHeaderAppIdPrompt =
     page !== "catalogue" &&
     Boolean(trimmedQuery) &&
     trimmedQuery === trimmedDebouncedQuery &&
     !isSearchLoading &&
     headerSearchQuery.isFetched &&
-    baseHeaderSearchSuggestions.length < 6;
+    mergedBaseSuggestions.length < 6;
   const appIdCandidate =
     shouldShowHeaderAppIdPrompt && steamAppIdPattern.test(trimmedQuery)
       ? trimmedQuery
@@ -76,13 +179,13 @@ export function useAppShellState(page: Page) {
   });
 
   const headerSearchSuggestions = useMemo(() => {
-    const suggestions = [...baseHeaderSearchSuggestions];
+    const suggestions = [...mergedBaseSuggestions];
     const appIdGame = appIdLookupQuery.data;
     if (appIdGame && !suggestions.some((game) => game.appId === appIdGame.appId)) {
       suggestions.push(appIdGame);
     }
     return suggestions.slice(0, 6);
-  }, [appIdLookupQuery.data, baseHeaderSearchSuggestions]);
+  }, [appIdLookupQuery.data, mergedBaseSuggestions]);
 
   const handleQueryChange = useCallback((nextQuery: string) => {
     setQuery(nextQuery);

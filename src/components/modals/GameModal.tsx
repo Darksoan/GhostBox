@@ -1230,6 +1230,33 @@ export function GameModal({
   const cachedScreenshotSources = useCachedImageSources(showcaseSources);
   const cachedLogoSources = useCachedImageSources(logoSources);
 
+  // Galeria aparece mesmo quando o jogo não tem conquistas e o payload da
+  // loja chegou sem screenshots: reaproveita capa/header/hero disponíveis
+  // para não deixar a coluna principal vazia. Quando há screenshots reais,
+  // eles têm prioridade total.
+  const galleryScreenshots = useMemo(() => {
+    if (screenshots.length) return screenshots;
+    if (!displayGame) return [];
+    return uniqueSources(
+      [
+        displayGame.coverUrl,
+        displayGame.cover,
+        ...(displayGame.coverFallbacks ?? []),
+        modalHeroSources[0],
+        heroScreenshotFallback,
+        ...(displayGame.heroFallbacks ?? []),
+      ].filter(
+        (source): source is string =>
+          typeof source === "string" && source.trim().length > 0,
+      ),
+    );
+  }, [
+    screenshots,
+    displayGame,
+    modalHeroSources,
+    heroScreenshotFallback,
+  ]);
+
   const achievements = useMemo(
     () =>
       [...(displayGame?.achievementList ?? [])].sort(
@@ -1445,6 +1472,14 @@ export function GameModal({
   const [aboutTheGameHtml, setAboutTheGameHtml] = useState("");
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
   const isEffectivelyExpanded = isMaximized || isAboutExpanded;
+  // Sobre exibe mesmo sem conquistas: cai para shortDescription quando a
+  // descrição completa ainda não chegou (store incompleto/transiente).
+  const aboutSourceText =
+    displayGame?.aboutTheGame?.trim()
+      ? displayGame.aboutTheGame
+      : displayGame?.shortDescription?.trim()
+        ? displayGame.shortDescription
+        : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -1452,14 +1487,14 @@ export function GameModal({
 
     const cancelIdle = runWhenIdle(() => {
       if (cancelled) return;
-      setAboutTheGameHtml(getSanitizedSteamAboutHtml(displayGame?.aboutTheGame));
+      setAboutTheGameHtml(getSanitizedSteamAboutHtml(aboutSourceText));
     }, 800);
 
     return () => {
       cancelled = true;
       cancelIdle();
     };
-  }, [displayGame?.aboutTheGame]);
+  }, [aboutSourceText]);
 
   // Steam descriptions embed autoplaying clips. The sanitizer ships them with
   // preload="none" and no autoplay, so only the ones actually on screen decode.
@@ -1727,10 +1762,11 @@ export function GameModal({
 
             <section className="modal__details">
               <div className="modal__details-main">
-                {(screenshots.length > 0 || Boolean(displayGame.movies?.length)) && (
+                {(galleryScreenshots.length > 0 ||
+                  Boolean(displayGame.movies?.length)) && (
                   <Suspense fallback={null}>
                     <LazyGallerySlider
-                      screenshots={screenshots}
+                      screenshots={galleryScreenshots}
                       movies={displayGame.movies}
                       gameTitle={displayGame.title}
                       language={appearance.language}

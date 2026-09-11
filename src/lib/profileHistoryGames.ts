@@ -45,6 +45,63 @@ function countUnlockedAchievements(game: GhostBoxGame | undefined) {
   return getUnlockedAchievementCount(game);
 }
 
+function preferNonEmptyString(
+  incoming: string | undefined,
+  current: string | undefined,
+): string | undefined {
+  if (incoming?.trim()) return incoming;
+  return current;
+}
+
+function preferNonEmptyStrings(
+  incoming: string[] | undefined,
+  current: string[] | undefined,
+): string[] | undefined {
+  if (incoming?.length) return incoming;
+  return current;
+}
+
+function preferNonEmptyMovies(
+  incoming: GhostBoxGame["movies"],
+  current: GhostBoxGame["movies"],
+): GhostBoxGame["movies"] {
+  if (incoming?.length) return incoming;
+  return current;
+}
+
+function mergeRequirementsPreserving(
+  current: GhostBoxGame["pcRequirements"],
+  incoming: GhostBoxGame["pcRequirements"],
+): GhostBoxGame["pcRequirements"] {
+  const incomingMin = incoming?.minimum ?? [];
+  const incomingRec = incoming?.recommended ?? [];
+  if (!incomingMin.length && !incomingRec.length) return current;
+  const currentMin = current?.minimum ?? [];
+  const currentRec = current?.recommended ?? [];
+  return {
+    minimum: incomingMin.length ? incomingMin : currentMin,
+    recommended: incomingRec.length ? incomingRec : currentRec,
+  };
+}
+
+function mergeControllerSupportPreserving(
+  current: GhostBoxGame["controllerSupport"],
+  incoming: GhostBoxGame["controllerSupport"],
+): GhostBoxGame["controllerSupport"] {
+  if (incoming === "full" || incoming === "partial") return incoming;
+  if (current === "full" || current === "partial") return current;
+  return incoming ?? current;
+}
+
+function preferNumberPreserving(
+  incoming: number | undefined,
+  current: number | undefined,
+): number | undefined {
+  if (typeof incoming !== "number" || !Number.isFinite(incoming)) return current;
+  if (incoming === 0 && typeof current === "number" && current !== 0) return current;
+  return incoming;
+}
+
 export function mergeGameDetailsPreservingAchievements(
   game: GhostBoxGame,
   details: GhostBoxGame
@@ -82,6 +139,78 @@ export function mergeGameDetailsPreservingAchievements(
     ...game,
     ...details,
     title: isPlaceholderTitle && game.title ? game.title : details.title,
+    cover: preferNonEmptyString(details.cover, game.cover) ?? details.cover,
+    hero: preferNonEmptyString(details.hero, game.hero) ?? details.hero,
+    coverUrl: preferNonEmptyString(details.coverUrl, game.coverUrl) ?? details.coverUrl,
+    heroUrl: preferNonEmptyString(details.heroUrl, game.heroUrl) ?? details.heroUrl,
+    logo: preferNonEmptyString(details.logo, game.logo) ?? details.logo,
+    coverFallbacks:
+      preferNonEmptyStrings(details.coverFallbacks, game.coverFallbacks) ??
+      details.coverFallbacks,
+    heroFallbacks:
+      preferNonEmptyStrings(details.heroFallbacks, game.heroFallbacks) ??
+      details.heroFallbacks,
+    screenshots:
+      preferNonEmptyStrings(details.screenshots, game.screenshots) ??
+      details.screenshots,
+    movies: preferNonEmptyMovies(details.movies, game.movies),
+    shortDescription:
+      preferNonEmptyString(details.shortDescription, game.shortDescription) ??
+      details.shortDescription,
+    aboutTheGame:
+      preferNonEmptyString(details.aboutTheGame, game.aboutTheGame) ??
+      details.aboutTheGame,
+    pcRequirements: mergeRequirementsPreserving(
+      game.pcRequirements,
+      details.pcRequirements,
+    ),
+    controllerSupport: mergeControllerSupportPreserving(
+      game.controllerSupport,
+      details.controllerSupport,
+    ),
+    supportedLanguages:
+      preferNonEmptyString(details.supportedLanguages, game.supportedLanguages) ??
+      details.supportedLanguages,
+    tags:
+      preferNonEmptyStrings(details.tags, game.tags) ?? details.tags,
+    genres:
+      preferNonEmptyStrings(details.genres, game.genres) ?? details.genres,
+    developers:
+      preferNonEmptyStrings(details.developers, game.developers) ??
+      details.developers,
+    publishers:
+      preferNonEmptyStrings(details.publishers, game.publishers) ??
+      details.publishers,
+    steamReviewCount:
+      preferNumberPreserving(details.steamReviewCount, game.steamReviewCount) ??
+      details.steamReviewCount,
+    steamPositiveRatio:
+      preferNumberPreserving(details.steamPositiveRatio, game.steamPositiveRatio) ??
+      details.steamPositiveRatio,
+    metacriticScore:
+      preferNumberPreserving(details.metacriticScore, game.metacriticScore) ??
+      details.metacriticScore,
+    recommendations:
+      preferNumberPreserving(details.recommendations, game.recommendations) ??
+      details.recommendations,
+    playingNow:
+      preferNumberPreserving(details.playingNow, game.playingNow) ??
+      details.playingNow,
+    ownersEstimate:
+      preferNumberPreserving(details.ownersEstimate, game.ownersEstimate) ??
+      details.ownersEstimate,
+    popularityScore:
+      preferNumberPreserving(details.popularityScore, game.popularityScore) ??
+      details.popularityScore,
+    popularityRank:
+      preferNumberPreserving(details.popularityRank, game.popularityRank) ??
+      details.popularityRank,
+    rankingScore:
+      preferNumberPreserving(details.rankingScore, game.rankingScore) ??
+      details.rankingScore,
+    rankingTier:
+      preferNumberPreserving(details.rankingTier, game.rankingTier) ??
+      details.rankingTier,
     achievements: {
       unlocked,
       total,

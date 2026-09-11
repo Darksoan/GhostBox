@@ -143,6 +143,31 @@ function loadCachedGameRequestForLanguage(
   return request;
 }
 
+export function hasUsefulStoreDetails(
+  game: GhostBoxGame | null | undefined,
+): boolean {
+  if (!game) return false;
+  if ((game.screenshots?.length ?? 0) > 0) return true;
+  if ((game.movies?.length ?? 0) > 0) return true;
+  if (game.aboutTheGame?.trim()) return true;
+  if (game.shortDescription?.trim()) return true;
+  if (game.supportedLanguages?.trim()) return true;
+  if (
+    game.controllerSupport === "full" ||
+    game.controllerSupport === "partial"
+  )
+    return true;
+  if ((game.genres?.length ?? 0) > 0) return true;
+  if ((game.developers?.length ?? 0) > 0) return true;
+  if ((game.publishers?.length ?? 0) > 0) return true;
+  if (
+    (game.pcRequirements?.minimum.length ?? 0) > 0 ||
+    (game.pcRequirements?.recommended.length ?? 0) > 0
+  )
+    return true;
+  return false;
+}
+
 export function loadGameDetailsCached(gameId: string) {
   return loadCachedGameRequest(
     gameId,
@@ -153,12 +178,45 @@ export function loadGameDetailsCached(gameId: string) {
 }
 
 export function loadGameStoreDetailsCached(gameId: string) {
-  return loadCachedGameRequestForLanguage(
-    gameId,
-    gameStoreDetailsCache,
-    gameStoreDetailsRequestCache,
-    loadGameStoreDetails
-  );
+  const appId = normalizeGameCacheId(gameId);
+  const language = getCurrentAppearanceLanguage();
+  const cacheKey = `${appId}::${language}`;
+
+  const cached = gameStoreDetailsCache.get(cacheKey);
+  // Só serve do cache em memória quando o payload tem dado útil de loja.
+  // Um primeiro fetch incompleto (proxy instável, Steam 429, catálogo sem
+  // screenshots) ficava preso na sessão e o modal abria vazio para sempre,
+  // mesmo com a busca de conquistas retornando "no-achievements".
+  if (cached && hasUsefulStoreDetails(cached)) {
+    return Promise.resolve(cached);
+  }
+  if (cached) {
+    gameStoreDetailsCache.delete(cacheKey);
+  }
+
+  const pending = gameStoreDetailsRequestCache.get(cacheKey);
+  if (pending) return pending;
+
+  const request = loadGameStoreDetails(appId, language)
+    .then((game) => {
+      // Só fixa no cache o que tem enriquecimento real. Payload vazio ou só
+      // com fallback (sem screenshots/sobre/idiomas) não é fixado para a
+      // próxima abertura tentar de novo via backend (que tem disco + proxy +
+      // fallback direto para a Steam).
+      if (game && hasUsefulStoreDetails(game)) {
+        gameStoreDetailsCache.set(cacheKey, game);
+      } else {
+        gameStoreDetailsCache.delete(cacheKey);
+      }
+      return game;
+    })
+    .finally(() => {
+      gameStoreDetailsRequestCache.delete(cacheKey);
+    });
+
+  gameStoreDetailsRequestCache.set(cacheKey, request);
+
+  return request;
 }
 
 export function loadGameAchievementDetailsCached(gameId: string) {
