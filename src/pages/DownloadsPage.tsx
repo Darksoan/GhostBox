@@ -37,17 +37,6 @@ function downloadCardElement(id: string) {
     .find((element) => element.dataset.downloadId === id) ?? null;
 }
 
-function formatEta(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "--";
-  const totalSeconds = Math.ceil(seconds);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
-  if (totalMinutes < 60) return `${totalMinutes}min`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
-}
-
 function formatDownloadTimestamp(timestamp: number | undefined, language: "pt" | "en") {
   if (!timestamp || !Number.isFinite(timestamp)) return "--";
   return new Intl.DateTimeFormat(language === "en" ? "en-US" : "pt-BR", {
@@ -154,10 +143,6 @@ function DownloadsHero({
   const canResume = task.status === "paused";
   const progressPercent = isCompleted ? 100 :
     task.bytesTotal > 0 ? Math.min(100, Math.round((task.bytesDownloaded / task.bytesTotal) * 100)) : 0;
-  const etaLabel =
-    typeof task.estimatedSecondsRemaining === "number"
-      ? t("downloads.estimatedTime", { time: formatEta(task.estimatedSecondsRemaining) })
-      : t("downloads.estimatedTimeCalculating");
   const statusLabel =
     task.status === "queued"
       ? t("downloads.queuePosition", { position: queuePosition ?? 1 })
@@ -177,7 +162,6 @@ function DownloadsHero({
     showsProgress
       ? [
           `${formatBytes(task.bytesDownloaded)} / ${task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}`,
-          task.status === "downloading" ? etaLabel : "",
           task.status === "downloading" ? formatSpeed(task.speedBytesPerSecond) : "",
         ]
       : task.status === "completed"

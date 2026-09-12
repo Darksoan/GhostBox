@@ -269,6 +269,7 @@ type DiscordUserResponse = {
   id?: string;
   username?: string;
   global_name?: string | null;
+  avatar?: string | null;
   email?: string | null;
   verified?: boolean;
 };
@@ -292,6 +293,7 @@ type ProviderIdentity = {
   id: string;
   username: string | null;
   displayName: string | null;
+  avatarUrl: string | null;
   email: string | null;
   emailVerified: boolean;
 };
@@ -1323,11 +1325,16 @@ async function exchangeDiscordCode(env: Env, request: Request, code: string) {
 }
 
 function discordIdentity(user: DiscordUserResponse): ProviderIdentity {
+  const avatarHash = user.avatar?.trim();
+  const avatarFormat = avatarHash?.startsWith("a_") ? "gif" : "png";
   return {
     provider: "discord",
     id: user.id!,
     username: user.username ?? null,
     displayName: user.global_name ?? user.username ?? null,
+    avatarUrl: avatarHash
+      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(user.id!)}/${encodeURIComponent(avatarHash)}.${avatarFormat}?size=256`
+      : null,
     email: normalizeEmail(user.email),
     emailVerified: user.verified === true,
   };
@@ -1468,6 +1475,7 @@ async function writeDiscordLink(env: Env, userId: string, user: DiscordUserRespo
       JSON.stringify({
         username: user.username ?? null,
         globalName: user.global_name ?? null,
+        avatarUrl: discordIdentity(user).avatarUrl,
         email: normalizeEmail(user.email),
         emailVerified: user.verified === true,
       }),
@@ -1570,6 +1578,39 @@ async function handleOAuthLoginCallback(request: Request, env: Env, state: Disco
   )
     .bind(identity.provider, identity.id)
     .first<UserConnectionRow>();
+
+  // Provider data changes independently of GhostBox. Refresh it on each
+  // successful authorization so `/auth/me` returns the current identity to
+  // the sidebar immediately after login.
+  if (connection?.user_id) {
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE user_connections SET metadata_json = ?
+       WHERE user_id = ? AND provider = ? AND provider_id = ?`
+    )
+      .bind(
+        JSON.stringify({
+          username: identity.username,
+          globalName: identity.displayName,
+          avatarUrl: identity.avatarUrl,
+          email: identity.email,
+          emailVerified: identity.emailVerified,
+        }),
+        connection.user_id,
+        identity.provider,
+        identity.id
+      )
+      .run();
+
+    if (identity.provider === "discord") {
+      await env.SUBSCRIPTION_DB.prepare(
+        `UPDATE discord_links
+         SET discord_username = ?, discord_global_name = ?, updated_at = ?
+         WHERE user_id = ? AND discord_user_id = ?`
+      )
+        .bind(identity.username, identity.displayName, nowIso(), connection.user_id, identity.id)
+        .run();
+    }
+  }
 
   // Recovery only ever proves an account that already exists. Offering signup
   // here would turn "I lost my password" into "here is a brand new account",
@@ -3218,6 +3259,7 @@ function ticketIdentity(row: DiscordLoginTicketRow): ProviderIdentity {
     id: row.discord_user_id,
     username: row.discord_username,
     displayName: row.discord_global_name,
+    avatarUrl: null,
     email: row.discord_email,
     emailVerified: row.discord_email_verified === 1,
   };

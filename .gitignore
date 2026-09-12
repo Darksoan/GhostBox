@@ -59,3 +59,20 @@ sidecars/steamkit-poc/obj/
 
 # Config local do Claude Code (regras deny de leitura; nao compartilhado)
 .claude/settings.local.json
+
+# Limpeza GhostBox — fora do produto final (nao versionar)
+build_log.txt
+buildout.txt
+ghostboxtokens.txt
+phase2.diff
+*.diff
+skills-lock.json
+Plans/
+fixes/
+docs/superpowers/
+mcp/
+mcps/
+.agents/
+.claude/launch.json
+.codex/
+.opencode/agents/

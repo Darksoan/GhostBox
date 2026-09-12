@@ -25,6 +25,7 @@ import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../uti
 import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
+import { resolveSidebarIdentity } from "../../lib/sidebarIdentity";
 import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
 import {
   readSidebarCollectionsCollapsed,
@@ -649,21 +650,31 @@ const SidebarProfile = memo(function SidebarProfile({
   isActive,
   onOpenProfile,
 }: SidebarProfileProps) {
-  const { appearance } = useSettings();
-  const { account, status } = useAuth();
+  const { appearance, t } = useSettings();
+  const { account, connections, authenticatedVia, status } = useAuth();
   // The app stays mounted behind the login modal, and a Steam profile can
   // briefly outlive a sign-out (in-flight restores, leftover disk cache).
   // While anonymous the sidebar must never paint a profile.
   const visibleProfile = status === "anonymous" ? null : profile;
+  const identity = resolveSidebarIdentity({
+    status,
+    account,
+    connections,
+    authenticatedVia,
+    profile: visibleProfile,
+    anonymousLabel: t("sidebar.profile.signIn"),
+    loadingLabel: t("sidebar.profile.loading"),
+    accountLabel: t("sidebar.profile.account"),
+  });
   const avatarSources = useCachedImageSources(
-    visibleProfile?.avatarUrl ? [visibleProfile.avatarUrl] : []
+    identity.avatarUrl ? [identity.avatarUrl] : []
   );
   const avatarSource = useLoadableImageSource(avatarSources);
   const shouldHoldSteamAvatar = Boolean(
     isCloudProfileRestoring &&
-      visibleProfile?.avatarUrl &&
-      !visibleProfile.avatarUrl.startsWith("data:") &&
-      !visibleProfile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
+      identity.avatarUrl &&
+      !identity.avatarUrl.startsWith("data:") &&
+      !identity.avatarUrl.includes("/storage/v1/object/public/profile-images/")
   );
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
 
@@ -720,7 +731,7 @@ const SidebarProfile = memo(function SidebarProfile({
       >
         <div className="sidebar-profile__button-content">
           <span className="sidebar-profile__avatar" aria-hidden="true">
-            {shouldHoldSteamAvatar || (isCloudProfileRestoring && !avatarSource) ? (
+            {identity.loading || shouldHoldSteamAvatar || (isCloudProfileRestoring && !avatarSource) ? (
               <span className="sidebar-profile__avatar-skeleton" />
             ) : (
               <img
@@ -737,9 +748,7 @@ const SidebarProfile = memo(function SidebarProfile({
           <span className="sidebar-profile__button-information">
             <span className="sidebar-profile__title-row">
               <span className="sidebar-profile__button-title">
-                {visibleProfile?.displayName || account?.displayName ||
-                  account?.username ||
-                  (appearance.language === "en" ? "Log in" : "Fazer login")}
+                {identity.title}
               </span>
               {isSteamConnected(visibleProfile) ? (
                 <span

@@ -10,6 +10,7 @@ import { useEnrichedGameCards } from "../hooks/useEnrichedGameCards";
 import { useAppData } from "../context/AppDataContext";
 import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
+import { normalizeGameSearchText } from "../utils/gameSearch";
 import { sortLibraryGames } from "../utils/librarySort";
 import {
   filterByLibrarySource,
@@ -208,6 +209,23 @@ export function LibraryPage({
       }
     }
 
+    // Busca da searchbar: filtra pelo que está sendo digitado (título,
+    // sem acento/caixa/pontuação) e compõe via AND com origem + coleção.
+    const normalizedQuery = normalizeGameSearchText(query ?? "");
+    if (normalizedQuery) {
+      const tokens = normalizedQuery.split(" ");
+      filteredGames = filteredGames.filter((game) => {
+        const title = normalizeGameSearchText(game.title ?? "");
+        if (title.includes(normalizedQuery)) return true;
+        if (title && tokens.every((token) => title.includes(token)))
+          return true;
+        const appId = game.appId?.trim() ?? "";
+        if (appId && normalizedQuery.replace(/\s+/g, "") && appId.includes(normalizedQuery.replace(/\s+/g, "")))
+          return true;
+        return false;
+      });
+    }
+
     return sortLibraryGames(filteredGames, sortBy, language);
   }, [
     activeCollectionId,
@@ -215,6 +233,7 @@ export function LibraryPage({
     favoriteGames,
     favoritesOnly,
     language,
+    query,
     sortBy,
     sourceFilter,
     userCollections,

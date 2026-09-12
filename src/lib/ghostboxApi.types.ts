@@ -422,6 +422,19 @@ export type AccountConnection = {
   linkedAt: string;
 };
 
+export type DiscordConnectionMetadata = {
+  username?: string | null;
+  globalName?: string | null;
+  avatarUrl?: string | null;
+  email?: string | null;
+  emailVerified?: boolean;
+};
+
+export type SteamConnectionMetadata = {
+  displayName?: string | null;
+  avatarUrl?: string | null;
+};
+
 export type AccountMeResult = {
   /** Present only when the worker slid the session forward. The Rust side
    * persists it; callers can ignore it. */

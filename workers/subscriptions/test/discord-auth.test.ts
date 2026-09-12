@@ -58,6 +58,7 @@ function mockDiscordOAuth(user: Record<string, unknown> = {}) {
         id: DISCORD_USER_ID,
         username: "ghost",
         global_name: "Ghost",
+        avatar: "avatar_hash_1",
         email: "ghost@example.com",
         verified: true,
         ...user,
@@ -172,6 +173,24 @@ describe("POST /auth/discord/exchange", () => {
     // verified, so the account is confirmed without any email being sent.
     expect(body.account.emailVerified).toBe(true);
     expect(body.account.verifiedVia).toBe("email");
+    expect(JSON.parse(db.rows("user_connections")[0].metadata_json)).toMatchObject({
+      username: "ghost",
+      globalName: "Ghost",
+      avatarUrl: `https://cdn.discordapp.com/avatars/${DISCORD_USER_ID}/avatar_hash_1.png?size=256`,
+    });
+
+    const me = await worker
+      .fetch(
+        new Request("https://worker.test/auth/me", {
+          headers: { authorization: `Bearer ${body.token}` },
+        }),
+        discordEnv(db),
+        executionContext,
+      )
+      .then((meResponse) => meResponse.json<any>());
+    expect(me.connections[0].metadata.avatarUrl).toBe(
+      `https://cdn.discordapp.com/avatars/${DISCORD_USER_ID}/avatar_hash_1.png?size=256`,
+    );
   });
 
   it("does not confirm the email when Discord holds a different address", async () => {

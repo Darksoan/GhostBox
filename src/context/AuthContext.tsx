@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type {
+  AccountConnection,
   GhostBoxAccount,
   LoginProvider,
   RecoveryTicket,
@@ -19,7 +20,9 @@ export type AuthStatus = "loading" | "anonymous" | "authenticated";
 interface AuthContextValue {
   status: AuthStatus;
   account: GhostBoxAccount | null;
+  connections: AccountConnection[];
   linkedSteamId: string | null;
+  authenticatedVia: LoginProvider | "password" | null;
   isAuthModalOpen: boolean;
   openAuthModal: () => void;
   closeAuthModal: () => void;
@@ -59,7 +62,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [account, setAccount] = useState<GhostBoxAccount | null>(null);
+  const [connections, setConnections] = useState<AccountConnection[]>([]);
   const [linkedSteamId, setLinkedSteamId] = useState<string | null>(null);
+  const [authenticatedVia, setAuthenticatedVia] = useState<
+    LoginProvider | "password" | null
+  >(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
@@ -68,9 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyAccount = useCallback(
     (me: Awaited<ReturnType<typeof ghostboxApi.getAccount>>) => {
       if (!me?.account) return false;
+      const nextConnections = Array.isArray(me.connections) ? me.connections : [];
       setAccount(me.account);
+      setConnections(nextConnections);
       setLinkedSteamId(
-        me.connections.find((connection) => connection.provider === "steam")
+        nextConnections.find((connection) => connection.provider === "steam")
           ?.providerId ?? null,
       );
       setStatus("authenticated");
@@ -94,7 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // drop it so the gate reverts to the login screen instead of a stuck
     // "authenticated" state pointing at a dead session.
     setAccount(null);
+    setConnections([]);
     setLinkedSteamId(null);
+    setAuthenticatedVia(null);
     setStatus("anonymous");
     await ghostboxApi.signOutCloud();
     return null;
@@ -105,13 +116,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void (async () => {
       const session = await ghostboxApi.getCloudSession();
       if (cancelled) return;
-      if (!session?.token) {
+      if (!session?.token || !session.account) {
         setStatus("anonymous");
         return;
       }
       // Paint instantly from the locally persisted account, then confirm
       // against the worker in the background.
       setAccount(session.account);
+      setConnections([]);
+      setLinkedSteamId(session.steamId ?? null);
+      setAuthenticatedVia(null);
       setStatus("authenticated");
       let me: Awaited<ReturnType<typeof ghostboxApi.getAccount>>;
       try {
@@ -123,7 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (!applyAccount(me)) {
         setAccount(null);
+        setConnections([]);
         setLinkedSteamId(null);
+        setAuthenticatedVia(null);
         setStatus("anonymous");
         await ghostboxApi.signOutCloud();
       }
@@ -136,8 +152,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (email: string, username: string, password: string, displayName?: string) => {
       const session = await ghostboxApi.registerAccount(email, username, password, displayName);
+      if (!session?.account) throw new Error("A sessão não retornou uma conta válida.");
       setAccount(session.account);
+      setConnections([]);
       setLinkedSteamId(null);
+      setAuthenticatedVia("password");
       setStatus("authenticated");
     },
     []
@@ -145,7 +164,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (identifier: string, password: string) => {
     const session = await ghostboxApi.loginAccount(identifier, password);
+    if (!session?.account) throw new Error("A sessão não retornou uma conta válida.");
     setAccount(session.account);
+    setConnections([]);
+    setLinkedSteamId(session.steamId ?? null);
+    setAuthenticatedVia("password");
     setStatus("authenticated");
     try {
       applyAccount(await ghostboxApi.getAccount());
@@ -156,8 +179,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithProvider = useCallback(async (provider: LoginProvider) => {
     const result = await ghostboxApi.loginWithProvider(provider);
+    if (!result?.account) throw new Error("A sessão não retornou uma conta válida.");
     setAccount(result.account);
-    if (result.steamId) setLinkedSteamId(result.steamId);
+    setConnections([]);
+    setLinkedSteamId(result.steamId ?? null);
+    setAuthenticatedVia(provider);
     setStatus("authenticated");
     try {
       applyAccount(await ghostboxApi.getAccount());
@@ -171,7 +197,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // localStorage, and AppDataProvider (still mounted until the gate closes)
     // has in-flight Steam fetches that would write those keys straight back.
     setAccount(null);
+    setConnections([]);
     setLinkedSteamId(null);
+    setAuthenticatedVia(null);
     setStatus("anonymous");
     await ghostboxApi.signOutCloud();
   }, []);
@@ -189,7 +217,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeRecovery = useCallback(
     async (recoveryToken: string, newPassword: string) => {
       const session = await ghostboxApi.completeRecovery(recoveryToken, newPassword);
+      if (!session?.account) throw new Error("A sessão não retornou uma conta válida.");
       setAccount(session.account);
+      setConnections([]);
+      setLinkedSteamId(session.steamId ?? null);
+      setAuthenticatedVia(null);
       setStatus("authenticated");
       try {
         applyAccount(await ghostboxApi.getAccount());
@@ -208,7 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       account,
+      connections,
       linkedSteamId,
+      authenticatedVia,
       isAuthModalOpen,
       openAuthModal,
       closeAuthModal,
@@ -226,7 +260,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       status,
       account,
+      connections,
       linkedSteamId,
+      authenticatedVia,
       isAuthModalOpen,
       openAuthModal,
       closeAuthModal,

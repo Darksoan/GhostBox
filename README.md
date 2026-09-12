@@ -64,7 +64,7 @@ src-tauri/      backend Rust (comandos Tauri, integrações Steam/Ludusavi/CDN)
 workers/        Cloudflare Workers (proxies e Stripe)
 scripts/        scripts de manutenção (check-tokens, set-release-version, etc.)
 tests/          testes Vitest
-Plans/, fixes/  planos de melhoria e auditorias de features
+docs/email-templates/  fonte versionada dos templates de e-mail (Firebase Console)
 ```
 
 ## Documentação relacionada

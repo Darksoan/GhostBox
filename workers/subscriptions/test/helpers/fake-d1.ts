@@ -713,6 +713,33 @@ const rules: Rule[] = [
     },
   },
   {
+    pattern: /^UPDATE user_connections SET metadata_json = \? WHERE user_id = \? AND provider = \? AND provider_id = \?/i,
+    run: ([metadataJson, userId, provider, providerId], db) => {
+      const row = db.rows("user_connections").find(
+        (entry) =>
+          entry.user_id === userId &&
+          entry.provider === provider &&
+          entry.provider_id === providerId,
+      );
+      if (!row) return { changes: 0 };
+      row.metadata_json = metadataJson;
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^UPDATE discord_links SET discord_username = \?, discord_global_name = \?, updated_at = \? WHERE user_id = \? AND discord_user_id = \?/i,
+    run: ([username, globalName, updatedAt, userId, discordUserId], db) => {
+      const row = db.rows("discord_links").find(
+        (entry) => entry.user_id === userId && entry.discord_user_id === discordUserId,
+      );
+      if (!row) return { changes: 0 };
+      row.discord_username = username;
+      row.discord_global_name = globalName;
+      row.updated_at = updatedAt;
+      return { changes: 1 };
+    },
+  },
+  {
     pattern: /^SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = \?/i,
     run: ([providerId], db) => {
       const row = db

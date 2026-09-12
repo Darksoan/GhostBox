@@ -54,11 +54,6 @@ function AchievementListItem({
   const preferredSource = achievementIconSource(achievement, unlocked);
   const [source, setSource] = useState(preferredSource);
   const unlockedDate = formatUnlockedDate(achievement.unlockedAt, language);
-  const isRare =
-    unlocked &&
-    typeof achievement.globalPercent === "number" &&
-    Number.isFinite(achievement.globalPercent) &&
-    achievement.globalPercent <= 10;
   const globalPercent =
     typeof achievement.globalPercent === "number" &&
     Number.isFinite(achievement.globalPercent)
@@ -76,11 +71,7 @@ function AchievementListItem({
       } ${highlighted ? "game-achievements-page__item--highlighted" : ""}`}
       data-achievement-id={achievement.name}
     >
-      <span
-        className={`game-achievements-page__icon-wrap${
-          isRare ? " game-achievements-page__icon-wrap--rare" : ""
-        }`}
-      >
+      <span className="game-achievements-page__icon-wrap">
         <img
           className="game-achievements-page__icon"
           src={source}

@@ -185,7 +185,9 @@ function createWishlistFallbackGame(appId: string, index = 0, title?: string) {
 }
 
 function preloadHomeRecommendedCover(game: GhostBoxGame) {
-  const sources = gameHeroCapsuleSources(game).slice(
+  // O banner pinta `library_hero`: pré-carregar `hero_capsule` aqui aquecia a
+  // família errada e cada navegação do carrossel buscava o hero a frio.
+  const sources = gameHeroSources(game).slice(
     0,
     homeRecommendedHeroPreloadLimit
   );
@@ -1215,13 +1217,14 @@ function HomeGameShelf({
   );
 }
 
-/** Arte larga do banner: `library_hero`, com screenshot/header como rede. */
+/**
+ * Arte larga do banner: só `library_hero`/`library_hero_2x` (mesmo aspecto do
+ * frame, 1920×620). Screenshot (16:9) e header (460×215) têm outro aspecto e,
+ * com `background-size: cover`, cortam na vertical e entram em baixa
+ * resolução — melhor segurar o fundo chapado do que pintar a rede errada.
+ */
 function homeBannerArtSources(game: GhostBoxGame) {
-  return [
-    ...gameHeroSources(game),
-    ...(game.screenshots ?? []).slice(0, 1),
-    ...gameHeaderOnlySources(game).slice(0, 1),
-  ];
+  return gameHeroSources(game);
 }
 
 /**
@@ -1236,7 +1239,15 @@ function HomeBannerArt({
   game: GhostBoxGame;
   active: boolean;
 }) {
-  const fallbackSources = useMemo(() => homeBannerArtSources(game), [game]);
+  // Chave estável por jogo: o enriquecimento recria o objeto (título,
+  // screenshots) e refazer a cadeia a cada merge reiniciava o `Image()` em
+  // voo, piscando a arte de volta para a primeira URL de baixa resolução. As
+  // URLs líderes derivam só do appId, então a lista segue válida após o merge.
+  const fallbackSources = useMemo(
+    () => homeBannerArtSources(game),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [game.appId, game.id, game.heroUrl, game.hero]
+  );
   const cachedSources = useCachedImageSources(fallbackSources);
   // `preferOrder` faz o walk respeitar o ranking da lista (library_hero
   // primeiro). Sem ele, o atalho de sessão pinta qualquer source já decodificada
@@ -1251,10 +1262,10 @@ function HomeBannerArt({
       className={`home-banner__art${active ? " home-banner__art--active" : ""}${
         loaded ? " home-banner__art--loaded" : ""
       }`}
-      style={layeredImageStyle(
-        loaded && source ? [source] : fallbackSources.slice(0, 1),
-        ""
-      )}
+      // Nada pintado até carregar: exibir a primeira URL crua enquanto o
+      // `Image()` resolve mostrava a arte parcial/cortada e depois trocava de
+      // resolução de repente quando a fonte preferida terminava.
+      style={layeredImageStyle(loaded && source ? [source] : [], "")}
       aria-hidden="true"
     />
   );

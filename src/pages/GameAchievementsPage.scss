@@ -1,5 +1,3 @@
-@use "../styles/mixins";
-
 .game-achievements-page {
   display: flex;
   width: 100%;
@@ -172,18 +170,6 @@
     height: 58px;
     min-width: 58px;
     border-radius: var(--radius-sm);
-
-    &--rare {
-      border-radius: var(--radius-sm);
-
-      .game-achievements-page__icon {
-        border-color: transparent;
-      }
-
-      &::before {
-        @include mixins.gold-flashlight-border-rare;
-      }
-    }
   }
 
   &__icon {

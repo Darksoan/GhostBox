@@ -506,11 +506,6 @@ const AchievementIcon = memo(function AchievementIcon({
   const { appearance, t } = useSettings();
   const itemRef = useRef<HTMLLIElement>(null);
   const isUnlocked = isAchievementUnlocked(achievement);
-  const isRare =
-    isUnlocked &&
-    typeof achievement.globalPercent === "number" &&
-    Number.isFinite(achievement.globalPercent) &&
-    achievement.globalPercent <= 10;
   // A arte real (colorida) é sempre a primeira escolha, mesmo bloqueada: o
   // estado de bloqueio é comunicado por filtro CSS (dessaturação), não
   // trocando para o ícone cinza da Steam antes mesmo de tentar carregar —
@@ -590,7 +585,7 @@ const AchievementIcon = memo(function AchievementIcon({
 
   return (
     <li
-      className={`modal__achievement-item ${isUnlocked ? "modal__achievement-item--unlocked" : "modal__achievement-item--locked"}${isRare ? " modal__achievement-item--rare" : ""}${onSelect && interactive ? " modal__achievement-item--clickable" : ""}`}
+      className={`modal__achievement-item ${isUnlocked ? "modal__achievement-item--unlocked" : "modal__achievement-item--locked"}${onSelect && interactive ? " modal__achievement-item--clickable" : ""}`}
       tabIndex={interactive ? 0 : -1}
       aria-hidden={!interactive}
       aria-label={interactive ? ariaLabel : undefined}

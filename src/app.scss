@@ -2352,7 +2352,7 @@ p {
       color: var(--text-primary);
       font-weight: var(--weight-regular);
       font-size: var(--type-size-compact);
-      line-height: 1;
+      line-height: var(--type-line-compact);
 
       &::placeholder {
         font-weight: var(--weight-regular);
@@ -2492,12 +2492,13 @@ p {
     width: 100%;
     align-items: center;
     min-height: var(--header-control);
-    padding: 0 var(--space-5);
+    padding: var(--space-2) var(--space-5);
     border: 0;
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
     font-weight: var(--weight-regular);
+    line-height: var(--type-line-body);
     text-align: left;
     transition: background-color var(--motion-fast) ease;
 
@@ -2513,6 +2514,7 @@ p {
       min-width: 0;
       font-size: var(--type-size-body);
       font-weight: var(--weight-regular);
+      line-height: var(--type-line-body);
     }
 
   }
@@ -3130,8 +3132,10 @@ p {
   position: relative;
   overflow: hidden;
   width: 100%;
-  max-height: 420px;
-  /* Aspecto da `library_hero` (1920x620) — a arte preenche sem letterbox. */
+  /* Altura vinda do aspecto da `library_hero` (1920x620) — a arte preenche sem
+     letterbox. Sem `max-height`: quando a largura esticava a altura calculada
+     para além do teto, o teto vencia, a proporção quebrava e o `cover`
+     cortava o topo/base da arte. */
   aspect-ratio: 1920 / 620;
   /* Sem raio: encostando na borda da janela, canto arredondado deixaria um
      triângulo de fundo em cada quina. */
@@ -5224,18 +5228,6 @@ html.no-animations {
   // a textura compete com os cards de resumo e foi removida a pedido.
   &:has(.subscription-account:not(.subscription-account--loading)) .subscription-backdrop {
     display: none;
-  }
-}
-
-@property --premium-border-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-@keyframes subscription-premium-border-shine {
-  to {
-    --premium-border-angle: 360deg;
   }
 }
 
@@ -12701,20 +12693,6 @@ html.no-backdrop-blur {
 
     &--clickable {
       cursor: pointer;
-    }
-
-    /* Rare unlocked (≤10%): gold flashlight border (brighter than subscription).
-       O anel dourado é o `::before` com `inset: 0` e padding próprio — não
-       depende da borda do slot, que agora é zero em todos os estados. */
-    &--rare {
-      &::before {
-        @include mixins.gold-flashlight-border-rare;
-      }
-
-      img {
-        position: relative;
-        z-index: var(--z-base);
-      }
     }
   }
 

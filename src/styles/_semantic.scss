@@ -191,14 +191,12 @@
   --spinner-track-on-light: color-mix(in srgb, #070707 25%, transparent);
   --spinner-indicator-on-light: #070707;
 
-  // --- Dourado (assinatura + conquista rara — nada mais usa isto) ---
+  // --- Dourado (assinatura — nada mais usa isto) ---
   --premium-gold: var(--gold-500);
   // Hover do CTA dourado e texto desenhado por cima dele. O dourado é claro o
   // bastante para exigir tinta escura — mesma lógica do par --on-light acima.
   --premium-gold-hover: var(--gold-400);
   --premium-gold-ink: #070707;
-  // Ângulo animado da borda do card de assinatura (ver @property em app.scss).
-  --premium-border-angle: 0deg;
   --profile-banner-placeholder-bg: var(--black);
 
   // --- Vidro sobre arte ---

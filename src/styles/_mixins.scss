@@ -17,45 +17,6 @@
   }
 }
 
-// Borda "lanterna" dourada: um conic-gradient que varre a borda com um flash de
-// luz, usada apenas em conquista rara (≤10% de desbloqueio global).
-//
-// Existia uma variante mais suave para o card de assinatura, removida junto com
-// o card — o modal Premium desenha a borda de outro jeito.
-//
-// $duration: duração de uma volta completa da animação.
-@mixin gold-flashlight-border-rare($duration: 7s) {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  padding: 1.5px;
-  pointer-events: none;
-  opacity: 1;
-  background: conic-gradient(
-    from var(--premium-border-angle),
-    transparent 0deg,
-    transparent 180deg,
-    color-mix(in srgb, var(--gold-500) 18%, transparent) 230deg,
-    color-mix(in srgb, var(--gold-500) 45%, transparent) 275deg,
-    color-mix(in srgb, var(--gold-500) 72%, #fff 8%) 305deg,
-    color-mix(in srgb, var(--gold-500) 90%, #fff 18%) 328deg,
-    color-mix(in srgb, var(--gold-500) 55%, transparent) 345deg,
-    color-mix(in srgb, var(--gold-500) 22%, transparent) 355deg,
-    transparent 360deg
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: subscription-premium-border-shine #{$duration} linear infinite;
-}
-
 /// Canonical uppercase section label. The `.eyebrow` class is this mixin;
 /// use the class in markup you control, the mixin when the selector is fixed
 /// (a `dt`, a `span` inside a component block).

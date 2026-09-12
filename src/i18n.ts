@@ -142,8 +142,6 @@ const translations: Record<Language, TranslationTree> = {
       statusCompleted: "Concluído",
       statusError: "Erro",
       remaining: "Restante: {size}",
-      estimatedTime: "{time} restantes",
-      estimatedTimeCalculating: "calculando…",
       totalDownloaded: "{size} baixados",
       failedFiles: "{count} arquivo(s) com falha",
       genericError: "Não foi possível concluir o download.",
@@ -337,6 +335,11 @@ const translations: Record<Language, TranslationTree> = {
       reviews: "{count} avaliações",
     },
     sidebar: {
+      profile: {
+        signIn: "Fazer login",
+        loading: "Carregando conta…",
+        account: "Conta GhostBox",
+      },
       collections: "Coleções",
       searchCollections: "Pesquisar jogos nas coleções",
       collectionSearchPlaceholder: "Pesquisar nas coleções",
@@ -732,20 +735,6 @@ const translations: Record<Language, TranslationTree> = {
           label: "Toasts de erro",
           description: "Permite avisos de falha, validação ou atenção.",
         },
-        testToast: {
-          label: "Testar toast",
-          description: "Dispara um aviso de sucesso de exemplo dentro do app.",
-          action: "Testar",
-          toastTitle: "Ajustes salvos",
-          toastMessage: "Este é um toast de teste do GhostBox.",
-        },
-        testAchievementToast: {
-          label: "Testar toast de conquista",
-          description: "Dispara um exemplo fiel ao mockup (Rising Star · Reach level 20).",
-          action: "Testar",
-          toastTitle: "Rising Star",
-          toastDescription: "Reach level 20.",
-        },
       },
       download: {
         morrenusApiKey: {
@@ -894,8 +883,6 @@ const translations: Record<Language, TranslationTree> = {
       statusCompleted: "Completed",
       statusError: "Error",
       remaining: "Remaining: {size}",
-      estimatedTime: "{time} left",
-      estimatedTimeCalculating: "estimating…",
       totalDownloaded: "{size} downloaded",
       failedFiles: "{count} file(s) failed",
       genericError: "Could not complete the download.",
@@ -1083,6 +1070,11 @@ const translations: Record<Language, TranslationTree> = {
       reviews: "{count} reviews",
     },
     sidebar: {
+      profile: {
+        signIn: "Log in",
+        loading: "Loading account…",
+        account: "GhostBox account",
+      },
       collections: "Collections",
       searchCollections: "Search games in collections",
       collectionSearchPlaceholder: "Search collections",
@@ -1475,20 +1467,6 @@ const translations: Record<Language, TranslationTree> = {
         inAppErrorToasts: {
           label: "Error toasts",
           description: "Allows failure, validation, or attention alerts.",
-        },
-        testToast: {
-          label: "Test toast",
-          description: "Fires a sample success alert inside the app.",
-          action: "Test",
-          toastTitle: "Settings saved",
-          toastMessage: "This is a GhostBox test toast.",
-        },
-        testAchievementToast: {
-          label: "Test achievement toast",
-          description: "Fires a mockup-faithful sample (Rising Star · Reach level 20).",
-          action: "Test",
-          toastTitle: "Rising Star",
-          toastDescription: "Reach level 20.",
         },
       },
       download: {

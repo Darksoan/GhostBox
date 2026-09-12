@@ -109,6 +109,7 @@ const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
 
 interface PageRouterProps {
   page: Page;
+  query: string;
   debouncedQuery: string;
   knownGames: GhostBoxGame[];
   activeSettingsTabId: string;
@@ -130,6 +131,7 @@ interface PageRouterProps {
 
 export function PageRouter({
   page,
+  query,
   debouncedQuery,
   knownGames,
   activeSettingsTabId,
@@ -313,7 +315,7 @@ export function PageRouter({
           games={visibleLibraryGames}
           favoriteGames={appData.favoriteGames}
           loading={false}
-          query={debouncedQuery}
+          query={query}
           onOpenGame={openGame}
           favoriteGameIds={appData.favoriteGameIds}
           userCollections={appData.userCollections}

@@ -389,13 +389,18 @@ export function withoutHeroImageSources(sources: string[]) {
 export function gameHeroSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const screenshotSources = new Set(game.screenshots ?? []);
+  // Alta densidade primeiro (`library_hero_2x` = 3840×1240, `library_hero` =
+  // 1920×620): o banner percorre a lista em ordem e fixa na primeira que
+  // carrega, então 1x na frente travava a arte na resolução baixa para sempre.
   const steamHeroSources = [
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
-    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero_2x.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
   ];
   const customHeroSources = [
     game.heroUrl,

@@ -601,6 +601,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
           >
             <PageRouter
               page={page}
+              query={shell.query}
               debouncedQuery={shell.debouncedQuery}
               knownGames={knownGames}
               activeSettingsTabId={shell.activeSettingsTabId}
