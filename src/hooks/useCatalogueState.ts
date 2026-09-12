@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GameDatabaseResult } from "../data";
+import type { GameDatabaseResult, GhostBoxGame } from "../data";
 import type { CatalogueFilters, CatalogueSort } from "../types";
 import {
   catalogueChunkPageCount,
@@ -10,13 +10,25 @@ import {
 import { hasSelectedCatalogueFilters } from "../utils/filters";
 import { setHasLoadedCatalogueGlobally } from "../utils/gameCache";
 import { catalogueRotationSeed } from "../utils/rotation";
-import { useGamesQuery } from "../queries/games";
+import { useGamesQuery, useSteamStoreSearchQuery } from "../queries/games";
+import { useSettings } from "../context/settings";
+import {
+  mergeGameSearchResults,
+  normalizeGameSearchText,
+  searchKnownGames,
+  shouldUseSteamSearchFallback,
+} from "../utils/gameSearch";
 
 function normalizeCatalogueQuery(query: string) {
-  return query.trim().toLowerCase();
+  return normalizeGameSearchText(query);
 }
 
-export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
+export function useCatalogueState(
+  debouncedQuery: string,
+  enabled: boolean,
+  knownGames: readonly GhostBoxGame[] = [],
+) {
+  const { appearance } = useSettings();
   const [cataloguePage, setCataloguePage] = useState(1);
   const [catalogueFilters, setCatalogueFilters] =
     useState<CatalogueFilters>(emptyCatalogueFilters);
@@ -63,6 +75,68 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     enabled,
   });
 
+  const hasActiveFilters = hasSelectedCatalogueFilters(catalogueFilters);
+  const canUseSearchFallback =
+    enabled && Boolean(normalizedQuery) && !hasActiveFilters;
+  const localFallbackGames = useMemo(
+    () =>
+      canUseSearchFallback
+        ? searchKnownGames(knownGames, normalizedQuery, 20)
+        : [],
+    [canUseSearchFallback, knownGames, normalizedQuery],
+  );
+  const d1SearchSettled =
+    catalogueQuery.isError ||
+    (catalogueQuery.isFetched &&
+      !catalogueQuery.isFetching &&
+      !catalogueQuery.isPlaceholderData);
+  const d1SearchIsEmpty =
+    catalogueQuery.isError ||
+    (d1SearchSettled && (catalogueQuery.data?.games.length ?? 0) === 0);
+  const shouldSearchSteam =
+    canUseSearchFallback &&
+    shouldUseSteamSearchFallback({
+      query: normalizedQuery,
+      localResultCount: localFallbackGames.length,
+      remoteResultCount: catalogueQuery.data?.games.length ?? 0,
+      remoteSettled: d1SearchSettled,
+      remoteFailed: catalogueQuery.isError,
+      hasActiveFilters,
+    });
+  const steamSearchQuery = useSteamStoreSearchQuery(
+    normalizedQuery,
+    20,
+    appearance.language,
+    { enabled: shouldSearchSteam },
+  );
+  const isFallbackMode = canUseSearchFallback && d1SearchIsEmpty;
+  const fallbackGames = useMemo(
+    () =>
+      mergeGameSearchResults(
+        [
+          localFallbackGames,
+          shouldSearchSteam ? (steamSearchQuery.data ?? []) : [],
+        ],
+        20,
+      ),
+    [localFallbackGames, shouldSearchSteam, steamSearchQuery.data],
+  );
+  const resolvedCatalogueDatabase = useMemo<GameDatabaseResult>(() => {
+    if (!isFallbackMode) return catalogueQuery.data ?? emptyGameDatabase;
+    return {
+      games: fallbackGames,
+      total: fallbackGames.length,
+      matched: fallbackGames.length,
+      limited: false,
+      source: localFallbackGames.length > 0 ? "local" : "steam-store",
+    };
+  }, [
+    catalogueQuery.data,
+    fallbackGames,
+    isFallbackMode,
+    localFallbackGames.length,
+  ]);
+
   const facetsQuery = useGamesQuery(
     {
       query: "",
@@ -108,11 +182,13 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
     }
   }, [catalogueQuery.data?.facets, enabled, facetsQuery.data?.facets]);
 
-  const hasAnyCatalogueData = Boolean(catalogueQuery.data);
-  const isCatalogueRefreshing = catalogueQuery.isFetching;
+  const hasAnyCatalogueData = Boolean(catalogueQuery.data) || fallbackGames.length > 0;
+  const isSteamFallbackLoading = shouldSearchSteam && steamSearchQuery.isFetching;
+  const isCatalogueRefreshing = catalogueQuery.isFetching || isSteamFallbackLoading;
   // Só cobre a lista com skeleton quando não há absolutamente nada para
   // mostrar. Refetch com dado anterior na tela vira indicador sutil.
-  const shouldShowCatalogueLoading = !hasAnyCatalogueData && !catalogueQuery.isError;
+  const shouldShowCatalogueLoading =
+    (!hasAnyCatalogueData && !catalogueQuery.isError) || isSteamFallbackLoading;
 
   const handleCatalogueFiltersChange = useCallback(
     (filters: CatalogueFilters) => {
@@ -136,23 +212,27 @@ export function useCatalogueState(debouncedQuery: string, enabled: boolean) {
   }, [catalogueQuery, facetsQuery]);
 
   return {
-    catalogueDatabase: catalogueQuery.data ?? emptyGameDatabase,
+    catalogueDatabase: resolvedCatalogueDatabase,
     catalogueFacets:
       facetsQuery.data?.facets ?? catalogueQuery.data?.facets ?? lastCatalogueFacets,
     isLoadingCatalogueFacets: facetsQuery.isFetching,
     isInitialCatalogueLoading: shouldShowCatalogueLoading && !hasLoadedCatalogueOnce,
     shouldShowCatalogueLoading,
     isCatalogueRefreshing,
-    hasCatalogueError: catalogueQuery.isError && !hasAnyCatalogueData,
-    hasCatalogueRefreshError: catalogueQuery.isRefetchError,
+    hasCatalogueError:
+      catalogueQuery.isError &&
+      fallbackGames.length === 0 &&
+      (!shouldSearchSteam || steamSearchQuery.isError),
+    hasCatalogueRefreshError:
+      catalogueQuery.isRefetchError && !isFallbackMode,
     hasCatalogueFacetsError: facetsQuery.isError && !facetsQuery.data && !lastCatalogueFacets,
     onCatalogueRetry: handleCatalogueRetry,
     shouldPulseCatalogueLoading:
       (isCatalogueRefreshing || !hasAnyCatalogueData) &&
       hasSelectedCatalogueFilters(catalogueFilters),
-    cataloguePage: effectiveCataloguePage,
-    catalogueDisplayedPage: displayedPageRef.current,
-    catalogueChunkOffset: displayedChunkOffsetRef.current,
+    cataloguePage: isFallbackMode ? 1 : effectiveCataloguePage,
+    catalogueDisplayedPage: isFallbackMode ? 1 : displayedPageRef.current,
+    catalogueChunkOffset: isFallbackMode ? 0 : displayedChunkOffsetRef.current,
     catalogueFilters,
     catalogueSort,
     handleCatalogueFiltersChange,

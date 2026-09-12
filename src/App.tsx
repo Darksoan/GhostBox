@@ -24,7 +24,9 @@ import {
 } from "./lib/trayNotifications";
 import { type SettingsTabId } from "./features/settings/settingsTabsShared";
 import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
-import { ingestRemoteGameByAppId, type GhostBoxGame } from "./data";
+import type { GhostBoxGame } from "./data";
+import { buildSteamOwnedGamesFromPlaytimes } from "./utils/steamLibraryMerge";
+import { buildKnownGameIndex } from "./utils/gameSearch";
 import ghostIconSource from "../Icons/ghost-solid.png";
 import "./app.scss";
 
@@ -117,19 +119,26 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     setCanForwardOverlay(Boolean(entry));
   }, []);
 
-  const localHeaderGames = useMemo(
-    () => [
-      ...appData.addedLibraryGames,
-      ...appData.favoriteGames,
-      ...appData.profileHistoryGames,
-    ],
+  const knownGames = useMemo(
+    () => buildKnownGameIndex([
+      appData.addedLibraryGames,
+      appData.favoriteGames,
+      appData.profileHistoryGames,
+      appData.userCollections.flatMap((collection) => collection.games ?? []),
+      buildSteamOwnedGamesFromPlaytimes(
+        appData.steamAccountStats?.ownedPlaytimes ?? [],
+        {},
+      ),
+    ]),
     [
       appData.addedLibraryGames,
       appData.favoriteGames,
       appData.profileHistoryGames,
+      appData.steamAccountStats?.ownedPlaytimes,
+      appData.userCollections,
     ],
   );
-  const shell = useAppShellState(page, { localGames: localHeaderGames });
+  const shell = useAppShellState(page, { localGames: knownGames });
   const [settingsLibraryView, setSettingsLibraryView] = useState<
     "overview" | "hidden-games"
   >("overview");
@@ -491,18 +500,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     }
   }, [appearance.language, showToast, subscriptionPortalFlow]);
 
-  const openGameAndIngestFallback = useCallback((game: GhostBoxGame) => {
-    openGame(game);
-    if (/^\d{1,10}$/.test(game.appId) && !game.databaseAddedAt) {
-      void ingestRemoteGameByAppId(game.appId)
-        .then(() => {
-          void queryClient.invalidateQueries({ queryKey: ["games"] });
-          void queryClient.invalidateQueries({ queryKey: ["home"] });
-        })
-        .catch(() => undefined);
-    }
-  }, [openGame, queryClient]);
-
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
@@ -588,7 +585,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             onQueryChange={shell.handleQueryChange}
             onSelectSuggestion={(game) => {
               clearOverlayForward();
-              openGameAndIngestFallback(game);
+              openGame(game);
             }}
             onBack={handleBack}
             onForward={handleForward}
@@ -605,6 +602,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             <PageRouter
               page={page}
               debouncedQuery={shell.debouncedQuery}
+              knownGames={knownGames}
               activeSettingsTabId={shell.activeSettingsTabId}
               settingsLibraryView={settingsLibraryView}
               onSettingsLibraryViewChange={setSettingsLibraryView}

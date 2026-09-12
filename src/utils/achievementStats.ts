@@ -32,6 +32,11 @@ export function getAchievementTotal(game: GhostBoxGame) {
   );
 }
 
+/** Whether the game has an achievement total that can be shown to the player. */
+export function hasAvailableAchievements(game: GhostBoxGame) {
+  return getAchievementTotal(game) > 0;
+}
+
 type RicherAchievementGameOptions = {
   /**
    * Carry a real title over from the losing side when the richer game only has a

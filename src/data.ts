@@ -257,6 +257,14 @@ export async function loadGameStoreDetails(
   return ghostboxApi.getGameStoreDetails(gameId, language);
 }
 
+export async function searchSteamStoreGames(
+  query: string,
+  limit = 20,
+  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage(),
+): Promise<GhostBoxGame[]> {
+  return ghostboxApi.searchSteamStoreGames(query, limit, language);
+}
+
 export async function ingestRemoteGameByAppId(appId: string): Promise<void> {
   return ghostboxApi.ingestRemoteGameByAppId(appId);
 }

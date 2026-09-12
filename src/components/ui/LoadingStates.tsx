@@ -81,17 +81,40 @@ export function GameGridLoadingState({
 }
 
 /**
- * Skeleton chapado: só as duas massas do item real (capa + corpo). Nada de
- * barras de título ou chips — a lista carregada preenche esse espaço sozinha.
+ * A lista mantém só as duas massas do item real (capa + corpo), sem texto nem
+ * chips. A grade reserva suas duas linhas para fechar na altura do card final.
  */
-export function CatalogueListLoadingState({ count }: { count?: number }) {
+export function CatalogueListLoadingState({
+  count,
+  viewMode = "list",
+}: {
+  count?: number;
+  viewMode?: "list" | "grid";
+}) {
   const placeholderCount = count ?? cataloguePageSize;
+  const isGrid = viewMode === "grid";
 
   return (
-    <div className="catalogue-list catalogue-list--skeleton" aria-hidden="true">
+    <div
+      className={`catalogue-list catalogue-list--skeleton${
+        isGrid ? " catalogue-list--cards" : ""
+      }`}
+      aria-hidden="true"
+    >
       {Array.from({ length: placeholderCount }, (_, index) => (
-        <article className="catalogue-card catalogue-card--list catalogue-card--skeleton" key={`catalogue-loading-${index}`}>
-          <div className="catalogue-card__cover catalogue-card__cover--skeleton skeleton" />
+        <article
+          className={`catalogue-card catalogue-card--${viewMode} catalogue-card--skeleton`}
+          key={`catalogue-loading-${index}`}
+        >
+          <div className={`catalogue-card__button catalogue-card__button--${viewMode}`}>
+            <div className="catalogue-card__cover catalogue-card__cover--skeleton skeleton" />
+            {isGrid && (
+              <div className="catalogue-card__grid-body catalogue-card__grid-body--skeleton">
+                <span className="catalogue-card__skeleton-title skeleton" />
+                <span className="catalogue-card__skeleton-developer skeleton" />
+              </div>
+            )}
+          </div>
         </article>
       ))}
     </div>

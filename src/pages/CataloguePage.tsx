@@ -987,7 +987,7 @@ export function CataloguePage({
               onAction={onRetry}
             />
           ) : loading ? (
-            <CatalogueListLoadingState />
+            <CatalogueListLoadingState viewMode={viewMode} />
           ) : visibleGames.length > 0 ? (
             <div className="catalogue-page__list-container">
               <CatalogueList

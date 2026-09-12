@@ -4,6 +4,18 @@ import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
 describe("Home layout", () => {
+  it("uses the maximized composition whenever the viewport is wide enough", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const css = compile("src/app.scss").css;
+
+    expect(component).toContain('const homeWideLayoutMediaQuery = "(min-width: 1600px)";');
+    expect(component).toContain("const isWideLayout = useWideHomeLayout(isMaximized);");
+    expect(component).toContain('isWideLayout ? " home-page--maximized" : ""');
+    expect(component).toContain("isMaximized={isWideLayout}");
+    expect(css).toContain("@media (min-width: 1600px)");
+    expect(css).toContain("--content-max-width: 1480px");
+  });
+
   it("keeps the app, titlebar, and page backgrounds on the raised canvas", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     const customProperties = new Map<string, string>();

@@ -1821,6 +1821,8 @@ p {
   --header-control: 36px;
   --header-icon: 20px;
   --header-gap: var(--space-4);
+  --header-search-width: 280px;
+  --header-search-rest-width: 200px;
 
   position: relative;
   z-index: var(--z-drawer);
@@ -2294,7 +2296,7 @@ p {
 
   &__search {
     display: inline-flex;
-    width: 200px;
+    width: var(--header-search-rest-width);
     height: var(--header-control);
     min-height: var(--header-control);
     max-height: var(--header-control);
@@ -2324,7 +2326,7 @@ p {
 
     &:focus-within,
     &--focused {
-      width: 240px;
+      width: var(--header-search-width);
       background: var(--surface-titlebar-control-hover);
       color: var(--text-primary);
       opacity: 1;
@@ -2471,7 +2473,7 @@ p {
     top: calc(100% + 4px);
     right: 0;
     z-index: 10000;
-    width: 280px;
+    width: var(--header-search-width);
     max-height: 350px;
     overflow-y: auto;
     border: 0;
@@ -2489,9 +2491,8 @@ p {
     display: flex;
     width: 100%;
     align-items: center;
-    gap: var(--space-5);
-    min-height: 55px;
-    padding: var(--space-3) var(--space-5);
+    min-height: var(--header-control);
+    padding: 0 var(--space-5);
     border: 0;
     background: transparent;
     color: var(--text-primary);
@@ -2508,19 +2509,10 @@ p {
 
     &-title {
       @include mixins.truncate;
+      flex: 1 1 auto;
+      min-width: 0;
       font-size: var(--type-size-body);
       font-weight: var(--weight-regular);
-    }
-
-    &__icons {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      margin-left: auto;
-      color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
-      min-width: 14px;
-      min-height: 14px;
     }
 
   }
@@ -2547,25 +2539,6 @@ p {
   &__search-empty-icon {
     flex: 0 0 auto;
     color: var(--text-secondary);
-  }
-
-  &__search-dropdown-thumbnail {
-    display: block;
-    width: 92px;
-    aspect-ratio: 460 / 215;
-    flex: 0 0 92px;
-    overflow: hidden;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-
-    img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      image-rendering: auto;
-      backface-visibility: visible;
-    }
   }
 
   &__search-empty-content {
@@ -2616,6 +2589,8 @@ p {
   --header-control: 40px;
   --header-icon: 22px;
   --header-gap: var(--space-5);
+  --header-search-width: 300px;
+  --header-search-rest-width: 220px;
   padding: 0 var(--space-8) 0 var(--space-12);
 }
 
@@ -2659,17 +2634,11 @@ p {
 
 .sidebar--maximized ~ .container .header__search,
 .app-main:has(.sidebar--maximized) .header__search {
-  width: 220px;
   height: var(--header-control);
   min-height: var(--header-control);
   max-height: var(--header-control);
   gap: var(--space-5);
   padding: 0 var(--space-6);
-}
-
-.sidebar--maximized ~ .container .header__search--focused,
-.app-main:has(.sidebar--maximized) .header__search--focused {
-  width: 270px;
 }
 
 .sidebar--maximized ~ .container .header__search input,
@@ -2683,11 +2652,6 @@ p {
   min-width: 18px;
   height: 18px;
   flex-basis: 18px;
-}
-
-.sidebar--maximized ~ .container .header__search-dropdown,
-.app-main:has(.sidebar--maximized) .header__search-dropdown {
-  width: 300px;
 }
 
 .sidebar--maximized ~ .container .header__premium-indicator,
@@ -7937,6 +7901,27 @@ input[type="search"]::-ms-reveal {
   padding: var(--space-7) var(--space-6);
 }
 
+/* O placeholder usa a mesma caixa do corpo real para a capa e as linhas
+   fecharem na altura que o card terá quando os dados chegarem. */
+.catalogue-card__grid-body--skeleton {
+  gap: calc(var(--space-3) - 1px);
+}
+
+.catalogue-card__skeleton-title,
+.catalogue-card__skeleton-developer {
+  display: block;
+}
+
+.catalogue-card__skeleton-title {
+  width: 64%;
+  height: var(--type-line-body-emphasis);
+}
+
+.catalogue-card__skeleton-developer {
+  width: 42%;
+  height: var(--type-line-compact);
+}
+
 .catalogue-card__title-row {
   display: flex;
   min-width: 0;
@@ -9773,10 +9758,10 @@ input[type="search"]::-ms-reveal {
       border-radius: inherit;
       background: var(--text-primary);
       opacity: 0.9;
-      // O badge chega com 0 até o recheck de conquistas resolver: sem
-      // transição o preenchimento saltava quando o número atualizava.
+      // O dado de conquistas pode chegar depois do hover. A barra precisa
+      // refletir o valor final de imediato, sem parecer um indicador de loading.
       transform-origin: left center;
-      transition: transform var(--motion-base) var(--ease);
+      transition: none;
     }
   }
 
@@ -10732,7 +10717,16 @@ html.no-backdrop-blur {
 
 }
 
-/* Breakpoint próprio, mais largo que o resto da Home: em 1400px o container
+/* Em uma janela restaurada larga, a Home cresce junto com o espaço útil e
+   adota pelo React a mesma composição do estado maximizado. O primeiro degrau
+   acompanha o catálogo; mantém os cards confortáveis sem deixar faixas vazias. */
+@media (min-width: 1600px) {
+  .home-page {
+    --content-max-width: 1480px;
+  }
+}
+
+/* Breakpoint próprio para o segundo degrau: em 1400px o container
    (janela − 280 de sidebar − ~9 de gutter de scrollbar − 24 de padding − 72 de
    inset da seção) mal passa de 1015px. Picotar isso em 4 colunas em vez de 3 dá
    card de 246px contra os 331px que a mesma largura já dava em 3 — a coluna
@@ -10747,13 +10741,9 @@ html.no-backdrop-blur {
    junto — sem isso o teto de 1200px ainda prende o container e a 4ª/6ª coluna
    picotaria o mesmo espaço estreito de novo.
 
-   Calendário e wishlist ficam de fora por design, não por descuido: os dias do
-   calendário mudam de contagem via `ResizeObserver` na própria régua
-   (`useCalendarVisibleDays` em HomePage.tsx, correto por natureza — já é
-   breakpoint de conteúdo). A wishlist troca de 1 para 2 colunas por motivo de
-   leitura (citação da review capada em ~70 caracteres por linha, ver o
-   comentário no bloco de 1400px acima), não para não encolher card — a
-   redução de largura ali é o objetivo, não o bug. */
+   O React também ativa `.home-page--maximized` desde 1600px, fazendo Top Rated,
+   calendário e wishlist acompanharem o modo largo mesmo com a janela apenas
+   redimensionada. */
 @media (min-width: 1900px) {
   .home-page {
     --content-max-width: 1760px;
@@ -14648,16 +14638,8 @@ button {
       var(--space-6) 0;
   }
 
-  .header__search {
-    width: 190px;
-
-    &--collapsed {
-      width: 36px;
-    }
-
-    &--open {
-      width: 190px;
-    }
+  .header {
+    --header-search-rest-width: 190px;
   }
 
   .settings-page--tabs {

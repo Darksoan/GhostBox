@@ -9,11 +9,13 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { GhostBoxGame } from "../data";
 import type { ToastVariant } from "../components/ui/Toast";
 import { getToastVariant } from "../lib/toastUtils";
 import { loadGameModalModule } from "../utils/gameModalLoader";
 import { useSettings } from "./settings";
+import { ingestCatalogueGameOnOpen } from "../utils/catalogueIngestion";
 
 export type AchievementsViewState = {
   game: GhostBoxGame;
@@ -77,6 +79,7 @@ const OverlayContext = createContext<OverlayContextValue | undefined>(
 );
 
 export function OverlayProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const { notifications, appearance } = useSettings();
   const [selectedGame, setSelectedGame] = useState<GhostBoxGame | null>(null);
   const [achievementsView, setAchievementsView] =
@@ -173,7 +176,19 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     return 100;
   }, [appearance.reduceAllAnimations]);
 
+  const ingestOpenedGame = useCallback((game: GhostBoxGame) => {
+    void ingestCatalogueGameOnOpen(game, {
+      invalidate: async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["games"] }),
+          queryClient.invalidateQueries({ queryKey: ["home"] }),
+        ]);
+      },
+    }).catch(() => undefined);
+  }, [queryClient]);
+
   const openGame = useCallback(async (game: GhostBoxGame) => {
+    ingestOpenedGame(game);
     const requestId = openGameRequestRef.current + 1;
     openGameRequestRef.current = requestId;
 
@@ -185,7 +200,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     setIsGameModalExitPending(false);
     setAchievementsView(null);
     setSelectedGame(game);
-  }, [clearOverlayExitTimeout]);
+  }, [clearOverlayExitTimeout, ingestOpenedGame]);
 
   const closeGame = useCallback(() => {
     if (gameModalExitTimeoutRef.current !== undefined) return;
@@ -219,6 +234,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         highlightAchievementId?: string;
       },
     ) => {
+      ingestOpenedGame(game);
       clearOverlayExitTimeout();
       setIsGameModalExitPending(false);
       setSelectedGame(null);
@@ -228,7 +244,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         highlightAchievementId: options?.highlightAchievementId,
       });
     },
-    [clearOverlayExitTimeout],
+    [clearOverlayExitTimeout, ingestOpenedGame],
   );
 
   const closeAchievements = useCallback(() => {

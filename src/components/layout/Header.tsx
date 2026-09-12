@@ -6,7 +6,6 @@ import {
   CreditCard,
   Crown,
   Download,
-  Heart,
   Info,
   LoaderCircle,
   Maximize2,
@@ -17,23 +16,16 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect, useMemo, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useState, useCallback, useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
-import {
-  useCachedImageSources,
-  useLoadableImageCover,
-} from "../../hooks/useCachedImageSources";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import type { SubscriptionPortalFlow, UpdateCheckResult } from "../../lib/ghostboxApi.types";
-import {
-  gameSteamHeaderFirstSources,
-  preloadGameModalAssetsThrottled,
-} from "../../utils/image";
+import { preloadGameModalAssetsThrottled } from "../../utils/image";
 import { SearchSuggestionsLoadingState } from "../ui/LoadingStates";
 import { FeedbackModal } from "../modals/FeedbackModal";
 
@@ -49,24 +41,11 @@ const HighlightedSearchText = memo(function HighlightedSearchText({
 
 const SearchSuggestionItem = memo(function SearchSuggestionItem({
   game,
-  isAdded,
-  isFavorite,
   onSelect,
 }: {
   game: GhostBoxGame;
-  isAdded: boolean;
-  isFavorite: boolean;
   onSelect: () => void;
 }) {
-  const rawSources = useMemo(() => gameSteamHeaderFirstSources(game), [game]);
-  const sources = useCachedImageSources(rawSources);
-  const { source, loaded } = useLoadableImageCover(sources);
-
-  // A sugestão sempre aparece: descartar o resultado inteiro quando a capa
-  // falha fazia o dropdown mostrar 3 de 6 jogos, e os itens iam pipocando um a
-  // um conforme cada imagem decodificava.
-  const hasCover = loaded && Boolean(source);
-
   return (
     <li>
       <button
@@ -77,23 +56,9 @@ const SearchSuggestionItem = memo(function SearchSuggestionItem({
         onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
         onClick={onSelect}
       >
-        <span className="header__search-dropdown-thumbnail" aria-hidden="true">
-          {hasCover && (
-            <img src={source} alt="" decoding="async" draggable={false} />
-          )}
-        </span>
         <span className="header__search-dropdown-item-title">
           <HighlightedSearchText text={game.title} />
         </span>
-        <div className="header__search-dropdown-item__icons">
-          {isAdded && (
-            <Heart
-              size={14}
-              fill={isFavorite ? "var(--text-primary)" : "none"}
-              stroke={isFavorite ? "var(--text-primary)" : "currentColor"}
-            />
-          )}
-        </div>
       </button>
     </li>
   );
@@ -109,8 +74,6 @@ interface HeaderProps {
   hasNoSearchResults?: boolean;
   showAppIdPrompt?: boolean;
   allowSearchDropdown?: boolean;
-  favoriteGameIds?: Set<string>;
-  addedGameAppIds?: Set<string>;
   steamProfile?: SteamProfile | null;
   isPremium?: boolean;
   subscriptionPeriodEnd?: string | null;
@@ -159,8 +122,6 @@ export const Header = memo(function Header({
   hasNoSearchResults = false,
   showAppIdPrompt = false,
   allowSearchDropdown = false,
-  favoriteGameIds = new Set(),
-  addedGameAppIds = new Set(),
   steamProfile = null,
   isPremium = false,
   subscriptionPeriodEnd = null,
@@ -708,14 +669,10 @@ export const Header = memo(function Header({
                 <>
                   <ul className="header__search-dropdown-list">
                     {suggestions.map((game) => {
-                      const isFavorite = favoriteGameIds.has(game.id);
-                      const isAdded = addedGameAppIds.has(game.appId);
                       return (
                         <SearchSuggestionItem
                           key={game.id}
                           game={game}
-                          isAdded={isAdded}
-                          isFavorite={isFavorite}
                           onSelect={() => {
                             setFocused(false);
                             onSelectSuggestion(game);

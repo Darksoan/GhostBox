@@ -1731,6 +1731,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             catalogue::app_get_status,
             catalogue::database_get_games,
+            catalogue::database_search_steam_store,
             catalogue::database_get_game_details,
             catalogue::database_get_game_store_details,
             catalogue::database_get_game_achievement_details,

@@ -643,6 +643,18 @@ export const ghostboxApi = {
     );
   },
 
+  searchSteamStoreGames(
+    query: string,
+    limit = 20,
+    language?: "pt" | "en",
+  ): Promise<GhostBoxGame[]> {
+    return invoke<GhostBoxGame[]>("database_search_steam_store", {
+      query,
+      limit,
+      language,
+    });
+  },
+
   /**
    * Igual a `getGames`, mas propaga a falha em vez de devolver um resultado
    * vazio. O catálogo precisa distinguir "backend fora" de "nenhum resultado";

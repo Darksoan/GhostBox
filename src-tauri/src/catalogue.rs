@@ -1800,6 +1800,87 @@ pub async fn database_get_games(
     }
 }
 
+fn validate_steam_store_search(query: &str, limit: u64) -> Result<(String, usize), String> {
+    let query = query.trim();
+    let is_app_id = !query.is_empty()
+        && query.len() <= 10
+        && query.chars().all(|character| character.is_ascii_digit());
+    if !is_app_id && query.chars().count() < 3 {
+        return Err("Steam Store search requires at least 3 characters".to_string());
+    }
+    Ok((query.to_string(), limit.clamp(1, 20) as usize))
+}
+
+fn steam_store_search_games(payload: &Value, limit: usize) -> Vec<Value> {
+    payload
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("app"))
+        .filter_map(|item| {
+            let app_id = item.get("id")?.as_u64()?.to_string();
+            let title = text(item.get("name"));
+            if title.is_empty() {
+                return None;
+            }
+
+            let mut game = steam_app_fallback_game(&app_id);
+            let object = game.as_object_mut()?;
+            let portrait = format!(
+                "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900.jpg"
+            );
+            let header = format!(
+                "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg"
+            );
+            let tiny_image = text(item.get("tiny_image"));
+            let mut fallbacks = vec![Value::String(header)];
+            if !tiny_image.is_empty() {
+                fallbacks.push(Value::String(tiny_image));
+            }
+            object.insert("title".to_string(), Value::String(title));
+            object.insert("cover".to_string(), Value::String(portrait.clone()));
+            object.insert("coverUrl".to_string(), Value::String(portrait));
+            object.insert("coverFallbacks".to_string(), Value::Array(fallbacks));
+            Some(game)
+        })
+        .take(limit)
+        .collect()
+}
+
+#[tauri::command]
+pub async fn database_search_steam_store(
+    query: String,
+    limit: Option<u64>,
+    language: Option<String>,
+) -> Result<Vec<Value>, String> {
+    let (query, limit) = validate_steam_store_search(&query, limit.unwrap_or(20))?;
+    let language = steam_ui_language(language.as_deref());
+    let country = if language == "english" { "US" } else { "BR" };
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(6))
+        .user_agent(STEAM_STORE_USER_AGENT)
+        .build()
+        .map_err(|error| error.to_string())?;
+    let payload = client
+        .get("https://store.steampowered.com/api/storesearch/")
+        .query(&[
+            ("term", query.as_str()),
+            ("l", language),
+            ("cc", country),
+        ])
+        .send()
+        .await
+        .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
+        .json::<Value>()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(steam_store_search_games(&payload, limit))
+}
+
 #[tauri::command]
 pub async fn database_get_game_details(
     app: tauri::AppHandle,
@@ -2338,7 +2419,8 @@ pub async fn cache_resolve_steam_library_assets_batch(
 mod tests {
     use super::{
         is_cached_icon_source, merge_cached_steam_store_details, read_client_icon_from_vdf,
-        steam_details_have_about, steam_reviews_response_is_usable,
+        steam_details_have_about, steam_reviews_response_is_usable, steam_store_search_games,
+        validate_steam_store_search,
     };
 
     #[test]
@@ -2423,5 +2505,28 @@ mod tests {
             "3602290",
             &format!("https://example.com/{hash}.jpg")
         ));
+    }
+
+    #[test]
+    fn steam_store_search_validates_query_and_limit() {
+        assert!(validate_steam_store_search("ab", 20).is_err());
+        assert_eq!(validate_steam_store_search("10", 100).unwrap(), ("10".into(), 20));
+        assert_eq!(validate_steam_store_search(" FragPunk ", 0).unwrap(), ("FragPunk".into(), 1));
+    }
+
+    #[test]
+    fn steam_store_search_maps_only_apps_to_catalogue_games() {
+        let games = steam_store_search_games(
+            &serde_json::json!({
+                "items": [
+                    { "type": "app", "id": 2943650, "name": "FragPunk" },
+                    { "type": "bundle", "id": 1, "name": "Bundle" }
+                ]
+            }),
+            20,
+        );
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0]["appId"], "2943650");
+        assert_eq!(games[0]["title"], "FragPunk");
     }
 }

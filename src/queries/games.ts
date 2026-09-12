@@ -3,9 +3,12 @@ import type { GameDatabaseRequest } from "../data";
 import {
   loadGameStoreDetails,
   loadGamesOrThrow,
+  searchSteamStoreGames,
 } from "../data";
 import { emptyCatalogueFilters } from "../constants/catalogue";
 import type { CatalogueFilterKey, CatalogueFilters } from "../types";
+import type { AppearanceSettings } from "../context/settings";
+import { normalizeGameSearchText } from "../utils/gameSearch";
 
 const catalogueFacetsCacheVersion = "catalogue-response-v3";
 
@@ -30,7 +33,7 @@ export function normalizeGameRequest(
   request: GameDatabaseRequest = {}
 ): GameDatabaseRequest {
   return {
-    query: request.query?.trim().toLowerCase() ?? "",
+    query: normalizeGameSearchText(request.query ?? ""),
     limit: request.limit ?? 0,
     offset: request.offset ?? 0,
     sort: request.sort ?? "popular",
@@ -106,5 +109,22 @@ export function useGameStoreDetailsQuery(
     queryKey: gamesQueryKeys.storeDetails(gameId),
     queryFn: () => loadGameStoreDetails(gameId),
     enabled: Boolean(gameId) && (options.enabled ?? true),
+  });
+}
+
+export function useSteamStoreSearchQuery(
+  query: string,
+  limit: number,
+  language: AppearanceSettings["language"],
+  options: GamesQueryOptions = {},
+) {
+  const normalizedQuery = normalizeGameSearchText(query);
+  return useQuery({
+    queryKey: ["games", "steam-store-search", normalizedQuery, limit, language],
+    queryFn: () => searchSteamStoreGames(query.trim(), limit, language),
+    enabled: Boolean(normalizedQuery) && (options.enabled ?? true),
+    staleTime: 10 * 60 * 1_000,
+    gcTime: 10 * 60 * 1_000,
+    retry: false,
   });
 }

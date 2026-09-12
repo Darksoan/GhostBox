@@ -183,10 +183,24 @@ describe("Skeleton primitive", () => {
     );
 
     expect(listState).toContain("catalogue-list--skeleton");
+    expect(listState).toContain('catalogue-card__button--${viewMode}');
     expect(listState).toContain("catalogue-card__cover--skeleton skeleton");
     expect(listState).not.toContain("catalogue-card__list-content");
     expect(listState).not.toContain("catalogue-card__genres");
     expect(listState).not.toContain("catalogue-card__actions");
+  });
+
+  it("keeps the loading cards in the selected catalogue layout", () => {
+    const source = readFileSync("src/components/ui/LoadingStates.tsx", "utf8");
+    const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
+    const css = compile("src/app.scss").css;
+
+    expect(source).toContain('viewMode = "list"');
+    expect(source).toContain('isGrid ? " catalogue-list--cards" : ""');
+    expect(source).toContain("catalogue-card__grid-body--skeleton");
+    expect(page).toContain("<CatalogueListLoadingState viewMode={viewMode} />");
+    expect(css).toContain(".catalogue-card__grid-body--skeleton");
+    expect(css).toContain(".catalogue-card__skeleton-title");
   });
 
   it("has no pulse/animate prop chain left in the catalogue loading path", () => {

@@ -126,6 +126,7 @@ const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 15;
 const homePersonalCalendarEnrichmentLimit = 6;
 const homeCalendarCoverLoadMargin = "360px 720px";
 const homePersonalCalendarNarrowDays = 3;
+const homeWideLayoutMediaQuery = "(min-width: 1600px)";
 const homeWishlistCycleSourceCount = 6;
 const homeWishlistSimilarPoolLimit = 64;
 const homeWishlistCycleGameCount = 4;
@@ -1033,6 +1034,24 @@ function useCalendarVisibleDays(isMaximized: boolean) {
     : homePersonalCalendarNarrowDays;
 }
 
+function useWideHomeLayout(isMaximized: boolean) {
+  const [hasWideViewport, setHasWideViewport] = useState(() =>
+    typeof window !== "undefined" &&
+    window.matchMedia(homeWideLayoutMediaQuery).matches
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(homeWideLayoutMediaQuery);
+    const update = () => setHasWideViewport(mediaQuery.matches);
+
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
+
+  return isMaximized || hasWideViewport;
+}
+
 function HomePersonalCalendar({
   title,
   games,
@@ -1658,6 +1677,7 @@ export function HomePage({
 }) {
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
+  const isWideLayout = useWideHomeLayout(isMaximized);
   // Always anchored to "today": a stored start from a previous day would label
   // the columns with dates that already passed.
   const [personalCalendarCycleStart, setPersonalCalendarCycleStart] = useState(() =>
@@ -2039,7 +2059,7 @@ export function HomePage({
     onOpenGame,
   });
   return (
-    <section className={`home-page${isMaximized ? " home-page--maximized" : ""}`} aria-label={t("home.pageAria")}>
+    <section className={`home-page${isWideLayout ? " home-page--maximized" : ""}`} aria-label={t("home.pageAria")}>
       <HomeRecommendedHero
         title={t("home.recommended")}
         shelf={shelves.recommended}
@@ -2084,7 +2104,7 @@ export function HomePage({
         cycleStart={personalCalendarCycleStart}
         language={appearance.language}
         loading={isLoadingPersonalCalendar}
-        isMaximized={isMaximized}
+        isMaximized={isWideLayout}
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />

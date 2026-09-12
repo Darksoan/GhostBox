@@ -35,8 +35,19 @@ describe("badge de conquistas/horas das capas", () => {
   it("usa o resumo da conta como piso mesmo quando o schema já tem lista", () => {
     expect(componentSource).toContain("getUnlockedAchievementCount(game)");
     expect(componentSource).toContain("getAchievementTotal(game)");
+    expect(componentSource).toContain("hasAvailableAchievements(game)");
     expect(componentSource).not.toContain(
       "achievementListTotal > 0",
+    );
+  });
+
+  it("não mostra o badge quando o jogo não tem conquistas disponíveis", () => {
+    expect(componentSource).toContain("const hasAchievementBadge =");
+    expect(componentSource).toContain(
+      "showAchievements && hasAvailableAchievements(game)",
+    );
+    expect(componentSource).toContain(
+      "hasAchievementBadge && !showLockedBadge",
     );
   });
 
@@ -54,11 +65,11 @@ describe("badge de conquistas/horas das capas", () => {
     expect(summary).toContain("gap: var(--space-1);");
   });
 
-  it("anima o enchimento da barra quando a contagem atualiza no hover", () => {
+  it("mostra o preenchimento final sem animação de loading", () => {
     const progress = blockOf("&__achievement-progress {");
     expect(progress).toContain("transform-origin: left center;");
     expect(progress).toContain(
-      "transition: transform var(--motion-base) var(--ease);",
+      "transition: none;",
     );
     expect(componentSource).toContain(
       "transform: `scaleX(${achievementProgress / 100})`",

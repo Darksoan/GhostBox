@@ -4,6 +4,7 @@ import {
   getAchievementTotal,
   getRicherAchievementGame,
   getUnlockedAchievementCount,
+  hasAvailableAchievements,
   isAchievementUnlocked,
 } from "../src/utils/achievementStats";
 
@@ -109,6 +110,18 @@ describe("getAchievementTotal", () => {
 
     // Only the summary knows these unlocks, so they set the floor for the total.
     expect(getAchievementTotal(makeGame({ unlocked: 9 }))).toBe(9);
+  });
+});
+
+describe("hasAvailableAchievements", () => {
+  it("only reports achievements when a count can be displayed", () => {
+    expect(hasAvailableAchievements(makeGame())).toBe(false);
+    expect(hasAvailableAchievements(makeGame({ total: 1 }))).toBe(true);
+    expect(
+      hasAvailableAchievements(
+        makeGame({ achievementList: [makeAchievement({ name: "first" })] }),
+      ),
+    ).toBe(true);
   });
 });
 

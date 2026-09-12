@@ -20,6 +20,7 @@ import {
   mergeSteamOwnedLibraryGames,
 } from "../../utils/libraryVisibility";
 import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
+import type { GhostBoxGame } from "../../data";
 
 const LazyHomePage = lazy(() =>
   import("../../pages/HomePage").then((m) => {
@@ -109,6 +110,7 @@ const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
 interface PageRouterProps {
   page: Page;
   debouncedQuery: string;
+  knownGames: GhostBoxGame[];
   activeSettingsTabId: string;
   settingsLibraryView: "overview" | "hidden-games";
   onSettingsLibraryViewChange: (view: "overview" | "hidden-games") => void;
@@ -129,6 +131,7 @@ interface PageRouterProps {
 export function PageRouter({
   page,
   debouncedQuery,
+  knownGames,
   activeSettingsTabId,
   settingsLibraryView,
   onSettingsLibraryViewChange,
@@ -161,7 +164,11 @@ export function PageRouter({
   } = useOverlay();
   const { hasOverlay } = useContentOverlayState();
 
-  const catalogue = useCatalogueState(debouncedQuery, page === "catalogue");
+  const catalogue = useCatalogueState(
+    debouncedQuery,
+    page === "catalogue",
+    knownGames,
+  );
   const visibleLibraryGames = useMemo(() => {
     const ownedGames = buildSteamOwnedGamesFromPlaytimes(
       appData.steamAccountStats?.ownedPlaytimes ?? [],

@@ -15,6 +15,7 @@ import {
 import {
   getAchievementTotal,
   getUnlockedAchievementCount,
+  hasAvailableAchievements,
 } from "../../utils/achievementStats";
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
@@ -103,7 +104,12 @@ export const GameCard = memo(function GameCard({
     achievementTotal > 0
       ? Math.round((achievementUnlocked / achievementTotal) * 100)
       : 0;
-  const showLockedBadge = showAchievements && !areMetricsUnlocked;
+  // O card ainda pode estar aguardando o enriquecimento no primeiro paint.
+  // Enquanto não houver total, não exibe o badge vazio "0 / 0"; ao chegar um
+  // schema válido, ele aparece normalmente no próximo render.
+  const hasAchievementBadge =
+    showAchievements && hasAvailableAchievements(game);
+  const showLockedBadge = hasAchievementBadge && !areMetricsUnlocked;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     if (onContextMenu) {
@@ -140,7 +146,7 @@ export const GameCard = memo(function GameCard({
           portrait ? "auto 106%" : "100% 100%",
         )}
       >
-        {!showLockedBadge && showAchievements && (
+        {hasAchievementBadge && !showLockedBadge && (
           <div
             className="game-card__achievement-badges"
             aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${achievementProgress}%`}

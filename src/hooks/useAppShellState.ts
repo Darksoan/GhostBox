@@ -3,42 +3,20 @@ import type { GhostBoxGame } from "../data";
 import type { Page } from "../types";
 import type { SettingsTabId } from "../features/settings/settingsTabsShared";
 import { useDebouncedValue } from "./useDebouncedValue";
-import { useGameStoreDetailsQuery, useGamesQuery } from "../queries/games";
+import { useGamesQuery, useSteamStoreSearchQuery } from "../queries/games";
 import { searchDebounceMs } from "../constants/catalogue";
+import { useSettings } from "../context/settings";
+import {
+  mergeGameSearchResults,
+  normalizeGameSearchText,
+  searchKnownGames,
+  shouldUseSteamSearchFallback,
+} from "../utils/gameSearch";
 
 const steamAppIdPattern = /^\d{2,10}$/;
 
 export function normalizeHeaderSearchText(value: string) {
-  return value
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-function gameMatchesHeaderQuery(game: GhostBoxGame, normalizedQuery: string) {
-  if (!normalizedQuery) return false;
-  const title = normalizeHeaderSearchText(game.title ?? "");
-  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
-  if (tokens.length > 1) {
-    const compactTitle = title.replace(/\s+/g, "");
-    const allInTitle = tokens.every(
-      (token) => title.includes(token) || compactTitle.includes(token.replace(/\s+/g, "")),
-    );
-    if (allInTitle) return true;
-  } else if (title.includes(normalizedQuery)) {
-    return true;
-  }
-  const digits = normalizedQuery.replace(/\D/g, "");
-  if (digits) {
-    const appId = game.appId?.trim() ?? "";
-    if (appId && appId.includes(digits)) return true;
-    const id = game.id?.trim().toLowerCase() ?? "";
-    if (id && id.includes(digits)) return true;
-  }
-  const id = game.id?.trim().toLowerCase() ?? "";
-  if (id && id.includes(normalizedQuery)) return true;
-  return false;
+  return normalizeGameSearchText(value);
 }
 
 export function mergeHeaderSearchSuggestions(
@@ -47,31 +25,17 @@ export function mergeHeaderSearchSuggestions(
   query: string,
   limit = 6,
 ) {
-  const normalizedQuery = normalizeHeaderSearchText(query);
-  if (!normalizedQuery) return [];
-  const seen = new Set<string>();
-  const merged: GhostBoxGame[] = [];
-  const push = (game: GhostBoxGame) => {
-    const key = game.appId?.trim() || game.id?.trim() || game.title?.trim();
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    if (merged.length < limit) merged.push(game);
-  };
-  for (const game of localGames) {
-    if (gameMatchesHeaderQuery(game, normalizedQuery)) push(game);
-    if (merged.length >= limit) break;
-  }
-  for (const game of remoteGames) {
-    push(game);
-    if (merged.length >= limit) break;
-  }
-  return merged;
+  return mergeGameSearchResults(
+    [searchKnownGames(localGames, query, limit), remoteGames],
+    limit,
+  );
 }
 
 export function useAppShellState(
   page: Page,
   options: { localGames?: GhostBoxGame[] } = {},
 ) {
+  const { appearance } = useSettings();
   const [query, setQuery] = useState("");
   const [activeSettingsTabId, setActiveSettingsTabId] =
     useState<SettingsTabId>("general");
@@ -105,56 +69,78 @@ export function useAppShellState(
     Boolean(query.trim()) &&
     query.trim() !== debouncedQuery.trim();
 
-  const isSearchLoading =
-    isCatalogueSearchPending ||
-    (headerSearchQuery.isFetching && Boolean(debouncedQuery.trim()));
-
-  const baseHeaderSearchSuggestions = useMemo(
-    () =>
-      trimmedDebouncedQuery && !isSearchLoading
-        ? (headerSearchQuery.data?.games ?? []).slice(0, 6)
-        : [],
-    [headerSearchQuery.data?.games, isSearchLoading, trimmedDebouncedQuery]
-  );
+  const isCurrentDebouncedQuery = trimmedQuery === trimmedDebouncedQuery;
+  const baseHeaderSearchSuggestions = useMemo(() => {
+    if (
+      !trimmedDebouncedQuery ||
+      !isCurrentDebouncedQuery ||
+      headerSearchQuery.isError ||
+      headerSearchQuery.isPlaceholderData
+    ) {
+      return [];
+    }
+    return (headerSearchQuery.data?.games ?? []).slice(0, 6);
+  }, [
+    headerSearchQuery.data?.games,
+    headerSearchQuery.isError,
+    headerSearchQuery.isPlaceholderData,
+    isCurrentDebouncedQuery,
+    trimmedDebouncedQuery,
+  ]);
 
   // Busca local é síncrona e imediata: mostra a biblioteca mesmo quando o
   // catálogo remoto falha ou ainda não indexou o jogo (ex: FragPunk aberto
   // no modal mas ausente do /catalogue/search).
   const localHeaderSearchSuggestions = useMemo(() => {
     if (page === "catalogue" || !trimmedQuery) return [];
-    const normalized = normalizeHeaderSearchText(trimmedQuery);
-    if (!normalized) return [];
-    const localGames = options.localGames ?? [];
-    const matched: GhostBoxGame[] = [];
-    const seen = new Set<string>();
-    for (const game of localGames) {
-      if (!gameMatchesHeaderQuery(game, normalized)) continue;
-      const key = game.appId?.trim() || game.id?.trim() || game.title?.trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      matched.push(game);
-      if (matched.length >= 6) break;
-    }
-    return matched;
+    return searchKnownGames(options.localGames ?? [], trimmedQuery, 6);
   }, [options.localGames, page, trimmedQuery]);
+
+  const shouldSearchSteam =
+    page !== "catalogue" &&
+    isCurrentDebouncedQuery &&
+    shouldUseSteamSearchFallback({
+      query: trimmedDebouncedQuery,
+      localResultCount: localHeaderSearchSuggestions.length,
+      remoteResultCount: baseHeaderSearchSuggestions.length,
+      remoteSettled:
+        headerSearchQuery.isFetched && !headerSearchQuery.isFetching,
+      remoteFailed: headerSearchQuery.isError,
+    });
+  const steamSearchQuery = useSteamStoreSearchQuery(
+    trimmedDebouncedQuery,
+    6,
+    appearance.language,
+    { enabled: shouldSearchSteam },
+  );
 
   const mergedBaseSuggestions = useMemo(() => {
     // Local já vem filtrado pela query imediata (sem debounce) para resposta
     // instantânea; remoto vem do debounce. Dedupe por appId/id, local primeiro.
-    const seen = new Set<string>();
-    const merged: GhostBoxGame[] = [];
-    for (const game of [
-      ...localHeaderSearchSuggestions,
-      ...baseHeaderSearchSuggestions,
-    ]) {
-      const key = game.appId?.trim() || game.id?.trim() || game.title?.trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(game);
-      if (merged.length >= 6) break;
-    }
-    return merged;
-  }, [baseHeaderSearchSuggestions, localHeaderSearchSuggestions]);
+    return mergeGameSearchResults(
+      [
+        localHeaderSearchSuggestions,
+        baseHeaderSearchSuggestions,
+        shouldSearchSteam ? (steamSearchQuery.data ?? []) : [],
+      ],
+      6,
+    );
+  }, [
+    baseHeaderSearchSuggestions,
+    localHeaderSearchSuggestions,
+    shouldSearchSteam,
+    steamSearchQuery.data,
+  ]);
+
+  const isSearchLoading =
+    isCatalogueSearchPending ||
+    (page !== "catalogue" &&
+      localHeaderSearchSuggestions.length === 0 &&
+      (headerSearchQuery.isFetching ||
+        (shouldSearchSteam && steamSearchQuery.isFetching)));
+
+  const steamSearchSettled =
+    !shouldSearchSteam || steamSearchQuery.isFetched || steamSearchQuery.isError;
 
   const hasNoHeaderSearchResults =
     page !== "catalogue" &&
@@ -162,6 +148,7 @@ export function useAppShellState(
     trimmedQuery === trimmedDebouncedQuery &&
     !isSearchLoading &&
     headerSearchQuery.isFetched &&
+    steamSearchSettled &&
     mergedBaseSuggestions.length === 0;
   const shouldShowHeaderAppIdPrompt =
     page !== "catalogue" &&
@@ -169,23 +156,13 @@ export function useAppShellState(
     trimmedQuery === trimmedDebouncedQuery &&
     !isSearchLoading &&
     headerSearchQuery.isFetched &&
+    steamSearchSettled &&
     mergedBaseSuggestions.length < 6;
   const appIdCandidate =
     shouldShowHeaderAppIdPrompt && steamAppIdPattern.test(trimmedQuery)
       ? trimmedQuery
       : null;
-  const appIdLookupQuery = useGameStoreDetailsQuery(appIdCandidate ?? "", {
-    enabled: Boolean(appIdCandidate),
-  });
-
-  const headerSearchSuggestions = useMemo(() => {
-    const suggestions = [...mergedBaseSuggestions];
-    const appIdGame = appIdLookupQuery.data;
-    if (appIdGame && !suggestions.some((game) => game.appId === appIdGame.appId)) {
-      suggestions.push(appIdGame);
-    }
-    return suggestions.slice(0, 6);
-  }, [appIdLookupQuery.data, mergedBaseSuggestions]);
+  const headerSearchSuggestions = mergedBaseSuggestions;
 
   const handleQueryChange = useCallback((nextQuery: string) => {
     setQuery(nextQuery);
