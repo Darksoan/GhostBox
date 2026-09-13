@@ -27,6 +27,7 @@ import type {
 } from "../types";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { pushAppNotification } from "../lib/appNotifications";
+import { isBlockedSteamDemo } from "../utils/steamAppType";
 import type {
   CloudSave,
   GamePlaytimeSnapshot,
@@ -1796,6 +1797,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const queueGame = useCallback(
     async (game: GhostBoxGame) => {
+      // Demos nunca entram em downloads/fila: fonte de verdade é o tipo, sem
+      // regex de título e sem apagar nada persistido.
+      if (isBlockedSteamDemo(game)) return;
       if (
         addingGameId ||
         removingGameId ||
@@ -2143,6 +2147,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const handlePlayGame = useCallback(
     async (game: GhostBoxGame) => {
+      if (isBlockedSteamDemo(game)) return;
       setLaunchingGameId(game.id);
       try {
         // Saves must be back in place before Steam opens the game.

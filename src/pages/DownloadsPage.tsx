@@ -189,6 +189,8 @@ function DownloadsHero({
     launchInFlight.current = true;
     setLaunching(true);
     try {
+      const appType = (await ghostboxApi.getSteamAppTypes([task.appId]))[task.appId];
+      if (!appType || appType.toLowerCase() === "demo") return;
       await ghostboxApi.launchDownloadedGame(
         task.appId, displayTitle, task.downloadsRoot, task.outputDir, task.installDir,
       );

@@ -15,7 +15,29 @@ const SOURCE = "cloudflare-d1";
 export const GAME_COLUMNS = `games.app_id, games.name, games.release_date, games.release_year, games.header_image,
   games.developers_json, games.publishers_json, games.categories_json, games.genres_json, games.screenshots_json, games.tags_json,
   games.updated_at, games.popularity_score, games.popularity_rank, games.steam_review_count, games.steam_positive_ratio,
-  games.metacritic_score, games.recommendations, games.ranking_score, games.ranking_tier, games.steamspy_ccu, games.steamspy_owners_max`;
+  games.metacritic_score, games.recommendations, games.ranking_score, games.ranking_tier, games.steamspy_ccu, games.steamspy_owners_max,
+  games.app_type`;
+
+export function normalizeCatalogueAppType(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "";
+  if (!/^[a-z0-9_-]{1,32}$/.test(normalized)) return "";
+  return normalized;
+}
+
+export function isCatalogueDemo(appType: unknown): boolean {
+  return normalizeCatalogueAppType(appType) === "demo";
+}
+
+/**
+ * Exclusão definitiva: o backfill deve classificar as linhas legadas antes de
+ * publicar esta versão do worker. NULL fica oculto para nunca transformar
+ * "não classificado" em "jogo" e abrir uma brecha para demos.
+ */
+export function demoExclusionClause(tableAlias = "games"): string {
+  return `(${tableAlias}.app_type IS NOT NULL AND lower(${tableAlias}.app_type) <> 'demo')`;
+}
 
 export const POPULAR_ORDER = RANKING_ORDER;
 
@@ -46,6 +68,7 @@ interface GameRow {
   ranking_tier: number;
   steamspy_ccu: number;
   steamspy_owners_max: number;
+  app_type: string | null;
 }
 
 let metaCache: { expiresAt: number; promise: Promise<CatalogueMeta> } | undefined;
@@ -99,9 +122,11 @@ export function toGame(row: GameRow, origin: string, snapshot?: SteamSpySnapshot
   const steamSpySample = snapshot == null
     ? { ccu: row.steamspy_ccu, ownersMax: row.steamspy_owners_max }
     : steamSpySnapshotSample(snapshot, appId) ?? { ccu: 0, ownersMax: 0 };
+  const appType = normalizeCatalogueAppType(row.app_type);
   return {
     appId,
     id: `steam-${appId}`,
+    appType: appType || undefined,
     title: row.name,
     subtitle,
     status: "discover",
@@ -298,16 +323,38 @@ async function fetchSteamStoreItem(appId: string): Promise<SteamStoreItem | null
 export async function ingestSteamApp(db: D1Database, appId: string, origin: string, onChanged?: () => Promise<unknown>) {
   if (!/^\d{1,10}$/.test(appId)) return { ok: false, error: "invalid_appid" };
 
-  const existing = await db.prepare("SELECT updated_at FROM games WHERE app_id = ? LIMIT 1")
+  const existing = await db.prepare("SELECT updated_at, app_type FROM games WHERE app_id = ? LIMIT 1")
     .bind(appId)
-    .first<{ updated_at: number }>();
+    .first<{ updated_at: number; app_type: string | null }>();
   if (existing) {
+    if (isCatalogueDemo(existing.app_type)) return { ok: false, error: "steam_app_is_demo" };
+    if (!normalizeCatalogueAppType(existing.app_type)) {
+      // Rows created before app_type existed are classified lazily when an
+      // explicit ingest is requested. A missing type is not safe to expose.
+      const data = await fetchSteamStoreItem(appId);
+      const appType = normalizeCatalogueAppType(data?.type);
+      if (!data || !appType) return { ok: false, error: "steam_app_type_unavailable" };
+      await db.prepare("UPDATE games SET app_type = ? WHERE app_id = ?")
+        .bind(appType, appId)
+        .run();
+      invalidateCatalogueMetaCache();
+      poolCache.clear();
+      if (appType === "demo") {
+        await onChanged?.();
+        return { ok: false, error: "steam_app_is_demo" };
+      }
+      await onChanged?.();
+    }
     const game = await getGame(db, appId, origin);
+    if (!game) return { ok: false, error: "steam_app_is_demo" };
     return { ok: true, appId, updatedAt: new Date(existing.updated_at).toISOString(), game };
   }
 
   const data = await fetchSteamStoreItem(appId);
   if (!data) return { ok: false, error: "steam_app_not_found" };
+  const appType = normalizeCatalogueAppType(data.type);
+  if (!appType) return { ok: false, error: "steam_app_type_unavailable" };
+  if (appType === "demo") return { ok: false, error: "steam_app_is_demo" };
 
   const now = Date.now();
   const name = data.name!.trim();
@@ -339,8 +386,8 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
       app_id, name, release_date, release_year, release_sort, header_image,
       developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
       genres_text, tags_text, updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
-      metacritic_score, recommendations, search_text
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?)`)
+      metacritic_score, recommendations, search_text, app_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?, ?)`)
     .bind(
       appId,
       name,
@@ -360,6 +407,7 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
       metacriticScore,
       recommendations,
       document.text,
+      appType || null,
     );
   const updatedAt = new Date(now).toISOString();
   await db.batch([
@@ -396,12 +444,12 @@ export async function getCatalogueFacets(db: D1Database, _updatedAt: string): Pr
 }
 
 export function searchConditions(request: SearchRequest, useSteamSpySnapshot = false): { sql: string; bindings: unknown[] } {
-  const clauses: string[] = [];
+  const clauses: string[] = [demoExclusionClause("games")];
   const bindings: unknown[] = [];
   // "Jogando agora" is meaningless for the ~107k games with no SteamSpy sample
   // (steamspy_ccu = 0) — without this they'd fill the entire page with zeros.
   if (request.sort === "playingNow") {
-    clauses.push(`${useSteamSpySnapshot ? "steamspy.sample_ccu" : "steamspy_ccu"} > 0`);
+    clauses.push(`${useSteamSpySnapshot ? "steamspy.sample_ccu" : "games.steamspy_ccu"} > 0`);
   }
   const tokens = request.q.split(/\s+/).filter(Boolean);
   for (const token of tokens) {
@@ -458,7 +506,7 @@ export function searchIndexMatch(request: SearchRequest): string | null {
 }
 
 export function indexedSearchConditions(request: SearchRequest, useSteamSpySnapshot = false): { sql: string; bindings: unknown[] } {
-  const clauses: string[] = [];
+  const clauses: string[] = [demoExclusionClause("games")];
   const bindings: unknown[] = [];
   if (request.sort === "playingNow") {
     clauses.push(`${useSteamSpySnapshot ? "steamspy.sample_ccu" : "games.steamspy_ccu"} > 0`);
@@ -468,7 +516,7 @@ export function indexedSearchConditions(request: SearchRequest, useSteamSpySnaps
     clauses.push("games_search MATCH ?");
     bindings.push(match);
   }
-  return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", bindings };
+  return { sql: `WHERE ${clauses.join(" AND ")}`, bindings };
 }
 
 type WhereClause = ReturnType<typeof searchConditions>;
@@ -510,7 +558,9 @@ function rotationPool(db: D1Database, seed: number, where: WhereClause, indexed:
 export function rotatedRowsSql(appIds: readonly string[]): string | null {
   const safe = appIds.filter((appId) => /^\d{1,10}$/.test(appId));
   if (!safe.length) return null;
-  return `SELECT ${GAME_COLUMNS} FROM games WHERE app_id IN (${safe.map((appId) => `'${appId}'`).join(", ")})`;
+  // Exclusão de demos também no fetch por IDs (pool rotacionado e branch
+  // SteamSpy): IDs amostrados passam por aqui antes de virar `toGame`.
+  return `SELECT ${GAME_COLUMNS} FROM games WHERE app_id IN (${safe.map((appId) => `'${appId}'`).join(", ")}) AND ${demoExclusionClause("games")}`;
 }
 
 async function rotatedPageRows(db: D1Database, request: SearchRequest, where: WhereClause, indexed: boolean, revision: string): Promise<GameRow[]> {
@@ -544,7 +594,7 @@ export async function searchCatalogue(
   if (useSnapshot && !hasSearchCriteria(request)) {
     const ids = await cachedValue(cacheKey("count", `playing-ids:${snapshot!.sampledAt}`, catalogueUpdatedAt), 3600, async () => {
       const positiveIds = Object.entries(snapshot!.samples).filter(([, sample]) => sample[0] > 0).map(([id]) => id);
-      const rows = await db.prepare("SELECT games.app_id FROM json_each(?) AS sample CROSS JOIN games ON games.app_id = sample.value")
+      const rows = await db.prepare(`SELECT games.app_id FROM json_each(?) AS sample CROSS JOIN games ON games.app_id = sample.value WHERE ${demoExclusionClause("games")}`)
         .bind(JSON.stringify(positiveIds)).all<{ app_id: string }>();
       return rows.results.map((row) => row.app_id).sort((a, b) => snapshot!.samples[b][0] - snapshot!.samples[a][0] || Number(a) - Number(b));
     });
@@ -577,7 +627,11 @@ export async function searchCatalogue(
       ? `FROM ${gamesSource} CROSS JOIN steamspy_data`
       : `FROM ${gamesSource} JOIN steamspy ON steamspy.snapshot_app_id = games.app_id`
     : `FROM ${gamesSource}`;
-  const countFrom = indexed && !useSnapshot && request.sort !== "playingNow" ? "FROM games_search" : fromClause;
+  // Quando indexado, o COUNT precisa do JOIN com `games` para aplicar a
+  // exclusão de demos (`games.app_type` não existe em `games_search`).
+  const countFrom = indexed && !useSnapshot && request.sort !== "playingNow"
+    ? "FROM games_search CROSS JOIN games ON games.app_id = games_search.app_id"
+    : fromClause;
   const countQuery = () => (where.sql
     ? cachedValue(
       countCacheKey(request, `${catalogueUpdatedAt}:${useSnapshot ? snapshot!.sampledAt : "d1"}`, origin),
@@ -643,7 +697,9 @@ export async function searchCatalogue(
 
 export async function getGame(db: D1Database, appId: string, origin: string, snapshot?: SteamSpySnapshot | null): Promise<ReturnType<typeof toGame> | null> {
   const row = await db.prepare(`SELECT ${GAME_COLUMNS} FROM games WHERE app_id = ? LIMIT 1`).bind(appId).first<GameRow>();
-  return row ? toGame(row, origin, snapshot) : null;
+  if (!row) return null;
+  if (isCatalogueDemo(row.app_type)) return null;
+  return toGame(row, origin, snapshot);
 }
 
 export async function getHome(

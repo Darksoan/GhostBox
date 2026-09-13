@@ -2,6 +2,7 @@ import type { GhostBoxGame } from "../data";
 import type { StoredPersonalCalendar } from "./storage";
 import { isSteamTitlePlaceholder } from "./steamTitles";
 import { gameTraitAppId, getGameTraitSet } from "./gameTraits";
+import { filterOutSteamDemos } from "./steamAppType";
 
 const personalCalendarAlgorithmVersion = "daily-v4";
 const personalCalendarHistoryMonths = 3;
@@ -82,7 +83,7 @@ export function getPersonalCalendarDates(
 export function getUniquePersonalCalendarPool(games: GhostBoxGame[]) {
   const seen = new Set<string>();
 
-  return games.filter((game) => {
+  return filterOutSteamDemos(games).filter((game) => {
     const key = personalCalendarGameKey(game);
     if (!key || seen.has(key) || isSteamTitlePlaceholder(game.title, game.appId)) {
       return false;

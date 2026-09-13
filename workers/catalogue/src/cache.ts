@@ -1,7 +1,7 @@
 import { rotates } from "./ranking";
 import type { SearchRequest } from "./types";
 
-export const CACHE_VERSION = "catalogue-v8-d1-budget";
+export const CACHE_VERSION = "catalogue-v9-app-type";
 
 export type CacheRoute = "facets" | "search" | "game" | "home" | "meta" | "count";
 

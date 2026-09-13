@@ -27,6 +27,8 @@ import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/gho
 import type { GhostBoxGame } from "./data";
 import { buildSteamOwnedGamesFromPlaytimes } from "./utils/steamLibraryMerge";
 import { buildKnownGameIndex } from "./utils/gameSearch";
+import { applySteamAppTypes } from "./utils/steamAppType";
+import { useSteamAppTypes } from "./hooks/useSteamAppTypes";
 import ghostIconSource from "../Icons/ghost-solid.png";
 import "./app.scss";
 
@@ -58,6 +60,7 @@ function AppSplash() {
 
 function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const { status, openAuthModal } = useAuth();
+  const isAuthenticated = status === "authenticated";
   const {
     openGame,
     openAchievements,
@@ -119,23 +122,36 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     setCanForwardOverlay(Boolean(entry));
   }, []);
 
-  const knownGames = useMemo(
-    () => buildKnownGameIndex([
-      appData.addedLibraryGames,
-      appData.favoriteGames,
-      appData.profileHistoryGames,
-      appData.userCollections.flatMap((collection) => collection.games ?? []),
+  const steamOwnedForSearch = useMemo(
+    () =>
       buildSteamOwnedGamesFromPlaytimes(
         appData.steamAccountStats?.ownedPlaytimes ?? [],
         {},
       ),
-    ]),
+    [appData.steamAccountStats?.ownedPlaytimes],
+  );
+  // Busca header/local precisa do tipo para não sugerir demo: aplica o batch
+  // resolvido; `buildKnownGameIndex` já descarta `demo` classificada.
+  const searchAppTypes = useSteamAppTypes(steamOwnedForSearch, isAuthenticated);
+  const classifiedOwned = useMemo(
+    () => applySteamAppTypes(steamOwnedForSearch, searchAppTypes),
+    [searchAppTypes, steamOwnedForSearch],
+  );
+  const knownGames = useMemo(
+    () =>
+      buildKnownGameIndex([
+        appData.addedLibraryGames,
+        appData.favoriteGames,
+        appData.profileHistoryGames,
+        appData.userCollections.flatMap((collection) => collection.games ?? []),
+        classifiedOwned,
+      ]),
     [
       appData.addedLibraryGames,
       appData.favoriteGames,
       appData.profileHistoryGames,
-      appData.steamAccountStats?.ownedPlaytimes,
       appData.userCollections,
+      classifiedOwned,
     ],
   );
   const shell = useAppShellState(page, { localGames: knownGames });

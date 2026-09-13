@@ -1,4 +1,5 @@
 import {
+  normalizeAppType,
   normalizeStoreDetails,
   parseLanguage,
   steamAppData,
@@ -7,7 +8,11 @@ import {
 
 type Env = Record<string, never>;
 
-const CACHE_VERSION = "v3";
+// v4: respostas passam a incluir `appType` (Steam `data.type` normalizado),
+// necessário para excluir demos em todas as superfícies. Bump invalida o
+// edge cache antigo, que não tinha o campo.
+const CACHE_VERSION = "v4";
+const TYPES_BATCH_MAX_IDS = 50;
 const POSITIVE_CACHE_CONTROL =
   "public, max-age=28800, stale-while-revalidate=86400, stale-if-error=604800";
 const NEGATIVE_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=60";
@@ -138,6 +143,116 @@ async function handleDetails(
   return response;
 }
 
+function parseTypesAppIds(raw: string | null): string[] | null {
+  if (!raw) return null;
+  const ids = raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((id, index, all) => validAppId(id) && all.indexOf(id) === index)
+    .slice(0, TYPES_BATCH_MAX_IDS);
+  return ids.length ? ids : null;
+}
+
+async function handleTypes(
+  request: Request,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const appIds = parseTypesAppIds(url.searchParams.get("appids"));
+  if (!appIds) return errorResponse("Invalid or empty appids (1-50 numeric ids)", 400);
+
+  const language = parseLanguage(url.searchParams.get("lang")) ?? "english";
+  const results: Array<{ appId: string; appType?: string }> = [];
+  // Sem KV próprio aqui: reutiliza o edge cache de detalhes por app e extrai
+  // só o tipo. Resposta batch também é cacheada (positiva 24h, negativa curta)
+  // para o próximo lote não refazer o upstream.
+  const batchKey = new Request(
+    `https://ghostbox-steam-details.cache/${CACHE_VERSION}/games/types?lang=${language}&appids=${[...appIds].sort().join(",")}`,
+  );
+  const cachedBatch = await caches.default.match(batchKey).catch(() => undefined);
+  if (cachedBatch) {
+    try {
+      const body = (await cachedBatch.json()) as {
+        types?: Array<{ appId: string; appType?: unknown }>;
+      };
+      const byId = new Map(
+        (body.types ?? []).map((entry) => [entry.appId, normalizeAppType(entry.appType)]),
+      );
+      if (appIds.every((appId) => byId.has(appId))) {
+        return withCacheStatus(cachedBatch, "HIT");
+      }
+    } catch {
+      // Cache corrompido: trata como miss e resolve de novo.
+    }
+  }
+  const uncached: string[] = [];
+  for (const appId of appIds) {
+    const key = cacheRequest(appId, language);
+    const cached = await caches.default.match(key).catch(() => undefined);
+    if (cached) {
+      try {
+        const body = (await cached.json()) as { appType?: unknown };
+        const appType = normalizeAppType(body?.appType);
+        results.push(appType ? { appId, appType } : { appId });
+        continue;
+      } catch {
+        // Cache corrompido: trata como miss e busca no upstream.
+      }
+    }
+    uncached.push(appId);
+  }
+
+  if (uncached.length) {
+    const batchUrl = new URL("https://store.steampowered.com/api/appdetails");
+    batchUrl.searchParams.set("appids", uncached.join(","));
+    batchUrl.searchParams.set("l", language);
+    try {
+      const upstream = await fetch(batchUrl, {
+        headers: {
+          accept: "application/json",
+          "user-agent": "GhostBox Steam Details/1.0",
+        },
+        signal: AbortSignal.timeout(6_000),
+      });
+      if (upstream.ok) {
+        const payload = (await upstream.json()) as Record<
+          string,
+          { success?: boolean; data?: { type?: unknown } }
+        >;
+        for (const appId of uncached) {
+          const entry = payload[appId];
+          const appType =
+            entry?.success && entry.data
+              ? normalizeAppType(entry.data.type)
+              : "";
+          results.push(appType ? { appId, appType } : { appId });
+        }
+      } else {
+        for (const appId of uncached) results.push({ appId });
+      }
+    } catch {
+      for (const appId of uncached) results.push({ appId });
+    }
+  }
+
+  const byId = new Map(results.map((entry) => [entry.appId, entry]));
+  const ordered = appIds.map((appId) => byId.get(appId) ?? { appId });
+  const resolvedCount = ordered.filter((entry) => entry.appType).length;
+  const response = jsonResponse(
+    { types: ordered },
+    200,
+    resolvedCount === ordered.length
+      ? "public, max-age=86400, stale-while-revalidate=86400, stale-if-error=604800"
+      : "public, max-age=300, stale-while-revalidate=60",
+    "MISS",
+  );
+  // Grava o próprio batch (não só lê o cache de detalhes): sem isso cada lote
+  // idêntico refazia o upstream. Negativo curto para ids sem tipo.
+  ctx.waitUntil(caches.default.put(batchKey, response.clone()).catch(() => undefined));
+  return response;
+}
+
 export default {
   async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
@@ -153,6 +268,14 @@ export default {
     }
 
     const path = new URL(request.url).pathname;
+    if (path === "/v2/games/types") {
+      if (request.method !== "GET") {
+        const response = errorResponse("Method not allowed", 405);
+        response.headers.set("allow", "GET, OPTIONS");
+        return response;
+      }
+      return handleTypes(request, ctx);
+    }
     const match = /^\/(?:v2\/)?games\/([^/]+)\/details\/?$/.exec(path);
     if (!match) return errorResponse("Not found", 404);
     if (request.method !== "GET") {

@@ -12,12 +12,18 @@ use tauri::{Emitter, Manager};
 
 const STEAM_STORE_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
-const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 3;
+// v4: payload passa a incluir `appType` (Steam `data.type` normalizado) para
+// excluir demos. Bump invalida o disco antigo, que não tinha o campo.
+const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 4;
 const STEAM_STORE_DETAILS_CACHE_MAX_AGE_DAYS: i64 = 30;
 const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.hella.workers.dev";
 const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
 const LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV: &str = "EDEN_STEAM_DETAILS_PROXY_URL";
 const LEGACY_STEAM_DETAILS_PROXY_URL_ENV: &str = "PIRATEBOX_STEAM_DETAILS_PROXY_URL";
+const STEAM_APP_TYPE_CACHE_VERSION: u64 = 1;
+const STEAM_APP_TYPE_CACHE_MAX_IDS: usize = 50;
+const STEAM_APP_TYPE_CACHE_FILE: &str = "steam-app-type-cache.json";
+const CATALOGUE_APP_TYPE_VERSION: &str = "1";
 const GAME_ICON_URLS_RESOLVED_EVENT: &str = "game-icon-urls-resolved";
 const STEAM_APPINFO_ICON_SEARCH_WINDOW: usize = 65_536;
 const STEAMCMD_DOWNLOAD_URL: &str = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
@@ -33,6 +39,7 @@ static STEAM_PLAYER_COUNT_CACHE: OnceLock<Mutex<HashMap<String, (Instant, u64)>>
 static STEAM_ICON_URL_MEMORY: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static STEAM_ICON_NEGATIVE_CACHE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 static STEAM_APPINFO_BYTES_CACHE: OnceLock<Mutex<Option<AppinfoBytesCache>>> = OnceLock::new();
+static STEAM_APP_TYPE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 struct AppinfoBytesCache {
     path: PathBuf,
     modified: SystemTime,
@@ -53,6 +60,67 @@ fn text(value: Option<&Value>) -> String {
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_default()
+}
+
+fn normalize_steam_app_type(value: Option<&Value>) -> String {
+    let raw = text(value).to_ascii_lowercase();
+    if raw.is_empty() || raw.len() > 32 {
+        return String::new();
+    }
+    if raw
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    {
+        raw
+    } else {
+        String::new()
+    }
+}
+
+fn steam_app_type_of(value: &Value) -> String {
+    let object = match value.as_object() {
+        Some(object) => object,
+        None => return String::new(),
+    };
+    for key in ["appType", "app_type", "type"] {
+        let normalized = normalize_steam_app_type(object.get(key));
+        if !normalized.is_empty() {
+            return normalized;
+        }
+    }
+    String::new()
+}
+
+fn is_steam_demo(value: &Value) -> bool {
+    steam_app_type_of(value) == "demo"
+}
+
+fn is_known_demo_from_disk_cache(app: &tauri::AppHandle, app_id: &str) -> bool {
+    for language in ["portuguese", "english"] {
+        if let Some(details) = read_cached_steam_store_details(app, app_id, language) {
+            if steam_app_type_of(&details) == "demo" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn filter_demo_games_with_disk_cache(app: &tauri::AppHandle, games: Vec<Value>) -> Vec<Value> {
+    games
+        .into_iter()
+        .filter(|game| {
+            if is_steam_demo(game) {
+                return false;
+            }
+            let app_id = text(game.get("appId"))
+                .if_empty_then(|| text(game.get("app_id")));
+            if app_id.is_empty() {
+                return true;
+            }
+            !is_known_demo_from_disk_cache(app, &app_id)
+        })
+        .collect()
 }
 
 fn default_games_api_url() -> String {
@@ -217,6 +285,11 @@ fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
         return;
     };
 
+    let app_type = steam_app_type_of(store_data);
+    if !app_type.is_empty() {
+        object.insert("appType".to_string(), Value::String(app_type));
+    }
+
     let name = text(store_data.get("name"));
     if !name.is_empty() {
         let current_title = text(object.get("title"));
@@ -363,8 +436,9 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
         })
         .unwrap_or_default();
     let pc_requirements = store_data.get("pc_requirements").unwrap_or(&Value::Null);
+    let app_type = steam_app_type_of(store_data);
 
-    serde_json::json!({
+    let mut details = serde_json::json!({
         "name": text(store_data.get("name")),
         "headerImage": text(store_data.get("header_image")),
         "screenshots": screenshots,
@@ -381,7 +455,13 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
         "controllerSupport": steam_controller_support(store_data)
             .unwrap_or_else(|| "none".to_string()),
         "supportedLanguages": text(store_data.get("supported_languages")),
-    })
+    });
+    if !app_type.is_empty() {
+        if let Some(object) = details.as_object_mut() {
+            object.insert("appType".to_string(), Value::String(app_type));
+        }
+    }
+    details
 }
 
 fn merge_header_image(object: &mut serde_json::Map<String, Value>, header_image: String) {
@@ -542,6 +622,11 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
             "supportedLanguages".to_string(),
             Value::String(supported_languages),
         );
+    }
+
+    let app_type = steam_app_type_of(details);
+    if !app_type.is_empty() {
+        object.insert("appType".to_string(), Value::String(app_type));
     }
 
     let genres = text_array(details.get("genres"), 6);
@@ -771,6 +856,259 @@ fn steam_details_proxy_url(app_id: &str, language: &str) -> Option<reqwest::Url>
     url.set_path(&format!("{base_path}/v2/games/{app_id}/details"));
     url.query_pairs_mut().clear().append_pair("lang", language);
     Some(url)
+}
+
+fn steam_details_proxy_base_url() -> Option<reqwest::Url> {
+    let base = std::env::var(STEAM_DETAILS_PROXY_URL_ENV)
+        .or_else(|_| std::env::var(LEGACY_EDEN_STEAM_DETAILS_PROXY_URL_ENV))
+        .or_else(|_| std::env::var(LEGACY_STEAM_DETAILS_PROXY_URL_ENV))
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_STEAM_DETAILS_PROXY_URL.to_string());
+    let url = reqwest::Url::parse(&base).ok()?;
+    let is_localhost = matches!(url.host_str(), Some("localhost" | "127.0.0.1"));
+    if url.scheme() != "https" && !is_localhost {
+        return None;
+    }
+    Some(url)
+}
+
+fn steam_app_type_cache_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    Some(app.path().app_data_dir().ok()?.join(STEAM_APP_TYPE_CACHE_FILE))
+}
+
+fn steam_app_type_cache_memory() -> &'static Mutex<HashMap<String, String>> {
+    STEAM_APP_TYPE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn read_steam_app_type_cache(app: &tauri::AppHandle) -> HashMap<String, String> {
+    if let Ok(memory) = steam_app_type_cache_memory().lock() {
+        if !memory.is_empty() {
+            return memory.clone();
+        }
+    }
+
+    let cache = steam_app_type_cache_path(app)
+        .and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
+        .filter(|value| {
+            value.get("version").and_then(Value::as_u64)
+                == Some(STEAM_APP_TYPE_CACHE_VERSION)
+        })
+        .and_then(|value| value.get("types").cloned())
+        .and_then(|value| serde_json::from_value::<HashMap<String, String>>(value).ok())
+        .unwrap_or_default();
+
+    if let Ok(mut memory) = steam_app_type_cache_memory().lock() {
+        *memory = cache.clone();
+    }
+    cache
+}
+
+fn write_steam_app_type_cache(app: &tauri::AppHandle, cache: &HashMap<String, String>) {
+    if let Ok(mut memory) = steam_app_type_cache_memory().lock() {
+        *memory = cache.clone();
+    }
+    let Some(path) = steam_app_type_cache_path(app) else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+    let body = serde_json::json!({
+        "version": STEAM_APP_TYPE_CACHE_VERSION,
+        "types": cache,
+    });
+    let Ok(contents) = serde_json::to_string(&body) else {
+        return;
+    };
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    if fs::write(&temporary, contents).is_err() {
+        return;
+    }
+    if path.exists() && fs::remove_file(&path).is_err() {
+        let _ = fs::remove_file(&temporary);
+        return;
+    }
+    if fs::rename(&temporary, &path).is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+}
+
+fn app_type_map_from_payload(value: &Value) -> HashMap<String, String> {
+    value
+        .get("types")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let app_id = text(entry.get("appId"))
+                .if_empty_then(|| text(entry.get("app_id")));
+            let app_type = steam_app_type_of(entry);
+            if app_id.is_empty() || app_type.is_empty() {
+                None
+            } else {
+                Some((app_id, app_type))
+            }
+        })
+        .collect()
+}
+
+async fn fetch_steam_app_types_from_proxy(app_ids: &[String]) -> Option<HashMap<String, String>> {
+    let mut url = steam_details_proxy_base_url()?;
+    let base_path = url.path().trim_end_matches('/');
+    url.set_path(&format!("{base_path}/v2/games/types"));
+    url.query_pairs_mut()
+        .clear()
+        .append_pair("appids", &app_ids.join(","));
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+    let value = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()?;
+    Some(app_type_map_from_payload(&value))
+}
+
+async fn fetch_steam_app_types_direct(app_ids: &[String]) -> Option<HashMap<String, String>> {
+    let mut url = reqwest::Url::parse("https://store.steampowered.com/api/appdetails").ok()?;
+    url.query_pairs_mut()
+        .append_pair("appids", &app_ids.join(","))
+        .append_pair("l", "english");
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .ok()?;
+    let payload = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()?;
+    let mut result = HashMap::new();
+    for app_id in app_ids {
+        let Some(entry) = payload.get(app_id) else {
+            continue;
+        };
+        if entry.get("success").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        let Some(data) = entry.get("data") else {
+            continue;
+        };
+        let app_type = steam_app_type_of(data);
+        if !app_type.is_empty() {
+            result.insert(app_id.clone(), app_type);
+        }
+    }
+    Some(result)
+}
+
+async fn resolve_steam_app_types(
+    app: &tauri::AppHandle,
+    requested: &[String],
+) -> HashMap<String, String> {
+    let app_ids: Vec<String> = requested
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| value.chars().all(|c| c.is_ascii_digit()) && !value.is_empty())
+        .take(STEAM_APP_TYPE_CACHE_MAX_IDS)
+        .collect();
+    let mut cache = read_steam_app_type_cache(app);
+    let missing: Vec<String> = app_ids
+        .iter()
+        .filter(|app_id| !cache.contains_key(*app_id))
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        let mut fetched = fetch_steam_app_types_from_proxy(&missing)
+            .await
+            .unwrap_or_default();
+        let still_missing: Vec<String> = missing
+            .iter()
+            .filter(|app_id| !fetched.contains_key(*app_id))
+            .cloned()
+            .collect();
+        if !still_missing.is_empty() {
+            if let Some(direct) = fetch_steam_app_types_direct(&still_missing).await {
+                fetched.extend(direct);
+            }
+        }
+        cache.extend(fetched);
+        write_steam_app_type_cache(app, &cache);
+    }
+    app_ids
+        .into_iter()
+        .filter_map(|app_id| cache.get(&app_id).cloned().map(|app_type| (app_id, app_type)))
+        .collect()
+}
+
+async fn filter_featured_demos(app: &tauri::AppHandle, value: &mut Value) {
+    let keys = ["topSellers", "newReleases", "comingSoon"];
+    let ids: Vec<String> = keys
+        .iter()
+        .flat_map(|key| {
+            value
+                .get(*key)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|entry| {
+                    let app_id = text(entry.get("appId"))
+                        .if_empty_then(|| text(entry.get("app_id")));
+                    (!app_id.is_empty()).then_some(app_id)
+                })
+        })
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    if ids.is_empty() {
+        return;
+    }
+    let types = resolve_steam_app_types(app, &ids).await;
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    for key in keys {
+        let Some(items) = object.get_mut(key).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        items.retain_mut(|entry| {
+            let app_id = text(entry.get("appId"))
+                .if_empty_then(|| text(entry.get("app_id")));
+            let Some(app_type) = types.get(&app_id) else {
+                // Sem classificação não há garantia de que o card não seja
+                // demo; a Home prefere uma rail menor a exibir o app errado.
+                return false;
+            };
+            if app_type == "demo" {
+                return false;
+            }
+            if let Some(entry) = entry.as_object_mut() {
+                entry.insert("appType".to_string(), Value::String(app_type.clone()));
+            }
+            true
+        });
+    }
 }
 
 async fn fetch_steam_details_proxy(app_id: &str, language: &str) -> Option<Value> {
@@ -1725,6 +2063,9 @@ pub(crate) async fn fetch_remote_game(
     }
 
     let url = remote_url(api_url, &format!("games/{app_id}"))?;
+    let mut url = url;
+    url.query_pairs_mut()
+        .append_pair("appTypeVersion", CATALOGUE_APP_TYPE_VERSION);
     let (value, _, _) = catalogue_cache::fetch_json_with_cache(app, url, false).await?;
     Ok(value
         .get("game")
@@ -1760,6 +2101,7 @@ pub async fn database_get_games(
     url.query_pairs_mut()
         .append_pair("limit", &limit.to_string())
         .append_pair("offset", &offset.to_string())
+        .append_pair("appTypeVersion", CATALOGUE_APP_TYPE_VERSION)
         .append_pair("facetsVersion", FACETS_VERSION)
         .append_pair("rankingVersion", RANKING_VERSION);
 
@@ -1790,6 +2132,17 @@ pub async fn database_get_games(
     let force_refresh = query.is_some() || sort.as_deref() == Some("recentlyAdded");
     match catalogue_cache::fetch_json_with_cache(&app, url, force_refresh).await {
         Ok((mut value, updated_at, from_cache)) => {
+            // Rede de segurança client-side: worker já filtra demos, mas cache
+            // em disco antigo pode conter payloads com demos.
+            if let Some(object) = value.as_object_mut() {
+                if let Some(games) = object.get("games").and_then(|v| v.as_array()).cloned() {
+                    let filtered = filter_demo_games_with_disk_cache(&app, games);
+                    object.insert(
+                        "games".to_string(),
+                        Value::Array(filtered),
+                    );
+                }
+            }
             catalogue_cache::prepare_cached_response(&mut value, updated_at, from_cache);
             Ok(value)
         }
@@ -1850,6 +2203,7 @@ fn steam_store_search_games(payload: &Value, limit: usize) -> Vec<Value> {
 
 #[tauri::command]
 pub async fn database_search_steam_store(
+    app: tauri::AppHandle,
     query: String,
     limit: Option<u64>,
     language: Option<String>,
@@ -1878,7 +2232,11 @@ pub async fn database_search_steam_store(
         .await
         .map_err(|error| error.to_string())?;
 
-    Ok(steam_store_search_games(&payload, limit))
+    // `storesearch` retorna `type: "app"` tanto para jogos quanto para demos;
+    // a classificação definitiva vem do cache de detalhes. Filtra o que já é
+    // sabidamente demo; o restante é filtrado no frontend após enriquecimento.
+    let games = steam_store_search_games(&payload, limit);
+    Ok(filter_demo_games_with_disk_cache(&app, games))
 }
 
 #[tauri::command]
@@ -1887,7 +2245,13 @@ pub async fn database_get_game_details(
     game_id: String,
     api_url: Option<String>,
 ) -> Result<Option<serde_json::Value>, String> {
-    fetch_remote_game(&app, game_id, api_url).await
+    let game = fetch_remote_game(&app, game_id, api_url).await?;
+    if let Some(ref game) = game {
+        if is_steam_demo(game) {
+            return Ok(None);
+        }
+    }
+    Ok(game)
 }
 
 #[tauri::command]
@@ -1914,7 +2278,13 @@ pub async fn database_get_game_store_details(
 
     let latest_cached_details = read_cached_steam_store_details(&app, &app_id, steam_language);
     if let Some(cached_details) = latest_cached_details.as_ref() {
+        if steam_app_type_of(cached_details) == "demo" {
+            return Ok(None);
+        }
         merge_normalized_steam_details(&mut game, cached_details);
+        if is_steam_demo(&game) {
+            return Ok(None);
+        }
         if cached_steam_store_details_is_fresh(&app, &app_id, steam_language)
             && steam_details_have_about(cached_details)
             // Cache escrito pelo proxy pode não ter os campos novos (controle/
@@ -1926,9 +2296,18 @@ pub async fn database_get_game_store_details(
     }
 
     if let Some(proxy_details) = fetch_steam_details_proxy(&app_id, steam_language).await {
+        if steam_app_type_of(&proxy_details) == "demo" {
+            return Ok(None);
+        }
         let merged_details =
             merge_cached_steam_store_details(latest_cached_details.as_ref(), &proxy_details);
+        if steam_app_type_of(&merged_details) == "demo" {
+            return Ok(None);
+        }
         merge_normalized_steam_details(&mut game, &merged_details);
+        if is_steam_demo(&game) {
+            return Ok(None);
+        }
         write_cached_steam_store_details(&app, &app_id, steam_language, &merged_details);
         if steam_details_have_about(&merged_details)
             && steam_details_have_metric_fields(&merged_details)
@@ -1940,13 +2319,25 @@ pub async fn database_get_game_store_details(
     // The details proxy can be online while omitting the description fields. Only
     // fall back to Steam's JSON endpoint when the data required by the UI is absent.
     if let Some(store_data) = fetch_steam_store_details(&app_id, steam_language).await {
+        if steam_app_type_of(&store_data) == "demo" {
+            return Ok(None);
+        }
         let store_details = steam_store_details_from_store_data(&store_data);
+        if steam_app_type_of(&store_details) == "demo" {
+            return Ok(None);
+        }
         merge_steam_store_details(&mut game, &store_data);
+        if is_steam_demo(&game) {
+            return Ok(None);
+        }
         let merged_details =
             merge_cached_steam_store_details(latest_cached_details.as_ref(), &store_details);
         write_cached_steam_store_details(&app, &app_id, steam_language, &merged_details);
     }
 
+    if is_steam_demo(&game) {
+        return Ok(None);
+    }
     Ok(Some(game))
 }
 
@@ -2068,8 +2459,9 @@ pub async fn steam_get_featured(
     // to show offline, same stale-while-error behavior as the other catalogue
     // endpoints — this path just isn't one `is_valid_catalogue_response`
     // recognizes, so it takes the permissive `_ => true` arm unchanged.
-    let (value, _updated_at, _from_cache) =
+    let (mut value, _updated_at, _from_cache) =
         catalogue_cache::fetch_json_with_cache(&app, url, false).await?;
+    filter_featured_demos(&app, &mut value).await;
     Ok(value)
 }
 
@@ -2079,8 +2471,21 @@ pub async fn catalogue_get_home(
     api_url: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let url = remote_url(api_url, "home")?;
+    let mut url = url;
+    url.query_pairs_mut()
+        .append_pair("appTypeVersion", CATALOGUE_APP_TYPE_VERSION);
     let (mut value, updated_at, from_cache) =
         catalogue_cache::fetch_json_with_cache(&app, url, false).await?;
+    if let Some(object) = value.as_object_mut() {
+        for key in ["popular", "recentlyAdded"] {
+            if let Some(games) = object.get(key).and_then(|v| v.as_array()).cloned() {
+                object.insert(
+                    key.to_string(),
+                    Value::Array(filter_demo_games_with_disk_cache(&app, games)),
+                );
+            }
+        }
+    }
     catalogue_cache::prepare_cached_response(&mut value, updated_at, from_cache);
     Ok(value)
 }
@@ -2212,6 +2617,17 @@ pub async fn steam_get_player_counts(app_ids: Vec<String>) -> HashMap<String, u6
     }
 
     counts
+}
+
+/// Resolve os tipos de apps Steam em lote. A ausência de um app no mapa não é
+/// tratada como `game`: callers que exigem exclusão segura devem mantê-lo
+/// oculto até uma classificação válida chegar.
+#[tauri::command]
+pub async fn steam_get_app_types(
+    app: tauri::AppHandle,
+    app_ids: Vec<String>,
+) -> HashMap<String, String> {
+    resolve_steam_app_types(&app, &app_ids).await
 }
 
 #[tauri::command]

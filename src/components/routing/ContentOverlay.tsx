@@ -13,6 +13,7 @@ import { readStoredDownloadsDir, writeStoredDownloadsDir } from "../../utils/sto
 import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
+import { isBlockedSteamDemo } from "../../utils/steamAppType";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import {
@@ -220,6 +221,8 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
             onPlayGame={appData.handlePlayGame}
             onSetCustomExe={appData.setCustomExeGame}
             onDownloadGame={async () => {
+              // Demos classificadas não enfileiram download.
+              if (isBlockedSteamDemo(mergedGame)) return;
               if (!getGameAppId(mergedGame)) return;
               let downloadsRoot = readStoredDownloadsDir();
               if (!downloadsRoot) {

@@ -28,7 +28,7 @@ beforeAll(async () => {
     steam_review_count INTEGER DEFAULT 0, steam_positive_ratio REAL DEFAULT 0,
     metacritic_score INTEGER DEFAULT 0, recommendations INTEGER DEFAULT 0,
     ranking_score REAL DEFAULT 0, ranking_tier INTEGER DEFAULT 0,
-    steamspy_ccu INTEGER DEFAULT 0, steamspy_owners_max INTEGER DEFAULT 7
+    steamspy_ccu INTEGER DEFAULT 0, steamspy_owners_max INTEGER DEFAULT 7, app_type TEXT DEFAULT 'game'
   )`).run();
   await db.prepare(`CREATE VIRTUAL TABLE games_search USING fts5(
     app_id UNINDEXED, text, genres, tags, developers, publishers, years,
@@ -74,6 +74,19 @@ describe("snapshot queries in local D1", () => {
     const plan = await db.prepare(`EXPLAIN QUERY PLAN ${candidatesSql}`).bind(JSON.stringify(positiveIds)).all<{ detail: string }>();
     expect(plan.results.some((row) => /SEARCH games .*app_id=/.test(row.detail))).toBe(true);
     expect(plan.results.some((row) => /^SCAN games/.test(row.detail))).toBe(false);
+  });
+
+  it("excludes demos and unclassified rows while keeping DLC visible", async () => {
+    await db.prepare("INSERT INTO games (app_id, name, search_text, steamspy_ccu, app_type) VALUES ('90', 'Demo Game', 'demo game', 999, 'demo')").run();
+    await db.prepare("INSERT INTO games (app_id, name, search_text, steamspy_ccu, app_type) VALUES ('91', 'Legacy Row', 'legacy row', 998, NULL)").run();
+    await db.prepare("INSERT INTO games (app_id, name, search_text, steamspy_ccu, app_type) VALUES ('92', 'Extra DLC', 'extra dlc', 997, 'dlc')").run();
+    const popular = await search("sort=popular&limit=200", null);
+    expect(popular.games.map((game) => game.appId)).not.toContain("90");
+    expect(popular.games.map((game) => game.appId)).not.toContain("91");
+    expect(popular.games.map((game) => game.appId)).toContain("92");
+    expect((await getGame(db, "90", "https://example.com", snapshot))).toBeNull();
+    expect((await getGame(db, "92", "https://example.com", snapshot))?.appId).toBe("92");
+    await db.prepare("DELETE FROM games WHERE app_id IN ('90', '91', '92')").run();
   });
 
   it("uses current CCU, excludes missing/zero games, and paginates numeric ties correctly", async () => {

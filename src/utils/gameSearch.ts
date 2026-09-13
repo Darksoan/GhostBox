@@ -1,4 +1,5 @@
 import type { GhostBoxGame } from "../data";
+import { isBlockedSteamDemo } from "./steamAppType";
 
 const combiningMarksPattern = /[\u0300-\u036f]/g;
 const apostrophePattern = /['’‘`´]/g;
@@ -70,6 +71,7 @@ export function buildKnownGameIndex(sources: readonly (readonly GhostBoxGame[])[
   let order = 0;
   for (const source of sources) {
     for (const game of source) {
+      if (isBlockedSteamDemo(game)) continue;
       const key = gameKey(game);
       if (key.endsWith(":")) continue;
       const score = completenessScore(game);

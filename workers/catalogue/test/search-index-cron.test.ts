@@ -15,7 +15,8 @@ beforeAll(async () => {
   db = await runtime.getD1Database("DB") as unknown as D1Database;
   await db.prepare(`CREATE TABLE games (
     app_id TEXT PRIMARY KEY, name TEXT, release_year TEXT,
-    developers_json TEXT, publishers_json TEXT, categories_json TEXT, genres_json TEXT, tags_json TEXT
+    developers_json TEXT, publishers_json TEXT, categories_json TEXT, genres_json TEXT, tags_json TEXT,
+    app_type TEXT DEFAULT 'game'
   )`).run();
   await db.prepare("CREATE TABLE catalogue_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
   await db.prepare(`CREATE VIRTUAL TABLE games_search USING fts5(
@@ -24,8 +25,8 @@ beforeAll(async () => {
   )`).run();
   await db.batch(Array.from({ length: 80 }, (_, index) => {
     const appId = String(index + 1);
-    return db.prepare("INSERT INTO games VALUES (?,?,?,?,?,?,?,?)")
-      .bind(appId, `Jogo ${appId}`, "2026", '["Estúdio"]', '["Editora"]', '["Single-player"]', '["Ação"]', '["Co-op","C++"]');
+    return db.prepare("INSERT INTO games (app_id, name, release_year, developers_json, publishers_json, categories_json, genres_json, tags_json, app_type) VALUES (?,?,?,?,?,?,?,?,?)")
+      .bind(appId, `Jogo ${appId}`, "2026", '["Estúdio"]', '["Editora"]', '["Single-player"]', '["Ação"]', '["Co-op","C++"]', 'game');
   }));
 }, 20_000);
 

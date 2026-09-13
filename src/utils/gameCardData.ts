@@ -35,6 +35,17 @@ function preferControllerSupport(
   return primary ?? fallback;
 }
 
+function preferAppType(
+  primary: GhostBoxGame["appType"],
+  fallback: GhostBoxGame["appType"],
+) {
+  const normalizedPrimary = primary?.trim().toLowerCase() ?? "";
+  if (normalizedPrimary) return normalizedPrimary;
+  const normalizedFallback = fallback?.trim().toLowerCase() ?? "";
+  if (normalizedFallback) return normalizedFallback;
+  return primary ?? fallback;
+}
+
 export function mergeGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
   const richerAchievementGame = getRicherAchievementGame(game, details);
   const gamePlaytime = game.playTimeInMilliseconds ?? 0;
@@ -85,6 +96,7 @@ export function mergeGameCardData(game: GhostBoxGame, details: GhostBoxGame) {
       details.controllerSupport,
       game.controllerSupport,
     ),
+    appType: preferAppType(details.appType, game.appType),
     supportedLanguages:
       preferOptionalString(
         details.supportedLanguages,

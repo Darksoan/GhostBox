@@ -16,6 +16,7 @@ import { getToastVariant } from "../lib/toastUtils";
 import { loadGameModalModule } from "../utils/gameModalLoader";
 import { useSettings } from "./settings";
 import { ingestCatalogueGameOnOpen } from "../utils/catalogueIngestion";
+import { isBlockedSteamDemo } from "../utils/steamAppType";
 
 export type AchievementsViewState = {
   game: GhostBoxGame;
@@ -188,6 +189,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const openGame = useCallback(async (game: GhostBoxGame) => {
+    if (isBlockedSteamDemo(game)) return;
     ingestOpenedGame(game);
     const requestId = openGameRequestRef.current + 1;
     openGameRequestRef.current = requestId;
@@ -234,6 +236,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         highlightAchievementId?: string;
       },
     ) => {
+      if (isBlockedSteamDemo(game)) return;
       ingestOpenedGame(game);
       clearOverlayExitTimeout();
       setIsGameModalExitPending(false);

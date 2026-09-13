@@ -228,6 +228,8 @@ export function DownloadDetailsModal({
     if (launching) return;
     setLaunching(true);
     try {
+      const appType = (await ghostboxApi.getSteamAppTypes([task.appId]))[task.appId];
+      if (!appType || appType.toLowerCase() === "demo") return;
       await Promise.all([
         ghostboxApi.launchDownloadedGame(
           task.appId,

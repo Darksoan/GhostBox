@@ -11,6 +11,7 @@ import {
   readStoredProfileHistoryGames,
 } from "../utils/storage";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
+import { isBlockedSteamDemo } from "../utils/steamAppType";
 
 type DownloadTaskStatus = "queued" | "downloading" | "paused" | "completed" | "error";
 
@@ -723,6 +724,9 @@ export function normalizeDownloadsRoot(root: string): string {
  */
 export function enqueueDownload(game: GhostBoxGame, downloadsRoot: string) {
   ensureLiveTasksHydrated();
+  // Defesa em profundidade: mesmo que um caller esqueça o guard, demo
+  // classificada não vira tarefa de download.
+  if (isBlockedSteamDemo(game)) return;
   const appId = getGameAppId(game);
   if (!appId) return;
   const root = normalizeDownloadsRoot(downloadsRoot);

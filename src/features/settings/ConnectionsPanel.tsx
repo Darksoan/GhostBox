@@ -30,6 +30,8 @@ import {
 } from "../../utils/hiddenProfileGames";
 import { gameCatalogueHeaderSources } from "../../utils/image";
 import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
+import { applySteamAppTypes, filterVisibleSteamGames } from "../../utils/steamAppType";
+import { useSteamAppTypes } from "../../hooks/useSteamAppTypes";
 import steamIcon from "../../../Icons/steam-glyph.svg";
 import discordIcon from "../../../Icons/discord.svg";
 import "./ConnectionsPanel.scss";
@@ -424,6 +426,15 @@ export function HiddenProfileGamesSection() {
   // visibilidade atualiza o card imediatamente, mas só reagrupa na próxima entrada.
   const entryHiddenGameIdsRef = useRef(new Set(hiddenProfileGameIds));
   const titleId = useId();
+  const rawOwnedGames = useMemo(
+    () => buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
+    [steamAccountStats?.ownedPlaytimes],
+  );
+  const ownedAppTypes = useSteamAppTypes(rawOwnedGames, true);
+  const visibleOwnedGames = useMemo(
+    () => filterVisibleSteamGames(applySteamAppTypes(rawOwnedGames, ownedAppTypes)),
+    [ownedAppTypes, rawOwnedGames],
+  );
   const allGames = useMemo(() => {
     const backupGameIds = new Set([
       ...Object.entries(backupSettings?.backupRecords ?? {})
@@ -449,7 +460,7 @@ export function HiddenProfileGamesSection() {
       ...profileAddedLibraryGames,
       ...profileFavoriteGames,
       ...profileHistoryGames,
-      ...buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
+      ...visibleOwnedGames,
     ];
 
     for (const game of candidates) {
@@ -486,6 +497,7 @@ export function HiddenProfileGamesSection() {
     profileFavoriteGames,
     profileHistoryGames,
     steamAccountStats,
+    visibleOwnedGames,
   ]);
   const availableInitials = useMemo(
     () => new Set(allGames.map((game) => getHiddenProfileGameInitial(game.title))),

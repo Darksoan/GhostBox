@@ -19,6 +19,12 @@ import {
   filterSteamLibraryGames,
   mergeSteamOwnedLibraryGames,
 } from "../../utils/libraryVisibility";
+import {
+  applySteamAppTypes,
+  filterOutSteamDemos,
+  filterVisibleSteamGames,
+} from "../../utils/steamAppType";
+import { useSteamAppTypes } from "../../hooks/useSteamAppTypes";
 import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
 import type { GhostBoxGame } from "../../data";
 
@@ -171,19 +177,33 @@ export function PageRouter({
     page === "catalogue",
     knownGames,
   );
+  const steamOwnedGames = useMemo(
+    () =>
+      buildSteamOwnedGamesFromPlaytimes(
+        appData.steamAccountStats?.ownedPlaytimes ?? [],
+        {},
+      ),
+    [appData.steamAccountStats?.ownedPlaytimes],
+  );
+  // GetOwnedGames não retorna tipo: classifica em batch antes de renderizar.
+  // Itens ainda sem `appType` ficam ocultos (visibilidade estrita) em vez de
+  // vazar uma demo na primeira pintura.
+  const steamAppTypes = useSteamAppTypes(steamOwnedGames, isAuthenticated);
+  const visibleOwnedGames = useMemo(() => {
+    const classified = applySteamAppTypes(steamOwnedGames, steamAppTypes);
+    return filterVisibleSteamGames(classified);
+  }, [steamAppTypes, steamOwnedGames]);
   const visibleLibraryGames = useMemo(() => {
-    const ownedGames = buildSteamOwnedGamesFromPlaytimes(
-      appData.steamAccountStats?.ownedPlaytimes ?? [],
-      {},
-    );
-    return filterSteamLibraryGames(
-      mergeSteamOwnedLibraryGames(appData.addedLibraryGames, ownedGames),
-      appData.showSteamLibraryGames,
+    return filterOutSteamDemos(
+      filterSteamLibraryGames(
+        mergeSteamOwnedLibraryGames(appData.addedLibraryGames, visibleOwnedGames),
+        appData.showSteamLibraryGames,
+      ),
     );
   }, [
     appData.addedLibraryGames,
     appData.showSteamLibraryGames,
-    appData.steamAccountStats?.ownedPlaytimes,
+    visibleOwnedGames,
   ]);
   const [mountedPages, setMountedPages] = useState<Set<Page>>(() =>
     resolveMountedPages({

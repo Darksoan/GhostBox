@@ -125,6 +125,12 @@ export type GhostBoxGame = {
   controllerSupport?: ControllerSupportStatus;
   /** String HTML bruta de `supported_languages` da Steam appdetails. */
   supportedLanguages?: string;
+  /**
+   * Tipo do app na Steam (`appdetails.data.type` normalizado em minúsculas:
+   * "game", "demo", "dlc", ...). Ausente = não classificado.
+   * Somente "demo" é bloqueado; outros tipos continuam visíveis.
+   */
+  appType?: string;
   databaseAddedAt?: number;
   popularityScore?: number;
   popularityRank?: number;
@@ -189,6 +195,7 @@ export type FeaturedGame = {
   appId: string;
   name: string;
   headerImage: string;
+  appType?: string;
 };
 
 export type FeaturedResult = {
@@ -292,6 +299,12 @@ export async function loadSteamPlayerCounts(
   appIds: string[]
 ): Promise<Record<string, number>> {
   return ghostboxApi.getSteamPlayerCounts(appIds);
+}
+
+export async function loadSteamAppTypes(
+  appIds: string[],
+): Promise<Record<string, string>> {
+  return ghostboxApi.getSteamAppTypes(appIds);
 }
 
 export async function loadSteamSimilarAppIds(appId: string): Promise<string[]> {

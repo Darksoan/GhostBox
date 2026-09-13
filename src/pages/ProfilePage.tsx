@@ -81,6 +81,8 @@ import {
   mergeSteamAchievementsIntoGames,
 } from "../utils/steamAchievementMerge";
 import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
+import { applySteamAppTypes, filterVisibleSteamGames } from "../utils/steamAppType";
+import { useSteamAppTypes } from "../hooks/useSteamAppTypes";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../lib/ghostboxApi.types";
@@ -749,16 +751,32 @@ export function ProfilePage({
 
   // Steam account games are not listed in the library, but profile recognition
   // still needs playtime + achievements from the owned stats payload.
+  const rawSteamOwnedProfileGames = useMemo(
+    () => buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
+    [steamAccountStats?.ownedPlaytimes],
+  );
+  const profileSteamAppTypes = useSteamAppTypes(
+    rawSteamOwnedProfileGames,
+    shouldComputeOverviewData && shouldShowSteamContent,
+  );
   const steamOwnedProfileGames = useMemo(() => {
-    if (!shouldComputeOverviewData || !shouldShowSteamContent || !steamAccountStats?.ownedPlaytimes?.length) {
-      return [];
-    }
+    if (!shouldComputeOverviewData || !shouldShowSteamContent) return [];
+    const visible = filterVisibleSteamGames(
+      applySteamAppTypes(rawSteamOwnedProfileGames, profileSteamAppTypes),
+    );
     return mergeSteamAchievementsIntoGames(
-      buildSteamOwnedGamesFromPlaytimes(steamAccountStats.ownedPlaytimes, {}),
+      visible,
       steamAccountStats,
       steamAchievementIndex,
     );
-  }, [shouldComputeOverviewData, steamAccountStats, steamAchievementIndex]);
+  }, [
+    profileSteamAppTypes,
+    rawSteamOwnedProfileGames,
+    shouldComputeOverviewData,
+    shouldShowSteamContent,
+    steamAccountStats,
+    steamAchievementIndex,
+  ]);
 
   const profileGameBase = useMemo(() => {
     if (!shouldComputeOverviewData) return [];

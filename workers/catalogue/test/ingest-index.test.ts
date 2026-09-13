@@ -20,7 +20,7 @@ beforeAll(async () => {
     popularity_score REAL DEFAULT 0, popularity_rank INTEGER, steam_review_count INTEGER DEFAULT 0,
     steam_positive_ratio REAL DEFAULT 0, metacritic_score INTEGER DEFAULT 0, recommendations INTEGER DEFAULT 0,
     ranking_score REAL DEFAULT 0, ranking_tier INTEGER DEFAULT 0, steamspy_ccu INTEGER DEFAULT 0,
-    steamspy_owners_max INTEGER DEFAULT 0
+    steamspy_owners_max INTEGER DEFAULT 0, app_type TEXT
   )`).run();
   await db.prepare("CREATE TABLE catalogue_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
   await db.prepare(`CREATE VIRTUAL TABLE games_search USING fts5(
@@ -45,6 +45,7 @@ describe("catalogue ingestion", () => {
           genres: [{ description: "Action" }],
           categories: [{ description: "Single-player" }],
           recommendations: { total: 12 },
+          type: "game",
         },
       },
     })));
@@ -66,5 +67,27 @@ describe("catalogue ingestion", () => {
     expect(second.ok).toBe(true);
     expect(second.game?.appId).toBe("424242");
     expect(after).toBe(before);
+  });
+
+  it("rejects demos without persisting rows and keeps DLC ingestible", async () => {
+    const demoFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      "777001": { success: true, data: { name: "Demo Game", type: "demo" } },
+    })));
+    vi.stubGlobal("fetch", demoFetch);
+    const demo = await ingestSteamApp(db, "777001", "https://example.com");
+    expect(demo.ok).toBe(false);
+    expect(demo).toMatchObject({ error: "steam_app_is_demo" });
+    const missing = await db.prepare("SELECT app_id FROM games WHERE app_id = '777001'").first();
+    expect(missing).toBeNull();
+
+    const dlcFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      "777002": { success: true, data: { name: "Extra DLC", type: "dlc" } },
+    })));
+    vi.stubGlobal("fetch", dlcFetch);
+    const dlc = await ingestSteamApp(db, "777002", "https://example.com");
+    expect(dlc.ok).toBe(true);
+    expect(dlc.game?.appType).toBe("dlc");
+    await db.prepare("DELETE FROM games WHERE app_id IN ('777001', '777002')").run();
+    await db.prepare("DELETE FROM games_search WHERE app_id IN ('777001', '777002')").run();
   });
 });

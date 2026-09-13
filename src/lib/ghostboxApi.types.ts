@@ -62,6 +62,9 @@ export type GamePlaytimeEntry = {
 
 export type GamePlaytimeSnapshot = Record<string, GamePlaytimeEntry>;
 
+/** Steam app type resolved from appdetails (`demo`, `game`, ...). */
+export type SteamAppTypeMap = Record<string, string>;
+
 export type SteamGameReviewAuthor = {
   steamid: string;
   personaname: string;

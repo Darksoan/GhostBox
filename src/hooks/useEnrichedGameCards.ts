@@ -7,6 +7,7 @@ import {
 } from "../utils/gameCache";
 import { mergeGameCardData } from "../utils/gameCardData";
 import { gameCardEnrichmentQueue } from "../utils/requestQueue";
+import { filterOutSteamDemos } from "../utils/steamAppType";
 
 export function useEnrichedGameCards(
   games: GhostBoxGame[],
@@ -115,12 +116,13 @@ export function useEnrichedGameCards(
     };
   }, [enabled, gamesKey, includeAchievements, limit]);
 
-  return useMemo(
-    () =>
-      games.map((game) => {
-        const details = detailsByAppId.get(game.appId);
-        return details ? mergeGameCardData(game, details) : game;
-      }),
-    [detailsByAppId, games]
-  );
+  return useMemo(() => {
+    const merged = games.map((game) => {
+      const details = detailsByAppId.get(game.appId);
+      return details ? mergeGameCardData(game, details) : game;
+    });
+    // Demos classificadas via enriquecimento somem assim que o tipo chega,
+    // sem esperar refetch da lista. Itens ainda sem `appType` permanecem.
+    return filterOutSteamDemos(merged);
+  }, [detailsByAppId, games]);
 }

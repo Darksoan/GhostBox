@@ -17,6 +17,7 @@ import {
   type TasteProfile,
 } from "../utils/tasteProfile";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
+import { isBlockedSteamDemo } from "../utils/steamAppType";
 
 type HomeShelfId =
   | "recommended"
@@ -90,7 +91,8 @@ type UseHomeShelvesInput = {
 function isDisplayableGame(game: GhostBoxGame) {
   return (
     Boolean(gameTraitAppId(game)) &&
-    !isSteamTitlePlaceholder(game.title, game.appId)
+    !isSteamTitlePlaceholder(game.title, game.appId) &&
+    !isBlockedSteamDemo(game)
   );
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeAppType,
   normalizeStoreDetails,
   parseLanguage,
   parseRequirements,
@@ -114,5 +115,21 @@ describe("Steam normalization", () => {
     expect(details?.supportedLanguages).toBe(
       "Inglês<strong>*</strong>, Português (Brasil)<br>legendas"
     );
+  });
+
+  it("normalizes Steam app types from type/appType/app_type aliases", () => {
+    expect(normalizeAppType("Demo")).toBe("demo");
+    expect(normalizeAppType("  GAME ")).toBe("game");
+    expect(normalizeAppType("")).toBe("");
+    expect(normalizeAppType("a b")).toBe("");
+    expect(
+      normalizeStoreDetails("10", { name: "X", type: "DEMO" })?.appType
+    ).toBe("demo");
+    expect(
+      normalizeStoreDetails("11", { name: "Y", appType: "game" })?.appType
+    ).toBe("game");
+    expect(
+      normalizeStoreDetails("12", { name: "Z" })?.appType
+    ).toBeUndefined();
   });
 });

@@ -10,6 +10,7 @@ import {
 import { hasSelectedCatalogueFilters } from "../utils/filters";
 import { setHasLoadedCatalogueGlobally } from "../utils/gameCache";
 import { catalogueRotationSeed } from "../utils/rotation";
+import { filterOutSteamDemos } from "../utils/steamAppType";
 import { useGamesQuery, useSteamStoreSearchQuery } from "../queries/games";
 import { useSettings } from "../context/settings";
 import {
@@ -122,11 +123,17 @@ export function useCatalogueState(
     [localFallbackGames, shouldSearchSteam, steamSearchQuery.data],
   );
   const resolvedCatalogueDatabase = useMemo<GameDatabaseResult>(() => {
-    if (!isFallbackMode) return catalogueQuery.data ?? emptyGameDatabase;
+    if (!isFallbackMode) {
+      const data = catalogueQuery.data ?? emptyGameDatabase;
+      const games = filterOutSteamDemos(data.games);
+      if (games === data.games) return data;
+      return { ...data, games, matched: Math.min(data.matched, games.length) };
+    }
+    const games = filterOutSteamDemos(fallbackGames);
     return {
-      games: fallbackGames,
-      total: fallbackGames.length,
-      matched: fallbackGames.length,
+      games,
+      total: games.length,
+      matched: games.length,
       limited: false,
       source: localFallbackGames.length > 0 ? "local" : "steam-store",
     };

@@ -1,5 +1,6 @@
 import type { GhostBoxGame } from "../data";
 import { ingestRemoteGameByAppId } from "../data";
+import { isBlockedSteamDemo } from "./steamAppType";
 
 const completedAppIds = new Set<string>();
 const pendingAppIds = new Set<string>();
@@ -23,7 +24,8 @@ export async function ingestCatalogueGameOnOpen(
     game.databaseAddedAt ||
     !/^\d{1,10}$/.test(appId) ||
     completedAppIds.has(appId) ||
-    pendingAppIds.has(appId)
+    pendingAppIds.has(appId) ||
+    isBlockedSteamDemo(game)
   ) {
     return false;
   }

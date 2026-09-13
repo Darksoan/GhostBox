@@ -35,6 +35,7 @@ import type {
   SteamLibraryVolume,
   SteamLibraryScanResult,
   SteamAccountStats,
+  SteamAppTypeMap,
   SteamPathSelectionResult,
   SteamProfile,
   SteamWishlistItem,
@@ -1701,6 +1702,14 @@ export const ghostboxApi = {
   getSteamPlayerCounts(appIds: string[]): Promise<Record<string, number>> {
     return invokeOr<Record<string, number>>(
       "steam_get_player_counts",
+      { appIds },
+      {},
+    );
+  },
+
+  getSteamAppTypes(appIds: string[]): Promise<SteamAppTypeMap> {
+    return invokeOr<SteamAppTypeMap>(
+      "steam_get_app_types",
       { appIds },
       {},
     );

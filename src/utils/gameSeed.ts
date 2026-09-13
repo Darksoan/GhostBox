@@ -4,6 +4,7 @@ type GameSeed = {
   appId: string;
   title: string;
   shortDescription?: string;
+  appType?: string;
 };
 
 function seedSteamCdnUrl(appId: string, asset: string) {
@@ -32,6 +33,7 @@ export function createSeedGame(
   return {
     appId: game.appId,
     id: `steam-${game.appId}`,
+    ...(game.appType ? { appType: game.appType } : {}),
     title: game.title,
     subtitle,
     status: "discover",

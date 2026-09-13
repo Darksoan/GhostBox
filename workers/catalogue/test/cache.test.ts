@@ -69,6 +69,7 @@ describe("production schema", () => {
       ranking_tier: 48,
       steamspy_ccu: 1200,
       steamspy_owners_max: 20000000,
+      app_type: "game",
     }, "https://catalogue.example");
 
     expect(game).toMatchObject({
@@ -114,6 +115,7 @@ describe("production schema", () => {
       ranking_tier: 0,
       steamspy_ccu: 0,
       steamspy_owners_max: 0,
+      app_type: "game",
     }, "https://catalogue.example");
 
     expect(game.playingNow).toBeUndefined();
@@ -180,7 +182,8 @@ describe("playingNow sort", () => {
     const query = searchConditions(request);
     expect(query.sql).toContain("steamspy_ccu > 0");
     expect(query.sql).toContain("EXISTS");
-    expect(query.sql).toMatch(/WHERE steamspy_ccu > 0 AND/);
+    expect(query.sql).toContain("app_type");
+    expect(query.sql).toMatch(/WHERE \(games\.app_type IS NOT NULL AND lower\(games\.app_type\) <> 'demo'\) AND/);
   });
 
   it("uses the snapshot alias when SteamSpy data comes from KV", () => {

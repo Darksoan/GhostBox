@@ -31,7 +31,20 @@ export type GameDetails = {
   publishers: string[];
   controllerSupport: ControllerSupport;
   supportedLanguages: string;
+  /**
+   * Tipo do app na Steam (`appdetails.data.type` normalizado: "game",
+   * "demo", "dlc", ...). Ausente = upstream não informou.
+   */
+  appType?: string;
 };
+
+export function normalizeAppType(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "";
+  if (!/^[a-z0-9_-]{1,32}$/.test(normalized)) return "";
+  return normalized;
+}
 
 function isObject(value: unknown): value is UnknownObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -199,10 +212,12 @@ export function normalizeStoreDetails(
   if (!isObject(value)) return null;
   const requirements = first(value, ["pc_requirements", "pcRequirements"]);
   const requirementObject = isObject(requirements) ? requirements : {};
+  const appType = normalizeAppType(first(value, ["type", "appType", "app_type"]));
 
   return {
     appId,
     createdAt,
+    ...(appType ? { appType } : {}),
     name: aliasedText(value, "name", "title"),
     headerImage: aliasedText(value, "header_image", "headerImage"),
     screenshots: normalizeScreenshots(value.screenshots),
