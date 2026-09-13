@@ -22,10 +22,10 @@ import {
 import {
   applySteamAppTypes,
   filterOutSteamDemos,
-  filterVisibleSteamGames,
 } from "../../utils/steamAppType";
 import { useSteamAppTypes } from "../../hooks/useSteamAppTypes";
 import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
+import { mergeSteamAchievementsIntoGames } from "../../utils/steamAchievementMerge";
 import type { GhostBoxGame } from "../../data";
 
 const LazyHomePage = lazy(() =>
@@ -133,6 +133,7 @@ interface PageRouterProps {
   onNavigateToCatalogue: () => void;
   onNavigateToDownloads: () => void;
   steamProfile: SteamProfile | null;
+  isPremium: boolean;
 }
 
 export function PageRouter({
@@ -155,6 +156,7 @@ export function PageRouter({
   onNavigateToCatalogue,
   onNavigateToDownloads,
   steamProfile,
+  isPremium,
 }: PageRouterProps) {
   const { appearance } = useSettings();
   const appData = useAppData();
@@ -179,19 +181,22 @@ export function PageRouter({
   );
   const steamOwnedGames = useMemo(
     () =>
-      buildSteamOwnedGamesFromPlaytimes(
-        appData.steamAccountStats?.ownedPlaytimes ?? [],
-        {},
+      mergeSteamAchievementsIntoGames(
+        buildSteamOwnedGamesFromPlaytimes(
+          appData.steamAccountStats?.ownedPlaytimes ?? [],
+          {},
+        ),
+        appData.steamAccountStats,
       ),
-    [appData.steamAccountStats?.ownedPlaytimes],
+    [appData.steamAccountStats],
   );
-  // GetOwnedGames não retorna tipo: classifica em batch antes de renderizar.
-  // Itens ainda sem `appType` ficam ocultos (visibilidade estrita) em vez de
-  // vazar uma demo na primeira pintura.
+  // GetOwnedGames não retorna tipo: classifica em batch e remove apenas itens
+  // confirmados como demo. Ocultar os ainda não classificados esvaziava a
+  // biblioteca quando a classificação remota atrasava ou falhava.
   const steamAppTypes = useSteamAppTypes(steamOwnedGames, isAuthenticated);
   const visibleOwnedGames = useMemo(() => {
     const classified = applySteamAppTypes(steamOwnedGames, steamAppTypes);
-    return filterVisibleSteamGames(classified);
+    return filterOutSteamDemos(classified);
   }, [steamAppTypes, steamOwnedGames]);
   const visibleLibraryGames = useMemo(() => {
     return filterOutSteamDemos(
@@ -417,6 +422,7 @@ export function PageRouter({
           steamProfile={appData.steamProfile}
           steamAccountStats={appData.steamAccountStats}
           isCloudProfileRestoring={appData.isCloudProfileRestoring}
+          isPremium={isPremium}
           favoriteGames={appData.profileFavoriteGames}
           addedLibraryGames={appData.profileAddedLibraryGames}
           achievementHistoryGames={appData.profileHistoryGames}

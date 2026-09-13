@@ -20,6 +20,8 @@ import {
 import { GameGridLoadingState } from "./LoadingStates";
 import { useFlipLayout } from "../../hooks/useFlipLayout";
 import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
+import { loadGameAchievementDetailsCached } from "../../utils/gameCache";
+import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
 
 interface GameCardProps {
   game: GhostBoxGame;
@@ -43,6 +45,13 @@ export const GameCard = memo(function GameCard({
   libraryCoverFade = false,
 }: GameCardProps) {
   const areMetricsUnlocked = useMetricsUnlocked();
+  const [hoverAchievementDetails, setHoverAchievementDetails] = useState<GhostBoxGame | null>(null);
+  const badgeGame = useMemo(
+    () => hoverAchievementDetails?.appId === game.appId
+      ? mergeAchievementDetailsIntoGame(game, hoverAchievementDetails)
+      : game,
+    [game, hoverAchievementDetails],
+  );
   const cardRef = useRef<HTMLElement | null>(null);
   const [shouldLoadCover, setShouldLoadCover] = useState(false);
   const rawHeaderSources = useMemo(
@@ -96,9 +105,9 @@ export const GameCard = memo(function GameCard({
   // Lista de schema pode chegar antes dos flags pessoais. O resumo da conta
   // continua sendo piso da contagem; usar só a lista fazia 1/34 virar 0/34 no
   // card até o modal executar sua fusão completa.
-  const achievementTotal = showAchievements ? getAchievementTotal(game) : 0;
+  const achievementTotal = showAchievements ? getAchievementTotal(badgeGame) : 0;
   const achievementUnlocked = showAchievements
-    ? Math.min(getUnlockedAchievementCount(game), achievementTotal)
+    ? Math.min(getUnlockedAchievementCount(badgeGame), achievementTotal)
     : 0;
   const achievementProgress =
     achievementTotal > 0
@@ -108,7 +117,7 @@ export const GameCard = memo(function GameCard({
   // Enquanto não houver total, não exibe o badge vazio "0 / 0"; ao chegar um
   // schema válido, ele aparece normalmente no próximo render.
   const hasAchievementBadge =
-    showAchievements && hasAvailableAchievements(game);
+    showAchievements && hasAvailableAchievements(badgeGame);
   const showLockedBadge = hasAchievementBadge && !areMetricsUnlocked;
 
   const handleContextMenu = (event: React.MouseEvent) => {
@@ -123,7 +132,16 @@ export const GameCard = memo(function GameCard({
   // modal abrir. O dedupe mora no refresh (inFlight + 1/appId/versão stats).
   const handleHoverEnrich = () => {
     preloadGameModalAssets(game, 0, { nativeResolve: false });
-    if (showAchievements && !showLockedBadge) onHoverGame?.(game);
+    if (showAchievements && areMetricsUnlocked) {
+      onHoverGame?.(game);
+      // Atualiza também cards Steam que não pertencem às listas locais do
+      // contexto, sem esperar a fila de enriquecimento da biblioteca inteira.
+      void loadGameAchievementDetailsCached(game.appId || game.id)
+        .then((details) => {
+          if (details) setHoverAchievementDetails(details);
+        })
+        .catch(() => undefined);
+    }
   };
 
   return (
@@ -137,6 +155,9 @@ export const GameCard = memo(function GameCard({
       onMouseEnter={handleHoverEnrich}
       onContextMenu={handleContextMenu}
     >
+      {!coverSource && (
+        <div className="game-card__cover-skeleton skeleton" aria-hidden="true" />
+      )}
       <div
         className={`game-card__cover ${coverSources.length ? "game-card__cover--loaded" : ""}`}
         style={layeredImageStyle(
@@ -204,27 +225,18 @@ export function GameGrid({
   libraryCoverFade = false,
   animateLayout = false,
 }: GameGridProps) {
-  // Windowing progressivo: sem virtualização total (que bateria com o layout
-  // CSS grid auto-fill + FLIP), renderizamos a lista em páginas acionadas por
-  // um sentinel IntersectionObserver. O custo de DOM/render no primeiro paint
-  // deixa de escalar com a biblioteca inteira — só com o viewport. Combinado
-  // com `content-visibility:auto` nos cards, os itens já renderizados mas fora
-  // da tela seguem baratos.
+  // Paginação progressiva mantém o primeiro paint pequeno. O orçamento só
+  // cresce: atualizar detalhes/conquistas não pode desmontar as páginas já
+  // visíveis e encolher a grade durante a rolagem.
   const INITIAL_PAGE = 48;
   const PAGE_SIZE = 48;
-  const [renderCount, setRenderCount] = useState(() =>
-    Math.min(INITIAL_PAGE, visibleGames.length),
-  );
+  const [renderCount, setRenderCount] = useState(INITIAL_PAGE);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const renderedGames = useMemo(
     () => visibleGames.slice(0, renderCount),
     [visibleGames, renderCount],
   );
-
-  useEffect(() => {
-    setRenderCount(Math.min(INITIAL_PAGE, visibleGames.length));
-  }, [visibleGames]);
 
   useEffect(() => {
     const node = sentinelRef.current;

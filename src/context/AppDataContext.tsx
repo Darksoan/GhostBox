@@ -2498,6 +2498,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       };
 
       const previousBannerUrl = currentProfile.bannerUrl;
+      const currentBannerPosition = {
+        x: Math.min(100, Math.max(0, Math.round(currentProfile.bannerPosition?.x ?? 50))),
+        y: Math.min(100, Math.max(0, Math.round(currentProfile.bannerPosition?.y ?? 50))),
+        scale: Math.min(
+          3,
+          Math.max(1, Number((currentProfile.bannerPosition?.scale ?? 1).toFixed(2))),
+        ),
+      };
+      const bannerChanged =
+        (previousBannerUrl ?? "") !== bannerUrl ||
+        currentBannerPosition.x !== bannerPosition.x ||
+        currentBannerPosition.y !== bannerPosition.y ||
+        (currentBannerPosition.scale ?? 1) !== (bannerPosition.scale ?? 1);
+      const canUseCloudImages = await hasPremiumCloudProfileAccess();
+      if (bannerChanged && !canUseCloudImages) {
+        showToast(
+          appearance.language === "en" ? "Premium feature" : "Recurso Premium",
+          appearance.language === "en"
+            ? "Changing the profile banner is available with Premium."
+            : "A alteração da capa do perfil está disponível no Premium.",
+          "error",
+        );
+        return;
+      }
+
       const optimisticProfile: SteamProfile = {
         ...currentProfile,
         displayName,
@@ -2508,11 +2533,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setSteamProfile(optimisticProfile);
       let persistedAvatarUrl = avatarUrl;
       let persistedBannerUrl = bannerUrl;
-      // Free accounts have no cloud bucket: uploading always fails and used to
-      // roll the whole edit back. Keep the encoded data URL as-is — it is
-      // persisted locally (localStorage + saveSteamProfile) and renders the
-      // same. Cloud upload stays premium-only.
-      const canUseCloudImages = await hasPremiumCloudProfileAccess();
       try {
         if (canUseCloudImages) {
           if (/^data:/i.test(persistedAvatarUrl)) {
@@ -2565,6 +2585,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     },
     [
       hasPremiumCloudProfileAccess,
+      appearance.language,
       scheduleCloudProfileSync,
       showToast,
       steamProfile,

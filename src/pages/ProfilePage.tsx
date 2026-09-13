@@ -367,6 +367,7 @@ interface ProfilePageProps {
   steamProfile: SteamProfile | null;
   steamAccountStats?: SteamAccountStats | null;
   isCloudProfileRestoring?: boolean;
+  isPremium: boolean;
   favoriteGames: GhostBoxGame[];
   addedLibraryGames: GhostBoxGame[];
   achievementHistoryGames?: GhostBoxGame[];
@@ -550,6 +551,7 @@ export function ProfilePage({
   steamProfile,
   steamAccountStats = null,
   isCloudProfileRestoring = false,
+  isPremium,
   favoriteGames,
   addedLibraryGames,
   achievementHistoryGames = [],
@@ -2379,6 +2381,7 @@ export function ProfilePage({
             ) : isEditProfileActive ? (
               <EditProfileTab
                 profile={steamProfile}
+                isPremium={isPremium}
                 onUpdateProfile={onUpdateProfile}
               />
             ) : renderedGames.length > 0 ? (

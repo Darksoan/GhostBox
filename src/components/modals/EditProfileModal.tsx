@@ -385,7 +385,7 @@ export function EditProfileModal({
                   {isAvatarCropMode
                     ? appearance.language === "en" ? "Crop avatar" : "Recortar avatar"
                     : isCoverMode
-                      ? appearance.language === "en" ? "Change cover" : "Mudar capa"
+                      ? appearance.language === "en" ? "Change cover" : "Alterar capa"
                       : t("profile.editProfile")}
                 </h3>
                 <p>
@@ -469,7 +469,7 @@ export function EditProfileModal({
                         onClick={handleBannerChange}
                       >
                         <ImageUp size={16} aria-hidden="true" />
-                        {appearance.language === "en" ? "Change cover" : "Mudar capa"}
+                        {appearance.language === "en" ? "Change cover" : "Alterar capa"}
                       </button>
                       <button
                         type="button"

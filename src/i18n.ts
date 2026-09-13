@@ -239,7 +239,7 @@ const translations: Record<Language, TranslationTree> = {
       facetsError: "Não foi possível carregar todos os filtros.",
     },
     profile: {
-      changeBanner: "Mudar capa",
+      changeBanner: "Alterar capa",
       createCollection: "Criar coleção",
       overview: "Geral",
       unlockedAchievements: "Conquistas",
@@ -261,7 +261,7 @@ const translations: Record<Language, TranslationTree> = {
       editProfile: "Editar perfil",
       editProfileSubtitle: "Personalize seu nome, avatar e capa de perfil",
       profileAvatar: "Foto de perfil",
-      changeAvatar: "Alterar foto",
+      changeAvatar: "Alterar",
       avatarFormatHelp: "JPG, PNG ou GIF.",
       processingAvatar: "Processando...",
       avatarTooLarge: "A animação é muito grande. Escolha um GIF menor ou mais curto.",
@@ -271,7 +271,9 @@ const translations: Record<Language, TranslationTree> = {
       displayName: "Nome de exibição",
       displayNamePlaceholder: "Seu nome",
       bannerCover: "Capa do perfil",
-      removeBanner: "Remover capa",
+      bannerPremiumHelp: "A alteração de capa está disponível somente na assinatura",
+      bannerPremiumLink: "GhostBox Premium",
+      removeBanner: "Remover",
       cropAvatar: "Recortar avatar",
       saveChanges: "Salvar alterações",
       changesSaved: "Perfil atualizado",
@@ -631,9 +633,9 @@ const translations: Record<Language, TranslationTree> = {
           showOnProfile: "Mostrar dados Steam no perfil",
           showOnProfileDescription:
             "Exibe métricas e jogos da conta Steam no seu perfil GhostBox.",
-          showInLibrary: "Mostrar jogos instalados no Steam",
+          showInLibrary: "Mostrar jogos da biblioteca Steam no Ghostbox",
           showInLibraryDescription:
-            "Exibe os jogos instalados na sua biblioteca Steam na aba Biblioteca do GhostBox.",
+            "Exibe os jogos da sua biblioteca Steam na aba Biblioteca do GhostBox.",
         },
         discord: {
           title: "Discord",
@@ -998,7 +1000,7 @@ const translations: Record<Language, TranslationTree> = {
       editProfile: "Edit profile",
       editProfileSubtitle: "Customize your display name, avatar and profile banner",
       profileAvatar: "Profile avatar",
-      changeAvatar: "Change photo",
+      changeAvatar: "Change",
       avatarFormatHelp: "JPG, PNG or GIF.",
       processingAvatar: "Processing...",
       avatarTooLarge: "The animation is too large. Choose a smaller or shorter GIF.",
@@ -1008,7 +1010,9 @@ const translations: Record<Language, TranslationTree> = {
       displayName: "Display name",
       displayNamePlaceholder: "Your name",
       bannerCover: "Profile banner",
-      removeBanner: "Remove banner",
+      bannerPremiumHelp: "Banner changes are available only with the",
+      bannerPremiumLink: "GhostBox Premium subscription",
+      removeBanner: "Remove",
       cropAvatar: "Crop avatar",
       saveChanges: "Save changes",
       changesSaved: "Profile updated",
@@ -1365,9 +1369,9 @@ const translations: Record<Language, TranslationTree> = {
           showOnProfile: "Show Steam data on profile",
           showOnProfileDescription:
             "Show metrics and games from your Steam account on your GhostBox profile.",
-          showInLibrary: "Show games installed in Steam",
+          showInLibrary: "Show Steam library games in Ghostbox",
           showInLibraryDescription:
-            "Show games installed in your Steam library in the GhostBox Library tab.",
+            "Show games from your Steam library in the GhostBox Library tab.",
         },
         discord: {
           title: "Discord",

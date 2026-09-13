@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { relativeLayoutRect } from "../src/utils/flipLayout";
+
+describe("coordenadas de layout durante a rolagem", () => {
+  it("não interpreta scroll vertical/horizontal como movimento dos cards", () => {
+    const before = relativeLayoutRect(
+      { left: 260, top: 900, width: 180, height: 270 },
+      { left: 40, top: 100 },
+    );
+    const after = relativeLayoutRect(
+      { left: 240, top: 300, width: 180, height: 270 },
+      { left: 20, top: -500 },
+    );
+    expect(after).toEqual(before);
+  });
+
+  it("preserva movimento real de uma linha mesmo quando também houve scroll", () => {
+    const before = relativeLayoutRect(
+      { left: 260, top: 900, width: 180, height: 270 },
+      { left: 40, top: 100 },
+    );
+    const after = relativeLayoutRect(
+      { left: 260, top: 600, width: 180, height: 270 },
+      { left: 40, top: -500 },
+    );
+    expect(after.top - before.top).toBe(300);
+    expect(after.left - before.left).toBe(0);
+  });
+});
 
 describe("useFlipLayout — motion design e reorganização de capas", () => {
   it("utiliza tokens calibrados de motion design para duração e curva ease-out", () => {

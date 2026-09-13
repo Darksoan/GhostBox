@@ -2,6 +2,7 @@ import {
   Camera,
   Crop,
   ImageUp,
+  SquareArrowOutUpRight,
   createLucideIcon,
   Trash,
 } from "lucide-react";
@@ -67,6 +68,7 @@ function normalizeBannerPosition(position?: SteamProfile["bannerPosition"]): Ban
 
 interface EditProfileTabProps {
   profile: SteamProfile | null;
+  isPremium: boolean;
   onUpdateProfile: (
     displayName: string,
     avatarUrl: string,
@@ -75,9 +77,9 @@ interface EditProfileTabProps {
   ) => Promise<void> | void;
 }
 
-export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps) {
+export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProfileTabProps) {
   const { appearance, t } = useSettings();
-  const { showToast } = useOverlay();
+  const { showToast, setSubscriptionModalOpen } = useOverlay();
   const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
   const avatarEncodingRef = useRef<AbortController | null>(null);
   const [displayName, setDisplayName] = useState(() => profile?.displayName || "");
@@ -223,6 +225,8 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
   }, [avatarCropPosition, pendingAvatar, showToast, t]);
 
   const handleBannerChange = useCallback(async () => {
+    if (!isPremium) return;
+
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -243,15 +247,17 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
       }
     };
     input.click();
-  }, []);
+  }, [isPremium]);
 
   const handleBannerRemove = useCallback(() => {
+    if (!isPremium) return;
+
     setBannerUrl("");
     setBannerPosition(defaultBannerPosition);
-  }, []);
+  }, [isPremium]);
 
   const handleBannerPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (isBannerPlaceholder || !bannerPreviewSource) return;
+    if (!isPremium || isBannerPlaceholder || !bannerPreviewSource) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
     bannerDragRef.current = {
@@ -261,9 +267,11 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
       originX: bannerPosition.x,
       originY: bannerPosition.y,
     };
-  }, [bannerPosition.x, bannerPosition.y, bannerPreviewSource, isBannerPlaceholder]);
+  }, [bannerPosition.x, bannerPosition.y, bannerPreviewSource, isBannerPlaceholder, isPremium]);
 
   const handleBannerPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPremium) return;
+
     const drag = bannerDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
 
@@ -275,7 +283,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
       x: clampBannerPosition(drag.originX - deltaX),
       y: clampBannerPosition(drag.originY - deltaY),
     }));
-  }, []);
+  }, [isPremium]);
 
   const handleBannerPointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (bannerDragRef.current?.pointerId === event.pointerId) {
@@ -284,7 +292,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
   }, []);
 
   const handleBannerWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (isBannerPlaceholder || !bannerPreviewSource) return;
+    if (!isPremium || isBannerPlaceholder || !bannerPreviewSource) return;
 
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
@@ -292,7 +300,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
       ...current,
       scale: clampBannerScale((current.scale ?? 1) + direction * 0.08),
     }));
-  }, [bannerPreviewSource, isBannerPlaceholder]);
+  }, [bannerPreviewSource, isBannerPlaceholder, isPremium]);
 
   const handleAvatarCropPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!pendingAvatar) return;
@@ -474,6 +482,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
               </div>
               <div className="profile-page__edit-field profile-page__edit-name">
                 <label htmlFor="profile-display-name">{t("profile.displayName")}</label>
+                <p id="profile-display-name-help">{t("profile.displayNameHelp")}</p>
                 <input
                   id="profile-display-name"
                   className="profile-page__edit-input"
@@ -485,7 +494,6 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <p id="profile-display-name-help">{t("profile.displayNameHelp")}</p>
               </div>
             </div>
 
@@ -495,7 +503,7 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
               </div>
 
               <div
-                className={`profile-page__edit-banner-preview${isBannerPlaceholder ? " profile-page__edit-banner-preview--placeholder" : ""}`}
+                className={`profile-page__edit-banner-preview${isBannerPlaceholder ? " profile-page__edit-banner-preview--placeholder" : ""}${!isPremium ? " profile-page__edit-banner-preview--locked" : ""}`}
                 onPointerDown={handleBannerPointerDown}
                 onPointerMove={handleBannerPointerMove}
                 onPointerUp={handleBannerPointerEnd}
@@ -524,39 +532,61 @@ export function EditProfileTab({ profile, onUpdateProfile }: EditProfileTabProps
                 ) : (
                   <div className="edit-profile-modal__banner-placeholder" />
                 )}
-              </div>
-              <div className="profile-page__edit-banner-toolbar">
-                <p>{t("profile.avatarCropHelp")}</p>
-                <div className="profile-page__edit-banner-actions">
+                <div
+                  className="profile-page__edit-banner-overlay"
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
                   <button
                     type="button"
-                    className="button"
+                    className="button profile-page__edit-banner-overlay-btn"
                     onClick={handleBannerChange}
+                    disabled={!isPremium}
+                    aria-describedby={!isPremium ? "profile-banner-premium-help" : undefined}
                   >
                     <ImageUp size={18} aria-hidden="true" />
                     <span>{t("profile.changeBanner")}</span>
                   </button>
                   <button
                     type="button"
-                    className="button profile-page__edit-remove-btn"
+                    className="button profile-page__edit-banner-overlay-btn profile-page__edit-remove-btn"
                     onClick={handleBannerRemove}
-                    disabled={isBannerPlaceholder}
+                    disabled={!isPremium || isBannerPlaceholder}
                   >
                     <Trash size={18} aria-hidden="true" />
                     <span>{t("profile.removeBanner")}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="button button--primary profile-page__edit-save-btn"
-                    disabled={!displayName.trim() || isSaving}
-                    onClick={handleSave}
-                  >
-                    <SaveCheck size={18} aria-hidden="true" />
-                    <span>{isSaving ? t("profile.saving") : t("profile.saveChanges")}</span>
-                  </button>
                 </div>
               </div>
+              {!isPremium ? (
+                <div className="profile-page__edit-banner-toolbar">
+                  <div className="profile-page__edit-banner-actions">
+                    <p id="profile-banner-premium-help">
+                      {t("profile.bannerPremiumHelp")}{" "}
+                      <button
+                        type="button"
+                        className="profile-page__edit-banner-premium-link"
+                        onClick={() => setSubscriptionModalOpen(true)}
+                      >
+                        <span>{t("profile.bannerPremiumLink")}</span>
+                        <SquareArrowOutUpRight size={13} aria-hidden="true" />
+                      </button>
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </div>
+          </div>
+
+          <div className="profile-page__edit-footer">
+            <button
+              type="button"
+              className="button button--primary profile-page__edit-save-btn"
+              disabled={!displayName.trim() || isSaving}
+              onClick={handleSave}
+            >
+              <SaveCheck size={18} aria-hidden="true" />
+              <span>{isSaving ? t("profile.saving") : t("profile.saveChanges")}</span>
+            </button>
           </div>
         </section>
       )}

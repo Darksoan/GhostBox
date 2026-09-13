@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { isMotionDisabled } from "../utils/motion";
+import { relativeLayoutRect, type LayoutRect } from "../utils/flipLayout";
 
 // Tokens do sistema de movimento (motion design):
 // Duração base calibrada para reorganização de grid (220ms) e curva ease-out com
@@ -12,7 +13,7 @@ export function useFlipLayout<T extends HTMLElement>(
   enabled = true,
 ): RefObject<T> {
   const containerRef = useRef<T>(null);
-  const previousRectsRef = useRef(new Map<string, DOMRect>());
+  const previousRectsRef = useRef(new Map<string, LayoutRect>());
   const animationsRef = useRef(new Map<string, Animation>());
   const lastContainerWidthRef = useRef<number>(0);
 
@@ -39,11 +40,12 @@ export function useFlipLayout<T extends HTMLElement>(
 
     // Se houver animações em andamento, capturamos a posição visual ao vivo (incluindo o transform atual)
     // para garantir que qualquer nova interpolação parta exatamente de onde o card está visualmente.
-    const currentVisualRects = new Map<string, DOMRect>();
+    const containerRect = container.getBoundingClientRect();
+    const currentVisualRects = new Map<string, LayoutRect>();
     for (const element of elements) {
       const id = element.dataset.layoutId;
       if (id) {
-        currentVisualRects.set(id, element.getBoundingClientRect());
+        currentVisualRects.set(id, relativeLayoutRect(element.getBoundingClientRect(), containerRect));
       }
     }
 
@@ -55,17 +57,21 @@ export function useFlipLayout<T extends HTMLElement>(
     }
     animationsRef.current.clear();
 
-    const nextRects = new Map<string, DOMRect>();
+    const nextRects = new Map<string, LayoutRect>();
     for (const element of elements) {
       const id = element.dataset.layoutId;
       if (id) {
-        nextRects.set(id, element.getBoundingClientRect());
+        nextRects.set(id, relativeLayoutRect(element.getBoundingClientRect(), containerRect));
       }
     }
 
     const viewportHeight =
       typeof window !== "undefined" ? window.innerHeight : 1080;
     const hasPrevious = previousRectsRef.current.size > 0;
+    const isAppend = hasPrevious && elements.length > previousRectsRef.current.size &&
+      [...previousRectsRef.current.keys()].every(
+        (id, index) => elements[index]?.dataset.layoutId === id,
+      );
 
     if (hasPrevious) {
       for (const element of elements) {
@@ -77,16 +83,17 @@ export function useFlipLayout<T extends HTMLElement>(
 
         // Otimização de performance: anima apenas cards que estão dentro ou próximos
         // do scrollport visível (-250px a +250px), evitando reflows/GPU thrashing com listas longas.
+        const viewportTop = nextRect.top + containerRect.top;
         const isNearViewport =
-          nextRect.bottom >= -250 && nextRect.top <= viewportHeight + 250;
+          viewportTop + nextRect.height >= -250 && viewportTop <= viewportHeight + 250;
 
         const previousRect = wasAnimating.has(id)
           ? currentVisualRects.get(id)
           : previousRectsRef.current.get(id);
 
         if (!previousRect) {
-          // Entrada de novos elementos (apenas quando não é resize)
-          if (!isResize && isNearViewport) {
+          // Paginação por scroll revela skeletons estáveis, sem animação de entrada.
+          if (!isResize && !isAppend && isNearViewport) {
             element.style.willChange = "transform, opacity";
             const animation = element.animate(
               [

@@ -216,6 +216,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   }, [getOverlayExitMs]);
 
   const closeContentOverlay = useCallback(() => {
+    openGameRequestRef.current += 1;
     clearOverlayExitTimeout();
     setSelectedGame(null);
     setAchievementsView(null);

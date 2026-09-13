@@ -15,7 +15,7 @@
    * discreto de altura, sem ligar a altura à largura, dá um pouco mais de
    * respiro à capa sem reenquadrar a arte a cada resize.
    */
-  --profile-cover-height: 312px;
+  --profile-cover-height: 336px;
   --profile-banner-bottom-fade: linear-gradient(
     to bottom,
     transparent 18%,
@@ -35,7 +35,7 @@
      badges) segue centralizado via justify-content do overlay, então mantém
      a posição relativa à nova altura sem ajuste extra. */
   &--maximized {
-    --profile-cover-height: 408px;
+    --profile-cover-height: 440px;
   }
 
   display: flex;
@@ -78,13 +78,38 @@
 
   }
 
-  &__banner-viewport::after,
-  &__edit-banner-preview::after {
+  &__banner-viewport::after {
     content: "";
     position: absolute;
     inset: 0;
     background:
       var(--profile-banner-bottom-fade),
+      linear-gradient(
+        to right,
+        color-mix(in srgb, var(--black) 50%, transparent) 0%,
+        color-mix(in srgb, var(--black) 18%, transparent) 32%,
+        transparent 62%
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--black) 38%, transparent) 0%,
+        color-mix(in srgb, var(--black) 10%, transparent) 22%,
+        transparent 44%
+      ),
+      radial-gradient(
+        128% 96% at 50% 4%,
+        transparent 56%,
+        color-mix(in srgb, var(--black) 28%, transparent) 100%
+      );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  &__edit-banner-preview::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
       linear-gradient(
         to right,
         color-mix(in srgb, var(--black) 50%, transparent) 0%,
@@ -163,8 +188,7 @@
     justify-content: center;
   }
 
-  &__background-overlay,
-  &__edit-banner-preview::before {
+  &__background-overlay {
     /* Fade suave até a base da capa — sem faixa fosca (as abas saíram daqui).
        O encontro com o fundo do app fica no `::after` do banner-viewport, então
        aqui sobra só um véu leve para o texto da identidade. */
@@ -1891,6 +1915,12 @@ html.no-backdrop-blur .profile-page {
     width: 100%;
   }
 
+  &__edit-panel {
+    min-height: calc(
+      100dvh - var(--app-header-height) - var(--space-8) - var(--page-bottom-space)
+    );
+  }
+
   &__edit-section-header {
     display: flex;
     flex-direction: column;
@@ -2035,45 +2065,35 @@ html.no-backdrop-blur .profile-page {
   }
 
   &__edit-avatar-actions .button,
-  &__edit-banner-actions .button {
-    position: relative;
+  &__edit-banner-toolbar .button,
+  &__edit-banner-overlay .button {
     align-items: center;
     gap: var(--space-3);
     min-height: 38px;
-    padding: var(--space-4) calc(var(--space-6) + (18px + var(--space-3)) / 2);
+    padding: var(--space-4) var(--space-6);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
-    transition:
-      color var(--motion-fast) ease,
-      opacity var(--motion-fast) ease,
-      background var(--motion-fast) ease;
+    color: var(--text-secondary);
 
     > svg {
-      position: absolute;
-      left: var(--space-6);
+      flex: 0 0 auto;
       width: 18px;
       height: 18px;
-      opacity: 0;
-      transform: translateX(calc(-1 * var(--space-3)));
-      transition:
-        opacity var(--motion-fast) var(--ease),
-        transform var(--motion-base) var(--ease);
+      opacity: 1;
     }
 
-    > span {
-      transition: transform var(--motion-base) var(--ease);
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      color: var(--text-secondary);
     }
+  }
 
-    &:hover,
-    &:focus-visible {
-      > svg {
-        opacity: 1;
-        transform: translateX(0);
-      }
+  &__edit-save-btn {
+    margin-left: auto;
 
-      > span {
-        transform: translateX(calc((18px + var(--space-3)) / 2));
-      }
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      color: var(--text-secondary);
     }
   }
 
@@ -2086,7 +2106,7 @@ html.no-backdrop-blur .profile-page {
   &__edit-banner-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: var(--space-6) var(--space-10);
     flex-wrap: wrap;
 
@@ -2104,6 +2124,62 @@ html.no-backdrop-blur .profile-page {
     align-items: center;
     flex-wrap: wrap;
     gap: var(--space-4);
+
+    p {
+      flex-basis: 100%;
+    }
+  }
+
+  &__edit-banner-overlay {
+    position: absolute;
+    left: var(--space-4);
+    bottom: var(--space-4);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  &__edit-banner-overlay-btn {
+    background: var(--surface-option);
+    color: var(--text-secondary);
+    border: 0;
+
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-option-hover);
+      color: var(--text-secondary);
+    }
+  }
+
+  &__edit-banner-premium-link {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: var(--weight-semibold);
+    line-height: inherit;
+    vertical-align: middle;
+    cursor: pointer;
+    transition: color var(--motion-fast) var(--ease);
+
+    > svg {
+      flex: 0 0 auto;
+      width: 13px;
+      height: 13px;
+    }
+
+    &:hover,
+    &:focus-visible {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
   }
 
   &__edit-banner-preview {
@@ -2118,10 +2194,16 @@ html.no-backdrop-blur .profile-page {
     touch-action: none;
     user-select: none;
 
+    &--locked {
+      cursor: default;
+      touch-action: auto;
+    }
+
     &::before {
       content: "";
       position: absolute;
       inset: 0;
+      background: none;
       pointer-events: none;
       z-index: 2;
     }
@@ -2161,6 +2243,7 @@ html.no-backdrop-blur .profile-page {
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: var(--space-4);
+    margin-top: auto;
   }
 
   &__edit-success-tag {

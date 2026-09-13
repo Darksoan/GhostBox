@@ -487,9 +487,11 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
   const handleProfileTabChange = useCallback(
     (tabId: string) => {
+      clearOverlayForward();
+      closeContentOverlay();
       shell.setActiveProfileCollectionId(tabId);
     },
-    [shell]
+    [clearOverlayForward, closeContentOverlay, shell]
   );
 
   const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {
@@ -635,6 +637,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               onNavigateToCatalogue={() => handleNavigate("catalogue")}
               onNavigateToDownloads={() => handleNavigate("downloads")}
               steamProfile={appData.steamProfile}
+              isPremium={isPremium}
             />
           </section>
         </article>

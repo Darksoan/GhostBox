@@ -33,9 +33,9 @@ function blockOf(needle: string): string {
 
 describe("badge de conquistas/horas das capas", () => {
   it("usa o resumo da conta como piso mesmo quando o schema já tem lista", () => {
-    expect(componentSource).toContain("getUnlockedAchievementCount(game)");
-    expect(componentSource).toContain("getAchievementTotal(game)");
-    expect(componentSource).toContain("hasAvailableAchievements(game)");
+    expect(componentSource).toContain("getUnlockedAchievementCount(badgeGame)");
+    expect(componentSource).toContain("getAchievementTotal(badgeGame)");
+    expect(componentSource).toContain("hasAvailableAchievements(badgeGame)");
     expect(componentSource).not.toContain(
       "achievementListTotal > 0",
     );
@@ -44,7 +44,7 @@ describe("badge de conquistas/horas das capas", () => {
   it("não mostra o badge quando o jogo não tem conquistas disponíveis", () => {
     expect(componentSource).toContain("const hasAchievementBadge =");
     expect(componentSource).toContain(
-      "showAchievements && hasAvailableAchievements(game)",
+      "showAchievements && hasAvailableAchievements(badgeGame)",
     );
     expect(componentSource).toContain(
       "hasAchievementBadge && !showLockedBadge",

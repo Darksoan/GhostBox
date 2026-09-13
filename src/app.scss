@@ -9639,8 +9639,8 @@ input[type="search"]::-ms-reveal {
 .game-card {
   position: relative;
   aspect-ratio: 460 / 215;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
+  // A proporção reserva a altura real também fora do viewport. Uma altura
+  // intrínseca estimada fazia as linhas crescerem ao entrar na tela.
   height: auto;
   overflow: hidden;
   border: 0;
@@ -9664,6 +9664,12 @@ input[type="search"]::-ms-reveal {
     @include media-depth(md);
   }
 
+  &__cover-skeleton {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
   &__cover {
     position: absolute;
     inset: 0;
@@ -9679,7 +9685,6 @@ input[type="search"]::-ms-reveal {
 
     &--loaded {
       opacity: 1;
-      animation: image-subtle-fade-in var(--motion-slow) ease both;
     }
 
     &::after {
@@ -10250,16 +10255,21 @@ input[type="search"]::-ms-reveal {
     border-radius: var(--radius-lg);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
-    gap: var(--space-4);
+    justify-content: center;
 
     span {
-      flex: 0 1 auto;
-      padding-right: 0;
-      padding-left: 0;
+      flex: 1;
+      min-width: 0;
+      padding-right: var(--space-6);
+      padding-left: var(--space-6);
+      text-align: center;
+      @include mixins.truncate;
     }
 
     svg {
-      position: static;
+      position: absolute;
+      right: var(--space-4);
+      flex-shrink: 0;
     }
   }
 
