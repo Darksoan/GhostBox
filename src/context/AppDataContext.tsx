@@ -50,6 +50,12 @@ import {
 import { getLatestChangedBackupRecord } from "../lib/backupNotifications";
 import { isHiddenLibraryGame } from "../utils/filters";
 import {
+  runSteamPlaytimeSync,
+  shouldApplyPlaytimeSnapshot,
+  shouldApplySteamAccountStats,
+  shouldClearSteamAccountStats,
+} from "../utils/steamStatsGuard";
+import {
   buildPremiumBackupNudgeNotification,
   hasSeenPremiumBackupNudge,
   markPremiumBackupNudgeSeen,
@@ -422,7 +428,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
   const [steamAccountStats, setSteamAccountStats] =
     useState<SteamAccountStats | null>(() => readStoredSteamAccountStats());
-  const steamAccountStatsRef = useRef<SteamAccountStats | null>(null);
+  // Inicializa o ref com o mesmo valor do storage: começar como `null`
+  // fazia o efeito de troca de conta apagar o cache válido no boot,
+  // zerando o tempo de jogo até o próximo fetch (que pode falhar).
+  const steamAccountStatsRef =
+    useRef<SteamAccountStats | null>(steamAccountStats);
   const [cloudSaveAppIds, setCloudSaveAppIds] = useState<Set<string>>(
     () => new Set<string>(),
   );
@@ -503,13 +513,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (steamId?: string | null) => {
       const id = steamId?.trim();
       if (!id) return;
+      const requestAccountUserId = accountUserIdRef.current;
 
       const stats = await ghostboxApi.getSteamAccountStats(id).catch(() => null);
+      if (!stats) return;
+      // Late responses must not repaint a signed-out UI or the next account
+      // with the previous account's playtimes (logout/switch/disconnect race).
       if (
-        stats &&
-        (!steamAccountStatsRef.current ||
-          stats.steamId !== steamAccountStatsRef.current.steamId ||
-          stats.fetchedAt >= steamAccountStatsRef.current.fetchedAt)
+        !shouldApplySteamAccountStats({
+          requestedSteamId: id,
+          statsSteamId: stats.steamId,
+          currentSteamId: steamProfileRef.current?.steamId,
+          requestAccountUserId,
+          currentAccountUserId: accountUserIdRef.current,
+        })
+      ) {
+        return;
+      }
+      if (
+        !steamAccountStatsRef.current ||
+        stats.steamId !== steamAccountStatsRef.current.steamId ||
+        stats.fetchedAt >= steamAccountStatsRef.current.fetchedAt
       ) {
         steamAccountStatsRef.current = stats;
         setSteamAccountStats(stats);
@@ -520,6 +544,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshGamePlaytimes = useCallback(async () => {
+    const requestAccountUserId = accountUserIdRef.current;
     let snapshot: GamePlaytimeSnapshot;
     try {
       snapshot = await ghostboxApi.getGamePlaytimes();
@@ -529,6 +554,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         error,
       );
       snapshot = gamePlaytimesRef.current;
+    }
+    if (
+      !shouldApplyPlaytimeSnapshot({
+        requestAccountUserId,
+        currentAccountUserId: accountUserIdRef.current,
+      })
+    ) {
+      return;
     }
     gamePlaytimesRef.current = snapshot;
     setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
@@ -547,9 +580,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (steamId?: string | null) => {
       const id = steamId?.trim();
       if (!id) return;
-      try {
-        const snapshot = await ghostboxApi.syncSteamPlaytimes(id);
-        if (snapshot && Object.keys(snapshot).length > 0) {
+      const requestAccountUserId = accountUserIdRef.current;
+      const isStale = () =>
+        !shouldApplyPlaytimeSnapshot({
+          requestedSteamId: id,
+          currentSteamId: steamProfileRef.current?.steamId,
+          requestAccountUserId,
+          currentAccountUserId: accountUserIdRef.current,
+        });
+      await runSteamPlaytimeSync(id, {
+        syncSteamPlaytimes: (targetId) =>
+          ghostboxApi.syncSteamPlaytimes(targetId),
+        refreshPlaytimes: () => refreshGamePlaytimes(),
+        refreshOwned: (targetId) => {
+          void refreshSteamOwnedLibraryGames(targetId);
+        },
+        applySnapshot: (snapshot) => {
           gamePlaytimesRef.current = snapshot;
           setActiveSessionAppIds(collectActiveSessionAppIds(snapshot));
           setFavoriteGames((current) =>
@@ -561,17 +607,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           setProfileHistoryGames((current) =>
             applyPlaytimeSnapshotToGames(current, snapshot),
           );
-          void refreshSteamOwnedLibraryGames(id);
-          return;
-        }
-        await refreshGamePlaytimes();
-      } catch (error) {
-        console.warn(
-          "[GhostBox] Steam playtime sync failed; showing last cached playtimes instead.",
-          error,
-        );
-        await refreshGamePlaytimes().catch(() => undefined);
-      }
+        },
+        isStale,
+        onSyncError: (error) => {
+          console.warn(
+            "[GhostBox] Steam playtime sync failed; showing last cached playtimes instead.",
+            error,
+          );
+        },
+      });
     },
     [refreshGamePlaytimes, refreshSteamOwnedLibraryGames],
   );
@@ -633,10 +677,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     steamProfileRef.current = steamProfile;
-    const steamId = steamProfile?.steamId?.trim();
     if (
-      steamId &&
-      steamAccountStatsRef.current?.steamId !== steamId
+      shouldClearSteamAccountStats(
+        steamProfile?.steamId,
+        steamAccountStatsRef.current?.steamId,
+      )
     ) {
       setSteamAccountStats(null);
       steamAccountStatsRef.current = null;

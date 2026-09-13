@@ -1465,9 +1465,51 @@ pub async fn steam_get_account_stats(
                 );
                 return Ok(stats);
             }
-            Err(error) => {
+            Err(proxy_error) => {
+                // Proxy falhou (cold start, rate-limit, 502): tenta ao menos o
+                // GetOwnedGames local (1 request, sem fan-out de conquistas)
+                // para não deixar login/conexão nova com tempo zerado quando
+                // o usuário tem API key local. Sem key, mantém o Err para o
+                // frontend preservar o cache em vez de sobrescrever com zero.
+                let fallback_api_key = load_steam_web_api_key(&app);
+                if !fallback_api_key.is_empty() {
+                    let direct_result = match reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(15))
+                        .build()
+                    {
+                        Ok(client) => {
+                            fetch_steam_owned_games(&client, &steam_id, &fallback_api_key).await
+                        }
+                        Err(error) => Err(error.to_string()),
+                    };
+                    match direct_result {
+                        Ok(owned_games) => {
+                            seed_playtimes_from_steam_owned_games(&app, &owned_games);
+                            apply_local_steam_playtimes(
+                                &app,
+                                &steam_id,
+                                &owned_app_ids_from_stats(&owned_games),
+                            );
+                            let fallback_cache =
+                                load_steam_account_stats_cache(&app, &steam_id);
+                            return Ok(build_steam_account_stats(
+                                &steam_id,
+                                &owned_games,
+                                &fallback_cache,
+                                true,
+                                false,
+                                false,
+                            ));
+                        }
+                        Err(direct_error) => {
+                            return Err(format!(
+                                "Steam stats proxy failed ({proxy_error}); direct Steam API also failed ({direct_error})"
+                            ));
+                        }
+                    }
+                }
                 return Err(format!(
-                    "Steam stats proxy is temporarily unavailable: {error}"
+                    "Steam stats proxy is temporarily unavailable: {proxy_error}"
                 ));
             }
         }
