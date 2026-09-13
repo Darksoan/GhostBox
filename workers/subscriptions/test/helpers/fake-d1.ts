@@ -9,7 +9,7 @@
 
 export type Row = Record<string, any>;
 
-type Handler = (binds: any[], db: FakeD1) => { results?: Row[]; changes: number; rowsWritten?: number };
+type Handler = (binds: any[], db: FakeD1, sql?: string) => { results?: Row[]; changes: number; rowsWritten?: number };
 
 type Rule = { pattern: RegExp; run: Handler };
 
@@ -381,6 +381,213 @@ const rules: Rule[] = [
     },
   },
   {
+    // Provider-neutral upsert used by provider-only signup: the provider
+    // arrives as a bind. The UNIQUE(provider, provider_id) index applies.
+    pattern: /^INSERT INTO user_connections \(user_id, provider, provider_id, metadata_json, linked_at\) VALUES \(\?, \?, \?, \?, \?\)/i,
+    run: ([userId, provider, providerId, metadataJson, linkedAt], db) => {
+      const clash = db
+        .rows("user_connections")
+        .find(
+          (entry) =>
+            entry.provider === provider &&
+            entry.provider_id === providerId &&
+            entry.user_id !== userId
+        );
+      if (clash) {
+        throw new Error("UNIQUE constraint failed: user_connections.provider, user_connections.provider_id");
+      }
+      const existing = db
+        .rows("user_connections")
+        .find((entry) => entry.user_id === userId && entry.provider === provider);
+      if (existing) {
+        existing.provider_id = providerId;
+        existing.metadata_json = metadataJson;
+        existing.linked_at = linkedAt;
+        return { changes: 1 };
+      }
+      db.rows("user_connections").push({
+        user_id: userId,
+        provider,
+        provider_id: providerId,
+        metadata_json: metadataJson,
+        linked_at: linkedAt,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    // Steam OpenID replay guard: one row per assertion nonce.
+    pattern: /^INSERT INTO steam_openid_nonces \(nonce_hash, created_at, expires_at\) VALUES \(\?, \?, \?\)/i,
+    run: ([nonceHash, createdAt, expiresAt], db) => {
+      if (db.rows("steam_openid_nonces").some((entry) => entry.nonce_hash === nonceHash)) {
+        throw new Error("UNIQUE constraint failed: steam_openid_nonces.nonce_hash");
+      }
+      db.rows("steam_openid_nonces").push({ nonce_hash: nonceHash, created_at: createdAt, expires_at: expiresAt });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^DELETE FROM steam_openid_nonces WHERE expires_at < \?/i,
+    run: ([cutoff], db) => {
+      const rows = db.rows("steam_openid_nonces");
+      const kept = rows.filter((entry) => String(entry.expires_at) >= String(cutoff));
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    // Legacy Steam-era identity row, backfilled on claim/signup.
+    pattern: /^INSERT INTO users \(steam_id, created_at, updated_at\)/i,
+    run: ([steamId, createdAt, updatedAt], db) => {
+      const existing = db.rows("users").find((entry) => entry.steam_id === steamId);
+      if (existing) {
+        existing.updated_at = updatedAt;
+        return { changes: 1 };
+      }
+      db.rows("users").push({ steam_id: steamId, created_at: createdAt, updated_at: updatedAt });
+      return { changes: 1 };
+    },
+  },
+  {
+    // Merge + Steam signup: move rows from one identity to another.
+    // Single-row-per-user tables throw on collision, like the real UNIQUE
+    // indexes, so the caller falls back to keeping the survivor's row.
+    // user_connections has its own clash-aware rule below.
+    pattern: /^UPDATE( OR IGNORE)? (?!user_connections)(\w+) SET user_id = \? WHERE (?:steam_id = \? AND user_id IS NULL|user_id = \?)$/i,
+    run: (binds, db, sql) => {
+      const table = /^UPDATE(?: OR IGNORE)? (\w+)/i.exec(sql || "")?.[1];
+      if (!table) throw new Error(`FakeD1: cannot resolve table\n${sql}`);
+      const singleRowTables = ["subscriptions", "discord_links", "user_profile_cloud"];
+      if (String(sql).includes("steam_id = ? AND user_id IS NULL")) {
+        // Steam claim backfill: legacy rows keyed by steam_id only.
+        const [toUserId, steamId] = binds;
+        let changes = 0;
+        for (const row of db.rows(table)) {
+          if (row.steam_id === steamId && (row.user_id === null || row.user_id === undefined)) {
+            row.user_id = toUserId;
+            changes += 1;
+          }
+        }
+        return { changes };
+      }
+      const [toUserId, fromUserId] = binds;
+      if (singleRowTables.includes(table)) {
+        const hasPrimary = db.rows(table).some((entry) => entry.user_id === toUserId);
+        const hasSecondary = db.rows(table).some((entry) => entry.user_id === fromUserId);
+        if (hasPrimary && hasSecondary) {
+          if (String(sql).startsWith("UPDATE OR IGNORE")) return { changes: 0 };
+          throw new Error(`UNIQUE constraint failed: ${table}.user_id`);
+        }
+      }
+      let changes = 0;
+      for (const row of db.rows(table)) {
+        if (row.user_id === fromUserId) {
+          if (String(sql).startsWith("UPDATE OR IGNORE")) {
+            const collision = db.rows(table).some((entry) => {
+              if (entry.user_id !== toUserId) return false;
+              if (table === "user_collections_cloud") return entry.id === row.id;
+              if (table === "user_collection_games_cloud") {
+                return entry.collection_id === row.collection_id && entry.game_id === row.game_id;
+              }
+              if (table === "user_favorite_games_cloud") return entry.game_id === row.game_id;
+              return false;
+            });
+            if (collision) continue;
+          }
+          row.user_id = toUserId;
+          changes += 1;
+        }
+      }
+      return { changes };
+    },
+  },
+  {
+    pattern: /^UPDATE (\w+) SET steam_id = NULL WHERE user_id = \?$/i,
+    run: ([userId], db, sql) => {
+      const table = /^UPDATE (\w+)/i.exec(sql || "")?.[1];
+      if (!table) throw new Error(`FakeD1: cannot resolve table\n${sql}`);
+      let changes = 0;
+      for (const row of db.rows(table)) {
+        if (row.user_id === userId && row.steam_id !== null && row.steam_id !== undefined) {
+          row.steam_id = null;
+          changes += 1;
+        }
+      }
+      return { changes };
+    },
+  },
+  {
+    // Account merge: move one provider connection to the survivor. Throws on
+    // a provider-type clash, like the real UNIQUE(user_id, provider).
+    pattern: /^UPDATE( OR IGNORE)? user_connections SET user_id = \? WHERE user_id = \?( AND provider = \?)?$/i,
+    run: (binds, db, sql) => {
+      const [toUserId, fromUserId, provider] = binds;
+      const moving = db
+        .rows("user_connections")
+        .filter((entry) => entry.user_id === fromUserId && (!provider || entry.provider === provider));
+      if (String(sql).includes("AND provider = ?")) {
+        const clash = db
+          .rows("user_connections")
+          .some((entry) => entry.user_id === toUserId && entry.provider === provider);
+        if (clash && moving.length > 0) {
+          throw new Error("UNIQUE constraint failed: user_connections.user_id, user_connections.provider");
+        }
+      } else {
+        for (const entry of moving) {
+          const clash = db
+            .rows("user_connections")
+            .some((row) => row.user_id === toUserId && row.provider === entry.provider);
+          if (clash) {
+            if (String(sql).startsWith("UPDATE OR IGNORE")) continue;
+            throw new Error("UNIQUE constraint failed: user_connections.user_id, user_connections.provider");
+          }
+          entry.user_id = toUserId;
+        }
+        return { changes: moving.filter((entry) => entry.user_id === toUserId).length };
+      }
+      for (const entry of moving) entry.user_id = toUserId;
+      return { changes: moving.length };
+    },
+  },
+  {
+    pattern: /^SELECT storage_path FROM cloud_saves WHERE user_id = \?$/i,
+    run: ([userId], db) => ({
+      results: db.rows("cloud_saves").filter((entry) => entry.user_id === userId).map((entry) => ({ storage_path: entry.storage_path })),
+      changes: 0,
+    }),
+  },
+  {
+    pattern: /^UPDATE (subscriptions|payments) SET user_id = NULL, steam_id = NULL WHERE user_id = \?$/i,
+    run: ([userId], db, sql) => {
+      const table = /^UPDATE (\w+)/i.exec(sql || "")?.[1];
+      if (!table) throw new Error(`FakeD1: cannot resolve table\n${sql}`);
+      let changes = 0;
+      for (const row of db.rows(table)) {
+        if (row.user_id === userId) {
+          row.user_id = null;
+          row.steam_id = null;
+          changes += 1;
+        }
+      }
+      return { changes };
+    },
+  },
+  {
+    // Self-service deletion + merge cleanup: drop every row one account owns.
+    // Sits after the specific DELETE rules above so those keep matching first.
+    pattern: /^DELETE FROM (\w+) WHERE user_id = \?$/i,
+    run: ([userId], db, sql) => {
+      const table = /^DELETE FROM (\w+)/i.exec(sql || "")?.[1];
+      if (!table) throw new Error(`FakeD1: cannot resolve table\n${sql}`);
+      const rows = db.rows(table);
+      const kept = rows.filter((entry) => entry.user_id !== userId);
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
     pattern: /^SELECT \* FROM discord_links WHERE user_id = \?/i,
     run: ([userId], db) => {
       const row = db.rows("discord_links").find((entry) => entry.user_id === userId);
@@ -433,14 +640,30 @@ const rules: Rule[] = [
   },
   {
     pattern: /^INSERT INTO accounts \(user_id, email, username, display_name, email_verified, verified_via, created_at, updated_at\)/i,
-    run: ([userId, email, username, displayName, emailVerified, verifiedVia, createdAt, updatedAt], db) => {
+    run: ([userId, email, username, displayName, createdAt, updatedAt], db) => {
+      // Provider-only accounts store NULL email; the UNIQUE indexes still
+      // apply, like the real schema.
+      if (
+        db
+          .rows("accounts")
+          .some((entry) => String(entry.username).toLowerCase() === String(username).toLowerCase())
+      ) {
+        throw new Error("UNIQUE constraint failed: accounts.username");
+      }
+      if (
+        email !== null &&
+        email !== undefined &&
+        db.rows("accounts").some((entry) => entry.email === email)
+      ) {
+        throw new Error("UNIQUE constraint failed: accounts.email");
+      }
       db.rows("accounts").push({
         user_id: userId,
-        email,
+        email: email ?? null,
         username,
         display_name: displayName,
-        email_verified: emailVerified,
-        verified_via: verifiedVia,
+        email_verified: 0,
+        verified_via: null,
         token_version: 1,
         created_at: createdAt,
         updated_at: updatedAt,
@@ -449,7 +672,7 @@ const rules: Rule[] = [
     },
   },
   {
-    pattern: /^UPDATE accounts SET token_version = token_version \+ 1, updated_at = \? WHERE user_id = \? RETURNING token_version/i,
+    pattern: /^UPDATE accounts SET token_version = token_version \+ 1, updated_at = \? WHERE user_id = \?(?: RETURNING token_version)?$/i,
     run: ([updatedAt, userId], db) => {
       const row = db.rows("accounts").find((entry) => entry.user_id === userId);
       if (!row) return { results: [], changes: 0 };
@@ -502,6 +725,40 @@ const rules: Rule[] = [
             entry.provider === "discord" && entry.provider_id === providerId && entry.user_id !== userId
         );
       return { results: row ? [{ user_id: row.user_id }] : [], changes: 0 };
+    },
+  },
+  {
+    // Provider-neutral version of the rule above: the "is this identity
+    // attached to somebody else" check shared by link, signup and merge.
+    pattern: /^SELECT user_id FROM user_connections WHERE provider = \? AND provider_id = \? AND user_id <> \?/i,
+    run: ([provider, providerId, userId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find(
+          (entry) =>
+            entry.provider === provider && entry.provider_id === providerId && entry.user_id !== userId
+        );
+      return { results: row ? [{ user_id: row.user_id }] : [], changes: 0 };
+    },
+  },
+  {
+    // Provider-neutral owner lookup used by login and signup.
+    pattern: /^SELECT user_id FROM user_connections WHERE provider = \? AND provider_id = \? LIMIT 1/i,
+    run: ([provider, providerId], db) => {
+      const row = db
+        .rows("user_connections")
+        .find((entry) => entry.provider === provider && entry.provider_id === providerId);
+      return { results: row ? [{ user_id: row.user_id }] : [], changes: 0 };
+    },
+  },
+  {
+    pattern: /^SELECT provider, provider_id FROM user_connections WHERE user_id = \?/i,
+    run: ([userId], db) => {
+      const rows = db
+        .rows("user_connections")
+        .filter((entry) => entry.user_id === userId)
+        .map((entry) => ({ provider: entry.provider, provider_id: entry.provider_id }));
+      return { results: rows, changes: 0 };
     },
   },
 
@@ -602,6 +859,25 @@ const rules: Rule[] = [
     run: ([ticketHash], db) => {
       const row = db.rows("discord_login_tickets").find((entry) => entry.ticket_hash === ticketHash);
       return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
+    // Atomic single-use consume: only a fresh, unconsumed ticket matches, so
+    // concurrent exchanges yield exactly one winner. Must sit before the
+    // prefix-matching non-atomic rule below.
+    pattern: /^UPDATE discord_login_tickets SET consumed_at = \? WHERE ticket_hash = \? AND consumed_at IS NULL AND expires_at > \? RETURNING \*/i,
+    run: ([consumedAt, ticketHash, now], db) => {
+      const row = db
+        .rows("discord_login_tickets")
+        .find(
+          (entry) =>
+            entry.ticket_hash === ticketHash &&
+            !entry.consumed_at &&
+            String(entry.expires_at) > String(now)
+        );
+      if (!row) return { results: [], changes: 0 };
+      row.consumed_at = consumedAt;
+      return { results: [{ ...row }], changes: 1 };
     },
   },
   {
@@ -1126,7 +1402,7 @@ export class FakeD1 {
     }
     const rule = rules.find((entry) => entry.pattern.test(sql));
     if (!rule) throw new Error(`FakeD1: unhandled statement\n${sql}`);
-    const outcome = rule.run(binds, this);
+    const outcome = rule.run(binds, this, sql);
     const changes = outcome.changes ?? 0;
     const rowsWritten = outcome.rowsWritten ?? changes;
     this.execLog.push({ sql, binds: [...binds], changes, rowsWritten });

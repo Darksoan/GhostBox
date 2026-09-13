@@ -59,7 +59,6 @@ Secrets vão por `wrangler secret put NOME --config workers/<worker>/wrangler.to
 | `STRIPE_WEBHOOK_SECRET` | **secret** | Valida a assinatura do webhook. |
 | `CLOUD_SESSION_SECRET` | **secret** | Assina as sessões de cloud save. |
 | `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_SYNC_TOKEN`, `DISCORD_OAUTH_STATE_SECRET` | **secret** | Integração com Discord (cargo Premium). |
-| `FIREBASE_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY` | **secret** | Auth. |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | **secret** | |
 | `CHECKOUT_RETURN_URL` | var | Em `[vars]`. |
 | `DISCORD_GUILD_ID`, `DISCORD_PREMIUM_ROLE_ID`, `DISCORD_REDIRECT_URI`, `OAUTH_REDIRECT_URI` | var | Em `[vars]`. As redirect URIs precisam bater **exatamente** com o console do provider — barra final ou `http://` já dá `redirect_uri_mismatch`. |

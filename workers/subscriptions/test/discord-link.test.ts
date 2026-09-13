@@ -104,7 +104,11 @@ describe("GET /discord/callback", () => {
     ]);
   });
 
-  it("moves the link when the Discord account belonged to another user", async () => {
+  it("refuses to steal a Discord that belongs to another account", async () => {
+    // One provider identity belongs to exactly one GhostBox account. Linking
+    // the same Discord elsewhere used to silently move it — a takeover vector.
+    // Now the callback refuses and points at the confirmed merge flow, and
+    // both accounts keep what they had.
     discord = mockDiscordOAuth();
     const db = fakeD1({
       discord_links: [
@@ -131,12 +135,13 @@ describe("GET /discord/callback", () => {
 
     const response = await worker.fetch(await callbackRequest("user_2"), discordEnv(db), executionContext);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
+    expect(response.headers.get("content-type")).toContain("text/html");
     expect(db.rows("discord_links")).toEqual([
-      expect.objectContaining({ user_id: "user_2", discord_user_id: DISCORD_USER_ID }),
+      expect.objectContaining({ user_id: "user_old", discord_user_id: DISCORD_USER_ID }),
     ]);
     expect(db.rows("user_connections")).toEqual([
-      expect.objectContaining({ user_id: "user_2", provider: "discord" }),
+      expect.objectContaining({ user_id: "user_old", provider: "discord" }),
     ]);
   });
 

@@ -62,9 +62,9 @@ export function useDiscordLink() {
 
   /**
    * Rejects with `last_connection` when this is the account's only linked
-   * provider: GhostBox sends no recovery emails and issues no backup codes,
-   * so the worker never lets an account drop to zero providers. The caller
-   * shows the warning and nothing else can talk past the refusal.
+   * provider: the provider account IS the sign-in now, so the worker never
+   * lets an account drop to zero providers. The caller shows the warning and
+   * nothing else can talk past the refusal.
    */
   const disconnect = useCallback(async () => {
     setBusy(true);

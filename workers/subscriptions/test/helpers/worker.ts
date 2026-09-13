@@ -39,11 +39,21 @@ export async function stripeWebhookRequest(event: Record<string, unknown>) {
  *
  * `version` is left off by default on purpose: that is exactly the shape of a
  * token minted before migration 0016, and those must keep working.
+ *
+ * `issuedAt` defaults to now, so the token counts as recent for sensitive
+ * identity actions (link, unlink, merge, delete). Pass an old timestamp — or
+ * `null` for no `iat` claim at all — to exercise the `reauth_required` path.
  */
-export async function sessionToken(userId: string, expiresInSeconds = 3600, version?: number) {
+export async function sessionToken(
+  userId: string,
+  expiresInSeconds = 3600,
+  version?: number,
+  issuedAt: number | null = Math.floor(Date.now() / 1000)
+) {
   const session = {
     userId,
     exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
+    ...(issuedAt === null ? {} : { iat: issuedAt }),
     ...(version === undefined ? {} : { v: version }),
   };
   const json = new TextEncoder().encode(JSON.stringify(session));

@@ -392,23 +392,37 @@ export type SubscriptionPortalResult = {
 
 export type GhostBoxAccount = {
   userId: string;
-  email: string;
+  /** Null for provider-created accounts that never had an address on file. */
+  email: string | null;
   username: string;
   displayName: string | null;
-  emailVerified: boolean;
-  /** How the account proved itself. `email` means the address on file is
-   * confirmed; `discord` means a real person holds the linked Discord account
-   * but the address is still unconfirmed. */
-  verifiedVia: "email" | "discord" | null;
 };
 
-/** Providers that sign in through the system browser. Steam is separate: it
- * takes its callback on the app's own loopback port, and it cannot create an
- * account because it reports no email address. */
+/** Providers that sign in through the system browser hand-off. Steam takes
+ * its callback on the app's own loopback port instead. Both create accounts
+ * directly and are the only ways into an account. */
 export type OAuthProvider = "discord";
 
 /** Every way into an account. */
 export type LoginProvider = OAuthProvider | "steam";
+
+/** An unlinked provider after the browser flow: the follow-up signup
+ * (username + terms) consumes the ticket/callback and creates the account. */
+export type ProviderSignupRequired = {
+  error: "signup_required" | "steam_not_linked";
+  provider?: LoginProvider | string;
+  providerId?: string;
+  /** Discord only: the still-unspent ticket, attached locally by the Rust
+   * side for the signup call. */
+  ticket?: string;
+  /** Steam only: the still-unspent callback URL for the signup call. */
+  callbackUrl?: string;
+  steamId?: string;
+  suggestedUsername?: string;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  disclaimer: string;
+};
 
 /** A proof that an account exists, good for exactly one thing: setting a new
  * password through `completeRecovery`. Never stored as a session. */
@@ -449,11 +463,19 @@ export type AccountMeResult = {
 
 export type CloudSessionResult = {
   token: string;
-  /** Absent on sessions opened through Discord: those never saw the password,
-   * so there is no Firebase credential to refresh. */
-  firebaseRefreshToken?: string;
   account: GhostBoxAccount;
   steamId?: string | null;
+  isNewAccount?: boolean;
+  disclaimer?: string;
+};
+
+export type MergePreviewResult = {
+  primaryAccount: GhostBoxAccount;
+  secondaryAccount: GhostBoxAccount;
+  primaryProviders: string[];
+  secondaryProviders: string[];
+  secondaryHasActiveSubscription: boolean;
+  warning: string;
 };
 
 export type CloudSaveManifest = {

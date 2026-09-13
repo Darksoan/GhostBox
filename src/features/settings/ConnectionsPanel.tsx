@@ -22,6 +22,9 @@ import {
   useLoadableImageState,
 } from "../../hooks/useCachedImageSources";
 import { useDiscordLink } from "./useDiscordLink";
+import { useAuth } from "../../context/AuthContext";
+import { ghostboxApi } from "../../lib/ghostboxApi";
+import type { MergePreviewResult } from "../../lib/ghostboxApi.types";
 import { isSteamConnected } from "../../lib/steamProfile";
 import {
   filterAndSortHiddenProfileGames,
@@ -106,6 +109,7 @@ function HiddenProfileGameHeader({
 
 export function ConnectionsPanel() {
   const { t } = useSettings();
+  const { previewAccountMerge, confirmAccountMerge, refreshAccount } = useAuth();
   const {
     steamProfile,
     isSteamSigningIn,
@@ -121,6 +125,57 @@ export function ConnectionsPanel() {
    * connection. Linking is mandatory server-side, so the refusal is final —
    * the warning just explains why. */
   const [lastConnectionBlocked, setLastConnectionBlocked] = useState(false);
+
+  // Confirmed merge: prove the OTHER account, preview what happens, confirm.
+  // The proof is fresh provider auth for that account (ticket or Steam
+  // callback) plus this session, which must itself be recent.
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeError, setMergeError] = useState("");
+  const [mergeNotice, setMergeNotice] = useState("");
+  const [mergePreview, setMergePreview] = useState<MergePreviewResult | null>(null);
+  const [mergeProof, setMergeProof] = useState<{ ticket?: string; callbackUrl?: string } | null>(null);
+
+  async function onMergeProofClick(provider: "discord" | "steam") {
+    if (mergeBusy) return;
+    setMergeBusy(true);
+    setMergeError("");
+    setMergeNotice("");
+    setMergePreview(null);
+    try {
+      if (provider === "steam") {
+        const proof = await ghostboxApi.steamProof();
+        const preview = await previewAccountMerge(undefined, proof.callbackUrl);
+        setMergeProof({ callbackUrl: proof.callbackUrl });
+        setMergePreview(preview);
+      } else {
+        const proof = await ghostboxApi.oauthProof();
+        const preview = await previewAccountMerge(proof.ticket, undefined);
+        setMergeProof({ ticket: proof.ticket });
+        setMergePreview(preview);
+      }
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMergeBusy(false);
+    }
+  }
+
+  async function onMergeConfirmClick() {
+    if (mergeBusy || !mergeProof) return;
+    setMergeBusy(true);
+    setMergeError("");
+    try {
+      await confirmAccountMerge(mergeProof.ticket, mergeProof.callbackUrl);
+      await refreshAccount();
+      setMergePreview(null);
+      setMergeProof(null);
+      setMergeNotice(t("settings.connections.merge.done"));
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMergeBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!confirmingSteamDisconnect) return;
@@ -161,9 +216,8 @@ export function ConnectionsPanel() {
   }
 
   /**
-   * The worker refuses to unlink the account's last provider outright — no
-   * recovery emails, no backup codes, so that link is the only way back into a
-   * forgotten password. The refusal is final; the warning explains it.
+   * The worker refuses to unlink the account's last provider outright — that
+   * link IS the sign-in now. The refusal is final; the warning explains it.
    */
   async function onDisconnectDiscordClick() {
     try {
@@ -313,6 +367,85 @@ export function ConnectionsPanel() {
                   ? t("settings.connections.discord.connecting")
                   : t("settings.connections.discord.connect")}
               </button>
+            )}
+          </div>
+        </section>
+
+        <section className="connection-card">
+          <div className="connection-card__body">
+            <h3>{t("settings.connections.merge.title")}</h3>
+            {!mergePreview && <p>{t("settings.connections.merge.description")}</p>}
+            {mergeError && (
+              <p className="connection-card__warning" role="alert">{mergeError}</p>
+            )}
+            <p className="connection-card__notice" role="status">{mergeNotice}</p>
+            {mergePreview && (
+              <div className="connection-card__merge-preview">
+                <p>
+                  {t("settings.connections.merge.previewAccounts", {
+                    primary: mergePreview.primaryAccount.username,
+                    secondary: mergePreview.secondaryAccount.username,
+                  })}
+                </p>
+                <p>
+                  {t("settings.connections.merge.previewProviders", {
+                    providers: mergePreview.secondaryProviders.join(", ") || "—",
+                  })}
+                </p>
+                <p className="connection-card__warning">{mergePreview.warning}</p>
+              </div>
+            )}
+          </div>
+          <div className="connection-card__actions">
+            {!mergePreview ? (
+              <>
+                <button
+                  type="button"
+                  className="connection-card__button"
+                  onClick={() => void onMergeProofClick("discord")}
+                  disabled={mergeBusy}
+                >
+                  {mergeBusy ? (
+                    <Loader2 size={14} className="connection-card__spinner" aria-hidden="true" />
+                  ) : null}
+                  {mergeBusy
+                    ? t("settings.connections.merge.proving")
+                    : t("settings.connections.merge.discordProof")}
+                </button>
+                <button
+                  type="button"
+                  className="connection-card__button"
+                  onClick={() => void onMergeProofClick("steam")}
+                  disabled={mergeBusy}
+                >
+                  {t("settings.connections.merge.steamProof")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="connection-card__button connection-card__button--primary"
+                  onClick={() => void onMergeConfirmClick()}
+                  disabled={mergeBusy}
+                >
+                  {mergeBusy
+                    ? t("settings.connections.merge.confirming")
+                    : t("settings.connections.merge.confirm")}
+                </button>
+                <button
+                  type="button"
+                  className="connection-card__button"
+                  onClick={() => {
+                    setMergePreview(null);
+                    setMergeProof(null);
+                    setMergeError("");
+                  }}
+                  disabled={mergeBusy}
+                >
+                  {t("settings.connections.merge.cancel")}
+                </button>
+              </>
             )}
           </div>
         </section>

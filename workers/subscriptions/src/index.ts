@@ -1,26 +1,15 @@
 import {
   bumpTokenVersion,
   clientIp,
-  firebaseDeleteAccount,
-  firebaseLookup,
-  firebaseSignIn,
-  firebaseSignInWithCustomToken,
-  firebaseSignUp,
-  firebaseUpdatePassword,
-  getAccountByEmail,
   getAccountByUserId,
   getAccountByUsername,
-  insertAccount,
-  mapFirebaseError,
-  markEmailVerified,
-  markVerifiedViaDiscord,
+  newUserId,
   normalizeEmail,
   normalizeUsername,
   publicAccount,
   recordAuthAttempt,
-  revokeDiscordVerification,
+  suggestUsername,
   tooManyAuthAttempts,
-  validPassword,
   type AccountRow,
 } from "./auth";
 import { base64Url, base64UrlDecode, hmacSha256, sha256Hex, timingSafeEqual } from "./crypto";
@@ -62,10 +51,15 @@ type Env = {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   CLOUD_SAVE_BUCKET?: string;
   PROFILE_IMAGE_BUCKET?: string;
-  FIREBASE_API_KEY?: string;
-  FIREBASE_SERVICE_ACCOUNT_KEY?: string;
   STRIPE_API_VERSION?: string;
 };
+
+/** Shown at signup and in the terms: the provider account IS the key. */
+const PROVIDER_AUTH_DISCLAIMER =
+  "A conta GhostBox é acessada exclusivamente pelo Discord ou pela Steam vinculados. " +
+  "Proteja essas contas e seus métodos de recuperação. A GhostBox não se responsabiliza por acessos " +
+  "decorrentes do comprometimento da sua conta no provedor, exceto quando resultarem de falha de " +
+  "segurança ou tratamento inadequado de dados pela própria GhostBox.";
 
 type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "cancelled";
 type SubscriptionStatus = "free" | "active" | "expired";
@@ -141,17 +135,19 @@ type CloudSession = {
   userId: string;
   steamId?: string | null;
   exp: number;
+  /** Seconds since epoch when this token was minted. Linking a second
+   * provider, unlinking, merging or deleting the account requires a *recent*
+   * session, so a stolen long-lived token alone cannot rewire who can get
+   * in. Tokens minted before this claim existed carry none and are treated
+   * as not-recent. */
+  iat?: number;
   /** The account's `token_version` when this token was signed. `requireSession`
-   * rejects the token once the account moves past it, which is how a password
-   * change or a recovery signs every other device out.
+   * rejects the token once the account moves past it, which is how linking,
+   * unlinking or merging signs every other device out.
    *
    * Optional because tokens minted before migration 0016 carry no version at
    * all; those are read as 1 so the deploy signs nobody out. */
   v?: number;
-  /** Absent on a normal session. `"recovery"` marks a token that proved an
-   * account through a provider but never saw its password: it may set a new
-   * one and nothing else. `requireSession` refuses it everywhere. */
-  scope?: "recovery";
 };
 
 type UserConnectionRow = {
@@ -399,8 +395,19 @@ async function issueSessionToken(env: Env, account: AccountRow) {
   return signCloudToken(env, {
     userId: account.user_id,
     exp: Math.floor(Date.now() / 1000) + CLOUD_SESSION_TTL_SECONDS,
+    iat: Math.floor(Date.now() / 1000),
     v: account.token_version ?? 1,
   });
+}
+
+/** A session counts as "recent" for sensitive identity actions (link a second
+ * provider, unlink, merge, delete). Without this, any stolen week-long token
+ * could rewire the account on its own. */
+const RECENT_SESSION_SECONDS = 15 * 60;
+
+function sessionIsRecent(session: CloudSession): boolean {
+  if (!session.iat) return false;
+  return Math.floor(Date.now() / 1000) - session.iat <= RECENT_SESSION_SECONDS;
 }
 
 async function signCloudToken(env: Env, session: CloudSession) {
@@ -451,11 +458,11 @@ function getDiscordStateSecret(env: Env) {
 
 /**
  * - `link` attaches a provider to the already-signed-in account that started
- *   the flow.
+ *   the flow. The session that started it must be recent.
  * - `login` runs before any session exists and carries the desktop app's
  *   loopback port so the callback knows where to hand the result back.
- * - `recover` is `login` for someone who cannot produce their password: it
- *   ends in a session that may do exactly one thing, set a new one.
+ * - `recover` is a retired purpose kept only so old signed states fail
+ *   closed with a clear error instead of matching nothing.
  */
 type DiscordStatePurpose = "link" | "login" | "recover";
 
@@ -647,13 +654,6 @@ async function requireSession(
   const session = await verifyCloudToken(env, request);
   if (!session) return { response: jsonResponse({ error: "unauthorized" }, env, 401) };
 
-  // A recovery token is not a session. It proves the account only well enough
-  // to set a new password, and `/auth/recover/password` verifies it directly —
-  // every other route treats it as no credential at all.
-  if (session.scope === "recovery") {
-    return { response: jsonResponse({ error: "recovery_scope" }, env, 403) };
-  }
-
   // Missing account row is not an error here. Sessions from the Steam-only era
   // predate the `accounts` table, and the handlers that actually need an
   // account already 404 on their own. Only the revocation check is skipped —
@@ -661,8 +661,8 @@ async function requireSession(
   const account = await getAccountByUserId(env, session.userId);
 
   // Revocation. A token minted before the account's current version belongs to
-  // a device that was signed out — by a password change, a recovery, or a
-  // provider being unlinked — and must not be honoured for the rest of its
+  // a device that was signed out — by a provider being linked or unlinked, or
+  // by an account merge — and must not be honoured for the rest of its
   // seven days.
   if (account && sessionVersion(session) < (account.token_version ?? 1)) {
     return { response: jsonResponse({ error: "session_revoked" }, env, 401) };
@@ -980,7 +980,27 @@ async function readJson(request: Request) {
   }
 }
 
-async function validateSteamOpenId(callbackUrl: string) {
+const STEAM_OPENID_NONCE_TTL_SECONDS = 10 * 60;
+
+/** One-shot guard against Steam OpenID assertion replay: the same
+ * `openid.response_nonce` is never accepted twice. */
+async function consumeSteamNonce(env: Env, nonce: string): Promise<boolean> {
+  const now = Date.now();
+  const hash = await sha256Hex(`steam-nonce:${nonce}`);
+  try {
+    await env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO steam_openid_nonces (nonce_hash, created_at, expires_at) VALUES (?, ?, ?)`
+    )
+      .bind(hash, new Date(now).toISOString(), new Date(now + STEAM_OPENID_NONCE_TTL_SECONDS * 1000).toISOString())
+      .run();
+    return true;
+  } catch {
+    // UNIQUE hit: this assertion was already used.
+    return false;
+  }
+}
+
+async function validateSteamOpenId(env: Env, callbackUrl: string, consume = true) {
   let url: URL;
   try {
     url = new URL(callbackUrl);
@@ -991,9 +1011,40 @@ async function validateSteamOpenId(callbackUrl: string) {
   const params = Array.from(url.searchParams.entries()).filter(([key]) => key.startsWith("openid."));
   const mode = url.searchParams.get("openid.mode");
   if (mode !== "id_res") return null;
+
+  // The assertion must come from Steam itself and describe one consistent id.
+  const opEndpoint = url.searchParams.get("openid.op_endpoint") || "";
+  if (opEndpoint !== "https://steamcommunity.com/openid/login") return null;
   const claimedId = url.searchParams.get("openid.claimed_id") || "";
+  const identity = url.searchParams.get("openid.identity") || "";
+  if (!claimedId || claimedId !== identity) return null;
   const steamId = claimedId.split("/openid/id/").pop() || "";
   if (!validSteamId(steamId)) return null;
+  if (claimedId !== `https://steamcommunity.com/openid/id/${steamId}`) return null;
+
+  // The app always sets return_to to its own loopback listener. Anything else
+  // is an assertion minted for somebody else's flow.
+  const returnTo = url.searchParams.get("openid.return_to") || "";
+  let returnToUrl: URL;
+  try {
+    returnToUrl = new URL(returnTo);
+  } catch {
+    return null;
+  }
+  if (returnToUrl.protocol !== "http:") return null;
+  if (returnToUrl.hostname !== "127.0.0.1" && returnToUrl.hostname !== "localhost") return null;
+  if (returnToUrl.pathname !== "/steam/callback") return null;
+
+  // Freshness + single use. Steam signs `response_nonce` as
+  // `<timestamp>Z<unique>`; the timestamp bounds the age and the table makes
+  // the assertion one-shot even if Steam would still answer `is_valid:true`.
+  // The timestamp is matched loosely on purpose: real nonces carry no
+  // fractional seconds, but anything starting with a valid UTC instant counts.
+  const nonce = url.searchParams.get("openid.response_nonce") || "";
+  const nonceInstant = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/.exec(nonce)?.[1];
+  const nonceTime = nonceInstant ? Date.parse(`${nonceInstant}Z`) : NaN;
+  if (!nonce || !Number.isFinite(nonceTime)) return null;
+  if (Math.abs(Date.now() - nonceTime) > STEAM_OPENID_NONCE_TTL_SECONDS * 1000) return null;
 
   const body = new URLSearchParams();
   for (const [key, value] of params) {
@@ -1008,7 +1059,15 @@ async function validateSteamOpenId(callbackUrl: string) {
   });
   if (!response.ok) return null;
   const text = await response.text();
-  return text.includes("is_valid:true") ? steamId : null;
+  if (!text.includes("is_valid:true")) return null;
+
+  // Consume the nonce only after Steam confirmed the assertion, so a network
+  // failure does not burn an assertion the user can still retry — while a
+  // captured assertion can never be traded in twice. Callers that only peek
+  // (merge preview, or a login that may yet turn into a signup on the same
+  // assertion) pass consume=false; every successful authentication consumes.
+  if (consume && !(await consumeSteamNonce(env, nonce))) return null;
+  return steamId;
 }
 
 async function ensureUser(env: Env, steamId: string) {
@@ -1132,6 +1191,11 @@ async function pruneStaleRecords(env: Env) {
     env.SUBSCRIPTION_DB.prepare(`DELETE FROM security_events WHERE created_at < ?`)
       .bind(new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString())
       .run(),
+    // Consumed or not, a Steam assertion is single-use: its nonce row only
+    // exists to reject replays inside the 10-minute freshness window.
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM steam_openid_nonces WHERE expires_at < ?`)
+      .bind(nowIso())
+      .run(),
   ]);
 
   for (const result of results) {
@@ -1178,9 +1242,9 @@ function oauthClient(env: Env, provider: OAuthProvider) {
       clientSecret: env.DISCORD_CLIENT_SECRET,
       authorizeEndpoint: "https://discord.com/oauth2/authorize",
       tokenEndpoint: "https://discord.com/api/oauth2/token",
-      // `email` is what lets a link double as email verification: the provider
-      // reports whether the address is verified on its side, so a match with
-      // the account on file confirms it without GhostBox sending anything.
+      // `email` pre-fills the account's contact address at signup. It proves
+      // nothing by itself and is never used for recovery — the provider
+      // account itself is the only way back in.
       scope: "identify email",
     };
   }
@@ -1212,6 +1276,14 @@ async function handleOAuthLinkStart(request: Request, env: Env, provider: OAuthP
   const auth = await requireSession(request, env);
   if (auth.response) return auth.response;
 
+  // Step-up: linking hands a second way into the account to whoever completes
+  // the browser flow, so a merely-valid (possibly stolen) week-long session is
+  // not enough — it must also be fresh. The user re-authenticates through
+  // their existing provider, which takes seconds and mints a fresh session.
+  if (!sessionIsRecent(auth.session!)) {
+    return jsonResponse({ error: "reauth_required" }, env, 403);
+  }
+
   const state = await createDiscordState(env, {
     purpose: "link",
     provider,
@@ -1235,11 +1307,7 @@ function handleDiscordLinkStart(request: Request, env: Env) {
 /** Signed-out counterpart of `handleOAuthLinkStart`. Providers only accept a
  * pre-registered redirect_uri, so the desktop app cannot receive the callback
  * directly on its random loopback port — it passes the port here instead and
- * the callback bounces the result back to it.
- *
- * `purpose` decides what the resulting ticket is worth: a `login` ticket
- * becomes a full session, a `recover` ticket becomes a session that can only
- * set a new password. */
+ * the callback bounces the result back to it. */
 async function handleOAuthLoginStart(
   request: Request,
   env: Env,
@@ -1355,17 +1423,6 @@ async function exchangeOAuthCode(
   return { identity: discordIdentity(exchanged.user), error: null };
 }
 
-/** A provider's address only counts as proof for the address GhostBox has on
- * file — a verified but *different* one says nothing about it. */
-function providerEmailConfirms(identity: ProviderIdentity, accountEmail: string) {
-  return identity.emailVerified && identity.email === accountEmail;
-}
-
-/** @deprecated Use `providerEmailConfirms`. */
-function discordEmailConfirms(user: DiscordUserResponse, accountEmail: string) {
-  return providerEmailConfirms(discordIdentity(user), accountEmail);
-}
-
 const DISCORD_TICKET_TTL_SECONDS = 90;
 
 async function createOAuthLoginTicket(
@@ -1413,31 +1470,103 @@ async function takeDiscordLoginTicket(env: Env, ticket: unknown) {
   return row;
 }
 
-async function consumeDiscordLoginTicket(env: Env, ticketHash: string) {
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE discord_login_tickets SET consumed_at = ? WHERE ticket_hash = ? AND consumed_at IS NULL`
-  ).bind(nowIso(), ticketHash).run();
+/** Atomic single-use consume: marks the ticket consumed and returns its row
+ * only when it was still fresh and unconsumed. Two concurrent exchanges of
+ * the same ticket yield exactly one winner. */
+async function consumeDiscordLoginTicketAtomic(env: Env, ticket: unknown) {
+  if (typeof ticket !== "string" || !ticket) return null;
+  const hash = await sha256Hex(ticket);
+  return env.SUBSCRIPTION_DB.prepare(
+    `UPDATE discord_login_tickets SET consumed_at = ?
+     WHERE ticket_hash = ? AND consumed_at IS NULL AND expires_at > ?
+     RETURNING *`
+  )
+    .bind(nowIso(), hash, nowIso())
+    .first<DiscordLoginTicketRow>();
 }
+
+/** Writes the provider link rows for `userId`. One provider identity belongs
+ * to exactly one GhostBox account: if it is already attached elsewhere the
+ * write refuses (`provider_already_linked`) and the caller points the user at
+ * the confirmed merge flow instead of silently stealing it. */
+async function writeProviderConnection(env: Env, userId: string, identity: ProviderIdentity) {
+  const now = nowIso();
+
+  const previousOwner = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id FROM user_connections WHERE provider = ? AND provider_id = ? AND user_id <> ? LIMIT 1`
+  )
+    .bind(identity.provider, identity.id, userId)
+    .first<{ user_id: string }>();
+  if (previousOwner?.user_id) {
+    throw new ProviderAlreadyLinkedError();
+  }
+
+  if (identity.provider === "discord") {
+    await env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM discord_links WHERE discord_user_id = ? AND (user_id IS NULL OR user_id <> ?)`
+    ).bind(identity.id, userId).run();
+
+    await env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO discord_links (
+         steam_id, user_id, discord_user_id, discord_username, discord_global_name, linked_at, updated_at
+       ) VALUES (NULL, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         discord_user_id = excluded.discord_user_id,
+         discord_username = excluded.discord_username,
+         discord_global_name = excluded.discord_global_name,
+         linked_at = excluded.linked_at,
+         updated_at = excluded.updated_at`
+    ).bind(userId, identity.id, identity.username, identity.displayName, now, now).run();
+  }
+
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, provider) DO UPDATE SET
+       provider_id = excluded.provider_id,
+       metadata_json = excluded.metadata_json,
+       linked_at = excluded.linked_at`
+  )
+    .bind(
+      userId,
+      identity.provider,
+      identity.id,
+      JSON.stringify({
+        username: identity.username,
+        globalName: identity.displayName,
+        avatarUrl: identity.avatarUrl,
+        email: identity.email,
+        emailVerified: identity.emailVerified,
+      }),
+      now
+    )
+    .run();
+}
+
+class ProviderAlreadyLinkedError extends Error {}
 
 /** Writes the Discord link rows for `userId`, claiming the Discord account
  * away from any other GhostBox account that still holds it. Shared by the
  * settings link flow and the Discord signup flow. */
 async function writeDiscordLink(env: Env, userId: string, user: DiscordUserResponse) {
-  const now = nowIso();
+  const identity = discordIdentity(user);
+  try {
+    await writeProviderConnection(env, userId, identity);
+    return;
+  } catch (error) {
+    if (!(error instanceof ProviderAlreadyLinkedError)) throw error;
+  }
 
-  // Who is losing this Discord, if anyone. Read before the deletes below wipe
-  // the evidence — that account's Discord proof has to go with it.
+  // Legacy claim path: the link callback verified this branch only when the
+  // caller already decided the move is legitimate. Kept so an in-flight link
+  // started before the merge flow existed still completes.
+  const now = nowIso();
   const previousOwner = await env.SUBSCRIPTION_DB.prepare(
     `SELECT user_id FROM user_connections WHERE provider = 'discord' AND provider_id = ? AND user_id <> ? LIMIT 1`
   )
     .bind(user.id!, userId)
     .first<{ user_id: string }>();
 
-  // discord_links.discord_user_id is UNIQUE, and the upsert below only knows
-  // how to resolve a conflict on user_id. A row holding this same Discord
-  // under another account — or a legacy row keyed by steam_id with a NULL
-  // user_id — would therefore make the INSERT throw, and the link would
-  // never be written. Claim it for this account first.
   await env.SUBSCRIPTION_DB.prepare(
     `DELETE FROM discord_links WHERE discord_user_id = ? AND (user_id IS NULL OR user_id <> ?)`
   ).bind(user.id!, userId).run();
@@ -1454,9 +1583,6 @@ async function writeDiscordLink(env: Env, userId: string, user: DiscordUserRespo
        updated_at = excluded.updated_at`
   ).bind(userId, user.id!, user.username ?? null, user.global_name ?? null, now, now).run();
 
-  // Same reasoning for the connections table: its key is (user_id, provider),
-  // so without this a single Discord account could stay attached to two
-  // GhostBox accounts at once.
   await env.SUBSCRIPTION_DB.prepare(
     `DELETE FROM user_connections WHERE provider = 'discord' AND provider_id = ? AND user_id <> ?`
   ).bind(user.id!, userId).run();
@@ -1484,7 +1610,6 @@ async function writeDiscordLink(env: Env, userId: string, user: DiscordUserRespo
     .run();
 
   if (previousOwner?.user_id) {
-    await revokeDiscordVerification(env, previousOwner.user_id);
     console.warn("Discord link moved between accounts", {
       from: previousOwner.user_id,
       to: userId,
@@ -1515,6 +1640,21 @@ async function handleDiscordCallback(request: Request, env: Env) {
   if (!exchanged.user) return htmlResponse("Falha no Discord", exchanged.error!, 502);
   const user = exchanged.user;
 
+  // Never steal: a Discord attached to another GhostBox account stays there.
+  // Uniting two accounts is the explicit merge flow, which proves both sides.
+  const conflictingOwner = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id FROM user_connections WHERE provider = 'discord' AND provider_id = ? AND user_id <> ? LIMIT 1`
+  )
+    .bind(user.id!, userId)
+    .first<{ user_id: string }>();
+  if (conflictingOwner?.user_id) {
+    return htmlResponse(
+      "Discord já vinculado",
+      "Esta conta do Discord já está vinculada a outra conta GhostBox. Volte ao app e use a opção de unir contas para juntá-las com confirmação.",
+      409
+    );
+  }
+
   try {
     await writeDiscordLink(env, userId, user);
   } catch (error) {
@@ -1524,14 +1664,7 @@ async function handleDiscordCallback(request: Request, env: Env) {
     return htmlResponse("Vínculo não concluído", "Não foi possível salvar o vínculo com o Discord. Tente novamente pelo GhostBox em instantes.", 500);
   }
 
-  // Linking doubles as email verification when Discord vouches for the very
-  // address the account uses — no verification email needed at all.
-  const account = await getAccountByUserId(env, userId);
-  let emailVerified = Boolean(account?.email_verified);
-  if (account && !emailVerified && discordEmailConfirms(user, account.email)) {
-    await markEmailVerified(env, userId);
-    emailVerified = true;
-  }
+  await recordSecurityEvent(env, request, userId, "provider_linked", "discord");
 
   // Synced in both directions, not only to grant. A Discord that moves from a
   // paying account to a free one used to keep the Premium role until the cron
@@ -1552,9 +1685,7 @@ async function handleDiscordCallback(request: Request, env: Env) {
 
   return htmlResponse(
     "Discord vinculado",
-    emailVerified
-      ? `${linkMessage} Seu e-mail também já está verificado pelo Discord. Você pode voltar ao app.`
-      : `${linkMessage} Você já pode voltar ao app.`
+    `${linkMessage} Você já pode voltar ao app.`
   );
 }
 
@@ -1615,19 +1746,21 @@ async function handleOAuthLoginCallback(request: Request, env: Env, state: Disco
   // Recovery only ever proves an account that already exists. Offering signup
   // here would turn "I lost my password" into "here is a brand new account",
   // which is not what the user asked for and hides the failure from them.
-  const purpose = state.purpose === "recover" ? "recover" : "login";
-  if (purpose === "recover" && !connection?.user_id) {
+  // The password-recovery hand-off no longer exists: there is no password to
+  // set. A `recover` state minted by an old app build fails closed here with
+  // a readable page instead of a ticket nobody can use.
+  if (state.purpose === "recover") {
     return htmlResponse(
-      "Nada para recuperar",
-      "Esta conta não está vinculada a nenhum cadastro do GhostBox. Volte ao app e entre pelo provedor que você vinculou.",
-      404
+      "Recuperação desativada",
+      "A recuperação por senha foi desativada junto com o acesso por e-mail/senha. Entre direto pelo Discord ou pela Steam vinculados à sua conta.",
+      410
     );
   }
 
   let ticket: string;
   try {
     ticket = await createOAuthLoginTicket(env, identity, connection?.user_id ?? null, {
-      purpose,
+      purpose: "login",
       appNonce: state.appNonce,
     });
   } catch (error) {
@@ -2113,16 +2246,21 @@ async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: s
 }
 
 async function deleteCloudSaveObject(env: Env, storagePath: string) {
+  return deleteCloudSaveObjects(env, [storagePath]);
+}
+
+async function deleteCloudSaveObjects(env: Env, storagePaths: string[]) {
   const storage = requireSupabase(env);
-  await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}`, {
+  const response = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}`, {
     method: "DELETE",
     headers: {
       authorization: `Bearer ${storage.key}`,
       apikey: storage.key,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ prefixes: [storagePath] }),
+    body: JSON.stringify({ prefixes: storagePaths }),
   });
+  if (!response.ok) throw new Error(`Supabase storage delete failed (${response.status})`);
 }
 
 async function pruneCloudSavesForGame(env: Env, userId: string, appId: string, protectedSaveId: string) {
@@ -2765,14 +2903,23 @@ async function syncPremiumRole(env: Env, userId: string, grant: boolean) {
 
 async function processCheckoutSessionCompleted(env: Env, event: StripeEventContext) {
   const { data, eventCreated } = event;
-  const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
-  const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
+  const metadataUserId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+  const metadataSteamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
   const planId = planIdFromStripe(data.metadata?.plan_id);
   const customerId = typeof data.customer === "string" ? data.customer : null;
   const subscriptionId = typeof data.subscription === "string" ? data.subscription : null;
   const sessionId = typeof data.id === "string" ? data.id : null;
 
-  if (!(userId || steamId) || !subscriptionId || !sessionId) return;
+  if (!subscriptionId || !sessionId) return;
+
+  // Local ownership is authoritative after an account merge/deletion. Stripe
+  // metadata can lag behind, but the checkout row moves or is anonymized.
+  const existingPayment = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT * FROM payments WHERE stripe_checkout_session_id = ? LIMIT 1`
+  ).bind(sessionId).first<PaymentRow>();
+  const userId = existingPayment ? existingPayment.user_id : metadataUserId;
+  const steamId = existingPayment ? existingPayment.steam_id : metadataSteamId;
+  if (!(userId || steamId)) return;
 
   const subInfo = await stripeRequest(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
   const stripeStatus = subInfo.status;
@@ -2826,11 +2973,17 @@ async function processSubscriptionUpserted(env: Env, event: StripeEventContext) 
   const { data, eventCreated } = event;
   const subscriptionId = typeof data.id === "string" ? data.id : null;
   const status = data.status;
-  const userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
-  const steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
+  const metadataUserId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
+  const metadataSteamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
   const planId = planIdFromStripe(data.metadata?.plan_id);
 
-  if (!(userId || steamId) || !subscriptionId) return;
+  if (!subscriptionId) return;
+  const existing = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id, steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
+  ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null }>();
+  const userId = existing ? existing.user_id : metadataUserId;
+  const steamId = existing ? existing.steam_id : metadataSteamId;
+  if (!(userId || steamId)) return;
 
   const isPremium = stripeSubscriptionIsPremium(status);
   const period = stripeSubscriptionPeriod(data);
@@ -2861,12 +3014,14 @@ async function processSubscriptionDeleted(env: Env, event: StripeEventContext) {
   let userId = typeof data.metadata?.user_id === "string" ? data.metadata.user_id : null;
   let steamId = validSteamId(data.metadata?.steam_id) ? data.metadata.steam_id : null;
 
-  if (!userId && !steamId && subscriptionId) {
+  if (subscriptionId) {
     const subRow = await env.SUBSCRIPTION_DB.prepare(
       `SELECT user_id, steam_id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1`
     ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null }>();
-    userId = subRow?.user_id || null;
-    steamId = subRow?.steam_id || null;
+    if (subRow) {
+      userId = subRow.user_id;
+      steamId = subRow.steam_id;
+    }
   }
 
   if (!userId && !steamId) return;
@@ -2893,9 +3048,9 @@ async function processInvoicePaymentSucceeded(env: Env, event: StripeEventContex
   ).bind(subscriptionId).first<{ user_id: string | null; steam_id: string | null; plan_id: PlanId }>();
 
   const subInfo = await stripeRequest(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
-  const userId = existing?.user_id || stripeMetadataString(subInfo, "user_id");
+  const userId = existing ? existing.user_id : stripeMetadataString(subInfo, "user_id");
   const steamIdMeta = stripeMetadataString(subInfo, "steam_id");
-  const steamId = existing?.steam_id || (validSteamId(steamIdMeta) ? steamIdMeta : null);
+  const steamId = existing ? existing.steam_id : (validSteamId(steamIdMeta) ? steamIdMeta : null);
   const planId = planIdFromStripe(stripeMetadataString(subInfo, "plan_id"), existing?.plan_id || "monthly");
 
   if (!userId && !steamId) return;
@@ -3107,146 +3262,54 @@ async function handleReturn(env: Env) {
   );
 }
 
-// ---- Account auth: register / login / password reset / verification ----
+// ---- Account auth: provider-only (Discord / Steam) ----
+//
+// Email/password signup, login, change and recovery were removed, together
+// with Firebase. Discord and Steam create accounts directly and are the only
+// ways back in. Password-era endpoints below answer 410 so old app builds
+// fail with a clear message instead of a confusing 404.
 
-function accountResponsePayload(account: AccountRow, token: string, firebaseRefreshToken: string) {
-  return { token, firebaseRefreshToken, account: publicAccount(account) };
+function accountResponsePayload(account: AccountRow, token: string) {
+  return { token, account: publicAccount(account), disclaimer: PROVIDER_AUTH_DISCLAIMER };
+}
+
+function passwordAuthGone(env: Env) {
+  return jsonResponse(
+    {
+      error: "password_auth_removed",
+      message:
+        "O acesso por e-mail/senha foi desativado. Entre com Discord ou Steam. " +
+        "Se sua conta não tem provedor vinculado, ela não pode mais ser acessada.",
+    },
+    env,
+    410
+  );
 }
 
 async function handleRegister(request: Request, env: Env) {
-  const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "register", 8, 3600)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-
-  const body = await readJson(request);
-  const email = normalizeEmail(body?.email);
-  const username = normalizeUsername(body?.username);
-  const password = body?.password;
-  const displayName = typeof body?.displayName === "string" ? body.displayName.trim().slice(0, 60) : null;
-
-  // Form-validation failures deliberately do NOT count against the rate
-  // limit: a user fumbling the signup form (short password, taken username)
-  // would otherwise lock themselves out for an hour. Only attempts that
-  // actually reach Firebase are counted.
-  if (!email) return jsonResponse({ error: "invalid_email" }, env, 400);
-  if (!username) return jsonResponse({ error: "invalid_username" }, env, 400);
-  if (!validPassword(password)) return jsonResponse({ error: "weak_password" }, env, 400);
-
-  const existingUsername = await getAccountByUsername(env, username);
-  if (existingUsername) return jsonResponse({ error: "username_taken" }, env, 409);
-  const existingEmail = await getAccountByEmail(env, email);
-  if (existingEmail) return jsonResponse({ error: "email_already_registered" }, env, 409);
-
-  await recordAuthAttempt(env, ip, "register");
-
-  let firebaseSession;
-  try {
-    firebaseSession = await firebaseSignUp(env, email, password);
-  } catch (error) {
-    const mapped = mapFirebaseError(error);
-    // EMAIL_EXISTS with no accounts row (checked above) means a previous
-    // signup created the Firebase credential and then failed to write D1 —
-    // and its rollback delete failed too. That account is otherwise
-    // unreachable forever: login 404s and signup 409s. Adopt it here, but
-    // only for whoever can produce the password.
-    if (mapped.code === "email_already_registered") {
-      const recovered = await firebaseSignIn(env, email, password).catch(() => null);
-      if (!recovered) {
-        return jsonResponse({ error: "email_already_registered" }, env, 409);
-      }
-      const strayAccount = await getAccountByUserId(env, recovered.localId);
-      if (strayAccount) {
-        return jsonResponse({ error: "email_already_registered" }, env, 409);
-      }
-      console.warn("Register: adopting orphaned Firebase credential", { userId: recovered.localId });
-      firebaseSession = recovered;
-    } else {
-      return jsonResponse({ error: mapped.code }, env, mapped.status === 500 ? 500 : 400);
-    }
-  }
-
-  try {
-    await insertAccount(env, {
-      userId: firebaseSession.localId,
-      email,
-      username,
-      displayName: displayName || username,
-    });
-  } catch (error) {
-    // Username/email race lost to a concurrent request: undo the Firebase signup.
-    await firebaseDeleteAccount(env, firebaseSession.idToken).catch(() => undefined);
-    console.warn("Register: account insert failed", { error: error instanceof Error ? error.message : String(error) });
-    return jsonResponse({ error: "username_taken" }, env, 409);
-  }
-
-  // No verification email. Discord is the only way an account gets verified
-  // now, so sending one would deliver a link the app never mentions, from a
-  // sender that lands in spam, for a flag nothing reads back.
-  const account = await getAccountByUserId(env, firebaseSession.localId);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 500);
-
-  const token = await issueSessionToken(env, account);
-
-  return jsonResponse(accountResponsePayload(account, token, firebaseSession.refreshToken), env, 201);
+  void request;
+  return passwordAuthGone(env);
 }
 
 async function handleLogin(request: Request, env: Env) {
-  const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "login", 15, 900)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-
-  const body = await readJson(request);
-  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
-  const password = body?.password;
-  if (!identifier || !validPassword(password)) {
-    return jsonResponse({ error: "invalid_credentials" }, env, 400);
-  }
-
-  // Counted from here on: a wrong password or an unknown user is exactly the
-  // brute-force pattern the limit exists for, so both must burn quota.
-  await recordAuthAttempt(env, ip, "login");
-
-  let email = normalizeEmail(identifier);
-  if (!email) {
-    const username = normalizeUsername(identifier);
-    const account = username ? await getAccountByUsername(env, username) : null;
-    if (!account) return jsonResponse({ error: "invalid_credentials" }, env, 401);
-    email = account.email;
-  }
-
-  let firebaseSession;
-  try {
-    firebaseSession = await firebaseSignIn(env, email, password);
-  } catch (error) {
-    const mapped = mapFirebaseError(error);
-    return jsonResponse({ error: mapped.code }, env, mapped.status === 500 ? 500 : 401);
-  }
-
-  // Only ever raises the flag. Firebase says `false` for every account now
-  // (GhostBox stopped sending its verification emails), so writing that back
-  // would strip the badge from accounts this app verified through Discord.
-  // Kept at all for accounts confirmed with Firebase before the switch.
-  const lookup = await firebaseLookup(env, firebaseSession.idToken).catch(() => null);
-  if (lookup?.emailVerified) {
-    await markEmailVerified(env, firebaseSession.localId);
-  }
-
-  const account = await getAccountByUserId(env, firebaseSession.localId);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
-
-  const token = await issueSessionToken(env, account);
-  await recordSecurityEvent(env, request, account.user_id, "login", "password");
-
-  return jsonResponse(accountResponsePayload(account, token, firebaseSession.refreshToken), env);
+  void request;
+  return passwordAuthGone(env);
 }
 
-// `/auth/password-reset` is gone. It sent a Firebase reset email — the last
-// email GhostBox produced, from a sender the app never mentions, for a flow
-// the app never explained. Recovery is `/auth/recover/*` now: prove yourself
-// through a linked provider, set the new password inside the session that
-// proves it. Nothing is delivered to an inbox.
+async function handleChangePassword(request: Request, env: Env) {
+  void request;
+  return passwordAuthGone(env);
+}
+
+async function handleRecoverGone(request: Request, env: Env) {
+  void request;
+  return passwordAuthGone(env);
+}
+
+async function handleVerificationGone(request: Request, env: Env) {
+  void request;
+  return passwordAuthGone(env);
+}
 
 // ---- Account auth: Discord login / signup / DM verification ----
 
@@ -3265,215 +3328,161 @@ function ticketIdentity(row: DiscordLoginTicketRow): ProviderIdentity {
   };
 }
 
+async function createProviderAccount(
+  env: Env,
+  input: { userId: string; email: string | null; username: string; displayName: string | null },
+  identity: ProviderIdentity
+) {
+  const now = nowIso();
+  const statements: D1PreparedStatement[] = [
+    env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO accounts (user_id, email, username, display_name, email_verified, verified_via, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, NULL, ?, ?)`
+    ).bind(input.userId, input.email, input.username, input.displayName, now, now),
+  ];
+  if (identity.provider === "discord") {
+    statements.push(
+      env.SUBSCRIPTION_DB.prepare(
+        `DELETE FROM discord_links WHERE discord_user_id = ? AND user_id IS NULL`
+      ).bind(identity.id),
+      env.SUBSCRIPTION_DB.prepare(
+        `INSERT INTO discord_links (
+           steam_id, user_id, discord_user_id, discord_username, discord_global_name, linked_at, updated_at
+         ) VALUES (NULL, ?, ?, ?, ?, ?, ?)`
+      ).bind(input.userId, identity.id, identity.username, identity.displayName, now, now)
+    );
+  }
+  statements.push(
+    env.SUBSCRIPTION_DB.prepare(
+      `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(
+      input.userId,
+      identity.provider,
+      identity.id,
+      JSON.stringify({
+        username: identity.username,
+        globalName: identity.displayName,
+        avatarUrl: identity.avatarUrl,
+        email: identity.email,
+        emailVerified: identity.emailVerified,
+      }),
+      now
+    )
+  );
+  await env.SUBSCRIPTION_DB.batch(statements);
+}
+
 /** Trades the single-use ticket the OAuth callback dropped on the app's
- * loopback port for a session. Accounts are created with email and password
- * only — a provider whose account has no GhostBox account attached gets
- * `provider_not_linked`, never a signup. */
+ * loopback port for a session. When the provider identity already owns a
+ * GhostBox account, this signs straight in. When it does not, the ticket is
+ * left unconsumed and the caller gets `signupRequired` plus everything needed
+ * to show the signup confirmation — the follow-up `/auth/oauth/signup`
+ * consumes the same ticket atomically, so exactly one account can come out
+ * of it. */
 async function handleDiscordExchange(request: Request, env: Env) {
   const body = await readJson(request);
-  const row = await takeDiscordLoginTicket(env, body?.ticket);
+  const ticket = body?.ticket;
+  const row = await takeDiscordLoginTicket(env, ticket);
   if (!row) return jsonResponse({ error: "invalid_ticket" }, env, 400);
 
-  // A recovery ticket is not a login. Trading one here would hand out a full
-  // session to someone who proved a provider but never a password, sidestepping
-  // the narrow scope `/auth/recover/exchange` exists to enforce.
+  // A recovery ticket is not a login. Recovery through a new password no
+  // longer exists — the provider itself is the way back in.
   if (row.purpose === "recover") return jsonResponse({ error: "invalid_ticket" }, env, 400);
 
-  // The answer is the same generic one for every unlinked Discord: signing in
-  // must not become a way to probe whether a Discord account exists anywhere.
-  if (!row.user_id) return jsonResponse({ error: "provider_not_linked" }, env, 404);
+  const identity = ticketIdentity(row);
 
-  await consumeDiscordLoginTicket(env, row.ticket_hash);
-
-  const account = await getAccountByUserId(env, row.user_id);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
-
-  if (!account.email_verified && providerEmailConfirms(ticketIdentity(row), account.email)) {
-    await markEmailVerified(env, account.user_id);
-  }
-
-  // No firebaseRefreshToken: this session never saw the password. Only the
-  // resend-verification endpoint needs one, and a Discord-verified account
-  // has no reason to reach it.
-  const fresh = await getAccountByUserId(env, account.user_id);
-  const token = await issueSessionToken(env, fresh ?? account);
-  await recordSecurityEvent(env, request, account.user_id, "login", row.provider);
-  return jsonResponse({ token, account: publicAccount(fresh ?? account) }, env);
-}
-
-const DISCORD_CODE_TTL_SECONDS = 10 * 60;
-const DISCORD_CODE_MAX_ATTEMPTS = 5;
-
-function discordConnectionEmail(connection: UserConnectionRow | null) {
-  if (!connection?.metadata_json) return { email: null as string | null, verified: false };
-  try {
-    const metadata = JSON.parse(connection.metadata_json) as { email?: unknown; emailVerified?: unknown };
-    return { email: normalizeEmail(metadata.email), verified: metadata.emailVerified === true };
-  } catch {
-    return { email: null, verified: false };
-  }
-}
-
-async function handleDiscordSendCode(request: Request, env: Env) {
-  const auth = await requireSession(request, env);
-  if (auth.response) return auth.response;
-  const userId = auth.session!.userId;
-
-  // Two budgets on purpose. The strict one counts codes that actually reached
-  // someone — that is the anti-spam limit. Counting failures against it locked
-  // out the very user who had just fixed their Discord privacy setting and
-  // wanted to retry. The loose one counts every call, so a permanently blocked
-  // DM still cannot be hammered against Discord's API.
-  const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "discord_code_call", 20, 3600)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-  if (await tooManyAuthAttempts(env, ip, "discord_code", 5, 3600)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-
-  const link = await getDiscordLink(env, userId);
-  if (!link) return jsonResponse({ error: "discord_not_linked" }, env, 409);
-
-  await recordAuthAttempt(env, ip, "discord_code_call");
-
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
-  const now = Date.now();
-  // Hashed with the account id mixed in, so a stolen row cannot be replayed
-  // against a different account.
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO discord_verification_codes (user_id, code_hash, discord_user_id, attempts, expires_at, created_at)
-     VALUES (?, ?, ?, 0, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       code_hash = excluded.code_hash,
-       discord_user_id = excluded.discord_user_id,
-       attempts = 0,
-       expires_at = excluded.expires_at,
-       created_at = excluded.created_at`
-  )
-    .bind(
-      userId,
-      await sha256Hex(`${userId}:${code}`),
-      link.discord_user_id,
-      new Date(now + DISCORD_CODE_TTL_SECONDS * 1000).toISOString(),
-      new Date(now).toISOString()
-    )
-    .run();
-
-  const dm = await discordDirectMessage(
-    env,
-    link.discord_user_id,
-    `Seu código de verificação do GhostBox é **${code}**.\nEle expira em 10 minutos. Se não foi você quem pediu, ignore esta mensagem.`
-  );
-
-  if (!dm.ok) {
-    // Leaving a live code behind for a message nobody received would just burn
-    // one of the user's five attempts per hour.
-    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`).bind(userId).run();
-    console.warn("Discord verification DM failed", { userId, reason: dm.reason });
-    return jsonResponse({ error: dm.blocked ? "discord_dm_blocked" : "discord_dm_failed" }, env, dm.blocked ? 409 : 502);
-  }
-
-  await recordAuthAttempt(env, ip, "discord_code");
-  return jsonResponse({ ok: true, expiresInSeconds: DISCORD_CODE_TTL_SECONDS }, env);
-}
-
-async function handleDiscordConfirmCode(request: Request, env: Env) {
-  const auth = await requireSession(request, env);
-  if (auth.response) return auth.response;
-  const userId = auth.session!.userId;
-
-  const body = await readJson(request);
-  const code = typeof body?.code === "string" ? body.code.trim() : "";
-  if (!/^[0-9]{6}$/.test(code)) return jsonResponse({ error: "invalid_code" }, env, 400);
-
-  const row = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM discord_verification_codes WHERE user_id = ? LIMIT 1`
-  )
-    .bind(userId)
-    .first<DiscordVerificationCodeRow>();
-  if (!row) return jsonResponse({ error: "code_not_found" }, env, 404);
-
-  const dropCode = () =>
-    env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`).bind(userId).run();
-
-  if (Date.parse(row.expires_at) < Date.now()) {
-    await dropCode();
-    return jsonResponse({ error: "code_expired" }, env, 410);
-  }
-  if (row.attempts >= DISCORD_CODE_MAX_ATTEMPTS) {
-    await dropCode();
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-
-  const expected = await sha256Hex(`${userId}:${code}`);
-  if (!timingSafeEqual(expected, row.code_hash)) {
-    await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE discord_verification_codes SET attempts = attempts + 1 WHERE user_id = ?`
-    ).bind(userId).run();
+  if (!row.user_id) {
     return jsonResponse(
-      { error: "invalid_code", attemptsLeft: Math.max(0, DISCORD_CODE_MAX_ATTEMPTS - (row.attempts + 1)) },
+      {
+        error: "signup_required",
+        provider: identity.provider,
+        providerId: identity.id,
+        suggestedUsername: suggestUsername(identity.displayName || identity.username, `${identity.provider}_user`),
+        displayName: identity.displayName,
+        avatarUrl: identity.avatarUrl,
+        disclaimer: PROVIDER_AUTH_DISCLAIMER,
+      },
       env,
-      401
+      404
     );
   }
 
-  await dropCode();
+  // Consume first, then read: concurrent exchanges of the same ticket yield
+  // exactly one session.
+  const consumed = await consumeDiscordLoginTicketAtomic(env, ticket);
+  if (!consumed) return jsonResponse({ error: "invalid_ticket" }, env, 400);
 
-  const account = auth.account;
+  const account = await getAccountByUserId(env, consumed.user_id!);
   if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
 
-  const connection = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM user_connections WHERE user_id = ? AND provider = 'discord' LIMIT 1`
-  )
-    .bind(userId)
-    .first<UserConnectionRow>();
-  const discordEmail = discordConnectionEmail(connection);
-
-  // The PIN proves a real person holds the Discord account. It only proves
-  // the *email address* when that address is the one on file.
-  await markVerifiedViaDiscord(env, userId, discordEmail.verified && discordEmail.email === account.email);
-
-  const fresh = await getAccountByUserId(env, userId);
-  return jsonResponse({ ok: true, account: publicAccount(fresh ?? account) }, env);
+  const token = await issueSessionToken(env, account);
+  await recordSecurityEvent(env, request, account.user_id, "login", consumed.provider);
+  return jsonResponse({ token, account: publicAccount(account) }, env);
 }
 
-async function handleChangePassword(request: Request, env: Env) {
-  const auth = await requireSession(request, env);
-  if (auth.response) return auth.response;
+/** Completes a provider signup: the ticket proved the provider identity, and
+ * the user confirmed a username plus the terms. Creates the account, links
+ * the provider, and signs straight in. */
+async function handleOAuthSignup(request: Request, env: Env) {
+  const ip = clientIp(request);
+  if (await tooManyAuthAttempts(env, ip, "oauth_signup", 8, 3600)) {
+    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+  }
 
   const body = await readJson(request);
-  const currentPassword = body?.currentPassword;
-  const newPassword = body?.newPassword;
-  if (!validPassword(currentPassword) || !validPassword(newPassword)) {
-    return jsonResponse({ error: "weak_password" }, env, 400);
+  const username = normalizeUsername(body?.username);
+  const displayName =
+    typeof body?.displayName === "string" && body.displayName.trim()
+      ? body.displayName.trim().slice(0, 60)
+      : null;
+  if (!username) return jsonResponse({ error: "invalid_username" }, env, 400);
+  if (body?.acceptTerms !== true && body?.acceptDisclaimer !== true) {
+    return jsonResponse({ error: "terms_required" }, env, 400);
   }
 
-  const account = auth.account;
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
-
-  let reauth;
-  try {
-    reauth = await firebaseSignIn(env, account.email, currentPassword);
-  } catch {
-    return jsonResponse({ error: "invalid_credentials" }, env, 401);
+  // Peek before consuming so a correctable username error does not force a
+  // second provider round-trip.
+  const peeked = await takeDiscordLoginTicket(env, body?.ticket);
+  if (!peeked || peeked.purpose === "recover") return jsonResponse({ error: "invalid_ticket" }, env, 400);
+  if (peeked.user_id) return jsonResponse({ error: "provider_already_linked" }, env, 409);
+  if (await getAccountByUsername(env, username)) {
+    return jsonResponse({ error: "username_taken" }, env, 409);
   }
 
+  const row = await consumeDiscordLoginTicketAtomic(env, body?.ticket);
+  if (!row || row.purpose === "recover") return jsonResponse({ error: "invalid_ticket" }, env, 400);
+  if (row.user_id) return jsonResponse({ error: "provider_already_linked" }, env, 409);
+
+  await recordAuthAttempt(env, ip, "oauth_signup");
+
+  const identity = ticketIdentity(row);
+  const existing = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id FROM user_connections WHERE provider = ? AND provider_id = ? LIMIT 1`
+  )
+    .bind(identity.provider, identity.id)
+    .first<{ user_id: string }>();
+  if (existing) return jsonResponse({ error: "provider_already_linked" }, env, 409);
+
+  const userId = newUserId();
   try {
-    await firebaseUpdatePassword(env, reauth.idToken, newPassword);
+    await createProviderAccount(env, {
+      userId,
+      email: identity.email,
+      username,
+      displayName: displayName || identity.displayName || username,
+    }, identity);
   } catch (error) {
-    const mapped = mapFirebaseError(error);
-    return jsonResponse({ error: mapped.code }, env, 400);
+    console.warn("OAuth signup failed", { error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: "username_taken" }, env, 409);
   }
 
-  // Changing the password signs every other device out — the whole point of
-  // changing it is usually that someone else might be holding one. The caller
-  // gets a token on the new version so it is not logged out by its own action.
-  const version = await bumpTokenVersion(env, account.user_id);
-  const token = await issueSessionToken(env, { ...account, token_version: version });
-  await recordSecurityEvent(env, request, account.user_id, "password_changed");
-
-  return jsonResponse({ ok: true, token }, env);
+  const account = await getAccountByUserId(env, userId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 500);
+  const token = await issueSessionToken(env, account);
+  await recordSecurityEvent(env, request, userId, "account_created", identity.provider);
+  await recordSecurityEvent(env, request, userId, "provider_linked", identity.provider);
+  return jsonResponse({ ...accountResponsePayload(account, token), isNewAccount: true }, env, 201);
 }
 
 async function handleMe(request: Request, env: Env) {
@@ -3511,6 +3520,7 @@ async function handleMe(request: Request, env: Env) {
       userId,
       steamId: session.steamId ?? null,
       exp: now + CLOUD_SESSION_TTL_SECONDS,
+      iat: now,
       v: account.token_version ?? 1,
     });
   }
@@ -3553,12 +3563,18 @@ async function handleClaimSteam(request: Request, env: Env) {
   if (auth.response) return auth.response;
   const userId = auth.session!.userId;
 
+  // Step-up like the Discord link: attaching a second way in needs a fresh
+  // session, not just a valid one.
+  if (!sessionIsRecent(auth.session!)) {
+    return jsonResponse({ error: "reauth_required" }, env, 403);
+  }
+
   const body = await readJson(request);
   const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : "";
   const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
   const avatarUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl.trim() : "";
 
-  const steamId = await validateSteamOpenId(callbackUrl);
+  const steamId = await validateSteamOpenId(env, callbackUrl, false);
   if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
 
   const existingLink = await env.SUBSCRIPTION_DB.prepare(
@@ -3575,8 +3591,8 @@ async function handleClaimSteam(request: Request, env: Env) {
     const now = nowIso();
     await env.SUBSCRIPTION_DB.prepare(
       `INSERT INTO user_connections (user_id, provider, provider_id, metadata_json, linked_at)
-       VALUES (?, 'steam', ?, ?, ?)`
-    ).bind(userId, steamId, JSON.stringify({ displayName: displayName || null, avatarUrl: avatarUrl || null }), now).run();
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(userId, "steam", steamId, JSON.stringify({ displayName: displayName || null, avatarUrl: avatarUrl || null }), now).run();
 
     for (const table of STEAM_LINKED_TABLES) {
       try {
@@ -3627,11 +3643,15 @@ async function handleDisconnectProvider(request: Request, env: Env, provider: "s
   if (auth.response) return auth.response;
   const userId = auth.session!.userId;
 
-  // GhostBox sends no email, so a linked provider is the only way back into an
-  // account whose password is forgotten — and there are no backup codes. The
-  // server refuses to let an account drop to zero providers, full stop: the
-  // "at least one linked provider" rule is enforced here, not in the UI, so no
-  // client flag can talk its way past it.
+  // Step-up: removing a way in is as sensitive as adding one.
+  if (!sessionIsRecent(auth.session!)) {
+    return jsonResponse({ error: "reauth_required" }, env, 403);
+  }
+
+  // The provider account IS the login now — there is no password and no
+  // backup code behind it. The server refuses to let an account drop to zero
+  // providers, full stop: the "at least one linked provider" rule is enforced
+  // here, not in the UI, so no client flag can talk its way past it.
   const connections = await env.SUBSCRIPTION_DB.prepare(
     `SELECT provider FROM user_connections WHERE user_id = ?`
   ).bind(userId).all<{ provider: string }>();
@@ -3681,11 +3701,14 @@ async function handleDisconnectProvider(request: Request, env: Env, provider: "s
 
   await recordSecurityEvent(env, request, userId, "provider_unlinked", provider);
 
-  // Deliberately does NOT bump token_version. Unlinking hands access to
-  // nobody, so there is no session to push out — and revoking here would sign
-  // the user's other devices out over a routine Settings action. Sessions are
-  // revoked where it actually buys something: password change and recovery.
-  return jsonResponse({ ok: true }, env);
+  // Unlinking removes a way in, so every other device is signed out. The
+  // caller gets a token on the new version so it is not logged out by its own
+  // action.
+  const account = await getAccountByUserId(env, userId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
+  const version = await bumpTokenVersion(env, userId);
+  const token = await issueSessionToken(env, { ...account, token_version: version });
+  return jsonResponse({ ok: true, token }, env);
 }
 
 // ---- Security trail ----
@@ -3703,15 +3726,15 @@ function ipPrefix(ip: string): string | null {
 /**
  * Records something that changed who can get into this account.
  *
- * Best-effort on purpose, and never awaited on the critical path in a way that
- * can fail the action: an audit write that blocks a password recovery would
- * lock the user out to protect a log entry.
+ * Best-effort on purpose: an audit write must never fail the action it
+ * describes — a user proving themselves through a provider must not be
+ * locked out to protect a log entry.
  */
 async function recordSecurityEvent(
   env: Env,
   request: Request,
   userId: string,
-  kind: "login" | "recover" | "password_changed" | "provider_linked" | "provider_unlinked",
+  kind: "login" | "account_created" | "account_merged" | "account_deleted" | "provider_linked" | "provider_unlinked",
   provider: string | null = null
 ) {
   try {
@@ -3730,7 +3753,7 @@ async function recordSecurityEvent(
   }
 }
 
-// ---- Steam as a sign-in method ----
+// ---- Steam as a sign-in and signup method ----
 
 /**
  * Signs in whoever owns the Steam account the OpenID callback proves.
@@ -3739,10 +3762,12 @@ async function recordSecurityEvent(
  * an arbitrary `return_to`, so the desktop app receives the callback straight
  * on its loopback port and posts the whole URL here.
  *
- * Steam cannot create an account. It reports a SteamID and nothing else — no
- * address — and every GhostBox account needs one on file. So an unknown Steam
- * gets `steam_not_linked` and the app sends the user to sign up another way.
- * That answer is the same for every unlinked SteamID, so it is no oracle.
+ * A SteamID with no GhostBox account gets `steam_not_linked` plus the id —
+ * unless the same request already carries a username and the terms
+ * acceptance, in which case the account is created inline and the session
+ * comes back directly. Either way the assertion is consumed at most once: a
+ * bare login that finds nobody leaves it unspent so the follow-up signup can
+ * reuse the very same callback.
  */
 async function handleSteamLogin(request: Request, env: Env) {
   const ip = clientIp(request);
@@ -3755,7 +3780,9 @@ async function handleSteamLogin(request: Request, env: Env) {
   const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : "";
 
   // The SteamID is taken from what Steam itself confirms, never from the body.
-  const steamId = await validateSteamOpenId(callbackUrl);
+  // Peek first: spending the assertion before knowing whether it logs in or
+  // signs up would force the user through the browser twice.
+  const steamId = await validateSteamOpenId(env, callbackUrl, false);
   if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
 
   const connection = await env.SUBSCRIPTION_DB.prepare(
@@ -3764,289 +3791,444 @@ async function handleSteamLogin(request: Request, env: Env) {
     .bind(steamId)
     .first<{ user_id: string }>();
 
-  if (!connection?.user_id) return jsonResponse({ error: "steam_not_linked" }, env, 404);
+  if (connection?.user_id) {
+    if (!(await consumeSteamNonce(env, nonceOf(callbackUrl)))) {
+      return jsonResponse({ error: "invalid_steam_login" }, env, 401);
+    }
+    const account = await getAccountByUserId(env, connection.user_id);
+    if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
 
-  const account = await getAccountByUserId(env, connection.user_id);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
+    const token = await issueSessionToken(env, account);
+    await recordSecurityEvent(env, request, account.user_id, "login", "steam");
+    return jsonResponse({ token, account: publicAccount(account), steamId }, env);
+  }
 
-  const token = await issueSessionToken(env, account);
-  await recordSecurityEvent(env, request, account.user_id, "login", "steam");
-  return jsonResponse({ token, account: publicAccount(account), steamId }, env);
+  const username = normalizeUsername(body?.username);
+  const acceptTerms = body?.acceptTerms === true || body?.acceptDisclaimer === true;
+  if (!username || !acceptTerms) {
+    return jsonResponse(
+      {
+        error: "steam_not_linked",
+        steamId,
+        disclaimer: PROVIDER_AUTH_DISCLAIMER,
+        suggestedUsername: suggestUsername(
+          typeof body?.displayName === "string" ? body.displayName : null,
+          "steam_user"
+        ),
+      },
+      env,
+      404
+    );
+  }
+
+  if (await getAccountByUsername(env, username)) {
+    return jsonResponse({ error: "username_taken" }, env, 409);
+  }
+  // Lost the race with a concurrent signup for the same Steam.
+  const raced = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = ? LIMIT 1`
+  )
+    .bind(steamId)
+    .first<{ user_id: string }>();
+  if (raced?.user_id) return jsonResponse({ error: "provider_already_linked" }, env, 409);
+  if (!(await consumeSteamNonce(env, nonceOf(callbackUrl)))) {
+    return jsonResponse({ error: "invalid_steam_login" }, env, 401);
+  }
+
+  const displayName =
+    typeof body?.displayName === "string" && body.displayName.trim()
+      ? body.displayName.trim().slice(0, 60)
+      : null;
+  const avatarUrl =
+    typeof body?.avatarUrl === "string" && body.avatarUrl.trim()
+      ? body.avatarUrl.trim().slice(0, 2048)
+      : null;
+  const userId = newUserId();
+  try {
+    await createProviderAccount(env, {
+      userId,
+      email: null,
+      username,
+      displayName: displayName || username,
+    }, {
+      provider: "steam",
+      id: steamId,
+      username: null,
+      displayName,
+      avatarUrl,
+      email: null,
+      emailVerified: false,
+    });
+    await ensureUser(env, steamId);
+    for (const table of STEAM_LINKED_TABLES) {
+      try {
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE ${table} SET user_id = ? WHERE steam_id = ? AND user_id IS NULL`
+        ).bind(userId, steamId).run();
+      } catch (error) {
+        console.warn("Signup: failed to migrate table", { table, steamId, userId, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  } catch (error) {
+    console.warn("Steam login-signup failed", { error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: "username_taken" }, env, 409);
+  }
+
+  const created = await getAccountByUserId(env, userId);
+  if (!created) return jsonResponse({ error: "account_not_found" }, env, 500);
+  const token = await issueSessionToken(env, created);
+  await recordSecurityEvent(env, request, userId, "account_created", "steam");
+  await recordSecurityEvent(env, request, userId, "provider_linked", "steam");
+  return jsonResponse({ ...accountResponsePayload(created, token), isNewAccount: true, steamId }, env, 201);
 }
 
-// ---- Recovery: proving an account without its password ----
-
-/** Long enough to choose a password, short enough that a stolen recovery
- * session is not a standing key to the account. */
-const RECOVERY_SESSION_TTL_SECONDS = 10 * 60;
-
-/** Mints the narrow session that `/auth/recover/password` accepts and every
- * other route rejects. */
-async function issueRecoverySessionToken(env: Env, account: AccountRow) {
-  return signCloudToken(env, {
-    userId: account.user_id,
-    exp: Math.floor(Date.now() / 1000) + RECOVERY_SESSION_TTL_SECONDS,
-    v: account.token_version ?? 1,
-    scope: "recovery",
-  });
+/** Extracts `openid.response_nonce` for explicit consumption. The login flow
+ * above validates first and consumes only once the outcome is known. */
+function nonceOf(callbackUrl: string): string {
+  try {
+    return new URL(callbackUrl).searchParams.get("openid.response_nonce") || "";
+  } catch {
+    return "";
+  }
 }
 
-/** Trades a `recover` ticket — or a validated Steam callback — for that narrow
- * session. Deliberately separate from `/auth/discord/exchange`, which refuses
- * recovery tickets, so neither can be walked into the other. */
-async function handleRecoverExchange(request: Request, env: Env) {
+/** Creates a GhostBox account straight from a validated Steam proof, then
+ * signs in. Mirrors `handleOAuthSignup` for Discord. */
+async function handleSteamSignup(request: Request, env: Env) {
   const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "recover", 10, 3600)) {
+  if (await tooManyAuthAttempts(env, ip, "steam_signup", 8, 3600)) {
     return jsonResponse({ error: "too_many_attempts" }, env, 429);
   }
-  await recordAuthAttempt(env, ip, "recover");
 
   const body = await readJson(request);
+  const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : "";
+  const username = normalizeUsername(body?.username);
+  const displayName =
+    typeof body?.displayName === "string" && body.displayName.trim()
+      ? body.displayName.trim().slice(0, 60)
+      : null;
+  const avatarUrl =
+    typeof body?.avatarUrl === "string" && body.avatarUrl.trim()
+      ? body.avatarUrl.trim().slice(0, 2048)
+      : null;
+  if (!username) return jsonResponse({ error: "invalid_username" }, env, 400);
+  if (body?.acceptTerms !== true && body?.acceptDisclaimer !== true) {
+    return jsonResponse({ error: "terms_required" }, env, 400);
+  }
 
-  let userId: string | null = null;
+  const steamId = await validateSteamOpenId(env, callbackUrl);
+  if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
 
+  await recordAuthAttempt(env, ip, "steam_signup");
+
+  const existing = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = ? LIMIT 1`
+  )
+    .bind(steamId)
+    .first<{ user_id: string }>();
+  if (existing?.user_id) return jsonResponse({ error: "provider_already_linked" }, env, 409);
+  if (await getAccountByUsername(env, username)) {
+    return jsonResponse({ error: "username_taken" }, env, 409);
+  }
+  if (!(await consumeSteamNonce(env, nonceOf(callbackUrl)))) {
+    return jsonResponse({ error: "invalid_steam_login" }, env, 401);
+  }
+
+  const userId = newUserId();
+  try {
+    await createProviderAccount(env, {
+      userId,
+      email: null,
+      username,
+      displayName: displayName || username,
+    }, {
+      provider: "steam",
+      id: steamId,
+      username: null,
+      displayName,
+      avatarUrl,
+      email: null,
+      emailVerified: false,
+    });
+    await ensureUser(env, steamId);
+    for (const table of STEAM_LINKED_TABLES) {
+      try {
+        await env.SUBSCRIPTION_DB.prepare(
+          `UPDATE ${table} SET user_id = ? WHERE steam_id = ? AND user_id IS NULL`
+        ).bind(userId, steamId).run();
+      } catch (error) {
+        console.warn("Signup: failed to migrate table", { table, steamId, userId, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  } catch (error) {
+    console.warn("Steam signup failed", { error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: "username_taken" }, env, 409);
+  }
+
+  const account = await getAccountByUserId(env, userId);
+  if (!account) return jsonResponse({ error: "account_not_found" }, env, 500);
+  const token = await issueSessionToken(env, account);
+  await recordSecurityEvent(env, request, userId, "account_created", "steam");
+  await recordSecurityEvent(env, request, userId, "provider_linked", "steam");
+  return jsonResponse({ ...accountResponsePayload(account, token), isNewAccount: true, steamId }, env, 201);
+}
+
+// ---- Confirmed account merge ----
+//
+// Uniting two GhostBox accounts that turned out to belong to the same person:
+// the caller's session proves account A (and must be recent), and a fresh
+// provider proof — a login ticket for account B, or a validated Steam
+// callback resolving to B — proves B. Nothing merges on a single session
+// alone, and nothing merges automatically by matching emails or names.
+//
+// The session's account survives; the other one is absorbed and deleted. When
+// both sides hold the same provider type with different ids, or both hold an
+// active subscription, the merge refuses (`merge_conflict`) and support
+// resolves it by hand.
+
+const MERGEABLE_TABLES = [
+  "subscriptions",
+  "payments",
+  "discord_links",
+  "cloud_saves",
+  "user_profile_cloud",
+  "user_collections_cloud",
+  "user_collection_games_cloud",
+  "user_favorite_games_cloud",
+];
+
+async function handleMergePreview(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const primaryId = auth.session!.userId;
+  if (!sessionIsRecent(auth.session!)) {
+    return jsonResponse({ error: "reauth_required" }, env, 403);
+  }
+
+  const otherId = await resolveMergeCounterpart(env, await readJson(request));
+  if (otherId === null) return jsonResponse({ error: "invalid_proof" }, env, 400);
+  if (otherId === primaryId) return jsonResponse({ error: "merge_same_account" }, env, 400);
+
+  const [primary, secondary] = await Promise.all([
+    getAccountByUserId(env, primaryId),
+    getAccountByUserId(env, otherId),
+  ]);
+  if (!primary || !secondary) return jsonResponse({ error: "account_not_found" }, env, 404);
+
+  const conflict = await mergeConflict(env, primaryId, otherId);
+  if (conflict) return jsonResponse({ error: "merge_conflict", detail: conflict }, env, 409);
+
+  const [primaryConnections, secondaryConnections, secondarySubscription] = await Promise.all([
+    env.SUBSCRIPTION_DB.prepare(`SELECT provider FROM user_connections WHERE user_id = ?`).bind(primaryId).all<{ provider: string }>(),
+    env.SUBSCRIPTION_DB.prepare(`SELECT provider FROM user_connections WHERE user_id = ?`).bind(otherId).all<{ provider: string }>(),
+    getSubscription(env, otherId),
+  ]);
+
+  return jsonResponse(
+    {
+      primaryAccount: publicAccount(primary),
+      secondaryAccount: publicAccount(secondary),
+      primaryProviders: (primaryConnections.results || []).map((row) => row.provider),
+      secondaryProviders: (secondaryConnections.results || []).map((row) => row.provider),
+      secondaryHasActiveSubscription: isActiveSubscription(secondarySubscription),
+      warning:
+        "A conta secundária será excluída e seus dados movidos para esta conta. " +
+        "Quando ambas tiverem dados no mesmo lugar, os desta conta prevalecem. " +
+        PROVIDER_AUTH_DISCLAIMER,
+    },
+    env
+  );
+}
+
+/** Resolves the "other" account from a fresh provider proof without consuming
+ * it (preview): either `{ ticket }` for a Discord login ticket, or
+ * `{ callbackUrl }` for a Steam OpenID callback. Returns the user id, or
+ * null when the proof is invalid. */
+async function resolveMergeCounterpart(env: Env, body: Record<string, unknown> | null): Promise<string | null> {
+  if (typeof body?.ticket === "string" && body.ticket) {
+    const row = await takeDiscordLoginTicket(env, body.ticket);
+    if (!row || row.purpose === "recover" || !row.user_id) return null;
+    return row.user_id;
+  }
   if (typeof body?.callbackUrl === "string" && body.callbackUrl) {
-    const steamId = await validateSteamOpenId(body.callbackUrl);
-    if (!steamId) return jsonResponse({ error: "invalid_steam_login" }, env, 401);
+    // Peek only: preview spends nothing, the confirm consumes.
+    const steamId = await validateSteamOpenId(env, body.callbackUrl, false);
+    if (!steamId) return null;
     const connection = await env.SUBSCRIPTION_DB.prepare(
       `SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = ? LIMIT 1`
     )
       .bind(steamId)
       .first<{ user_id: string }>();
-    userId = connection?.user_id ?? null;
-    if (!userId) return jsonResponse({ error: "steam_not_linked" }, env, 404);
-  } else {
-    const row = await takeDiscordLoginTicket(env, body?.ticket);
-    if (!row || row.purpose !== "recover") return jsonResponse({ error: "invalid_ticket" }, env, 400);
-    if (!row.user_id) return jsonResponse({ error: "provider_not_linked" }, env, 404);
-    await consumeDiscordLoginTicket(env, row.ticket_hash);
-    userId = row.user_id;
+    return connection?.user_id ?? null;
   }
-
-  const account = await getAccountByUserId(env, userId);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
-
-  return jsonResponse(
-    {
-      token: await issueRecoverySessionToken(env, account),
-      expiresInSeconds: RECOVERY_SESSION_TTL_SECONDS,
-      account: publicAccount(account),
-    },
-    env
-  );
+  return null;
 }
 
-// ---- Recovery via Discord PIN ----
-
-/** Per-account DM budget for recovery PINs. Whoever knows an identifier can
- * only ring the linked Discord three times an hour — the anti-DM-bombing cap
- * the per-IP limits alone cannot provide. */
-const DISCORD_RECOVER_DM_BUDGET = 3;
-
-/** Resolves the account an email-or-username identifier names, or `null`. */
-async function accountByIdentifier(env: Env, identifier: string) {
-  if (identifier.includes("@")) {
-    const email = normalizeEmail(identifier);
-    return email ? getAccountByEmail(env, email) : null;
+async function mergeConflict(env: Env, primaryId: string, secondaryId: string): Promise<string | null> {
+  const [primaryConnections, secondaryConnections] = await Promise.all([
+    env.SUBSCRIPTION_DB.prepare(`SELECT provider, provider_id FROM user_connections WHERE user_id = ?`).bind(primaryId).all<UserConnectionRow>(),
+    env.SUBSCRIPTION_DB.prepare(`SELECT provider, provider_id FROM user_connections WHERE user_id = ?`).bind(secondaryId).all<UserConnectionRow>(),
+  ]);
+  for (const secondary of secondaryConnections.results || []) {
+    const clash = (primaryConnections.results || []).find(
+      (primary) => primary.provider === secondary.provider && primary.provider_id !== secondary.provider_id
+    );
+    if (clash) return `both_accounts_hold_${secondary.provider}`;
   }
-  const username = normalizeUsername(identifier);
-  return username ? getAccountByUsername(env, username) : null;
+  const [primarySubscription, secondarySubscription] = await Promise.all([
+    getSubscription(env, primaryId),
+    getSubscription(env, secondaryId),
+  ]);
+  if (isActiveSubscription(primarySubscription) && isActiveSubscription(secondarySubscription)) {
+    return "both_accounts_subscribed";
+  }
+  return null;
 }
 
-/** Step one of the Discord recovery: the bot DMs a one-shot PIN to the Discord
- * linked to the account the identifier names.
- *
- * The answer is `{ ok: true }` for accounts that do not exist, for accounts
- * with no Discord linked and for DMs that could not be delivered — same as it
- * is for the happy path. Anything else would turn this endpoint into an
- * account oracle and the DM into a way to probe who linked what. */
-async function handleDiscordRecoverStart(request: Request, env: Env) {
-  const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "recover_discord_call", 10, 3600)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
+async function handleMergeConfirm(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const primaryId = auth.session!.userId;
+  if (!sessionIsRecent(auth.session!)) {
+    return jsonResponse({ error: "reauth_required" }, env, 403);
   }
 
   const body = await readJson(request);
-  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
-  if (!identifier) return jsonResponse({ ok: true }, env);
+  if (body?.confirm !== true) return jsonResponse({ error: "confirmation_required" }, env, 400);
 
-  const account = await accountByIdentifier(env, identifier);
-  if (!account) return jsonResponse({ ok: true }, env);
-
-  // Checked before the link lookup on purpose: an attacker must not be able to
-  // tell "no Discord linked" apart from "budget spent" by timing either.
-  if (await tooManyAuthAttempts(env, `user:${account.user_id}`, "recover_discord", DISCORD_RECOVER_DM_BUDGET, 3600)) {
-    return jsonResponse({ ok: true }, env);
-  }
-
-  const link = await getDiscordLink(env, account.user_id);
-  if (!link) return jsonResponse({ ok: true }, env);
-
-  // Shares the verification-code table: one pending code per account, and the
-  // newest request wins. The hash mixes in the account id, so a stolen row
-  // cannot be replayed against a different account.
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
-  const now = Date.now();
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO discord_verification_codes (user_id, code_hash, discord_user_id, attempts, expires_at, created_at)
-     VALUES (?, ?, ?, 0, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       code_hash = excluded.code_hash,
-       discord_user_id = excluded.discord_user_id,
-       attempts = 0,
-       expires_at = excluded.expires_at,
-       created_at = excluded.created_at`
-  )
-    .bind(
-      account.user_id,
-      await sha256Hex(`${account.user_id}:${code}`),
-      link.discord_user_id,
-      new Date(now + DISCORD_CODE_TTL_SECONDS * 1000).toISOString(),
-      new Date(now).toISOString()
+  // Consume the second proof first: one merge per proof, even under
+  // concurrency. A Discord ticket is single-use; a Steam assertion is
+  // single-use via its nonce, and validating it here (not in preview) keeps
+  // the window between proof and merge to seconds.
+  let secondaryId: string | null = null;
+  if (typeof body?.ticket === "string" && body.ticket) {
+    const row = await consumeDiscordLoginTicketAtomic(env, body.ticket);
+    if (!row || row.purpose === "recover" || !row.user_id) {
+      return jsonResponse({ error: "invalid_proof" }, env, 400);
+    }
+    secondaryId = row.user_id;
+  } else if (typeof body?.callbackUrl === "string" && body.callbackUrl) {
+    const steamId = await validateSteamOpenId(env, body.callbackUrl);
+    if (!steamId) return jsonResponse({ error: "invalid_proof" }, env, 400);
+    const connection = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT user_id FROM user_connections WHERE provider = 'steam' AND provider_id = ? LIMIT 1`
     )
-    .run();
+      .bind(steamId)
+      .first<{ user_id: string }>();
+    if (!connection?.user_id) return jsonResponse({ error: "invalid_proof" }, env, 400);
+    secondaryId = connection.user_id;
+  } else {
+    return jsonResponse({ error: "invalid_proof" }, env, 400);
+  }
 
-  const dm = await discordDirectMessage(
-    env,
-    link.discord_user_id,
-    `Código para redefinir a senha da sua conta GhostBox: **${code}**.\nEle expira em 10 minutos. Se não foi você quem pediu, ignore esta mensagem.`
+  if (secondaryId === primaryId) return jsonResponse({ error: "merge_same_account" }, env, 400);
+  const secondary = await getAccountByUserId(env, secondaryId);
+  const primary = await getAccountByUserId(env, primaryId);
+  if (!secondary || !primary) return jsonResponse({ error: "account_not_found" }, env, 404);
+
+  const conflict = await mergeConflict(env, primaryId, secondaryId);
+  if (conflict) return jsonResponse({ error: "merge_conflict", detail: conflict }, env, 409);
+
+  // D1 batches are transactional. OR IGNORE moves every non-conflicting row;
+  // the following delete drops only collisions where the survivor wins.
+  const statements: D1PreparedStatement[] = [];
+  for (const table of [...MERGEABLE_TABLES, "user_connections"]) {
+    statements.push(
+      env.SUBSCRIPTION_DB.prepare(`UPDATE OR IGNORE ${table} SET user_id = ? WHERE user_id = ?`)
+        .bind(primaryId, secondaryId),
+      env.SUBSCRIPTION_DB.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(secondaryId)
+    );
+  }
+  statements.push(
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`).bind(secondaryId),
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_login_tickets WHERE user_id = ?`).bind(secondaryId),
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM security_events WHERE user_id = ?`).bind(secondaryId),
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM accounts WHERE user_id = ?`).bind(secondaryId),
+    env.SUBSCRIPTION_DB.prepare(
+      `UPDATE accounts SET token_version = token_version + 1, updated_at = ? WHERE user_id = ?`
+    ).bind(nowIso(), primaryId)
   );
-  if (!dm.ok) {
-    // A code nobody received must not sit in the table answering guesses.
-    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`)
-      .bind(account.user_id).run();
-    console.warn("Discord recovery DM failed", { userId: account.user_id, reason: dm.reason });
-    return jsonResponse({ ok: true }, env);
-  }
-
-  await recordAuthAttempt(env, `user:${account.user_id}`, "recover_discord");
-  await recordSecurityEvent(env, request, account.user_id, "recover", "pin_requested");
-  return jsonResponse({ ok: true }, env);
-}
-
-/** Step two: the PIN proves whoever holds the linked Discord, and the reward is
- * the same narrow recovery session the provider hand-off ends in — it can do
- * exactly one thing, set a password. Every failure reads as `invalid_code` so
- * the endpoint cannot confirm whether an identifier exists. */
-async function handleDiscordRecoverConfirm(request: Request, env: Env) {
-  const ip = clientIp(request);
-  if (await tooManyAuthAttempts(env, ip, "recover", 10, 3600)) {
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-  await recordAuthAttempt(env, ip, "recover");
-
-  const body = await readJson(request);
-  const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
-  const code = typeof body?.code === "string" ? body.code.trim() : "";
-  if (!identifier || !/^[0-9]{6}$/.test(code)) return jsonResponse({ error: "invalid_code" }, env, 400);
-
-  const account = await accountByIdentifier(env, identifier);
-  if (!account) return jsonResponse({ error: "invalid_code" }, env, 400);
-
-  const row = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM discord_verification_codes WHERE user_id = ? LIMIT 1`
-  )
-    .bind(account.user_id)
-    .first<DiscordVerificationCodeRow>();
-
-  const dropCode = () =>
-    env.SUBSCRIPTION_DB.prepare(`DELETE FROM discord_verification_codes WHERE user_id = ?`)
-      .bind(account.user_id).run();
-
-  if (row && Date.parse(row.expires_at) < Date.now()) {
-    await dropCode();
-    return jsonResponse({ error: "invalid_code" }, env, 400);
-  }
-  if (!row) return jsonResponse({ error: "invalid_code" }, env, 400);
-  if (row.attempts >= DISCORD_CODE_MAX_ATTEMPTS) {
-    await dropCode();
-    return jsonResponse({ error: "too_many_attempts" }, env, 429);
-  }
-
-  const expected = await sha256Hex(`${account.user_id}:${code}`);
-  if (!timingSafeEqual(expected, row.code_hash)) {
-    await env.SUBSCRIPTION_DB.prepare(
-      `UPDATE discord_verification_codes SET attempts = attempts + 1 WHERE user_id = ?`
-    ).bind(account.user_id).run();
-    return jsonResponse({ error: "invalid_code" }, env, 400);
-  }
-
-  await dropCode();
-  await recordSecurityEvent(env, request, account.user_id, "recover", "discord_pin");
-  return jsonResponse(
-    {
-      token: await issueRecoverySessionToken(env, account),
-      expiresInSeconds: RECOVERY_SESSION_TTL_SECONDS,
-      account: publicAccount(account),
-    },
-    env
-  );
-}
-
-/**
- * Sets a new password for a caller holding a recovery session.
- *
- * The old password is never asked for — not having it is the whole situation.
- * `firebaseSignInWithCustomToken` is what makes that possible without an
- * emailed oobCode, and it is safe here precisely because the uid comes from a
- * session this worker minted after a provider proved the account, never from
- * anything the client said.
- */
-async function handleRecoverPassword(request: Request, env: Env) {
-  const session = await verifyCloudToken(env, request);
-  if (!session || session.scope !== "recovery") {
-    return jsonResponse({ error: "unauthorized" }, env, 401);
-  }
-
-  const body = await readJson(request);
-  const newPassword = body?.newPassword;
-  if (!validPassword(newPassword)) return jsonResponse({ error: "weak_password" }, env, 400);
-
-  const account = await getAccountByUserId(env, session.userId);
-  if (!account) return jsonResponse({ error: "account_not_found" }, env, 404);
-  // A recovery token outliving a completed recovery would be a second use of a
-  // one-shot proof.
-  if (sessionVersion(session) < (account.token_version ?? 1)) {
-    return jsonResponse({ error: "session_revoked" }, env, 401);
-  }
-
-  let firebaseSession;
   try {
-    firebaseSession = await firebaseSignInWithCustomToken(env, account.user_id, account.email);
-    await firebaseUpdatePassword(env, firebaseSession.idToken, newPassword);
+    await env.SUBSCRIPTION_DB.batch(statements);
   } catch (error) {
-    const mapped = mapFirebaseError(error);
-    console.warn("Recovery: password update failed", {
-      userId: account.user_id,
+    console.error("Account merge transaction failed", {
+      primaryId,
+      secondaryId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return jsonResponse({ error: mapped.code }, env, mapped.status === 500 ? 500 : 400);
+    return jsonResponse({ error: "merge_failed" }, env, 500);
   }
 
-  // Everything minted before this moment goes, including the recovery session
-  // that got here. Whoever was holding a session on this account — the reason
-  // to recover it in the first place — is out.
-  const version = await bumpTokenVersion(env, account.user_id);
-  const fresh = { ...account, token_version: version };
+  // The absorbed account is gone, so its sessions 404 from here on. The
+  // survivor rotates too: the merge changed who can get into it.
+  const fresh = await getAccountByUserId(env, primaryId);
+  if (!fresh) return jsonResponse({ error: "account_not_found" }, env, 500);
   const token = await issueSessionToken(env, fresh);
-  await recordSecurityEvent(env, request, account.user_id, "recover");
+  await recordSecurityEvent(env, request, primaryId, "account_merged");
+  return jsonResponse({ ok: true, token, account: publicAccount(fresh) }, env);
+}
 
-  // Best-effort notice on the only channel GhostBox has. Never blocks the
-  // recovery: a user locked out of their password must not also be blocked by
-  // Discord being unreachable.
-  const link = await getDiscordLink(env, account.user_id).catch(() => null);
-  if (link) {
-    await discordDirectMessage(
-      env,
-      link.discord_user_id,
-      "A senha da sua conta GhostBox acabou de ser redefinida por um provedor vinculado. Se não foi você, entre no app e redefina a senha imediatamente."
-    ).catch(() => undefined);
+// ---- Self-service account deletion ----
+
+const ACCOUNT_DELETION_TABLES = [
+  "cloud_saves",
+  "user_profile_cloud",
+  "user_collections_cloud",
+  "user_collection_games_cloud",
+  "user_favorite_games_cloud",
+  "discord_links",
+  "user_connections",
+  "discord_verification_codes",
+  "discord_login_tickets",
+  "security_events",
+];
+
+async function handleDeleteAccount(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const userId = auth.session!.userId;
+  if (!sessionIsRecent(auth.session!)) {
+    return jsonResponse({ error: "reauth_required" }, env, 403);
   }
 
-  return jsonResponse(
-    { ok: true, token, account: publicAccount(fresh), firebaseRefreshToken: firebaseSession.refreshToken },
-    env
+  const body = await readJson(request);
+  if (body?.confirm !== true) return jsonResponse({ error: "confirmation_required" }, env, 400);
+
+  // Money first: an active subscription must be cancelled through the billing
+  // portal before the account goes, so nobody keeps being charged for an
+  // account that no longer exists.
+  if (isActiveSubscription(await getSubscription(env, userId))) {
+    return jsonResponse({ error: "subscription_active" }, env, 409);
+  }
+
+  const saves = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT storage_path FROM cloud_saves WHERE user_id = ?`
+  ).bind(userId).all<{ storage_path: string }>();
+  const storagePaths = (saves.results || []).map((row) => row.storage_path).filter(Boolean);
+  try {
+    if (storagePaths.length) await deleteCloudSaveObjects(env, storagePaths);
+  } catch (error) {
+    console.error("Delete: failed to clear cloud storage", { userId, error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: "storage_delete_failed" }, env, 502);
+  }
+
+  const statements = ACCOUNT_DELETION_TABLES.map((table) =>
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(userId)
   );
+  // Keep legally relevant billing rows, but detach provider/account identity.
+  statements.push(
+    env.SUBSCRIPTION_DB.prepare(`UPDATE subscriptions SET user_id = NULL, steam_id = NULL WHERE user_id = ?`).bind(userId),
+    env.SUBSCRIPTION_DB.prepare(`UPDATE payments SET user_id = NULL, steam_id = NULL WHERE user_id = ?`).bind(userId),
+    env.SUBSCRIPTION_DB.prepare(`DELETE FROM accounts WHERE user_id = ?`).bind(userId)
+  );
+  try {
+    await env.SUBSCRIPTION_DB.batch(statements);
+  } catch (error) {
+    console.error("Account deletion transaction failed", { userId, error: error instanceof Error ? error.message : String(error) });
+    return jsonResponse({ error: "account_delete_failed" }, env, 500);
+  }
+
+  return jsonResponse({ ok: true }, env);
 }
 
 async function route(request: Request, env: Env, context: ExecutionContext) {
@@ -4060,6 +4242,14 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "POST" && url.pathname === "/auth/register") return handleRegister(request, env);
   if (request.method === "POST" && url.pathname === "/auth/login") return handleLogin(request, env);
   if (request.method === "POST" && url.pathname === "/auth/change-password") return handleChangePassword(request, env);
+  // Retired password flows: kept as explicit 410s so old app builds fail with
+  // a clear message instead of a confusing 404.
+  if (request.method === "POST" && url.pathname === "/auth/recover/exchange") return handleRecoverGone(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/recover/password") return handleRecoverGone(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/recover/discord/start") return handleRecoverGone(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/recover/discord/confirm") return handleRecoverGone(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/discord/send-code") return handleVerificationGone(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/discord/confirm-code") return handleVerificationGone(request, env);
   if (request.method === "GET" && url.pathname === "/auth/discord/start") return handleDiscordLoginStart(request, env);
   if (request.method === "POST" && url.pathname === "/auth/discord/exchange") return handleDiscordExchange(request, env);
 
@@ -4069,6 +4259,8 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "GET" && oauthStart) {
     const provider = oauthStart[1];
     if (!isOAuthProvider(provider)) return jsonResponse({ error: "unknown_provider" }, env, 404);
+    // `recover` was the password-recovery hand-off and no longer exists; it
+    // fails closed here instead of minting a usable state.
     const purpose = url.searchParams.get("purpose") === "recover" ? "recover" : "login";
     return handleOAuthLoginStart(request, env, provider, purpose);
   }
@@ -4079,15 +4271,14 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
     return handleOAuthLinkStart(request, env, provider);
   }
   if (request.method === "POST" && url.pathname === "/auth/oauth/exchange") return handleDiscordExchange(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/oauth/signup") return handleOAuthSignup(request, env);
   if (request.method === "GET" && url.pathname === "/oauth/callback") return handleDiscordCallback(request, env);
 
   if (request.method === "POST" && url.pathname === "/auth/steam/login") return handleSteamLogin(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/recover/exchange") return handleRecoverExchange(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/recover/password") return handleRecoverPassword(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/recover/discord/start") return handleDiscordRecoverStart(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/recover/discord/confirm") return handleDiscordRecoverConfirm(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/discord/send-code") return handleDiscordSendCode(request, env);
-  if (request.method === "POST" && url.pathname === "/auth/discord/confirm-code") return handleDiscordConfirmCode(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/steam/signup") return handleSteamSignup(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/merge/preview") return handleMergePreview(request, env);
+  if (request.method === "POST" && url.pathname === "/auth/merge/confirm") return handleMergeConfirm(request, env);
+  if (request.method === "DELETE" && url.pathname === "/auth/account") return handleDeleteAccount(request, env);
   if (request.method === "GET" && url.pathname === "/auth/me") return handleMe(request, env);
   if (request.method === "POST" && url.pathname === "/auth/claim-steam") return handleClaimSteam(request, env);
   if (request.method === "DELETE" && url.pathname === "/auth/connections/steam") return handleDisconnectProvider(request, env, "steam");

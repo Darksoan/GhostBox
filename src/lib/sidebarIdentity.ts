@@ -19,7 +19,7 @@ type SidebarIdentityInput = {
   status: SidebarAuthStatus;
   account: GhostBoxAccount | null;
   connections: AccountConnection[];
-  authenticatedVia: LoginProvider | "password" | null;
+  authenticatedVia: LoginProvider | null;
   profile: SteamProfile | null;
   anonymousLabel: string;
   loadingLabel: string;

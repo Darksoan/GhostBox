@@ -154,7 +154,21 @@
 }
 
 .connection-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
   flex: 0 0 auto;
+}
+
+.connection-card__merge-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.connection-card__notice {
+  color: var(--success);
 }
 
 .connection-card__button {

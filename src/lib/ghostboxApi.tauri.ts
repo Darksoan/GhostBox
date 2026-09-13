@@ -54,6 +54,8 @@ import type {
   CloudSavePinnedResult,
   CloudSessionResult,
   LoginProvider,
+  MergePreviewResult,
+  ProviderSignupRequired,
   RecoveryTicket,
   GhostBoxAccount,
   AccountMeResult,
@@ -1224,42 +1226,109 @@ export const ghostboxApi = {
 
   /**
    * Opens the provider's sign-in flow in the system browser and waits for it.
-   * The session is saved by the Rust side. Accounts are created with email and
-   * password only, so a provider with no GhostBox account attached rejects
-   * with `provider_not_linked` (Discord) or `steam_not_linked` (Steam).
+   * The session is saved by the Rust side. When the provider owns no GhostBox
+   * account yet, nothing is saved and the `signup_required` payload comes
+   * back so the UI can show the one-step signup confirmation instead. Steam
+   * behaves the same way (`steam_not_linked` + callback URL).
    */
-  async loginWithProvider(provider: LoginProvider): Promise<CloudSessionResult> {
-    if (provider === "steam") return invoke<CloudSessionResult>("cloud_steam_login", {});
-    return invoke<CloudSessionResult>("cloud_oauth_login", { provider });
+  async loginWithProvider(
+    provider: LoginProvider,
+  ): Promise<CloudSessionResult | ProviderSignupRequired> {
+    if (provider === "steam") return invoke<CloudSessionResult | ProviderSignupRequired>("cloud_steam_login", {});
+    return invoke<CloudSessionResult | ProviderSignupRequired>("cloud_oauth_login", { provider });
+  },
+
+  /** Runs the Discord browser flow and returns the proof ticket without
+   * exchanging it — for the confirmed merge flow. */
+  async oauthProof(): Promise<{ ticket: string }> {
+    return invoke<{ ticket: string }>("cloud_oauth_proof", { provider: "discord" });
+  },
+
+  /** Steam proof for the merge flow: the still-unspent callback URL. */
+  async steamProof(): Promise<{ callbackUrl: string; steamId: string }> {
+    return invoke("cloud_steam_proof", {});
   },
 
   /**
-   * Step one of recovering a password through the linked Discord: the bot DMs
-   * a one-shot PIN to that Discord. The answer is uniform whether or not the
-   * identifier names an account.
+   * Completes a Discord signup: the ticket proved the provider identity, and
+   * the user confirmed a username plus the terms. Creates the account, links
+   * Discord, and signs straight in.
+   */
+  async signupWithProvider(
+    ticket: string,
+    username: string,
+    displayName?: string,
+  ): Promise<CloudSessionResult> {
+    return invoke<CloudSessionResult>("cloud_oauth_signup", {
+      ticket,
+      username,
+      displayName: displayName || null,
+      acceptTerms: true,
+    });
+  },
+
+  /** Same as above for Steam, reusing the still-unspent callback URL. */
+  async signupWithSteam(
+    callbackUrl: string,
+    username: string,
+    displayName?: string | null,
+    avatarUrl?: string | null,
+  ): Promise<CloudSessionResult> {
+    return invoke<CloudSessionResult>("cloud_steam_signup", {
+      callbackUrl,
+      username,
+      displayName: displayName || null,
+      avatarUrl: avatarUrl || null,
+      acceptTerms: true,
+    });
+  },
+
+  /** Shows what a confirmed merge would do, spending nothing. */
+  async previewAccountMerge(ticket?: string, callbackUrl?: string): Promise<MergePreviewResult> {
+    return invoke<MergePreviewResult>("cloud_merge_preview", {
+      ticket: ticket || null,
+      callbackUrl: callbackUrl || null,
+    });
+  },
+
+  /** Confirms the merge: the other account is absorbed and deleted, and the
+   * returned session replaces the stored one. */
+  async confirmAccountMerge(ticket?: string, callbackUrl?: string): Promise<CloudSessionResult> {
+    return invoke<CloudSessionResult>("cloud_merge_confirm", {
+      ticket: ticket || null,
+      callbackUrl: callbackUrl || null,
+    });
+  },
+
+  /** Deletes the account and everything it owns. Refused while a subscription
+   * is active. */
+  async deleteAccount(): Promise<void> {
+    await invoke<void>("cloud_delete_account", {});
+  },
+
+  /**
+   * Retired with email/password: kept so old UI paths fail with the worker's
+   * message instead of an unknown-command error.
    */
   async startDiscordRecovery(identifier: string): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>("cloud_discord_recover_start", { identifier });
   },
 
   /**
-   * Step two: trades the PIN for a token good only for `completeRecovery`,
-   * which is why it is not persisted as a session.
+   * Retired with email/password.
    */
   async confirmDiscordRecovery(identifier: string, code: string): Promise<RecoveryTicket> {
     return invoke<RecoveryTicket>("cloud_discord_recover_confirm", { identifier, code });
   },
 
   /**
-   * Step one of recovering an account whose password is lost through Steam:
-   * the Steam OpenID callback proves the account. Returns a token good only
-   * for `completeRecovery`, which is why it is not persisted as a session.
+   * Retired with email/password.
    */
   async startSteamRecovery(): Promise<RecoveryTicket> {
     return invoke<RecoveryTicket>("cloud_steam_recover", {});
   },
 
-  /** Step two: sets the new password and signs every other device out. */
+  /** Retired with email/password. */
   async completeRecovery(recoveryToken: string, newPassword: string): Promise<CloudSessionResult> {
     return invoke<CloudSessionResult>("cloud_recover_set_password", {
       recoveryToken,
@@ -1267,15 +1336,17 @@ export const ghostboxApi = {
     });
   },
 
-  /** Asks the bot to DM a 6-digit code to the linked Discord account. */
+  /** Retired with email verification. */
   async sendDiscordVerificationCode(): Promise<{ ok: boolean; expiresInSeconds: number }> {
     return invoke("cloud_discord_send_code", {});
   },
 
+  /** Retired with email verification. */
   async confirmDiscordVerificationCode(code: string): Promise<{ ok: boolean; account: GhostBoxAccount }> {
     return invoke("cloud_discord_confirm_code", { code });
   },
 
+  /** Retired with email/password. */
   async changeAccountPassword(currentPassword: string, newPassword: string): Promise<void> {
     await invoke<void>("cloud_change_password", { currentPassword, newPassword });
   },

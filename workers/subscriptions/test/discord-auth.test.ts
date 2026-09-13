@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { hmacSha256, sha256Hex } from "../src/crypto";
+import { hmacSha256 } from "../src/crypto";
 import { fakeD1, type Row } from "./helpers/fake-d1";
 import { executionContext, makeEnv, mockStripe, sessionToken } from "./helpers/worker";
 
@@ -169,10 +169,7 @@ describe("POST /auth/discord/exchange", () => {
     const body = await response.json<any>();
     expect(body.token).toBeTruthy();
     expect(body.account.userId).toBe("user_1");
-    // The Discord address matches the one on file and Discord says it is
-    // verified, so the account is confirmed without any email being sent.
-    expect(body.account.emailVerified).toBe(true);
-    expect(body.account.verifiedVia).toBe("email");
+    expect(body.account.username).toBe("ghost");
     expect(JSON.parse(db.rows("user_connections")[0].metadata_json)).toMatchObject({
       username: "ghost",
       globalName: "Ghost",
@@ -193,17 +190,18 @@ describe("POST /auth/discord/exchange", () => {
     );
   });
 
-  it("does not confirm the email when Discord holds a different address", async () => {
+  it("leaves the ticket unspent when the provider still needs a signup", async () => {
     discord = mockDiscordOAuth({ email: "other@example.com" });
     const db = fakeD1({ accounts: [account()], user_connections: [discordConnection()] });
 
     const ticket = await loginCallbackTicket(db);
-    const body = await worker
-      .fetch(exchangeRequest(ticket), discordEnv(db), executionContext)
-      .then((response) => response.json<any>());
+    const first = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
+    expect(first.status).toBe(200);
 
-    expect(body.account.emailVerified).toBe(false);
-    expect(body.account.verifiedVia).toBe(null);
+    // Same ticket twice: the atomic consume lets exactly one exchange through.
+    const replay = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
+    expect(replay.status).toBe(400);
+    expect(await replay.json<any>()).toEqual({ error: "invalid_ticket" });
   });
 
   it("rejects a ticket that was already spent", async () => {
@@ -229,7 +227,9 @@ describe("POST /auth/discord/exchange", () => {
     expect(response.status).toBe(400);
   });
 
-  it("refuses to sign in a Discord nobody linked: accounts are born from email + password", async () => {
+  it("answers signup_required for a Discord nobody linked, without spending the ticket", async () => {
+    // Discord creates accounts directly now: the exchange points the app at
+    // the signup confirmation instead of signing in.
     discord = mockDiscordOAuth();
     const db = fakeD1();
 
@@ -237,9 +237,13 @@ describe("POST /auth/discord/exchange", () => {
     const response = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
 
     expect(response.status).toBe(404);
-    expect(await response.json<any>()).toEqual({ error: "provider_not_linked" });
-    // Still unspent: the ticket is not a signup coupon, but it stays valid so
-    // the same authorization can link the account later from Settings.
+    const body = await response.json<any>();
+    expect(body.error).toBe("signup_required");
+    expect(body.provider).toBe("discord");
+    expect(body.providerId).toBe(DISCORD_USER_ID);
+    expect(body.suggestedUsername).toBe("ghost");
+    expect(body.disclaimer).toMatch(/Discord ou pela Steam/);
+    // Still unspent: the follow-up signup consumes this very ticket.
     expect(db.rows("discord_login_tickets")[0].consumed_at).toBe(null);
   });
 });
@@ -259,91 +263,109 @@ describe("POST /auth/discord/register", () => {
   });
 });
 
-describe("POST /auth/login verification sync", () => {
-  function loginRequest() {
-    return new Request("https://worker.test/auth/login", {
+describe("POST /auth/oauth/signup", () => {
+  function signupRequest(body: Record<string, unknown>) {
+    return new Request("https://worker.test/auth/oauth/signup", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ identifier: "ghost@example.com", password: "hunter2hunter2" }),
+      body: JSON.stringify(body),
     });
   }
 
-  function firebaseLogin(emailVerified: boolean) {
-    return mockStripe({
-      routes: {
-        "accounts:signInWithPassword": {
-          localId: "user_1",
-          idToken: "id_1",
-          refreshToken: "refresh_1",
-          email: "ghost@example.com",
-        },
-        "accounts:lookup": { users: [{ localId: "user_1", emailVerified }] },
-      },
-    });
-  }
+  it("creates the account, links Discord, and signs straight in", async () => {
+    discord = mockDiscordOAuth();
+    const db = fakeD1();
 
-  it("does not strip a verification Firebase never knew about", async () => {
-    // GhostBox stopped sending Firebase verification emails, so Firebase says
-    // `false` for every account forever — including ones this app verified by
-    // matching a Discord address Discord had already verified. Writing that
-    // false back silently un-verified the account on the next sign-in.
-    const db = fakeD1({ accounts: [account({ email_verified: 1, verified_via: "email" })] });
-    const firebase = firebaseLogin(false);
+    const ticket = await loginCallbackTicket(db);
+    const response = await worker.fetch(
+      signupRequest({ ticket, username: "ghost", displayName: "Ghost", acceptTerms: true }),
+      discordEnv(db),
+      executionContext
+    );
 
-    try {
-      const body = await worker
-        .fetch(loginRequest(), discordEnv(db, { FIREBASE_API_KEY: "k" }), executionContext)
-        .then((response) => response.json<any>());
+    expect(response.status).toBe(201);
+    const body = await response.json<any>();
+    expect(body.isNewAccount).toBe(true);
+    expect(body.token).toBeTruthy();
+    expect(body.account.username).toBe("ghost");
+    expect(body.account.email).toBe("ghost@example.com");
+    expect(body.disclaimer).toMatch(/Discord ou pela Steam/);
+    expect(db.rows("accounts")).toHaveLength(1);
+    expect(db.rows("user_connections")).toEqual([
+      expect.objectContaining({ provider: "discord", provider_id: DISCORD_USER_ID }),
+    ]);
+    expect(db.rows("discord_links")).toEqual([
+      expect.objectContaining({ discord_user_id: DISCORD_USER_ID }),
+    ]);
 
-      expect(body.account.emailVerified).toBe(true);
-      expect(body.account.verifiedVia).toBe("email");
-    } finally {
-      firebase.restore();
-    }
+    // The ticket is spent: no second account comes out of it.
+    const replay = await worker.fetch(
+      signupRequest({ ticket, username: "ghost2", acceptTerms: true }),
+      discordEnv(db),
+      executionContext
+    );
+    expect(replay.status).toBe(400);
+    expect(db.rows("accounts")).toHaveLength(1);
   });
 
-  it("leaves a Discord proof intact across sign-ins", async () => {
-    const db = fakeD1({ accounts: [account({ email_verified: 0, verified_via: "discord" })] });
-    const firebase = firebaseLogin(false);
+  it("requires the terms acceptance", async () => {
+    discord = mockDiscordOAuth();
+    const db = fakeD1();
 
-    try {
-      const body = await worker
-        .fetch(loginRequest(), discordEnv(db, { FIREBASE_API_KEY: "k" }), executionContext)
-        .then((response) => response.json<any>());
+    const ticket = await loginCallbackTicket(db);
+    const response = await worker.fetch(
+      signupRequest({ ticket, username: "ghost" }),
+      discordEnv(db),
+      executionContext
+    );
 
-      expect(body.account.verifiedVia).toBe("discord");
-    } finally {
-      firebase.restore();
-    }
+    expect(response.status).toBe(400);
+    expect(await response.json<any>()).toEqual({ error: "terms_required" });
+    expect(db.rows("accounts")).toHaveLength(0);
   });
 
-  it("still adopts a verification Firebase does report", async () => {
-    const db = fakeD1({ accounts: [account({ email_verified: 0, verified_via: null })] });
-    const firebase = firebaseLogin(true);
+  it("rejects a username that is already taken", async () => {
+    discord = mockDiscordOAuth();
+    const db = fakeD1({ accounts: [account()] });
 
-    try {
-      const body = await worker
-        .fetch(loginRequest(), discordEnv(db, { FIREBASE_API_KEY: "k" }), executionContext)
-        .then((response) => response.json<any>());
+    const ticket = await loginCallbackTicket(db);
+    const response = await worker.fetch(
+      signupRequest({ ticket, username: "ghost", acceptTerms: true }),
+      discordEnv(db),
+      executionContext
+    );
 
-      expect(body.account.emailVerified).toBe(true);
-      expect(body.account.verifiedVia).toBe("email");
-    } finally {
-      firebase.restore();
-    }
+    expect(response.status).toBe(409);
+    expect(await response.json<any>()).toEqual({ error: "username_taken" });
+  });
+
+  it("refuses a Discord that is already attached to another account", async () => {
+    // A ticket that resolves to an existing account is a login, not a
+    // signup: it cannot open a second account for the same Discord.
+    discord = mockDiscordOAuth();
+    const db = fakeD1({ accounts: [account()], user_connections: [discordConnection()] });
+
+    const ticket = await loginCallbackTicket(db);
+    const response = await worker.fetch(
+      signupRequest({ ticket, username: "someone_else", acceptTerms: true }),
+      discordEnv(db),
+      executionContext
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json<any>()).toEqual({ error: "provider_already_linked" });
+    expect(db.rows("accounts")).toHaveLength(1);
   });
 });
 
-describe("moving a Discord between accounts", () => {
-  async function linkState(overrides: { fromVerifiedVia: string | null; fromEmailVerified?: number }) {
+describe("linking a Discord that belongs to another account", () => {
+  async function linkState() {
     return fakeD1({
       accounts: [
         account({
           user_id: "user_old",
           username: "old",
           email: "old@example.com",
-          email_verified: overrides.fromEmailVerified ?? 0,
-          verified_via: overrides.fromVerifiedVia,
         }),
         account({ user_id: "user_new", username: "new", email: "new@example.com" }),
       ],
@@ -371,247 +393,39 @@ describe("moving a Discord between accounts", () => {
     );
   }
 
-  it("revokes the Discord proof from the account that lost the link", async () => {
-    // Otherwise one Discord stamps every account it ever touched as verified:
-    // link, verify, move on, verify again — account farming with a single
-    // Discord, which is exactly what the check is meant to prevent.
+  it("refuses the link instead of moving it — uniting accounts is the merge flow", async () => {
+    // Silently moving the Discord was a takeover vector. The link stays where
+    // it is; the confirmed merge flow is the only way to unite two accounts.
     discord = mockDiscordOAuth({ email: "unrelated@example.com" });
-    const db = await linkState({ fromVerifiedVia: "discord" });
+    const db = await linkState();
 
-    await linkCallback(db, "user_new");
+    const response = await linkCallback(db, "user_new");
 
-    const previous = db.rows("accounts").find((row) => row.user_id === "user_old");
-    expect(previous?.verified_via).toBe(null);
+    expect(response.status).toBe(409);
     expect(db.rows("user_connections")).toEqual([
-      expect.objectContaining({ user_id: "user_new", provider: "discord" }),
+      expect.objectContaining({ user_id: "user_old", provider: "discord" }),
     ]);
-  });
-
-  it("leaves an email proof alone — the address did not move", async () => {
-    discord = mockDiscordOAuth({ email: "unrelated@example.com" });
-    const db = await linkState({ fromVerifiedVia: "email", fromEmailVerified: 1 });
-
-    await linkCallback(db, "user_new");
-
-    const previous = db.rows("accounts").find((row) => row.user_id === "user_old");
-    expect(previous?.verified_via).toBe("email");
-    expect(previous?.email_verified).toBe(1);
   });
 });
 
-describe("Discord DM verification code", () => {
-  function sendRequest(token: string) {
-    return new Request("https://worker.test/auth/discord/send-code", {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}` },
-    });
-  }
-
-  function confirmRequest(token: string, code: string) {
-    return new Request("https://worker.test/auth/discord/confirm-code", {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-  }
-
-  function linkedDb(accountOverrides: Row = {}, connectionOverrides: Row = {}) {
-    return fakeD1({
-      accounts: [account(accountOverrides)],
-      discord_links: [
-        {
-          steam_id: null,
-          user_id: "user_1",
-          discord_user_id: DISCORD_USER_ID,
-          discord_username: "ghost",
-          discord_global_name: "Ghost",
-          linked_at: "2026-01-01T00:00:00.000Z",
-          updated_at: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-      user_connections: [discordConnection(connectionOverrides)],
-    });
-  }
-
-  /** Recovers the plaintext PIN the handler DM'd, by brute-forcing the hash
-   * against the stored row — the test never sees the code otherwise. */
-  async function storedCode(db: ReturnType<typeof fakeD1>, dmBody: string) {
-    const match = dmBody.match(/\*\*(\d{6})\*\*/);
-    expect(match).not.toBe(null);
-    const code = match![1];
-    expect(db.rows("discord_verification_codes")[0].code_hash).toBe(await sha256Hex(`user_1:${code}`));
-    return code;
-  }
-
-  function mockDiscordDm(options: { status?: number } = {}) {
-    const bodies: string[] = [];
-    const original = globalThis.fetch;
-    globalThis.fetch = (async (input: any, init: any) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.includes("users/@me/channels")) {
-        return new Response(JSON.stringify({ id: "dm_channel_1" }), { status: options.status ?? 200 });
-      }
-      if (url.includes("/messages")) {
-        bodies.push(JSON.parse(init.body).content);
-        return new Response(JSON.stringify({ id: "message_1" }), { status: options.status ?? 200 });
-      }
-      return new Response("{}", { status: 404 });
-    }) as typeof fetch;
-    return { bodies, restore: () => (globalThis.fetch = original) };
-  }
-
-  it("marks the account verified via Discord without touching the email flag", async () => {
-    // Account email and Discord email differ, which is exactly the case the
-    // PIN exists for: the person is real, the address is still unconfirmed.
-    const db = linkedDb({ email: "other@example.com" });
+describe("retired email-verification endpoints", () => {
+  it("answers 410: there is no email to verify anymore", async () => {
+    const db = fakeD1({ accounts: [account()], user_connections: [discordConnection()] });
     const token = await sessionToken("user_1");
-    const dm = mockDiscordDm();
+    const env = discordEnv(db);
 
-    try {
-      const sent = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      expect(sent.status).toBe(200);
-
-      const code = await storedCode(db, dm.bodies[0]);
-      const response = await worker.fetch(confirmRequest(token, code), discordEnv(db), executionContext);
-
-      expect(response.status).toBe(200);
-      const body = await response.json<any>();
-      expect(body.account.verifiedVia).toBe("discord");
-      expect(body.account.emailVerified).toBe(false);
-      expect(db.rows("discord_verification_codes")).toEqual([]);
-    } finally {
-      dm.restore();
-    }
-  });
-
-  it("confirms the email too when Discord holds that same address", async () => {
-    const db = linkedDb();
-    const token = await sessionToken("user_1");
-    const dm = mockDiscordDm();
-
-    try {
-      await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      const code = await storedCode(db, dm.bodies[0]);
-      const body = await worker
-        .fetch(confirmRequest(token, code), discordEnv(db), executionContext)
-        .then((response) => response.json<any>());
-
-      expect(body.account.emailVerified).toBe(true);
-      expect(body.account.verifiedVia).toBe("email");
-    } finally {
-      dm.restore();
-    }
-  });
-
-  it("locks the code after five wrong guesses", async () => {
-    const db = linkedDb();
-    const token = await sessionToken("user_1");
-    const dm = mockDiscordDm();
-
-    try {
-      await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      const real = await storedCode(db, dm.bodies[0]);
-      const wrong = real === "000000" ? "111111" : "000000";
-
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const response = await worker.fetch(confirmRequest(token, wrong), discordEnv(db), executionContext);
-        expect(response.status).toBe(401);
-      }
-
-      // Even the correct code is refused once the budget is gone.
-      const locked = await worker.fetch(confirmRequest(token, real), discordEnv(db), executionContext);
-      expect(locked.status).toBe(429);
-      expect(db.rows("discord_verification_codes")).toEqual([]);
-    } finally {
-      dm.restore();
-    }
-  });
-
-  it("rejects an expired code", async () => {
-    const db = linkedDb();
-    const token = await sessionToken("user_1");
-    const dm = mockDiscordDm();
-
-    try {
-      await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      const code = await storedCode(db, dm.bodies[0]);
-      db.rows("discord_verification_codes")[0].expires_at = new Date(Date.now() - 1000).toISOString();
-
-      const response = await worker.fetch(confirmRequest(token, code), discordEnv(db), executionContext);
+    for (const path of ["/auth/discord/send-code", "/auth/discord/confirm-code"]) {
+      const response = await worker.fetch(
+        new Request(`https://worker.test${path}`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ code: "123456" }),
+        }),
+        env,
+        executionContext
+      );
       expect(response.status).toBe(410);
-      expect(await response.json<any>()).toEqual({ error: "code_expired" });
-    } finally {
-      dm.restore();
+      expect(await response.json<any>()).toMatchObject({ error: "password_auth_removed" });
     }
-  });
-
-  it("reports blocked DMs distinctly and leaves no dangling code", async () => {
-    const db = linkedDb();
-    const token = await sessionToken("user_1");
-    const dm = mockDiscordDm({ status: 403 });
-
-    try {
-      const response = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      expect(response.status).toBe(409);
-      expect(await response.json<any>()).toEqual({ error: "discord_dm_blocked" });
-      expect(db.rows("discord_verification_codes")).toEqual([]);
-    } finally {
-      dm.restore();
-    }
-  });
-
-  it("does not spend the delivered-code budget on a blocked DM", async () => {
-    // The user closes DMs, hits the error, fixes the setting, retries. Charging
-    // the strict budget for the failures locked them out for an hour right at
-    // the moment they had made it work.
-    const db = linkedDb();
-    const token = await sessionToken("user_1");
-
-    const blocked = mockDiscordDm({ status: 403 });
-    try {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const response = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-        expect(response.status).toBe(409);
-      }
-    } finally {
-      blocked.restore();
-    }
-
-    const dm = mockDiscordDm();
-    try {
-      const response = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      expect(response.status).toBe(200);
-      expect(dm.bodies).toHaveLength(1);
-    } finally {
-      dm.restore();
-    }
-  });
-
-  it("still caps delivered codes per hour", async () => {
-    const db = linkedDb();
-    const token = await sessionToken("user_1");
-    const dm = mockDiscordDm();
-
-    try {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const response = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-        expect(response.status).toBe(200);
-      }
-
-      const blockedBySpamLimit = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-      expect(blockedBySpamLimit.status).toBe(429);
-      expect(dm.bodies).toHaveLength(5);
-    } finally {
-      dm.restore();
-    }
-  });
-
-  it("refuses to send when no Discord is linked", async () => {
-    const db = fakeD1({ accounts: [account()] });
-    const token = await sessionToken("user_1");
-
-    const response = await worker.fetch(sendRequest(token), discordEnv(db), executionContext);
-    expect(response.status).toBe(409);
-    expect(await response.json<any>()).toEqual({ error: "discord_not_linked" });
   });
 });

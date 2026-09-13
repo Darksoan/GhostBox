@@ -55,6 +55,92 @@
   font-weight: var(--weight-regular);
 }
 
+.account-section__note {
+  max-width: 62ch;
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: var(--type-size-micro);
+  line-height: var(--type-line-caption);
+}
+
+.account-section__danger {
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+
+  h3,
+  p {
+    margin: 0;
+  }
+
+  h3 {
+    color: var(--danger);
+    font-size: var(--type-size-caption);
+  }
+
+  p {
+    max-width: 62ch;
+    color: var(--text-muted);
+    font-size: var(--type-size-micro);
+    line-height: var(--type-line-caption);
+  }
+
+  .auth-field {
+    display: grid;
+    gap: 6px;
+    max-width: 320px;
+  }
+
+  .auth-field__label {
+    color: var(--text-secondary);
+    font-size: var(--type-size-micro);
+    font-weight: var(--weight-semibold);
+  }
+
+  .auth-field__input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-modal-control);
+    color: var(--text-primary);
+    font: inherit;
+    outline: none;
+
+    &:focus-visible {
+      border-color: var(--danger);
+    }
+  }
+}
+
+.account-section__danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--danger);
+  font-size: var(--type-size-caption);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: var(--danger-soft);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
 /* Same token pair as the game modal's "Ver mais" (.button--outline): a dark
    surface that lightens on hover, instead of the inverted high-contrast chip
    this used to be. */
@@ -197,5 +283,17 @@
 @keyframes account-section-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 600px) {
+  .account-section {
+    padding: 16px;
+  }
+
+  .account-section__danger .auth-field,
+  .account-section__danger-button {
+    width: 100%;
+    max-width: none;
   }
 }

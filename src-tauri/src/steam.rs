@@ -873,42 +873,11 @@ fn start_steam_achievement_stats_scan(
     });
 }
 
-async fn validate_steam_openid(callback_url: &reqwest::Url) -> Result<bool, String> {
-    let mut params = callback_url
-        .query_pairs()
-        .filter(|(key, _)| key.starts_with("openid."))
-        .map(|(key, value)| (key.to_string(), value.to_string()))
-        .collect::<Vec<_>>();
-    params.retain(|(key, _)| key != "openid.mode");
-    params.push((
-        "openid.mode".to_string(),
-        "check_authentication".to_string(),
-    ));
-
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|error| error.to_string())?
-        .post(STEAM_OPENID_ENDPOINT)
-        .header(
-            reqwest::header::CONTENT_TYPE,
-            "application/x-www-form-urlencoded",
-        )
-        .form(&params)
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-
-    if !response.status().is_success() {
-        return Ok(false);
-    }
-
-    Ok(response
-        .text()
-        .await
-        .map_err(|error| error.to_string())?
-        .contains("is_valid:true"))
-}
+/// Steam assertions are validated authoritatively by the Worker
+/// (`validateSteamOpenId`: op_endpoint, return_to, claimed identity, nonce
+/// freshness and single-use, plus `check_authentication` against Steam). The
+/// local `check_authentication` call that used to live here was removed so
+/// there is exactly one validator to keep correct.
 
 fn steam_id_from_openid(callback_url: &reqwest::Url) -> String {
     callback_url
@@ -1046,10 +1015,10 @@ async fn run_steam_openid_flow(app: &tauri::AppHandle) -> Result<SteamCallback, 
 /// Signs in through Steam, with no GhostBox session required up front.
 ///
 /// The Worker is what decides whether this Steam belongs to anyone: it
-/// re-validates the callback against Steam and looks the connection up. Steam
-/// cannot create an account (it reports no email address), so an unlinked one
-/// comes back as `steam_not_linked` and the UI sends the user to sign up
-/// another way.
+/// re-validates the callback against Steam and looks the connection up. An
+/// unlinked Steam comes back as `steam_not_linked` (with the still-unspent
+/// callback URL inside) so the UI can ask for a username and finish the
+/// signup through `cloud_steam_signup` — no second browser round-trip.
 #[tauri::command]
 pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let _guard = begin_steam_sign_in()?;
@@ -1059,6 +1028,14 @@ pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Valu
 
     match result {
         Ok(session) => {
+            if session.get("error").and_then(|item| item.as_str()) == Some("steam_not_linked") {
+                write_http_response(
+                    &mut callback.stream,
+                    "200 OK",
+                    &steam_login_page_html(true, "Continue no GhostBox para criar sua conta."),
+                );
+                return Ok(session);
+            }
             if let Err(error) = crate::cloud_save::save_cloud_session(&app, &session) {
                 write_http_response(
                     &mut callback.stream,
@@ -1090,34 +1067,31 @@ pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Valu
     }
 }
 
-/// Steam's branch of account recovery. Same proof as `cloud_steam_login`, but
-/// the Worker answers with the narrow recovery session instead of a real one;
-/// finish it with `cloud_recover_set_password`.
+/// Runs the Steam browser flow and returns the callback URL WITHOUT trading
+/// it for anything. Used to prove ownership of a second account (confirmed
+/// merge): the URL goes to `/auth/merge/preview` + `/auth/merge/confirm`,
+/// and the Worker validates it there.
 #[tauri::command]
-pub async fn cloud_steam_recover(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn cloud_steam_proof(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let _guard = begin_steam_sign_in()?;
     let mut callback = run_steam_openid_flow(&app).await?;
+    write_http_response(
+        &mut callback.stream,
+        "200 OK",
+        &steam_login_page_html(true, "Continue no GhostBox para unir as contas."),
+    );
+    Ok(serde_json::json!({
+        "callbackUrl": callback.url.as_str(),
+        "steamId": callback.steam_id,
+    }))
+}
 
-    let result = crate::cloud_save::cloud_steam_recover_callback(callback.url.as_str()).await;
-
-    match result {
-        Ok(recovery) => {
-            write_http_response(
-                &mut callback.stream,
-                "200 OK",
-                &steam_login_page_html(true, "Verified. Back to GhostBox."),
-            );
-            Ok(recovery)
-        }
-        Err(error) => {
-            write_http_response(
-                &mut callback.stream,
-                "400 Bad Request",
-                &steam_login_page_html(false, "Not verified."),
-            );
-            Err(error)
-        }
-    }
+/// Retired with email/password: Steam proves the account directly now, so
+/// there is no recovery session to hand out.
+#[tauri::command]
+pub async fn cloud_steam_recover(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let _ = app;
+    Err(crate::cloud_save::password_auth_removed_message())
 }
 
 async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -1142,33 +1116,36 @@ async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Val
     };
 
     let display_name = text_value(profile.get("displayName"));
-    let success_message = if display_name.is_empty() {
-        "Steam account connected.".to_string()
-    } else {
-        format!("Steam account connected as {display_name}.")
-    };
-    write_http_response(
-        &mut callback.stream,
-        "200 OK",
-        &steam_login_page_html(true, &success_message),
-    );
 
-    let cloud_session =
-        crate::cloud_save::cloud_claim_steam_callback(app, callback.url.as_str(), &profile)
-            .await
-            .ok();
-    // The Worker validates the callback against Steam itself, so that check
-    // stands in for this one. Only when it never ran does the app have to
-    // verify the assertion on its own.
-    if cloud_session.is_none() && !validate_steam_openid(&callback.url).await? {
-        return Err("Steam OpenID validation failed".to_string());
+    // The Worker is the authority on whether the link landed: its answer is
+    // propagated, never swallowed. Claiming "connected" on a failed link used
+    // to leave users believing Steam was their way back in when only a local
+    // profile existed.
+    match crate::cloud_save::cloud_claim_steam_callback(app, callback.url.as_str(), &profile).await {
+        Ok(cloud_session) => {
+            let success_message = if display_name.is_empty() {
+                "Steam account connected.".to_string()
+            } else {
+                format!("Steam account connected as {display_name}.")
+            };
+            write_http_response(
+                &mut callback.stream,
+                "200 OK",
+                &steam_login_page_html(true, &success_message),
+            );
+            let mut saved_profile = save_steam_profile(app, profile)?;
+            saved_profile["cloudSession"] = cloud_session;
+            Ok(saved_profile)
+        }
+        Err(error) => {
+            write_http_response(
+                &mut callback.stream,
+                "400 Bad Request",
+                &steam_login_page_html(false, "Not connected."),
+            );
+            Err(error)
+        }
     }
-
-    let mut saved_profile = save_steam_profile(app, profile)?;
-    if let Some(session) = cloud_session {
-        saved_profile["cloudSession"] = session;
-    }
-    Ok(saved_profile)
 }
 
 #[tauri::command]
