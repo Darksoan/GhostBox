@@ -152,6 +152,55 @@ function removeLibraryGameByAppId(games: GhostBoxGame[], appId: string) {
   return games.filter((game) => game.appId !== appId);
 }
 
+/**
+ * Remove marcas de terceiros das mensagens exibidas no launcher.
+ * Os comandos Tauri (`luatools_*`) e o campo `api: "LuaTools"` são mantidos —
+ * aqui só passa o texto que chega em `showToast` / notificações.
+ */
+function sanitizeDependencyMessage(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  return value
+    .replace(
+      /LuaTools e BetterSteamTools já estão prontos\./gi,
+      "As dependências já estão prontas.",
+    )
+    .replace(
+      /LuaTools e BetterSteamTools foram instalados com sucesso\./gi,
+      "As dependências foram instaladas com sucesso.",
+    )
+    .replace(
+      /A instalação automática do LuaTools está disponível apenas no Windows\./gi,
+      "A instalação automática das dependências está disponível apenas no Windows.",
+    )
+    .replace(
+      /Não foi possível localizar LOCALAPPDATA para instalar LuaTools\./gi,
+      "Não foi possível localizar a pasta de instalação das dependências.",
+    )
+    .replace(
+      /O pacote LuaTools não continha LuaTools\.exe\./gi,
+      "O pacote de dependências estava incompleto.",
+    )
+    .replace(
+      /Release do LuaTools não contém pacote instalável\./gi,
+      "A versão disponível não contém pacote instalável.",
+    )
+    .replace(
+      /O pacote BetterSteamTools não continha .+\./gi,
+      "O pacote de dependências estava incompleto.",
+    )
+    .replace(
+      /Release do BetterSteamTools não contém pacote Release\./gi,
+      "A versão disponível não contém pacote instalável.",
+    )
+    .replace(
+      /Não foi possível preparar o LuaTools/gi,
+      "Não foi possível preparar as dependências",
+    )
+    .replace(/\bBetterSteamTools\b/gi, "dependências")
+    .replace(/\bLuaTools\.exe\b/gi, "dependências")
+    .replace(/\bLuaTools\b/gi, "dependências");
+}
+
 async function resolveCloudGames(
   gameIds: string[],
   knownGames: GhostBoxGame[],
@@ -1682,9 +1731,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return ghostboxApi.onLuaToolsDependenciesFinished((event) => {
+      const title =
+        sanitizeDependencyMessage(event?.title) || "Dependências";
+      const message = sanitizeDependencyMessage(event?.message);
+      const error = sanitizeDependencyMessage(event?.error);
       showToast(
-        event.title,
-        event.error ? `${event.message} ${event.error}` : event.message,
+        title,
+        error ? `${message} ${error}` : message,
         event.success ? "success" : "error",
       );
     });
@@ -1868,7 +1921,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? await registerSteamLibraryGame(game)
           : await addGameViaLuaTools(game);
         if (!result.success) {
-          const errorMessage = result.error || "Não foi possível adicionar o jogo à Biblioteca.";
+          const errorMessage =
+            sanitizeDependencyMessage(result.error) ||
+            "Não foi possível adicionar o jogo à Biblioteca.";
           showToast("Falha ao adicionar", errorMessage, "error");
           pushAppNotification({
             id: `library:add:error:${game.appId}:${Date.now()}`,
@@ -1937,9 +1992,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         void autoRestoreCloudBackup(libraryGame);
       } catch (error) {
-        const errorMessage = error instanceof Error
-          ? error.message
-          : "Não foi possível concluir o fluxo LuaTools.";
+        const errorMessage =
+          error instanceof Error
+            ? sanitizeDependencyMessage(error.message) ||
+              "Não foi possível adicionar o jogo à Biblioteca."
+            : typeof error === "string"
+              ? sanitizeDependencyMessage(error) ||
+                "Não foi possível adicionar o jogo à Biblioteca."
+              : "Não foi possível adicionar o jogo à Biblioteca.";
         showToast(
           "Falha ao adicionar",
           errorMessage,
@@ -1985,7 +2045,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const result = await removeGameViaLuaTools(game);
         if (!result.success) {
-          const errorMessage = result.error || "Não foi possível remover o jogo.";
+          const errorMessage =
+            sanitizeDependencyMessage(result.error) ||
+            "Não foi possível remover o jogo.";
           showToast("Falha ao remover", errorMessage, "error");
           pushAppNotification({
             id: `library:remove:error:${game.appId}:${Date.now()}`,
@@ -2065,9 +2127,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           },
         });
       } catch (error) {
-        const errorMessage = error instanceof Error
-          ? error.message
-          : "Não foi possível remover o jogo.";
+        const errorMessage =
+          error instanceof Error
+            ? sanitizeDependencyMessage(error.message) ||
+              "Não foi possível remover o jogo."
+            : typeof error === "string"
+              ? sanitizeDependencyMessage(error) ||
+                "Não foi possível remover o jogo."
+              : "Não foi possível remover o jogo.";
         showToast(
           "Falha ao remover",
           errorMessage,

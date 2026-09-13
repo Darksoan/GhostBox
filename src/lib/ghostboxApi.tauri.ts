@@ -821,7 +821,7 @@ export const ghostboxApi = {
       { game },
       {
         success: false,
-        error: "Não foi possível adicionar o jogo via LuaTools.",
+        error: "Não foi possível adicionar o jogo à Biblioteca.",
       },
     );
   },
@@ -1008,7 +1008,7 @@ export const ghostboxApi = {
       { game },
       {
         success: false,
-        error: "Não foi possível remover o jogo via LuaTools.",
+        error: "Não foi possível remover o jogo da Biblioteca.",
       },
     );
   },
