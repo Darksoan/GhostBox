@@ -65,7 +65,10 @@ describe("POST /subscription/refresh", () => {
   });
 
   it("hides another account's payment behind a 404", async () => {
-    const db = fakeD1({ payments: [payment()] });
+    const db = fakeD1({
+      accounts: [{ user_id: "user_2", token_version: 1 }],
+      payments: [payment()],
+    });
     const token = await sessionToken("user_2");
     const response = await worker.fetch(refreshRequest(token), makeEnv(db), executionContext);
 

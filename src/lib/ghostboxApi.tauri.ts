@@ -54,8 +54,6 @@ import type {
   CloudSavePinnedResult,
   CloudSessionResult,
   LoginProvider,
-  MergePreviewResult,
-  ProviderSignupRequired,
   RecoveryTicket,
   GhostBoxAccount,
   AccountMeResult,
@@ -296,12 +294,8 @@ export const ghostboxApi = {
   /** Opens the browser for Discord OAuth; the returned URL already carries a
    * signed, per-account state token minted by the worker. */
   async getDiscordLinkUrl(): Promise<string | null> {
-    try {
-      const result = await invoke<{ url: string }>("discord_link_start", {});
-      return result?.url ?? null;
-    } catch {
-      return null;
-    }
+    const result = await invoke<{ url: string }>("discord_link_start", {});
+    return result?.url ?? null;
   },
 
   /** Synchronous hydrate for UI — memory then localStorage. */
@@ -315,6 +309,16 @@ export const ghostboxApi = {
   cacheDiscordLinkStatus(status: DiscordLinkStatus | null | undefined) {
     if (!status) return;
     writeDiscordLinkCache(status);
+  },
+
+  clearDiscordLinkCache() {
+    memoryDiscordLinkCache = null;
+    discordLinkInFlight = null;
+    try {
+      localStorage.removeItem(DISCORD_LINK_CACHE_KEY);
+    } catch {
+      // ignore unavailable storage
+    }
   },
 
   getCachedIsPremium(): boolean | null {
@@ -1194,7 +1198,7 @@ export const ghostboxApi = {
    */
   async signOutCloud(): Promise<void> {
     await invokeOr<void>("steam_clear_local_profile", {}, undefined);
-    await invokeOr<void>("cloud_sign_out", {}, undefined);
+    await invoke<void>("cloud_sign_out", {});
     clearAccountCaches();
     clearStoredAccountData();
   },
@@ -1224,86 +1228,10 @@ export const ghostboxApi = {
     return invoke<CloudSessionResult>("cloud_login", { identifier, password });
   },
 
-  /**
-   * Opens the provider's sign-in flow in the system browser and waits for it.
-   * The session is saved by the Rust side. When the provider owns no GhostBox
-   * account yet, nothing is saved and the `signup_required` payload comes
-   * back so the UI can show the one-step signup confirmation instead. Steam
-   * behaves the same way (`steam_not_linked` + callback URL).
-   */
-  async loginWithProvider(
-    provider: LoginProvider,
-  ): Promise<CloudSessionResult | ProviderSignupRequired> {
-    if (provider === "steam") return invoke<CloudSessionResult | ProviderSignupRequired>("cloud_steam_login", {});
-    return invoke<CloudSessionResult | ProviderSignupRequired>("cloud_oauth_login", { provider });
-  },
-
-  /** Runs the Discord browser flow and returns the proof ticket without
-   * exchanging it — for the confirmed merge flow. */
-  async oauthProof(): Promise<{ ticket: string }> {
-    return invoke<{ ticket: string }>("cloud_oauth_proof", { provider: "discord" });
-  },
-
-  /** Steam proof for the merge flow: the still-unspent callback URL. */
-  async steamProof(): Promise<{ callbackUrl: string; steamId: string }> {
-    return invoke("cloud_steam_proof", {});
-  },
-
-  /**
-   * Completes a Discord signup: the ticket proved the provider identity, and
-   * the user confirmed a username plus the terms. Creates the account, links
-   * Discord, and signs straight in.
-   */
-  async signupWithProvider(
-    ticket: string,
-    username: string,
-    displayName?: string,
-  ): Promise<CloudSessionResult> {
-    return invoke<CloudSessionResult>("cloud_oauth_signup", {
-      ticket,
-      username,
-      displayName: displayName || null,
-      acceptTerms: true,
-    });
-  },
-
-  /** Same as above for Steam, reusing the still-unspent callback URL. */
-  async signupWithSteam(
-    callbackUrl: string,
-    username: string,
-    displayName?: string | null,
-    avatarUrl?: string | null,
-  ): Promise<CloudSessionResult> {
-    return invoke<CloudSessionResult>("cloud_steam_signup", {
-      callbackUrl,
-      username,
-      displayName: displayName || null,
-      avatarUrl: avatarUrl || null,
-      acceptTerms: true,
-    });
-  },
-
-  /** Shows what a confirmed merge would do, spending nothing. */
-  async previewAccountMerge(ticket?: string, callbackUrl?: string): Promise<MergePreviewResult> {
-    return invoke<MergePreviewResult>("cloud_merge_preview", {
-      ticket: ticket || null,
-      callbackUrl: callbackUrl || null,
-    });
-  },
-
-  /** Confirms the merge: the other account is absorbed and deleted, and the
-   * returned session replaces the stored one. */
-  async confirmAccountMerge(ticket?: string, callbackUrl?: string): Promise<CloudSessionResult> {
-    return invoke<CloudSessionResult>("cloud_merge_confirm", {
-      ticket: ticket || null,
-      callbackUrl: callbackUrl || null,
-    });
-  },
-
-  /** Deletes the account and everything it owns. Refused while a subscription
-   * is active. */
-  async deleteAccount(): Promise<void> {
-    await invoke<void>("cloud_delete_account", {});
+  /** Opens the provider's sign-in flow and waits for the resulting session. */
+  async loginWithProvider(provider: LoginProvider): Promise<CloudSessionResult> {
+    if (provider === "steam") return invoke<CloudSessionResult>("cloud_steam_login", {});
+    return invoke<CloudSessionResult>("cloud_oauth_login", { provider });
   },
 
   /**

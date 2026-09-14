@@ -20,7 +20,7 @@ GhostBox accounts are created and accessed exclusively through a linked Discord 
 
 Users are responsible for protecting their Discord and Steam accounts, including their passwords, two-factor authentication, and recovery methods. GhostBox is not responsible for access resulting from the compromise of the user's provider account, except where the access results from a security failure or inadequate data handling by GhostBox itself.
 
-Every account must keep at least one provider linked. Uniting two accounts (merge) requires fresh proof of both sides and an explicit confirmation; accounts are never merged automatically. Deleting the account erases its data and cannot be undone; an active subscription must be cancelled through the billing portal first.
+Every account must keep at least one provider linked. GhostBox does not automatically combine accounts that share an email, name, or avatar.
 
 GhostBox may change, suspend, or discontinue features as the product evolves. Subscription terms are shown during Stripe Checkout before payment is completed, and refund requests are handled under the Refund Policy.
 
@@ -38,10 +38,10 @@ For Premium features, GhostBox may process account, subscription, and sync-relat
 
 - Sign-in happens through Discord (OAuth 2.0, scopes `identify email`) or Steam (OpenID). GhostBox stores the provider's stable id, the displayed name/username, and avatar reference so the app can show who is linked. The provider's email address, when reported, is stored as contact information only — it is never used for sign-in or recovery.
 - Provider access tokens are used once during the sign-in handshake and are never stored.
-- GhostBox sessions are HMAC-signed tokens valid for 7 days, revocable when providers are linked/unlinked or accounts are merged. A short audit trail of sign-ins and account changes (event type, provider, and coarse IP prefix such as `192.168.1.0`, never the full address) is kept for 90 days so users can notice access that was not theirs.
+- GhostBox sessions are HMAC-signed tokens valid for 7 days, revocable when providers are linked or unlinked. A short audit trail of sign-ins and account changes (event type, provider, and coarse IP prefix such as `192.168.1.0`, never the full address) is kept for 90 days so users can notice access that was not theirs.
 - Sign-in rate-limit counters keep the full IP for up to 24 hours.
 - Steam game statistics shown in the app (owned games, playtime, achievements, wishlist) are cached per account for up to 180 days to keep the interface fast.
-- Accounts are deleted on request through the app (Settings → Account → Delete). Billing records that the law requires GhostBox to keep (payments, invoices) are retained separately from the deleted account for the legally required period.
+- Billing records that the law requires GhostBox to keep (payments, invoices) are retained for the legally required period.
 
 Refund and support requests may require the user to provide account, billing, and issue details so GhostBox can review the request and identify the related Stripe payment.
 

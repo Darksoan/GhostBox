@@ -412,7 +412,7 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { showToast, showAchievementToast, setCollectionModalOpen } = useOverlay();
   const { appearance, notifications, t } = useSettings();
-  const { account, linkedSteamId } = useAuth();
+  const { account, linkedSteamId, refreshAccount } = useAuth();
   const accountUserId = account?.userId ?? null;
 
   const [favoriteGames, setFavoriteGames] = useState<GhostBoxGame[]>(() =>
@@ -2523,6 +2523,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       steamProfileRef.current = profile;
       setSteamProfile(profile);
       writeStoredSteamProfile(profile);
+      await refreshAccount();
       void syncPlaytimesFromSteam(profile?.steamId);
       void restoreCloudProfileFromRemote();
       showToast(
@@ -2553,6 +2554,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     showToast,
     steamProfile,
     syncPlaytimesFromSteam,
+    refreshAccount,
   ]);
 
   // Disconnecting Steam only drops the Steam connection and its local profile
@@ -2567,6 +2569,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await ghostboxApi.disconnectSteamAccount();
     setSteamProfile(null);
     writeStoredSteamProfile(null);
+    await refreshAccount();
 
     // Game history and last fetched metrics remain account-scoped and usable
     // offline. A later Steam connection replaces them only with newer data.
@@ -2575,7 +2578,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(cloudProfileRestoreRetryTimerRef.current);
       cloudProfileRestoreRetryTimerRef.current = null;
     }
-  }, []);
+  }, [refreshAccount]);
 
   const handleRestartSteam = useCallback(async () => {
     const result = await ghostboxApi.restartSteam();

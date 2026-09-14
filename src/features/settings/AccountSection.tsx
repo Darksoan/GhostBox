@@ -1,50 +1,13 @@
-import { useRef, useState, type FormEvent } from "react";
-import { Loader2, LogOut, Trash2 } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
 import "./AccountSection.scss";
 
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "string" && error) return error;
-  return fallback;
-}
-
-const DELETE_CONFIRM_PT = "EXCLUIR";
-const DELETE_CONFIRM_EN = "DELETE";
-
 export function AccountSection() {
-  const { t, appearance } = useSettings();
-  const { account, logout, deleteAccount } = useAuth();
-  const [error, setError] = useState("");
-  const [confirmText, setConfirmText] = useState("");
-  const [confirmInvalid, setConfirmInvalid] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const confirmInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useSettings();
+  const { account, logout } = useAuth();
 
   if (!account) return null;
-
-  const confirmWord = appearance.language === "en" ? DELETE_CONFIRM_EN : DELETE_CONFIRM_PT;
-
-  async function onDelete(event: FormEvent) {
-    event.preventDefault();
-    if (deleting) return;
-    if (confirmText.trim().toUpperCase() !== confirmWord) {
-      setConfirmInvalid(true);
-      setError(t("settings.general.account.deleteConfirmError"));
-      confirmInputRef.current?.focus();
-      return;
-    }
-    setDeleting(true);
-    setConfirmInvalid(false);
-    setError("");
-    try {
-      await deleteAccount();
-    } catch (deleteError) {
-      setError(errorMessage(deleteError, t("settings.general.account.deleteError")));
-      setDeleting(false);
-    }
-  }
 
   return (
     <section className="account-section">
@@ -80,38 +43,6 @@ export function AccountSection() {
         </div>
       </div>
 
-      <form className="account-section__danger" onSubmit={onDelete}>
-        <h3>{t("settings.general.account.deleteTitle")}</h3>
-        <p>{t("settings.general.account.deleteDescription")}</p>
-        <label className="auth-field">
-          <span className="auth-field__label">{t("settings.general.account.deleteConfirmLabel")}</span>
-          <input
-            ref={confirmInputRef}
-            name="delete-confirmation"
-            className="auth-field__input"
-            type="text"
-            value={confirmText}
-            onChange={(event) => {
-              setConfirmText(event.target.value);
-              setConfirmInvalid(false);
-            }}
-            placeholder={t("settings.general.account.deleteConfirmPlaceholder")}
-            autoComplete="off"
-            aria-invalid={confirmInvalid}
-            aria-describedby={confirmInvalid ? "account-delete-error" : undefined}
-          />
-        </label>
-        <button
-          type="submit"
-          className="account-section__danger-button"
-          disabled={deleting}
-        >
-          {deleting ? <Loader2 size={14} className="account-section__spinner" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
-          {deleting ? t("settings.general.account.deleting") : t("settings.general.account.delete")}
-        </button>
-      </form>
-
-      {error && <p id="account-delete-error" className="account-section__error" role="alert">{error}</p>}
     </section>
   );
 }

@@ -51,6 +51,7 @@ beforeAll(async () => {
       ON user_favorite_games_cloud(user_id, game_id)`,
   ];
   await db.batch(schema.map((sql) => db.prepare(sql)));
+  await db.prepare(`INSERT INTO accounts (user_id, token_version) VALUES (?, 1)`).bind("user_1").run();
   await db.prepare(
     `INSERT INTO subscriptions (
        steam_id, user_id, plan_id, status, current_period_start, current_period_end,

@@ -6,16 +6,11 @@ Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Str
 
 - `GET /health`
 - `GET /auth/discord/start?port=...` — no auth; returns `{ url }` for the desktop app's Discord sign-in, with the app's loopback port carried in the signed state
-- `POST /auth/discord/exchange` — no auth, `{ ticket }`; returns a session, or `signup_required` when that Discord owns no GhostBox account yet (providers create accounts directly)
-- `POST /auth/oauth/signup` — no auth, `{ ticket, username, displayName?, acceptTerms }`; creates the account, links Discord, returns a session (201)
-- `POST /auth/steam/login` — no auth, `{ callbackUrl, username?, displayName?, avatarUrl?, acceptTerms? }`; returns a session, or `steam_not_linked` (404) so the app can show the signup confirmation and retry with a username on the same assertion
-- `POST /auth/steam/signup` — no auth, same signup fields + `callbackUrl`; creates the account from a validated Steam proof (201)
-- `POST /auth/merge/preview` — Bearer (recent session), `{ ticket? }` or `{ callbackUrl? }`; shows both accounts without spending anything
-- `POST /auth/merge/confirm` — Bearer (recent session), same proof + `{ confirm: true }`; absorbs the other account and deletes it
-- `DELETE /auth/account` — Bearer (recent session), `{ confirm: true }`; deletes the account and everything it owns (refused while a subscription is active)
+- `POST /auth/discord/exchange` / `POST /auth/oauth/exchange` — no auth, `{ ticket }`; resolves the current Discord owner or creates a provider-only account and returns a session
+- `POST /auth/steam/login` — no auth, `{ callbackUrl, displayName?, avatarUrl? }`; resolves the Steam owner or creates a provider-only account and returns a session
 - `GET /auth/me` — Bearer
-- `POST /auth/claim-steam` — Bearer (recent session), `{ callbackUrl, displayName?, avatarUrl? }`, links Steam to the caller's account and backfills legacy Steam-keyed rows
-- `DELETE /auth/connections/steam` / `DELETE /auth/connections/discord` — Bearer (recent session); refuses to remove the last provider (`last_connection`) and rotates the session
+- `POST /auth/claim-steam` — Bearer, `{ callbackUrl, displayName?, avatarUrl? }`, links Steam to the caller's account, consumes the assertion nonce, and backfills legacy Steam-keyed rows
+- `DELETE /auth/connections/steam` / `DELETE /auth/connections/discord` — Bearer; conditionally refuses to remove the last provider (`last_connection`), rotates the session, and cleans provider-derived rows
 - `POST /subscription/checkouts` — Bearer, `{ planId }`
 - `POST /subscription/portal` — Bearer, `{ flow?: "manage" | "payment_method_update" }`
 - `GET /subscription/status` — Bearer
@@ -39,24 +34,18 @@ Identity is an internal random id (`user_id`), wrapped in a 7-day HMAC session t
 
 | Route | Provider |
 |---|---|
-| `GET /auth/oauth/:provider/start?port=&nonce=` → `GET /oauth/callback` → `POST /auth/oauth/exchange` (+ `POST /auth/oauth/signup` when unlinked) | `discord` |
-| `POST /auth/steam/login` (with optional inline signup fields) | Steam |
+| `GET /auth/oauth/:provider/start?port=&nonce=` → `GET /oauth/callback` → `POST /auth/oauth/exchange` | `discord` |
+| `POST /auth/steam/login` | Steam |
 
 Discord only redirects to a pre-registered URI, so the browser lands on `/oauth/callback` here and the worker bounces a **single-use ticket** to the desktop app's loopback port. The ticket, not a session token, is what travels through the browser. The redirect echoes back the `nonce` the app generated: without it, any local process could reach the loopback port first and hand the app a ticket for its own account. Tickets are consumed atomically (`UPDATE ... RETURNING`), so concurrent exchanges yield exactly one winner.
 
-Steam accepts an arbitrary `return_to`, so the app takes the OpenID callback directly and posts it here for validation against `steamcommunity.com`. Validation checks `op_endpoint`, matching `claimed_id`/`identity`, a loopback `return_to`, a fresh `response_nonce`, and `check_authentication` — and every successful authentication consumes the nonce from `steam_openid_nonces`, so a captured assertion cannot be replayed. A bare login that finds no account leaves the nonce unspent so the follow-up signup reuses the same assertion (one browser round-trip).
+Steam accepts an arbitrary `return_to`, so the app takes the OpenID callback directly and posts it here for validation against `steamcommunity.com`. Validation checks `op_endpoint`, matching `claimed_id`/`identity`, a loopback `return_to`, a fresh `response_nonce`, and `check_authentication`. Every successful login or claim consumes the nonce from `steam_openid_nonces`, so a captured assertion cannot be replayed.
 
-A second provider is linked from Settings while signed in (`/auth/oauth/:provider/link`, `/auth/claim-steam`). Linking, unlinking, merging and deleting all require a **recent** session (minted within 15 minutes), so a stolen week-long token alone cannot rewire who can get in. Unlinking and merging bump `token_version`, signing every other device out; the caller gets a replacement token.
+A second provider is linked from Settings while signed in (`/auth/oauth/:provider/link`, `/auth/claim-steam`). A valid session is required; there is no separate recent-session credential in provider-only auth. Unlinking bumps `token_version`, signing every other device out while returning a replacement token to the caller.
 
-One provider identity belongs to exactly one GhostBox account. Linking a provider that is attached elsewhere refuses instead of stealing it — uniting two accounts is the confirmed merge flow, which proves both sides and never merges automatically.
+One provider identity belongs to exactly one GhostBox account. Linking a provider that is attached elsewhere refuses instead of stealing it; contact support if ownership needs to be resolved.
 
 `/auth/claim-steam` migrates a pre-existing Steam-only account's subscription, cloud saves, profile and Discord link onto the new account the first time that Steam ID is connected.
-
-## Merge and deletion
-
-`POST /auth/merge/preview` shows both accounts, their providers, and the warning without spending the proof. `POST /auth/merge/confirm` (with `confirm: true`) consumes the second proof, moves every row to the surviving account (its rows win on collision), deletes the absorbed account, and rotates the session. Refuses with `merge_conflict` when both sides hold the same provider type with different ids or both hold an active subscription.
-
-`DELETE /auth/account` erases the account, cloud objects, and all non-financial rows. Local billing rows that require retention are detached from the account identity; Stripe keeps the authoritative financial records. Refused with `subscription_active` while a subscription runs — cancel through the billing portal first.
 
 There are no backup codes: **losing every linked provider means losing the account.** Linking is mandatory, so `DELETE /auth/connections/:provider` refuses to remove the last one outright — no client flag can talk past it.
 
@@ -79,7 +68,7 @@ Firebase is gone: `FIREBASE_API_KEY` and `FIREBASE_SERVICE_ACCOUNT_KEY` are no l
 
 `CLOUD_SESSION_SECRET` is **required** and has no fallback. It used to fall back to `DISCORD_OAUTH_STATE_SECRET` / `DISCORD_CLIENT_SECRET`, which made the key that forges any user's session the same one handed to Discord. It is also the panic button: **rotating it signs every user out at once**, on every device, immediately.
 
-For signing out one account rather than all of them, bump `accounts.token_version` — every session token carries the version it was minted under, and `requireSession` rejects anything older (migration `0016`). Unlinking a provider and merging accounts do this automatically.
+For signing out one account rather than all of them, bump `accounts.token_version` — every session token carries the version it was minted under, and `requireSession` rejects anything older or any token whose account no longer exists (migration `0016`). Unlinking a provider does this automatically.
 
 Optional variables/secrets:
 
@@ -94,7 +83,7 @@ Optional variables/secrets:
 
 The bot must be in the Discord server and have `Manage Roles`. Its highest role must be above the Premium role.
 
-Both Discord flows request the `identify email` scope in the authorize URL the worker builds — scopes are not whitelisted in the Developer Portal, so there is nothing to configure there beyond the redirect URI. The `email` scope only pre-fills a contact address at signup; it proves nothing and is never used for sign-in or recovery.
+Both Discord flows request the `identify email` scope in the authorize URL the worker builds. Provider-created account rows deliberately store `email = NULL`; provider email is retained only in connection metadata and is never used for sign-in or recovery.
 
 Stripe Customer Portal must be configured in the Stripe dashboard before `/subscription/portal` can open subscription management or payment method update flows.
 

@@ -88,7 +88,7 @@ describe("GET /subscription/status", () => {
   });
 
   it("treats an account with no subscription row as free", async () => {
-    const db = fakeD1();
+    const db = fakeD1({ accounts: [{ user_id: "user_1", token_version: 1 }] });
 
     const { body } = await status(db);
 

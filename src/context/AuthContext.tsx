@@ -13,8 +13,6 @@ import type {
   CloudSessionResult,
   GhostBoxAccount,
   LoginProvider,
-  MergePreviewResult,
-  ProviderSignupRequired,
 } from "../lib/ghostboxApi.types";
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated";
@@ -28,25 +26,8 @@ interface AuthContextValue {
   isAuthModalOpen: boolean;
   openAuthModal: () => void;
   closeAuthModal: () => void;
-  /** Signs in through the provider. When the provider owns no account yet,
-   * the result is the signup payload (nothing is stored) so the UI can show
-   * the one-step signup confirmation instead. */
-  loginWithProvider: (provider: LoginProvider) => Promise<CloudSessionResult | ProviderSignupRequired>;
-  /** Completes a Discord signup after the browser flow (ticket + username). */
-  signupWithProvider: (ticket: string, username: string, displayName?: string) => Promise<void>;
-  /** Completes a Steam signup reusing the still-unspent callback URL. */
-  signupWithSteam: (
-    callbackUrl: string,
-    username: string,
-    displayName?: string | null,
-    avatarUrl?: string | null,
-  ) => Promise<void>;
-  /** Shows what a confirmed merge would do, spending nothing. */
-  previewAccountMerge: (ticket?: string, callbackUrl?: string) => Promise<MergePreviewResult>;
-  /** Confirms the merge: the other account is absorbed and deleted. */
-  confirmAccountMerge: (ticket?: string, callbackUrl?: string) => Promise<void>;
-  /** Deletes the account and everything it owns. */
-  deleteAccount: () => Promise<void>;
+  /** Signs in through the provider and creates the account when needed. */
+  loginWithProvider: (provider: LoginProvider) => Promise<CloudSessionResult>;
   logout: () => Promise<void>;
   /** Resolves to the account as the worker now sees it, so a caller that just
    * changed something server-side can branch on the result without waiting for
@@ -55,23 +36,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function applySessionResult(
-  result: CloudSessionResult,
-  setAccount: (account: GhostBoxAccount) => void,
-  setAuthenticatedVia: (provider: LoginProvider) => void,
-  setStatus: (status: AuthStatus) => void,
-) {
-  setAccount(result.account);
-  setAuthenticatedVia(result.steamId ? "steam" : "discord");
-  setStatus("authenticated");
-}
-
-function isSessionResult(
-  result: CloudSessionResult | ProviderSignupRequired,
-): result is CloudSessionResult {
-  return (result as CloudSessionResult).account !== undefined;
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
@@ -163,11 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithProvider = useCallback(
     async (provider: LoginProvider) => {
-      const result = await ghostboxApi.loginWithProvider(provider);
-      if (!isSessionResult(result)) return result;
-      setAccount(result.account);
+      const session = await ghostboxApi.loginWithProvider(provider);
+      if (!session?.account) throw new Error("A sessão não retornou uma conta válida.");
+      setAccount(session.account);
       setConnections([]);
-      setLinkedSteamId(result.steamId ?? null);
+      setLinkedSteamId(session.steamId ?? null);
       setAuthenticatedVia(provider);
       setStatus("authenticated");
       try {
@@ -175,74 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // Offline right after signing in: keep the session we just received.
       }
-      return result;
+      return session;
     },
     [applyAccount],
   );
-
-  const signupWithProvider = useCallback(
-    async (ticket: string, username: string, displayName?: string) => {
-      const session = await ghostboxApi.signupWithProvider(ticket, username, displayName);
-      if (!session?.account) throw new Error("A sessão não retornou uma conta válida.");
-      applySessionResult(session, setAccount, setAuthenticatedVia, setStatus);
-      setConnections([]);
-      setLinkedSteamId(session.steamId ?? null);
-      try {
-        applyAccount(await ghostboxApi.getAccount());
-      } catch {
-        // Offline right after signing up: keep the session we just received.
-      }
-    },
-    [applyAccount],
-  );
-
-  const signupWithSteam = useCallback(
-    async (callbackUrl: string, username: string, displayName?: string | null, avatarUrl?: string | null) => {
-      const session = await ghostboxApi.signupWithSteam(callbackUrl, username, displayName, avatarUrl);
-      if (!session?.account) throw new Error("A sessão não retornou uma conta válida.");
-      setAccount(session.account);
-      setConnections([]);
-      setLinkedSteamId(session.steamId ?? null);
-      setAuthenticatedVia("steam");
-      setStatus("authenticated");
-      try {
-        applyAccount(await ghostboxApi.getAccount());
-      } catch {
-        // Offline right after signing up: keep the session we just received.
-      }
-    },
-    [applyAccount],
-  );
-
-  const previewAccountMerge = useCallback((ticket?: string, callbackUrl?: string) => {
-    return ghostboxApi.previewAccountMerge(ticket, callbackUrl);
-  }, []);
-
-  const confirmAccountMerge = useCallback(
-    async (ticket?: string, callbackUrl?: string) => {
-      const session = await ghostboxApi.confirmAccountMerge(ticket, callbackUrl);
-      if (!session?.account) throw new Error("A união não retornou uma conta válida.");
-      setAccount(session.account);
-      setAuthenticatedVia(null);
-      setStatus("authenticated");
-      try {
-        applyAccount(await ghostboxApi.getAccount());
-      } catch {
-        // Offline right after merging: keep the session we just received.
-      }
-    },
-    [applyAccount],
-  );
-
-  const deleteAccount = useCallback(async () => {
-    await ghostboxApi.deleteAccount();
-    setAccount(null);
-    setConnections([]);
-    setLinkedSteamId(null);
-    setAuthenticatedVia(null);
-    setStatus("anonymous");
-    await ghostboxApi.signOutCloud();
-  }, []);
 
   const logout = useCallback(async () => {
     // Flip to anonymous first: signOutCloud wipes the account-scoped
@@ -267,11 +167,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       openAuthModal,
       closeAuthModal,
       loginWithProvider,
-      signupWithProvider,
-      signupWithSteam,
-      previewAccountMerge,
-      confirmAccountMerge,
-      deleteAccount,
       logout,
       refreshAccount,
     }),
@@ -285,11 +180,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       openAuthModal,
       closeAuthModal,
       loginWithProvider,
-      signupWithProvider,
-      signupWithSteam,
-      previewAccountMerge,
-      confirmAccountMerge,
-      deleteAccount,
       logout,
       refreshAccount,
     ]

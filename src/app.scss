@@ -4444,19 +4444,32 @@ p {
   min-width: 0;
 }
 
-/* Maximizada: wishlist em duas colunas. Empilhada, cada card ocupava a largura
-   inteira e a citação da review passava de 200 caracteres por linha — medida de
-   leitura ruim justamente onde sobra espaço. Duas colunas resolvem as duas
-   coisas: a linha volta pra ~70 caracteres e a seção ocupa a largura. Guiado
+/* Maximizada: os quatro cards em uma única linha horizontal. Dentro do card a
+   arte vai para cima (coluna única, como o card já faz em viewport estreita) —
+   a largura de 1/4 da linha não comporta cover + review lado a lado. Guiado
    pelo estado da janela (`.home-page--maximized`), não por largura de viewport:
-   só maximizar garante espaço real para a grade. */
-/* Sem `align-items: start`: os dois cards da linha são superfícies próprias e
+   só maximizar garante espaço real para a linha. */
+/* Sem `align-items: start`: os cards da linha são superfícies próprias e
    alturas desencontradas leem como erro. Esticando, a sobra cai entre citação
    e autor — o autor já ancora no fim por `margin-top: auto`. */
 .home-page--maximized .home-wishlist__list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--home-category-gap);
+  display: flex;
+  flex-direction: row;
+  gap: var(--home-category-gap);
+}
+
+.home-page--maximized .home-wishlist-card {
+  flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
+  min-width: 0;
+}
+
+.home-page--maximized .home-wishlist-card__media,
+.home-page--maximized .home-wishlist-card__media--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.home-page--maximized .home-wishlist-card__cover {
+  max-width: 360px;
 }
 
 .home-wishlist-card {

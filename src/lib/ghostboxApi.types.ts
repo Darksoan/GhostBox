@@ -406,24 +406,6 @@ export type OAuthProvider = "discord";
 /** Every way into an account. */
 export type LoginProvider = OAuthProvider | "steam";
 
-/** An unlinked provider after the browser flow: the follow-up signup
- * (username + terms) consumes the ticket/callback and creates the account. */
-export type ProviderSignupRequired = {
-  error: "signup_required" | "steam_not_linked";
-  provider?: LoginProvider | string;
-  providerId?: string;
-  /** Discord only: the still-unspent ticket, attached locally by the Rust
-   * side for the signup call. */
-  ticket?: string;
-  /** Steam only: the still-unspent callback URL for the signup call. */
-  callbackUrl?: string;
-  steamId?: string;
-  suggestedUsername?: string;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-  disclaimer: string;
-};
-
 /** A proof that an account exists, good for exactly one thing: setting a new
  * password through `completeRecovery`. Never stored as a session. */
 export type RecoveryTicket = {
@@ -467,15 +449,6 @@ export type CloudSessionResult = {
   steamId?: string | null;
   isNewAccount?: boolean;
   disclaimer?: string;
-};
-
-export type MergePreviewResult = {
-  primaryAccount: GhostBoxAccount;
-  secondaryAccount: GhostBoxAccount;
-  primaryProviders: string[];
-  secondaryProviders: string[];
-  secondaryHasActiveSubscription: boolean;
-  warning: string;
 };
 
 export type CloudSaveManifest = {

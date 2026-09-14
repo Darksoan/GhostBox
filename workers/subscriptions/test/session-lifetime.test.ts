@@ -108,7 +108,7 @@ describe("DELETE /auth/connections/discord", () => {
     expect(db.rows("user_connections")).toHaveLength(1);
   });
 
-  it("demands a recent session before removing a provider", async () => {
+  it("accepts an older valid session when removing a provider", async () => {
     const db = fakeD1({
       accounts: [account()],
       user_connections: [
@@ -116,13 +116,12 @@ describe("DELETE /auth/connections/discord", () => {
         { user_id: "user_1", provider: "steam", provider_id: "76561198000000001", metadata_json: "{}", linked_at: "2026-01-01T00:00:00.000Z" },
       ],
     });
-    // A week-old token is valid but not recent: unlinking with it alone fails.
+    // Provider-only auth has no practical separate step-up mechanism.
     const stale = await sessionToken("user_1", 6 * 24 * 60 * 60, 1, Math.floor(Date.now() / 1000) - 3600);
 
     const response = await worker.fetch(disconnectRequest(stale), makeEnv(db), executionContext);
-    expect(response.status).toBe(403);
-    expect(await response.json<any>()).toMatchObject({ error: "reauth_required" });
-    expect(db.rows("user_connections")).toHaveLength(2);
+    expect(response.status).toBe(200);
+    expect(db.rows("user_connections")).toHaveLength(1);
   });
 
   it("unlinks Discord and signs other devices out, when another provider stays", async () => {

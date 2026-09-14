@@ -170,7 +170,7 @@ describe("POST /auth/steam/login", () => {
     }
   });
 
-  it("points an unknown Steam at signup instead of creating an account", async () => {
+  it("creates and signs into an account for an unknown Steam", async () => {
     const restore = steamMock(true);
     try {
       const db = fakeD1({ accounts: [account()] });
@@ -179,9 +179,10 @@ describe("POST /auth/steam/login", () => {
         env(db),
         executionContext
       );
-      expect(response.status).toBe(404);
-      expect(await response.json<any>()).toMatchObject({ error: "steam_not_linked", steamId: STEAM_ID });
-      expect(db.rows("accounts")).toHaveLength(1);
+      expect(response.status).toBe(201);
+      expect(await response.json<any>()).toMatchObject({ isNewAccount: true, steamId: STEAM_ID });
+      expect(db.rows("accounts")).toHaveLength(2);
+      expect(db.rows("accounts")[1].email).toBe(null);
     } finally {
       restore();
     }
@@ -248,467 +249,136 @@ describe("POST /auth/steam/login", () => {
   });
 });
 
-describe("POST /auth/steam/signup", () => {
-  function signupRequest(body: Record<string, unknown>) {
-    return new Request("https://worker.test/auth/steam/signup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  }
-
-  it("creates the account from a validated Steam proof and signs in", async () => {
+describe("removed provider signup route", () => {
+  it("answers 404 for POST /auth/steam/signup", async () => {
     const restore = steamMock(true);
     try {
-      const db = fakeD1();
       const response = await worker.fetch(
-        signupRequest({
-          callbackUrl: steamCallbackUrl(),
-          username: "steamghost",
-          displayName: "Steam Ghost",
-          acceptTerms: true,
+        new Request("https://worker.test/auth/steam/signup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ callbackUrl: steamCallbackUrl(), username: "ghost" }),
         }),
-        env(db),
+        env(fakeD1()),
         executionContext
       );
-      expect(response.status).toBe(201);
-      const body = await response.json<any>();
-      expect(body.isNewAccount).toBe(true);
-      expect(body.token).toBeTruthy();
-      expect(body.account.username).toBe("steamghost");
-      expect(body.account.email).toBe(null);
-      expect(body.steamId).toBe(STEAM_ID);
-      expect(body.disclaimer).toMatch(/Discord ou pela Steam/);
-      expect(db.rows("user_connections")).toEqual([
-        expect.objectContaining({ provider: "steam", provider_id: STEAM_ID }),
-      ]);
+      expect(response.status).toBe(404);
     } finally {
       restore();
     }
   });
+});
 
-  it("reuses the same assertion from a bare login to complete the signup", async () => {
-    // One browser round-trip: the login finds nobody and leaves the assertion
-    // unspent, so the signup confirmation that follows consumes it.
+describe("concurrent first logins converge", () => {
+  it("two Steam assertions for the same account yield one account", async () => {
     const restore = steamMock(true);
     try {
       const db = fakeD1();
-      const callbackUrl = steamCallbackUrl();
-
-      const login = await worker.fetch(
+      const loginRequest = (callbackUrl: string) =>
         new Request("https://worker.test/auth/steam/login", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ callbackUrl }),
-        }),
-        env(db),
-        executionContext
-      );
-      expect(login.status).toBe(404);
-
-      const signup = await worker.fetch(
-        signupRequest({ callbackUrl, username: "steamghost", acceptTerms: true }),
-        env(db),
-        executionContext
-      );
-      expect(signup.status).toBe(201);
+          body: JSON.stringify({
+            callbackUrl,
+            displayName: "Steam Ghost",
+            avatarUrl: "https://example.com/a.png",
+          }),
+        });
+      const [left, right] = await Promise.all([
+        worker.fetch(loginRequest(steamCallbackUrl()), env(db), executionContext),
+        worker.fetch(loginRequest(steamCallbackUrl()), env(db), executionContext),
+      ]);
+      expect([left.status, right.status].sort()).toEqual([200, 201]);
       expect(db.rows("accounts")).toHaveLength(1);
-
-      // And now it is spent.
-      const replay = await worker.fetch(
-        signupRequest({ callbackUrl, username: "someone_else", acceptTerms: true }),
-        env(db),
-        executionContext
-      );
-      expect(replay.status).toBe(401);
+      expect(db.rows("user_connections")).toHaveLength(1);
     } finally {
       restore();
     }
   });
 
-  it("rejects a taken username and an already-linked Steam", async () => {
-    const restore = steamMock(true);
-    try {
-      const db = fakeD1({
-        accounts: [account()],
-        user_connections: [connection("user_1", "steam", STEAM_ID)],
-      });
-      const taken = await worker.fetch(
-        signupRequest({ callbackUrl: steamCallbackUrl(), username: "ghost", acceptTerms: true }),
-        env(db),
-        executionContext
-      );
-      expect(taken.status).toBe(409);
-
-      const linked = await worker.fetch(
-        signupRequest({ callbackUrl: steamCallbackUrl(), username: "someone_new", acceptTerms: true }),
-        env(db),
-        executionContext
-      );
-      expect(linked.status).toBe(409);
-      expect(await linked.json<any>()).toEqual({ error: "provider_already_linked" });
-      expect(db.rows("accounts")).toHaveLength(1);
-    } finally {
-      restore();
-    }
-  });
-});
-
-describe("confirmed account merge", () => {
-  /** A Discord login ticket proving the account that linked `discordId`. */
-  async function discordTicket(db: ReturnType<typeof fakeD1>, discordId: string) {
-    mock = mockDiscordOAuth({ id: discordId });
-    const callback = await worker.fetch(
-      new Request(
-        `https://worker.test/oauth/callback?code=auth_code_1&state=${encodeURIComponent(await oauthState({}))}`,
-        { redirect: "manual" }
-      ),
-      env(db),
-      executionContext
-    );
-    expect(callback.status).toBe(302);
-    return new URL(callback.headers.get("location")!).searchParams.get("ticket")!;
-  }
-
-  function previewRequest(token: string, body: Record<string, unknown>) {
-    return new Request("https://worker.test/auth/merge/preview", {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  }
-
-  function confirmRequest(token: string, body: Record<string, unknown>) {
-    return new Request("https://worker.test/auth/merge/confirm", {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  }
-
-  it("previews both sides, then absorbs the second account on confirm", async () => {
-    // A holds Steam, B holds Discord: complementary types, so the merge moves
-    // B's Discord onto A and deletes B.
-    const db = fakeD1({
-      accounts: [
-        account({ user_id: "user_a", username: "alice", email: null }),
-        account({ user_id: "user_b", username: "bob", email: "bob@example.com" }),
-      ],
-      user_connections: [
-        connection("user_a", "steam", STEAM_ID),
-        connection("user_b", "discord", "discord_b"),
-      ],
-    });
-    const ticket = await discordTicket(db, "discord_b");
-    const token = await sessionToken("user_a");
-
-    const preview = await worker.fetch(previewRequest(token, { ticket }), env(db), executionContext);
-    expect(preview.status).toBe(200);
-    const previewBody = await preview.json<any>();
-    expect(previewBody.primaryAccount.username).toBe("alice");
-    expect(previewBody.secondaryAccount.username).toBe("bob");
-    expect(previewBody.warning).toMatch(/excluída/);
-    // Preview spends nothing.
-    expect(db.rows("accounts")).toHaveLength(2);
-
-    const confirmed = await worker.fetch(
-      confirmRequest(token, { ticket, confirm: true }),
-      env(db),
-      executionContext
-    );
-    expect(confirmed.status).toBe(200);
-    const body = await confirmed.json<any>();
-    expect(body.account.username).toBe("alice");
-    expect(body.token).toBeTruthy();
-
-    // B is gone; both providers now belong to A.
-    expect(db.rows("accounts").map((row) => row.user_id)).toEqual(["user_a"]);
-    const providers = db.rows("user_connections").map((row) => `${row.provider}:${row.provider_id}`).sort();
-    expect(providers).toEqual(["discord:discord_b", `steam:${STEAM_ID}`]);
-
-    // B's old session dies with the account.
-    const ghost = await sessionToken("user_b");
-    const me = await worker.fetch(
-      new Request("https://worker.test/auth/me", { headers: { authorization: `Bearer ${ghost}` } }),
-      env(db),
-      executionContext
-    );
-    expect(me.status).toBe(404);
-  });
-
-  it("rolls back every database move when the merge batch fails", async () => {
-    const db = fakeD1({
-      accounts: [
-        account({ user_id: "user_a", username: "alice", email: null }),
-        account({ user_id: "user_b", username: "bob", email: null }),
-      ],
-      user_connections: [
-        connection("user_a", "steam", STEAM_ID),
-        connection("user_b", "discord", "discord_b"),
-      ],
-      payments: [{ id: "pay_b", user_id: "user_b", steam_id: null }],
-    });
-    const ticket = await discordTicket(db, "discord_b");
-    const token = await sessionToken("user_a");
-    db.failBatchAt(3);
-
-    const response = await worker.fetch(
-      confirmRequest(token, { ticket, confirm: true }),
-      env(db),
-      executionContext
-    );
-
-    expect(response.status).toBe(500);
-    expect(db.rows("accounts").map((row) => row.user_id)).toEqual(["user_a", "user_b"]);
-    expect(db.rows("payments")[0].user_id).toBe("user_b");
-    expect(db.rows("user_connections").map((row) => row.user_id)).toEqual(["user_a", "user_b"]);
-  });
-
-  it("merges on a Steam second proof too", async () => {
-    const restore = steamMock(true);
-    try {
-      const db = fakeD1({
-        accounts: [
-          account({ user_id: "user_a", username: "alice", email: "alice@example.com" }),
-          account({ user_id: "user_b", username: "bob", email: null }),
-        ],
-        user_connections: [
-          connection("user_a", "discord", "discord_a"),
-          connection("user_b", "steam", STEAM_ID),
-        ],
-      });
-      const token = await sessionToken("user_a");
-
-      const preview = await worker.fetch(
-        previewRequest(token, { callbackUrl: steamCallbackUrl() }),
-        env(db),
-        executionContext
-      );
-      expect(preview.status).toBe(200);
-
-      const confirmed = await worker.fetch(
-        confirmRequest(token, { callbackUrl: steamCallbackUrl(), confirm: true }),
-        env(db),
-        executionContext
-      );
-      expect(confirmed.status).toBe(200);
-      expect(db.rows("accounts").map((row) => row.user_id)).toEqual(["user_a"]);
-      const providers = db.rows("user_connections").map((row) => row.provider).sort();
-      expect(providers).toEqual(["discord", "steam"]);
-    } finally {
-      restore();
-    }
-  });
-
-  it("refuses when both accounts hold the same provider type", async () => {
-    const db = fakeD1({
-      accounts: [
-        account({ user_id: "user_a", username: "alice" }),
-        account({ user_id: "user_b", username: "bob" }),
-      ],
-      user_connections: [
-        connection("user_a", "discord", "discord_a"),
-        connection("user_b", "discord", "discord_b"),
-      ],
-    });
-    const ticket = await discordTicket(db, "discord_b");
-    const token = await sessionToken("user_a");
-
-    const preview = await worker.fetch(previewRequest(token, { ticket }), env(db), executionContext);
-    expect(preview.status).toBe(409);
-    expect(await preview.json<any>()).toMatchObject({
-      error: "merge_conflict",
-      detail: "both_accounts_hold_discord",
-    });
-    expect(db.rows("accounts")).toHaveLength(2);
-  });
-
-  it("demands a recent session and an explicit confirmation", async () => {
-    const db = fakeD1({
-      accounts: [
-        account({ user_id: "user_a", username: "alice", email: null }),
-        account({ user_id: "user_b", username: "bob", email: "bob@example.com" }),
-      ],
-      user_connections: [
-        connection("user_a", "steam", STEAM_ID),
-        connection("user_b", "discord", "discord_b"),
-      ],
-    });
-    const ticket = await discordTicket(db, "discord_b");
-    const stale = await sessionToken("user_a", 3600, 1, Math.floor(Date.now() / 1000) - 3600);
-
-    const preview = await worker.fetch(previewRequest(stale, { ticket }), env(db), executionContext);
-    expect(preview.status).toBe(403);
-    expect(await preview.json<any>()).toEqual({ error: "reauth_required" });
-
-    const fresh = await sessionToken("user_a");
-    const unconfirmed = await worker.fetch(
-      confirmRequest(fresh, { ticket }),
-      env(db),
-      executionContext
-    );
-    expect(unconfirmed.status).toBe(400);
-    expect(await unconfirmed.json<any>()).toEqual({ error: "confirmation_required" });
-    expect(db.rows("accounts")).toHaveLength(2);
-  });
-
-  it("fails the recover hand-off closed", async () => {
+  it("two Discord tickets for the same account yield one account", async () => {
     mock = mockDiscordOAuth();
-    const db = fakeD1({
-      accounts: [account()],
-      user_connections: [connection("user_1", "discord", DISCORD_USER_ID)],
-    });
-    const callback = await worker.fetch(
-      new Request(
-        `https://worker.test/oauth/callback?code=auth_code_1&state=${encodeURIComponent(await oauthState({ purpose: "recover" }))}`,
-        { redirect: "manual" }
-      ),
-      env(db),
-      executionContext
-    );
-    expect(callback.status).toBe(410);
+    const db = fakeD1();
+    async function ticket() {
+      const callback = await worker.fetch(
+        new Request(
+          `https://worker.test/oauth/callback?code=auth_code_1&state=${encodeURIComponent(await oauthState({}))}`,
+          { redirect: "manual" }
+        ),
+        env(db),
+        executionContext
+      );
+      expect(callback.status).toBe(302);
+      return new URL(callback.headers.get("location")!).searchParams.get("ticket")!;
+    }
+    const first = await ticket();
+    const second = await ticket();
+    const exchange = (value: string) =>
+      new Request("https://worker.test/auth/oauth/exchange", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ticket: value }),
+      });
+    const [left, right] = await Promise.all([
+      worker.fetch(exchange(first), env(db), executionContext),
+      worker.fetch(exchange(second), env(db), executionContext),
+    ]);
+    expect([left.status, right.status].sort()).toEqual([200, 201]);
+    expect(db.rows("accounts")).toHaveLength(1);
+    expect(db.rows("user_connections").filter((row) => row.provider === "discord")).toHaveLength(1);
   });
-});
 
-describe("DELETE /auth/account", () => {
-  it("deletes everything and invalidates the session", async () => {
+  it("simultaneous unlinks cannot remove the last provider", async () => {
     const db = fakeD1({
       accounts: [account()],
       user_connections: [
         connection("user_1", "discord", DISCORD_USER_ID),
         connection("user_1", "steam", STEAM_ID),
       ],
-      discord_links: [
-        {
-          steam_id: null,
-          user_id: "user_1",
-          discord_user_id: DISCORD_USER_ID,
-          discord_username: "ghost",
-          discord_global_name: "Ghost",
-          linked_at: "2026-01-01T00:00:00.000Z",
-          updated_at: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-      security_events: [
-        { id: "e1", user_id: "user_1", kind: "login", provider: "discord", ip_prefix: null, created_at: "2026-01-01T00:00:00.000Z" },
-      ],
-      subscriptions: [{ user_id: "user_1", steam_id: STEAM_ID, status: "expired" }],
-      payments: [{ id: "pay_1", user_id: "user_1", steam_id: STEAM_ID, status: "paid" }],
     });
     const token = await sessionToken("user_1");
-
-    const response = await worker.fetch(
-      new Request("https://worker.test/auth/account", {
+    const remove = (provider: string) =>
+      new Request(`https://worker.test/auth/connections/${provider}`, {
         method: "DELETE",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ confirm: true }),
-      }),
-      env(db),
-      executionContext
-    );
-    expect(response.status).toBe(200);
-    expect(db.rows("accounts")).toEqual([]);
-    expect(db.rows("user_connections")).toEqual([]);
-    expect(db.rows("discord_links")).toEqual([]);
-    expect(db.rows("subscriptions")[0]).toMatchObject({ user_id: null, steam_id: null });
-    expect(db.rows("payments")[0]).toMatchObject({ user_id: null, steam_id: null });
-
-    const me = await worker.fetch(
-      new Request("https://worker.test/auth/me", { headers: { authorization: `Bearer ${token}` } }),
-      env(db),
-      executionContext
-    );
-    expect(me.status).toBe(404);
-  });
-
-  it("rolls back every database deletion when the batch fails", async () => {
-    const db = fakeD1({
-      accounts: [account()],
-      user_connections: [connection("user_1", "discord", DISCORD_USER_ID)],
-      subscriptions: [{ user_id: "user_1", steam_id: null, status: "expired" }],
-    });
-    const token = await sessionToken("user_1");
-    db.failBatchAt(5);
-
-    const response = await worker.fetch(
-      new Request("https://worker.test/auth/account", {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ confirm: true }),
-      }),
-      env(db),
-      executionContext
-    );
-
-    expect(response.status).toBe(500);
-    expect(db.rows("accounts")).toHaveLength(1);
-    expect(db.rows("user_connections")).toHaveLength(1);
-    expect(db.rows("subscriptions")[0].user_id).toBe("user_1");
-  });
-
-  it("keeps the account when its cloud objects cannot be deleted", async () => {
-    const db = fakeD1({
-      accounts: [account()],
-      user_connections: [connection("user_1", "discord", DISCORD_USER_ID)],
-      cloud_saves: [{ id: "save_1", user_id: "user_1", storage_path: "user_1/game/save.zip" }],
-    });
-    const token = await sessionToken("user_1");
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
-
-    try {
-      const response = await worker.fetch(
-        new Request("https://worker.test/auth/account", {
-          method: "DELETE",
-          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify({ confirm: true }),
-        }),
-        env(db, {
-          SUPABASE_URL: "https://storage.test",
-          SUPABASE_SERVICE_ROLE_KEY: "service_key",
-        }),
-        executionContext
-      );
-
-      expect(response.status).toBe(502);
-      expect(await response.json<any>()).toEqual({ error: "storage_delete_failed" });
-      expect(db.rows("accounts")).toHaveLength(1);
-      expect(db.rows("cloud_saves")).toHaveLength(1);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("refuses while a subscription is active, and without confirmation", async () => {
-    const db = fakeD1({
-      accounts: [account()],
-      user_connections: [connection("user_1", "discord", DISCORD_USER_ID)],
-      subscriptions: [
-        {
-          user_id: "user_1",
-          plan_id: "monthly",
-          status: "active",
-          current_period_start: "2026-01-01T00:00:00.000Z",
-          current_period_end: "2099-01-01T00:00:00.000Z",
-          last_payment_id: null,
-          created_at: "2026-01-01T00:00:00.000Z",
-          updated_at: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-    });
-    const token = await sessionToken("user_1");
-    const request = (body: Record<string, unknown>) =>
-      new Request("https://worker.test/auth/account", {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify(body),
+        headers: { authorization: `Bearer ${token}` },
       });
+    const [left, right] = await Promise.all([
+      worker.fetch(remove("discord"), env(db), executionContext),
+      worker.fetch(remove("steam"), env(db), executionContext),
+    ]);
+    // Exactly one unlink wins. The loser is rejected — either by the
+    // last-connection guard or by the session rotation of the winner.
+    const statuses = [left.status, right.status].sort();
+    expect(statuses[0]).toBe(200);
+    expect([401, 409]).toContain(statuses[1]);
+    expect(db.rows("user_connections")).toHaveLength(1);
+  });
+});
 
-    const active = await worker.fetch(request({ confirm: true }), env(db), executionContext);
-    expect(active.status).toBe(409);
-    expect(await active.json<any>()).toEqual({ error: "subscription_active" });
-
-    const unconfirmed = await worker.fetch(request({}), env(fakeD1({ accounts: [account()] })), executionContext);
-    expect(unconfirmed.status).toBe(400);
+describe("removed merge and deletion routes", () => {
+  it("answers 404 for merge preview, merge confirm and account deletion", async () => {
+    const db = fakeD1({ accounts: [account()] });
+    const token = await sessionToken("user_1");
+    for (const request of [
+      new Request("https://worker.test/auth/merge/preview", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+      new Request("https://worker.test/auth/merge/confirm", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      }),
+      new Request("https://worker.test/auth/account", {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      }),
+    ]) {
+      const response = await worker.fetch(request, env(db), executionContext);
+      expect(response.status).toBe(404);
+    }
+    expect(db.rows("accounts")).toHaveLength(1);
   });
 });

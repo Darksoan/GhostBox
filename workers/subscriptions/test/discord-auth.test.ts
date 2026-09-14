@@ -190,18 +190,20 @@ describe("POST /auth/discord/exchange", () => {
     );
   });
 
-  it("leaves the ticket unspent when the provider still needs a signup", async () => {
-    discord = mockDiscordOAuth({ email: "other@example.com" });
+  it("resolves the current owner instead of the one captured at callback time", async () => {
+    discord = mockDiscordOAuth();
     const db = fakeD1({ accounts: [account()], user_connections: [discordConnection()] });
 
     const ticket = await loginCallbackTicket(db);
-    const first = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
-    expect(first.status).toBe(200);
+    // The Discord moved to another account after the callback minted the
+    // ticket: the exchange must follow the live mapping, not the stale one.
+    db.rows("user_connections").splice(0, db.rows("user_connections").length);
+    db.rows("accounts").push(account({ user_id: "user_2", username: "ghost2", email: null }));
+    db.rows("user_connections").push(discordConnection({ user_id: "user_2" }));
 
-    // Same ticket twice: the atomic consume lets exactly one exchange through.
-    const replay = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
-    expect(replay.status).toBe(400);
-    expect(await replay.json<any>()).toEqual({ error: "invalid_ticket" });
+    const response = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
+    expect(response.status).toBe(200);
+    expect((await response.json<any>()).account.userId).toBe("user_2");
   });
 
   it("rejects a ticket that was already spent", async () => {
@@ -227,24 +229,24 @@ describe("POST /auth/discord/exchange", () => {
     expect(response.status).toBe(400);
   });
 
-  it("answers signup_required for a Discord nobody linked, without spending the ticket", async () => {
-    // Discord creates accounts directly now: the exchange points the app at
-    // the signup confirmation instead of signing in.
+  it("creates an account for a previously unknown Discord", async () => {
     discord = mockDiscordOAuth();
     const db = fakeD1();
 
     const ticket = await loginCallbackTicket(db);
     const response = await worker.fetch(exchangeRequest(ticket), discordEnv(db), executionContext);
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(201);
     const body = await response.json<any>();
-    expect(body.error).toBe("signup_required");
-    expect(body.provider).toBe("discord");
-    expect(body.providerId).toBe(DISCORD_USER_ID);
-    expect(body.suggestedUsername).toBe("ghost");
+    expect(body.isNewAccount).toBe(true);
+    expect(body.token).toBeTruthy();
+    expect(body.account.username).toBe("ghost");
+    expect(body.account.email).toBe(null);
     expect(body.disclaimer).toMatch(/Discord ou pela Steam/);
-    // Still unspent: the follow-up signup consumes this very ticket.
-    expect(db.rows("discord_login_tickets")[0].consumed_at).toBe(null);
+    expect(db.rows("discord_login_tickets")[0].consumed_at).not.toBe(null);
+    expect(JSON.parse(db.rows("user_connections")[0].metadata_json).avatarUrl).toBe(
+      `https://cdn.discordapp.com/avatars/${DISCORD_USER_ID}/avatar_hash_1.png?size=256`,
+    );
   });
 });
 
@@ -263,98 +265,18 @@ describe("POST /auth/discord/register", () => {
   });
 });
 
-describe("POST /auth/oauth/signup", () => {
-  function signupRequest(body: Record<string, unknown>) {
-    return new Request("https://worker.test/auth/oauth/signup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  }
-
-  it("creates the account, links Discord, and signs straight in", async () => {
-    discord = mockDiscordOAuth();
-    const db = fakeD1();
-
-    const ticket = await loginCallbackTicket(db);
+describe("removed provider signup endpoints", () => {
+  it("answers 404 for POST /auth/oauth/signup", async () => {
     const response = await worker.fetch(
-      signupRequest({ ticket, username: "ghost", displayName: "Ghost", acceptTerms: true }),
-      discordEnv(db),
+      new Request("https://worker.test/auth/oauth/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ticket: "whatever", username: "ghostuser" }),
+      }),
+      discordEnv(fakeD1()),
       executionContext
     );
-
-    expect(response.status).toBe(201);
-    const body = await response.json<any>();
-    expect(body.isNewAccount).toBe(true);
-    expect(body.token).toBeTruthy();
-    expect(body.account.username).toBe("ghost");
-    expect(body.account.email).toBe("ghost@example.com");
-    expect(body.disclaimer).toMatch(/Discord ou pela Steam/);
-    expect(db.rows("accounts")).toHaveLength(1);
-    expect(db.rows("user_connections")).toEqual([
-      expect.objectContaining({ provider: "discord", provider_id: DISCORD_USER_ID }),
-    ]);
-    expect(db.rows("discord_links")).toEqual([
-      expect.objectContaining({ discord_user_id: DISCORD_USER_ID }),
-    ]);
-
-    // The ticket is spent: no second account comes out of it.
-    const replay = await worker.fetch(
-      signupRequest({ ticket, username: "ghost2", acceptTerms: true }),
-      discordEnv(db),
-      executionContext
-    );
-    expect(replay.status).toBe(400);
-    expect(db.rows("accounts")).toHaveLength(1);
-  });
-
-  it("requires the terms acceptance", async () => {
-    discord = mockDiscordOAuth();
-    const db = fakeD1();
-
-    const ticket = await loginCallbackTicket(db);
-    const response = await worker.fetch(
-      signupRequest({ ticket, username: "ghost" }),
-      discordEnv(db),
-      executionContext
-    );
-
-    expect(response.status).toBe(400);
-    expect(await response.json<any>()).toEqual({ error: "terms_required" });
-    expect(db.rows("accounts")).toHaveLength(0);
-  });
-
-  it("rejects a username that is already taken", async () => {
-    discord = mockDiscordOAuth();
-    const db = fakeD1({ accounts: [account()] });
-
-    const ticket = await loginCallbackTicket(db);
-    const response = await worker.fetch(
-      signupRequest({ ticket, username: "ghost", acceptTerms: true }),
-      discordEnv(db),
-      executionContext
-    );
-
-    expect(response.status).toBe(409);
-    expect(await response.json<any>()).toEqual({ error: "username_taken" });
-  });
-
-  it("refuses a Discord that is already attached to another account", async () => {
-    // A ticket that resolves to an existing account is a login, not a
-    // signup: it cannot open a second account for the same Discord.
-    discord = mockDiscordOAuth();
-    const db = fakeD1({ accounts: [account()], user_connections: [discordConnection()] });
-
-    const ticket = await loginCallbackTicket(db);
-    const response = await worker.fetch(
-      signupRequest({ ticket, username: "someone_else", acceptTerms: true }),
-      discordEnv(db),
-      executionContext
-    );
-
-    expect(response.status).toBe(409);
-    expect(await response.json<any>()).toEqual({ error: "provider_already_linked" });
-    expect(db.rows("accounts")).toHaveLength(1);
+    expect(response.status).toBe(404);
   });
 });
 
@@ -393,9 +315,9 @@ describe("linking a Discord that belongs to another account", () => {
     );
   }
 
-  it("refuses the link instead of moving it — uniting accounts is the merge flow", async () => {
+  it("refuses the link instead of moving it", async () => {
     // Silently moving the Discord was a takeover vector. The link stays where
-    // it is; the confirmed merge flow is the only way to unite two accounts.
+    // it is; ownership conflicts are resolved through support.
     discord = mockDiscordOAuth({ email: "unrelated@example.com" });
     const db = await linkState();
 

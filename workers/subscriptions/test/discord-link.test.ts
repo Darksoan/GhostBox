@@ -148,21 +148,15 @@ describe("GET /discord/callback", () => {
   it("answers with HTML, not a JSON 500, when the write fails", async () => {
     discord = mockDiscordOAuth();
     const db = fakeD1();
-    const failing = {
-      ...db,
-      prepare(sql: string) {
-        if (/^\s*DELETE FROM discord_links/i.test(sql)) {
-          return {
-            bind: () => ({
-              run: async () => {
-                throw new Error("D1_ERROR: database is locked");
-              },
-            }),
-          };
-        }
-        return db.prepare(sql);
+    // The link write is a single D1 batch: fail the batch itself so the test
+    // exercises the real failure path instead of a missing-method artifact.
+    const failing = Object.create(db, {
+      batch: {
+        value: async () => {
+          throw new Error("D1_ERROR: database is locked");
+        },
       },
-    } as unknown as typeof db;
+    }) as unknown as typeof db;
 
     const response = await worker.fetch(
       await callbackRequest("user_1"),

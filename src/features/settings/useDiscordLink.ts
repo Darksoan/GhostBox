@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import type { DiscordLinkStatus } from "../../lib/ghostboxApi.types";
+import { useAuth } from "../../context/AuthContext";
 
 /** Shared Discord connection flow: open the signed OAuth URL in the system
  * browser, then re-poll link status a few seconds later once the user
  * finishes in the browser. Used by both the Connections settings tab and
  * the Premium subscription panel's "link Discord" CTA. */
 export function useDiscordLink() {
+  const { refreshAccount } = useAuth();
   const [status, setStatus] = useState<DiscordLinkStatus | null>(() =>
     ghostboxApi.getCachedDiscordLinkStatus(),
   );
@@ -52,13 +54,16 @@ export function useDiscordLink() {
         await new Promise((resolve) => window.setTimeout(resolve, 3000));
         next = await ghostboxApi.getDiscordLinkStatus();
         setStatus(next);
-        if (next?.linked) break;
+        if (next?.linked) {
+          await refreshAccount();
+          break;
+        }
       }
       return next;
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [refreshAccount]);
 
   /**
    * Rejects with `last_connection` when this is the account's only linked
@@ -70,11 +75,13 @@ export function useDiscordLink() {
     setBusy(true);
     try {
       await ghostboxApi.disconnectConnection("discord");
+      ghostboxApi.clearDiscordLinkCache();
       setStatus(null);
+      await refreshAccount();
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [refreshAccount]);
 
   return { status, busy, connect, disconnect, refresh };
 }

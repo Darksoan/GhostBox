@@ -1014,28 +1014,29 @@ async fn run_steam_openid_flow(app: &tauri::AppHandle) -> Result<SteamCallback, 
 
 /// Signs in through Steam, with no GhostBox session required up front.
 ///
-/// The Worker is what decides whether this Steam belongs to anyone: it
-/// re-validates the callback against Steam and looks the connection up. An
-/// unlinked Steam comes back as `steam_not_linked` (with the still-unspent
-/// callback URL inside) so the UI can ask for a username and finish the
-/// signup through `cloud_steam_signup` — no second browser round-trip.
+/// The Worker re-validates the callback against Steam and creates the
+/// provider-only account when needed.
 #[tauri::command]
 pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let _guard = begin_steam_sign_in()?;
     let mut callback = run_steam_openid_flow(&app).await?;
 
-    let result = crate::cloud_save::cloud_steam_login_callback(callback.url.as_str()).await;
+    let profile = match fetch_steam_profile(&callback.steam_id).await {
+        Ok(profile) => profile,
+        Err(error) => {
+            write_http_response(
+                &mut callback.stream,
+                "400 Bad Request",
+                &steam_login_page_html(false, "Not signed in."),
+            );
+            return Err(error);
+        }
+    };
+    let result =
+        crate::cloud_save::cloud_steam_login_callback(callback.url.as_str(), Some(&profile)).await;
 
     match result {
         Ok(session) => {
-            if session.get("error").and_then(|item| item.as_str()) == Some("steam_not_linked") {
-                write_http_response(
-                    &mut callback.stream,
-                    "200 OK",
-                    &steam_login_page_html(true, "Continue no GhostBox para criar sua conta."),
-                );
-                return Ok(session);
-            }
             if let Err(error) = crate::cloud_save::save_cloud_session(&app, &session) {
                 write_http_response(
                     &mut callback.stream,
@@ -1049,11 +1050,9 @@ pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Valu
                 "200 OK",
                 &steam_login_page_html(true, "Signed in. Back to GhostBox."),
             );
-            // Best effort: the profile only unlocks local metrics, and failing
-            // to fetch it must not undo a sign-in that already succeeded.
-            if let Ok(profile) = fetch_steam_profile(&callback.steam_id).await {
-                let _ = save_steam_profile(&app, profile);
-            }
+            // The worker login is already complete; a local cache write must
+            // not turn that successful account session into a reported failure.
+            let _ = save_steam_profile(&app, profile);
             Ok(session)
         }
         Err(error) => {
@@ -1065,25 +1064,6 @@ pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Valu
             Err(error)
         }
     }
-}
-
-/// Runs the Steam browser flow and returns the callback URL WITHOUT trading
-/// it for anything. Used to prove ownership of a second account (confirmed
-/// merge): the URL goes to `/auth/merge/preview` + `/auth/merge/confirm`,
-/// and the Worker validates it there.
-#[tauri::command]
-pub async fn cloud_steam_proof(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let _guard = begin_steam_sign_in()?;
-    let mut callback = run_steam_openid_flow(&app).await?;
-    write_http_response(
-        &mut callback.stream,
-        "200 OK",
-        &steam_login_page_html(true, "Continue no GhostBox para unir as contas."),
-    );
-    Ok(serde_json::json!({
-        "callbackUrl": callback.url.as_str(),
-        "steamId": callback.steam_id,
-    }))
 }
 
 /// Retired with email/password: Steam proves the account directly now, so

@@ -135,6 +135,13 @@ const rules: Rule[] = [
     },
   },
   {
+    pattern: /^SELECT \* FROM payments WHERE stripe_checkout_session_id = \? LIMIT 1/i,
+    run: ([sessionId], db) => {
+      const row = db.rows("payments").find((entry) => entry.stripe_checkout_session_id === sessionId);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
     pattern: /^UPDATE subscriptions SET user_id = \?, updated_at = \? WHERE steam_id = \? AND user_id IS NULL/i,
     run: ([userId, updatedAt, steamId], db) => {
       let changes = 0;
@@ -302,6 +309,16 @@ const rules: Rule[] = [
       const kept = rows.filter(
         (entry) => !(entry.discord_user_id === discordUserId && entry.user_id !== userId)
       );
+      const changes = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { changes };
+    },
+  },
+  {
+    pattern: /^DELETE FROM discord_links WHERE discord_user_id = \? AND user_id IS NULL/i,
+    run: ([discordUserId], db) => {
+      const rows = db.rows("discord_links");
+      const kept = rows.filter((entry) => !(entry.discord_user_id === discordUserId && entry.user_id == null));
       const changes = rows.length - kept.length;
       rows.splice(0, rows.length, ...kept);
       return { changes };
@@ -831,6 +848,7 @@ const rules: Rule[] = [
         discordUserId,
         discordUsername,
         discordGlobalName,
+        discordAvatarUrl,
         discordEmail,
         discordEmailVerified,
         expiresAt,
@@ -845,6 +863,7 @@ const rules: Rule[] = [
         discord_user_id: discordUserId,
         discord_username: discordUsername,
         discord_global_name: discordGlobalName,
+        discord_avatar_url: discordAvatarUrl,
         discord_email: discordEmail,
         discord_email_verified: discordEmailVerified,
         expires_at: expiresAt,
@@ -1033,12 +1052,24 @@ const rules: Rule[] = [
   },
   {
     pattern: /^DELETE FROM user_connections WHERE user_id = \? AND provider = \?/i,
-    run: ([userId, provider], db) => {
+    run: ([userId, provider], db, sql) => {
       const rows = db.rows("user_connections");
+      if (String(sql).includes("AND EXISTS") && !rows.some((entry) => entry.user_id === userId && entry.provider !== provider)) {
+        return { changes: 0 };
+      }
       const kept = rows.filter((entry) => !(entry.user_id === userId && entry.provider === provider));
       const changes = rows.length - kept.length;
       rows.splice(0, rows.length, ...kept);
       return { changes };
+    },
+  },
+  {
+    pattern: /^SELECT user_id FROM discord_links WHERE discord_user_id = \? AND user_id <> \?/i,
+    run: ([discordUserId, userId], db) => {
+      const row = db.rows("discord_links").find(
+        (entry) => entry.discord_user_id === discordUserId && entry.user_id != null && entry.user_id !== userId,
+      );
+      return { results: row ? [{ user_id: row.user_id }] : [], changes: 0 };
     },
   },
   {
@@ -1286,6 +1317,26 @@ export class FakeD1 {
   constructor(seed: Record<string, Row[]> = {}) {
     for (const [table, rows] of Object.entries(seed)) {
       this.tables.set(table, rows.map((row) => ({ ...row })));
+    }
+    // Production foreign-key relationships imply an account for persisted
+    // user-owned rows. Infer those fixtures so authenticated non-auth tests
+    // continue to model a valid database after requireSession began enforcing
+    // account existence.
+    if (!("accounts" in seed)) {
+      const userIds = new Set(
+        Object.values(seed).flatMap((rows) => rows.map((row) => row.user_id).filter(Boolean)),
+      );
+      this.tables.set("accounts", Array.from(userIds, (userId) => ({
+        user_id: userId,
+        email: null,
+        username: `user_${String(userId).slice(-12)}`.slice(0, 20),
+        display_name: null,
+        email_verified: 0,
+        verified_via: null,
+        token_version: 1,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      })));
     }
   }
 

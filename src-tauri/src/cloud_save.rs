@@ -914,10 +914,8 @@ async fn run_oauth_browser_flow(
     Ok(ticket)
 }
 
-/// Signs in through an OAuth provider. When the provider owns an account,
-/// this saves the session and returns it. When it does not, nothing is
-/// saved and the `signup_required` payload comes back untouched, so the UI
-/// can show the one-step signup confirmation (username + terms) instead.
+/// Signs in through an OAuth provider. The Worker creates the provider-only
+/// account when needed, then returns the session for local persistence.
 #[tauri::command]
 pub async fn cloud_oauth_login(
     app: tauri::AppHandle,
@@ -926,76 +924,15 @@ pub async fn cloud_oauth_login(
     let provider = validate_oauth_provider(&provider)?;
     let ticket = run_oauth_browser_flow(&app, provider, "login").await?;
 
-    let response = auth_client(20)?
-        .post(format!("{}/auth/oauth/exchange", cloud_api_url()))
-        .json(&serde_json::json!({ "ticket": ticket }))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    let status = response.status();
-    let body = response.text().await.map_err(|error| error.to_string())?;
-    if !status.is_success() {
-        // Unlinked provider: not an error to log through — the caller turns
-        // this into the signup confirmation, reusing the same ticket. The
-        // ticket never leaves this machine: it arrived on the loopback
-        // listener and goes straight back into the signup call.
-        if status.as_u16() == 404 {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) {
-                if value.get("error").and_then(|item| item.as_str()) == Some("signup_required") {
-                    let mut signup = value;
-                    if let Some(object) = signup.as_object_mut() {
-                        object.insert("ticket".to_string(), serde_json::json!(ticket));
-                    }
-                    return Ok(signup);
-                }
-            }
-        }
-        return Err(format_auth_api_error(&body, status.as_u16()));
-    }
-    let result: serde_json::Value =
-        serde_json::from_str(&body).map_err(|error| error.to_string())?;
+    let result = auth_json_request(
+        auth_client(20)?
+            .post(format!("{}/auth/oauth/exchange", cloud_api_url()))
+            .json(&serde_json::json!({ "ticket": ticket })),
+    )
+    .await?;
 
     save_cloud_session(&app, &result)?;
     Ok(result)
-}
-
-/// Runs the provider browser flow and returns the single-use ticket WITHOUT
-/// exchanging it. Used to prove ownership of a second account (confirmed
-/// merge): the ticket goes to `/auth/merge/preview` + `/auth/merge/confirm`,
-/// never to the login exchange.
-#[tauri::command]
-pub async fn cloud_oauth_proof(
-    app: tauri::AppHandle,
-    provider: String,
-) -> Result<serde_json::Value, String> {
-    let provider = validate_oauth_provider(&provider)?;
-    let ticket = run_oauth_browser_flow(&app, provider, "login").await?;
-    Ok(serde_json::json!({ "ticket": ticket }))
-}
-
-/// Completes a provider signup: the ticket proved the provider identity, and
-/// the user confirmed a username plus the terms in the UI.
-#[tauri::command]
-pub async fn cloud_oauth_signup(
-    app: tauri::AppHandle,
-    ticket: String,
-    username: String,
-    display_name: Option<String>,
-    accept_terms: bool,
-) -> Result<serde_json::Value, String> {
-    let session = auth_json_request(
-        auth_client(20)?
-            .post(format!("{}/auth/oauth/signup", cloud_api_url()))
-            .json(&serde_json::json!({
-                "ticket": ticket,
-                "username": username,
-                "displayName": display_name,
-                "acceptTerms": accept_terms,
-            })),
-    )
-    .await?;
-    save_cloud_session(&app, &session)?;
-    Ok(session)
 }
 
 /// Retired with email/password: there is no password to recover. The
@@ -1048,127 +985,22 @@ pub async fn cloud_discord_confirm_code(
 /// `steam::cloud_steam_login`; the Worker re-validates the callback against
 /// Steam itself, so nothing here has to be trusted.
 ///
-/// An unlinked Steam is NOT an error here: the `signup_required` payload
-/// comes back with the very same callback URL (left unspent by the Worker),
-/// so the UI can ask for a username and finish the signup without a second
-/// browser round-trip.
+/// The Worker creates the provider-only account when needed and returns the
+/// resulting session.
 pub(crate) async fn cloud_steam_login_callback(
     callback_url: &str,
+    profile: Option<&serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let response = auth_client(20)?
-        .post(format!("{}/auth/steam/login", cloud_api_url()))
-        .json(&serde_json::json!({ "callbackUrl": callback_url }))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    let status = response.status();
-    let body = response.text().await.map_err(|error| error.to_string())?;
-    if !status.is_success() {
-        if status.as_u16() == 404 {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) {
-                if value.get("error").and_then(|item| item.as_str()) == Some("steam_not_linked") {
-                    let mut signup = value;
-                    if let Some(object) = signup.as_object_mut() {
-                        object.insert(
-                            "callbackUrl".to_string(),
-                            serde_json::json!(callback_url),
-                        );
-                    }
-                    return Ok(signup);
-                }
-            }
-        }
-        return Err(format_auth_api_error(&body, status.as_u16()));
-    }
-    serde_json::from_str(&body).map_err(|error| error.to_string())
-}
-
-/// Creates a GhostBox account straight from a validated Steam proof, then
-/// signs in. The username and terms come from the signup confirmation UI.
-#[tauri::command]
-pub async fn cloud_steam_signup(
-    app: tauri::AppHandle,
-    callback_url: String,
-    username: String,
-    display_name: Option<String>,
-    avatar_url: Option<String>,
-    accept_terms: bool,
-) -> Result<serde_json::Value, String> {
-    let session = auth_json_request(
-        auth_client(20)?
-            .post(format!("{}/auth/steam/signup", cloud_api_url()))
-            .json(&serde_json::json!({
-                "callbackUrl": callback_url,
-                "username": username,
-                "displayName": display_name,
-                "avatarUrl": avatar_url,
-                "acceptTerms": accept_terms,
-            })),
-    )
-    .await?;
-    save_cloud_session(&app, &session)?;
-    Ok(session)
-}
-
-/// Shows what a confirmed merge would do: both accounts, their providers,
-/// and the warning. Spends nothing.
-#[tauri::command]
-pub async fn cloud_merge_preview(
-    app: tauri::AppHandle,
-    ticket: Option<String>,
-    callback_url: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let token = session_token(&app)?;
     auth_json_request(
         auth_client(20)?
-            .post(format!("{}/auth/merge/preview", cloud_api_url()))
-            .bearer_auth(token)
-            .json(&serde_json::json!({ "ticket": ticket, "callbackUrl": callback_url })),
+            .post(format!("{}/auth/steam/login", cloud_api_url()))
+            .json(&serde_json::json!({
+                "callbackUrl": callback_url,
+                "displayName": profile.map(|value| text_value(value.get("displayName"))),
+                "avatarUrl": profile.map(|value| text_value(value.get("avatarUrl"))),
+            })),
     )
     .await
-}
-
-/// Confirms the merge previewed above. The other account is absorbed and
-/// deleted; the returned token replaces the stored session.
-#[tauri::command]
-pub async fn cloud_merge_confirm(
-    app: tauri::AppHandle,
-    ticket: Option<String>,
-    callback_url: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let token = session_token(&app)?;
-    let result = auth_json_request(
-        auth_client(20)?
-            .post(format!("{}/auth/merge/confirm", cloud_api_url()))
-            .bearer_auth(token)
-            .json(&serde_json::json!({
-                "ticket": ticket,
-                "callbackUrl": callback_url,
-                "confirm": true,
-            })),
-    )
-    .await?;
-    save_cloud_session(&app, &result)?;
-    Ok(result)
-}
-
-/// Deletes the account and everything it owns. Refused while a subscription
-/// is active — cancel through the billing portal first.
-#[tauri::command]
-pub async fn cloud_delete_account(app: tauri::AppHandle) -> Result<(), String> {
-    let token = session_token(&app)?;
-    auth_json_request(
-        auth_client(20)?
-            .delete(format!("{}/auth/account", cloud_api_url()))
-            .bearer_auth(token)
-            .json(&serde_json::json!({ "confirm": true })),
-    )
-    .await?;
-    // If Windows temporarily refuses removal, overwrite the encrypted token
-    // with an invalid empty payload so offline startup cannot restore it.
-    remove_data_file(&app, CLOUD_SESSION_FILE)
-        .or_else(|_| write_binary_file(&app, CLOUD_SESSION_FILE, &[]))?;
-    Ok(())
 }
 
 /// Retired with email/password: there is no password to change.
@@ -1244,13 +1076,16 @@ pub async fn cloud_disconnect_connection(
             .bearer_auth(token),
     )
     .await?;
-    if let Some(replacement) = result.get("token").and_then(|value| value.as_str()) {
-        if let Some(mut session) = load_cloud_session(&app) {
-            if let Some(object) = session.as_object_mut() {
+    if let Some(mut session) = load_cloud_session(&app) {
+        if let Some(object) = session.as_object_mut() {
+            if let Some(replacement) = result.get("token").and_then(|value| value.as_str()) {
                 object.insert("token".to_string(), serde_json::json!(replacement));
-                save_cloud_session(&app, &session)?;
+            }
+            if provider == "steam" {
+                object.remove("steamId");
             }
         }
+        save_cloud_session(&app, &session)?;
     }
     Ok(())
 }

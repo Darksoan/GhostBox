@@ -53,9 +53,22 @@ export function Shelf<T>({
     const carousel = carouselRef.current;
     if (!carousel) return;
 
+    // O reset precisa ser instantâneo: `scroll-behavior: smooth` do CSS do
+    // carrossel também se aplica a atribuições via JS, então sem desligá-lo
+    // aqui o reset vira uma animação visível de volta ao início sempre que o
+    // browser tiver reposicionado o offset antes (o re-snap obrigatório dispara
+    // quando os cards trocam — os dados da home chegam em etapas no arranque).
+    const { style } = carousel;
+    const previousBehavior = style.scrollBehavior;
+    style.scrollBehavior = "auto";
     carousel.scrollLeft = 0;
-    setIsAtStart(true);
+    // A leitura abaixo força o layout (e o re-snap do snap `mandatory` que vem
+    // junto); o segundo assert garante o início mesmo depois dele. Como isso
+    // roda em layout effect, nada disso aparece pintado na tela.
     setIsAtEnd(carousel.clientWidth >= carousel.scrollWidth - 2);
+    carousel.scrollLeft = 0;
+    style.scrollBehavior = previousBehavior;
+    setIsAtStart(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemOrderKey]);
 
