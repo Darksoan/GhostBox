@@ -5168,9 +5168,10 @@ html.no-animations {
 }
 
 // Superfície de assinatura compartilhada entre a modal da titlebar e a aba
-// de assinatura dentro de Ajustes. Antes centralizada com backdrop de capas;
-// agora fluida: ocupa toda a altura/largura disponível e faz os cards
-// crescerem quando a janela é redimensionada, sem deixar vazios.
+// de assinatura dentro de Ajustes. O resumo da conta ativa é fluido (ocupa
+// toda a altura/largura e cresce com a janela); a oferta usa o card de
+// paridade total com o diálogo (largura, recorte e grade em
+// `_premium-modal.scss`) centralizado neste palco, com o mesmo backdrop.
 .subscription-surface {
   position: relative;
   display: flex;
@@ -5214,9 +5215,8 @@ html.no-animations {
     min-height: 0;
   }
 
-  // O card e o resumo preenchem a largura disponível e crescem com a janela.
-  .subscription-account,
-  .premium-offer--settings {
+  // O resumo (Premium ativo) preenche a largura disponível e cresce com a janela.
+  .subscription-account {
     position: relative;
     z-index: 1;
     width: 100%;
@@ -5228,13 +5228,18 @@ html.no-animations {
     flex-direction: column;
   }
 
+  // Paridade com o diálogo "Seja premium": a oferta usa a largura, o recorte
+  // e a grade de 2 colunas de `.premium-offer` — aqui só centraliza no palco.
+  // (Sem `display`/`overflow` próprios: eles herdariam sobre o card e
+  // quebrariam a grade e o `overflow: hidden` que recorta o backdrop.)
   .premium-offer--settings {
-    box-shadow: 0 48px 120px -48px var(--black);
-    max-height: none;
-    height: auto;
-    flex: 1 1 auto;
-    overflow: visible;
     align-self: center;
+    flex: 0 0 auto;
+    width: min(1000px, 100%);
+    // `auto` nos dois eixos centraliza como o diálogo quando há folga, sem
+    // cortar o topo quando o conteúdo transborda (o que `justify-content:
+    // center` faria num flex com `overflow: auto`).
+    margin: auto;
   }
 
   // Quando logado (conta Premium ativa) o backdrop de capas não deve aparecer:

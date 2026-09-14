@@ -445,13 +445,15 @@ const translations: Record<Language, TranslationTree> = {
     auth: {
       login: {
         title: "Entre no GHOSTBOX",
-        subtitle: "Entre com Discord ou Steam. Não há senha: a sua conta no provedor é a sua chave.",
+        legalNotice: "Aceito as políticas do GhostBox.",
+        terms: "Termos de Uso",
+        privacy: "Política de Privacidade",
       },
       provider: {
         divider: "ou",
         discord: "Continuar com Discord",
         steam: "Continuar com Steam",
-        signingIn: "Abrindo o navegador...",
+        signingIn: "Conectando…",
       },
       disclaimer:
         "A conta GhostBox é acessada exclusivamente pelo Discord ou pela Steam vinculados. Proteja essas contas e seus métodos de recuperação. A GhostBox não se responsabiliza por acessos decorrentes do comprometimento da sua conta no provedor.",
@@ -1129,13 +1131,15 @@ const translations: Record<Language, TranslationTree> = {
     auth: {
       login: {
         title: "Sign in to GHOSTBOX",
-        subtitle: "Sign in with Discord or Steam. There is no password: your provider account is your key.",
+        legalNotice: "I accept GhostBox's policies.",
+        terms: "Terms of Use",
+        privacy: "Privacy Policy",
       },
       provider: {
         divider: "or",
         discord: "Continue with Discord",
         steam: "Continue with Steam",
-        signingIn: "Opening the browser...",
+        signingIn: "Connecting…",
       },
       disclaimer:
         "Your GhostBox account is accessed exclusively through the linked Discord or Steam. Protect those accounts and their recovery methods. GhostBox is not responsible for access resulting from the compromise of your provider account.",

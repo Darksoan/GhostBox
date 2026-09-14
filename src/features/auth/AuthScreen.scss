@@ -11,33 +11,33 @@
 
 .auth-screen__card {
   width: 100%;
-  max-width: 380px;
+  max-width: 388px;
+  min-height: 372px;
+  max-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
-  border-radius: var(--radius-panel);
-  padding: 24px;
-  overflow: hidden;
-  transition: height 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+  border-radius: calc(var(--radius-panel) * 2);
+  padding: var(--space-10) var(--space-12) var(--space-10);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow:
+    0 18px 48px color-mix(in srgb, var(--black) 38%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--text-strong) 5%, transparent);
 }
 
 .auth-form {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 16px;
+  justify-content: space-between;
+  gap: var(--space-10);
   animation: none;
 }
 
-@keyframes auth-form-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.auth-form__header {
+  display: flex;
+  flex-direction: column;
 }
 
 .auth-form__title {
@@ -47,121 +47,20 @@
   color: var(--text-strong);
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 9px;
   line-height: 1.25;
 }
 
 .auth-form__title-icon {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   flex-shrink: 0;
 }
 
-.auth-form__subtitle {
-  margin: -4px 0 0;
-  font-size: var(--type-size-compact);
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.auth-field__label {
-  font-size: var(--type-size-caption);
-  font-weight: var(--weight-regular);
-  color: var(--text-muted);
-}
-
-.auth-field__input {
-  width: 100%;
-  background: var(--surface-modal-control);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--type-size-body);
-  font-family: var(--font-sans);
-  padding: 10px 12px;
-  outline: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
-
-  &:hover {
-    background: var(--surface-modal-control-hover);
-  }
-
-  &:focus,
-  &:focus-visible {
-    outline: none;
-  }
-
-  &::placeholder {
-    color: var(--text-muted);
-  }
-
-  &::-ms-reveal,
-  &::-ms-clear {
-    display: none;
-  }
-}
-
-.auth-field__password {
-  position: relative;
-  display: flex;
-
-  .auth-field__input {
-    padding-right: 40px;
-  }
-}
-
-.auth-field__toggle {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
-}
-
-.auth-field__hint {
-  font-size: var(--type-size-micro);
-  color: var(--text-faint);
-}
-
-.auth-form__link {
-  align-self: flex-end;
-  background: none;
-  border: none;
-  padding: 0;
-  margin-top: -8px;
-  font-size: var(--type-size-caption);
-  font-weight: var(--weight-regular);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--icon-default);
-  }
-}
-
 .auth-form__error {
-  margin: 0;
+  margin: -12px 0 0;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--danger-soft);
@@ -170,140 +69,189 @@
   line-height: 1.4;
 }
 
-.auth-form__notice {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--success-soft);
-  color: var(--success);
-  font-size: var(--type-size-compact);
-  line-height: 1.4;
-}
-
-.auth-form__submit {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 11px 16px;
-  background: var(--text-strong);
-  color: var(--surface-canvas);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--type-size-body);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-
-  &:hover:not(:disabled) {
-    opacity: 0.88;
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-}
-
-.auth-form__spinner {
-  animation: auth-spin 0.8s linear infinite;
-}
-
-@keyframes auth-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-// Providers side by side rather than stacked: they are peers — any of them
-// signs in, and any of them recovers the account.
 .auth-form__providers {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.auth-form__title-prefix {
+  color: var(--text-muted);
+}
+
+.auth-form__title-copy {
+  white-space: nowrap;
 }
 
 .auth-form__provider {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px max-content;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 11px 12px;
+  gap: var(--space-7);
+  width: 100%;
+  max-width: 292px;
+  min-height: 60px;
+  padding: 0 var(--space-8);
   background: var(--surface-modal-control);
   color: var(--text-primary);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--type-size-body);
-  font-weight: var(--weight-semibold);
+  border: 0;
+  border-radius: calc(var(--radius-sm) * 2);
   font-family: var(--font-sans);
+  font-size: var(--type-size-body-emphasis);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  touch-action: manipulation;
+  transition-property: background-color, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 
   &:hover:not(:disabled) {
     background: var(--surface-modal-control-hover);
   }
 
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--surface-panel),
+      0 0 0 4px color-mix(in srgb, var(--text-strong) 46%, transparent);
+  }
+
   &:disabled {
-    opacity: 0.6;
+    opacity: 0.68;
     cursor: default;
   }
+
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+}
+
+.auth-form__provider > span {
+  white-space: nowrap;
+}
+
+.auth-form__provider-icon-slot {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
 }
 
 .auth-form__provider-icon {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
-  flex-shrink: 0;
 }
 
-// The "no linked provider means no way back" warning on the recovery screen.
-// Quiet, but it has to be readable: it is the only place the user learns the
-// account can be lost for good.
-.auth-form__hint-block {
-  margin: 0;
-  font-size: var(--type-size-micro);
-  line-height: 1.5;
+.auth-form__provider[data-provider="steam"] .auth-form__provider-icon {
+  width: 28px;
+  height: 28px;
+  transform: translateX(1px);
+}
+
+.auth-form__legal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-7);
   color: var(--text-tertiary);
+  font-size: var(--type-size-micro);
+  line-height: 1.45;
   text-align: center;
+
 }
 
-.auth-form__divider {
+.auth-form__consent {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: -4px 0;
-  font-size: var(--type-size-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
+  gap: 8px;
+  min-height: 24px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
 
-  &::before,
-  &::after {
-    content: "";
-    flex: 1;
+  input {
+    position: absolute;
+    width: 1px;
     height: 1px;
-    background: var(--surface-modal-control);
+    opacity: 0;
+    pointer-events: none;
   }
 }
 
-  .auth-form__switch {
-    margin: 4px 0 0;
-    text-align: center;
-    font-size: var(--type-size-compact);
+.auth-form__consent-toggle {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-circle);
+  background: var(--surface-canvas);
+  color: var(--surface-canvas);
+  transition-property: background-color, border-color;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.auth-form__consent input:checked + .auth-form__consent-toggle {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+}
+
+.auth-form__consent input:focus-visible + .auth-form__consent-toggle {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.auth-form__legal-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+
+  button {
+    padding: 0;
+    background: none;
+    border: 0;
     color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 3px;
+    transition-property: color, text-decoration-color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
 
-    button {
-      background: none;
-      border: none;
-      padding: 0;
+    &:hover {
       color: var(--text-primary);
-      font-weight: var(--weight-regular);
-      cursor: pointer;
-      transition: color 0.15s ease;
+      text-decoration-color: currentColor;
+    }
 
-      &:hover {
-        color: var(--icon-default);
-      }
+    &:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 3px;
+      border-radius: 2px;
     }
   }
+}
+
+@media (max-width: 420px) {
+  .auth-screen {
+    padding: 16px;
+  }
+
+  .auth-screen__card {
+    padding-inline: 24px;
+  }
+
+  .auth-form__provider {
+    gap: var(--space-5);
+    padding-inline: var(--space-6);
+  }
+}
