@@ -1,22 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  Check,
-  ExternalLink,
-  FolderInput,
-  FolderOpen,
-  HardDrive,
-  Loader2,
-  Rocket,
-  Trash2,
-  X,
-} from "lucide-react";
-import { formatBytes } from "../../utils/formatBytes";
+import { FolderInput, Loader2, MonitorDown, Trash2 } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
-import type { UserCollection } from "../../types";
 import { useSettings } from "../../context/settings";
 import { useOverlay } from "../../context/OverlayContext";
-import type { GameExecutableCandidate } from "../../lib/ghostboxApi.types";
 import {
   readDownloadTasks,
   removeDownloadTask,
@@ -25,1018 +12,223 @@ import {
 } from "../../lib/downloadManager";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 
-interface BackupOptionsModalProps {
+interface GameActionsMenuProps {
   open: boolean;
   appId: string;
-  gameId: string;
   gameTitle: string;
   game: GhostBoxGame | null;
-  customExePath: string;
-  isFavorite: boolean;
-  userCollections: UserCollection[];
+  trigger: HTMLElement | null;
   onClose: () => void;
-  onToggleFavorite: () => void | Promise<void>;
-  onAddGameToCollection: (collectionId: string) => void | Promise<void>;
-  onRemoveGameFromCollection: (collectionId: string) => void | Promise<void>;
-  onSetCustomExe?: (
-    customExePath: string,
-    launchArguments?: string,
-    options?: { showSuccessToast?: boolean },
-  ) => Promise<GhostBoxGame | null>;
   onInstallationChanged?: () => void;
 }
-
-type SettingsSection = "launch" | "installation" | "organization";
 
 export function GameBackupOptionsModal({
   open,
   appId,
-  gameId,
   gameTitle,
   game,
-  customExePath,
-  isFavorite,
-  userCollections,
+  trigger,
   onClose,
-  onToggleFavorite,
-  onAddGameToCollection,
-  onRemoveGameFromCollection,
-  onSetCustomExe,
   onInstallationChanged,
-}: BackupOptionsModalProps) {
-  const { appearance, t } = useSettings();
+}: GameActionsMenuProps) {
+  const { appearance } = useSettings();
   const { showToast } = useOverlay();
-  const modalRef = useRef<HTMLFormElement>(null);
-  const navRef = useRef<HTMLElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-  const resetKeyRef = useRef("");
-  const executableScanRequestRef = useRef(0);
-  const [draftCollectionIds, setDraftCollectionIds] = useState<Set<string>>(
-    () =>
-      new Set(
-        userCollections
-          .filter((collection) => collection.gameIds.includes(gameId))
-          .map((collection) => collection.id),
-      ),
-  );
-  const [draftIsFavorite, setDraftIsFavorite] = useState(isFavorite);
-  const [isSavingCollections, setIsSavingCollections] = useState(false);
-  const [confirmUninstallOpen, setConfirmUninstallOpen] = useState(false);
-  const [uninstallBusy, setUninstallBusy] = useState(false);
-  const [moveConfirmOpen, setMoveConfirmOpen] = useState(false);
+  const [installTask, setInstallTask] = useState<DownloadTask | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"move" | "uninstall" | null>(null);
   const [moveTargetRoot, setMoveTargetRoot] = useState<string | null>(null);
-  const [moveBusy, setMoveBusy] = useState(false);
-  const [activeSection, setActiveSection] = useState<SettingsSection>("launch");
-  const [launchMethod, setLaunchMethod] = useState<"steam" | "executable">(
-    customExePath ? "executable" : "steam",
-  );
-  const [draftExePath, setDraftExePath] = useState(customExePath);
-  const [draftLaunchArguments, setDraftLaunchArguments] = useState(
-    game?.launchArguments ?? "",
-  );
-  const [executableCandidates, setExecutableCandidates] = useState<
-    GameExecutableCandidate[]
-  >([]);
-  const [candidateState, setCandidateState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
-  const [launchBusy, setLaunchBusy] = useState(false);
-  const [shortcutBusy, setShortcutBusy] = useState(false);
-  const language = appearance.language;
-  const copy = (pt: string, en: string) => (language === "en" ? en : pt);
-  const currentCollectionIds = useMemo(
-    () =>
-      new Set(
-        userCollections
-          .filter((collection) => collection.gameIds.includes(gameId))
-          .map((collection) => collection.id),
-      ),
-    [gameId, userCollections],
-  );
-  const collectionCount = currentCollectionIds.size + (isFavorite ? 1 : 0);
-  const collectionSelectionChanged =
-    draftIsFavorite !== isFavorite ||
-    draftCollectionIds.size !== currentCollectionIds.size ||
-    [...draftCollectionIds].some(
-      (collectionId) => !currentCollectionIds.has(collectionId),
-    );
-
-  const installTask = useMemo<DownloadTask | null>(() => {
-    if (!open || !appId) return null;
-    return (
-      readDownloadTasks().find(
-        (task) => task.appId === appId && task.status === "completed",
-      ) ?? null
-    );
-  }, [open, appId]);
+  const [busy, setBusy] = useState(false);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const isEnglish = appearance.language === "en";
+  const copy = (pt: string, en: string) => (isEnglish ? en : pt);
   const steamInstallPath = game?.installPath?.trim() ?? "";
-  const installationKind = installTask
-    ? "ghostbox"
-    : steamInstallPath
-      ? "steam"
-      : null;
-  const installationPath = installTask?.outputDir.trim() || steamInstallPath;
-  const executableInstallPaths = useMemo(() => {
-    const seen = new Set<string>();
-    return [installTask?.outputDir, game?.installPath].reduce<string[]>(
-      (paths, rawPath) => {
-        const path = rawPath?.trim();
-        if (!path) return paths;
-        const key = path.replaceAll("\\", "/").toLowerCase();
-        if (seen.has(key)) return paths;
-        seen.add(key);
-        paths.push(path);
-        return paths;
-      },
-      [],
-    );
-  }, [game?.installPath, installTask?.outputDir]);
+  const installationKind = installTask ? "ghostbox" : steamInstallPath ? "steam" : null;
 
-  useEffect(() => {
-    const requestId = ++executableScanRequestRef.current;
-    if (
-      !open ||
-      activeSection !== "launch" ||
-      launchMethod !== "executable"
-    ) {
-      return;
-    }
-    let cancelled = false;
-    setExecutableCandidates([]);
-    if (executableInstallPaths.length === 0) {
-      setCandidateState("error");
-      return;
-    }
-    setCandidateState("loading");
-    void (async () => {
-      let hasReadablePath = false;
-
-      for (const installPath of executableInstallPaths) {
-        if (cancelled || requestId !== executableScanRequestRef.current) return;
-        try {
-          const candidates = await ghostboxApi.listGameExecutables(
-            installPath,
-            gameTitle,
-          );
-          hasReadablePath = true;
-          if (candidates.length === 0) continue;
-          if (cancelled || requestId !== executableScanRequestRef.current) return;
-          setExecutableCandidates(candidates);
-          setCandidateState("ready");
-          return;
-        } catch {
-          // Try the next known installation path before showing the inline error.
-        }
-      }
-
-      if (cancelled || requestId !== executableScanRequestRef.current) return;
-      setExecutableCandidates([]);
-      setCandidateState(hasReadablePath ? "ready" : "error");
-    })();
-    return () => {
-      cancelled = true;
-      if (executableScanRequestRef.current === requestId) {
-        executableScanRequestRef.current += 1;
-      }
+  useLayoutEffect(() => {
+    if (!open || !trigger) return;
+    const updatePosition = () => {
+      const rect = trigger.getBoundingClientRect();
+      setPosition({ left: Math.max(12, rect.right - 244), top: Math.max(12, rect.top - 8) });
     };
-  }, [
-    activeSection,
-    executableInstallPaths,
-    gameTitle,
-    launchMethod,
-    open,
-  ]);
-
-  useEffect(() => {
-    if (!open) {
-      resetKeyRef.current = "";
-      return;
-    }
-    if (resetKeyRef.current === gameId) return;
-    resetKeyRef.current = gameId;
-    setIsSavingCollections(false);
-    setDraftCollectionIds(currentCollectionIds);
-    setDraftIsFavorite(isFavorite);
-    setConfirmUninstallOpen(false);
-    setUninstallBusy(false);
-    setMoveConfirmOpen(false);
-    setMoveTargetRoot(null);
-    setMoveBusy(false);
-    setActiveSection("launch");
-    setLaunchMethod(customExePath ? "executable" : "steam");
-    setDraftExePath(customExePath);
-    setDraftLaunchArguments(game?.launchArguments ?? "");
-    setExecutableCandidates([]);
-    setCandidateState("idle");
-    setLaunchBusy(false);
-    setShortcutBusy(false);
-  }, [currentCollectionIds, customExePath, game?.launchArguments, gameId, isFavorite, open]);
-
-  // Linha de apoio da instalação: tamanho e data só entram quando a task tem o
-  // dado; sem eles a frase vira um fato neutro em vez de "0 B · Invalid Date".
-  const installFacts = [
-    installTask?.bytesTotal ? formatBytes(installTask.bytesTotal) : "",
-    installTask?.finishedAt
-      ? new Date(installTask.finishedAt).toLocaleDateString(
-          language === "en" ? "en-US" : "pt-BR",
-          { day: "2-digit", month: "short", year: "numeric" },
-        )
-      : "",
-  ].filter(Boolean);
-  const installSummary = installFacts.length
-    ? installFacts.join(" · ")
-    : copy("Arquivos prontos no disco.", "Files ready on disk.");
-
-  const sectionDescription: Record<SettingsSection, string> = {
-    launch: t("gameSettings.launch.description"),
-    organization: t("gameSettings.collections.description"),
-    installation: copy(
-      "Onde os arquivos ficam no disco.",
-      "Where the files live on disk.",
-    ),
-  };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [open, trigger]);
 
   useEffect(() => {
     if (!open) return;
+    setInstallTask(
+      readDownloadTasks().find(
+        (task) => task.appId === appId && task.status === "completed",
+      ) ?? null,
+    );
+    setConfirmAction(null);
+    setMoveTargetRoot(null);
+    setBusy(false);
+  }, [appId, open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (confirmAction) return;
+      if (trigger?.contains(event.target as Node)) return;
+      const menu = document.querySelector(".game-actions-menu");
+      if (!menu?.contains(event.target as Node)) onClose();
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (confirmUninstallOpen) {
-        if (uninstallBusy) return;
-        setConfirmUninstallOpen(false);
-        return;
-      }
-      if (moveConfirmOpen) {
-        if (moveBusy) return;
-        setMoveConfirmOpen(false);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (busy) return;
+      if (confirmAction) {
+        setConfirmAction(null);
         setMoveTargetRoot(null);
-        return;
-      }
-      onClose();
-    };
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (confirmUninstallOpen || moveConfirmOpen) {
-        return;
-      }
-      if (
-        modalRef.current &&
-        !modalRef.current.contains(event.target as Node)
-      ) {
+      } else {
         onClose();
       }
     };
-
-    window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("mousedown", handlePointerDown);
-
+    window.addEventListener("keydown", handleKeyDown, true);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [
-    open,
-    onClose,
-    isSavingCollections,
-    confirmUninstallOpen,
-    uninstallBusy,
-    moveConfirmOpen,
-    moveBusy,
-  ]);
+  }, [busy, confirmAction, onClose, open, trigger]);
 
   const startMove = async () => {
-    if (!installTask) return;
+    if (!installTask || busy) return;
     try {
       const target = await ghostboxApi.selectDownloadsDir();
       if (typeof target !== "string" || !target.trim()) return;
-      if (installTask && target.trim() === installTask.downloadsRoot.trim()) {
+      if (target.trim() === installTask.downloadsRoot.trim()) {
         showToast(
-          t("gameSettings.sections.installation"),
-          copy(
-            "A nova pasta é a mesma da instalação atual.",
-            "The selected folder is the same as the current installation folder.",
-          ),
+          copy("Mover instalação", "Move installation"),
+          copy("A nova pasta é a mesma da instalação atual.", "The selected folder is the same as the current installation folder."),
           "error",
         );
         return;
       }
       setMoveTargetRoot(target);
-      setMoveConfirmOpen(true);
+      setConfirmAction("move");
     } catch {
-      // user dismissed dialog
-    }
-  };
-
-  const confirmMove = async () => {
-    if (!installTask || !moveTargetRoot || moveBusy) return;
-    setMoveBusy(true);
-    try {
-      const newOutput = await ghostboxApi.moveInstallDir(
-        installTask.appId,
-        installTask.downloadsRoot,
-        installTask.outputDir,
-        moveTargetRoot,
-      );
-      updateInstallPathsForApp(installTask.appId, moveTargetRoot, newOutput);
-      showToast(
-        t("gameSettings.sections.installation"),
-        copy("Instalação movida.", "Installation moved."),
-        "success",
-      );
-      setMoveConfirmOpen(false);
-      setMoveTargetRoot(null);
-      onInstallationChanged?.();
-    } catch (error) {
-      showToast(
-        t("gameSettings.sections.installation"),
-        error instanceof Error
-          ? error.message
-          : copy("Falha ao mover.", "Move failed."),
-        "error",
-      );
-    } finally {
-      setMoveBusy(false);
-    }
-  };
-
-  const confirmUninstall = async () => {
-    if (!installationKind || uninstallBusy) return;
-    setUninstallBusy(true);
-    try {
-      if (installTask) {
-        await ghostboxApi.deleteDownloadOutputDir(
-          installTask.appId,
-          installTask.downloadsRoot,
-          installTask.outputDir,
-        );
-        removeDownloadTask(installTask.id);
-        showToast(
-          t("gameSettings.sections.installation"),
-          copy("Jogo desinstalado.", "Game uninstalled."),
-          "success",
-        );
-        onInstallationChanged?.();
-      } else {
-        await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
-        showToast(
-          t("gameSettings.sections.installation"),
-          t("gameSettings.installation.steamUninstallOpened"),
-          "info",
-        );
-      }
-      setConfirmUninstallOpen(false);
-    } catch (error) {
-      showToast(
-        t("gameSettings.sections.installation"),
-        error instanceof Error
-          ? error.message
-          : installationKind === "steam"
-            ? t("gameSettings.installation.steamUninstallError")
-            : copy("Falha ao desinstalar.", "Uninstall failed."),
-        "error",
-      );
-    } finally {
-      setUninstallBusy(false);
-    }
-  };
-
-  const chooseCustomExe = async () => {
-    if (!game || !onSetCustomExe) return;
-    try {
-      const picked = await ghostboxApi.selectExeFile();
-      if (typeof picked !== "string" || !picked.trim()) return;
-      executableScanRequestRef.current += 1;
-      setExecutableCandidates([]);
-      setCandidateState("ready");
-      setDraftExePath(picked);
-      setLaunchMethod("executable");
-    } catch (error) {
-      showToast(
-        t("gameSettings.sections.launch"),
-        error instanceof Error
-          ? error.message
-          : t("gameSettings.launch.saveError"),
-        "error",
-      );
-    }
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    returnFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => {
-      navRef.current
-        ?.querySelector<HTMLButtonElement>("[aria-current='page']")
-        ?.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      const target = returnFocusRef.current;
-      if (target?.isConnected) target.focus();
-    };
-  }, [open]);
-
-  const handleNavKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    const buttons = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
-    );
-    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    if (currentIndex < 0) return;
-    event.preventDefault();
-    const delta = event.key === "ArrowDown" ? 1 : -1;
-    buttons[(currentIndex + delta + buttons.length) % buttons.length]?.focus();
-  };
-
-  const saveLaunchSettings = async (
-    options?: { showSuccessToast?: boolean },
-  ): Promise<GhostBoxGame | null> => {
-    if (!game || launchBusy || !onSetCustomExe) return null;
-    if (launchMethod === "executable" && !draftExePath.trim()) {
-      showToast(
-        t("gameSettings.sections.launch"),
-        t("gameSettings.launch.executableRequired"),
-        "error",
-      );
-      return null;
-    }
-    setLaunchBusy(true);
-    try {
-      const updated = await onSetCustomExe(
-        launchMethod === "executable" ? draftExePath.trim() : "",
-        draftLaunchArguments.trim(),
-        options,
-      );
-      if (!updated) return null;
-      return updated;
-    } catch (error) {
-      showToast(
-        t("gameSettings.sections.launch"),
-        error instanceof Error
-          ? error.message
-          : t("gameSettings.launch.saveError"),
-        "error",
-      );
-      return null;
-    } finally {
-      setLaunchBusy(false);
+      // The folder picker was dismissed.
     }
   };
 
   const createDesktopShortcut = async () => {
-    if (shortcutBusy || launchBusy) return;
-    setShortcutBusy(true);
+    if (!game || busy) return;
+    setBusy(true);
     try {
-      const updated = await saveLaunchSettings({ showSuccessToast: false });
-      if (!updated) return;
-      await ghostboxApi.createGameShortcut(updated, "desktop");
+      await ghostboxApi.createGameShortcut(game, "desktop");
       showToast(
-        t("gameSettings.launch.shortcutsTitle"),
-        t("gameSettings.launch.desktopShortcutCreated"),
+        copy("Atalho na área de trabalho", "Desktop shortcut"),
+        copy("Atalho criado na área de trabalho.", "Desktop shortcut created."),
         "success",
       );
+      onClose();
     } catch (error) {
       showToast(
-        t("gameSettings.launch.shortcutsTitle"),
-        error instanceof Error
-          ? error.message
-          : t("gameSettings.launch.shortcutError"),
+        copy("Atalho na área de trabalho", "Desktop shortcut"),
+        error instanceof Error ? error.message : copy("Não foi possível criar o atalho.", "Could not create the shortcut."),
         "error",
       );
     } finally {
-      setShortcutBusy(false);
+      setBusy(false);
     }
   };
 
-  const saveCollectionSelections = async () => {
-    if (!game || isSavingCollections || !collectionSelectionChanged) return;
-    const addedIds = [...draftCollectionIds].filter(
-      (collectionId) => !currentCollectionIds.has(collectionId),
-    );
-    const removedIds = [...currentCollectionIds].filter(
-      (collectionId) => !draftCollectionIds.has(collectionId),
-    );
-
-    setIsSavingCollections(true);
+  const confirm = async () => {
+    if (!confirmAction || busy) return;
+    setBusy(true);
     try {
-      if (draftIsFavorite !== isFavorite) {
-        await onToggleFavorite();
+      if (confirmAction === "move" && installTask && moveTargetRoot) {
+        const outputDir = await ghostboxApi.moveInstallDir(
+          installTask.appId,
+          installTask.downloadsRoot,
+          installTask.outputDir,
+          moveTargetRoot,
+        );
+        updateInstallPathsForApp(installTask.appId, moveTargetRoot, outputDir);
+        setInstallTask((current) => current && { ...current, downloadsRoot: moveTargetRoot, outputDir });
+        showToast(copy("Mover instalação", "Move installation"), copy("Instalação movida.", "Installation moved."), "success");
       }
-      for (const collectionId of removedIds) {
-        await onRemoveGameFromCollection(collectionId);
+      if (confirmAction === "uninstall") {
+        if (installTask) {
+          await ghostboxApi.deleteDownloadOutputDir(installTask.appId, installTask.downloadsRoot, installTask.outputDir);
+          removeDownloadTask(installTask.id);
+          setInstallTask(null);
+          showToast(copy("Desinstalar", "Uninstall"), copy("Jogo desinstalado.", "Game uninstalled."), "success");
+        } else {
+          await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
+          showToast(copy("Desinstalar", "Uninstall"), copy("Desinstalação aberta na Steam.", "Uninstall opened in Steam."), "info");
+        }
       }
-      for (const collectionId of addedIds) {
-        await onAddGameToCollection(collectionId);
-      }
+      onInstallationChanged?.();
+      setConfirmAction(null);
+      onClose();
     } catch (error) {
       showToast(
-        t("gameSettings.sections.collections"),
-        error instanceof Error
-          ? error.message
-          : t("gameSettings.collections.saveError"),
+        copy("Ajustes do jogo", "Game settings"),
+        error instanceof Error ? error.message : copy("Não foi possível concluir a ação.", "Could not complete the action."),
         "error",
       );
     } finally {
-      setIsSavingCollections(false);
+      setBusy(false);
     }
   };
 
-  if (!open || typeof document === "undefined") return null;
+  if (!open || !position || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="backdrop backdrop--profile" onClick={onClose}>
-      <form
-        className="game-settings-modal game-settings-modal--widgets"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="game-backup-modal-title"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => event.preventDefault()}
-        ref={modalRef}
+    <>
+      <div
+        className="game-actions-menu"
+        role="menu"
+        aria-label={copy("Ajustes do jogo", "Game settings")}
+        style={{ left: position.left, top: position.top }}
       >
-        <h2 id="game-backup-modal-title" className="sr-only">
-          {appearance.language === "en"
-            ? `Game settings for ${gameTitle}`
-            : `Ajustes de ${gameTitle}`}
-        </h2>
-
-        <div className="game-settings-modal__body">
-          <aside className="game-settings-modal__sidebar">
-            <nav
-              className="game-settings-modal__nav"
-              aria-label={copy("Seção de ajustes", "Settings section")}
-              ref={navRef}
-              onKeyDown={handleNavKeyDown}
-            >
-              <button
-                type="button"
-                className={`game-settings-modal__nav-button ${activeSection === "launch" ? "game-settings-modal__nav-button--active" : ""}`}
-                onClick={() => setActiveSection("launch")}
-                aria-current={activeSection === "launch" ? "page" : undefined}
-              >
-                <Rocket size={18} strokeWidth={1.9} aria-hidden="true" />
-                {t("gameSettings.sections.launch")}
-              </button>
-              <button
-                type="button"
-                className={`game-settings-modal__nav-button ${activeSection === "installation" ? "game-settings-modal__nav-button--active" : ""}`}
-                onClick={() => setActiveSection("installation")}
-                aria-current={activeSection === "installation" ? "page" : undefined}
-              >
-                <HardDrive size={18} strokeWidth={1.9} aria-hidden="true" />
-                {t("gameSettings.sections.installation")}
-              </button>
-              <button
-                type="button"
-                className={`game-settings-modal__nav-button ${activeSection === "organization" ? "game-settings-modal__nav-button--active" : ""}`}
-                onClick={() => setActiveSection("organization")}
-                aria-current={activeSection === "organization" ? "page" : undefined}
-              >
-                <FolderOpen size={18} strokeWidth={1.9} aria-hidden="true" />
-                {t("gameSettings.sections.collections")}
-                {collectionCount > 0 && (
-                  <span className="game-settings-modal__nav-count">
-                    {collectionCount}
-                  </span>
-                )}
-              </button>
-            </nav>
-          </aside>
-
-          <main className="game-settings-modal__content">
-            <button
-              type="button"
-              className="game-settings-modal__close"
-              onClick={onClose}
-              aria-label={copy("Fechar", "Close")}
-            >
-              <X size={16} strokeWidth={2} aria-hidden="true" />
-            </button>
-
-            <div className="game-settings-modal__section-view" key={activeSection}>
-              <header className="game-settings-modal__section-header">
-                <h4>{t(`gameSettings.sections.${activeSection === "organization" ? "collections" : activeSection}`)}</h4>
-                <p>{sectionDescription[activeSection]}</p>
-              </header>
-
-              <div
-                className={`game-settings-modal__rows ${activeSection === "launch" ? "game-settings-modal__rows--launch" : ""}`}
-              >
-            {activeSection === "organization" && (
-            <section className="game-settings-modal__card">
-              <div className="game-settings-modal__card-copy">
-                <strong>{t("gameSettings.collections.selectionTitle")}</strong>
-                <span>{t("gameSettings.collections.selectionDescription")}</span>
-              </div>
-
-              <div
-                className="game-settings-modal__collection-list"
-                role="group"
-                aria-label={t("gameSettings.collections.selectionTitle")}
-              >
-                <label
-                  className={`game-settings-modal__collection-option ${draftIsFavorite ? "game-settings-modal__collection-option--checked" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={draftIsFavorite}
-                    disabled={isSavingCollections}
-                    onChange={(event) => setDraftIsFavorite(event.target.checked)}
-                  />
-                  <span className="game-settings-modal__collection-check">
-                    {draftIsFavorite && <Check size={12} strokeWidth={2} aria-hidden="true" />}
-                  </span>
-                  <span className="game-settings-modal__collection-name">
-                    {t("gameSettings.collections.favorites")}
-                  </span>
-                </label>
-
-                {userCollections.map((collection) => {
-                  const checked = draftCollectionIds.has(collection.id);
-                  return (
-                    <label
-                      key={collection.id}
-                      className={`game-settings-modal__collection-option ${checked ? "game-settings-modal__collection-option--checked" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={isSavingCollections}
-                        onChange={() => {
-                          setDraftCollectionIds((current) => {
-                            const next = new Set(current);
-                            if (next.has(collection.id)) next.delete(collection.id);
-                            else next.add(collection.id);
-                            return next;
-                          });
-                        }}
-                      />
-                      <span className="game-settings-modal__collection-check">
-                        {checked && <Check size={12} strokeWidth={2} aria-hidden="true" />}
-                      </span>
-                      <span className="game-settings-modal__collection-name">
-                        {collection.name}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {collectionSelectionChanged && (
-                <div className="game-settings-modal__collection-actions">
-                  <button
-                    type="button"
-                    className="button button--primary"
-                    disabled={isSavingCollections}
-                    onClick={() => void saveCollectionSelections()}
-                  >
-                    {t("gameSettings.collections.save")}
-                  </button>
-                </div>
-              )}
-            </section>
-            )}
-
-            {activeSection === "launch" && (
-              <>
-                <section className="game-settings-modal__card">
-                  <div className="game-settings-modal__card-copy">
-                    <strong>{t("gameSettings.launch.methodTitle")}</strong>
-                    <span>{t("gameSettings.launch.methodDescription")}</span>
-                  </div>
-                  <div
-                    className="game-settings-modal__choice-grid"
-                    role="radiogroup"
-                    aria-label={t("gameSettings.launch.methodTitle")}
-                  >
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={launchMethod === "steam"}
-                      className={`game-settings-modal__choice ${launchMethod === "steam" ? "game-settings-modal__choice--active" : ""}`}
-                      onClick={() => setLaunchMethod("steam")}
-                    >
-                      <span>{t("gameSettings.launch.steam")}</span>
-                      <small>{t("gameSettings.launch.steamDescription")}</small>
-                    </button>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={launchMethod === "executable"}
-                      className={`game-settings-modal__choice ${launchMethod === "executable" ? "game-settings-modal__choice--active" : ""}`}
-                      onClick={() => setLaunchMethod("executable")}
-                    >
-                      <span>{t("gameSettings.launch.customExecutable")}</span>
-                      <small>{t("gameSettings.launch.customExecutableDescription")}</small>
-                    </button>
-                  </div>
-                </section>
-
-                {launchMethod === "executable" && (
-                  <section className="game-settings-modal__card">
-                    <div className="game-settings-modal__card-head">
-                      <div className="game-settings-modal__card-copy">
-                        <strong>{t("gameSettings.launch.executableTitle")}</strong>
-                        <span>{t("gameSettings.launch.executableDescription")}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="game-settings-modal__action-button game-settings-modal__icon-button"
-                        onClick={() => void chooseCustomExe()}
-                        disabled={!game || !onSetCustomExe}
-                        aria-label={t("gameSettings.launch.browse")}
-                      >
-                        <FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
-                      </button>
-                    </div>
-
-                    {candidateState === "loading" && (
-                      <div className="game-settings-modal__loading-row">
-                        <Loader2 size={15} strokeWidth={2} aria-hidden="true" />
-                        {t("gameSettings.launch.scanning")}
-                      </div>
-                    )}
-                    {candidateState === "ready" && executableCandidates.length > 0 && (
-                      <div className="game-settings-modal__candidate-list">
-                        {executableCandidates.slice(0, 6).map((candidate) => (
-                          <button
-                            type="button"
-                            key={candidate.path}
-                            className={`game-settings-modal__candidate ${draftExePath === candidate.path ? "game-settings-modal__candidate--active" : ""}`}
-                            onClick={() => setDraftExePath(candidate.path)}
-                          >
-                            <span className="game-settings-modal__candidate-text">
-                              <span>{candidate.fileName}</span>
-                            </span>
-                            {candidate.recommended && (
-                              <small className="game-settings-modal__candidate-badge">
-                                {t("gameSettings.launch.recommended")}
-                              </small>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {candidateState === "ready" && executableCandidates.length === 0 && (
-                      <p className="game-settings-modal__empty-note">
-                        {t("gameSettings.launch.noExecutables")}
-                      </p>
-                    )}
-                    {candidateState === "error" && (
-                      <p className="game-settings-modal__empty-note" role="alert">
-                        {t("gameSettings.launch.scanError")}
-                      </p>
-                    )}
-
-                    {draftExePath && (
-                      <p className="game-settings-modal__path">{draftExePath}</p>
-                    )}
-                  </section>
-                )}
-
-                <section className="game-settings-modal__card">
-                  <label className="game-settings-modal__field">
-                    <span>{t("gameSettings.launch.argumentsTitle")}</span>
-                    <small>{t("gameSettings.launch.argumentsDescription")}</small>
-                    <input
-                      className="settings-input"
-                      value={draftLaunchArguments}
-                      onChange={(event) => setDraftLaunchArguments(event.target.value)}
-                      placeholder={t("gameSettings.launch.argumentsPlaceholder")}
-                      spellCheck={false}
-                    />
-                  </label>
-                </section>
-
-                <section className="game-settings-modal__card">
-                  <div className="game-settings-modal__card-head">
-                    <div className="game-settings-modal__card-copy">
-                      <strong>{t("gameSettings.launch.shortcutsTitle")}</strong>
-                      <span>{t("gameSettings.launch.shortcutsDescription")}</span>
-                    </div>
-                    <div className="game-settings-modal__actions">
-                      <button
-                        type="button"
-                        className="button game-settings-modal__shortcut-button"
-                        onClick={() => void createDesktopShortcut()}
-                        disabled={shortcutBusy || launchBusy}
-                        aria-label={t("gameSettings.launch.desktop")}
-                        aria-busy={shortcutBusy}
-                      >
-                        {shortcutBusy ? (
-                          <span
-                            className="modal__add-spinner modal__add-spinner--light"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <ExternalLink
-                            size={16}
-                            strokeWidth={2}
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </section>
-
-                <div className="game-settings-modal__launch-actions">
-                  <button
-                    type="button"
-                    className="button button--primary"
-                    onClick={() => void saveLaunchSettings()}
-                    disabled={launchBusy || shortcutBusy}
-                  >
-                    {t("gameSettings.launch.save")}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {activeSection === "installation" && (
-            <section
-              className={`game-settings-modal__card ${!installationKind || moveBusy || uninstallBusy ? "game-settings-modal__card--disabled" : ""}`}
-            >
-              <div className="game-settings-modal__card-head">
-                <div className="game-settings-modal__card-copy">
-                  <strong>
-                    {installationKind === "ghostbox"
-                      ? copy("Instalado neste PC", "Installed on this PC")
-                      : installationKind === "steam"
-                        ? t("gameSettings.installation.steamInstalled")
-                      : copy(
-                          "Nenhuma instalação local",
-                          "No local installation",
-                        )}
-                  </strong>
-                  <span>
-                    {installationKind === "ghostbox"
-                      ? installSummary
-                      : installationKind === "steam"
-                        ? t("gameSettings.installation.steamManaged")
-                      : copy(
-                          "Baixe o jogo para mover ou desinstalar por aqui.",
-                          "Download the game to move or uninstall it here.",
-                        )}
-                  </span>
-                </div>
-                <div className="game-settings-modal__actions">
-                  <button
-                    type="button"
-                    className="game-settings-modal__action-button"
-                    onClick={() => {
-                      if (!installationPath) return;
-                      void ghostboxApi
-                        .revealDownloadFolder(installationPath)
-                        .catch(() =>
-                          showToast(
-                            t("downloads.openFolder"),
-                            t("downloads.openFolderError"),
-                            "error",
-                          ),
-                        );
-                    }}
-                    disabled={!installationPath || moveBusy || uninstallBusy}
-                  >
-                    <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />
-                    {t("downloads.openFolder")}
-                  </button>
-                  {installationKind === "ghostbox" && (
-                    <button
-                      type="button"
-                      className="game-settings-modal__action-button"
-                      onClick={() => void startMove()}
-                      disabled={moveBusy || uninstallBusy}
-                    >
-                      <FolderInput size={14} strokeWidth={2} aria-hidden="true" />
-                      {copy("Mover", "Move")}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="game-settings-modal__action-button game-settings-modal__action-button--danger"
-                    onClick={() => setConfirmUninstallOpen(true)}
-                    disabled={!installationKind || moveBusy || uninstallBusy}
-                  >
-                    <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
-                    {copy("Desinstalar", "Uninstall")}
-                  </button>
-                </div>
-              </div>
-
-              {installationPath && (
-                <p className="game-settings-modal__path">
-                  {installationPath}
-                </p>
-              )}
-            </section>
-            )}
-              </div>
-
+        <button type="button" role="menuitem" onClick={() => void startMove()} disabled={installationKind !== "ghostbox" || busy}>
+          <FolderInput size={17} aria-hidden="true" />
+          {copy("Mover instalação", "Move installation")}
+        </button>
+        <button type="button" role="menuitem" onClick={() => setConfirmAction("uninstall")} disabled={!installationKind || busy}>
+          <Trash2 size={17} aria-hidden="true" />
+          {copy("Desinstalar", "Uninstall")}
+        </button>
+        <span className="game-actions-menu__separator" aria-hidden="true" />
+        <button type="button" role="menuitem" onClick={() => void createDesktopShortcut()} disabled={!game || busy}>
+          {busy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <MonitorDown size={17} aria-hidden="true" />}
+          {copy("Criar atalho na área de trabalho", "Create desktop shortcut")}
+        </button>
+      </div>
+      {confirmAction && (
+        <div className="backdrop backdrop--profile game-actions-menu__confirm-backdrop">
+          <section className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="game-actions-confirm-title">
+            <header className="confirm-modal__header">
+              <h3 id="game-actions-confirm-title">
+                {confirmAction === "move" ? copy("Mover instalação", "Move installation") : copy("Desinstalar jogo", "Uninstall game")}
+              </h3>
+            </header>
+            <div className="confirm-modal__content">
+              <p>
+                {confirmAction === "move"
+                  ? copy(`Mover os arquivos de "${gameTitle}" para ${moveTargetRoot}? Movimentos entre discos diferentes podem demorar.`, `Move "${gameTitle}" files to ${moveTargetRoot}? Cross-drive moves can take a while.`)
+                  : installationKind === "steam"
+                    ? copy(`A Steam será aberta para desinstalar "${gameTitle}".`, `Steam will open to uninstall "${gameTitle}".`)
+                    : copy(`Excluir permanentemente os arquivos instalados de "${gameTitle}"?`, `Permanently delete the installed files for "${gameTitle}"?`)}
+              </p>
             </div>
-
-          {confirmUninstallOpen && (
-            <section
-              className="confirm-modal game-settings-modal__confirm"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="game-uninstall-confirm-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="confirm-modal__header">
-                <h3 id="game-uninstall-confirm-title">
-                  {appearance.language === "en" ? "Uninstall game" : "Desinstalar jogo"}
-                </h3>
-              </header>
-              <div className="confirm-modal__content">
-                <p>
-                  {installationKind === "steam"
-                    ? t("gameSettings.installation.steamUninstallPrompt", {
-                        title: gameTitle,
-                      })
-                    : copy(
-                        `Excluir permanentemente os arquivos instalados de "${gameTitle}"? A entrada na biblioteca não é removida.`,
-                        `Permanently delete the installed files for "${gameTitle}"? The library entry is not removed.`,
-                      )}
-                </p>
-              </div>
-              <div className="confirm-modal__actions">
-                <button
-                  type="button"
-                  className="button button--outline"
-                  onClick={() => setConfirmUninstallOpen(false)}
-                  disabled={uninstallBusy}
-                  autoFocus
-                >
-                  {appearance.language === "en" ? "Cancel" : "Cancelar"}
-                </button>
-                <button
-                  type="button"
-                  className="button game-settings-modal__confirm-danger"
-                  onClick={() => void confirmUninstall()}
-                  disabled={uninstallBusy}
-                >
-                  {installationKind === "steam"
-                    ? t("gameSettings.installation.openSteam")
-                    : appearance.language === "en"
-                      ? "Uninstall"
-                      : "Desinstalar"}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {moveConfirmOpen && installTask && (
-            <section
-              className="confirm-modal game-settings-modal__confirm"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="game-move-confirm-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="confirm-modal__header">
-                <h3 id="game-move-confirm-title">
-                  {appearance.language === "en" ? "Move installation" : "Mover instalação"}
-                </h3>
-              </header>
-              <div className="confirm-modal__content">
-                <p>
-                  {copy(
-                    `Mover os arquivos de "${gameTitle}" para ${moveTargetRoot}? Movimentos entre discos diferentes copiam antes de apagar — pode demorar.`,
-                    `Move "${gameTitle}" files to ${moveTargetRoot}? Cross-drive moves copy first then delete — it can take a while.`,
-                  )}
-                </p>
-              </div>
-              <div className="confirm-modal__actions">
-                <button
-                  type="button"
-                  className="button button--outline"
-                  onClick={() => {
-                    setMoveConfirmOpen(false);
-                    setMoveTargetRoot(null);
-                  }}
-                  disabled={moveBusy}
-                  autoFocus
-                >
-                  {appearance.language === "en" ? "Cancel" : "Cancelar"}
-                </button>
-                <button
-                  type="button"
-                  className="button confirm-modal__confirm"
-                  onClick={() => void confirmMove()}
-                  disabled={moveBusy}
-                >
-                  {appearance.language === "en" ? "Move" : "Mover"}
-                </button>
-              </div>
-            </section>
-          )}
-          </main>
+            <div className="confirm-modal__actions">
+              <button type="button" className="button button--outline" onClick={() => setConfirmAction(null)} disabled={busy}>
+                {copy("Cancelar", "Cancel")}
+              </button>
+              <button type="button" className={`button ${confirmAction === "uninstall" ? "game-actions-menu__danger" : "button--primary"}`} onClick={() => void confirm()} disabled={busy}>
+                {busy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : confirmAction === "move" ? copy("Mover", "Move") : copy("Desinstalar", "Uninstall")}
+              </button>
+            </div>
+          </section>
         </div>
-
-      </form>
-    </div>,
+      )}
+    </>,
     document.body,
   );
 }

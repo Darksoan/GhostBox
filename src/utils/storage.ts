@@ -362,7 +362,6 @@ function normalizeStoredFavoriteGame(value: unknown): GhostBoxGame | null {
         ].includes(game.librarySource) &&
         (game.librarySource as GhostBoxGame["librarySource"])) ||
       undefined,
-    customExePath: storedString(game.customExePath) || undefined,
   };
 }
 

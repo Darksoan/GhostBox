@@ -70,29 +70,13 @@ describe("isSteamSourceGame", () => {
 });
 
 describe("isGhostboxSourceGame", () => {
-  it("aceita ghostbox puro e exe custom com outra fonte", () => {
+  it("aceita somente jogos da fonte GhostBox", () => {
     expect(
       isGhostboxSourceGame(game("1001", { librarySource: "ghostbox" })),
     ).toBe(true);
-    expect(
-      isGhostboxSourceGame(
-        game("620", {
-          librarySource: "steam-installed",
-          customExePath: "C:\\Jogos\\game.exe",
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      isGhostboxSourceGame(
-        game("730", {
-          librarySource: "registered",
-          customExePath: "C:\\Jogos\\game.exe",
-        }),
-      ),
-    ).toBe(true);
   });
 
-  it("rejeita steam puro, plugin/registered sem exe e exe vazio", () => {
+  it("rejeita Steam, plugin e registered", () => {
     expect(
       isGhostboxSourceGame(game("620", { librarySource: "steam-installed" })),
     ).toBe(false);
@@ -101,16 +85,6 @@ describe("isGhostboxSourceGame", () => {
     ).toBe(false);
     expect(
       isGhostboxSourceGame(game("730", { librarySource: "registered" })),
-    ).toBe(false);
-    expect(
-      isGhostboxSourceGame(
-        game("1", { librarySource: "ghostbox", customExePath: "   " }),
-      ),
-    ).toBe(true);
-    expect(
-      isGhostboxSourceGame(
-        game("2", { librarySource: "steam-owned", customExePath: "  " }),
-      ),
     ).toBe(false);
   });
 });
@@ -121,18 +95,10 @@ describe("filterByLibrarySource", () => {
     game("440", { librarySource: "steam-owned", status: "discover" }),
     game("570", { status: "discover" }),
     game("1001", { librarySource: "ghostbox", status: "discover" }),
-    game("1002", {
-      librarySource: "ghostbox",
-      status: "installed",
-      customExePath: "C:\\GhostBox\\game.exe",
-    }),
+    game("1002", { librarySource: "ghostbox", status: "installed" }),
     game("730", { librarySource: "registered", status: "discover" }),
     game("1250", { librarySource: "plugin", status: "discover" }),
-    game("99", {
-      librarySource: "steam-owned",
-      status: "discover",
-      customExePath: "C:\\Custom\\game.exe",
-    }),
+    game("99", { librarySource: "steam-owned", status: "discover" }),
   ];
 
   it("all devolve a lista intacta", () => {
@@ -150,16 +116,14 @@ describe("filterByLibrarySource", () => {
     expect(filterByLibrarySource(games, "steam").map((g) => g.id)).toEqual([
       "620",
       "440",
-      "570",
-      "99",
+      "570", "99",
     ]);
   });
 
-  it("ghostbox lista ghostbox puro mais exe custom de outra fonte", () => {
+  it("ghostbox lista somente a fonte GhostBox", () => {
     expect(filterByLibrarySource(games, "ghostbox").map((g) => g.id)).toEqual([
       "1001",
       "1002",
-      "99",
     ]);
   });
 

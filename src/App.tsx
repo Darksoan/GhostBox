@@ -477,6 +477,33 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     shell,
   ]);
 
+  // Botões laterais do mouse: X1 (button 3 / "mouse 4") = voltar,
+  // X2 (button 4 / "mouse 5") = avançar. Mesmo caminho dos botões do Header
+  // (`handleBack`/`handleForward`), então fecha modal/achievements primeiro.
+  useEffect(() => {
+    const onSideButtonDown = (event: MouseEvent) => {
+      if (event.button === 3) {
+        event.preventDefault();
+        handleBack();
+      } else if (event.button === 4) {
+        event.preventDefault();
+        handleForward();
+      }
+    };
+    // Bloqueia a navegação nativa do WebView no mouseup/auxclick.
+    const blockNativeNav = (event: MouseEvent) => {
+      if (event.button === 3 || event.button === 4) event.preventDefault();
+    };
+    window.addEventListener("mousedown", onSideButtonDown);
+    window.addEventListener("mouseup", blockNativeNav);
+    window.addEventListener("auxclick", blockNativeNav);
+    return () => {
+      window.removeEventListener("mousedown", onSideButtonDown);
+      window.removeEventListener("mouseup", blockNativeNav);
+      window.removeEventListener("auxclick", blockNativeNav);
+    };
+  }, [handleBack, handleForward]);
+
   const handleSettingsTabChange = useCallback(
     (tabId: SettingsTabId) => {
       setSettingsLibraryView("overview");

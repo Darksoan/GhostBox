@@ -1,4 +1,5 @@
 import type { GamePlaytimeSnapshot } from "../lib/ghostboxApi.types";
+import type { SteamAccountStats } from "../types";
 
 function trimId(value: string | null | undefined) {
   return (value ?? "").trim();
@@ -16,6 +17,37 @@ export function shouldClearSteamAccountStats(
   const steamId = trimId(currentSteamId);
   if (!steamId) return false;
   return trimId(refSteamId) !== steamId;
+}
+
+/**
+ * Whether a stats payload carries any library at all. Responses manufactured
+ * without a data source (no proxy, no API key) or from degenerate fallbacks
+ * arrive with zero games and a fresh `fetchedAt` — applying them wipes real
+ * totals and poisons the persisted cache so later good responses look stale.
+ */
+export function isDegenerateSteamAccountStats(
+  stats: SteamAccountStats | null | undefined,
+): boolean {
+  if (!stats) return true;
+  return (
+    (stats.gamesCount ?? 0) <= 0 &&
+    (stats.ownedPlaytimes?.length ?? 0) <= 0
+  );
+}
+
+/**
+ * Whether an incoming stats payload may replace the current one. Never
+ * regresses populated stats to a degenerate (zero-game) payload — e.g. a
+ * fresh login whose first fetch resolves before any data source is ready
+ * must not lock the profile at zero achievements with a fresh timestamp.
+ */
+export function shouldReplaceSteamAccountStats(
+  current: SteamAccountStats | null | undefined,
+  incoming: SteamAccountStats | null | undefined,
+): boolean {
+  if (!incoming) return false;
+  if (isDegenerateSteamAccountStats(current)) return true;
+  return !isDegenerateSteamAccountStats(incoming);
 }
 
 export type SteamStatsStaleCheck = {
@@ -83,8 +115,7 @@ export function shouldApplyPlaytimeSnapshot(
   return true;
 }
 
-export type SteamPlaytimeSyncDeps = {
-  syncSteamPlaytimes: (
+export type SteamPlaytimeSyncDeps = {  syncSteamPlaytimes: (
     steamId: string,
   ) => Promise<GamePlaytimeSnapshot | null | undefined>;
   refreshPlaytimes: () => Promise<void>;

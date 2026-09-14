@@ -14,6 +14,7 @@ import { normalizeGameSearchText } from "../utils/gameSearch";
 import { sortLibraryGames } from "../utils/librarySort";
 import {
   filterByLibrarySource,
+  gameMatchesLibrarySourceFilter,
   type LibrarySourceFilter,
 } from "../utils/librarySourceFilter";
 import {
@@ -156,10 +157,9 @@ export function LibraryPage({
       visibleGames,
       sourceFilter,
     );
-    // A biblioteca é a fonte do que esta aba mostra: favoritos e coleções
-    // FILTRAM o que já está aqui. Antes as duas listas eram somadas ao mapa
-    // antes do filtro, então ligar a chip trazia títulos que não estão na
-    // biblioteca — e desligá-la fazia esses títulos sumirem.
+    // Favoritos FILTRAM o que já está na biblioteca. Coleções personalizadas,
+    // por outro lado, exibem o jogo mesmo quando ele não está na biblioteca
+    // (opção A): os jogos da coleção ausentes aqui são somados abaixo.
     const gamesByKey = new Map<string, GhostBoxGame>();
     sourceFilteredGames.forEach((game) => {
       gamesByKey.set(game.appId || game.id, game);
@@ -203,9 +203,26 @@ export function LibraryPage({
         collectionGames.forEach((game) => {
           for (const key of getLibraryGameKeys(game)) collectionKeys.add(key);
         });
-        filteredGames = [...gamesByKey.values()].filter((game) =>
+        const libraryMatches = [...gamesByKey.values()].filter((game) =>
           gameMatchesLibraryKeys(game, collectionKeys),
         );
+        // Opção A: a coleção exibe o jogo mesmo quando ele não está na
+        // biblioteca. Antes a coleção só FILTRAVA a biblioteca, então um jogo
+        // fora dela "sumia" ao ligar o chip da coleção.
+        const seenKeys = new Set<string>();
+        libraryMatches.forEach((game) => {
+          for (const key of getLibraryGameKeys(game)) seenKeys.add(key);
+        });
+        const collectionOnlyGames = collectionGames.filter((game) => {
+          if (!gameMatchesLibraryKeys(game, collectionKeys)) return false;
+          for (const key of getLibraryGameKeys(game)) {
+            if (seenKeys.has(key)) return false;
+          }
+          if (!gameMatchesLibrarySourceFilter(game, sourceFilter)) return false;
+          for (const key of getLibraryGameKeys(game)) seenKeys.add(key);
+          return true;
+        });
+        filteredGames = [...libraryMatches, ...collectionOnlyGames];
       }
     }
 

@@ -966,8 +966,9 @@ export function CataloguePage({
       >
         <div
           className={`catalogue-page__results${
-            refreshing ? " catalogue-page__results--refreshing" : ""
+            refreshing || loading ? " catalogue-page__results--refreshing" : ""
           }`}
+          aria-busy={refreshing || loading}
         >
           {hasRefreshError && (
             <div className="catalogue-page__notice" role="alert">
@@ -986,8 +987,6 @@ export function CataloguePage({
               actionLabel={onRetry ? t("catalogue.errorRetry") : undefined}
               onAction={onRetry}
             />
-          ) : loading ? (
-            <CatalogueListLoadingState viewMode={viewMode} />
           ) : visibleGames.length > 0 ? (
             <div className="catalogue-page__list-container">
               <CatalogueList
@@ -1002,6 +1001,8 @@ export function CataloguePage({
                 onGameContextMenu={handleGameContextMenu}
               />
             </div>
+          ) : loading ? (
+            <CatalogueListLoadingState viewMode={viewMode} />
           ) : (
             <EmptyState
               query={query}
@@ -1014,21 +1015,7 @@ export function CataloguePage({
             />
           )}
 
-          {/* Indicador de recarga: os cards permanecem na tela em
-              vez de trocar por skeleton e fazer a página pular de altura. O
-              spinner é `sticky` (ver SCSS), então fica centrado no que está
-              visível mesmo numa lista longa. */}
-          {refreshing && (
-            <div className="catalogue-page__refreshing" role="status">
-              <span
-                className="page-spinner-loading__spinner"
-                aria-hidden="true"
-              />
-              <span className="sr-only">{t("loading.catalogue")}</span>
-            </div>
-          )}
-
-          {!refreshing && !loading && !hasError && totalPages > 1 && (
+          {!loading && !hasError && totalPages > 1 && (
             <div className="catalogue-page__footer">
               <PaginationControls
                 page={currentPage}

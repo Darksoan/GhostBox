@@ -48,13 +48,29 @@ export function rehydrateUserCollectionGames(
     }
   }
 
-  return collections.map((collection) => ({
-    ...collection,
-    games: collection.gameIds.flatMap((gameId) => {
-      const game = gameByKey.get(gameId.trim());
-      return game ? [game] : [];
-    }),
-  }));
+  return collections.map((collection) => {
+    // Opção A: a coleção exibe o jogo mesmo quando ele não está na biblioteca
+    // (catálogo, busca, histórico). Sem este fallback, um gameId sem match em
+    // `knownGames` era descartado de `games` e o jogo "sumia" da sidebar e da
+    // aba da coleção após reload ou após o efeito de reidratação.
+    const storedGamesByKey = new Map<string, GhostBoxGame>();
+    for (const game of collection.games ?? []) {
+      for (const key of gameLookupKeys(game)) {
+        if (!storedGamesByKey.has(key)) {
+          storedGamesByKey.set(key, game);
+        }
+      }
+    }
+
+    return {
+      ...collection,
+      games: collection.gameIds.flatMap((gameId) => {
+        const key = gameId.trim();
+        const game = gameByKey.get(key) ?? storedGamesByKey.get(key);
+        return game ? [game] : [];
+      }),
+    };
+  });
 }
 
 export function haveCollectionGamesChanged(

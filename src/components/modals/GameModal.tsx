@@ -32,7 +32,6 @@ import type {
   GameRequirements,
   SteamAchievement,
 } from "../../data";
-import type { UserCollection } from "../../types";
 import { useCachedImageSources } from "../../hooks/useCachedImageSources";
 import { mergeGameDetailsPreservingAchievements } from "../../lib/profileHistoryGames";
 import {
@@ -717,6 +716,7 @@ interface ModalActionsProps {
   isSessionActive: boolean;
   isFavorite: boolean;
   isBackupOptionsOpen: boolean;
+  gearButtonRef: React.RefObject<HTMLButtonElement>;
   language: string;
   downloadingLabel: string;
   cancelLabel: string;
@@ -741,6 +741,7 @@ const ModalActions = memo(function ModalActions({
   isSessionActive,
   isFavorite,
   isBackupOptionsOpen,
+  gearButtonRef,
   language,
   downloadingLabel,
   cancelLabel,
@@ -886,6 +887,7 @@ const ModalActions = memo(function ModalActions({
           <button
             type="button"
             className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
+            ref={gearButtonRef}
             onClick={onOpenBackupOptions}
             aria-label={
               language === "en" ? "Backup settings" : "Ajustes de backup"
@@ -930,6 +932,7 @@ const ModalActions = memo(function ModalActions({
           <button
             type="button"
             className={`modal__gear-button ${isBackupOptionsOpen ? "modal__gear-button--active" : ""}`}
+            ref={gearButtonRef}
             onClick={onOpenBackupOptions}
             aria-label={
               language === "en" ? "Backup settings" : "Ajustes de backup"
@@ -954,28 +957,13 @@ interface GameModalProps {
   isPlaying: boolean;
   isSessionActive?: boolean;
   isFavorite: boolean;
-  userCollections: UserCollection[];
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
   onDownloadGame: (game: GhostBoxGame) => void | Promise<void>;
   onCancelDownload: () => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
-  onAddGameToCollection: (
-    game: GhostBoxGame,
-    collectionId: string
-  ) => void | Promise<void>;
-  onRemoveGameFromCollection: (
-    game: GhostBoxGame,
-    collectionId: string
-  ) => void | Promise<void>;
   onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
-  onSetCustomExe?: (
-    game: GhostBoxGame,
-    customExePath: string,
-    launchArguments?: string,
-    options?: { showSuccessToast?: boolean },
-  ) => Promise<GhostBoxGame | null>;
   onDetailsLoaded?: (game: GhostBoxGame) => void;
   onViewAchievements?: (game: GhostBoxGame) => void;
 }
@@ -991,17 +979,13 @@ export function GameModal({
   isPlaying,
   isSessionActive = false,
   isFavorite,
-  userCollections,
   onClose,
   onQueueGame,
   onRemoveGame,
   onDownloadGame,
   onCancelDownload,
   onToggleFavorite,
-  onAddGameToCollection,
-  onRemoveGameFromCollection,
   onPlayGame,
-  onSetCustomExe,
   onDetailsLoaded,
   onViewAchievements,
 }: GameModalProps) {
@@ -1019,6 +1003,7 @@ export function GameModal({
   const [loadedLogoSource, setLoadedLogoSource] = useState("");
   const [visibleScreenshotSource, setVisibleScreenshotSource] = useState("");
   const [isBackupOptionsOpen, setIsBackupOptionsOpen] = useState(false);
+  const gearButtonRef = useRef<HTMLButtonElement>(null);
   const achievementsPanelId = useId();
   const chipsPanelId = useId();
   const [isAchievementsCollapsed, setIsAchievementsCollapsed] = useState(false);
@@ -1635,7 +1620,7 @@ export function GameModal({
   }, [displayGame, onViewAchievements]);
 
   const handleOpenBackupOptions = useCallback(() => {
-    setIsBackupOptionsOpen(true);
+    setIsBackupOptionsOpen((open) => !open);
   }, []);
 
   return (
@@ -1738,12 +1723,13 @@ export function GameModal({
                   isRemoving={isRemoving}
                   isPlaying={isPlaying}
                   isSessionActive={isSessionActive}
-                  isFavorite={isFavorite}
-                  isBackupOptionsOpen={isBackupOptionsOpen}
+            isFavorite={isFavorite}
+            isBackupOptionsOpen={isBackupOptionsOpen}
+            gearButtonRef={gearButtonRef}
                   language={appearance.language}
                   downloadingLabel={t("downloads.statusDownloading")}
                   cancelLabel={t("downloads.cancel")}
-                  game={displayGame}
+            game={game ?? displayGame}
                   onPlay={onPlayGame}
                   onRemove={onRemoveGame}
                   onDownload={onDownloadGame}
@@ -1986,34 +1972,12 @@ export function GameModal({
           <LazyGameBackupOptionsModal
             open={Boolean(displayGame)}
             appId={displayGame?.appId ?? ""}
-            gameId={displayGame?.id ?? ""}
             gameTitle={displayGame?.title ?? ""}
-            game={displayGame}
-            customExePath={displayGame?.customExePath ?? ""}
-            isFavorite={isFavorite}
-            userCollections={userCollections}
+            // A configuração de inicialização é local; o payload de detalhes
+            // da Steam não inclui o executável personalizado.
+            game={game ?? displayGame}
             onClose={() => setIsBackupOptionsOpen(false)}
-            onToggleFavorite={() => {
-              if (!displayGame) return;
-              onToggleFavorite(displayGame);
-            }}
-            onAddGameToCollection={(collectionId) => {
-              if (!displayGame) return;
-              onAddGameToCollection?.(displayGame, collectionId);
-            }}
-            onRemoveGameFromCollection={(collectionId) => {
-              if (!displayGame) return;
-              onRemoveGameFromCollection(displayGame, collectionId);
-            }}
-            onSetCustomExe={async (exePath, launchArguments, options) => {
-              if (!displayGame) return null;
-              return onSetCustomExe?.(
-                displayGame,
-                exePath,
-                launchArguments,
-                options,
-              ) ?? null;
-            }}
+            trigger={gearButtonRef.current}
           />
         </Suspense>
       )}

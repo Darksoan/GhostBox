@@ -1,6 +1,5 @@
 import type {
   AddGameResult,
-  CustomExeResult,
   FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
@@ -22,7 +21,6 @@ import type {
 
 export type {
   AddGameResult,
-  CustomExeResult,
   FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
@@ -216,16 +214,6 @@ export type LaunchGameResult = {
   success: boolean;
   appId: string;
   error?: string;
-};
-
-export type GameExecutableCandidate = {
-  path: string;
-  relativePath: string;
-  fileName: string;
-  sizeBytes: number;
-  score: number;
-  reason: "title-match" | "installation-root" | "executable";
-  recommended?: boolean;
 };
 
 export type GameShortcutResult = {

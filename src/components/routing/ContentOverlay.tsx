@@ -102,6 +102,7 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
 
   const downloadTask = useGameDownloadTask(
     selectedGame ? getGameAppId(selectedGame) : null,
+    true,
   );
 
   const animationsOff = appearance.reduceAllAnimations;
@@ -200,7 +201,12 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
             }
             isAdded={appData.availableLibraryGameAppIds.has(selectedAppId)}
             isInstalled={appData.addedLibraryGameAppIds.has(selectedAppId)}
-            isDownloaded={mergedGame.librarySource === "steam-installed"}
+            isDownloaded={
+              mergedGame.status === "installed" ||
+              mergedGame.librarySource === "steam-installed" ||
+              (downloadTask?.appId === selectedAppId &&
+                downloadTask.status === "completed")
+            }
             isRemoving={
               appData.removingGameId === selectedGame.id ||
               appData.removingGameId === mergedGame.id
@@ -211,15 +217,11 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
             }
             isSessionActive={isSessionActive}
             isFavorite={isFavorite}
-            userCollections={appData.userCollections}
             onClose={closeGame}
             onQueueGame={appData.queueGame}
             onRemoveGame={appData.removeQueuedGame}
             onToggleFavorite={appData.toggleFavoriteGame}
-            onAddGameToCollection={appData.addGameToUserCollection}
-            onRemoveGameFromCollection={appData.removeGameFromCollection}
             onPlayGame={appData.handlePlayGame}
-            onSetCustomExe={appData.setCustomExeGame}
             onDownloadGame={async () => {
               // Demos classificadas não enfileiram download.
               if (isBlockedSteamDemo(mergedGame)) return;

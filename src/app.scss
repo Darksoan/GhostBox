@@ -133,6 +133,14 @@
   font-weight: var(--weight-regular);
 }
 
+.tray-menu__error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  color: var(--danger);
+  font-size: var(--type-size-caption);
+  line-height: var(--type-line-compact);
+}
+
 // ─── Mixins ──────────────────────────────────────────────────────────────────
 
 /// Gradient escuro nas extremidades esquerda e direita do carrossel,
@@ -1242,7 +1250,7 @@ p {
     height: 14px;
 
     &::before,
-    &::after {
+    &--loaded::after {
       content: "";
       position: absolute;
       left: 50%;
@@ -6665,31 +6673,22 @@ html.no-animations {
 
   /* Enquanto a consulta seguinte não volta, os resultados anteriores ficam na
      tela em vez de sumirem: trocar por skeleton faria a página saltar de altura
-     a cada mudança de filtro ou de página. */
+     a cada mudança de filtro ou de página. Os cards apenas escurecem. */
   &__results--refreshing {
     .catalogue-page__list-container {
       pointer-events: none;
       user-select: none;
+      opacity: 0.45;
+      filter: brightness(0.7);
+      transition:
+        opacity 160ms ease,
+        filter 160ms ease;
     }
-  }
 
-  /* O indicador ocupa a área de resultados, mas o spinner é `sticky`
-     dentro dele: numa lista longa, um filho centrado por `place-items` cairia
-     no meio da lista (fora da tela). O `sticky` prende o spinner ao meio do
-     que está visível conforme a página rola. */
-  &__refreshing {
-    position: absolute;
-    z-index: 2;
-    display: grid;
-    inset: 0;
-    justify-items: center;
-    pointer-events: none;
-  }
-
-  &__refreshing .page-spinner-loading__spinner {
-    position: sticky;
-    top: calc(50vh - 12px);
-    bottom: calc(50vh - 12px);
+    .catalogue-page__footer {
+      pointer-events: none;
+      user-select: none;
+    }
   }
 
   /* Uma linha só: filtros à esquerda, ordenação à direita. `flex-wrap` é a
@@ -6890,6 +6889,9 @@ html.no-animations {
     flex: 0 0 auto;
     min-height: 0;
     overflow: visible;
+    transition:
+      opacity 160ms ease,
+      filter 160ms ease;
   }
 
 }
@@ -13104,7 +13106,8 @@ html.no-backdrop-blur {
     }
   }
 
-  /* Surface-option palette for the action row (play keeps its own look) */
+  /* Superfície compartilhada para os controles da linha de ação. */
+  &__play-button,
   &__add-button,
   &__remove-button,
   &__download-button,
@@ -13317,6 +13320,65 @@ html.no-backdrop-blur {
   to {
     opacity: 1;
   }
+}
+
+.game-actions-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: grid;
+  width: 244px;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-md);
+  background: var(--surface-modal-canvas);
+  box-shadow: var(--shadow-3);
+  transform: translateY(-100%);
+}
+
+.game-actions-menu button {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--type-size-caption);
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-actions-menu button:hover:not(:disabled),
+.game-actions-menu button:focus-visible:not(:disabled) {
+  background: var(--surface-option-hover);
+}
+
+.game-actions-menu button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.game-actions-menu__separator {
+  height: 1px;
+  margin: var(--space-1) var(--space-2);
+  background: var(--border-ui);
+}
+
+.game-actions-menu__spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.game-actions-menu__danger {
+  background: var(--danger);
+  color: var(--text-primary);
+}
+
+.game-actions-menu__confirm-backdrop {
+  z-index: var(--z-modal);
 }
 
 @keyframes game-settings-section-in {

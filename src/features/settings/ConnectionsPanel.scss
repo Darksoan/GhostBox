@@ -86,7 +86,7 @@
 }
 
 .connection-card__connected-name {
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
   color: var(--text-primary);
 }
 
@@ -203,7 +203,8 @@
 .connection-card__button--danger {
   color: var(--text-primary);
   border-color: transparent;
-  background: var(--surface-option);
+  background: var(--surface-option-hover);
+  font-weight: var(--weight-regular);
 
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {

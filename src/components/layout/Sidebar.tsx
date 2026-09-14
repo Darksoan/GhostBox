@@ -132,13 +132,29 @@ export const Sidebar = memo(function Sidebar({
   const deferredAddedLibraryGames = useDeferredValue(addedLibraryGames);
 
   const sidebarCollections = useMemo<SidebarCollection[]>(() => {
-    const gamesById = new Map(
-      [
-        ...userCollections.flatMap((collection) => collection.games ?? []),
-        ...deferredFavoriteGames,
-        ...deferredAddedLibraryGames,
-      ].map((game) => [game.id, game])
-    );
+    // Chaves normalizadas (`id`, `appId`, `steam-<appId>`): o jogo pode ter
+    // sido guardado com um formato e a biblioteca referenciá-lo em outro.
+    const addGameKeys = (map: Map<string, GhostBoxGame>, game: GhostBoxGame) => {
+      const keys = new Set<string>();
+      const id = game.id?.trim();
+      const appId = game.appId?.trim();
+      if (id) keys.add(id);
+      if (appId) {
+        keys.add(appId);
+        if (/^\d+$/.test(appId)) keys.add(`steam-${appId}`);
+      }
+      const steamId = id?.match(/^steam-(\d+)$/i)?.[1];
+      if (steamId) keys.add(steamId);
+      for (const key of keys) {
+        if (!map.has(key)) map.set(key, game);
+      }
+    };
+    const gamesByKey = new Map<string, GhostBoxGame>();
+    [
+      ...deferredFavoriteGames,
+      ...deferredAddedLibraryGames,
+      ...userCollections.flatMap((collection) => collection.games ?? []),
+    ].forEach((game) => addGameKeys(gamesByKey, game));
 
     return [
       {
@@ -146,14 +162,23 @@ export const Sidebar = memo(function Sidebar({
         name: t("profile.favorites"),
         games: deferredFavoriteGames,
       },
-      ...userCollections.map((collection) => ({
-        id: collection.id,
-        name: collection.name,
-        games: collection.gameIds.flatMap((gameId) => {
-          const game = gamesById.get(gameId);
-          return game ? [game] : [];
-        }),
-      })),
+      ...userCollections.map((collection) => {
+        // Opção A: a cópia guardada na coleção é o fallback — mesmo que o jogo
+        // não esteja na biblioteca/favoritos, o dropdown da sidebar o exibe.
+        const storedByKey = new Map<string, GhostBoxGame>();
+        for (const game of collection.games ?? []) {
+          addGameKeys(storedByKey, game);
+        }
+        return {
+          id: collection.id,
+          name: collection.name,
+          games: collection.gameIds.flatMap((gameId) => {
+            const key = gameId.trim();
+            const game = gamesByKey.get(key) ?? storedByKey.get(key);
+            return game ? [game] : [];
+          }),
+        };
+      }),
     ];
   }, [deferredAddedLibraryGames, deferredFavoriteGames, userCollections, t]);
 

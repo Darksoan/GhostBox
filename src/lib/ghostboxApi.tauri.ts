@@ -5,7 +5,6 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
-  CustomExeResult,
   AppStatus,
   BackupDetails,
   BackupSettings,
@@ -14,7 +13,6 @@ import type {
   GameDatabaseRequest,
   GameDatabaseResult,
   GamePlaytimeSnapshot,
-  GameExecutableCandidate,
   GameShortcutResult,
   SteamGameReviewsResult,
   SteamRecommendedTag,
@@ -837,39 +835,6 @@ export const ghostboxApi = {
       "ghostbox_library_register_steam_game",
       { game },
       { success: false, error: "Não foi possível registrar o jogo da Steam." },
-    );
-  },
-
-  setCustomExe(
-    game: GhostBoxGame,
-    customExePath: string,
-    launchArguments = "",
-  ): Promise<CustomExeResult> {
-    return invokeOr<CustomExeResult>(
-      "ghostbox_library_set_custom_exe",
-      { game, customExePath, launchArguments },
-      { success: false, error: "Não foi possível associar o executável." },
-    );
-  },
-
-  async selectExeFile(): Promise<string | null> {
-    const selectedPath = await open({
-      directory: false,
-      multiple: false,
-      filters: [{ name: "Executáveis", extensions: ["exe"] }],
-      title: "Selecione o executável do jogo",
-    });
-
-    return typeof selectedPath === "string" ? selectedPath : null;
-  },
-
-  listGameExecutables(
-    installPath: string,
-    gameTitle: string,
-  ): Promise<GameExecutableCandidate[]> {
-    return invoke<GameExecutableCandidate[]>(
-      "ghostbox_library_list_executables",
-      { installPath, gameTitle },
     );
   },
 

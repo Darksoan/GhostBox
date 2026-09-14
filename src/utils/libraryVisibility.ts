@@ -11,6 +11,9 @@ export function mergeSteamOwnedLibraryGames(
 }
 
 function isSteamLibraryGame(game: GhostBoxGame) {
+  // Um executável configurado pelo usuário é uma entrada gerenciada pelo
+  // GhostBox, mesmo quando o catálogo original veio da Steam.
+
   // Scans antigos não persistiam a procedência dos manifestos Steam.
   return (
     !game.librarySource ||

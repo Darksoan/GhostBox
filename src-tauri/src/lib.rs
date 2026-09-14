@@ -1396,23 +1396,14 @@ pub(crate) fn launch_game_from_value(
         }));
     }
 
-    let launch_arguments = game
-        .get("launchArguments")
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or_default();
+    // Launch overrides and arguments are intentionally no longer honored.
+    let launch_arguments = "";
 
     // Override de executável: quando o usuário associou um .exe personalizado a
     // este jogo, ignoramos `steam://rungameid` e abrimos o binário diretamente.
     // O monitor de playtime continua funcionando porque marca o processo via
     // `mark_process_fallback_started` + `monitor_game_process`.
-    let custom_exe = game
-        .get("customExePath")
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string());
+    let custom_exe: Option<String> = None;
     if let Some(custom_exe_path) = custom_exe {
         let exe_path = std::path::Path::new(&custom_exe_path);
         if !exe_path.is_file() {
@@ -1565,6 +1556,74 @@ pub(crate) fn launch_game_from_value(
     }
 }
 
+fn launch_app_id_from_args(args: &[String]) -> Option<String> {
+    let index = args.iter().position(|arg| arg == "--ghostbox-launch")?;
+    let app_id = args.get(index + 1)?.trim();
+    if app_id.is_empty() || !app_id.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+    Some(app_id.to_string())
+}
+
+pub(crate) fn launch_registered_game(
+    app: tauri::AppHandle,
+    app_id: &str,
+) -> Result<serde_json::Value, String> {
+    let normalized_app_id = app_id
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    if normalized_app_id.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": "",
+            "error": "AppId inválido."
+        }));
+    }
+
+    let game = ghostbox_library::read_ghostbox_library_games(&app)
+        .into_iter()
+        .find(|game| {
+            game.get("appId")
+                .and_then(|value| value.as_str())
+                .map(|value| {
+                    value
+                        .chars()
+                        .filter(char::is_ascii_digit)
+                        .collect::<String>()
+                        == normalized_app_id
+                })
+                .unwrap_or(false)
+        });
+    let Some(game) = game else {
+        return Ok(serde_json::json!({
+            "success": false,
+            "appId": normalized_app_id,
+            "error": "Jogo não encontrado na biblioteca."
+        }));
+    };
+
+    launch_game_from_value(app, game)
+}
+
+fn launch_registered_game_from_args(app: &tauri::AppHandle, args: &[String]) {
+    let Some(app_id) = launch_app_id_from_args(args) else {
+        return;
+    };
+
+    match launch_registered_game(app.clone(), &app_id) {
+        Ok(result) if result.get("success").and_then(|value| value.as_bool()) == Some(true) => {}
+        Ok(result) => eprintln!(
+            "GhostBox shortcut launch failed: {}",
+            result
+                .get("error")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown error")
+        ),
+        Err(error) => eprintln!("GhostBox shortcut launch failed: {error}"),
+    }
+}
+
 pub(crate) fn parse_launch_arguments(input: &str) -> Vec<String> {
     let mut arguments = Vec::new();
     let mut current = String::new();
@@ -1594,7 +1653,7 @@ pub(crate) fn parse_launch_arguments(input: &str) -> Vec<String> {
 
 #[tauri::command]
 fn game_create_shortcut(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     game: serde_json::Value,
     location: String,
 ) -> Result<serde_json::Value, String> {
@@ -1607,43 +1666,44 @@ fn game_create_shortcut(
         return Err("Unsupported shortcut location.".to_string());
     }
 
-    let raw_arguments = text_value(game.get("launchArguments"));
-    let custom_executable = text_value(game.get("customExePath"));
+    let custom_executable = String::new();
+    let raw_arguments = String::new();
     let (target, arguments, working_directory) = if !custom_executable.is_empty() {
         let executable = std::fs::canonicalize(&custom_executable)
             .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
-        let install_path = text_value(game.get("installPath"));
-        if !install_path.is_empty()
-            && !is_path_inside_or_equal(std::path::Path::new(&install_path), &executable)
-        {
-            return Err(
-                "The custom executable is outside the game's installation folder.".to_string(),
-            );
-        }
         let working_directory = executable
             .parent()
             .map(|path| path.to_string_lossy().to_string())
             .unwrap_or_default();
+
+        // Um override é explícito: o atalho deve abrir exatamente o .exe
+        // escolhido pelo usuário, mantendo diretório de trabalho e argumentos
+        // persistidos. O fluxo interno de Play continua sendo usado no app.
         (
             executable.to_string_lossy().to_string(),
             raw_arguments,
             working_directory,
         )
     } else {
-        let Some(steam_path) = resolve_steam_path(&app, None).0 else {
-            return Err("Steam installation was not found.".to_string());
-        };
-        let target = std::path::PathBuf::from(&steam_path).join("steam.exe");
+        // Sem override, o atalho continua delegando ao GhostBox para manter o
+        // mesmo fluxo Steam de Play, inclusive quando já há outra instância.
+        let target = std::env::current_exe()
+            .map_err(|error| format!("Could not resolve GhostBox executable: {error}"))?;
+        let working_directory = target
+            .parent()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default();
         (
             target.to_string_lossy().to_string(),
-            format!("-applaunch {app_id} {raw_arguments}")
-                .trim()
-                .to_string(),
-            steam_path,
+            format!("--ghostbox-launch {app_id}"),
+            working_directory,
         )
     };
 
-    let script = r#"$shell = New-Object -ComObject WScript.Shell; $base = if ($args[0] -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }; $name = $args[1] -replace '[<>:\"/\\|?*]', '_'; $path = Join-Path $base ($name + '.lnk'); $shortcut = $shell.CreateShortcut($path); $shortcut.TargetPath = $args[2]; $shortcut.Arguments = $args[3]; $shortcut.WorkingDirectory = $args[4]; $shortcut.Save(); Write-Output $path"#;
+    // Valores depois de `powershell -Command` são reinterpretados como parte
+    // do comando e perdem os limites originais (especialmente paths com
+    // espaços). Variáveis de ambiente preservam cada valor sem interpolação.
+    let script = r#"$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; $shell = New-Object -ComObject WScript.Shell; $location = $env:GHOSTBOX_SHORTCUT_LOCATION; $base = if ($location -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }; $name = $env:GHOSTBOX_SHORTCUT_NAME -replace '[<>:\"/\\|?*]', '_'; $path = Join-Path $base ($name + '.lnk'); $shortcut = $shell.CreateShortcut($path); $shortcut.TargetPath = $env:GHOSTBOX_SHORTCUT_TARGET; $shortcut.Arguments = $env:GHOSTBOX_SHORTCUT_ARGUMENTS; $shortcut.WorkingDirectory = $env:GHOSTBOX_SHORTCUT_WORKING_DIRECTORY; $shortcut.Save(); if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Shortcut was not created.' }; Write-Output $path"#;
     let output = std::process::Command::new("powershell")
         .args([
             "-NoProfile",
@@ -1653,11 +1713,14 @@ fn game_create_shortcut(
             "-Command",
             script,
         ])
-        .arg(&location)
-        .arg(&title)
-        .arg(&target)
-        .arg(&arguments)
-        .arg(&working_directory)
+        .env("GHOSTBOX_SHORTCUT_LOCATION", &location)
+        .env("GHOSTBOX_SHORTCUT_NAME", &title)
+        .env("GHOSTBOX_SHORTCUT_TARGET", &target)
+        .env("GHOSTBOX_SHORTCUT_ARGUMENTS", &arguments)
+        .env(
+            "GHOSTBOX_SHORTCUT_WORKING_DIRECTORY",
+            &working_directory,
+        )
         .output()
         .map_err(|error| format!("Could not create shortcut: {error}"))?;
     if !output.status.success() {
@@ -1692,7 +1755,8 @@ pub fn run() {
                 window_lifecycle::show_main_window_when_ready(webview.app_handle());
             }
         })
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            launch_registered_game_from_args(app, &args);
             window_lifecycle::show_main_window(app);
         }))
         .plugin(tauri_plugin_autostart::init(
@@ -1726,6 +1790,8 @@ pub fn run() {
                 std::thread::spawn(move || storage_audit::startup_temp_sweep(&handle));
             }
             window_lifecycle::setup_window_lifecycle(app)?;
+            let startup_args = std::env::args().collect::<Vec<_>>();
+            launch_registered_game_from_args(app.handle(), &startup_args);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1813,8 +1879,6 @@ pub fn run() {
             game_launch,
             playtime::game_get_playtimes,
             ghostbox_library::ghostbox_library_register_steam_game,
-            ghostbox_library::ghostbox_library_set_custom_exe,
-            ghostbox_library::ghostbox_library_list_executables,
             game_create_shortcut,
             luatools::luatools_add_game,
             luatools::luatools_remove_game,
@@ -1988,6 +2052,30 @@ mod tests {
                 "-name",
                 "two words",
             ]
+        );
+    }
+
+    #[test]
+    fn shortcut_launch_arguments_extract_only_numeric_app_ids() {
+        assert_eq!(
+            super::launch_app_id_from_args(&[
+                "GhostBox.exe".to_string(),
+                "--ghostbox-launch".to_string(),
+                "620".to_string(),
+            ]),
+            Some("620".to_string())
+        );
+        assert_eq!(
+            super::launch_app_id_from_args(&[
+                "GhostBox.exe".to_string(),
+                "--ghostbox-launch".to_string(),
+                "620;evil".to_string(),
+            ]),
+            None
+        );
+        assert_eq!(
+            super::launch_app_id_from_args(&["GhostBox.exe".to_string()]),
+            None
         );
     }
 }

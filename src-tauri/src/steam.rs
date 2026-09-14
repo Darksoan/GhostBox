@@ -957,7 +957,7 @@ async fn run_steam_openid_flow(app: &tauri::AppHandle) -> Result<SteamCallback, 
         .map_err(|error| error.to_string())?
         .port();
     let state = uuid::Uuid::new_v4().to_string();
-    let callback_url = format!("http://127.0.0.1:{port}/steam/callback?state={state}");
+    let callback_url = format!("http://localhost:{port}/steam/callback?state={state}");
     let mut login_url =
         reqwest::Url::parse(STEAM_OPENID_ENDPOINT).map_err(|error| error.to_string())?;
     login_url
@@ -965,7 +965,7 @@ async fn run_steam_openid_flow(app: &tauri::AppHandle) -> Result<SteamCallback, 
         .append_pair("openid.ns", "http://specs.openid.net/auth/2.0")
         .append_pair("openid.mode", "checkid_setup")
         .append_pair("openid.return_to", &callback_url)
-        .append_pair("openid.realm", &format!("http://127.0.0.1:{port}"))
+        .append_pair("openid.realm", &format!("http://localhost:{port}"))
         .append_pair(
             "openid.identity",
             "http://specs.openid.net/auth/2.0/identifier_select",
@@ -1475,14 +1475,14 @@ pub async fn steam_get_account_stats(
     let api_key = load_steam_web_api_key(&app);
     let cache = load_steam_account_stats_cache(&app, &steam_id);
     if api_key.is_empty() {
-        return Ok(build_steam_account_stats(
-            &steam_id,
-            &[],
-            &cache,
-            false,
-            false,
-            false,
-        ));
+        // Sem fonte de dados (proxy desconfigurado + sem chave local): preserva
+        // o cache em vez de fabricar zeros com `fetchedAt` fresco — zeros
+        // sobrescreveriam totais válidos e, pelo guarda de `fetchedAt` no
+        // frontend, bloqueariam respostas boas posteriores (login novo travado
+        // em zero conquistas). Mesmo princípio do caminho de proxy falho acima.
+        return Err(
+            "Steam stats unavailable without Web API key or stats proxy".to_string(),
+        );
     }
 
     let client = reqwest::Client::builder()

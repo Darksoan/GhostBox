@@ -50,6 +50,7 @@ export function TrayMenu() {
   const { appearance } = useSettings();
   const [games, setGames] = useState<GhostBoxGame[]>([]);
   const [launchingAppId, setLaunchingAppId] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const isEnglish = appearance.language === "en";
 
   const refreshGames = useCallback(() => {
@@ -77,9 +78,16 @@ export function TrayMenu() {
   const handleLaunch = async (game: GhostBoxGame) => {
     if (launchingAppId) return;
 
+    setLaunchError(null);
     setLaunchingAppId(game.appId);
     try {
-      await ghostboxApi.launchTrayGame(game.appId);
+      const result = await ghostboxApi.launchTrayGame(game.appId);
+      if (!result?.success) {
+        setLaunchError(
+          result?.error ||
+            (isEnglish ? "Could not launch the game." : "Não foi possível iniciar o jogo."),
+        );
+      }
     } finally {
       setLaunchingAppId(null);
     }
@@ -135,6 +143,12 @@ export function TrayMenu() {
               })}
             </div>
           </section>
+        )}
+
+        {launchError && (
+          <p className="tray-menu__error" role="alert">
+            {launchError}
+          </p>
         )}
 
         {games.length > 0 && <div className="tray-menu__separator" />}

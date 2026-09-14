@@ -321,9 +321,20 @@ pub fn tray_launch_game(
         .into_iter()
         .find(|game| tray_game_app_id(game) == app_id.trim());
 
-    hide_tray_menu(&app);
     match game {
-        Some(game) => crate::launch_game_from_value(app, game),
+        Some(game) => {
+            let result = crate::launch_game_from_value(app.clone(), game);
+            if result
+                .as_ref()
+                .ok()
+                .and_then(|value| value.get("success"))
+                .and_then(|value| value.as_bool())
+                == Some(true)
+            {
+                hide_tray_menu(&app);
+            }
+            result
+        }
         None => Ok(serde_json::json!({
             "success": false,
             "appId": app_id,

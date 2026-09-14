@@ -54,6 +54,7 @@ import {
   shouldApplyPlaytimeSnapshot,
   shouldApplySteamAccountStats,
   shouldClearSteamAccountStats,
+  shouldReplaceSteamAccountStats,
 } from "../utils/steamStatsGuard";
 import {
   buildPremiumBackupNudgeNotification,
@@ -369,12 +370,6 @@ interface AppDataContextValue {
   uninstallGame: (game: GhostBoxGame) => Promise<void>;
 
   handlePlayGame: (game: GhostBoxGame) => Promise<void>;
-  setCustomExeGame: (
-    game: GhostBoxGame,
-    customExePath: string,
-    launchArguments?: string,
-    options?: { showSuccessToast?: boolean },
-  ) => Promise<GhostBoxGame | null>;
   addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
   removeGameFromCollection: (game: GhostBoxGame, collectionId: string) => void;
   deleteCollection: (collectionId: string) => void;
@@ -579,6 +574,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ) {
         return;
       }
+      // A degenerate (zero-game) payload must never wipe populated stats:
+      // on a fresh login the first fetch can resolve before any data source
+      // is ready, and its fresh `fetchedAt` would otherwise pin achievements
+      // at zero and block later good responses.
+      if (
+        !shouldReplaceSteamAccountStats(steamAccountStatsRef.current, stats)
+      ) {
+        return;
+      }
       if (
         !steamAccountStatsRef.current ||
         stats.steamId !== steamAccountStatsRef.current.steamId ||
@@ -758,6 +762,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const applyStats = (stats: SteamAccountStats) => {
       if (cancelled) return;
       const current = steamAccountStatsRef.current;
+      // Never regress populated stats to a degenerate (zero-game) payload —
+      // same anti-poisoning guard as `refreshSteamOwnedLibraryGames`.
+      if (!shouldReplaceSteamAccountStats(current, stats)) return;
       if (
         current?.steamId === stats.steamId &&
         current.fetchedAt > stats.fetchedAt
@@ -802,7 +809,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (stats) applyStats(stats);
           schedulePoll(stats);
         })
-        .catch(() => schedulePoll(steamAccountStatsRef.current, 5 * 60));
+        .catch(() =>
+          // Fresh logins with nothing to show yet retry sooner (60s) instead
+          // of sitting at zero achievements for five minutes; once stats
+          // exist the calm 5-minute backoff applies.
+          schedulePoll(
+            steamAccountStatsRef.current,
+            steamAccountStatsRef.current ? 5 * 60 : 60,
+          ),
+        );
 
     void refreshStats();
 
@@ -1414,7 +1429,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           game.librarySource === "steam-installed" ||
           game.librarySource === "plugin" ||
           game.librarySource === "registered" ||
-          Boolean(game.customExePath) ||
           completedDownloadAppIds.has(game.appId),
       })),
     );
@@ -2288,79 +2302,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [autoRestoreCloudBackup, refreshGamePlaytimes, showToast],
   );
 
-  // Override de launch: associa um .exe personalizado a um jogo e o persiste
-  // em disco. O bypass do fluxo LuaTools/Steam-register é intencional: este
-  // comando grava direto em `ghostbox-library.json`. Retorna o jogo atualizado
-  // ou null em falha (toast já mostrado).
-  const setCustomExeGame = useCallback(
-    async (
-      game: GhostBoxGame,
-      customExePath: string,
-      launchArguments = "",
-      options?: { showSuccessToast?: boolean },
-    ): Promise<GhostBoxGame | null> => {
-      const trimmed = customExePath.trim();
-      const trimmedArguments = launchArguments.trim();
-      try {
-        const result = await ghostboxApi.setCustomExe(
-          game,
-          trimmed,
-          trimmedArguments,
-        );
-        if (!result.success) {
-          showToast(
-            appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
-            result.error || (appearance.language === "en" ? "Unknown error." : "Erro desconhecido."),
-            "error",
-          );
-          return null;
-        }
-        const libraryGame = mergeGamePlaytime({
-          ...result.libraryGame,
-          librarySource: result.libraryGame.librarySource ?? "registered",
-          customExePath: trimmed || undefined,
-          launchArguments: trimmedArguments || undefined,
-        });
-
-        setScannedLibraryGames((current) =>
-          upsertLibraryGameByAppId(current, libraryGame),
-        );
-        setAddedLibraryGames((current) =>
-          upsertLibraryGameByAppId(current, libraryGame),
-        );
-        setAddedLibraryGameAppIds((current) =>
-          new Set(current).add(libraryGame.appId),
-        );
-        if (options?.showSuccessToast !== false) {
-          showToast(
-            appearance.language === "en" ? "Executable set" : "Executável definido",
-            trimmed
-              ? appearance.language === "en"
-                ? `${libraryGame.title} will launch from ${trimmed}.`
-                : `${libraryGame.title} iniciará a partir de ${trimmed}.`
-              : appearance.language === "en"
-                ? `${libraryGame.title} will launch via Steam again.`
-                : `${libraryGame.title} voltará a iniciar pela Steam.`,
-          );
-        }
-        return libraryGame;
-      } catch (error) {
-        const errorMessage = error instanceof Error
-          ? error.message
-          : (appearance.language === "en"
-            ? "Could not set the custom executable."
-            : "Não foi possível definir o executável personalizado.");
-        showToast(
-          appearance.language === "en" ? "Could not set executable" : "Falha ao definir executável",
-          errorMessage,
-          "error",
-        );
-        return null;
-      }
-    },
-    [appearance.language, showToast],
-  );
-
   const addGameToUserCollection = useCallback(
     (game: GhostBoxGame, collectionId: string) => {
       setUserCollections((current) =>
@@ -2903,7 +2844,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       uninstallGame,
       handlePlayGame,
 
-      setCustomExeGame,
       addGameToUserCollection,
       removeGameFromCollection,
       deleteCollection,
@@ -2965,7 +2905,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       requestRemoveGame,
       uninstallGame,
       handlePlayGame,
-      setCustomExeGame,
       addGameToUserCollection,
       removeGameFromCollection,
       deleteCollection,

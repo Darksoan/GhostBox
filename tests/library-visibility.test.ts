@@ -46,6 +46,7 @@ describe("filterSteamLibraryGames", () => {
       "1250",
     ]);
   });
+
 });
 
 describe("mergeSteamOwnedLibraryGames", () => {

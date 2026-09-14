@@ -36,6 +36,7 @@ export function isLocallyInstalledGame(game: GhostBoxGame): boolean {
  * fonte persistida e stub possuído da conta.
  */
 export function isSteamSourceGame(game: GhostBoxGame): boolean {
+
   return (
     !game.librarySource ||
     game.librarySource === "steam-installed" ||
@@ -50,7 +51,7 @@ export function isSteamSourceGame(game: GhostBoxGame): boolean {
  */
 export function isGhostboxSourceGame(game: GhostBoxGame): boolean {
   if (game.librarySource === "ghostbox") return true;
-  return Boolean(game.customExePath?.trim());
+  return false;
 }
 
 export function gameMatchesLibrarySourceFilter(

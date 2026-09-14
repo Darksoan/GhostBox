@@ -66,7 +66,13 @@ fn sanitize_ghostbox_library_game(value: &Value) -> Option<Value> {
     if is_library_app_blocked(&app_id, &title) {
         return None;
     }
-    Some(value.clone())
+    let mut game = value.clone();
+    // Legacy launch overrides are discarded: all launches now go through Steam.
+    if let Some(object) = game.as_object_mut() {
+        object.remove("customExePath");
+        object.remove("launchArguments");
+    }
+    Some(game)
 }
 
 pub fn read_ghostbox_library_games(app: &AppHandle) -> Vec<Value> {
@@ -156,68 +162,6 @@ pub fn ghostbox_library_register_steam_game(app: AppHandle, game: Value) -> Resu
         "api": "steam",
         "installedPath": "",
         "manifestCount": 0,
-        "libraryGame": library_game
-    }))
-}
-
-/// Associa um executável personalizado a um jogo e o persiste em
-/// `ghostbox-library.json`. Quando `custom_exe_path` é vazio, remove o override
-/// (o jogo volta a iniciar via `steam://rungameid/<appId>`). O registro aqui
-/// também garante que o jogo entre na biblioteca do app — `upsert` cuida disso.
-#[tauri::command]
-pub fn ghostbox_library_set_custom_exe(
-    app: AppHandle,
-    game: Value,
-    custom_exe_path: String,
-    launch_arguments: String,
-) -> Result<Value, String> {
-    let app_id = extract_app_id(&game);
-    let title = text_value(game.get("title"));
-    let id = text_value(game.get("id"));
-    if app_id.is_empty() || title.is_empty() || id.is_empty() {
-        return Ok(json!({
-            "success": false,
-            "error": "Jogo inválido para associar executável personalizado."
-        }));
-    }
-    if is_library_app_blocked(&app_id, &title) {
-        return Ok(json!({
-            "success": false,
-            "error": "Este item não é um jogo e foi bloqueado da Biblioteca."
-        }));
-    }
-
-    let path_trimmed = custom_exe_path.trim();
-    let mut library_game = game;
-    if let Some(object) = library_game.as_object_mut() {
-        object.insert("status".to_string(), json!("discover"));
-        // Manter registrado distinto de stubs steam-owned, igual ao comando
-        // de registro Steam. Assim a UI lista o jogo como da biblioteca.
-        object
-            .entry("librarySource".to_string())
-            .or_insert(json!("registered"));
-        object.remove("luaToolsManifests");
-        object.remove("luaToolsManifestFiles");
-        if path_trimmed.is_empty() {
-            object.remove("customExePath");
-        } else {
-            object.insert("customExePath".to_string(), json!(path_trimmed.to_string()));
-        }
-        let arguments_trimmed = launch_arguments.trim();
-        if arguments_trimmed.is_empty() {
-            object.remove("launchArguments");
-        } else {
-            object.insert(
-                "launchArguments".to_string(),
-                json!(arguments_trimmed.to_string()),
-            );
-        }
-    }
-
-    upsert_ghostbox_library_game(&app, library_game.clone())?;
-
-    Ok(json!({
-        "success": true,
         "libraryGame": library_game
     }))
 }
@@ -418,18 +362,6 @@ fn list_executables_blocking(install_path: &str, game_title: &str) -> Result<Vec
         first.insert("recommended".to_string(), json!(true));
     }
     Ok(candidates)
-}
-
-#[tauri::command]
-pub async fn ghostbox_library_list_executables(
-    install_path: String,
-    game_title: String,
-) -> Result<Vec<Value>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        list_executables_blocking(&install_path, &game_title)
-    })
-    .await
-    .map_err(|error| format!("Executable scan failed: {error}"))?
 }
 
 pub fn remove_ghostbox_library_game(app: &AppHandle, app_id: &str) -> Result<(), String> {
@@ -650,9 +582,12 @@ pub fn build_scan_games_with_plugins(
     let mut games = merge_library_games(steam_games, ghostbox_library_games);
     for game in games.iter_mut() {
         let app_id = extract_app_id(game);
-        if let Some(source) = registry_sources.remove(&app_id) {
+        let source = registry_sources.remove(&app_id);
+        if source.is_some() {
             if let Some(object) = game.as_object_mut() {
-                object.insert("librarySource".to_string(), source);
+                if let Some(source) = source {
+                    object.insert("librarySource".to_string(), source);
+                }
             }
         }
     }

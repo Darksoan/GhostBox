@@ -1,10 +1,38 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  isDegenerateSteamAccountStats,
   runSteamPlaytimeSync,
   shouldApplyPlaytimeSnapshot,
   shouldApplySteamAccountStats,
   shouldClearSteamAccountStats,
+  shouldReplaceSteamAccountStats,
 } from "../src/utils/steamStatsGuard";
+import type { SteamAccountStats } from "../src/types";
+
+function makeStats(overrides: Partial<SteamAccountStats> = {}): SteamAccountStats {
+  return {
+    steamId: "76561198000000001",
+    gamesCount: 12,
+    totalPlaytimeMinutes: 600,
+    unlockedAchievements: 34,
+    totalAchievements: 120,
+    perfectGames: 1,
+    averageProgress: 28,
+    scannedGames: 12,
+    pendingGames: 0,
+    failedGames: 0,
+    fetchedAt: 1_700_000_000,
+    private: false,
+    hasApiKey: true,
+    scanInProgress: false,
+    recentAchievements: [],
+    ownedPlaytimes: [
+      { appId: "730", playtimeForever: 600, rtimeLastPlayed: 1_700_000_000 },
+    ],
+    achievements: [],
+    ...overrides,
+  };
+}
 
 describe("shouldClearSteamAccountStats", () => {
   it("keeps cached stats on boot when the ref already matches the profile", () => {
@@ -104,6 +132,62 @@ describe("shouldApplyPlaytimeSnapshot", () => {
         requestAccountUserId: "user-1",
         currentAccountUserId: "user-1",
       }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldReplaceSteamAccountStats", () => {
+  it("replaces missing current stats with anything non-null", () => {
+    expect(shouldReplaceSteamAccountStats(null, makeStats())).toBe(true);
+    expect(shouldReplaceSteamAccountStats(undefined, makeStats())).toBe(true);
+  });
+
+  it("never regresses populated stats to a degenerate zero-game payload", () => {
+    const degenerate = makeStats({
+      gamesCount: 0,
+      ownedPlaytimes: [],
+      unlockedAchievements: 0,
+      totalAchievements: 0,
+      fetchedAt: 1_800_000_000,
+    });
+    expect(shouldReplaceSteamAccountStats(makeStats(), degenerate)).toBe(false);
+  });
+
+  it("accepts scan-in-progress payloads that still carry the library", () => {
+    const scanning = makeStats({
+      unlockedAchievements: 0,
+      totalAchievements: 0,
+      pendingGames: 12,
+      scanInProgress: true,
+      nextPollAfter: 120,
+    });
+    expect(shouldReplaceSteamAccountStats(makeStats(), scanning)).toBe(true);
+  });
+
+  it("accepts a degenerate payload when there is nothing populated to lose", () => {
+    const degenerate = makeStats({ gamesCount: 0, ownedPlaytimes: [] });
+    expect(shouldReplaceSteamAccountStats(null, degenerate)).toBe(true);
+  });
+
+  it("rejects null payloads", () => {
+    expect(shouldReplaceSteamAccountStats(makeStats(), null)).toBe(false);
+  });
+});
+
+describe("isDegenerateSteamAccountStats", () => {
+  it("flags null and zero-game payloads", () => {
+    expect(isDegenerateSteamAccountStats(null)).toBe(true);
+    expect(isDegenerateSteamAccountStats(undefined)).toBe(true);
+    expect(
+      isDegenerateSteamAccountStats(makeStats({ gamesCount: 0, ownedPlaytimes: [] })),
+    ).toBe(true);
+  });
+
+  it("does not flag payloads that carry the library even with zero achievements", () => {
+    expect(
+      isDegenerateSteamAccountStats(
+        makeStats({ unlockedAchievements: 0, totalAchievements: 0 }),
+      ),
     ).toBe(false);
   });
 });
