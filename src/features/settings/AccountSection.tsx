@@ -38,8 +38,7 @@ export function AccountSection() {
               </span>
             </div>
 
-            <p className="account-section__note">{t("settings.general.account.providersNote")}</p>
-          </div>
+            </div>
         </div>
       </div>
 

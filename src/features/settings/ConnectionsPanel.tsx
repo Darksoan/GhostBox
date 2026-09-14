@@ -26,11 +26,10 @@ import { isSteamConnected } from "../../lib/steamProfile";
 import {
   filterAndSortHiddenProfileGames,
   getHiddenProfileGameInitial,
-  hasHiddenProfileGameEvidence,
 } from "../../utils/hiddenProfileGames";
 import { gameCatalogueHeaderSources } from "../../utils/image";
 import { buildSteamOwnedGamesFromPlaytimes } from "../../utils/steamLibraryMerge";
-import { applySteamAppTypes, filterVisibleSteamGames } from "../../utils/steamAppType";
+import { applySteamAppTypes, filterOutSteamDemos } from "../../utils/steamAppType";
 import { useSteamAppTypes } from "../../hooks/useSteamAppTypes";
 import steamIcon from "../../../Icons/steam-glyph.svg";
 import discordIcon from "../../../Icons/discord.svg";
@@ -410,8 +409,6 @@ export function SteamVisibilitySection({
 export function HiddenProfileGamesSection() {
   const { t } = useSettings();
   const {
-    backupSettings,
-    cloudSaveAppIds,
     hiddenProfileGameIds,
     setProfileGameHidden,
     profileAddedLibraryGames,
@@ -432,29 +429,16 @@ export function HiddenProfileGamesSection() {
   );
   const ownedAppTypes = useSteamAppTypes(rawOwnedGames, true);
   const visibleOwnedGames = useMemo(
-    () => filterVisibleSteamGames(applySteamAppTypes(rawOwnedGames, ownedAppTypes)),
+    () => filterOutSteamDemos(applySteamAppTypes(rawOwnedGames, ownedAppTypes)),
     [ownedAppTypes, rawOwnedGames],
   );
   const allGames = useMemo(() => {
-    const backupGameIds = new Set([
-      ...Object.entries(backupSettings?.backupRecords ?? {})
-        .filter(([, record]) =>
-          record.lastBackupSuccess === true ||
-          Boolean(record.lastBackupPath) ||
-          Boolean(record.entries?.length),
-        )
-        .map(([appId]) => appId),
-      ...cloudSaveAppIds,
-    ]);
-    const personalMetricGameIds = new Set([
-      ...(steamAccountStats?.recentAchievements ?? []).map((entry) => entry.appId),
-      ...(steamAccountStats?.achievements ?? [])
-        .filter((summary) => summary.achievements.some((achievement) => achievement.unlocked))
-        .map((summary) => summary.appId),
-    ]);
+    // Espelha o Perfil>Geral (que espelha a Biblioteca): todo owned + GhostBox,
+    // sem exigir evidência (playtime/conquista/backup) e sem pular títulos
+    // placeholder — jogos 0/X ou nunca jogados continuam ocultáveis.
     const uniqueGames = new Map<
       string,
-      { appId: string; title: string; sources: string[]; hasEvidence: boolean }
+      { appId: string; title: string; sources: string[] }
     >();
     const candidates = [
       ...profileAddedLibraryGames,
@@ -465,38 +449,31 @@ export function HiddenProfileGamesSection() {
 
     for (const game of candidates) {
       const appId = game.appId.trim();
-      const title = game.title.trim();
-      if (!appId || !title || title === appId) continue;
+      if (!appId) continue;
+      const rawTitle = game.title.trim();
+      const title = rawTitle || `Steam App ${appId}`;
 
       const sources = gameCatalogueHeaderSources(game);
-      const hasEvidence = hasHiddenProfileGameEvidence(
-        game,
-        backupGameIds,
-        personalMetricGameIds,
-      );
       const current = uniqueGames.get(appId);
       if (current) {
         current.sources = [...new Set([...current.sources, ...sources])];
-        current.hasEvidence ||= hasEvidence;
+        if (current.title.startsWith("Steam App ") && !title.startsWith("Steam App ")) {
+          current.title = title;
+        }
       } else {
-        uniqueGames.set(appId, { appId, title, sources, hasEvidence });
+        uniqueGames.set(appId, { appId, title, sources });
       }
     }
 
-    return [...uniqueGames.values()]
-      .filter((game) => game.hasEvidence)
-      .map((game) => ({
-        appId: game.appId,
-        title: game.title,
-        sources: game.sources,
-      }));
+    return [...uniqueGames.values()].map((game) => ({
+      appId: game.appId,
+      title: game.title,
+      sources: game.sources,
+    }));
   }, [
-    backupSettings?.backupRecords,
-    cloudSaveAppIds,
     profileAddedLibraryGames,
     profileFavoriteGames,
     profileHistoryGames,
-    steamAccountStats,
     visibleOwnedGames,
   ]);
   const availableInitials = useMemo(
@@ -557,7 +534,7 @@ export function HiddenProfileGamesSection() {
               setHoveredAlphabetIndex(null);
             }}
           >
-            <ArrowDownAZ size={17} aria-hidden="true" />
+            <ArrowDownAZ size={24} aria-hidden="true" />
           </button>
           {PROFILE_GAME_ALPHABET.map((letter, index) => {
             const selected = selectedInitial === letter;

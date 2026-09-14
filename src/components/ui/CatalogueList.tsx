@@ -60,11 +60,17 @@ const CatalogueHeaderImage = memo(function CatalogueHeaderImage({
   const [sourceIndex, setSourceIndex] = useState(0);
   const [resolvedFallbackSource, setResolvedFallbackSource] = useState("");
   const fallbackRequestRef = useRef(0);
+  // Enquanto o source atual não confirma `onLoad`, o img fica invisível e só
+  // o placeholder da capa (fundo skeleton com aspect-ratio) aparece — sem
+  // isso o WebView pinta o ícone de imagem quebrada entre o `src` e o
+  // `onError` que troca para o próximo fallback.
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     fallbackRequestRef.current += 1;
     setSourceIndex(0);
     setResolvedFallbackSource("");
+    setIsLoaded(false);
 
     return () => {
       fallbackRequestRef.current += 1;
@@ -72,6 +78,13 @@ const CatalogueHeaderImage = memo(function CatalogueHeaderImage({
   }, [sourceKey]);
 
   const source = sources[sourceIndex] ?? resolvedFallbackSource;
+
+  // Cada troca de fallback (source novo no mesmo `img`) volta a esconder até
+  // o próximo `onLoad`, para o ícone quebrado nunca pintar num frame.
+  useEffect(() => {
+    setIsLoaded(false);
+  }, [source]);
+
   if (!source) return null;
 
   return (
@@ -85,7 +98,9 @@ const CatalogueHeaderImage = memo(function CatalogueHeaderImage({
       decoding="async"
       draggable={false}
       aria-hidden="true"
+      style={isLoaded ? undefined : { opacity: 0 }}
       onLoad={() => {
+        setIsLoaded(true);
         markImageSourceLoaded(source);
         if (!/^https?:\/\//i.test(source)) return;
 

@@ -7696,6 +7696,14 @@ input[type="search"]::-ms-reveal {
 .catalogue-card__cover {
   display: block;
   width: 100%;
+  /* Reserva a caixa 460×215 desde o primeiro paint, como o skeleton: sem
+     isso a capa colapsa (img ainda decodificando ou source nulo) e o nome
+     aparece no topo / ao lado do vazio, empurrando o card quando a imagem
+     chega — na lista e na grade. */
+  aspect-ratio: 460 / 215;
+  overflow: hidden;
+  background: var(--skeleton-fill);
+  min-height: 0;
 }
 
 .catalogue-card__cover-image {

@@ -55,14 +55,6 @@
   font-weight: var(--weight-regular);
 }
 
-.account-section__note {
-  max-width: 62ch;
-  margin: 2px 0 0;
-  color: var(--text-muted);
-  font-size: var(--type-size-micro);
-  line-height: var(--type-line-caption);
-}
-
 /* Same token pair as the game modal's "Ver mais" (.button--outline): a dark
    surface that lightens on hover, instead of the inverted high-contrast chip
    this used to be. */
@@ -141,12 +133,11 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color var(--motion-fast) ease, background var(--motion-fast) ease;
+  transition: background var(--motion-fast) ease;
 
   &:hover,
   &:focus-visible {
-    color: var(--danger);
-    background: var(--danger-soft);
+    background: var(--surface-option-hover);
   }
 }
 

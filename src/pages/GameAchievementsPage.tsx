@@ -127,17 +127,34 @@ export function GameAchievementsPage({
   const [detailGame, setDetailGame] = useState<GhostBoxGame>(game);
   const [isLoading, setIsLoading] = useState(true);
   const highlightScrolledRef = useRef(false);
+  // Mesmo identificador que o modal usa: o backend resolve conquistas pelo
+  // appId numérico, e `game.id` nem sempre o carrega (`steam-<appId>` sim,
+  // mas ids locais podem ser qualquer coisa).
+  const detailsGameId = game.appId || game.id;
 
   useEffect(() => {
-    setDetailGame(game);
-    highlightScrolledRef.current = false;
+    setDetailGame((current) => {
+      const sameGame =
+        current.id === game.id ||
+        (Boolean(current.appId) && current.appId === game.appId);
+      if (!sameGame) {
+        highlightScrolledRef.current = false;
+        return game;
+      }
+      if (current === game) return current;
+      // O prop troca de identidade a cada tick de playtime/refresh da conta
+      // Steam mesmo sem mudar de jogo. Substituir aqui descartava a lista de
+      // schema já carregada (a cópia das listas às vezes ainda não a tem) e
+      // a aba esvaziava sem novo fetch — a união nunca perde entradas.
+      return mergeAchievementDetailsIntoGame(game, current);
+    });
   }, [game]);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
 
-    loadGameAchievementDetailsCached(game.id)
+    loadGameAchievementDetailsCached(detailsGameId)
       .then((details) => {
         if (cancelled || !details) return;
 
@@ -156,7 +173,7 @@ export function GameAchievementsPage({
     return () => {
       cancelled = true;
     };
-  }, [game.id, onDetailsLoaded]);
+  }, [game.appId, game.id, onDetailsLoaded]);
 
   const achievements = useMemo(
     () =>
@@ -248,7 +265,7 @@ export function GameAchievementsPage({
       </div>
 
       <div className="game-achievements-page__content">
-        {isLoading ? (
+        {isLoading && achievements.length === 0 ? (
           <AchievementsListLoadingState count={8} />
         ) : achievements.length === 0 ? (
           <EmptyState

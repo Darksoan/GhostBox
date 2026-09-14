@@ -419,7 +419,7 @@
 
     > span {
       width: 8px;
-      height: 2.6px;
+      height: 2px;
       justify-self: start;
       background: currentColor;
       opacity: 0.56;
@@ -517,21 +517,28 @@
 }
 
 .hidden-profile-games-page__alphabet
-  .hidden-profile-games-page__alphabet-reset {
+  button.hidden-profile-games-page__alphabet-reset {
   display: flex;
   height: 24px;
   align-items: center;
   justify-content: flex-start;
   margin-bottom: var(--space-3);
+  color: var(--text-tertiary);
 
   > svg {
-    width: 17px;
-    height: 17px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
   }
 
   &:hover,
   &:focus-visible {
     color: var(--text-secondary);
+    opacity: 1;
+  }
+
+  &[aria-pressed="true"] {
+    color: var(--text-primary);
     opacity: 1;
   }
 

@@ -63,11 +63,9 @@ import {
 import { sortOverviewGames } from "../utils/overviewSort";
 import {
   getProfileAchievementTotal as getAchievementTotal,
-  getProfileGameRecognitionOptions,
   getProfileUnlockedAchievementCount as getUnlockedAchievementCount,
   getRicherProfileAchievementGame as getRicherAchievementGame,
   isProfileAchievementUnlocked as isAchievementUnlocked,
-  isRecognizedSteamProfileGame,
 } from "../utils/profileAchievements";
 import {
   readStoredOverviewSortBy,
@@ -81,7 +79,11 @@ import {
   mergeSteamAchievementsIntoGames,
 } from "../utils/steamAchievementMerge";
 import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
-import { applySteamAppTypes, filterVisibleSteamGames } from "../utils/steamAppType";
+import { applySteamAppTypes, filterOutSteamDemos } from "../utils/steamAppType";
+import {
+  filterSteamLibraryGames,
+  mergeSteamOwnedLibraryGames,
+} from "../utils/libraryVisibility";
 import { useSteamAppTypes } from "../hooks/useSteamAppTypes";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
@@ -567,7 +569,7 @@ export function ProfilePage({
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
   const { account } = useAuth();
-  const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
+  const { showSteamGames, showSteamLibraryGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
@@ -669,16 +671,29 @@ export function ProfilePage({
   }, []);
 
   const profileCollections = useMemo<ProfileCollection[]>(() => {
+    // Geral e Biblioteca do perfil espelham a Biblioteca global (Todos:
+    // Steam owned + GhostBox), então as contagens usam a mesma união por appId.
+    const uniqueAppIds = new Set<string>();
+    for (const game of addedLibraryGames) {
+      uniqueAppIds.add(game.appId || game.id);
+    }
+    if (shouldShowSteamContent) {
+      for (const entry of steamAccountStats?.ownedPlaytimes ?? []) {
+        const appId = entry.appId.trim();
+        if (appId) uniqueAppIds.add(appId);
+      }
+    }
+    const libraryUniqueCount = uniqueAppIds.size;
     return [
       {
         id: "overview",
         name: t("profile.overview"),
-        count: addedLibraryGames.length,
+        count: libraryUniqueCount,
       },
       {
         id: "library",
         name: t("profile.library"),
-        count: addedLibraryGames.length,
+        count: libraryUniqueCount,
       },
       {
         id: "achievements",
@@ -691,7 +706,7 @@ export function ProfilePage({
         count: 0,
       },
     ];
-  }, [addedLibraryGames.length, t]);
+  }, [addedLibraryGames, shouldShowSteamContent, steamAccountStats?.ownedPlaytimes, t]);
 
   const userCollectionById = useMemo(
     () =>
@@ -751,19 +766,23 @@ export function ProfilePage({
     [shouldComputeOverviewData, shouldShowSteamContent, steamAccountStats],
   );
 
-  // Steam account games are not listed in the library, but profile recognition
-  // still needs playtime + achievements from the owned stats payload.
+  // Perfil espelha a Biblioteca global: todo owned Steam aparece (menos demos
+  // confirmadas). O filtro permissivo evita esvaziar a lista quando a
+  // classificação de appType atrasa/falha — mesmo comportamento da sidebar.
   const rawSteamOwnedProfileGames = useMemo(
     () => buildSteamOwnedGamesFromPlaytimes(steamAccountStats?.ownedPlaytimes ?? [], {}),
     [steamAccountStats?.ownedPlaytimes],
   );
+  const shouldLoadSteamOwnedProfileGames =
+    shouldShowSteamContent &&
+    (shouldComputeOverviewData || shouldBuildCollectionGameData);
   const profileSteamAppTypes = useSteamAppTypes(
     rawSteamOwnedProfileGames,
-    shouldComputeOverviewData && shouldShowSteamContent,
+    shouldLoadSteamOwnedProfileGames,
   );
   const steamOwnedProfileGames = useMemo(() => {
-    if (!shouldComputeOverviewData || !shouldShowSteamContent) return [];
-    const visible = filterVisibleSteamGames(
+    if (!shouldLoadSteamOwnedProfileGames) return [];
+    const visible = filterOutSteamDemos(
       applySteamAppTypes(rawSteamOwnedProfileGames, profileSteamAppTypes),
     );
     return mergeSteamAchievementsIntoGames(
@@ -774,8 +793,7 @@ export function ProfilePage({
   }, [
     profileSteamAppTypes,
     rawSteamOwnedProfileGames,
-    shouldComputeOverviewData,
-    shouldShowSteamContent,
+    shouldLoadSteamOwnedProfileGames,
     steamAccountStats,
     steamAchievementIndex,
   ]);
@@ -817,29 +835,16 @@ export function ProfilePage({
   ]);
 
   const overviewPreloadGames = useMemo(() => {
-    return profileGameBase
-      .filter((game) =>
-        isRecognizedSteamProfileGame(
-          game,
-          getGamePlaytime(game),
-          getProfileGameRecognitionOptions(
-            shouldShowSteamContent,
-            cloudSaveAppIds.has(game.appId),
-          ),
-        ),
-      )
-      .sort((left, right) => {
-        const lastPlayedDelta =
-          parseLastPlayed(right.lastTimePlayed) -
-          parseLastPlayed(left.lastTimePlayed);
-        if (lastPlayedDelta !== 0) return lastPlayedDelta;
-        return getGamePlaytime(right) - getGamePlaytime(left);
-      });
-  }, [
-    cloudSaveAppIds,
-    profileGameBase,
-    shouldShowSteamContent,
-  ]);
+    // Geral lista todo owned (igual à Biblioteca): sem filtro de
+    // reconhecimento por playtime/conquistas ou software.
+    return [...profileGameBase].sort((left, right) => {
+      const lastPlayedDelta =
+        parseLastPlayed(right.lastTimePlayed) -
+        parseLastPlayed(left.lastTimePlayed);
+      if (lastPlayedDelta !== 0) return lastPlayedDelta;
+      return getGamePlaytime(right) - getGamePlaytime(left);
+    });
+  }, [profileGameBase]);
 
   useEffect(() => {
     if (!isOverviewActive || overviewPreloadGames.length === 0) return;
@@ -950,6 +955,9 @@ export function ProfilePage({
 
     const effectiveSteamAccountStats = shouldShowSteamContent ? steamAccountStats : null;
     const effectiveSteamIndex = shouldShowSteamContent ? steamAchievementIndex : new Map();
+    // Geral e Conquistas listam todo owned (igual à Biblioteca): sem exigir
+    // playtime/conquista desbloqueada e sem excluir software. Jogos 0/X ou
+    // nunca jogados continuam na lista.
     return [...games.values()]
       .map((game) =>
         withResolvedProfileGameTitle(game, resolvedGameTitlesByAppId),
@@ -959,16 +967,6 @@ export function ProfilePage({
           game,
           effectiveSteamAccountStats,
           effectiveSteamIndex,
-        ),
-      )
-      .filter((game) =>
-        isRecognizedSteamProfileGame(
-          game,
-          getGamePlaytime(game),
-          getProfileGameRecognitionOptions(
-            shouldShowSteamContent,
-            cloudSaveAppIds.has(game.appId),
-          ),
         ),
       );
   }, [
@@ -1248,8 +1246,14 @@ export function ProfilePage({
       return [];
 
     if (activeCollection.id === "library") {
+      // Aba Biblioteca do perfil espelha a Biblioteca global (Todos:
+      // Steam owned + GhostBox), com o mesmo merge + toggle + filtro de demo.
+      const merged = mergeSteamOwnedLibraryGames(
+        enrichedAddedLibraryGames,
+        steamOwnedProfileGames,
+      );
       const result: GhostBoxGame[] = [];
-      for (const game of enrichedAddedLibraryGames) {
+      for (const game of filterOutSteamDemos(filterSteamLibraryGames(merged, showSteamLibraryGames))) {
         if (seen.has(game.id)) continue;
         seen.add(game.id);
         result.push(game);
@@ -1275,6 +1279,8 @@ export function ProfilePage({
     activeCollection.id,
     enrichedAddedLibraryGames,
     gamesById,
+    showSteamLibraryGames,
+    steamOwnedProfileGames,
     userCollectionById,
   ]);
 
