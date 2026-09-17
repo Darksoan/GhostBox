@@ -331,8 +331,9 @@ export function SettingsPage({
       aria-label={t("nav.settings")}
     >
       {/* O backdrop é o mesmo do diálogo "Seja premium": a visibilidade nas
-          duas superfícies é controlada por CSS (escondido só com a conta
-          Premium ativa), então o fundo aqui é incondicional. */}
+          duas superfícies é controlada por CSS (escondido com o resumo da
+          conta ou o skeleton de carregamento), então o fundo aqui é
+          incondicional. */}
       {activeTab.id === "subscription" && <SubscriptionBackdrop />}
       <article
         className={`settings-panel${

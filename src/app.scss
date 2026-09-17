@@ -1805,7 +1805,6 @@ p {
   --header-icon: 20px;
   --header-gap: var(--space-4);
   --header-search-width: 280px;
-  --header-search-rest-width: 200px;
 
   position: relative;
   z-index: var(--z-drawer);
@@ -2111,140 +2110,6 @@ p {
         transform: translateX(-50%) translateY(0) scale(1);
       }
     }
-
-    &--split {
-      padding: 0;
-      gap: 0;
-      cursor: default;
-      display: inline-flex;
-      align-items: stretch;
-    }
-
-    &-main {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-3);
-      height: 100%;
-      margin: 0;
-      padding: 0 var(--space-2) 0 var(--space-5);
-      border: none;
-      border-radius: var(--radius-pill) 0 0 var(--radius-pill);
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-      font-size: inherit;
-      font-weight: inherit;
-      line-height: 1;
-    }
-
-    &-arrow {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 26px;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      border: none;
-      border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-      line-height: 0;
-      transition: color var(--motion-fast) var(--ease);
-
-      &:hover {
-        color: var(--text-primary);
-      }
-    }
-  }
-
-  &__subscription-menu {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    height: 100%;
-    flex: 0 0 auto;
-
-    &--open {
-      .header__premium-indicator {
-        background: var(--surface-dropdown-menu);
-        color: var(--text-primary);
-      }
-
-      .header__premium-indicator-arrow {
-        color: var(--text-primary);
-      }
-
-      .header__premium-chevron {
-        transform: rotate(0deg);
-      }
-
-      .header__tooltip {
-        opacity: 0 !important;
-        visibility: hidden !important;
-      }
-    }
-  }
-
-  &__premium-chevron {
-    display: block;
-    flex: 0 0 auto;
-    transform: rotate(90deg);
-    transition: transform var(--motion-fast) var(--ease);
-  }
-
-  &__subscription-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 50%;
-    z-index: var(--z-modal);
-    display: flex;
-    min-width: 186px;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-popover);
-    transform: translateX(50%);
-  }
-
-  &__subscription-menu-item {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-5);
-    width: 100%;
-    min-height: 32px;
-    padding: 0 var(--space-5);
-    @include mixins.ghost-button;
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: 1;
-    text-align: left;
-    transition:
-      background-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &:hover,
-    &:focus-visible {
-      background: var(--sidebar-option-active);
-      color: var(--text-primary);
-
-      svg {
-        color: var(--text-primary);
-      }
-    }
-
-    svg {
-      display: block;
-      flex: 0 0 17px;
-      color: var(--text-secondary);
-      font-weight: var(--weight-semibold);
-      shape-rendering: geometricPrecision;
-      transition: color var(--motion-fast) var(--ease);
-    }
   }
 
   &__premium-crown {
@@ -2279,7 +2144,7 @@ p {
 
   &__search {
     display: inline-flex;
-    width: var(--header-search-rest-width);
+    width: var(--header-search-width);
     height: var(--header-control);
     min-height: var(--header-control);
     max-height: var(--header-control);
@@ -2297,23 +2162,8 @@ p {
     overflow: hidden;
     cursor: text;
     transition:
-      width var(--motion-base) var(--ease),
       padding var(--motion-base) var(--ease),
-      background-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease),
       opacity var(--motion-fast) var(--ease);
-
-    &:hover {
-      background: var(--surface-titlebar-control-hover);
-    }
-
-    &:focus-within,
-    &--focused {
-      width: var(--header-search-width);
-      background: var(--surface-titlebar-control-hover);
-      color: var(--text-primary);
-      opacity: 1;
-    }
 
     > svg {
       display: block;
@@ -2575,7 +2425,6 @@ p {
   --header-icon: 22px;
   --header-gap: var(--space-5);
   --header-search-width: 300px;
-  --header-search-rest-width: 220px;
   padding: 0 var(--space-8) 0 var(--space-12);
 }
 
@@ -3559,7 +3408,7 @@ p {
 .home-explore-card {
   position: relative;
   display: grid;
-  flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 4)) / 5);
+  flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 3)) / 4);
   min-height: clamp(126px, 13vw, 168px);
   overflow: hidden;
   place-items: center;
@@ -5261,17 +5110,16 @@ html.no-animations {
     margin: auto;
   }
 
-  // Quando logado (conta Premium ativa) o backdrop de capas não deve aparecer:
-  // a textura compete com os cards de resumo e foi removida a pedido.
-  &:has(.subscription-account:not(.subscription-account--loading)) .subscription-backdrop {
+  // Quando logado (conta Premium ativa ou skeleton de carregamento) o
+  // backdrop de capas não deve aparecer: a textura compete com os cards de
+  // resumo e foi removida a pedido. O backdrop vive só na oferta.
+  &:has(.subscription-account) .subscription-backdrop {
     display: none;
   }
 }
 
 .subscription-account {
   // Sizes derivadas da escala de espaçamento — sem literais espalhados pelo bloco.
-  --subscription-brand-size: var(--space-14);
-  --subscription-brand-glyph: var(--space-9);
   --subscription-pill-height: var(--space-10);
   --subscription-summary-min: clamp(calc(var(--space-16) * 1.5), 11vh, calc(var(--space-16) * 2 + var(--space-4)));
   --subscription-panel-min: clamp(calc(var(--space-16) * 1.6), 14vh, calc(var(--space-16) * 2 + var(--space-12)));
@@ -5368,19 +5216,6 @@ html.no-animations {
         line-height: var(--type-line-micro);
       }
 
-      .subscription-account__brand-icon {
-        width: 20px;
-        height: 20px;
-        border-radius: 0;
-        background: transparent;
-
-        &::before {
-          width: 20px;
-          height: 20px;
-          background: var(--text-primary);
-        }
-      }
-
       .subscription-account__status-badge {
         min-width: 64px;
         min-height: 20px;
@@ -5401,30 +5236,6 @@ html.no-animations {
     min-width: 0;
     align-items: center;
     gap: var(--space-7);
-  }
-
-  &__brand-icon {
-    display: inline-flex;
-    flex: 0 0 auto;
-    width: var(--subscription-brand-size);
-    height: var(--subscription-brand-size);
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-
-    &::before {
-      width: var(--subscription-brand-glyph);
-      height: var(--subscription-brand-glyph);
-      background: var(--premium-gold);
-      content: "";
-      mask: var(--subscription-ghost-icon) center / contain no-repeat;
-      -webkit-mask: var(--subscription-ghost-icon) center / contain no-repeat;
-    }
-  }
-
-  &__brand-icon--skeleton::before {
-    content: none;
   }
 
   &__status-badge {
@@ -7697,10 +7508,9 @@ input[type="search"]::-ms-reveal {
 .catalogue-card__button--list {
   display: grid;
   grid-column: 1;
-  /* A largura não depende do estado da janela. O WebView2 cria o raster da
-     imagem no tamanho de pintura; alternar 224px no modo janela e 232px no
-     maximizado produzia duas nitidezes para o mesmo header.jpg. */
-  grid-template-columns: 232px minmax(0, 1fr);
+  /* No modo janela a capa ligeiramente menor encurta a linha sem comprimir os
+     metadados: os 16px devolvidos à coluna de texto preservam duas pills. */
+  grid-template-columns: 216px minmax(0, 1fr);
   align-self: stretch;
   align-items: center;
   gap: var(--space-8);
@@ -7808,6 +7618,11 @@ input[type="search"]::-ms-reveal {
 .app-main:has(.sidebar--maximized) .catalogue-card__list-content strong {
   font-size: var(--type-size-body-emphasis);
   line-height: var(--type-line-body-emphasis);
+}
+
+.sidebar--maximized ~ .container .catalogue-card__button--list,
+.app-main:has(.sidebar--maximized) .catalogue-card__button--list {
+  grid-template-columns: 232px minmax(0, 1fr);
 }
 
 .sidebar--maximized ~ .container .catalogue-card__genre-chip,
@@ -9489,6 +9304,23 @@ input[type="search"]::-ms-reveal {
       right: var(--space-4);
       flex-shrink: 0;
     }
+
+    &:hover,
+    &:focus-visible {
+      color: var(--text-secondary);
+
+      svg {
+        color: var(--text-secondary);
+      }
+    }
+  }
+
+  .settings-dropdown--open .settings-dropdown__trigger {
+    color: var(--text-secondary);
+
+    svg {
+      color: var(--text-secondary);
+    }
   }
 
   .settings-dropdown__menu {
@@ -9612,7 +9444,7 @@ border: 0;
 
   &:hover {
     background: var(--sidebar-option-hover);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   &:focus-visible {
@@ -9627,7 +9459,7 @@ border: 0;
   &[aria-pressed="true"]:hover,
   &[aria-pressed="true"]:focus-visible {
     background: var(--sidebar-option-active);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 }
 
@@ -9949,10 +9781,6 @@ html.no-backdrop-blur {
 
   .home-recommended__track .home-category-card {
     flex: 0 0 calc((100% - var(--home-category-gap) * 3) / 4);
-  }
-
-  .home-explore-card {
-    flex: 0 0 calc((100% - (clamp(10px, 1.2vw, 16px) * 5)) / 6);
   }
 }
 
@@ -12201,8 +12029,8 @@ html.no-backdrop-blur {
   &__remove-button {
     min-width: 0;
     width: fit-content;
-    min-height: clamp(34px, 0.6vw + 27px, 38px);
-    height: clamp(34px, 0.6vw + 27px, 38px);
+    min-height: clamp(32px, 0.6vw + 25px, 36px);
+    height: clamp(32px, 0.6vw + 25px, 36px);
     gap: clamp(var(--space-3), 0.35vw + 4px, var(--space-4));
     padding: 0 clamp(var(--space-6), 0.6vw + 6px, var(--space-8));
     align-items: center;
@@ -12223,8 +12051,8 @@ html.no-backdrop-blur {
   &__favorite-button {
     display: grid;
     place-items: center;
-    width: clamp(34px, 0.6vw + 27px, 38px);
-    height: clamp(34px, 0.6vw + 27px, 38px);
+    width: clamp(32px, 0.6vw + 25px, 36px);
+    height: clamp(32px, 0.6vw + 25px, 36px);
     padding: 0;
     cursor: pointer;
   }
@@ -12232,8 +12060,8 @@ html.no-backdrop-blur {
   &__gear-button {
     display: grid;
     place-items: center;
-    width: clamp(34px, 0.6vw + 27px, 38px);
-    height: clamp(34px, 0.6vw + 27px, 38px);
+    width: clamp(32px, 0.6vw + 25px, 36px);
+    height: clamp(32px, 0.6vw + 25px, 36px);
     padding: 0;
   }
 
@@ -12262,8 +12090,8 @@ html.no-backdrop-blur {
     }
 
     &:hover:not(:disabled),
-    &:focus-visible {
-      background: color-mix(in srgb, var(--white) 12%, transparent);
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-option);
       color: var(--text-primary);
 
       svg {
@@ -12272,35 +12100,20 @@ html.no-backdrop-blur {
     }
   }
 
-  /* Superfície compartilhada para os controles da linha de ação. */
+  /* Superfície compartilhada para os controles da linha de ação: sem mudança
+     de cor no hover — o feedback é só no texto (secondary → primary). */
   &__play-button,
   &__add-button,
   &__remove-button,
   &__favorite-button,
   &__gear-button {
     background: var(--surface-option);
-
-    &:hover:not(:disabled),
-    &:focus-visible {
-      background: var(--c-4);
-    }
-  }
-
-  &__remove-button:hover:not(:disabled),
-  &__remove-button:focus-visible:not(:disabled) {
-    background: var(--danger);
-    color: var(--text-primary);
   }
 
   &__favorite-button--active,
   &__gear-button--active {
     color: var(--text-primary);
     background: var(--surface-option);
-
-    &:hover:not(:disabled),
-    &:focus-visible {
-      background: var(--c-4);
-    }
   }
 
   &__action-label {
@@ -12310,16 +12123,31 @@ html.no-backdrop-blur {
     transform: translateY(0.5px);
   }
 
+  &__add-button {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &__add-button &__action-label {
+    font-weight: var(--weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-100);
+    line-height: 1;
+    transform: none;
+  }
+
   /* Mesmo "+" da sidebar de coleções (`sidebar__add-icon`, via
      `mixins.plus-icon`): barras preenchidas com cantos arredondados, mesma
-     caneta de 2px. A caixa é `1em`, amarrada ao `font-size` do label do botão
-     (14px): o ícone escala junto com o texto em vez de ter tamanho fixo. */
+     caneta de 2px. Caixa fixa de 12px para centralizar opticamente com o
+     label em uppercase semibold (cap-height ~10px): `1em` (14px) deixava o
+     ícone visualmente maior que o texto e quebrava o alinhamento ao meio. */
   &__add-icon {
     @include mixins.plus-icon;
     display: block;
-    flex: 0 0 1em;
-    width: 1em;
-    height: 1em;
+    flex: 0 0 12px;
+    align-self: center;
+    width: 12px;
+    height: 12px;
   }
 
   &__adding-state {
@@ -12328,7 +12156,7 @@ html.no-backdrop-blur {
     align-self: center;
     align-items: center;
     justify-content: flex-start;
-    min-height: 34px;
+    min-height: 32px;
     padding: 0 var(--space-6);
     border: none;
     border-radius: var(--radius-sm);
@@ -12395,8 +12223,8 @@ html.no-backdrop-blur {
 .app-main:has(.sidebar--maximized) .modal__play-button,
 .app-main:has(.sidebar--maximized) .modal__add-button,
 .app-main:has(.sidebar--maximized) .modal__remove-button {
-  min-height: 38px;
-  height: 38px;
+  min-height: 36px;
+  height: 36px;
   padding: 0 var(--space-8);
   gap: var(--space-4);
 }
@@ -12407,8 +12235,8 @@ html.no-backdrop-blur {
 .sidebar--maximized ~ .container .modal__gear-button,
 .app-main:has(.sidebar--maximized) .modal__favorite-button,
 .app-main:has(.sidebar--maximized) .modal__gear-button {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
 }
 
 .modal--maximized .modal__play-button svg,
@@ -12470,9 +12298,9 @@ html.no-backdrop-blur {
   width: 244px;
   gap: var(--space-1);
   padding: var(--space-2);
-  border: 1px solid var(--border-ui);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface-modal-canvas);
+  background: var(--surface-option);
   box-shadow: var(--shadow-3);
   transform: translateY(-100%);
 }
@@ -12501,12 +12329,6 @@ html.no-backdrop-blur {
 .game-actions-menu button:disabled {
   cursor: default;
   opacity: 0.45;
-}
-
-.game-actions-menu__separator {
-  height: 1px;
-  margin: var(--space-1) var(--space-2);
-  background: var(--border-ui);
 }
 
 .game-actions-menu__spinner {
@@ -13853,10 +13675,6 @@ button {
   .page--library {
     padding: var(--space-6) var(--space-6)
       var(--space-6) 0;
-  }
-
-  .header {
-    --header-search-rest-width: 190px;
   }
 
   .settings-page--tabs {

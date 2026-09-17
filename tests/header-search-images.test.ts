@@ -13,16 +13,16 @@ describe("miniaturas da busca global", () => {
     expect(component).not.toContain("<Heart");
   });
 
-  it("expande ao foco até a largura dos resultados e mantém o tamanho antigo em repouso", () => {
+  it("mantém a largura expandida por padrão, sem expansão ao foco", () => {
     const css = compile("src/app.scss").css;
+    const component = readFileSync("src/components/layout/Header.tsx", "utf8");
 
     expect(css).toMatch(/\.header \{[\s\S]*?--header-search-width: 280px;/);
-    expect(css).toMatch(/\.header__search \{[^}]*width: var\(--header-search-rest-width\);/);
-    expect(css).toMatch(/\.header__search--focused \{[^}]*width: var\(--header-search-width\);/);
+    expect(css).toMatch(/\.header__search \{[^}]*width: var\(--header-search-width\);/);
+    expect(css).not.toContain("header__search--focused");
+    expect(css).not.toContain("--header-search-rest-width");
     expect(css).toMatch(/\.header__search-dropdown \{[\s\S]*?width: var\(--header-search-width\);/);
     expect(css).toContain("--header-search-width: 300px;");
-    expect(css).toContain("--header-search-rest-width: 200px;");
-    expect(css).toContain("--header-search-rest-width: 220px;");
-    expect(css).toContain("--header-search-rest-width: 190px;");
+    expect(component).not.toContain("header__search--focused");
   });
 });

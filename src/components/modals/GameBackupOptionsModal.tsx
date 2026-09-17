@@ -134,7 +134,6 @@ export function GameBackupOptionsModal({
           <Trash2 size={17} aria-hidden="true" />
           {copy("Desinstalar", "Uninstall")}
         </button>
-        <span className="game-actions-menu__separator" aria-hidden="true" />
         <button type="button" role="menuitem" onClick={() => void createDesktopShortcut()} disabled={!game || busy}>
           {busy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <MonitorDown size={17} aria-hidden="true" />}
           {copy("Criar atalho na área de trabalho", "Create desktop shortcut")}

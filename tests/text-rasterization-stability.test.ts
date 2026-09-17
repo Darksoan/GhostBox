@@ -34,9 +34,8 @@ describe("text rasterization stability", () => {
 
   it("keeps profile, premium and authentication text outside animated layers", () => {
     expect(profileStyles).not.toMatch(/animation:\s*steamid-(reveal|hide|copy-enter)/);
-    expect(profileStyles).not.toMatch(
-      /animation:\s*profile-achievement-percent-reveal/,
-    );
+    expect(profileStyles).not.toMatch(/animation:\s*profile-achievement-percent-reveal/);
+    expect(profileStyles).not.toMatch(/animation:\s*profile-achievement-fill-reveal/);
     expect(premiumStyles).not.toMatch(/animation:\s*premium-modal-(scrim-in|in|item-in)/);
     expect(authStyles).not.toMatch(/animation:\s*auth-form-enter/);
   });
@@ -44,6 +43,5 @@ describe("text rasterization stability", () => {
   it("preserves functional progress and loading animation", () => {
     expect(appStyles).toMatch(/animation:\s*spin/);
     expect(appStyles).toMatch(/animation:\s*toast-progress/);
-    expect(profileStyles).toMatch(/animation:\s*profile-achievement-fill-reveal/);
   });
 });

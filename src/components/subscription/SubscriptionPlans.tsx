@@ -315,7 +315,6 @@ export function SubscriptionPlans({
         <span className="sr-only" role="status" aria-live="polite">{copy("Carregando dados da assinatura", "Loading subscription data")}</span>
         <header className="subscription-account__header">
           <div className="subscription-account__header-main">
-            <span className="subscription-account__brand-icon subscription-account__brand-icon--skeleton skeleton" aria-hidden="true" />
             <div>
               <span className="subscription-account__line subscription-account__line--eyebrow skeleton" />
               <h3 className="subscription-account__line subscription-account__line--title skeleton" />
@@ -375,14 +374,12 @@ export function SubscriptionPlans({
         className="subscription-account settings-panel__animated-block"
         style={{
           ...(enterDelay ? { ["--settings-enter-delay" as string]: enterDelay } : {}),
-          ["--subscription-ghost-icon" as string]: `url(${ghostIcon})`
         }}
         aria-label={copy("Resumo da assinatura Premium", "Premium subscription summary")}
       >
         <header className="subscription-account__header subscription-account__header--active">
           <h3 className="sr-only">{copy("Assinatura ativa", "Active subscription")}</h3>
           <span className="subscription-account__eyebrow">
-            <span className="subscription-account__brand-icon" aria-hidden="true" />
             <span className="subscription-account__brand-name">GHOSTBOX</span>
             <span className="subscription-account__premium-name">PREMIUM</span>
           </span>

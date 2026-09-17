@@ -1,9 +1,7 @@
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
-  CreditCard,
   Crown,
   Download,
   Info,
@@ -11,8 +9,6 @@ import {
   Maximize2,
   MessageSquareShare,
   Minus,
-  Settings2,
-  UserCog,
   Search,
   X,
 } from "lucide-react";
@@ -24,7 +20,7 @@ import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import type { SubscriptionPortalFlow, UpdateCheckResult } from "../../lib/ghostboxApi.types";
+import type { UpdateCheckResult } from "../../lib/ghostboxApi.types";
 import { preloadGameModalAssetsThrottled } from "../../utils/image";
 import { SearchSuggestionsLoadingState } from "../ui/LoadingStates";
 import { FeedbackModal } from "../modals/FeedbackModal";
@@ -78,13 +74,11 @@ interface HeaderProps {
   isPremium?: boolean;
   subscriptionPeriodEnd?: string | null;
   subscriptionAccessType?: "free" | "stripe" | "lifetime" | null;
-  canManageSubscriptionBilling?: boolean;
   onQueryChange: (query: string) => void;
   onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
   onForward: () => void;
   onClickPremium?: () => void;
-  onOpenSubscriptionPortal?: (flow: SubscriptionPortalFlow) => void;
 }
 
 function formatSubscriptionExpiry(value: string | null | undefined, language: "pt" | "en") {
@@ -128,13 +122,11 @@ export const Header = memo(function Header({
   isPremium = false,
   subscriptionPeriodEnd = null,
   subscriptionAccessType = null,
-  canManageSubscriptionBilling = false,
   onQueryChange,
   onSelectSuggestion,
   onBack,
   onForward,
   onClickPremium,
-  onOpenSubscriptionPortal,
 }: HeaderProps) {
   const { t, appearance } = useSettings();
   const [focused, setFocused] = useState(false);
@@ -144,8 +136,6 @@ export const Header = memo(function Header({
   const [updatePercent, setUpdatePercent] = useState(0);
   const [updatePhase, setUpdatePhase] = useState<"download" | "install" | "error">("download");
   const [updateError, setUpdateError] = useState<string | null>(null);
-  const [isSubscriptionMenuOpen, setIsSubscriptionMenuOpen] = useState(false);
-  const subscriptionMenuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titlebarDragRef = useRef<{
     pointerId: number;
@@ -209,26 +199,6 @@ export const Header = memo(function Header({
     },
     [onSelectSuggestion, suggestions]
   );
-
-  useEffect(() => {
-    if (!isSubscriptionMenuOpen) return;
-
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!subscriptionMenuRef.current?.contains(event.target as Node)) {
-        setIsSubscriptionMenuOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsSubscriptionMenuOpen(false);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePress);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePress);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isSubscriptionMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -296,10 +266,6 @@ export const Header = memo(function Header({
     : `Nova versão disponível: v${update?.latestVersion ?? ""}`;
 
   const premiumExpiryText = formatSubscriptionExpiry(subscriptionPeriodEnd, appearance.language);
-  const openSubscriptionPortal = (flow: SubscriptionPortalFlow) => {
-    setIsSubscriptionMenuOpen(false);
-    onOpenSubscriptionPortal?.(flow);
-  };
 
   const handleMinimize = useCallback(() => void ghostboxApi.minimize(), []);
   const handleClose = useCallback(() => void ghostboxApi.close(), []);
@@ -310,7 +276,7 @@ export const Header = memo(function Header({
   }, []);
 
   const titlebarInteractiveSelector =
-    "button, input, a, label, [role='button'], [role='menu'], [role='menuitem'], .header__search-shell, .header__subscription-menu, .header__window-controls";
+    "button, input, a, label, [role='button'], .header__search-shell, .header__window-controls";
 
   const flushTitlebarDrag = useCallback(() => {
     const drag = titlebarDragRef.current;
@@ -526,135 +492,62 @@ export const Header = memo(function Header({
             Discord
           </span>
         </button>
-        <div
-          ref={subscriptionMenuRef}
-          className={`header__subscription-menu${isSubscriptionMenuOpen ? " header__subscription-menu--open" : ""}`}
+        <button
+          type="button"
+          className="header__premium-indicator"
+          aria-label={
+            isPremium
+              ? appearance.language === "en"
+                ? "Subscription"
+                : "Assinatura"
+              : appearance.language === "en"
+                ? "Become premium"
+                : "Seja premium"
+          }
+          onClick={onClickPremium}
         >
-          {isPremium ? (
-            <div className="header__premium-indicator header__premium-indicator--split">
-              <button
-                type="button"
-                className="header__premium-indicator-main"
-                aria-label={
-                  appearance.language === "en"
-                    ? "Subscription panel"
-                    : "Painel de assinatura"
-                }
-                onClick={onClickPremium}
-              >
-                <Crown className="header__premium-crown" size={18} aria-hidden="true" />
-                <span className="header__premium-label">
-                  {appearance.language === "en" ? "Subscription" : "Assinatura"}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="header__premium-indicator-arrow"
-                aria-label={
-                  appearance.language === "en"
-                    ? "Toggle subscription menu"
-                    : "Alternar menu de assinatura"
-                }
-                aria-expanded={isSubscriptionMenuOpen}
-                aria-haspopup="menu"
-                onClick={() => setIsSubscriptionMenuOpen((open) => !open)}
-              >
-                <ChevronDown
-                  className="header__premium-chevron"
-                  size={14}
-                  strokeWidth={2.15}
-                  aria-hidden="true"
-                />
-              </button>
-              <span className="header__tooltip header__tooltip--premium">
-                {subscriptionAccessType === "lifetime" ? (
-                  appearance.language === "en" ? "Lifetime Premium access." : "Acesso Premium vitalício."
-                ) : premiumExpiryText ? (
-                  <>
-                    {appearance.language === "en" ? "Expires on " : "Expira em "}
-                    <span className="header__tooltip-date">{premiumExpiryText.date}</span>
-                    <span className="header__tooltip-connector">
-                      {appearance.language === "en" ? " at " : " às "}
-                    </span>
-                    <span className="header__tooltip-date">{premiumExpiryText.time}</span>
-                    {"."}
-                  </>
-                ) : appearance.language === "en" ? (
-                  "Active subscription."
-                ) : (
-                  "Assinatura ativa."
-                )}
-              </span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="header__premium-indicator"
-              aria-label={
-                appearance.language === "en"
-                  ? "Become premium"
-                  : "Seja premium"
-              }
-              onClick={onClickPremium}
-            >
-              <Crown className="header__premium-crown" size={18} aria-hidden="true" />
-              <span className="header__premium-label">
-                {appearance.language === "en"
-                  ? "Become premium"
-                  : "Seja premium"}
-              </span>
-              <span className="header__tooltip header__tooltip--premium">
-                {appearance.language === "en"
-                  ? "Unlock GhostBox Premium."
-                  : "Desbloqueie o GhostBox Premium."}
-              </span>
-            </button>
-          )}
-          {isPremium && isSubscriptionMenuOpen && (
-            <div className="header__subscription-dropdown" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                className="header__subscription-menu-item"
-                onClick={() => {
-                  setIsSubscriptionMenuOpen(false);
-                  onClickPremium?.();
-                }}
-              >
-                <Settings2 size={17} strokeWidth={2.25} aria-hidden="true" />
-                {appearance.language === "en" ? "Subscription panel" : "Painel de assinatura"}
-              </button>
-              {canManageSubscriptionBilling ? (
+          <Crown className="header__premium-crown" size={18} aria-hidden="true" />
+          <span className="header__premium-label">
+            {isPremium
+              ? appearance.language === "en"
+                ? "Subscription"
+                : "Assinatura"
+              : appearance.language === "en"
+                ? "Become premium"
+                : "Seja premium"}
+          </span>
+          <span className="header__tooltip header__tooltip--premium">
+            {isPremium ? (
+              subscriptionAccessType === "lifetime" ? (
+                appearance.language === "en" ? "Lifetime Premium access." : "Acesso Premium vitalício."
+              ) : premiumExpiryText ? (
                 <>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="header__subscription-menu-item"
-                    onClick={() => openSubscriptionPortal("manage")}
-                  >
-                    <UserCog size={17} strokeWidth={2.25} aria-hidden="true" />
-                    {appearance.language === "en" ? "Manage" : "Gerenciar"}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="header__subscription-menu-item"
-                    onClick={() => openSubscriptionPortal("payment_method_update")}
-                  >
-                    <CreditCard size={17} strokeWidth={2.25} aria-hidden="true" />
-                    {appearance.language === "en" ? "Change payment method" : "Alterar método de pagamento"}
-                  </button>
+                  {appearance.language === "en" ? "Expires on " : "Expira em "}
+                  <span className="header__tooltip-date">{premiumExpiryText.date}</span>
+                  <span className="header__tooltip-connector">
+                    {appearance.language === "en" ? " at " : " às "}
+                  </span>
+                  <span className="header__tooltip-date">{premiumExpiryText.time}</span>
+                  {"."}
                 </>
-              ) : null}
-            </div>
-          )}
-        </div>
+              ) : appearance.language === "en" ? (
+                "Active subscription."
+              ) : (
+                "Assinatura ativa."
+              )
+            ) : appearance.language === "en" ? (
+              "Unlock GhostBox Premium."
+            ) : (
+              "Desbloqueie o GhostBox Premium."
+            )}
+          </span>
+        </button>
         <div
           className="header__search-shell"
           onBlur={handleBlur}
         >
           <label
-            className={`header__search ${focused ? "header__search--focused" : ""} ${isSearching ? "header__search--loading" : ""}`}
+            className={`header__search ${isSearching ? "header__search--loading" : ""}`}
           >
             <Search size={16} />
             <input

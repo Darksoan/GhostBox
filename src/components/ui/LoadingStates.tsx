@@ -390,7 +390,7 @@ function HomePageLoadingState() {
         <div className="home-explore__rail">
           <div className="home-explore__carousel">
             <div className="home-explore__track">
-              {Array.from({ length: 5 }, (_, index) => (
+              {Array.from({ length: 4 }, (_, index) => (
                 <span
                   className="home-explore-card home-explore-card--skeleton skeleton"
                   key={`home-explore-${index}`}

@@ -22,7 +22,7 @@ import {
   showTrayHiddenDesktopNotification,
 } from "./lib/trayNotifications";
 import { type SettingsTabId } from "./features/settings/settingsTabsShared";
-import type { SubscriptionPortalFlow, SubscriptionStatusResult } from "./lib/ghostboxApi.types";
+import type { SubscriptionStatusResult } from "./lib/ghostboxApi.types";
 import type { GhostBoxGame } from "./data";
 import { buildSteamOwnedGamesFromPlaytimes } from "./utils/steamLibraryMerge";
 import { buildKnownGameIndex } from "./utils/gameSearch";
@@ -76,7 +76,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     modalReturnScrollTopRef,
     restoreContentScrollAfterModalRef,
     setSubscriptionModalOpen,
-    showToast,
   } = useOverlay();
   const { isGameModalVisible, isAchievementsViewVisible } =
     useContentOverlayState();
@@ -171,8 +170,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const [isPremium, setIsPremium] = useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = useState<string | null>(null);
   const [subscriptionAccessType, setSubscriptionAccessType] = useState<"free" | "stripe" | "lifetime" | null>(null);
-  const [canManageSubscriptionBilling, setCanManageSubscriptionBilling] = useState(false);
-  const [subscriptionPortalFlow, setSubscriptionPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
 
   // Guards the async status reads against a late resolve after unmount. A ref,
   // not an effect-local flag: the read is now kicked off from more than one
@@ -200,7 +197,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     setIsPremium(active && (!end || !Number.isFinite(endTime) || endTime > Date.now()));
     setSubscriptionPeriodEnd(active ? end : null);
     setSubscriptionAccessType(subscription?.accessType ?? null);
-    setCanManageSubscriptionBilling(active && subscription?.canManageBilling === true);
     return true;
   }, []);
 
@@ -308,7 +304,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     setIsPremium(false);
     setSubscriptionPeriodEnd(null);
     setSubscriptionAccessType(null);
-    setCanManageSubscriptionBilling(false);
   }, [status]);
 
   useEffect(() => {
@@ -527,30 +522,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     [clearOverlayForward, closeContentOverlay, shell]
   );
 
-  const handleOpenSubscriptionPortal = useCallback(async (flow: SubscriptionPortalFlow) => {
-    const copy = (pt: string, en: string) => appearance.language === "en" ? en : pt;
-    if (subscriptionPortalFlow) return;
-
-    setSubscriptionPortalFlow(flow);
-    try {
-      const session = await ghostboxApi.createSubscriptionPortalSession(flow);
-      if (!session?.url) {
-        throw new Error(copy("Não foi possível abrir o portal de cobrança.", "Could not open the billing portal."));
-      }
-      await ghostboxApi.openExternalUrl(session.url);
-    } catch (error) {
-      showToast(
-        copy("Portal de assinatura", "Subscription portal"),
-        error instanceof Error && error.message
-          ? error.message
-          : copy("Não foi possível abrir o portal de cobrança.", "Could not open the billing portal."),
-        "error"
-      );
-    } finally {
-      setSubscriptionPortalFlow(null);
-    }
-  }, [appearance.language, showToast, subscriptionPortalFlow]);
-
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
@@ -635,7 +606,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             isPremium={isPremium}
             subscriptionPeriodEnd={subscriptionPeriodEnd}
             subscriptionAccessType={subscriptionAccessType}
-            canManageSubscriptionBilling={canManageSubscriptionBilling}
             onQueryChange={shell.handleQueryChange}
             onSelectSuggestion={(game) => {
               clearOverlayForward();
@@ -644,9 +614,10 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             onBack={handleBack}
             onForward={handleForward}
             onClickPremium={() => {
-              setSubscriptionModalOpen(true);
+              setSettingsLibraryView("overview");
+              handleNavigate("settings");
+              shell.setActiveSettingsTabId("subscription");
             }}
-            onOpenSubscriptionPortal={handleOpenSubscriptionPortal}
           />
 
           <section

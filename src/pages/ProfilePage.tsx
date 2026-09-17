@@ -427,7 +427,6 @@ type ProfileActivityViewModel = {
 const localAchievementHydrationLimit = 80;
 const localAchievementHydrationBatchSize = 5;
 const visibleAchievementPercentBatchSize = 2;
-const achievementPercentRevealMs = 600;
 // A game whose store page resolved but whose achievement list did not is retried
 // on the next hydration pass after this window, instead of staying blank.
 const localAchievementRetryDelayMs = 5 * 60 * 1000;
@@ -437,56 +436,6 @@ let hasPreparedProfileOverviewData = false;
 function getGamePlaytime(game: GhostBoxGame) {
   // Only Steam-synced totals (never catalogue `hours` or stale local cache).
   return game.playTimeInMilliseconds ?? 0;
-}
-
-function AnimatedAchievementPercent({
-  value,
-  delayMs,
-}: {
-  value: number;
-  delayMs: number;
-}) {
-  const reducedMotion = () =>
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const [displayValue, setDisplayValue] = useState(() =>
-    reducedMotion() ? value : 0,
-  );
-
-  useEffect(() => {
-    if (reducedMotion()) {
-      setDisplayValue(value);
-      return;
-    }
-
-    setDisplayValue(0);
-    let frame = 0;
-    const timeout = window.setTimeout(() => {
-      const startedAt = performance.now();
-      const tick = (now: number) => {
-        const progress = Math.min(1, (now - startedAt) / achievementPercentRevealMs);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        setDisplayValue(value * eased);
-        if (progress < 1) frame = window.requestAnimationFrame(tick);
-      };
-      frame = window.requestAnimationFrame(tick);
-    }, delayMs);
-
-    return () => {
-      window.clearTimeout(timeout);
-      window.cancelAnimationFrame(frame);
-    };
-  }, [delayMs, value]);
-
-  return (
-    <span
-      className="profile-page__achievement-card-percent"
-      style={{ animationDelay: `${delayMs}ms` }}
-      aria-hidden="true"
-    >
-      {displayValue.toFixed(1)}%
-    </span>
-  );
 }
 
 function formatProfileLastSession(value: string | null | undefined, language: string) {
@@ -2244,16 +2193,10 @@ export function ProfilePage({
 
                         <div className="profile-page__achievement-card-shell">
                           <div className="profile-page__achievement-card-row">
-                          {visibleAchievements.map((achievement, achievementIndex) => {
+                          {visibleAchievements.map((achievement) => {
                             const unlocked = isAchievementUnlocked(achievement);
                             const icon = achievementShowcaseIcon(achievement, unlocked);
                             const achievementId = achievement.name || achievement.title;
-                            const globalPercent =
-                              typeof achievement.globalPercent === "number" &&
-                              Number.isFinite(achievement.globalPercent)
-                                ? Math.min(100, Math.max(0, achievement.globalPercent))
-                                : null;
-                            const revealDelayMs = (achievementIndex % 4) * 35;
 
                             return (
                               <button
@@ -2264,27 +2207,13 @@ export function ProfilePage({
                                     ? "profile-page__achievement-card--unlocked"
                                     : "profile-page__achievement-card--locked"
                                 }`}
-                                aria-label={`${achievement.title}${
-                                  globalPercent === null
-                                    ? ""
-                                    : `, ${globalPercent.toFixed(1)}% ${t("achievements.globalPercent")}`
-                                }, ${game.title}`}
+                                aria-label={`${achievement.title}, ${game.title}`}
                                 onClick={() =>
                                   onOpenGameAchievements
                                     ? onOpenGameAchievements(game, achievementId)
                                     : onOpenGame(game)
                                 }
                               >
-                                {globalPercent !== null ? (
-                                  <span
-                                    className="profile-page__achievement-card-fill"
-                                    style={{
-                                      width: `${globalPercent}%`,
-                                      animationDelay: `${revealDelayMs}ms`,
-                                    }}
-                                    aria-hidden="true"
-                                  />
-                                ) : null}
                                 <span className="profile-page__achievement-card-media">
                                   <img
                                     src={icon}
@@ -2303,12 +2232,6 @@ export function ProfilePage({
                                       <span className="profile-page__achievement-card-description">
                                         {achievement.description}
                                       </span>
-                                    ) : null}
-                                    {globalPercent !== null ? (
-                                      <AnimatedAchievementPercent
-                                        value={globalPercent}
-                                        delayMs={revealDelayMs}
-                                      />
                                     ) : null}
                                   </span>
                                 </span>

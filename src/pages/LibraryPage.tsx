@@ -351,7 +351,7 @@ export function LibraryPage({
               onClick={() => setSortDropdownOpen((current) => !current)}
             >
               <span>{sortLabel}</span>
-              <ChevronDown size={14} />
+              <ChevronDown size={16} />
             </button>
             {sortDropdownOpen && (
               <div
@@ -390,7 +390,7 @@ export function LibraryPage({
               onClick={() => setSourceDropdownOpen((current) => !current)}
             >
               <span>{sourceLabel}</span>
-              <ChevronDown size={14} />
+              <ChevronDown size={16} />
             </button>
             {sourceDropdownOpen && (
               <div
@@ -433,7 +433,7 @@ export function LibraryPage({
                   );
                 }}
               >
-                <Heart size={14} strokeWidth={2.0} fill="none" />
+                <Heart size={16} strokeWidth={2.0} fill="none" />
                 <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
               </button>
             )}
@@ -456,7 +456,7 @@ export function LibraryPage({
                   );
                 }}
               >
-                <Folder size={14} strokeWidth={2.0} />
+                <Folder size={16} strokeWidth={2.0} />
                 <span>{collection.name}</span>
               </button>
             ))}

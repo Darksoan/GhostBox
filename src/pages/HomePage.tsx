@@ -116,7 +116,7 @@ const homeTopRatedCardCount = 3;
 // navegador não aplica as do clamp (texto de uma linha só, muito longo).
 const homeShortDescriptionLimit = 150;
 const homeRecommendedGroupPreloadTimeoutMs = 1800;
-const homeExploreCategoryLimit = 15;
+const homeExploreCategoryLimit = 12;
 const homePersonalCalendarDays = 4;
 const homePersonalCalendarGamesPerDay = 2;
 const homePersonalCalendarGameCount =
