@@ -33,7 +33,10 @@ export function mergeHeaderSearchSuggestions(
 
 export function useAppShellState(
   page: Page,
-  options: { localGames?: GhostBoxGame[] } = {},
+  options: {
+    localGames?: GhostBoxGame[];
+    allowHeaderSearchDropdown?: boolean;
+  } = {},
 ) {
   const { appearance } = useSettings();
   const [query, setQuery] = useState("");
@@ -58,10 +61,15 @@ export function useAppShellState(
   const debouncedQuery = useDebouncedValue(query, searchDebounceMs);
   const trimmedQuery = query.trim();
   const trimmedDebouncedQuery = debouncedQuery.trim();
+  // No catálogo a busca do header filtra a página e o dropdown fica
+  // desligado. Com um overlay (ex: GameModal) aberto sobre o catálogo, a
+  // busca precisa voltar a sugerir e exibir o dropdown.
+  const allowHeaderSearch =
+    page !== "catalogue" || Boolean(options.allowHeaderSearchDropdown);
 
   const headerSearchQuery = useGamesQuery(
     { query: debouncedQuery, limit: 6, offset: 0 },
-    { enabled: Boolean(debouncedQuery.trim()) && page !== "catalogue" }
+    { enabled: Boolean(debouncedQuery.trim()) && allowHeaderSearch }
   );
 
   const isCatalogueSearchPending =
@@ -92,12 +100,12 @@ export function useAppShellState(
   // catálogo remoto falha ou ainda não indexou o jogo (ex: FragPunk aberto
   // no modal mas ausente do /catalogue/search).
   const localHeaderSearchSuggestions = useMemo(() => {
-    if (page === "catalogue" || !trimmedQuery) return [];
+    if (!allowHeaderSearch || !trimmedQuery) return [];
     return searchKnownGames(options.localGames ?? [], trimmedQuery, 6);
-  }, [options.localGames, page, trimmedQuery]);
+  }, [allowHeaderSearch, options.localGames, trimmedQuery]);
 
   const shouldSearchSteam =
-    page !== "catalogue" &&
+    allowHeaderSearch &&
     isCurrentDebouncedQuery &&
     shouldUseSteamSearchFallback({
       query: trimmedDebouncedQuery,
@@ -134,7 +142,7 @@ export function useAppShellState(
 
   const isSearchLoading =
     isCatalogueSearchPending ||
-    (page !== "catalogue" &&
+    (allowHeaderSearch &&
       localHeaderSearchSuggestions.length === 0 &&
       (headerSearchQuery.isFetching ||
         (shouldSearchSteam && steamSearchQuery.isFetching)));
@@ -143,7 +151,7 @@ export function useAppShellState(
     !shouldSearchSteam || steamSearchQuery.isFetched || steamSearchQuery.isError;
 
   const hasNoHeaderSearchResults =
-    page !== "catalogue" &&
+    allowHeaderSearch &&
     Boolean(trimmedQuery) &&
     trimmedQuery === trimmedDebouncedQuery &&
     !isSearchLoading &&
@@ -151,7 +159,7 @@ export function useAppShellState(
     steamSearchSettled &&
     mergedBaseSuggestions.length === 0;
   const shouldShowHeaderAppIdPrompt =
-    page !== "catalogue" &&
+    allowHeaderSearch &&
     Boolean(trimmedQuery) &&
     trimmedQuery === trimmedDebouncedQuery &&
     !isSearchLoading &&

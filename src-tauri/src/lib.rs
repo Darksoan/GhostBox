@@ -1651,9 +1651,13 @@ pub(crate) fn parse_launch_arguments(input: &str) -> Vec<String> {
     arguments
 }
 
+fn shortcut_powershell_script() -> &'static str {
+    r#"$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; $shell = New-Object -ComObject WScript.Shell; $location = $env:GHOSTBOX_SHORTCUT_LOCATION; $base = if ($location -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }; $name = $env:GHOSTBOX_SHORTCUT_NAME -replace '[<>:\"/\\|?*]', '_'; $path = Join-Path $base ($name + '.lnk'); $shortcut = $shell.CreateShortcut($path); $shortcut.TargetPath = $env:GHOSTBOX_SHORTCUT_TARGET; $shortcut.Arguments = $env:GHOSTBOX_SHORTCUT_ARGUMENTS; $shortcut.WorkingDirectory = $env:GHOSTBOX_SHORTCUT_WORKING_DIRECTORY; $icon = $env:GHOSTBOX_SHORTCUT_ICON; if (-not [string]::IsNullOrWhiteSpace($icon)) { $shortcut.IconLocation = $icon }; $shortcut.Save(); if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Shortcut was not created.' }; Write-Output $path"#
+}
+
 #[tauri::command]
-fn game_create_shortcut(
-    _app: tauri::AppHandle,
+async fn game_create_shortcut(
+    app: tauri::AppHandle,
     game: serde_json::Value,
     location: String,
 ) -> Result<serde_json::Value, String> {
@@ -1700,10 +1704,18 @@ fn game_create_shortcut(
         )
     };
 
+    // O alvo continua sendo o GhostBox (mesmo fluxo Steam de Play), mas o
+    // `IconLocation` aponta para o `.ico` do jogo quando resolvido. Sem ele,
+    // o Windows herda o ícone do launcher.
+    let icon_path = catalogue::game_ico_for_shortcut(&app, &app_id)
+        .await
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
     // Valores depois de `powershell -Command` são reinterpretados como parte
     // do comando e perdem os limites originais (especialmente paths com
     // espaços). Variáveis de ambiente preservam cada valor sem interpolação.
-    let script = r#"$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; $shell = New-Object -ComObject WScript.Shell; $location = $env:GHOSTBOX_SHORTCUT_LOCATION; $base = if ($location -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }; $name = $env:GHOSTBOX_SHORTCUT_NAME -replace '[<>:\"/\\|?*]', '_'; $path = Join-Path $base ($name + '.lnk'); $shortcut = $shell.CreateShortcut($path); $shortcut.TargetPath = $env:GHOSTBOX_SHORTCUT_TARGET; $shortcut.Arguments = $env:GHOSTBOX_SHORTCUT_ARGUMENTS; $shortcut.WorkingDirectory = $env:GHOSTBOX_SHORTCUT_WORKING_DIRECTORY; $shortcut.Save(); if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Shortcut was not created.' }; Write-Output $path"#;
+    let script = shortcut_powershell_script();
     let output = std::process::Command::new("powershell")
         .args([
             "-NoProfile",
@@ -1721,6 +1733,7 @@ fn game_create_shortcut(
             "GHOSTBOX_SHORTCUT_WORKING_DIRECTORY",
             &working_directory,
         )
+        .env("GHOSTBOX_SHORTCUT_ICON", &icon_path)
         .output()
         .map_err(|error| format!("Could not create shortcut: {error}"))?;
     if !output.status.success() {
@@ -2052,6 +2065,19 @@ mod tests {
                 "-name",
                 "two words",
             ]
+        );
+    }
+
+    #[test]
+    fn shortcut_script_sets_game_icon_location() {
+        let script = super::shortcut_powershell_script();
+        assert!(
+            script.contains("$shortcut.IconLocation"),
+            "atalho precisa definir IconLocation para não herdar o ícone do launcher"
+        );
+        assert!(
+            script.contains("GHOSTBOX_SHORTCUT_ICON"),
+            "ícone do jogo precisa chegar via variável de ambiente"
         );
     }
 

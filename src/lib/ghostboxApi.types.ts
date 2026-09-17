@@ -325,6 +325,8 @@ export type SubscriptionStatusResult = {
   subscription: {
     status: "free" | "active" | "expired";
     isPremium: boolean;
+    accessType?: "free" | "stripe" | "lifetime";
+    canManageBilling?: boolean;
     planId: "monthly" | "quarterly" | null;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;

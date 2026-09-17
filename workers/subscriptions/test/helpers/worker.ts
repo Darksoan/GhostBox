@@ -83,6 +83,7 @@ export function mockStripe(options: { routes?: Record<string, unknown>; fail?: b
     for (const [fragment, body] of Object.entries(options.routes ?? {})) {
       if (url.includes(fragment)) {
         const resolved = typeof body === "function" ? await (body as StripeRoute)(url) : body;
+        if (resolved instanceof Response) return resolved;
         return new Response(JSON.stringify(resolved), {
           status: 200,
           headers: { "content-type": "application/json" },

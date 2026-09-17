@@ -142,6 +142,54 @@ const rules: Rule[] = [
     },
   },
   {
+    pattern: /^INSERT INTO payments \(/i,
+    run: (
+      [
+        id,
+        checkoutReference,
+        checkoutId,
+        steamId,
+        userId,
+        planId,
+        amountCents,
+        hostedCheckoutUrl,
+        stripeCheckoutSessionId,
+        createdAt,
+        updatedAt,
+      ],
+      db
+    ) => {
+      db.rows("payments").push({
+        id,
+        checkout_reference: checkoutReference,
+        checkout_id: checkoutId,
+        steam_id: steamId,
+        user_id: userId,
+        plan_id: planId,
+        amount_cents: amountCents,
+        currency: "BRL",
+        status: "pending",
+        hosted_checkout_url: hostedCheckoutUrl,
+        stripe_checkout_session_id: stripeCheckoutSessionId,
+        stripe_invoice_id: null,
+        stripe_payment_intent_id: null,
+        stripe_subscription_id: null,
+        provider: "stripe",
+        created_at: createdAt,
+        updated_at: updatedAt,
+        confirmed_at: null,
+      });
+      return { changes: 1 };
+    },
+  },
+  {
+    pattern: /^SELECT \* FROM payments WHERE id = \?/i,
+    run: ([id], db) => {
+      const row = db.rows("payments").find((entry) => entry.id === id);
+      return { results: row ? [row] : [], changes: 0 };
+    },
+  },
+  {
     pattern: /^UPDATE subscriptions SET user_id = \?, updated_at = \? WHERE steam_id = \? AND user_id IS NULL/i,
     run: ([userId, updatedAt, steamId], db) => {
       let changes = 0;
@@ -195,6 +243,7 @@ const rules: Rule[] = [
           stripe_event_created: eventCreated,
           stripe_payment_method_json: null,
           stripe_payment_method_updated_at: null,
+          access_type: "stripe",
           created_at: createdAt,
           updated_at: updatedAt,
         });
@@ -217,6 +266,7 @@ const rules: Rule[] = [
       existing.stripe_subscription_status = stripeSubscriptionStatus ?? existing.stripe_subscription_status;
       existing.cancel_at_period_end = cancelAtPeriodEnd;
       existing.stripe_event_created = eventCreated;
+      existing.access_type = "stripe";
       existing.updated_at = updatedAt;
       return { changes: 1 };
     },
@@ -259,6 +309,20 @@ const rules: Rule[] = [
       for (const row of db.rows("subscriptions")) {
         if (row.user_id === userId) {
           row.status = "expired";
+          row.updated_at = updatedAt;
+          changes += 1;
+        }
+      }
+      return { changes };
+    },
+  },
+  {
+    pattern: /^UPDATE subscriptions SET stripe_customer_id = \?, updated_at = \? WHERE user_id = \?/i,
+    run: ([customerId, updatedAt, userId], db) => {
+      let changes = 0;
+      for (const row of db.rows("subscriptions")) {
+        if (row.user_id === userId) {
+          row.stripe_customer_id = customerId;
           row.updated_at = updatedAt;
           changes += 1;
         }

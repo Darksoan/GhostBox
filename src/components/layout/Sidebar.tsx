@@ -695,12 +695,11 @@ const SidebarProfile = memo(function SidebarProfile({
     identity.avatarUrl ? [identity.avatarUrl] : []
   );
   const avatarSource = useLoadableImageSource(avatarSources);
-  const shouldHoldSteamAvatar = Boolean(
-    isCloudProfileRestoring &&
-      identity.avatarUrl &&
-      !identity.avatarUrl.startsWith("data:") &&
-      !identity.avatarUrl.includes("/storage/v1/object/public/profile-images/")
-  );
+  // Reopening the app paints the Steam summary (avatar + name) before the
+  // account's cloud profile lands. While the cloud sync is in flight, hold
+  // the placeholder avatar and no username instead of the provisional Steam
+  // data — for any URL kind, not just non-custom ones.
+  const isHoldingForCloudSync = Boolean(isCloudProfileRestoring);
   const [steamLevel, setSteamLevel] = useState<number | null>(null);
 
   useEffect(() => {
@@ -756,7 +755,7 @@ const SidebarProfile = memo(function SidebarProfile({
       >
         <div className="sidebar-profile__button-content">
           <span className="sidebar-profile__avatar" aria-hidden="true">
-            {identity.loading || shouldHoldSteamAvatar || (isCloudProfileRestoring && !avatarSource) ? (
+            {identity.loading || isHoldingForCloudSync ? (
               <span className="sidebar-profile__avatar-skeleton" />
             ) : (
               <img
@@ -773,7 +772,7 @@ const SidebarProfile = memo(function SidebarProfile({
           <span className="sidebar-profile__button-information">
             <span className="sidebar-profile__title-row">
               <span className="sidebar-profile__button-title">
-                {identity.title}
+                {isHoldingForCloudSync ? "" : identity.title}
               </span>
               {isSteamConnected(visibleProfile) ? (
                 <span

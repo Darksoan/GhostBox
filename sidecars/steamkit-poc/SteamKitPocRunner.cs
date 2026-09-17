@@ -1005,7 +1005,10 @@ public class SteamKitPocRunner
                             string? cdnToken = null;
                             if (_steam3!.CDNAuthTokens.TryGetValue((manifest.DepotID, connection.Host), out var authTask))
                             {
-                                var authResult = await authTask.Task;
+                                // Sem o token, a pausa só era percebida depois
+                                // que a Steam respondia ao auth — com a rede
+                                // lenta, isto atrasava o cancelamento em segundos.
+                                var authResult = await authTask.Task.WaitAsync(_cancellationToken);
                                 cdnToken = authResult.Token;
                             }
 

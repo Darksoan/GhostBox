@@ -34,6 +34,7 @@ const STEAM_PLAYER_COUNT_TTL_SECS: u64 = 120;
 /// Teto de requisições simultâneas ao endpoint da Steam. Uma prateleira pede
 /// poucos jogos, mas a Home pode pedir várias de uma vez.
 const STEAM_PLAYER_COUNT_CONCURRENCY: usize = 6;
+const MAX_SHORTCUT_ICON_BYTES: usize = 8 * 1024 * 1024;
 static STEAM_STORE_DETAILS_CACHE_WRITE_LOCK: Mutex<()> = Mutex::new(());
 static STEAM_PLAYER_COUNT_CACHE: OnceLock<Mutex<HashMap<String, (Instant, u64)>>> = OnceLock::new();
 static STEAM_ICON_URL_MEMORY: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
@@ -2052,6 +2053,118 @@ fn resolve_local_game_icon_urls(
     resolved
 }
 
+fn is_ico_icon_url(app_id: &str, url: &str) -> bool {
+    let url = url.trim();
+    let base = url.split(['?', '#']).next().unwrap_or_default();
+    url.starts_with("https://")
+        && url.contains(&format!("steamcommunity/public/images/apps/{app_id}/"))
+        && base.to_ascii_lowercase().ends_with(".ico")
+}
+
+/// Caminho `.ico` local do jogo para uso como `IconLocation` do atalho.
+/// Só `.ico` serve ao `WScript.Shell`: os `icon.jpg/png` do `librarycache`
+/// são ignorados de propósito.
+pub(crate) fn local_game_ico_path(app: &tauri::AppHandle, app_id: &str) -> Option<PathBuf> {
+    let normalized: String = app_id.chars().filter(char::is_ascii_digit).collect();
+    if normalized.is_empty() {
+        return None;
+    }
+    get_game_icon_from_local_files(app, &normalized)
+        .filter(|path| path.to_ascii_lowercase().ends_with(".ico"))
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+}
+
+fn shortcut_ico_cache_path(app: &tauri::AppHandle, app_id: &str) -> Option<PathBuf> {
+    let dir = app.path().app_data_dir().ok()?.join("game-icons");
+    Some(dir.join(format!("{app_id}.ico")))
+}
+
+fn is_valid_ico_bytes(bytes: &[u8]) -> bool {
+    bytes.len() > 22 && bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 1 && bytes[3] == 0
+}
+
+async fn download_ico_to_cache(app: &tauri::AppHandle, app_id: &str, url: &str) -> Option<PathBuf> {
+    let url = url.trim();
+    if url.is_empty() || !is_ico_icon_url(app_id, url) {
+        return None;
+    }
+    let destination = shortcut_ico_cache_path(app, app_id)?;
+    if destination.is_file() {
+        return Some(destination);
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .ok()?;
+    let bytes = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, STEAM_STORE_USER_AGENT)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .bytes()
+        .await
+        .ok()?;
+    if bytes.len() > MAX_SHORTCUT_ICON_BYTES || !is_valid_ico_bytes(&bytes) {
+        return None;
+    }
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent).ok()?;
+    }
+    let temp_path = destination.with_extension("ico.tmp");
+    std::fs::write(&temp_path, &bytes).ok()?;
+    std::fs::rename(&temp_path, &destination).ok()?;
+    destination.is_file().then_some(destination)
+}
+
+/// Resolve o `.ico` do jogo para o atalho: prefere o arquivo local da Steam,
+/// reaproveita um `.ico` já baixado e, por último, baixa o `clienticon`
+/// (único hash que existe como `.ico` no CDN) para o cache do app.
+pub(crate) async fn game_ico_for_shortcut(
+    app: &tauri::AppHandle,
+    app_id: &str,
+) -> Option<PathBuf> {
+    let app_id: String = app_id.chars().filter(char::is_ascii_digit).collect();
+    if app_id.is_empty() {
+        return None;
+    }
+    if let Some(local) = local_game_ico_path(app, &app_id) {
+        return Some(local);
+    }
+    if let Some(cached) = shortcut_ico_cache_path(app, &app_id).filter(|path| path.is_file()) {
+        return Some(cached);
+    }
+    let mut candidates = Vec::new();
+    if let Some(url) = memory_steam_icon_url(&app_id).filter(|url| is_ico_icon_url(&app_id, url)) {
+        candidates.push(url);
+    }
+    if candidates.is_empty() {
+        let cache = read_steam_icon_url_cache(app);
+        if let Some(url) =
+            cached_steam_icon_url(&cache, &app_id).filter(|url| is_ico_icon_url(&app_id, url))
+        {
+            candidates.push(url);
+        }
+    }
+    if candidates.is_empty() {
+        let app_ids = std::slice::from_ref(&app_id);
+        for (_, url) in get_game_icons_from_local_appinfo(app, app_ids) {
+            if is_ico_icon_url(&app_id, &url) {
+                candidates.push(url);
+            }
+        }
+    }
+    for url in candidates {
+        if let Some(path) = download_ico_to_cache(app, &app_id, &url).await {
+            return Some(path);
+        }
+    }
+    None
+}
+
 pub(crate) async fn fetch_remote_game(
     app: &tauri::AppHandle,
     game_id: String,
@@ -2834,9 +2947,9 @@ pub async fn cache_resolve_steam_library_assets_batch(
 #[cfg(test)]
 mod tests {
     use super::{
-        is_cached_icon_source, merge_cached_steam_store_details, read_client_icon_from_vdf,
-        steam_details_have_about, steam_reviews_response_is_usable, steam_store_search_games,
-        validate_steam_store_search,
+        is_cached_icon_source, is_ico_icon_url, is_valid_ico_bytes,
+        merge_cached_steam_store_details, read_client_icon_from_vdf, steam_details_have_about,
+        steam_reviews_response_is_usable, steam_store_search_games, validate_steam_store_search,
     };
 
     #[test]
@@ -2921,6 +3034,30 @@ mod tests {
             "3602290",
             &format!("https://example.com/{hash}.jpg")
         ));
+    }
+
+    #[test]
+    fn shortcut_icon_accepts_only_community_ico_urls() {
+        let hash = "4cc8c99722309845b2c4775902ace66f468303ec";
+        assert!(is_ico_icon_url(
+            "3602290",
+            &format!("https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/3602290/{hash}.ico"),
+        ));
+        assert!(!is_ico_icon_url(
+            "3602290",
+            &format!("https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/3602290/{hash}.jpg"),
+        ));
+        assert!(!is_ico_icon_url(
+            "3602290",
+            "C:\\Steam\\steam\\games\\3602290.ico",
+        ));
+    }
+
+    #[test]
+    fn shortcut_icon_validates_ico_magic() {
+        assert!(is_valid_ico_bytes(&[0, 0, 1, 0, 1, 0, 32, 32, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 22, 0, 0, 0, 1]));
+        assert!(!is_valid_ico_bytes(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 1, 0]));
+        assert!(!is_valid_ico_bytes(&[]));
     }
 
     #[test]

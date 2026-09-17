@@ -271,7 +271,11 @@ export function SubscriptionPlans({
   }, [cloudBackupGames, cloudSaves, resolvedCloudGameTitles]);
 
   const isPremium = subscriptionStatus?.subscription.isPremium === true;
-  const payment = visiblePayment(latestPayment(subscriptionStatus?.latestPayment), subscriptionStatus?.subscription);
+  const isLifetime = subscriptionStatus?.subscription.accessType === "lifetime";
+  const canManageBilling = subscriptionStatus?.subscription.canManageBilling === true;
+  const payment = isLifetime
+    ? null
+    : visiblePayment(latestPayment(subscriptionStatus?.latestPayment), subscriptionStatus?.subscription);
   const paymentStatus = payment && subscriptionStatus ? effectivePaymentStatus(payment, subscriptionStatus.subscription) : null;
   const cloudBackupSummaries = (() => {
     const byAppId = new Map<string, CloudBackupGameSummary>();
@@ -388,16 +392,26 @@ export function SubscriptionPlans({
           <article className="subscription-account__summary-card">
             <CalendarClock size={18} strokeWidth={2.15} aria-hidden="true" />
             <span>
-              {subscriptionStatus.subscription.cancelAtPeriodEnd
+              {isLifetime
+                ? copy("Tipo de acesso", "Access type")
+                : subscriptionStatus.subscription.cancelAtPeriodEnd
                 ? copy("Acesso até", "Access until")
                 : copy("Próxima cobrança", "Next billing")}
             </span>
-            <strong>{formatBillingDate(subscriptionStatus.subscription.currentPeriodEnd, language)}</strong>
+            <strong>
+              {isLifetime
+                ? copy("Vitalício", "Lifetime")
+                : formatBillingDate(subscriptionStatus.subscription.currentPeriodEnd, language)}
+            </strong>
           </article>
           <article className="subscription-account__summary-card">
             <Wallet size={18} strokeWidth={2.15} aria-hidden="true" />
-            <span>{copy("Método de pagamento", "Payment method")}</span>
-            <strong>{formatPaymentMethodLabel(subscriptionStatus.paymentMethod, language)}</strong>
+            <span>{isLifetime ? copy("Cobrança", "Billing") : copy("Método de pagamento", "Payment method")}</span>
+            <strong>
+              {isLifetime
+                ? copy("Não se aplica", "Not applicable")
+                : formatPaymentMethodLabel(subscriptionStatus.paymentMethod, language)}
+            </strong>
           </article>
           <article className="subscription-account__summary-card">
             <CloudUpload size={18} strokeWidth={2.15} aria-hidden="true" />
@@ -408,7 +422,7 @@ export function SubscriptionPlans({
 
         <div className="subscription-account__details-grid">
           <article className="subscription-account__panel">
-            <h4>{copy("Pagamentos", "Payments")}</h4>
+            <h4>{isLifetime ? copy("Acesso Premium", "Premium access") : copy("Pagamentos", "Payments")}</h4>
             {payment ? (
               <ul className="subscription-account__payment-list">
                 <li>
@@ -427,8 +441,16 @@ export function SubscriptionPlans({
               </ul>
             ) : (
               <div className="subscription-account__empty">
-                <strong>{copy("Nenhum pagamento listado", "No payments listed")}</strong>
-                <p>{copy("O histórico aparece após a confirmação no Stripe.", "History appears after Stripe confirmation.")}</p>
+                <strong>
+                  {isLifetime
+                    ? copy("Ativação vitalícia", "Lifetime activation")
+                    : copy("Nenhum pagamento listado", "No payments listed")}
+                </strong>
+                <p>
+                  {isLifetime
+                    ? copy("Seu acesso não exige pagamentos recorrentes.", "Your access requires no recurring payments.")
+                    : copy("O histórico aparece após a confirmação no Stripe.", "History appears after Stripe confirmation.")}
+                </p>
               </div>
             )}
           </article>
@@ -498,7 +520,7 @@ export function SubscriptionPlans({
           </article>
         </div>
 
-        <div className="subscription-account__actions" role="group" aria-label={copy("Gerenciar assinatura", "Manage subscription")}>
+        {canManageBilling ? <div className="subscription-account__actions" role="group" aria-label={copy("Gerenciar assinatura", "Manage subscription")}>
           <button
             type="button"
             className="subscription-account__action-button"
@@ -527,7 +549,7 @@ export function SubscriptionPlans({
             </span>
             <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
           </button>
-        </div>
+        </div> : null}
       </section>
     );
   }

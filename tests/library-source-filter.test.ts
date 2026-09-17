@@ -70,22 +70,26 @@ describe("isSteamSourceGame", () => {
 });
 
 describe("isGhostboxSourceGame", () => {
-  it("aceita somente jogos da fonte GhostBox", () => {
+  it("aceita jogos gerenciados pelo launcher (ghostbox, plugin, registered)", () => {
     expect(
       isGhostboxSourceGame(game("1001", { librarySource: "ghostbox" })),
     ).toBe(true);
+    expect(
+      isGhostboxSourceGame(game("1250", { librarySource: "plugin" })),
+    ).toBe(true);
+    expect(
+      isGhostboxSourceGame(game("730", { librarySource: "registered" })),
+    ).toBe(true);
   });
 
-  it("rejeita Steam, plugin e registered", () => {
+  it("rejeita Steam", () => {
     expect(
       isGhostboxSourceGame(game("620", { librarySource: "steam-installed" })),
     ).toBe(false);
     expect(
-      isGhostboxSourceGame(game("1250", { librarySource: "plugin" })),
+      isGhostboxSourceGame(game("440", { librarySource: "steam-owned" })),
     ).toBe(false);
-    expect(
-      isGhostboxSourceGame(game("730", { librarySource: "registered" })),
-    ).toBe(false);
+    expect(isGhostboxSourceGame(game("570"))).toBe(false);
   });
 });
 
@@ -120,22 +124,19 @@ describe("filterByLibrarySource", () => {
     ]);
   });
 
-  it("ghostbox lista somente a fonte GhostBox", () => {
+  it("ghostbox lista jogos do launcher (ghostbox, plugin, registered)", () => {
     expect(filterByLibrarySource(games, "ghostbox").map((g) => g.id)).toEqual([
       "1001",
       "1002",
+      "730",
+      "1250",
     ]);
   });
 
-  it("plugin/registered sem exe aparecem só em todos", () => {
-    for (const filter of ["installed", "steam", "ghostbox"] as const) {
-      const ids = filterByLibrarySource(games, filter).map((g) => g.id);
-      expect(ids).not.toContain("730");
-      expect(ids).not.toContain("1250");
-    }
-    expect(
-      filterByLibrarySource(games, "all").map((g) => g.id),
-    ).toEqual(expect.arrayContaining(["730", "1250"]));
+  it("plugin/registered não aparecem no filtro steam", () => {
+    const ids = filterByLibrarySource(games, "steam").map((g) => g.id);
+    expect(ids).not.toContain("730");
+    expect(ids).not.toContain("1250");
   });
 });
 

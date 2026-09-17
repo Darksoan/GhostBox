@@ -62,6 +62,7 @@ const PROVIDER_AUTH_DISCLAIMER =
 
 type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "cancelled";
 type SubscriptionStatus = "free" | "active" | "expired";
+type SubscriptionAccessType = "stripe" | "lifetime";
 
 type Plan = {
   id: PlanId;
@@ -107,6 +108,7 @@ type SubscriptionRow = {
   stripe_event_created?: number | null;
   stripe_payment_method_json?: string | null;
   stripe_payment_method_updated_at?: string | null;
+  access_type?: SubscriptionAccessType | null;
   created_at: string;
   updated_at: string;
 };
@@ -723,6 +725,8 @@ function publicSubscription(row: SubscriptionRow | null) {
     return {
       status: "free" as SubscriptionStatus,
       isPremium: false,
+      accessType: "free" as const,
+      canManageBilling: false,
       planId: null,
       currentPeriodStart: null,
       currentPeriodEnd: null,
@@ -733,9 +737,12 @@ function publicSubscription(row: SubscriptionRow | null) {
   }
 
   const active = row.status === "active" && !!row.current_period_end && new Date(row.current_period_end).getTime() > Date.now();
+  const accessType = row.access_type === "lifetime" ? "lifetime" : "stripe";
   return {
     status: active ? "active" : "expired",
     isPremium: active,
+    accessType,
+    canManageBilling: active && accessType === "stripe" && Boolean(row.stripe_subscription_id?.trim()),
     planId: row.plan_id,
     currentPeriodStart: row.current_period_start,
     currentPeriodEnd: row.current_period_end,
@@ -1773,6 +1780,26 @@ async function saveStripeCustomerId(env: Env, userId: string, customerId: string
   ).bind(steamId || null, userId, customerId, now, now).run();
 }
 
+function isStripeMissingResourceError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /No such (customer|subscription)/i.test(message) || /resource_missing/i.test(message);
+}
+
+function stripeCustomerMissingError(): Error {
+  const error = new Error("stripe_customer_missing");
+  (error as unknown as Record<string, unknown>).code = "stripe_customer_missing";
+  return error;
+}
+
+function isStripeCustomerMissingError(error: unknown): boolean {
+  if (error instanceof Error) {
+    if (error.message === "stripe_customer_missing") return true;
+    const code = (error as unknown as Record<string, unknown>).code;
+    if (code === "stripe_customer_missing") return true;
+  }
+  return false;
+}
+
 async function findStripeCustomerIdByUser(env: Env, userId: string) {
   const query = `metadata['user_id']:'${userId}'`;
   const payload = await stripeRequest(
@@ -1807,23 +1834,46 @@ async function resolveStripeCustomerId(
   env: Env,
   userId: string,
   subscription: SubscriptionRow | null,
-  steamId?: string | null
+  steamId?: string | null,
+  allowCreate = true
 ) {
-  const stored = subscription?.stripe_customer_id?.trim();
-  if (stored) return stored;
-
-  const searched = await findStripeCustomerIdByUser(env, userId).catch(() => null);
-  if (searched) {
-    await saveStripeCustomerId(env, userId, searched, steamId);
-    return searched;
+  const stored = subscription?.stripe_customer_id?.trim() || null;
+  if (stored) {
+    try {
+      const customer = await stripeRequest(env, `/customers/${encodeURIComponent(stored)}`);
+      if (customer && typeof customer === "object" && (customer as Record<string, unknown>).deleted) {
+        throw stripeCustomerMissingError();
+      }
+      return stored;
+    } catch (error) {
+      if (!isStripeCustomerMissingError(error) && !isStripeMissingResourceError(error)) throw error;
+      // The stored id belongs to another Stripe mode (ex.: test id with a live
+      // key) or was deleted. Recover the live customer by metadata when there
+      // is one; the portal must never mint an empty customer just to open.
+      const searched = await findStripeCustomerIdByUser(env, userId).catch(() => null);
+      if (searched) {
+        await saveStripeCustomerId(env, userId, searched, steamId);
+        return searched;
+      }
+      if (!allowCreate) throw stripeCustomerMissingError();
+      // Fall through and create a live customer, overwriting the stale id.
+    }
+  } else {
+    const searched = await findStripeCustomerIdByUser(env, userId).catch(() => null);
+    if (searched) {
+      await saveStripeCustomerId(env, userId, searched, steamId);
+      return searched;
+    }
+    if (!allowCreate) throw stripeCustomerMissingError();
   }
 
   const created = await createStripeCustomerForUser(env, userId, steamId);
 
   // Re-read: a request that raced us may have stored a different id already,
-  // and two ids for one account means two billable customers.
+  // and two ids for one account means two billable customers. A stale stored
+  // id already proven missing above must not win over the live id just made.
   const current = (await getSubscription(env, userId))?.stripe_customer_id?.trim();
-  if (current && current !== created) return current;
+  if (current && current !== created && current !== stored) return current;
 
   await saveStripeCustomerId(env, userId, created, steamId);
   return created;
@@ -1866,8 +1916,19 @@ async function handleCreateBillingPortal(request: Request, env: Env) {
       402
     );
   }
+  if (subscription?.access_type === "lifetime") {
+    return jsonResponse({ error: "billing_not_managed" }, env, 409);
+  }
 
-  const customerId = await resolveStripeCustomerId(env, userId, subscription, auth.session!.steamId);
+  let customerId: string;
+  try {
+    customerId = await resolveStripeCustomerId(env, userId, subscription, auth.session!.steamId, false);
+  } catch (error) {
+    if (isStripeCustomerMissingError(error) || isStripeMissingResourceError(error)) {
+      return jsonResponse({ error: "stripe_customer_missing" }, env, 409);
+    }
+    throw error;
+  }
   const params = new URLSearchParams();
   params.set("customer", customerId);
   params.set("return_url", stripePortalReturnUrl(env, request));
@@ -1875,10 +1936,18 @@ async function handleCreateBillingPortal(request: Request, env: Env) {
     params.set("flow_data[type]", "payment_method_update");
   }
 
-  const session = await stripeRequest(env, "/billing_portal/sessions", {
-    method: "POST",
-    body: params,
-  });
+  let session: Record<string, any>;
+  try {
+    session = await stripeRequest(env, "/billing_portal/sessions", {
+      method: "POST",
+      body: params,
+    });
+  } catch (error) {
+    if (isStripeMissingResourceError(error)) {
+      return jsonResponse({ error: "stripe_customer_missing" }, env, 409);
+    }
+    throw error;
+  }
   const url = typeof session.url === "string" ? session.url : null;
   if (!url) {
     return jsonResponse({ error: "Stripe did not return a portal URL." }, env, 502);
@@ -1999,7 +2068,7 @@ async function handleStatus(request: Request, env: Env) {
 
   // Only subscribers have a card worth showing, and only they see the panel
   // that renders it.
-  const paymentMethod = isActiveSubscription(subscription)
+  const paymentMethod = isActiveSubscription(subscription) && subscription?.access_type !== "lifetime"
     ? await resolveCachedPaymentMethod(env, subscription).catch(() => null)
     : null;
 
@@ -2640,8 +2709,8 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
     `INSERT INTO subscriptions (
        steam_id, user_id, plan_id, status, current_period_start, current_period_end,
        last_payment_id, stripe_customer_id, stripe_subscription_id, stripe_subscription_status,
-       cancel_at_period_end, stripe_event_created, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       cancel_at_period_end, stripe_event_created, access_type, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stripe', ?, ?)
      ON CONFLICT(${conflictColumn}) DO UPDATE SET
        steam_id = COALESCE(excluded.steam_id, subscriptions.steam_id),
        user_id = COALESCE(excluded.user_id, subscriptions.user_id),
@@ -2655,6 +2724,7 @@ async function upsertSubscription(env: Env, input: UpsertSubscriptionInput) {
        stripe_subscription_status = COALESCE(excluded.stripe_subscription_status, subscriptions.stripe_subscription_status),
        cancel_at_period_end = excluded.cancel_at_period_end,
        stripe_event_created = excluded.stripe_event_created,
+       access_type = 'stripe',
        updated_at = excluded.updated_at
      WHERE COALESCE(subscriptions.stripe_event_created, 0) <= excluded.stripe_event_created`
   ).bind(
@@ -3403,8 +3473,14 @@ async function handleDiscordExchange(request: Request, env: Env) {
   if (resolved.isNewAccount) {
     await recordSecurityEvent(env, request, resolved.account.user_id, "provider_linked", identity.provider);
   }
+  // Session shape parity with Steam login: the client keys the linked-Steam
+  // restore off `steamId`, so a Discord sign-in to a doubly-linked account
+  // must carry it too — otherwise the Steam profile (and the cloud-profile
+  // merge that depends on it) only runs after a later `/auth/me` round-trip,
+  // making avatar/banner sync depend on which provider was used to sign in.
+  const steamId = await getLinkedSteamId(env, resolved.account.user_id);
   return jsonResponse(
-    { ...accountResponsePayload(resolved.account, token), isNewAccount: resolved.isNewAccount },
+    { ...accountResponsePayload(resolved.account, token), isNewAccount: resolved.isNewAccount, steamId },
     env,
     resolved.isNewAccount ? 201 : 200
   );

@@ -500,6 +500,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const cloudProfileLocalUpdatedAtRef = useRef<string | null>(
     readStoredCloudProfileUpdatedAt(),
   );
+  // The timestamp above is device-global (localStorage), but the decision
+  // local-vs-remote belongs to one GhostBox account. Without the owner check,
+  // a stale timestamp from whoever used the device last — or a Steam-native
+  // profile written to disk by the login itself — makes fresh provider state
+  // look newer than the account's remote snapshot, so the avatar/banner only
+  // comes back when signing in with the same provider as before.
+  const cloudProfileLocalUpdatedAtAccountRef = useRef<string | null>(null);
   const steamProfileRef = useRef<SteamProfile | null>(steamProfile);
   const userCollectionsRef = useRef<UserCollection[]>(userCollections);
   const favoriteGamesRef = useRef<GhostBoxGame[]>(favoriteGames);
@@ -724,6 +731,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setSteamAccountStats(null);
     cloudProfileFavoriteGameIdsRef.current = [];
     cloudProfileLocalUpdatedAtRef.current = null;
+    cloudProfileLocalUpdatedAtAccountRef.current = null;
     cloudProfilePendingUploadRef.current = false;
     cloudProfileRestoredUserIdRef.current = null;
   }, [accountUserId]);
@@ -890,6 +898,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const markCloudProfileLocalUpdated = useCallback(
     (iso = new Date().toISOString()) => {
       cloudProfileLocalUpdatedAtRef.current = iso;
+      cloudProfileLocalUpdatedAtAccountRef.current = accountUserIdRef.current;
       writeStoredCloudProfileUpdatedAt(iso);
       return iso;
     },
@@ -914,12 +923,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
     // Account, not Steam: the worker keys the snapshot by user_id, so an
     // account with no Steam connected still has a profile worth syncing.
-    if (!accountUserIdRef.current) return;
+    const pushAccountId = accountUserIdRef.current;
+    if (!pushAccountId) return;
     const profile = steamProfileRef.current;
 
     cloudProfileSyncInFlightRef.current = true;
     try {
       if (!(await hasPremiumCloudProfileAccess())) return;
+      // The account can change mid-upload (sign-out, provider switch).
+      // Stamping another account's timestamp would make its next restore
+      // believe the local state is current and skip the remote avatar/banner.
+      if (accountUserIdRef.current !== pushAccountId) return;
 
       const updatedAt =
         cloudProfileLocalUpdatedAtRef.current || markCloudProfileLocalUpdated();
@@ -949,8 +963,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         userCollections: userCollectionsRef.current,
       });
       const saved = await ghostboxApi.saveCloudProfileSnapshot(snapshot);
-      if (saved?.updatedAt) {
+      if (saved?.updatedAt && accountUserIdRef.current === pushAccountId) {
         cloudProfileLocalUpdatedAtRef.current = saved.updatedAt;
+        cloudProfileLocalUpdatedAtAccountRef.current = pushAccountId;
         writeStoredCloudProfileUpdatedAt(saved.updatedAt);
       }
     } catch {
@@ -1040,7 +1055,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       // Read after the awaits: a Steam profile restored meanwhile carries the
       // steamId that applyCloudProfileToLocal has to keep.
       const currentProfile = steamProfileRef.current;
-      const localUpdatedAt = cloudProfileLocalUpdatedAtRef.current;
+      // The device timestamp is only meaningful when it was written by this
+      // account's session. A stale value from another account — or from the
+      // Steam-native profile the login itself just wrote to disk — must not
+      // make the local state look current, or the remote avatar and banner
+      // are skipped and only reappear on the same provider as before.
+      const localUpdatedAt =
+        cloudProfileLocalUpdatedAtAccountRef.current === accountId
+          ? cloudProfileLocalUpdatedAtRef.current
+          : null;
       const localHasData =
         Boolean(currentProfile?.bannerUrl) ||
         favoriteGamesRef.current.length > 0 ||
@@ -1108,6 +1131,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       );
       writeStoredUserCollections(applied.userCollections);
       cloudProfileLocalUpdatedAtRef.current = remote.updatedAt;
+      cloudProfileLocalUpdatedAtAccountRef.current = accountId;
       writeStoredCloudProfileUpdatedAt(remote.updatedAt);
       cloudProfilePendingUploadRef.current = false;
       cloudProfileRestoredUserIdRef.current = accountId;
@@ -1537,6 +1561,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     const restoreLinkedAccount = async () => {
+      const restoreAccountId = accountUserIdRef.current;
       const current = steamProfileRef.current;
       if (current?.steamId === steamId) {
         void syncPlaytimesFromSteam(steamId);
@@ -1547,11 +1572,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await ghostboxApi.restoreSteamAccount(steamId);
         if (cancelled || steamProfileRequestSequenceRef.current !== requestId) return;
-        if (!accountUserIdRef.current) {
-          // The session ended while the restore was in flight, and Rust
-          // already re-wrote steam-profile.json before resolving: undo it so
-          // the signed-out state stays clean.
-          void ghostboxApi.clearLocalSteamProfile().catch(() => undefined);
+        // The account may have changed (sign-out, provider switch) while the
+        // Steam fetch was in flight: never paint another account's profile.
+        if (!accountUserIdRef.current || accountUserIdRef.current !== restoreAccountId) {
+          if (!accountUserIdRef.current) {
+            // The session ended while the restore was in flight, and Rust
+            // already re-wrote steam-profile.json before resolving: undo it so
+            // the signed-out state stays clean.
+            void ghostboxApi.clearLocalSteamProfile().catch(() => undefined);
+          }
           return;
         }
         // The Steam summary carries no banner and only the Steam avatar, and
@@ -1567,6 +1596,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (merged !== profile) {
           void ghostboxApi.saveSteamProfile(merged).catch(() => undefined);
         }
+        // Whichever provider signed in, the account's cloud profile is
+        // authoritative for avatar/banner/display name. If it has not landed
+        // yet for this account, re-assert it after the Steam write so the
+        // native summary cannot win the race on one login path but not the
+        // other. Concurrent calls collapse on the in-flight guard.
+        if (cloudProfileRestoredUserIdRef.current !== restoreAccountId) {
+          void restoreCloudProfileFromRemote();
+        }
         void syncPlaytimesFromSteam(steamId);
       } catch (error) {
         console.warn("Failed to restore linked Steam account", error);
@@ -1577,7 +1614,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [linkedSteamId, syncPlaytimesFromSteam]);
+  }, [linkedSteamId, restoreCloudProfileFromRemote, syncPlaytimesFromSteam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2205,7 +2242,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           // File deletion failure is non-fatal; library entry already removed.
         }
       } else {
-        // Steam-installed: delegate to Steam's own uninstall dialog.
+        // Remove the launcher entry before delegating file removal to Steam.
+        await removeQueuedGame(game);
         await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
       }
     },
@@ -2923,9 +2961,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeConfirmHasLocalInstall = removeConfirmGame
-    ? readDownloadTasks().some(
+    ? removeConfirmGame.status === "installed" ||
+      removeConfirmGame.librarySource === "steam-installed" ||
+      readDownloadTasks().some(
         (t) =>
-          t.appId === (removeConfirmGame.appId || removeConfirmGame.id.replace(/^steam-/, "")) &&
+          t.appId ===
+            (removeConfirmGame.appId || removeConfirmGame.id.replace(/^steam-/, "")) &&
           t.status === "completed",
       )
     : false;

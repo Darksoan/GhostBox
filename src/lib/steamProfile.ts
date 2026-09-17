@@ -5,16 +5,35 @@ import type { SteamProfile } from "../types";
 const UPLOADED_PROFILE_IMAGE_PATH = "/storage/v1/object/public/profile-images/";
 
 /**
- * A custom image is either still inline (picked, not uploaded yet) or already
- * living in the account's profile-images bucket. Matching only `data:` treated
- * every uploaded avatar as a Steam one, so the Steam summary won on merge and
- * the account's picture was lost on the next sign-in.
+ * A custom image is either still inline (picked, not uploaded yet), already
+ * living in the account's profile-images bucket, or hosted outside Steam
+ * (e.g. a Discord CDN avatar saved to the cloud profile). Only Steam-hosted
+ * images count as Steam ones: treating every uploaded avatar as Steam made
+ * the Steam summary win on merge and the account's picture was lost on the
+ * next sign-in — and only on the Steam-login path, since only it fetches a
+ * native profile before the cloud restore lands.
  */
 export function isCustomProfileAvatar(avatarUrl: string) {
-  return (
-    /^data:image\//i.test(avatarUrl) ||
-    avatarUrl.includes(UPLOADED_PROFILE_IMAGE_PATH)
-  );
+  const url = (avatarUrl || "").trim();
+  if (!url) return false;
+  if (/^data:image\//i.test(url)) return true;
+  if (url.includes(UPLOADED_PROFILE_IMAGE_PATH)) return true;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      const isSteamHost =
+        host === "steamstatic.com" ||
+        host.endsWith(".steamstatic.com") ||
+        host === "steamcommunity.com" ||
+        host.endsWith(".steamcommunity.com") ||
+        host === "akamaihd.net" ||
+        host.endsWith(".akamaihd.net");
+      return !isSteamHost;
+    } catch {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

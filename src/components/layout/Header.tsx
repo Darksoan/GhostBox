@@ -77,6 +77,8 @@ interface HeaderProps {
   steamProfile?: SteamProfile | null;
   isPremium?: boolean;
   subscriptionPeriodEnd?: string | null;
+  subscriptionAccessType?: "free" | "stripe" | "lifetime" | null;
+  canManageSubscriptionBilling?: boolean;
   onQueryChange: (query: string) => void;
   onSelectSuggestion: (game: GhostBoxGame) => void;
   onBack: () => void;
@@ -125,6 +127,8 @@ export const Header = memo(function Header({
   steamProfile = null,
   isPremium = false,
   subscriptionPeriodEnd = null,
+  subscriptionAccessType = null,
+  canManageSubscriptionBilling = false,
   onQueryChange,
   onSelectSuggestion,
   onBack,
@@ -563,7 +567,9 @@ export const Header = memo(function Header({
                 />
               </button>
               <span className="header__tooltip header__tooltip--premium">
-                {premiumExpiryText ? (
+                {subscriptionAccessType === "lifetime" ? (
+                  appearance.language === "en" ? "Lifetime Premium access." : "Acesso Premium vitalício."
+                ) : premiumExpiryText ? (
                   <>
                     {appearance.language === "en" ? "Expires on " : "Expira em "}
                     <span className="header__tooltip-date">{premiumExpiryText.date}</span>
@@ -618,24 +624,28 @@ export const Header = memo(function Header({
                 <Settings2 size={17} strokeWidth={2.25} aria-hidden="true" />
                 {appearance.language === "en" ? "Subscription panel" : "Painel de assinatura"}
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="header__subscription-menu-item"
-                onClick={() => openSubscriptionPortal("manage")}
-              >
-                <UserCog size={17} strokeWidth={2.25} aria-hidden="true" />
-                {appearance.language === "en" ? "Manage" : "Gerenciar"}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="header__subscription-menu-item"
-                onClick={() => openSubscriptionPortal("payment_method_update")}
-              >
-                <CreditCard size={17} strokeWidth={2.25} aria-hidden="true" />
-                {appearance.language === "en" ? "Change payment method" : "Alterar método de pagamento"}
-              </button>
+              {canManageSubscriptionBilling ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="header__subscription-menu-item"
+                    onClick={() => openSubscriptionPortal("manage")}
+                  >
+                    <UserCog size={17} strokeWidth={2.25} aria-hidden="true" />
+                    {appearance.language === "en" ? "Manage" : "Gerenciar"}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="header__subscription-menu-item"
+                    onClick={() => openSubscriptionPortal("payment_method_update")}
+                  >
+                    <CreditCard size={17} strokeWidth={2.25} aria-hidden="true" />
+                    {appearance.language === "en" ? "Change payment method" : "Alterar método de pagamento"}
+                  </button>
+                </>
+              ) : null}
             </div>
           )}
         </div>

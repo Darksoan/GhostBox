@@ -233,7 +233,12 @@ static async Task RunWorkerAsync()
                 }
                 finally
                 {
-                    WorkerState.ActiveDownloads.TryRemove(commandConfig.AppId, out _);
+                    // Remove só se o registro ainda é desta execução: sem a
+                    // comparação, o término da tentativa antiga (pausa) apagava
+                    // o controle da retomada recém-registrada sob o mesmo AppId
+                    // e o download novo ficava incancelável/travado.
+                    ((System.Collections.Generic.ICollection<System.Collections.Generic.KeyValuePair<uint, CancellationTokenSource>>)WorkerState.ActiveDownloads).Remove(
+                        new System.Collections.Generic.KeyValuePair<uint, CancellationTokenSource>(commandConfig.AppId, cancellation));
                     cancellation.Dispose();
                 }
             });

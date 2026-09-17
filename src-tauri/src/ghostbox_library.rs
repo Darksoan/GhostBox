@@ -533,10 +533,18 @@ pub fn build_scan_games_with_plugins(
 
     let mut steam_games = installed_games;
     for game in steam_games.iter_mut() {
+        let app_id = extract_app_id(game);
         if let Some(object) = game.as_object_mut() {
-            object
-                .entry("librarySource".to_string())
-                .or_insert_with(|| json!("steam-installed"));
+            if plugin_app_ids
+                .iter()
+                .any(|plugin_app_id| plugin_app_id == &app_id)
+            {
+                object.insert("librarySource".to_string(), json!("plugin"));
+            } else {
+                object
+                    .entry("librarySource".to_string())
+                    .or_insert_with(|| json!("steam-installed"));
+            }
         }
     }
     for app_id in plugin_app_ids {
@@ -662,6 +670,23 @@ mod tests {
         let (_, games) = build_scan_games_with_plugins(Vec::new(), &["1250".into()], Vec::new());
 
         assert_eq!(games.len(), 1);
+        assert_eq!(games[0]["librarySource"], "plugin");
+    }
+
+    #[test]
+    fn installed_plugin_is_kept_as_a_ghostbox_game() {
+        let installed = vec![serde_json::json!({
+            "appId": "1250",
+            "id": "steam-1250",
+            "title": "Killing Floor",
+            "status": "installed",
+            "librarySource": "steam-installed"
+        })];
+
+        let (_, games) = build_scan_games_with_plugins(installed, &["1250".into()], Vec::new());
+
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0]["status"], "installed");
         assert_eq!(games[0]["librarySource"], "plugin");
     }
 

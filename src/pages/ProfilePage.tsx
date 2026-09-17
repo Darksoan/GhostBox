@@ -1734,12 +1734,11 @@ export function ProfilePage({
   const avatarSource = isDataAvatar
     ? avatarUrl
     : loadableAvatarSource || avatarUrl;
-  const shouldHoldSteamAvatar = Boolean(
-    isCloudProfileRestoring &&
-      steamProfile?.avatarUrl &&
-      !steamProfile.avatarUrl.startsWith("data:") &&
-      !steamProfile.avatarUrl.includes("/storage/v1/object/public/profile-images/")
-  );
+  // Reopening the app paints the Steam summary (avatar, name, banner) before
+  // the account's cloud profile lands. While the cloud sync is in flight,
+  // hold the placeholder avatar/banner and no username instead of the
+  // provisional Steam data.
+  const isHoldingForCloudSync = Boolean(isCloudProfileRestoring);
   // Só pinta a arte depois que ela decodificou de fato. Pintar a URL "otimista"
   // é o que colocava o ícone de imagem quebrada na capa quando o download da
   // nuvem falhava.
@@ -1756,7 +1755,7 @@ export function ProfilePage({
   const paintedBannerSource = isBannerReady
     ? loadedBannerSource
     : lastPaintedBannerSourceRef.current;
-  const isBannerPlaceholder = !paintedBannerSource;
+  const isBannerPlaceholder = !paintedBannerSource || isHoldingForCloudSync;
   const bannerImageSource = isBannerPlaceholder
     ? profileBannerPlaceholderSource
     : paintedBannerSource;
@@ -1931,8 +1930,9 @@ export function ProfilePage({
   // the GhostBox account's, so it renders on its own and the Steam-derived
   // parts (level, Steam ID, library, achievements) simply stay out until a
   // Steam account is connected.
-  const profileDisplayName =
-    steamProfile?.displayName || account?.displayName || account?.username || "";
+  const profileDisplayName = isHoldingForCloudSync
+    ? ""
+    : steamProfile?.displayName || account?.displayName || account?.username || "";
   const steamLevelLabel =
     steamLevel === null
       ? appearance.language === "en"
@@ -1981,7 +1981,7 @@ export function ProfilePage({
             <div
               className="profile-page__avatar-frame"
             >
-              {shouldHoldSteamAvatar ? (
+              {isHoldingForCloudSync ? (
                 <span className="profile-page__avatar-skeleton" />
               ) : (
                 <img

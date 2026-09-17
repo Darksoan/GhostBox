@@ -60,8 +60,8 @@ export function UninstallConfirmModal({
           {hasLocalInstall && (
             <p className="uninstall-confirm-modal__note">
               {lang === "en"
-                ? "This game has files installed by GhostBox. You can also delete them to free up disk space."
-                : "Este jogo possui arquivos instalados pelo GhostBox. Você também pode apagá-los para liberar espaço em disco."}
+                ? "This game is installed. Choose Remove & uninstall to also delete its local files."
+                : "Este jogo está instalado. Escolha Remover e desinstalar para também apagar os arquivos locais."}
             </p>
           )}
 

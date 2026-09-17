@@ -249,6 +249,57 @@ describe("POST /auth/steam/login", () => {
   });
 });
 
+describe("POST /auth/oauth/exchange", () => {
+  async function loginTicket(db: ReturnType<typeof fakeD1>) {
+    const callback = await worker.fetch(
+      new Request(
+        `https://worker.test/oauth/callback?code=auth_code_1&state=${encodeURIComponent(await oauthState({}))}`,
+        { redirect: "manual" }
+      ),
+      env(db),
+      executionContext
+    );
+    expect(callback.status).toBe(302);
+    return new URL(callback.headers.get("location")!).searchParams.get("ticket")!;
+  }
+
+  function exchangeRequest(ticket: string) {
+    return new Request("https://worker.test/auth/oauth/exchange", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ticket }),
+    });
+  }
+
+  it("returns the linked Steam id, like Steam login does", async () => {
+    // The client keys the linked-Steam restore off `steamId`. A Discord
+    // sign-in to a doubly-linked account must carry it too otherwise avatar
+    // and banner sync depends on which provider signed in.
+    mock = mockDiscordOAuth();
+    const db = fakeD1({
+      accounts: [account()],
+      user_connections: [
+        connection("user_1", "discord", DISCORD_USER_ID),
+        connection("user_1", "steam", STEAM_ID),
+      ],
+    });
+    const response = await worker.fetch(exchangeRequest(await loginTicket(db)), env(db), executionContext);
+    expect(response.status).toBe(200);
+    expect(await response.json<any>()).toMatchObject({ isNewAccount: false, steamId: STEAM_ID });
+  });
+
+  it("returns a null Steam id when no Steam is linked", async () => {
+    mock = mockDiscordOAuth();
+    const db = fakeD1({
+      accounts: [account()],
+      user_connections: [connection("user_1", "discord", DISCORD_USER_ID)],
+    });
+    const response = await worker.fetch(exchangeRequest(await loginTicket(db)), env(db), executionContext);
+    expect(response.status).toBe(200);
+    expect(await response.json<any>()).toMatchObject({ isNewAccount: false, steamId: null });
+  });
+});
+
 describe("removed provider signup route", () => {
   it("answers 404 for POST /auth/steam/signup", async () => {
     const restore = steamMock(true);

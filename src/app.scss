@@ -1250,7 +1250,7 @@ p {
     height: 14px;
 
     &::before,
-    &--loaded::after {
+    &::after {
       content: "";
       position: absolute;
       left: 50%;
@@ -8603,7 +8603,7 @@ input[type="search"]::-ms-reveal {
     width: 100%;
     max-width: var(--content-max-width);
     margin-inline: auto;
-    gap: var(--space-5);
+    gap: var(--space-3);
   }
 
   &__empty.empty-state {
@@ -8616,7 +8616,7 @@ input[type="search"]::-ms-reveal {
     width: 100%;
     max-width: var(--content-max-width);
     margin-inline: auto;
-    gap: var(--space-8);
+    gap: var(--space-3);
   }
 
   &__section {
@@ -8631,19 +8631,49 @@ input[type="search"]::-ms-reveal {
 
 }
 
+// Janela maximizada: o cap de 1200px deixava faixas vazias nas laterais e o
+// card colado na titlebar — estica para a largura disponível (sobra só o
+// gutter) e dá respiro no topo. Mesmo tratamento do catálogo maximizado.
+.sidebar--maximized ~ .container .downloads-page,
+.app-main:has(.sidebar--maximized) .downloads-page {
+  --content-max-width: 100%;
+  padding-top: var(--space-10);
+}
+
+// Botões sutilmente maiores no maximizado: 26px → 30px, ícones 18px → 20px
+// (CSS sobrescreve o size do lucide). A fileira de controles do layout em
+// progresso acompanha (26px → 30px); o concluído usa metades flexíveis.
+.sidebar--maximized ~ .container .downloads-hero__action,
+.app-main:has(.sidebar--maximized) .downloads-hero__action {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+}
+
+.sidebar--maximized ~ .container .downloads-hero__action svg,
+.app-main:has(.sidebar--maximized) .downloads-hero__action svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar--maximized ~ .container .downloads-hero:not(.downloads-hero--completed) .downloads-hero__content,
+.app-main:has(.sidebar--maximized) .downloads-hero:not(.downloads-hero--completed) .downloads-hero__content {
+  grid-template-rows: minmax(0, auto) minmax(0, auto) 30px;
+}
+
 .downloads-hero {
-  --download-cover-width: 232px;
-  --download-cover-height: 108px;
+  --download-cover-width: 200px;
+  --download-cover-height: 93px;
   position: relative;
   display: grid;
   grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
   grid-template-rows: var(--download-cover-height);
-  column-gap: var(--space-8);
+  column-gap: var(--space-6);
   align-items: stretch;
   width: 100%;
   height: var(--download-cover-height);
   min-width: 0;
-  padding-right: var(--space-6);
+  padding-right: var(--space-4);
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--surface-secondary);
@@ -8673,8 +8703,10 @@ input[type="search"]::-ms-reveal {
     position: relative;
     z-index: 2;
     display: grid;
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) 28px;
-    padding: var(--space-3) 0;
+    grid-template-rows: minmax(0, auto) minmax(0, auto) 26px;
+    align-content: center;
+    row-gap: var(--space-1);
+    padding: var(--space-2) 0;
     min-width: 0;
     min-height: 0;
     pointer-events: none;
@@ -8684,7 +8716,7 @@ input[type="search"]::-ms-reveal {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-6);
+    gap: var(--space-4);
     min-width: 0;
   }
 
@@ -8692,12 +8724,11 @@ input[type="search"]::-ms-reveal {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-6);
+    gap: var(--space-4);
     min-width: 0;
   }
 
   &__title {
-    transform: translateY(calc(var(--space-1) * 2));
     overflow: hidden;
     color: var(--text-primary);
     font-size: var(--type-size-body-emphasis);
@@ -8715,7 +8746,7 @@ input[type="search"]::-ms-reveal {
     flex: 0 0 auto;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     text-transform: uppercase;
     letter-spacing: var(--ls-100);
@@ -8723,7 +8754,6 @@ input[type="search"]::-ms-reveal {
   }
 
   &__percent {
-    transform: translateY(calc(var(--space-1) * 2));
     flex: 0 0 auto;
     color: var(--text-primary);
     font-size: var(--type-size-caption);
@@ -8737,7 +8767,7 @@ input[type="search"]::-ms-reveal {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    column-gap: var(--space-8);
+    column-gap: var(--space-4);
   }
 
   &__progress-track {
@@ -8745,7 +8775,7 @@ input[type="search"]::-ms-reveal {
     grid-row: 1;
     display: block;
     width: 100%;
-    height: 6px;
+    height: 4px;
     overflow: hidden;
     border-radius: var(--radius-pill);
     background: var(--surface-modal-control);
@@ -8781,21 +8811,44 @@ input[type="search"]::-ms-reveal {
     white-space: nowrap;
   }
 
+  &__meta-value,
+  &__meta-unit {
+    font-weight: var(--weight-semibold);
+  }
+
   &__actions {
     grid-column: 2;
     grid-row: 1;
     display: flex;
-    gap: var(--space-3);
+    gap: var(--space-2);
     align-items: center;
     pointer-events: auto;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--motion-fast) var(--ease),
+      visibility var(--motion-fast);
+  }
+
+  &:hover &__actions,
+  &:focus-within &__actions {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  @media (hover: none) {
+    &__actions {
+      opacity: 1;
+      visibility: visible;
+    }
   }
 
   &__action {
     display: inline-grid;
     place-items: center;
-    flex: 0 0 28px;
-    width: 28px;
-    height: 28px;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     border: 0;
     border-radius: var(--radius-lg);
@@ -8842,6 +8895,59 @@ input[type="search"]::-ms-reveal {
     animation: spin 0.8s linear infinite;
   }
 
+  @media (min-width: 721px) {
+    &--completed &__content {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: 1fr 1fr;
+      column-gap: var(--space-8);
+      row-gap: var(--space-1);
+    }
+
+    &--completed &__top {
+      grid-column: 1;
+      grid-row: 1;
+      align-self: end;
+      align-items: baseline;
+      justify-content: flex-start;
+      margin-bottom: var(--space-2);
+    }
+
+    &--completed &__title {
+      font-size: calc(var(--type-size-body-emphasis) - 1px);
+    }
+
+    &--completed &__middle {
+      display: contents;
+    }
+
+    &--completed &__status-text {
+      grid-column: 1;
+      grid-row: 2;
+      align-self: start;
+      margin-top: var(--space-2);
+      color: var(--text-tertiary);
+      font-weight: var(--weight-semibold);
+      font-size: calc(var(--type-size-caption) - 2px);
+    }
+
+    &--completed &__top &__meta {
+      flex: 0 0 auto;
+      justify-content: flex-start;
+      color: var(--text-tertiary);
+      font-size: calc(var(--type-size-caption) - 2px);
+      line-height: var(--type-line-caption);
+    }
+
+    &--completed &__controls {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      justify-content: flex-end;
+      align-self: start;
+      margin-top: var(--space-2);
+    }
+  }
+
   &__stale {
     grid-column: 2;
     grid-row: 2;
@@ -8860,8 +8966,8 @@ input[type="search"]::-ms-reveal {
   }
 
   @media (max-width: 900px) {
-    --download-cover-width: 184px;
-    --download-cover-height: 86px;
+    --download-cover-width: 166px;
+    --download-cover-height: 78px;
 
     &__content {
       padding: 0 0 var(--space-1);
@@ -8869,8 +8975,8 @@ input[type="search"]::-ms-reveal {
   }
 
   @media (max-width: 720px) {
-    --download-cover-width: 160px;
-    --download-cover-height: 74px;
+    --download-cover-width: 146px;
+    --download-cover-height: 68px;
     grid-template-rows: auto auto;
     height: auto;
     min-height: var(--download-cover-height);
@@ -10569,7 +10675,8 @@ border: 0;
   @include pb-disable-cover-zoom;
 
   .downloads-hero__progress-track > span,
-  .downloads-hero__toggle svg {
+  .downloads-hero__toggle svg,
+  .downloads-hero__actions {
     transition: none;
   }
 

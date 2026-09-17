@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, FolderOpen, LoaderCircle, Pause, Play, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { EmptyState } from "../components/ui/LoadingStates";
 import { DownloadDeleteConfirmModal } from "../components/modals/DownloadDeleteConfirmModal";
@@ -158,7 +158,8 @@ function DownloadsHero({
   const downloadedAt = formatDownloadTimestamp(task.startedAt ?? task.queuedAt, appearance.language);
   const showsProgress = task.status === "downloading" || task.status === "paused" || task.status === "queued";
 
-  const metaItems = (
+  const completedSizeParts = formatBytes(task.totalBytesDownloaded ?? 0).split(" ");
+  const metaItems: ReactNode[] = (
     showsProgress
       ? [
           `${formatBytes(task.bytesDownloaded)} / ${task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "--"}`,
@@ -166,8 +167,10 @@ function DownloadsHero({
         ]
       : task.status === "completed"
         ? [
-            downloadedAt,
-            t("downloads.totalDownloaded", { size: formatBytes(task.totalBytesDownloaded ?? 0) }),
+            <>
+              <span className="downloads-hero__meta-value">{completedSizeParts[0]}</span>{" "}
+              <span className="downloads-hero__meta-unit">{completedSizeParts[1]}</span>
+            </>,
             task.failedFiles ? t("downloads.failedFiles", { count: task.failedFiles }) : "",
           ]
         : task.status === "error"
@@ -216,24 +219,31 @@ function DownloadsHero({
       <div className="downloads-hero__content">
         <div className="downloads-hero__top">
           <strong className="downloads-hero__title">{displayTitle}</strong>
-          {(showsProgress || isCompleted) && (
+          {showsProgress && (
             <span className="downloads-hero__percent">{progressPercent}%</span>
+          )}
+          {isCompleted && metaItems.length > 0 && (
+            <span className="downloads-hero__meta">
+              {metaItems.map((item, index) => (
+                <span key={index} className="downloads-hero__meta-item">{item}</span>
+              ))}
+            </span>
           )}
         </div>
 
         <div className="downloads-hero__middle">
           {statusLabel && <span className="downloads-hero__status-text">{statusLabel}</span>}
-          {metaItems.length > 0 && (
+          {!isCompleted && metaItems.length > 0 && (
             <span className="downloads-hero__meta">
-              {metaItems.map((item) => (
-                <span key={item} className="downloads-hero__meta-item">{item}</span>
+              {metaItems.map((item, index) => (
+                <span key={index} className="downloads-hero__meta-item">{item}</span>
               ))}
             </span>
           )}
         </div>
 
         <div className="downloads-hero__controls">
-          {(showsProgress || isCompleted) && (
+          {showsProgress && (
             <span className="downloads-hero__progress-track" role="progressbar"
               aria-label={t("downloads.details.progress")}
               aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>

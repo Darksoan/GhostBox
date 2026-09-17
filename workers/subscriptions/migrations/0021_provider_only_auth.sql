@@ -13,8 +13,6 @@
 --      kept for legal retention; they are keyed by user_id and harmless
 --      without the account row. All non-financial account data is removed.
 
-PRAGMA defer_foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS steam_openid_nonces (
   nonce_hash TEXT PRIMARY KEY,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -23,28 +21,6 @@ CREATE TABLE IF NOT EXISTS steam_openid_nonces (
 
 CREATE INDEX IF NOT EXISTS idx_steam_openid_nonces_expires
   ON steam_openid_nonces(expires_at);
-
--- Rebuild accounts with a nullable email. New provider-only accounts store
--- NULL; legacy rows keep their address for display.
-CREATE TABLE IF NOT EXISTS accounts_new (
-  user_id TEXT PRIMARY KEY,
-  email TEXT UNIQUE,
-  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  display_name TEXT,
-  email_verified INTEGER NOT NULL DEFAULT 0,
-  verified_via TEXT,
-  token_version INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
-INSERT OR IGNORE INTO accounts_new
-  (user_id, email, username, display_name, email_verified, verified_via, token_version, created_at, updated_at)
-SELECT user_id, email, username, display_name, email_verified, verified_via, token_version, created_at, updated_at
-FROM accounts;
-
-DROP TABLE IF EXISTS accounts;
-ALTER TABLE accounts_new RENAME TO accounts;
 
 -- Drop unrecoverable password-only accounts: no Discord, no Steam.
 DELETE FROM cloud_saves WHERE user_id IN (
@@ -105,3 +81,79 @@ UPDATE payments SET user_id = NULL, steam_id = NULL WHERE user_id IN (
 DELETE FROM accounts WHERE NOT EXISTS (
   SELECT 1 FROM user_connections c WHERE c.user_id = accounts.user_id
 );
+
+-- Rebuild accounts with a nullable email. Three child tables have foreign keys
+-- to accounts; rebuild them against accounts_new before dropping the old parent
+-- so D1 never observes a broken FK graph during the migration.
+CREATE TABLE accounts_new (
+  user_id TEXT PRIMARY KEY,
+  email TEXT UNIQUE,
+  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  display_name TEXT,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  verified_via TEXT,
+  token_version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+INSERT INTO accounts_new
+  (user_id, email, username, display_name, email_verified, verified_via, token_version, created_at, updated_at)
+SELECT user_id, email, username, display_name, email_verified, verified_via, token_version, created_at, updated_at
+FROM accounts;
+
+CREATE TABLE user_connections_new (
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
+  metadata_json TEXT,
+  linked_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  PRIMARY KEY (user_id, provider),
+  FOREIGN KEY (user_id) REFERENCES accounts_new(user_id)
+);
+
+INSERT INTO user_connections_new (user_id, provider, provider_id, metadata_json, linked_at)
+SELECT user_id, provider, provider_id, metadata_json, linked_at FROM user_connections;
+
+CREATE TABLE discord_verification_codes_new (
+  user_id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  discord_user_id TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES accounts_new(user_id)
+);
+
+INSERT INTO discord_verification_codes_new
+  (user_id, code_hash, discord_user_id, attempts, expires_at, created_at)
+SELECT user_id, code_hash, discord_user_id, attempts, expires_at, created_at
+FROM discord_verification_codes;
+
+CREATE TABLE security_events_new (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  provider TEXT,
+  ip_prefix TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (user_id) REFERENCES accounts_new(user_id)
+);
+
+INSERT INTO security_events_new (id, user_id, kind, provider, ip_prefix, created_at)
+SELECT id, user_id, kind, provider, ip_prefix, created_at FROM security_events;
+
+DROP TABLE user_connections;
+DROP TABLE discord_verification_codes;
+DROP TABLE security_events;
+DROP TABLE accounts;
+
+ALTER TABLE accounts_new RENAME TO accounts;
+ALTER TABLE user_connections_new RENAME TO user_connections;
+ALTER TABLE discord_verification_codes_new RENAME TO discord_verification_codes;
+ALTER TABLE security_events_new RENAME TO security_events;
+
+CREATE UNIQUE INDEX idx_user_connections_provider
+  ON user_connections(provider, provider_id);
+CREATE INDEX idx_security_events_user_created
+  ON security_events(user_id, created_at DESC);

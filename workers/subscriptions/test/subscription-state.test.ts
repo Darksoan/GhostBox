@@ -22,6 +22,7 @@ function subscription(overrides: Record<string, unknown> = {}) {
     stripe_event_created: 1,
     stripe_payment_method_json: null,
     stripe_payment_method_updated_at: null,
+    access_type: "stripe",
     created_at: "2025-01-01T00:00:00.000Z",
     updated_at: "2025-01-01T00:00:00.000Z",
     ...overrides,
@@ -63,6 +64,8 @@ describe("GET /subscription/status", () => {
     expect(body.subscription).toMatchObject({
       status: "active",
       isPremium: true,
+      accessType: "stripe",
+      canManageBilling: true,
       planId: "monthly",
       currentPeriodEnd: FUTURE,
       cancelAtPeriodEnd: false,
@@ -95,10 +98,31 @@ describe("GET /subscription/status", () => {
     expect(body.subscription).toMatchObject({
       status: "free",
       isPremium: false,
+      accessType: "free",
+      canManageBilling: false,
       planId: null,
       currentPeriodEnd: null,
     });
     expect(body.paymentMethod).toBeNull();
+  });
+
+  it("reports a lifetime grant without consulting Stripe billing", async () => {
+    stripe = mockStripe({ routes: {} });
+    const db = fakeD1({
+      subscriptions: [subscription({ access_type: "lifetime" })],
+    });
+
+    const { response, body } = await status(db);
+
+    expect(response.status).toBe(200);
+    expect(body.subscription).toMatchObject({
+      status: "active",
+      isPremium: true,
+      accessType: "lifetime",
+      canManageBilling: false,
+    });
+    expect(body.paymentMethod).toBeNull();
+    expect(stripe.calls).toHaveLength(0);
   });
 
   it("surfaces the card on file and caches it in D1", async () => {
@@ -220,6 +244,7 @@ describe("GET /subscription/status", () => {
   it("invalidating an already empty cache writes nothing", async () => {
     stripe = mockStripe({
       routes: {
+        "/customers/cus_test_1": { id: "cus_test_1" },
         "/billing_portal/sessions": { url: "https://portal.test/session" },
       },
     });
@@ -273,5 +298,112 @@ describe("GET /subscription/status", () => {
       brand: "amex",
       last4: "0005",
     });
+  });
+});
+
+describe("POST /subscription/portal with a cross-mode customer", () => {
+  function missingCustomerResponse(customerId: string) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: `No such customer: '${customerId}'; a similar object exists in test mode, but a live mode key was used to make this request.`,
+          type: "invalid_request_error",
+          code: "resource_missing",
+        },
+      }),
+      { status: 404, headers: { "content-type": "application/json" } }
+    );
+  }
+
+  async function portal(db: ReturnType<typeof fakeD1>) {
+    const token = await sessionToken("user_1");
+    const response = await worker.fetch(
+      new Request("https://worker.test/subscription/portal", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+      makeEnv(db),
+      executionContext
+    );
+    return { response, body: await response.json<any>() };
+  }
+
+  it("refuses lifetime access before making a Stripe request", async () => {
+    stripe = mockStripe({ routes: {} });
+    const db = fakeD1({
+      subscriptions: [subscription({ access_type: "lifetime" })],
+    });
+
+    const { response, body } = await portal(db);
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({ error: "billing_not_managed" });
+    expect(stripe.calls).toHaveLength(0);
+  });
+
+  it("answers 409 with a stable code instead of the raw Stripe message", async () => {
+    stripe = mockStripe({
+      routes: {
+        "/customers/cus_test_1": missingCustomerResponse("cus_test_1"),
+        "/customers/search": { data: [] },
+      },
+    });
+    const db = fakeD1({ subscriptions: [subscription()] });
+
+    const { response, body } = await portal(db);
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({ error: "stripe_customer_missing" });
+    // The portal must never mint an empty customer just to open.
+    expect(stripe.calls.some((url) => url.includes("/billing_portal/sessions"))).toBe(false);
+    expect(stripe.calls.some((url) => /\/customers$/.test(url))).toBe(false);
+    // Stale link preserved for audit; healed on the next checkout, not here.
+    expect(db.rows("subscriptions")[0].stripe_customer_id).toBe("cus_test_1");
+  });
+
+  it("recovers through metadata when a live customer exists", async () => {
+    stripe = mockStripe({
+      routes: {
+        "/customers/cus_test_1": missingCustomerResponse("cus_test_1"),
+        "/customers/search": { data: [{ id: "cus_live_1" }] },
+        "/billing_portal/sessions": { url: "https://portal.test/session" },
+      },
+    });
+    const db = fakeD1({ subscriptions: [subscription()] });
+
+    const { response, body } = await portal(db);
+
+    expect(response.status).toBe(200);
+    expect(body.customerId).toBe("cus_live_1");
+    expect(db.rows("subscriptions")[0].stripe_customer_id).toBe("cus_live_1");
+  });
+
+  it("heals a stale test-mode customer on the next checkout", async () => {
+    stripe = mockStripe({
+      routes: {
+        "/customers/cus_test_1": missingCustomerResponse("cus_test_1"),
+        "/customers/search": { data: [] },
+        "/customers": { id: "cus_live_2" },
+        "/checkout/sessions": { id: "cs_live_1", url: "https://checkout.test/session" },
+      },
+    });
+    const db = fakeD1({ subscriptions: [subscription()] });
+    const token = await sessionToken("user_1");
+
+    const response = await worker.fetch(
+      new Request("https://worker.test/subscription/checkouts", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ planId: "monthly" }),
+      }),
+      makeEnv(db),
+      executionContext
+    );
+
+    expect(response.status).toBe(201);
+    const body = await response.json<any>();
+    expect(body.payment?.hostedCheckoutUrl).toBe("https://checkout.test/session");
+    expect(db.rows("subscriptions")[0].stripe_customer_id).toBe("cus_live_2");
   });
 });

@@ -23,6 +23,7 @@ beforeAll(async () => {
       stripe_customer_id TEXT, stripe_subscription_id TEXT, stripe_subscription_status TEXT,
       cancel_at_period_end INTEGER, stripe_event_created INTEGER,
       stripe_payment_method_json TEXT, stripe_payment_method_updated_at TEXT,
+      access_type TEXT NOT NULL DEFAULT 'stripe',
       created_at TEXT, updated_at TEXT
     )`,
     `CREATE UNIQUE INDEX idx_subscriptions_user_id ON subscriptions(user_id)`,

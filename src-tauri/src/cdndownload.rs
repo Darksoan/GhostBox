@@ -108,6 +108,44 @@ fn clear_active_download_process(app_id: &str) {
         .map(|mut processes| processes.remove(app_id));
 }
 
+fn download_cancel_pending(app_id: &str) -> bool {
+    cancelled_downloads()
+        .lock()
+        .map(|cancelled| cancelled.contains(app_id))
+        .unwrap_or(false)
+}
+
+/// Prazo para o worker confirmar o cancelamento antes de ser considerado
+/// travado. O `read_worker_event` bloqueia lendo o stdout: se o worker está
+/// preso numa requisição de chunk que ignora o token, o loop nunca vê a flag
+/// e o `download_game` nunca resolve — a UI fica em `paused` com a retomada
+/// pendente para sempre ("não volta"). O watchdog derruba o processo; o loop
+/// vê EOF e, com a flag ainda presente, resolve como `cancelled`.
+const CANCEL_WATCHDOG_SECS: u64 = 8;
+
+fn spawn_cancel_watchdog(app_id: String) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(CANCEL_WATCHDOG_SECS));
+        // Só age se o cancelamento original continua pendente: se a flag sumiu,
+        // o loop antigo já saiu (e uma retomada pode estar rodando sob o mesmo
+        // app_id — derrubar o worker mataria o download novo).
+        let stuck = active_download_processes()
+            .lock()
+            .map(|processes| processes.contains_key(&app_id))
+            .unwrap_or(false)
+            && download_cancel_pending(&app_id);
+        if !stuck {
+            return;
+        }
+        if let Ok(mut worker_guard) = download_worker().lock() {
+            if let Some(mut worker) = worker_guard.take() {
+                let _ = worker.child.kill();
+                let _ = worker.child.wait();
+            }
+        }
+    });
+}
+
 fn ensure_download_worker(
     worker: &mut Option<DownloadWorker>,
 ) -> Result<&mut DownloadWorker, String> {
@@ -534,6 +572,8 @@ pub fn cdndownload_cancel_game(app_id: String) -> Result<bool, String> {
         .and_then(|_| stdin.write_all(b"\n"))
         .and_then(|_| stdin.flush())
         .map_err(|error| format!("Failed to write cancel command to steamkit worker: {error}"))?;
+
+    spawn_cancel_watchdog(app_id);
 
     Ok(true)
 }
@@ -1491,6 +1531,15 @@ pub async fn cdndownload_download_game(
         let inspected = loop {
             let Some(value) = read_worker_event(&worker_stdout)? else {
                 clear_active_download_process(&app_id);
+                // O watchdog pode ter derrubado um worker travado no meio da
+                // inspeção: com a flag presente, isto é um cancelamento.
+                if take_download_cancelled(&app_id) {
+                    return Ok(serde_json::json!({
+                        "Type": "cancelled",
+                        "Status": "cancelled",
+                        "AppId": app_id,
+                    }));
+                }
                 return Ok(serde_json::json!({
                     "Type": "error",
                     "Status": "worker-exited-during-inspection",

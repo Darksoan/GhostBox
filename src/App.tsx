@@ -154,7 +154,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       classifiedOwned,
     ],
   );
-  const shell = useAppShellState(page, { localGames: knownGames });
+  const allowHeaderSearchDropdown =
+    isGameModalVisible || isAchievementsViewVisible;
+  const shell = useAppShellState(page, {
+    localGames: knownGames,
+    allowHeaderSearchDropdown,
+  });
   const [settingsLibraryView, setSettingsLibraryView] = useState<
     "overview" | "hidden-games"
   >("overview");
@@ -166,6 +171,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [subscriptionPeriodEnd, setSubscriptionPeriodEnd] = useState<string | null>(null);
+  const [subscriptionAccessType, setSubscriptionAccessType] = useState<"free" | "stripe" | "lifetime" | null>(null);
+  const [canManageSubscriptionBilling, setCanManageSubscriptionBilling] = useState(false);
   const [subscriptionPortalFlow, setSubscriptionPortalFlow] = useState<SubscriptionPortalFlow | null>(null);
 
   // Guards the async status reads against a late resolve after unmount. A ref,
@@ -193,6 +200,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 
     setIsPremium(active && (!end || !Number.isFinite(endTime) || endTime > Date.now()));
     setSubscriptionPeriodEnd(active ? end : null);
+    setSubscriptionAccessType(subscription?.accessType ?? null);
+    setCanManageSubscriptionBilling(active && subscription?.canManageBilling === true);
     return true;
   }, []);
 
@@ -299,6 +308,8 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
     if (status !== "anonymous") return;
     setIsPremium(false);
     setSubscriptionPeriodEnd(null);
+    setSubscriptionAccessType(null);
+    setCanManageSubscriptionBilling(false);
   }, [status]);
 
   useEffect(() => {
@@ -624,9 +635,12 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             suggestions={shell.headerSearchSuggestions}
             hasNoSearchResults={shell.hasNoHeaderSearchResults}
             showAppIdPrompt={shell.shouldShowHeaderAppIdPrompt}
+            allowSearchDropdown={allowHeaderSearchDropdown}
             steamProfile={appData.steamProfile}
             isPremium={isPremium}
             subscriptionPeriodEnd={subscriptionPeriodEnd}
+            subscriptionAccessType={subscriptionAccessType}
+            canManageSubscriptionBilling={canManageSubscriptionBilling}
             onQueryChange={shell.handleQueryChange}
             onSelectSuggestion={(game) => {
               clearOverlayForward();

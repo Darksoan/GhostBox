@@ -23,6 +23,10 @@ pub(crate) struct SubscriptionPaymentMethod {
 pub(crate) struct SubscriptionInfo {
     status: String,
     is_premium: bool,
+    #[serde(default)]
+    access_type: Option<String>,
+    #[serde(default)]
+    can_manage_billing: bool,
     plan_id: Option<String>,
     current_period_start: Option<String>,
     current_period_end: Option<String>,
@@ -230,6 +234,17 @@ fn format_subscription_api_error(code: &str, status: reqwest::StatusCode) -> Str
             "Não foi possível confirmar o período da assinatura com a Stripe. Tente novamente em instantes.".to_string()
         }
         "Payment not found" | "payment_not_found" => "Pagamento não encontrado.".to_string(),
+        "stripe_customer_missing" => {
+            "A conta de cobrança não foi encontrada neste ambiente. Faça um novo checkout para continuar.".to_string()
+        }
+        "billing_not_managed" => {
+            "Seu acesso Premium é vitalício e não possui cobranças para gerenciar.".to_string()
+        }
+        other if other.starts_with("No such customer")
+            || other.contains("test mode, but a live mode key was used") =>
+        {
+            "A conta de cobrança não foi encontrada neste ambiente. Faça um novo checkout para continuar.".to_string()
+        }
         other if !other.is_empty() => other.to_string(),
         _ => format!("Subscription API respondeu HTTP {status}"),
     }

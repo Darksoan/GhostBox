@@ -219,7 +219,7 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
             isFavorite={isFavorite}
             onClose={closeGame}
             onQueueGame={appData.queueGame}
-            onRemoveGame={appData.removeQueuedGame}
+            onRemoveGame={appData.requestRemoveGame}
             onToggleFavorite={appData.toggleFavoriteGame}
             onPlayGame={appData.handlePlayGame}
             onDownloadGame={async () => {

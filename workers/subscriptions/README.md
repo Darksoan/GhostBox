@@ -96,6 +96,8 @@ npx wrangler d1 create ghostbox-subscriptions
 npx wrangler d1 migrations apply ghostbox-subscriptions --remote --config workers/subscriptions/wrangler.toml
 ```
 
+Lifetime Premium grants must set `subscriptions.access_type = 'lifetime'` explicitly. They are entitlements, not Stripe subscriptions: do not represent a new grant only by moving `current_period_end` to 2099, and clear any stale `stripe_customer_id`, `stripe_subscription_id`, `stripe_subscription_status`, and cached payment-method fields on the row. Stripe webhooks always restore `access_type = 'stripe'` when a real subscription is attached.
+
 Migration `0021` removes password-only accounts (no Discord, no Steam linked): they were reachable solely through the deleted email/password flow. Financial rows are kept for legal retention.
 
 ## Webhook delivery

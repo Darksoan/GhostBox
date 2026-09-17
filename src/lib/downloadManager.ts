@@ -603,7 +603,11 @@ async function finishActiveTask(result: Record<string, unknown>) {
     return;
   }
 
-  if (controlIntent === "pause") {
+  // A intenção de pausa só vale quando o backend confirmou com `cancelled`.
+  // Se ele concluiu/falhou antes do cancelamento ser processado, a intenção
+  // expirou: seguir o fluxo normal em vez de descartar o resultado e marcar
+  // `paused` (ou refilar um download que acabou de terminar).
+  if (controlIntent === "pause" && result.Type === "cancelled") {
     if (task.resumePending) {
       updateLiveTask(appId, {
         status: "queued",
@@ -934,8 +938,29 @@ export function pauseDownloadTask(id: string) {
 
   if (task.status !== "downloading" || activeAppId !== task.appId) return;
   activeControlIntent = "pause";
+  const previousDepotStatus = task.depotStatus;
   updateLiveTask(task.appId, { status: "paused", speedBytesPerSecond: 0 }, true);
-  void ghostboxApi.cancelDepotGame(task.appId);
+  // `cancelDepotGame` só entrega o pedido; a pausa se confirma quando o
+  // backend resolve o `downloadDepotGame` com `cancelled` (ver finishActiveTask).
+  // Se a entrega falhar, o backend continua baixando: restaura `downloading`
+  // para a UI não divergir — sem isto, um `resume` seguinte ficava pendente
+  // para sempre e o download "não voltava".
+  void ghostboxApi.cancelDepotGame(task.appId).then(
+    (delivered) => {
+      if (delivered !== false) return;
+      restoreDownloadingAfterFailedPause(task.appId, previousDepotStatus);
+    },
+    () => restoreDownloadingAfterFailedPause(task.appId, previousDepotStatus),
+  );
+}
+
+function restoreDownloadingAfterFailedPause(appId: string, depotStatus: string | undefined) {
+  ensureLiveTasksHydrated();
+  if (activeAppId !== appId || activeControlIntent !== "pause") return;
+  const current = liveTasks.find((entry) => entry.appId === appId);
+  if (!current || current.status !== "paused" || current.resumePending) return;
+  activeControlIntent = null;
+  updateLiveTask(appId, { status: "downloading", depotStatus }, true);
 }
 
 export function resumeDownloadTask(id: string) {

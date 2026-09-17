@@ -45,13 +45,15 @@ export function isSteamSourceGame(game: GhostBoxGame): boolean {
 }
 
 /**
- * Ghostbox = adicionado pelo GhostBox (`librarySource === "ghostbox"`) ou
- * jogo com executável personalizado configurado — mesmo que a fonte seja
- * outra. Plugin/registered puros ficam de fora e aparecem só em Todos.
+ * Ghostbox = gerenciado pelo launcher: fonte `ghostbox` (LuaTools/CDN),
+ * `registered` (Steam registrado pelo launcher) ou `plugin` (stplug-in).
  */
 export function isGhostboxSourceGame(game: GhostBoxGame): boolean {
-  if (game.librarySource === "ghostbox") return true;
-  return false;
+  return (
+    game.librarySource === "ghostbox" ||
+    game.librarySource === "registered" ||
+    game.librarySource === "plugin"
+  );
 }
 
 export function gameMatchesLibrarySourceFilter(
