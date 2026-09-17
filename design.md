@@ -129,7 +129,7 @@ Cards são contêineres funcionais, não painéis ornamentais. Manter título, e
 
 ### Controles
 
-Botões devem declarar prioridade visual: ação primária, secundária, discreta ou perigosa. Campos, selects, toggles e abas devem compartilhar altura, foco e feedback de estado. A ação primária de um hero (ex. `downloads-hero__action--primary`) é a única que compete frontalmente com a arte: preenchimento sólido claro com texto escuro, sem backdrop blur. Toggles acesos sobem ao teto da rampa (`--toggle-track-on: var(--c-5)`) — nunca branco puro, que domina qualquer conteúdo.
+Botões devem declarar prioridade visual: ação primária, secundária, discreta ou perigosa. Campos, selects, toggles e abas devem compartilhar altura, foco e feedback de estado. A ação primária de um hero (ex. `hero__action--primary`) é a única que compete frontalmente com a arte: preenchimento sólido claro com texto escuro, sem backdrop blur. Toggles acesos sobem ao teto da rampa (`--toggle-track-on: var(--c-5)`) — nunca branco puro, que domina qualquer conteúdo.
 
 ### Tags e badges
 

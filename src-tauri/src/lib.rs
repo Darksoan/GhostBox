@@ -32,8 +32,6 @@ mod achievement_monitor;
 mod backup;
 mod catalogue;
 mod catalogue_cache;
-mod cdndownload;
-mod chunk_index;
 mod cloud_save;
 mod ghostbox_library;
 mod goldberg;
@@ -48,7 +46,6 @@ mod settings;
 mod steam;
 mod steam_appcache;
 mod steam_appinfo;
-mod steam_appmanifest;
 mod steam_assets;
 mod steam_localconfig;
 mod steam_pics;
@@ -1420,8 +1417,7 @@ pub(crate) fn launch_game_from_value(
             .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
 
         // Containment: se o jogo tem `installPath`, o executável personalizado
-        // precisa estar dentro dele — mesmo padrão que `cdndownload_launch_game`
-        // já usa contra `canonical_output`. Sem isso, um path arbitrário vindo
+        // precisa estar dentro dele. Sem isso, um path arbitrário vindo
         // do `ghostbox-library.json` poderia apontar para qualquer binário local.
         let install_path_raw = text_value(game.get("installPath"));
         if !install_path_raw.is_empty() {
@@ -1836,9 +1832,6 @@ pub fn run() {
             settings::app_get_startup_settings,
             settings::app_set_startup_settings,
             settings::app_set_notification_settings,
-            settings::app_get_morrenus_api_key,
-            settings::app_set_morrenus_api_key,
-            settings::app_get_morrenus_stats,
             steam::steam_get_profile,
             steam::steam_restore_account,
             steam::steam_get_account_stats,
@@ -1888,7 +1881,6 @@ pub fn run() {
             steam::steam_select_path,
             steam::steam_scan_library,
             steam::steam_restart,
-            steam::steam_list_libraries,
             game_launch,
             playtime::game_get_playtimes,
             ghostbox_library::ghostbox_library_register_steam_game,
@@ -1897,14 +1889,6 @@ pub fn run() {
             luatools::luatools_remove_game,
             luatools_bootstrap::luatools_dependencies_status,
             luatools_bootstrap::luatools_dependencies_ensure,
-            cdndownload::cdndownload_download_game,
-            cdndownload::cdndownload_cancel_game,
-            cdndownload::cdndownload_delete_output_dir,
-            cdndownload::cdndownload_move_install_dir,
-            cdndownload::cdndownload_launch_game,
-            cdndownload::cdndownload_default_dir,
-            cdndownload::cdndownload_sweep_roots,
-            cdndownload::cdndownload_register_library,
             storage_audit::storage_usage,
             storage_audit::clear_app_caches,
             storage_audit::clear_storage_category,
@@ -1923,7 +1907,6 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
-                cdndownload::shutdown_download_worker();
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });

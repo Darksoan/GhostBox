@@ -61,7 +61,6 @@ import {
   hasSeenPremiumBackupNudge,
   markPremiumBackupNudgeSeen,
 } from "../utils/premiumNudge";
-import { deleteDownloadTaskFiles, readDownloadTasks } from "../lib/downloadManager";
 import { preloadGamePortraitSources } from "../utils/image";
 import {
   isSteamTitlePlaceholder,
@@ -116,7 +115,6 @@ import { useAuth } from "./AuthContext";
 
 type InitialLoadStep =
   | "backupRoot"
-  | "morrenusApiKey"
   | "playtimes"
   | "startupSettings"
   | "steamLibrary"
@@ -125,7 +123,6 @@ type InitialLoadStep =
 const initialLoadSteps: InitialLoadStep[] = [
   "startupSettings",
   "steamProfile",
-  "morrenusApiKey",
 ];
 
 const initialLoadStepSet = new Set<InitialLoadStep>(initialLoadSteps);
@@ -341,7 +338,6 @@ interface AppDataContextValue {
   playableGameAppIds: Set<string>;
   installedSteamGameAppIds: Set<string>;
   backupSettings: BackupSettings | null;
-  morrenusApiKey: string;
   startupSettings: StartupSettings | null;
   initialPage: StartupPage;
   steamPathInput: string;
@@ -385,7 +381,6 @@ interface AppDataContextValue {
     bannerPosition: NonNullable<SteamProfile["bannerPosition"]>,
   ) => Promise<void>;
   setBackupSettings: (settings: BackupSettings | null) => void;
-  setMorrenusApiKey: (key: string) => void;
   setInitialPage: Dispatch<SetStateAction<StartupPage>>;
   setSteamPathInput: (path: string) => void;
   setShowSteamGames: (value: boolean) => void;
@@ -394,7 +389,6 @@ interface AppDataContextValue {
   handleStartupSettingsChange: (
     settings: Partial<StartupSettings>,
   ) => Promise<void>;
-  handleMorrenusApiKeySave: (key: string) => Promise<void>;
   handleSelectSteamPath: () => Promise<void>;
   /** `false` quando o path não serve — o modal deve continuar aberto. */
   handleSubmitSteamPath: (steamPath: string) => Promise<boolean>;
@@ -442,7 +436,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [backupSettings, setBackupSettings] = useState<BackupSettings | null>(
     defaultBackupSettings,
   );
-  const [morrenusApiKey, setMorrenusApiKey] = useState("");
   const [startupSettings, setStartupSettings] =
     useState<StartupSettings | null>(null);
   const [initialPage, setInitialPage] = useState<StartupPage>(
@@ -1439,12 +1432,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [profileHistoryGames]);
 
   useEffect(() => {
-    const completedDownloadAppIds = new Set(
-      readDownloadTasks()
-        .filter((task) => task.status === "completed")
-        .map((task) => task.appId),
-    );
-
     void ghostboxApi.setTrayLibraryGames(
       addedLibraryGames.map((game) => ({
         ...game,
@@ -1452,8 +1439,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           game.status === "installed" ||
           game.librarySource === "steam-installed" ||
           game.librarySource === "plugin" ||
-          game.librarySource === "registered" ||
-          completedDownloadAppIds.has(game.appId),
+          game.librarySource === "registered",
       })),
     );
   }, [addedLibraryGames]);
@@ -1667,24 +1653,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     };
 
     void hydrate();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [markInitialLoadStepComplete]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void ghostboxApi
-      .getMorrenusApiKey()
-      .then((key) => {
-        if (!cancelled && typeof key === "string") setMorrenusApiKey(key);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) markInitialLoadStepComplete("morrenusApiKey");
-      });
 
     return () => {
       cancelled = true;
@@ -2230,22 +2198,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const uninstallGame = useCallback(
     async (game: GhostBoxGame) => {
       const appId = game.appId || game.id.replace(/^steam-/, "");
-      const task = readDownloadTasks().find(
-        (t) => t.appId === appId && t.status === "completed",
-      );
-      if (task) {
-        // GhostBox-downloaded: remove library entry + delete local files.
-        await removeQueuedGame(game);
-        try {
-          await deleteDownloadTaskFiles(task.id);
-        } catch {
-          // File deletion failure is non-fatal; library entry already removed.
-        }
-      } else {
-        // Remove the launcher entry before delegating file removal to Steam.
-        await removeQueuedGame(game);
-        await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
-      }
+      // Remove the launcher entry before delegating file removal to Steam.
+      await removeQueuedGame(game);
+      await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
     },
     [removeQueuedGame],
   );
@@ -2694,36 +2649,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const handleMorrenusApiKeySave = useCallback(
-    async (key: string) => {
-      try {
-        const saved = await ghostboxApi.setMorrenusApiKey(key);
-        setMorrenusApiKey(saved);
-        showToast(
-          appearance.language === "en"
-            ? "HubCap's key saved"
-            : "Chave HubCap's salva",
-          appearance.language === "en"
-            ? "Your Hubcap's Manifest API key was saved."
-            : "A chave do Hubcap's Manifest foi salva.",
-        );
-      } catch (error) {
-        showToast(
-          appearance.language === "en"
-            ? "Failed to save HubCap's key"
-            : "Falha ao salvar chave HubCap's",
-          error instanceof Error
-            ? error.message
-            : appearance.language === "en"
-              ? "Could not save the API key."
-              : "Não foi possível salvar a chave.",
-          "error",
-        );
-      }
-    },
-    [appearance.language, showToast],
-  );
-
   /**
    * Aplica o path escolhido — pelo diálogo nativo ou digitado no modal — e
    * escaneia a biblioteca. Retorna `false` quando o path não serve, para que o
@@ -2861,7 +2786,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       playableGameAppIds,
       installedSteamGameAppIds,
       backupSettings,
-      morrenusApiKey,
       startupSettings,
       initialPage,
       steamPathInput,
@@ -2892,14 +2816,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleRestartSteam,
       handleUpdateProfile,
       setBackupSettings,
-      setMorrenusApiKey,
       setInitialPage,
       setSteamPathInput,
       setShowSteamGames,
       setShowSteamLibraryGames,
       setProfileGameHidden,
       handleStartupSettingsChange,
-      handleMorrenusApiKeySave,
       handleSelectSteamPath,
       handleSubmitSteamPath,
     }),
@@ -2923,7 +2845,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       playableGameAppIds,
       installedSteamGameAppIds,
       backupSettings,
-      morrenusApiKey,
       startupSettings,
       initialPage,
       steamPathInput,
@@ -2954,22 +2875,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       handleUpdateProfile,
       setProfileGameHidden,
       handleStartupSettingsChange,
-      handleMorrenusApiKeySave,
       handleSelectSteamPath,
       handleSubmitSteamPath,
     ],
   );
 
-  const removeConfirmHasLocalInstall = removeConfirmGame
-    ? removeConfirmGame.status === "installed" ||
-      removeConfirmGame.librarySource === "steam-installed" ||
-      readDownloadTasks().some(
-        (t) =>
-          t.appId ===
-            (removeConfirmGame.appId || removeConfirmGame.id.replace(/^steam-/, "")) &&
-          t.status === "completed",
-      )
-    : false;
+  const removeConfirmHasLocalInstall = Boolean(
+    removeConfirmGame &&
+      (removeConfirmGame.status === "installed" ||
+        removeConfirmGame.librarySource === "steam-installed"),
+  );
 
   return (
     <AppDataContext.Provider value={value}>

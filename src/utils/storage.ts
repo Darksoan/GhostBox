@@ -37,7 +37,6 @@ import {
   overviewSortStorageKey,
   notificationsLastSeenStorageKey,
   autoRestoredCloudSavesStorageKey,
-  downloadsDirStorageKey,
   sidebarCollectionsCollapsedStorageKey,
   sidebarExpandedCollectionsStorageKey,
 } from "../constants/catalogue";
@@ -916,27 +915,6 @@ export function writeStoredLibrarySourceFilter(filter: LibrarySourceFilter) {
     // The setting still works during the session if localStorage is unavailable.
   }
 }
-
-export function readStoredDownloadsDir(): string {
-  if (typeof window === "undefined") return "";
-
-  try {
-    return window.localStorage.getItem(downloadsDirStorageKey)?.trim() ?? "";
-  } catch {
-    return "";
-  }
-}
-
-export function writeStoredDownloadsDir(directory: string) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(downloadsDirStorageKey, directory);
-  } catch {
-    // The chosen folder still applies for the rest of the session.
-  }
-}
-
 
 export function readStoredOverviewSortBy(): OverviewSortBy {
   if (typeof window === "undefined") return "recent";

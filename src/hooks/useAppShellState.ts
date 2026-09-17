@@ -45,14 +45,14 @@ export function useAppShellState(
   const [activeProfileCollectionId, setActiveProfileCollectionId] =
     useState<string>();
   // Estado próprio da biblioteca. O perfil e a biblioteca falam vocabulários
-  // diferentes — o perfil entende "overview"/"library"/"achievements" e ids de
+  // diferentes — o perfil entende "overview"/"achievements" e ids de
   // coleção, a biblioteca entende null/"favorites" e ids —, então dividir o
   // mesmo estado fazia um normalizar o valor do outro.
   const [activeLibraryCollectionId, setActiveLibraryCollectionId] = useState<
     string | null
   >(null);
   // A aba de coleção (page "favorites") também precisa do estado próprio: o
-  // perfil normaliza qualquer id fora de "overview"/"library"/"achievements" e
+  // perfil normaliza qualquer id fora de "overview"/"achievements" e
   // das coleções do usuário, então "favorites" era zerado no mesmo tick e a
   // sidebar perdia o destaque.
   const [activeFavoritesCollectionId, setActiveFavoritesCollectionId] =

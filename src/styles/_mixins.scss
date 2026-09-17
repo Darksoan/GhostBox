@@ -38,6 +38,37 @@
   cursor: pointer;
 }
 
+/// Ícone "+" geométrico desenhado em CSS — o mesmo da sidebar de coleções:
+/// duas barras preenchidas com cantos arredondados em `currentColor`. Os
+/// braços ocupam a caixa menos 2px e a espessura é sempre 2px (a mesma
+/// caneta em qualquer tamanho), então o chamador só define `width`/`height`.
+/// Usar no lugar do `Plus` do Lucide onde o desenho precisa ser idêntico.
+@mixin plus-icon {
+  position: relative;
+  display: inline-block;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border-radius: var(--radius-pill);
+    background: currentColor;
+    transform: translate(-50%, -50%);
+  }
+
+  &::before {
+    width: calc(100% - 2px);
+    height: 2px;
+  }
+
+  &::after {
+    width: 2px;
+    height: calc(100% - 2px);
+  }
+}
+
 /// Single-line ellipsis. Needs a constrained parent to do anything.
 @mixin truncate {
   min-width: 0;

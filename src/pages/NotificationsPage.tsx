@@ -47,7 +47,6 @@ const notificationTypeIcons: Record<AppNotificationType, LucideIcon> = {
   backup: CloudUpload,
   achievement: Trophy,
   account: UserRound,
-  download: Gamepad2,
   favorite: Heart,
   collection: Folder,
 };

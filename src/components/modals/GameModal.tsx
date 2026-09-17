@@ -2,7 +2,6 @@ import {
   Check,
   ChevronDown,
   Cpu,
-  Download,
   Gamepad2,
   Heart,
   Image as ImageIcon,
@@ -708,8 +707,7 @@ const GameDetailsLoadingSections = memo(function GameDetailsLoadingSections() {
 interface ModalActionsProps {
   isAdding: boolean;
   isInstalled: boolean;
-  isDownloaded: boolean;
-  isDownloading: boolean;
+  isLocallyInstalled: boolean;
   isAdded: boolean;
   isRemoving: boolean;
   isPlaying: boolean;
@@ -718,13 +716,9 @@ interface ModalActionsProps {
   isBackupOptionsOpen: boolean;
   gearButtonRef: React.RefObject<HTMLButtonElement>;
   language: string;
-  downloadingLabel: string;
-  cancelLabel: string;
   game: GhostBoxGame;
   onPlay: (game: GhostBoxGame) => void;
   onRemove: (game: GhostBoxGame) => void;
-  onDownload: (game: GhostBoxGame) => void;
-  onCancelDownload: () => void;
   onQueue: (game: GhostBoxGame) => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onOpenBackupOptions: () => void;
@@ -733,8 +727,7 @@ interface ModalActionsProps {
 const ModalActions = memo(function ModalActions({
   isAdding,
   isInstalled,
-  isDownloaded,
-  isDownloading,
+  isLocallyInstalled,
   isAdded,
   isRemoving,
   isPlaying,
@@ -743,20 +736,16 @@ const ModalActions = memo(function ModalActions({
   isBackupOptionsOpen,
   gearButtonRef,
   language,
-  downloadingLabel,
-  cancelLabel,
   game,
   onPlay,
   onRemove,
-  onDownload,
-  onCancelDownload,
   onQueue,
   onToggleFavorite,
   onOpenBackupOptions,
 }: ModalActionsProps) {
   return (
     <div className={`modal__actions ${isAdding ? "modal__actions--adding" : ""}`}>
-      {isInstalled && isDownloaded && (
+      {isInstalled && isLocallyInstalled && (
         <button
           type="button"
           className="button button--primary modal__play-button"
@@ -789,43 +778,6 @@ const ModalActions = memo(function ModalActions({
                   : "Jogar"}
           </span>
         </button>
-      )}
-      {isInstalled && !isDownloaded && (
-        isDownloading ? (
-          <button
-            type="button"
-            className="button button--primary modal__download-button modal__download-button--live"
-            onClick={onCancelDownload}
-            aria-label={cancelLabel}
-          >
-            <span className="modal__download-face" aria-hidden="true">
-              <span className="modal__add-spinner modal__add-spinner--light" />
-              <span className="button__label modal__action-label">
-                {downloadingLabel}
-              </span>
-            </span>
-            <span
-              className="modal__download-face modal__download-face--cancel"
-              aria-hidden="true"
-            >
-              <X size={20} strokeWidth={2.0} />
-              <span className="button__label modal__action-label">
-                {cancelLabel}
-              </span>
-            </span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="button button--primary modal__download-button"
-            onClick={() => onDownload(game)}
-          >
-            <Download size={20} strokeWidth={2.0} />
-            <span className="button__label modal__action-label">
-              {language === "en" ? "Download" : "Baixar"}
-            </span>
-          </button>
-        )
       )}
       {isAdding ? (
         <div
@@ -903,7 +855,7 @@ const ModalActions = memo(function ModalActions({
             className="button button--primary modal__add-button"
             onClick={() => onQueue(game)}
           >
-            <Download size={20} />
+            <span className="modal__add-icon" aria-hidden="true" />
             <span className="button__label modal__action-label">
               {language === "en" ? "Add" : "Adicionar"}
             </span>
@@ -951,8 +903,7 @@ interface GameModalProps {
   isAdding: boolean;
   isAdded: boolean;
   isInstalled: boolean;
-  isDownloaded: boolean;
-  isDownloading: boolean;
+  isLocallyInstalled: boolean;
   isRemoving: boolean;
   isPlaying: boolean;
   isSessionActive?: boolean;
@@ -960,8 +911,6 @@ interface GameModalProps {
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
-  onDownloadGame: (game: GhostBoxGame) => void | Promise<void>;
-  onCancelDownload: () => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
   onDetailsLoaded?: (game: GhostBoxGame) => void;
@@ -973,8 +922,7 @@ export function GameModal({
   isAdding,
   isAdded,
   isInstalled,
-  isDownloaded = false,
-  isDownloading,
+  isLocallyInstalled = false,
   isRemoving,
   isPlaying,
   isSessionActive = false,
@@ -982,8 +930,6 @@ export function GameModal({
   onClose,
   onQueueGame,
   onRemoveGame,
-  onDownloadGame,
-  onCancelDownload,
   onToggleFavorite,
   onPlayGame,
   onDetailsLoaded,
@@ -1717,8 +1663,7 @@ export function GameModal({
                 <ModalActions
                   isAdding={isAdding}
                   isInstalled={isInstalled}
-                  isDownloaded={isDownloaded}
-                  isDownloading={isDownloading}
+                  isLocallyInstalled={isLocallyInstalled}
                   isAdded={isAdded}
                   isRemoving={isRemoving}
                   isPlaying={isPlaying}
@@ -1727,13 +1672,9 @@ export function GameModal({
             isBackupOptionsOpen={isBackupOptionsOpen}
             gearButtonRef={gearButtonRef}
                   language={appearance.language}
-                  downloadingLabel={t("downloads.statusDownloading")}
-                  cancelLabel={t("downloads.cancel")}
             game={game ?? displayGame}
                   onPlay={onPlayGame}
                   onRemove={onRemoveGame}
-                  onDownload={onDownloadGame}
-                  onCancelDownload={onCancelDownload}
                   onQueue={onQueueGame}
                   onToggleFavorite={onToggleFavorite}
                   onOpenBackupOptions={handleOpenBackupOptions}

@@ -23,10 +23,15 @@ describe("Home recommended grid chevrons", () => {
       "minItemsForControls={homeRecommendedCardCount}"
     );
 
-    // A rolagem suave vem do Shelf, o mesmo componente do rail de explorar.
+    // A rolagem vem do Shelf, o mesmo componente do rail de explorar: voo
+    // determinístico via rAF (duração/easing fixos) em vez do `smooth` nativo,
+    // cuja duração varia com a distância e alternava a velocidade.
     expect(shelf).toContain("ChevronLeft");
     expect(shelf).toContain("ChevronRight");
-    expect(shelf).toContain('behavior: "smooth"');
+    expect(shelf).toContain("requestAnimationFrame");
+    expect(shelf).toContain("SHELF_SCROLL_DURATION_MS");
+    expect(shelf).toContain("__carousel--animating");
+    expect(shelf).not.toContain('behavior: "smooth"');
     expect(shelf).toContain("__arrow--prev");
     expect(shelf).toContain("__arrow--next");
   });
@@ -52,17 +57,19 @@ describe("Home recommended grid chevrons", () => {
     expect(selectors).toContain(".home-recommended__arrow--next");
     expect(mediaQueries).toContain("(prefers-reduced-motion: reduce)");
 
-    // A animação de rolamento é do scroller, igual ao rail de explorar. Lê a
-    // regra de topo, não o mapa acumulado: o override de movimento reduzido usa
-    // o mesmo seletor e sobrescreveria o valor aqui.
+    // A animação de rolamento é do JS (`Shelf`, rAF com duração/easing fixos),
+    // igual ao rail de explorar. Lê a regra de topo, não o mapa acumulado: o
+    // override de movimento reduzido usa o mesmo seletor e sobrescreveria o
+    // valor aqui.
     const carouselRule = stylesheet.nodes.find(
       (node) =>
         node.type === "rule" && node.selector === ".home-recommended__carousel"
     );
-    expect(carouselRule?.toString()).toContain("scroll-behavior: smooth");
-    expect(carouselRule?.toString()).toContain("scroll-snap-type: x mandatory");
+    expect(carouselRule?.toString()).toContain("scroll-behavior: auto");
+    expect(carouselRule?.toString()).toContain("scroll-snap-type: x proximity");
 
-    // `scroll-behavior: smooth` não respeita a preferência do sistema sozinho.
+    // O voo programático também respeita a preferência via `matchMedia` no JS;
+    // o CSS mantém `auto` no bloco de movimento reduzido como trava extra.
     const reducedMotion = stylesheet.nodes.find(
       (node) =>
         node.type === "atrule" &&

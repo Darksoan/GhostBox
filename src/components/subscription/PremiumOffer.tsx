@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   CloudUpload,
-  Download,
   RotateCcw,
   ScreenShare,
   ShieldCheck,
@@ -20,7 +19,7 @@ type Language = "pt" | "en";
 
 const PLAN_ORDER: PaidSubscriptionPlanId[] = ["monthly", "quarterly"];
 
-const BENEFIT_ICONS = [CloudUpload, ScreenShare, RotateCcw, User, Download] as const;
+const BENEFIT_ICONS = [CloudUpload, ScreenShare, RotateCcw, User] as const;
 
 /**
  * A lista fechada é só rótulo — cinco linhas, nenhum parágrafo. O detalhe vive
@@ -33,14 +32,12 @@ function benefitList(language: Language) {
     ["Sincronização entre PCs", "Continue de onde parou em qualquer máquina com o GhostBox instalado."],
     ["Restauração automática", "Instalou de novo? O save volta sozinho na primeira abertura do jogo."],
     ["Perfil personalizado", "Banner, avatar e vitrine de conquistas no seu perfil público."],
-    ["Downloads nativos", "Fila de download integrada ao app, sem depender de outro cliente."],
   ];
   const en = [
     ["Cloud backup", "Every save reaches the cloud the moment the game closes, with nothing to open."],
     ["Sync across PCs", "Pick up where you left off on any machine running GhostBox."],
     ["Automatic restore", "Reinstalled? Your save comes back on its own the first time the game launches."],
     ["Custom profile", "Banner, avatar and an achievement showcase on your public profile."],
-    ["Native downloads", "Download queue built into the app, no second client required."],
   ];
   return (language === "en" ? en : pt).map(([title, description], index) => ({
     title,

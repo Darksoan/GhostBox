@@ -1,14 +1,12 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
   AppStatus,
   BackupDetails,
   BackupSettings,
-  DownloadRootSweepSummary,
   FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
@@ -21,7 +19,6 @@ import type {
   LaunchGameResult,
   LocalAchievementsUnlockedPayload,
   LudusaviBackupPreviewGame,
-  MorrenusStatsResult,
   LuaToolsDependenciesEnsureResult,
   LuaToolsDependenciesFinishedEvent,
   LuaToolsDependenciesStatus,
@@ -30,7 +27,6 @@ import type {
   RemoveGameResult,
   StartupSettings,
   SteamRestartResult,
-  SteamLibraryVolume,
   SteamLibraryScanResult,
   SteamAccountStats,
   SteamAppTypeMap,
@@ -850,129 +846,6 @@ export const ghostboxApi = {
    * resolve `installdir` no appinfo e monta `<root>\steamapps\common\<installdir>`,
    * devolvendo o caminho no evento `depot-plan` e no resultado.
    */
-  downloadDepotGame(
-    appId: string,
-    downloadsRoot: string,
-    gameTitle?: string,
-    steamPath?: string,
-    allowStale?: boolean,
-  ): Promise<Record<string, unknown>> {
-    return invokeOr<Record<string, unknown>>(
-      "cdndownload_download_game",
-      { appId, downloadsRoot, gameTitle, steamPath, allowStale },
-      { Type: "error", Message: "Não foi possível iniciar o download." },
-    );
-  },
-
-  cancelDepotGame(appId: string): Promise<boolean> {
-    return invokeOr<boolean>("cdndownload_cancel_game", { appId }, false);
-  },
-
-  deleteDownloadOutputDir(
-    appId: string,
-    downloadsRoot: string,
-    outputDir: string,
-  ): Promise<boolean> {
-    return invoke<boolean>("cdndownload_delete_output_dir", {
-      appId,
-      downloadsRoot,
-      outputDir,
-    });
-  },
-
-  moveInstallDir(
-    appId: string,
-    oldDownloadsRoot: string,
-    oldOutputDir: string,
-    newDownloadsRoot: string,
-  ): Promise<string> {
-    return invoke<string>("cdndownload_move_install_dir", {
-      appId,
-      oldDownloadsRoot,
-      oldOutputDir,
-      newDownloadsRoot,
-    });
-  },
-
-  revealDownloadFolder(outputDir: string): Promise<void> {
-    return revealItemInDir(outputDir);
-  },
-
-  launchDownloadedGame(
-    appId: string,
-    title: string,
-    downloadsRoot: string,
-    outputDir: string,
-    installDir?: string,
-  ): Promise<string> {
-    return invoke<string>("cdndownload_launch_game", {
-      appId,
-      title,
-      downloadsRoot,
-      outputDir,
-      installDir,
-    });
-  },
-
-  getDefaultDownloadsDir(): Promise<string> {
-    return invokeOr<string>("cdndownload_default_dir", {}, "");
-  },
-
-  sweepDownloadRoots(roots: string[]): Promise<DownloadRootSweepSummary> {
-    return invokeOr<DownloadRootSweepSummary>(
-      "cdndownload_sweep_roots",
-      { roots },
-      { removedChunkTemps: 0, removedOrphanAcfs: [] },
-    );
-  },
-
-  /**
-   * Re-registra um download concluído na biblioteca Steam a partir do ACF que
-   * já está em disco. É o reparo do status "library-not-registered": a Steam
-   * pode descartar a entrada de `libraryfolders.vdf` quando sai depois de uma
-   * escrita com o cliente aberto. Idempotente — registro válido é no-op.
-   */
-  registerDownloadLibrary(
-    appId: string,
-    downloadsRoot: string,
-  ): Promise<Record<string, unknown>> {
-    return invoke<Record<string, unknown>>("cdndownload_register_library", {
-      appId,
-      downloadsRoot,
-    });
-  },
-
-  async selectDownloadsDir(): Promise<string | null> {
-    const selectedPath = await open({
-      directory: true,
-      multiple: false,
-      title: "Selecione a pasta de downloads",
-    });
-
-    return typeof selectedPath === "string" ? selectedPath : null;
-  },
-
-  onDownloadProgress(
-    callback: (payload: Record<string, unknown>) => void,
-  ): () => void {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    void listen<Record<string, unknown>>("download-progress", (event) => {
-      callback(event.payload);
-    }).then((nextUnlisten) => {
-      if (disposed) {
-        nextUnlisten();
-      } else {
-        unlisten = nextUnlisten;
-      }
-    });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  },
-
   removeGameViaLuaTools(game: GhostBoxGame): Promise<RemoveGameResult> {
     return invokeOr<RemoveGameResult>(
       "luatools_remove_game",
@@ -1399,14 +1272,6 @@ export const ghostboxApi = {
    * instalação), com rótulo do volume e espaço livre/total. Lista vazia quando
    * o caminho da Steam não está configurado ou não foi encontrado.
    */
-  listSteamLibraries(steamPath?: string): Promise<SteamLibraryVolume[]> {
-    return invokeOr<SteamLibraryVolume[]>(
-      "steam_list_libraries",
-      { steamPath },
-      [],
-    );
-  },
-
   scanSteamLibrary(
     steamPath?: string,
     forceRefreshOwnedGames?: boolean,
@@ -1487,26 +1352,6 @@ export const ghostboxApi = {
 
   clearStorageCategory(id: string): Promise<ClearResult> {
     return invokeOr<ClearResult>("clear_storage_category", { id }, emptyClearResult);
-  },
-
-  getMorrenusApiKey(): Promise<string | undefined> {
-    return invokeOr<string | undefined>(
-      "app_get_morrenus_api_key",
-      {},
-      undefined,
-    );
-  },
-
-  setMorrenusApiKey(apiKey: string): Promise<string> {
-    return invoke<string>("app_set_morrenus_api_key", { apiKey });
-  },
-
-  getMorrenusStats(apiKey: string): Promise<MorrenusStatsResult | undefined> {
-    return invokeOr<MorrenusStatsResult | undefined>(
-      "app_get_morrenus_stats",
-      { apiKey },
-      undefined,
-    );
   },
 
   getBackupSettings(): Promise<BackupSettings | undefined> {

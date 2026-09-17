@@ -1,9 +1,8 @@
 //! Leitura de `<steam>/appcache/appinfo.vdf` para os tres campos que o
 //! `appmanifest_<appid>.acf` nao pode inventar: `installdir`, `buildid` e `name`.
 //!
-//! O plano original resolvia isso pedindo um comando `appInfo` novo ao worker
-//! SteamKit (PICS, dado fresco). Nao da: o `steamkit-poc` so existe pre-compilado
-//! neste repositorio (ver `sidecars/README.md`), entao a leitura acontece aqui.
+//! A leitura acontece aqui, direto do `appinfo.vdf` local, sem depender de
+//! servicos externos.
 //!
 //! O formato e KV binario com cabecalho proprio. Tres versoes circulam em
 //! instalacoes reais e a v29 trocou as chaves inline por indices numa tabela de

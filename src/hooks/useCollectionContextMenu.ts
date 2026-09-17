@@ -12,7 +12,6 @@ import {
   Trash,
 } from "lucide-react";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
-import { readDownloadTasks } from "../lib/downloadManager";
 
 export interface UseCollectionContextMenuOptions {
   game: GhostBoxGame | null;
@@ -177,15 +176,11 @@ export function useCollectionContextMenu({
     }
 
     if (!onlyCollectionActions && onUninstallGame) {
-      const appId = game.appId || game.id.replace(/^steam-/, "");
-      const hasLocalInstall = readDownloadTasks().some(
-        (t) => t.appId === appId && t.status === "completed",
-      );
       const isSteamInstalled =
         game.status === "installed" ||
         game.librarySource === "steam-installed" ||
         hasGameKey(installedSteamGameAppIds);
-      if (hasLocalInstall || isSteamInstalled) {
+      if (isSteamInstalled) {
         items.push({
           label: "Desinstalar",
           icon: HardDriveDownload,

@@ -73,13 +73,6 @@ const LazyNotificationsPage = lazy(() =>
   }),
 );
 
-const LazyDownloadsPage = lazy(() =>
-  import("../../pages/DownloadsPage").then((m) => {
-    markPageLoaded("downloads");
-    return { default: m.DownloadsPage };
-  }),
-);
-
 const KEEP_ALIVE_PAGES: Page[] = [
   "home",
   "catalogue",
@@ -88,7 +81,6 @@ const KEEP_ALIVE_PAGES: Page[] = [
   "settings",
   "profile",
   "notifications",
-  "downloads",
 ];
 
 const PREFETCH_DELAYS_MS: Record<Page, number> = {
@@ -99,7 +91,6 @@ const PREFETCH_DELAYS_MS: Record<Page, number> = {
   settings: 3_200,
   profile: 3_600,
   notifications: 3_200,
-  downloads: 3_200,
 };
 
 const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
@@ -110,7 +101,6 @@ const PAGE_LOADERS: Record<Page, () => Promise<unknown>> = {
   settings: () => import("../../pages/SettingsPage"),
   profile: loadProfilePage,
   notifications: () => import("../../pages/NotificationsPage"),
-  downloads: () => import("../../pages/DownloadsPage"),
 };
 
 interface PageRouterProps {
@@ -131,7 +121,6 @@ interface PageRouterProps {
   steamPathModalLoading: boolean;
   setSteamPathModalLoading: (loading: boolean) => void;
   onNavigateToCatalogue: () => void;
-  onNavigateToDownloads: () => void;
   steamProfile: SteamProfile | null;
   isPremium: boolean;
 }
@@ -154,7 +143,6 @@ export function PageRouter({
   steamPathModalLoading,
   setSteamPathModalLoading,
   onNavigateToCatalogue,
-  onNavigateToDownloads,
   steamProfile,
   isPremium,
 }: PageRouterProps) {
@@ -401,11 +389,6 @@ export function PageRouter({
             }
           }
           onStartupSettingsChange={appData.handleStartupSettingsChange}
-          morrenusApiKey={appData.morrenusApiKey}
-          onMorrenusApiKeyChange={appData.setMorrenusApiKey}
-          onMorrenusApiKeySave={() =>
-            void appData.handleMorrenusApiKeySave(appData.morrenusApiKey)
-          }
           backupSettings={appData.backupSettings}
         />
       );
@@ -440,10 +423,6 @@ export function PageRouter({
 
     if (targetPage === "notifications") {
       return <LazyNotificationsPage />;
-    }
-
-    if (targetPage === "downloads") {
-      return <LazyDownloadsPage />;
     }
 
     return null;
@@ -491,7 +470,7 @@ export function PageRouter({
         </div>
         {hasOverlay ? (
           <div className="page-stack__overlay">
-            <ContentOverlay page={page} onNavigateToDownloads={onNavigateToDownloads} />
+            <ContentOverlay page={page} />
           </div>
         ) : null}
       </div>

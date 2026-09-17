@@ -202,14 +202,6 @@ export type CatalogueCacheUpdatedPayload = {
   updatedAt?: string;
 };
 
-/** Resultado da varredura de manutenção das raízes de downloads. */
-export type DownloadRootSweepSummary = {
-  /** Temporários `.ghostbox-chunks.json.tmp` órfãos removidos. */
-  removedChunkTemps: number;
-  /** App IDs cujo ACF apontava para pasta inexistente e foi removido da Steam. */
-  removedOrphanAcfs: string[];
-};
-
 export type LaunchGameResult = {
   success: boolean;
   appId: string;
@@ -225,12 +217,6 @@ export type LudusaviBackupPreviewGame = {
   id: string;
   appId: string;
   title: string;
-};
-
-export type MorrenusStatsResult = {
-  success: boolean;
-  stats?: unknown;
-  error?: string;
 };
 
 export type LuaToolsDependenciesStatus = {
@@ -270,19 +256,6 @@ export type SteamRestartResult = {
   checkedPaths?: string[];
   message?: string;
   error?: string;
-};
-
-/** Biblioteca Steam listada por `steam_list_libraries` (payload Rust PascalCase). */
-export type SteamLibraryVolume = {
-  Path: string;
-  /** Letra da unidade com dois-pontos (`E:`); vazio quando não se aplica. */
-  Drive: string;
-  /** Rótulo do volume nomeado pelo usuário; vazio quando sem rótulo. */
-  Label: string;
-  /** `fixed` | `removable` | `network` | `unknown`. */
-  DriveType: string;
-  FreeBytes: number;
-  TotalBytes: number;
 };
 
 export type SteamPathSelectionResult =

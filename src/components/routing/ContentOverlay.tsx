@@ -3,19 +3,10 @@ import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { useSettings } from "../../context/settings";
 import type { GhostBoxGame } from "../../data";
-import {
-  deleteDownloadTaskFiles,
-  enqueueDownload,
-} from "../../lib/downloadManager";
-import { useGameDownloadTask } from "../../hooks/useGameDownloadTask";
-import { ghostboxApi } from "../../lib/ghostboxApi";
-import { readStoredDownloadsDir, writeStoredDownloadsDir } from "../../utils/storage";
 import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
-import { isBlockedSteamDemo } from "../../utils/steamAppType";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
-import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import {
   getLoadedGameModalModule,
   loadGameModalModule,
@@ -85,25 +76,18 @@ const LazyGameAchievementsPage = lazy(() =>
 
 interface ContentOverlayProps {
   page: Page;
-  onNavigateToDownloads: () => void;
 }
 
-export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayProps) {
+export function ContentOverlay({ page }: ContentOverlayProps) {
   const appData = useAppData();
-  const { appearance, t } = useSettings();
+  const { appearance } = useSettings();
   const {
     selectedGame,
     achievementsView,
     isGameModalExitPending,
     closeGame,
     openAchievements,
-    showToast,
   } = useOverlay();
-
-  const downloadTask = useGameDownloadTask(
-    selectedGame ? getGameAppId(selectedGame) : null,
-    true,
-  );
 
   const animationsOff = appearance.reduceAllAnimations;
   const motionClass = animationsOff
@@ -201,11 +185,9 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
             }
             isAdded={appData.availableLibraryGameAppIds.has(selectedAppId)}
             isInstalled={appData.addedLibraryGameAppIds.has(selectedAppId)}
-            isDownloaded={
+            isLocallyInstalled={
               mergedGame.status === "installed" ||
-              mergedGame.librarySource === "steam-installed" ||
-              (downloadTask?.appId === selectedAppId &&
-                downloadTask.status === "completed")
+              mergedGame.librarySource === "steam-installed"
             }
             isRemoving={
               appData.removingGameId === selectedGame.id ||
@@ -222,55 +204,6 @@ export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayPr
             onRemoveGame={appData.requestRemoveGame}
             onToggleFavorite={appData.toggleFavoriteGame}
             onPlayGame={appData.handlePlayGame}
-            onDownloadGame={async () => {
-              // Demos classificadas não enfileiram download.
-              if (isBlockedSteamDemo(mergedGame)) return;
-              if (!getGameAppId(mergedGame)) return;
-              let downloadsRoot = readStoredDownloadsDir();
-              if (!downloadsRoot) {
-                downloadsRoot = await ghostboxApi.getDefaultDownloadsDir();
-                if (!downloadsRoot) return;
-                writeStoredDownloadsDir(downloadsRoot);
-              }
-              let gameForDownload = mergedGame;
-              const downloadAppId = getGameAppId(mergedGame);
-              if (
-                downloadAppId &&
-                isSteamTitlePlaceholder(mergedGame.title, downloadAppId)
-              ) {
-                try {
-                  const details =
-                    (await ghostboxApi.getGameDetails(downloadAppId).catch(() => null)) ??
-                    (await ghostboxApi
-                      .getGameStoreDetails(downloadAppId, appearance.language)
-                      .catch(() => null));
-                  if (
-                    details?.title &&
-                    !isSteamTitlePlaceholder(details.title, downloadAppId)
-                  ) {
-                    gameForDownload = { ...mergedGame, title: details.title };
-                  }
-                } catch {}
-              }
-              /* O destino final e `<root>\steamapps\common\<installdir>`, e so o
-                 Rust sabe o `installdir` — ele resolve o appinfo e devolve o
-                 caminho no evento `depot-plan`. Aqui so a raiz e conhecida. */
-              enqueueDownload(gameForDownload, downloadsRoot);
-              /* Download enfileirado: o usuário acompanha o progresso na aba
-                 Downloads, e o próprio goToPage fecha este modal ao navegar. */
-              onNavigateToDownloads();
-            }}
-            isDownloading={Boolean(downloadTask)}
-            onCancelDownload={() => {
-              if (!downloadTask) return;
-              deleteDownloadTaskFiles(downloadTask.id).catch(() => {
-                showToast(
-                  mergedGame.title,
-                  t("downloads.deleteError"),
-                  "error",
-                );
-              });
-            }}
             onViewAchievements={(game) =>
               openAchievements(game, { reopenModalOnBack: true })
             }

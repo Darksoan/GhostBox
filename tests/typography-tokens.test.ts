@@ -207,14 +207,9 @@ describe("Typography tokens", () => {
   });
 
   it("forbids literal font-size and stray ramp references in UI styles", () => {
-    // Exceções deliberadas de src/app.scss, documentadas no próprio SCSS:
-    // 1. Título display do hero da página de Downloads — tamanho fluido próprio,
-    //    fora da rampa semântica de propósito.
-    const allowedLiterals: Record<string, string[]> = {
-      "src/app.scss": [
-        "font-size: clamp(1.25rem, 2.4vw, 1.75rem)",
-      ],
-    };
+    // Sem exceções ativas: o hero da página de Downloads (única exceção
+    // deliberada) foi removido junto com o downloader nativo.
+    const allowedLiterals: Record<string, string[]> = {};
 
     for (const file of UI_STYLES) {
       const source = readFileSync(file, "utf8");

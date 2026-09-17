@@ -1,0 +1,67 @@
+/*
+ * Ajustes locais preservados ao remover o downloader nativo da master.
+ * A implementação-base permanece disponível na branch archive/native-downloads.
+ * Este arquivo deve ser aplicado depois dos estilos originais da tela.
+ */
+.downloads-hero {
+  // A composição segue a razão do mockup, mas escala com a largura real do card.
+  --download-cover-width: 27.25%;
+  --download-title-size: clamp(var(--type-size-body-emphasis), 2.13cqw, var(--type-size-page));
+  --download-meta-size: clamp(var(--type-size-caption), 1.9cqw, var(--type-size-section));
+  container-type: inline-size;
+  grid-template-rows: 100%;
+  height: auto;
+  aspect-ratio: 1689 / 215;
+
+  &__cover {
+    width: 100%;
+    height: 100%;
+  }
+
+  @media (min-width: 721px) {
+    &--completed &__top {
+      grid-column: 1 / -1;
+      justify-content: space-between;
+    }
+
+    &--completed &__title {
+      font-size: var(--download-title-size);
+      line-height: var(--type-line-page);
+      text-transform: uppercase;
+    }
+
+    &--completed &__status-text {
+      color: var(--text-secondary);
+      font-weight: var(--weight-regular);
+      font-size: var(--download-meta-size);
+      line-height: var(--type-line-body-emphasis);
+      text-transform: none;
+      letter-spacing: var(--ls-300);
+    }
+
+    &--completed &__top &__meta {
+      gap: var(--space-2);
+      color: var(--text-secondary);
+      font-size: var(--download-title-size);
+      line-height: var(--type-line-page);
+    }
+
+    &--completed &__top &__meta-item {
+      display: inline-flex;
+      align-items: center;
+      min-height: calc(var(--type-line-section) + var(--space-4));
+      padding-inline: var(--space-5);
+      border-radius: var(--radius-pill);
+      background: var(--pill-bg);
+    }
+
+    &--completed &__meta-value,
+    &--completed &__meta-unit {
+      font-weight: var(--weight-regular);
+    }
+  }
+
+  @media (max-width: 720px) {
+    aspect-ratio: auto;
+  }
+}

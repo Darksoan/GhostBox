@@ -285,8 +285,7 @@ svg[stroke-width="1.8"] {
 .home-wishlist-card__cover,
 .favorites-grid__cover,
 .modal__thumbnail img,
-.modal__showcase-image,
-.downloads-hero__cover {
+.modal__showcase-image {
   image-rendering: -webkit-optimize-contrast;
   image-rendering: auto;
   backface-visibility: hidden;
@@ -602,7 +601,6 @@ select,
 .settings-option,
 .profile-page,
 .notifications-page,
-.downloads-page,
 .sidebar,
 .header {
   text-rendering: optimizeLegibility;
@@ -627,7 +625,6 @@ input,
 .settings-option__copy,
 .profile-page,
 .notifications-page,
-.downloads-page,
 .modal__details {
   text-rendering: optimizeLegibility;
   font-synthesis: none;
@@ -1244,31 +1241,9 @@ p {
   }
 
   &__add-icon {
-    position: relative;
-    display: inline-block;
+    @include mixins.plus-icon;
     width: 14px;
     height: 14px;
-
-    &::before,
-    &::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      border-radius: var(--radius-pill);
-      background: currentColor;
-      transform: translate(-50%, -50%);
-    }
-
-    &::before {
-      width: 12px;
-      height: 2px;
-    }
-
-    &::after {
-      width: 2px;
-      height: 12px;
-    }
   }
 
   /* Menu — notification-card style options */
@@ -3007,12 +2982,22 @@ p {
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scroll-behavior: smooth;
-  scroll-snap-type: x mandatory;
+  /* Mesmo contrato do rail de "Bem avaliados": a animação é do JS (`Shelf`,
+     rAF de 450ms com ease-out); `proximity` ancora só o gesto manual e
+     `--animating` desliga o snap durante o voo programático. */
+  scroll-behavior: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0;
+  overscroll-behavior-x: contain;
+  will-change: scroll-position;
   scrollbar-width: none;
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  &--animating {
+    scroll-snap-type: none;
   }
 }
 
@@ -3545,12 +3530,22 @@ p {
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scroll-behavior: smooth;
-  scroll-snap-type: x mandatory;
+  /* Mesmo contrato do rail de "Bem avaliados": a animação é do JS (`Shelf`,
+     rAF de 450ms com ease-out); `proximity` ancora só o gesto manual e
+     `--animating` desliga o snap durante o voo programático. */
+  scroll-behavior: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0;
+  overscroll-behavior-x: contain;
+  will-change: scroll-position;
   scrollbar-width: none;
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  &--animating {
+    scroll-snap-type: none;
   }
 }
 
@@ -3723,12 +3718,25 @@ p {
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scroll-behavior: smooth;
-  scroll-snap-type: x mandatory;
+  /* A animação é do JS (`Shelf`: rAF de 450ms com ease-out). O `smooth`
+     nativo variava a duração conforme a distância (velocidade alternada) e o
+     snap `mandatory` corrigia o pouso no meio do voo com outra curva (o
+     "rasgo"): `proximity` só ancora gestos manuais próximos da fronteira e a
+     classe `--animating` desliga o snap durante o voo programático, cujo alvo
+     já é fronteira de card. */
+  scroll-behavior: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding: 0;
+  overscroll-behavior-x: contain;
+  will-change: scroll-position;
   scrollbar-width: none;
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  &--animating {
+    scroll-snap-type: none;
   }
 }
 
@@ -3753,6 +3761,9 @@ p {
   background: var(--surface-secondary);
   cursor: pointer;
   scroll-snap-align: start;
+  /* Camada própria de composição: sem ela cada card repintava durante a
+     rolagem do rail e o verniz aparecia como "rasgo". */
+  transform: translateZ(0);
   transition: background var(--motion-base) var(--ease);
 
   &:hover {
@@ -8574,895 +8585,6 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.downloads-page {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  justify-content: flex-start;
-  padding: var(--space-8) var(--space-10) var(--page-bottom-space);
-  gap: var(--space-8);
-  min-height: 100%;
-  height: auto;
-  overflow: visible;
-
-  /* Header segue o padrão de `.content-section__header`; só o alinhamento do
-     botão de ação muda, porque o bloco de texto tem duas linhas. */
-  &__header {
-    align-items: flex-start;
-
-    p {
-      max-width: 620px;
-    }
-  }
-
-  /* Lista de coluna única: trava na mesma largura das abas vitrine em vez de
-     esticar linha por linha na janela maximizada. */
-  &__list {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: var(--content-max-width);
-    margin-inline: auto;
-    gap: var(--space-3);
-  }
-
-  &__empty.empty-state {
-    min-height: 280px;
-  }
-
-  &__stack {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: var(--content-max-width);
-    margin-inline: auto;
-    gap: var(--space-3);
-  }
-
-  &__section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  &__hero-drop {
-    width: 100%;
-  }
-
-}
-
-// Janela maximizada: o cap de 1200px deixava faixas vazias nas laterais e o
-// card colado na titlebar — estica para a largura disponível (sobra só o
-// gutter) e dá respiro no topo. Mesmo tratamento do catálogo maximizado.
-.sidebar--maximized ~ .container .downloads-page,
-.app-main:has(.sidebar--maximized) .downloads-page {
-  --content-max-width: 100%;
-  padding-top: var(--space-10);
-}
-
-// Botões sutilmente maiores no maximizado: 26px → 30px, ícones 18px → 20px
-// (CSS sobrescreve o size do lucide). A fileira de controles do layout em
-// progresso acompanha (26px → 30px); o concluído usa metades flexíveis.
-.sidebar--maximized ~ .container .downloads-hero__action,
-.app-main:has(.sidebar--maximized) .downloads-hero__action {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-}
-
-.sidebar--maximized ~ .container .downloads-hero__action svg,
-.app-main:has(.sidebar--maximized) .downloads-hero__action svg {
-  width: 20px;
-  height: 20px;
-}
-
-.sidebar--maximized ~ .container .downloads-hero:not(.downloads-hero--completed) .downloads-hero__content,
-.app-main:has(.sidebar--maximized) .downloads-hero:not(.downloads-hero--completed) .downloads-hero__content {
-  grid-template-rows: minmax(0, auto) minmax(0, auto) 30px;
-}
-
-.downloads-hero {
-  --download-cover-width: 200px;
-  --download-cover-height: 93px;
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--download-cover-width) minmax(0, 1fr);
-  grid-template-rows: var(--download-cover-height);
-  column-gap: var(--space-6);
-  align-items: stretch;
-  width: 100%;
-  height: var(--download-cover-height);
-  min-width: 0;
-  padding-right: var(--space-4);
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: var(--surface-secondary);
-
-  &__cover {
-    display: block;
-    grid-column: 1;
-    grid-row: 1;
-    width: var(--download-cover-width);
-    height: var(--download-cover-height);
-    min-height: 0;
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    background-color: var(--surface-media-letterbox);
-    background-size: cover;
-    background-position: center;
-    opacity: 0;
-    transition: opacity var(--motion-base) var(--ease);
-  }
-
-  &__cover--loaded {
-    opacity: 1;
-  }
-
-  &__content {
-    grid-column: 2;
-    grid-row: 1;
-    position: relative;
-    z-index: 2;
-    display: grid;
-    grid-template-rows: minmax(0, auto) minmax(0, auto) 26px;
-    align-content: center;
-    row-gap: var(--space-1);
-    padding: var(--space-2) 0;
-    min-width: 0;
-    min-height: 0;
-    pointer-events: none;
-  }
-
-  &__top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-
-  &__middle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-
-  &__title {
-    overflow: hidden;
-    color: var(--text-primary);
-    font-size: var(--type-size-body-emphasis);
-    font-weight: var(--weight-regular);
-    line-height: var(--type-line-body);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  &__status-text {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: var(--type-line-caption);
-    text-transform: uppercase;
-    letter-spacing: var(--ls-100);
-    white-space: nowrap;
-  }
-
-  &__percent {
-    flex: 0 0 auto;
-    color: var(--text-primary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: var(--type-line-caption);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__controls {
-    grid-row: 3;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: var(--space-4);
-  }
-
-  &__progress-track {
-    grid-column: 1;
-    grid-row: 1;
-    display: block;
-    width: 100%;
-    height: 4px;
-    overflow: hidden;
-    border-radius: var(--radius-pill);
-    background: var(--surface-modal-control);
-  }
-
-  &__progress-track > span {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    background: var(--text-primary);
-    transform-origin: 0 50%;
-    transition: transform var(--motion-slow) var(--ease-out);
-  }
-
-  &__meta {
-    min-width: 0;
-    max-width: 100%;
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-3);
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: var(--type-line-caption);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__meta-item {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__meta-value,
-  &__meta-unit {
-    font-weight: var(--weight-semibold);
-  }
-
-  &__actions {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    gap: var(--space-2);
-    align-items: center;
-    pointer-events: auto;
-    opacity: 0;
-    visibility: hidden;
-    transition:
-      opacity var(--motion-fast) var(--ease),
-      visibility var(--motion-fast);
-  }
-
-  &:hover &__actions,
-  &:focus-within &__actions {
-    opacity: 1;
-    visibility: visible;
-  }
-
-  @media (hover: none) {
-    &__actions {
-      opacity: 1;
-      visibility: visible;
-    }
-  }
-
-  &__action {
-    display: inline-grid;
-    place-items: center;
-    flex: 0 0 26px;
-    width: 26px;
-    height: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-lg);
-    background: var(--surface-option);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition:
-      background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &:hover:not(:disabled) {
-      background: var(--surface-option-hover);
-      color: var(--text-secondary);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring-color);
-      outline-offset: 2px;
-    }
-
-    &:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-  }
-
-  &__action--danger:hover:not(:disabled),
-  &__action--danger:focus-visible:not(:disabled) {
-    background: var(--danger);
-    color: var(--text-primary);
-  }
-
-  &__toggle svg {
-    grid-area: 1 / 1;
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease);
-
-    &[data-active="true"] {
-      opacity: 1;
-    }
-  }
-
-  &__launch-spinner {
-    animation: spin 0.8s linear infinite;
-  }
-
-  @media (min-width: 721px) {
-    &--completed &__content {
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-rows: 1fr 1fr;
-      column-gap: var(--space-8);
-      row-gap: var(--space-1);
-    }
-
-    &--completed &__top {
-      grid-column: 1;
-      grid-row: 1;
-      align-self: end;
-      align-items: baseline;
-      justify-content: flex-start;
-      margin-bottom: var(--space-2);
-    }
-
-    &--completed &__title {
-      font-size: calc(var(--type-size-body-emphasis) - 1px);
-    }
-
-    &--completed &__middle {
-      display: contents;
-    }
-
-    &--completed &__status-text {
-      grid-column: 1;
-      grid-row: 2;
-      align-self: start;
-      margin-top: var(--space-2);
-      color: var(--text-tertiary);
-      font-weight: var(--weight-semibold);
-      font-size: calc(var(--type-size-caption) - 2px);
-    }
-
-    &--completed &__top &__meta {
-      flex: 0 0 auto;
-      justify-content: flex-start;
-      color: var(--text-tertiary);
-      font-size: calc(var(--type-size-caption) - 2px);
-      line-height: var(--type-line-caption);
-    }
-
-    &--completed &__controls {
-      grid-column: 2;
-      grid-row: 2;
-      display: flex;
-      justify-content: flex-end;
-      align-self: start;
-      margin-top: var(--space-2);
-    }
-  }
-
-  &__stale {
-    grid-column: 2;
-    grid-row: 2;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 0;
-    padding-bottom: var(--space-3);
-  }
-
-  &__stale-detail {
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    overflow-wrap: anywhere;
-  }
-
-  @media (max-width: 900px) {
-    --download-cover-width: 166px;
-    --download-cover-height: 78px;
-
-    &__content {
-      padding: 0 0 var(--space-1);
-    }
-  }
-
-  @media (max-width: 720px) {
-    --download-cover-width: 146px;
-    --download-cover-height: 68px;
-    grid-template-rows: auto auto;
-    height: auto;
-    min-height: var(--download-cover-height);
-
-    &__content {
-      display: contents;
-    }
-
-    &__cover {
-      align-self: start;
-    }
-
-    &__top {
-      grid-column: 2;
-      grid-row: 1;
-      position: relative;
-      z-index: 2;
-      align-self: start;
-      padding-top: var(--space-3);
-    }
-
-    &__middle {
-      grid-column: 2;
-      grid-row: 1;
-      position: relative;
-      z-index: 2;
-      align-self: end;
-      padding-bottom: var(--space-3);
-    }
-
-    &__meta {
-      justify-content: flex-end;
-    }
-
-    &__controls {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      position: relative;
-      z-index: 2;
-      column-gap: var(--space-4);
-      padding: 0 0 var(--space-3) var(--space-6);
-    }
-
-    &__stale {
-      grid-column: 1 / -1;
-      grid-row: 3;
-      padding-left: var(--space-6);
-    }
-  }
-}
-
-.backdrop--download-details {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-10);
-  /* Véu imersivo: o modal é a assinatura da tela enquanto aberto — mesmo papel
-     do token que existe para isso, um degrau mais fundo que o scrim corrente. */
-  background: var(--overlay-immersive);
-  animation: none;
-}
-
-.download-details-modal {
-  position: relative;
-  display: flex;
-  /* Largura nativa da arte de header (460×215): o hero pede no máximo 690
-     pixels físicos em tela a 150%, bem dentro do que o `header_2x` entrega. */
-  width: min(460px, calc(100vw - 48px));
-  max-height: min(760px, calc(100vh - 48px));
-  flex-direction: column;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--radius-lg);
-  /* Fundo (#0a0a0a), não superfície: o hero ocupa o topo do modal e a arte se
-     funde no corpo por gradiente — uma moldura clara em volta lia como
-     passe-partout. O piso do canvas também deixa o corpo existir como ficha
-     tipográfica solta, sem caixas por cima. */
-  background: var(--surface-modal-canvas);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-3);
-  /* Um único momento autoral de entrada: o palco inteiro sobe e assenta.
-     Dentro dele, a arte assenta de scale(1.04) para 1 quando carrega —
-     o download é a arte em movimento, e a entrada reforça isso uma vez,
-     sem coreografia espalhada pelo corpo. */
-  animation: none;
-
-  &__hero {
-    position: relative;
-    width: 100%;
-    min-height: 0;
-    aspect-ratio: 460 / 215;
-    flex: 0 1 auto;
-    overflow: hidden;
-    /* Letterbox de arte: token que existe para exatamente este papel, no lugar
-       do `--surface-solid` removido no redesenho de superfícies. */
-    background: var(--surface-media-letterbox);
-  }
-
-  &__hero-image {
-    position: absolute;
-    inset: 0;
-    background-position: center;
-    background-size: cover;
-    opacity: 0;
-    transform: scale(1.04);
-    transition:
-      opacity var(--motion-slow) var(--ease),
-      transform var(--motion-emphasis) var(--ease-out);
-
-    &--loaded {
-      opacity: 1;
-      transform: none;
-    }
-  }
-
-  /* Estado e percentual na mesma linha: o que a pessoa veio conferir, lido em
-     uma única varredura antes do título. */
-  &__summary-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-6);
-  }
-
-  &__summary-title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    min-width: 0;
-    flex: 1;
-  }
-
-  &__summary-percent {
-    color: var(--text-primary);
-    font-size: var(--type-size-body-emphasis);
-    font-weight: var(--weight-semibold);
-    line-height: var(--type-line-body-emphasis);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Primeiro bloco da ficha, fora da arte: a capa fica inteira e o status
-     continua sendo a entrada da leitura, acima do título. */
-  &__summary {
-    display: grid;
-    gap: var(--space-4);
-
-    h3 {
-      min-width: 0;
-      flex: 0 1 auto;
-      margin: 0;
-      overflow: hidden;
-      color: var(--text-primary);
-      font-size: var(--type-size-page);
-      font-weight: var(--weight-semibold);
-      line-height: var(--type-line-page);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-
-  &__summary-progress {
-    width: 100%;
-    height: 6px;
-    overflow: hidden;
-    border-radius: var(--radius-pill);
-    background: var(--surface-modal-control);
-
-    /* Escala no eixo X, não width: o preenchimento acompanha o progresso em
-       transform, fora do fluxo de layout. */
-    span {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border-radius: inherit;
-      background: var(--text-primary);
-      transform: scaleX(0);
-      transform-origin: 0 50%;
-      transition: transform var(--motion-slow) var(--ease-out);
-    }
-  }
-
-  &__summary-remaining {
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-regular);
-    line-height: var(--type-line-caption);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* O estado é a entrada da leitura do modal e continua sóbrio, sem indicador
-     decorativo adicional. */
-  &__state {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    color: var(--text-secondary);
-    font-size: var(--type-size-caption);
-    font-weight: var(--weight-semibold);
-    line-height: var(--type-line-caption);
-    text-transform: uppercase;
-    letter-spacing: var(--ls-100);
-    white-space: nowrap;
-  }
-
-  &__content {
-    display: grid;
-    gap: var(--space-9);
-    min-height: 0;
-    padding: var(--space-8) var(--space-9) var(--space-9);
-    overflow-y: auto;
-  }
-
-  /* Ficha tipográfica, sem caixas: rótulo pequeno e valor em corpo, separados
-     pelo ritmo do grid. O fundo do modal é o palco; nenhuma célula sobe de
-     grau — caixa em cima de caixa era o que matava a imersão do corpo. */
-  &__facts {
-    display: grid;
-    /* auto-fit em vez de colunas fixas: o terceiro fato (Steam, após concluir)
-       entra como coluna quando cabe e a grade se reorganiza sozinha. */
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: var(--space-6);
-    margin: 0;
-
-    div {
-      display: grid;
-      align-content: start;
-      gap: var(--space-3);
-      min-width: 0;
-    }
-
-    dt {
-      color: var(--text-secondary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      line-height: var(--type-line-caption);
-    }
-
-    dd {
-      margin: 0;
-      color: var(--text-primary);
-      font-size: var(--type-size-body);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-body);
-      font-variant-numeric: tabular-nums;
-      overflow-wrap: anywhere;
-    }
-  }
-
-  /* Mesma ficha dos fatos, em largura inteira: é o caminho que a pessoa vai
-     copiar, então ele merece a linha inteira do palco, não uma caixa. */
-  &__path {
-    display: grid;
-    gap: var(--space-3);
-    min-width: 0;
-    padding: var(--space-5) var(--space-6);
-    border-radius: var(--radius-sm);
-    background: var(--surface-option);
-
-    span {
-      color: var(--text-secondary);
-      font-size: var(--type-size-caption);
-      font-weight: var(--weight-semibold);
-      line-height: var(--type-line-caption);
-    }
-
-    strong {
-      min-width: 0;
-      color: var(--text-primary);
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-compact);
-      /* Quebra em qualquer ponto: o caminho é a string mais longa do modal e
-         serve para ser lida ou copiada inteira. Truncar tornava-a decorativa. */
-      overflow-wrap: anywhere;
-    }
-  }
-
-  /* Alerta funcional: a única superfície que sobe de tom no corpo, porque é
-     estado — e usa a tinta de perigo, não um degrau da rampa. */
-  &__stale {
-    display: grid;
-    gap: var(--space-4);
-    padding: var(--space-6);
-    border-radius: var(--radius-md);
-    background: var(--danger-soft);
-
-    &-detail {
-      color: var(--text-secondary);
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-compact);
-      overflow-wrap: anywhere;
-    }
-  }
-
-  &__inline-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-
-    .button {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-3);
-    }
-
-    .download-details-modal__launch-spinner {
-      animation: spin 1s linear infinite;
-    }
-  }
-
-  &__error {
-    margin: 0;
-    color: var(--danger);
-    font-size: var(--type-size-compact);
-    font-weight: var(--weight-regular);
-  }
-
-  /* Botões de ação do modal (rodapé e Pausar/Retomar) no mesmo papel do Jogar:
-     superfície de repouso da ação primária, texto primário e hover dois
-     degraus acima — tokens de ação, não os de controle de modal. O vermelho
-     fica para o confirmar do diálogo aninhado, onde é o ponto destrutivo. */
-  &__actions,
-  &__inline-actions {
-    .button--outline,
-    .button--primary,
-    .download-details-modal__danger {
-      color: var(--text-secondary);
-      background: var(--surface-option);
-
-      &:hover:not(:disabled),
-      &:focus-visible:not(:disabled) {
-        background: var(--surface-option-hover);
-        color: var(--text-primary);
-      }
-    }
-  }
-
-  &__actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-4);
-    padding: var(--space-5) var(--space-9) var(--space-9);
-  }
-
-  /* Vale para "Cancelar download" e para o confirmar do diálogo: os dois usam
-     esta classe. Uninstall confirmação agora em var(--red) 40% → 60% hover. */
-  &__danger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    min-height: 36px;
-    padding: 0 var(--space-7);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--surface-option);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-weight: var(--weight-regular);
-    transition:
-      background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &:hover:not(:disabled),
-    &:focus-visible:not(:disabled) {
-      background: var(--danger);
-      color: var(--text-primary);
-    }
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.55;
-    }
-  }
-
-  &__actions > .button {
-    position: relative;
-    min-height: 38px;
-    padding: var(--space-4) calc(var(--space-7) + (18px + var(--space-3)) / 2);
-    border-radius: var(--radius-lg);
-    color: var(--text-secondary);
-    background: var(--surface-option);
-
-    > svg {
-      display: block;
-      position: absolute;
-      left: var(--space-7);
-      width: 18px;
-      height: 18px;
-      opacity: 0;
-      transition: opacity var(--motion-fast) var(--ease);
-    }
-
-    > span {
-      transition: transform var(--motion-base) var(--ease);
-    }
-
-    &:hover:not(:disabled),
-    &:focus-visible:not(:disabled) {
-      background: var(--surface-option-hover);
-      color: var(--text-primary);
-
-      > svg {
-        opacity: 1;
-      }
-
-      > span {
-        transform: translateX(calc((18px + var(--space-3)) / 2));
-      }
-    }
-
-    &.download-details-modal__toggle {
-      flex-shrink: 0;
-
-      > svg[data-active="false"] {
-        opacity: 0;
-      }
-
-      > span {
-        display: grid;
-        justify-items: center;
-
-        > span {
-          grid-area: 1 / 1;
-          white-space: nowrap;
-          transition: opacity var(--motion-fast) var(--ease);
-
-          &[aria-hidden="true"] {
-            opacity: 0;
-          }
-        }
-      }
-    }
-
-    &.download-details-modal__danger:hover:not(:disabled),
-    &.download-details-modal__danger:focus-visible:not(:disabled) {
-      background: var(--danger);
-      color: var(--text-primary);
-    }
-  }
-
-  &__confirm-backdrop {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-8);
-    background: var(--overlay-confirm);
-
-    .confirm-modal {
-      background: var(--surface-modal);
-    }
-
-    .confirm-modal__actions .button {
-      border: 0;
-      background: var(--surface-option);
-      color: var(--text-secondary);
-
-      &:hover:not(:disabled),
-      &:focus-visible:not(:disabled) {
-        background: var(--surface-option-hover);
-        color: var(--text-primary);
-      }
-    }
-
-    .confirm-modal__actions .confirm-modal__confirm {
-      background: var(--surface-option);
-      color: var(--text-primary);
-    }
-
-    .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
-    .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled) {
-      background: var(--danger);
-      color: var(--text-primary);
-    }
-
-  }
-}
-
-.backdrop--download-details > .confirm-modal,
 .backdrop--confirm > .confirm-modal,
 .confirm-modal {
   background: var(--surface-modal);
@@ -9507,44 +8629,6 @@ input[type="search"]::-ms-reveal {
     opacity: 1;
   }
 }
-
-@keyframes download-backdrop-in {
-  from {
-    background-color: transparent;
-  }
-
-  to {
-    background-color: var(--overlay-immersive);
-  }
-}
-
-@keyframes download-stage-in {
-  from {
-    opacity: 0;
-    transform: translateY(var(--space-4)) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* O palco entra sem subir e a arte sem assentar; o véu e a arte continuam
-     aparecendo por opacidade, que é a transição que carrega significado. */
-  .backdrop--download-details,
-  .download-details-modal {
-    animation: none;
-  }
-
-  .download-details-modal__hero-image {
-    transform: none;
-    transition: opacity var(--motion-base) var(--ease);
-  }
-
-}
-
 /* Sem markup vivo hoje (a página de backup foi substituída pelo
    GameBackupOptionsModal; "backup" nem é mais um valor de `Page`), mas
    tests/page-bottom-spacing.test.ts cobra esta classe pelo nome — a regra
@@ -10674,12 +9758,6 @@ border: 0;
 
   @include pb-disable-cover-zoom;
 
-  .downloads-hero__progress-track > span,
-  .downloads-hero__toggle svg,
-  .downloads-hero__actions {
-    transition: none;
-  }
-
   /* Pins the library portrait hover zoom at its rest size. */
   .game-card__cover {
     --pb-background-size-current: var(--pb-background-size) !important;
@@ -10754,23 +9832,6 @@ border: 0;
     transform: none;
   }
 
-  /* Modal de detalhes de download: palco entra no estado final e a arte
-     aparece sem o assentamento de escala. */
-  .backdrop--download-details,
-  .download-details-modal {
-    animation: none;
-  }
-
-  .download-details-modal__hero-image {
-    transition: none;
-  }
-
-  .download-details-modal__actions > .button.download-details-modal__toggle {
-    svg,
-    span {
-      transition: none;
-    }
-  }
 }
 
 html.no-animations {
@@ -12229,7 +11290,7 @@ html.no-backdrop-blur {
     overflow: hidden;
     background: var(--background-dark);
 
-    &::after {
+    &--loaded::after {
       content: "";
       position: absolute;
       left: 0;
@@ -13137,8 +12198,7 @@ html.no-backdrop-blur {
 
   &__play-button,
   &__add-button,
-  &__remove-button,
-  &__download-button {
+  &__remove-button {
     min-width: 0;
     width: fit-content;
     min-height: clamp(34px, 0.6vw + 27px, 38px);
@@ -13180,7 +12240,6 @@ html.no-backdrop-blur {
   &__play-button,
   &__add-button,
   &__remove-button,
-  &__download-button,
   &__favorite-button,
   &__gear-button {
     border: none;
@@ -13217,7 +12276,6 @@ html.no-backdrop-blur {
   &__play-button,
   &__add-button,
   &__remove-button,
-  &__download-button,
   &__favorite-button,
   &__gear-button {
     background: var(--surface-option);
@@ -13245,41 +12303,23 @@ html.no-backdrop-blur {
     }
   }
 
-  /* Download em andamento: o botão anuncia "Baixando" e, no hover/foco, troca
-     para "Cancelar" com a cor de destrutivo — o clique interrompe o download e
-     remove os arquivos parciais. As duas faces existem no DOM para a troca não
-     depender de JS; o nome acessível do botão já é "Cancelar". */
-  &__download-face {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  &__download-button--live {
-    .modal__download-face--cancel {
-      display: none;
-    }
-
-    &:hover:not(:disabled),
-    &:focus-visible {
-      background: var(--danger);
-      color: var(--text-primary);
-
-      .modal__download-face {
-        display: none;
-      }
-
-      .modal__download-face--cancel {
-        display: inline-flex;
-      }
-    }
-  }
-
   &__action-label {
     display: inline-flex;
     align-items: center;
     line-height: 1;
     transform: translateY(0.5px);
+  }
+
+  /* Mesmo "+" da sidebar de coleções (`sidebar__add-icon`, via
+     `mixins.plus-icon`): barras preenchidas com cantos arredondados, mesma
+     caneta de 2px. A caixa é `1em`, amarrada ao `font-size` do label do botão
+     (14px): o ícone escala junto com o texto em vez de ter tamanho fixo. */
+  &__add-icon {
+    @include mixins.plus-icon;
+    display: block;
+    flex: 0 0 1em;
+    width: 1em;
+    height: 1em;
   }
 
   &__adding-state {
@@ -13349,15 +12389,12 @@ html.no-backdrop-blur {
 .modal--maximized .modal__play-button,
 .modal--maximized .modal__add-button,
 .modal--maximized .modal__remove-button,
-.modal--maximized .modal__download-button,
 .sidebar--maximized ~ .container .modal__play-button,
 .sidebar--maximized ~ .container .modal__add-button,
 .sidebar--maximized ~ .container .modal__remove-button,
-.sidebar--maximized ~ .container .modal__download-button,
 .app-main:has(.sidebar--maximized) .modal__play-button,
 .app-main:has(.sidebar--maximized) .modal__add-button,
-.app-main:has(.sidebar--maximized) .modal__remove-button,
-.app-main:has(.sidebar--maximized) .modal__download-button {
+.app-main:has(.sidebar--maximized) .modal__remove-button {
   min-height: 38px;
   height: 38px;
   padding: 0 var(--space-8);
@@ -13377,19 +12414,16 @@ html.no-backdrop-blur {
 .modal--maximized .modal__play-button svg,
 .modal--maximized .modal__add-button svg,
 .modal--maximized .modal__remove-button svg,
-.modal--maximized .modal__download-button svg,
 .modal--maximized .modal__favorite-button svg,
 .modal--maximized .modal__gear-button svg,
 .sidebar--maximized ~ .container .modal__play-button svg,
 .sidebar--maximized ~ .container .modal__add-button svg,
 .sidebar--maximized ~ .container .modal__remove-button svg,
-.sidebar--maximized ~ .container .modal__download-button svg,
 .sidebar--maximized ~ .container .modal__favorite-button svg,
 .sidebar--maximized ~ .container .modal__gear-button svg,
 .app-main:has(.sidebar--maximized) .modal__play-button svg,
 .app-main:has(.sidebar--maximized) .modal__add-button svg,
 .app-main:has(.sidebar--maximized) .modal__remove-button svg,
-.app-main:has(.sidebar--maximized) .modal__download-button svg,
 .app-main:has(.sidebar--maximized) .modal__favorite-button svg,
 .app-main:has(.sidebar--maximized) .modal__gear-button svg {
   width: 20px;
@@ -14999,6 +14033,21 @@ button {
     align-items: center;
     justify-content: center;
     height: 100%;
+
+    /* O translate percentual pode parar entre pixels físicos em algumas
+       larguras do WebView. A mídia ativa cobre esse seam de subpixel sem
+       alterar o passo de 100% da trilha. */
+    &--active {
+      position: relative;
+      z-index: 1;
+
+      > .gallery-slider__media {
+        width: calc(100% + 2px);
+        max-width: none;
+        margin-inline: -1px;
+        flex: 0 0 auto;
+      }
+    }
   }
 
   &__media {

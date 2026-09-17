@@ -26,7 +26,6 @@ describe("Page bottom spacing", () => {
       ".settings-page--tabs",
       ".profile-page__content-section",
       ".notifications-page",
-      ".downloads-page",
       ".backup-page",
       ".game-achievements-page__content",
     ];
@@ -106,7 +105,6 @@ describe("Page bottom spacing", () => {
       ".home-page",
       ".settings-page",
       ".notifications-page",
-      ".downloads-page",
       ".backup-page",
       ".profile-page",
       ".game-achievements-page",

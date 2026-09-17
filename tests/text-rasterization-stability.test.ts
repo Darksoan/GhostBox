@@ -17,7 +17,6 @@ describe("text rasterization stability", () => {
       "context-menu-in",
       "catalogue-filter-panel-in",
       "app-notification-child-in",
-      "download-stage-in",
       "toast-in",
       "toast-icon-in",
       "achievement-tooltip-fade-in",

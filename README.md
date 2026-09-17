@@ -1,13 +1,13 @@
 # GhostBox
 
-Aplicativo desktop (Tauri + React) para gerenciar sua biblioteca Steam pessoal: catálogo, downloads, saves (via Ludusavi), conquistas, calendário pessoal, recomendações e um plano Premium opcional (Stripe) com backup/restore de saves na nuvem.
+Aplicativo desktop (Tauri + React) para gerenciar sua biblioteca Steam pessoal: catálogo, saves (via Ludusavi), conquistas, calendário pessoal, recomendações e um plano Premium opcional (Stripe) com backup/restore de saves na nuvem.
 
 > **Aviso legal:** GhostBox é uma ferramenta de biblioteca e gerenciamento de progresso para jogos e apps que o usuário já está autorizado a executar. Não vende, distribui, fornece acesso ou modifica jogos. Veja [POLICIES.md](POLICIES.md).
 
 ## Arquitetura
 
 - **Frontend**: React + TypeScript + Vite, rodando dentro do shell Tauri (Rust).
-- **Backend local (Rust, `src-tauri/`)**: leitura da instalação Steam local (appinfo, appcache, manifests, paths), download via CDN, saves via `ludusavi` (binário externo empacotado), backup/cloud save, monitor de conquistas, ciclo de vida da janela.
+- **Backend local (Rust, `src-tauri/`)**: leitura da instalação Steam local (appinfo, appcache, manifests, paths), saves via `ludusavi` (binário externo empacotado), backup/cloud save, monitor de conquistas, ciclo de vida da janela.
 - **Backend remoto (Cloudflare Workers, `workers/`)**: proxies para `catalogue`, `steam-details`, `steam-stats`, `subscriptions` (Stripe) e `feedback`/updater. Mantêm a chave da Steam Web API fora do desktop e adicionam cache/fallback para o Steam Store público.
 - **Design system**: documentado em [design.md](design.md) — tokens em `src/styles/_primitives.scss` e `src/styles/_semantic.scss`, validados por `npm run check:tokens`.
 
@@ -60,7 +60,7 @@ wrangler deploy --config workers/steam-stats/wrangler.toml
 
 ```
 src/            frontend React (pages, components, utils, i18n)
-src-tauri/      backend Rust (comandos Tauri, integrações Steam/Ludusavi/CDN)
+src-tauri/      backend Rust (comandos Tauri, integrações Steam/Ludusavi)
 workers/        Cloudflare Workers (proxies e Stripe)
 scripts/        scripts de manutenção (check-tokens, set-release-version, etc.)
 tests/          testes Vitest

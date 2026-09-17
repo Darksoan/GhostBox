@@ -1,5 +1,4 @@
 import {
-  Code2,
   Crown,
   Bell,
   FolderCog,
@@ -15,8 +14,7 @@ export type SettingsTabId =
   | "library"
   | "connections"
   | "subscription"
-  | "notifications"
-  | "download";
+  | "notifications";
 
 export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   general: "settings.tabs.general.label",
@@ -25,7 +23,6 @@ export const settingsTabLabelKeys: Record<SettingsTabId, string> = {
   connections: "settings.tabs.connections.label",
   subscription: "settings.tabs.subscription.label",
   notifications: "settings.tabs.notifications.label",
-  download: "settings.tabs.download.label",
 };
 
 /** Descripciones por aba — texto corto bajo el título del encabezado de página. */
@@ -36,7 +33,6 @@ export const settingsTabDescriptionKeys: Record<SettingsTabId, string> = {
   connections: "settings.tabs.connections.description",
   subscription: "settings.tabs.subscription.description",
   notifications: "settings.tabs.notifications.description",
-  download: "settings.tabs.download.description",
 };
 
 type SettingsNavigationTab = {
@@ -51,5 +47,4 @@ export const settingsNavigationTabs: SettingsNavigationTab[] = [
   { id: "connections", icon: Link2 },
   { id: "subscription", icon: Crown },
   { id: "notifications", icon: Bell },
-  { id: "download", icon: Code2 },
 ];

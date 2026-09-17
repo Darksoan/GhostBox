@@ -26,7 +26,6 @@ import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { resolveSidebarIdentity } from "../../lib/sidebarIdentity";
-import { downloadTasksChangedEvent, getActiveDownloadCount } from "../../lib/downloadManager";
 import {
   readSidebarCollectionsCollapsed,
   readSidebarExpandedCollections,
@@ -226,15 +225,6 @@ export const Sidebar = memo(function Sidebar({
     preloadGameIconUrls(visibleSidebarIconGames);
   }, [visibleSidebarIconGames]);
 
-  const [activeDownloadCount, setActiveDownloadCount] = useState(() => getActiveDownloadCount());
-
-  useEffect(() => {
-    const refresh = () => setActiveDownloadCount(getActiveDownloadCount());
-    refresh();
-    window.addEventListener(downloadTasksChangedEvent, refresh);
-    return () => window.removeEventListener(downloadTasksChangedEvent, refresh);
-  }, []);
-
   const toggleCollectionExpanded = useCallback((collectionId: string) => {
     setExpandedCollectionIds((current) => {
       const next = new Set(current);
@@ -300,9 +290,6 @@ export const Sidebar = memo(function Sidebar({
                   >
                     <Icon size={19} strokeWidth={2} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
-                    {id === "downloads" && activeDownloadCount > 0 && (
-                      <strong>{activeDownloadCount > 99 ? "99+" : activeDownloadCount}</strong>
-                    )}
                   </button>
                 </li>
               ))}

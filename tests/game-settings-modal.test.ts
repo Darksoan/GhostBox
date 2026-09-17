@@ -15,7 +15,7 @@ describe("game actions menu", () => {
   });
 
   it("contains only installation and desktop shortcut actions", () => {
-    expect(menu).toContain('copy("Mover instalação", "Move installation")');
+    expect(menu).not.toContain('copy("Mover instalação", "Move installation")');
     expect(menu).toContain('copy("Desinstalar", "Uninstall")');
     expect(menu).toContain('copy("Criar atalho na área de trabalho", "Create desktop shortcut")');
     expect(menu).toContain('createGameShortcut(game, "desktop")');

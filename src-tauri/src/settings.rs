@@ -1,8 +1,7 @@
-use crate::util::{merge_object_defaults, text_value, EmptyStringExt};
+use crate::util::merge_object_defaults;
 
 pub(crate) const STARTUP_SETTINGS_FILE: &str = "startup-settings.json";
 pub(crate) const NOTIFICATION_SETTINGS_FILE: &str = "notification-settings.json";
-const HUBCAP_MANIFEST_API_KEY_FILE: &str = "morrenus-api-key.bin";
 const STEAM_WEB_API_KEY_FILE: &str = "steam-web-api-key.bin";
 const DEFAULT_STEAM_STATS_PROXY_URL: &str = "https://ghostbox-steam-stats.hella.workers.dev";
 
@@ -127,7 +126,7 @@ pub(crate) fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, St
     };
 
     if ok == 0 {
-        return Err("Falha ao proteger a API key do Hubcap's Manifest.".to_string());
+        return Err("Falha ao proteger o segredo local.".to_string());
     }
 
     let protected = unsafe {
@@ -169,7 +168,7 @@ pub(crate) fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, St
     };
 
     if ok == 0 {
-        return Err("Falha ao desproteger a API key do Hubcap's Manifest.".to_string());
+        return Err("Falha ao desproteger o segredo local.".to_string());
     }
 
     let decrypted = unsafe {
@@ -179,7 +178,7 @@ pub(crate) fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, St
         LocalFree(output_blob.pbData as _);
     }
 
-    String::from_utf8(decrypted).map_err(|_| "API key do Hubcap's Manifest inválida.".to_string())
+    String::from_utf8(decrypted).map_err(|_| "Segredo local inválido.".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -189,31 +188,7 @@ pub(crate) fn encrypt_secret_for_current_user(value: &str) -> Result<Vec<u8>, St
 
 #[cfg(not(target_os = "windows"))]
 pub(crate) fn decrypt_secret_for_current_user(value: &[u8]) -> Result<String, String> {
-    String::from_utf8(value.to_vec())
-        .map_err(|_| "API key do Hubcap's Manifest inválida.".to_string())
-}
-
-pub(crate) fn load_morrenus_api_key(app: &tauri::AppHandle) -> String {
-    match read_binary_file(app, HUBCAP_MANIFEST_API_KEY_FILE) {
-        Ok(bytes) if bytes.is_empty() => String::new(),
-        Ok(bytes) => decrypt_secret_for_current_user(&bytes).unwrap_or_default(),
-        Err(_) => String::new(),
-    }
-}
-
-pub(crate) fn save_morrenus_api_key(
-    app: &tauri::AppHandle,
-    api_key: &str,
-) -> Result<String, String> {
-    let normalized = api_key.trim().to_string();
-    if normalized.is_empty() {
-        remove_data_file(app, HUBCAP_MANIFEST_API_KEY_FILE)?;
-        return Ok(normalized);
-    }
-
-    let payload = encrypt_secret_for_current_user(&normalized)?;
-    write_binary_file(app, HUBCAP_MANIFEST_API_KEY_FILE, &payload)?;
-    Ok(normalized)
+    String::from_utf8(value.to_vec()).map_err(|_| "Segredo local inválido.".to_string())
 }
 
 pub(crate) fn load_steam_web_api_key(app: &tauri::AppHandle) -> String {
@@ -331,90 +306,4 @@ pub fn app_set_notification_settings(
     );
     let next = merge_object_defaults(current, settings);
     write_json_file(&app, NOTIFICATION_SETTINGS_FILE, &next)
-}
-
-#[tauri::command]
-pub fn app_get_morrenus_api_key(app: tauri::AppHandle) -> String {
-    load_morrenus_api_key(&app)
-}
-
-#[tauri::command]
-pub fn app_set_morrenus_api_key(app: tauri::AppHandle, api_key: String) -> Result<String, String> {
-    save_morrenus_api_key(&app, &api_key)
-}
-
-#[tauri::command]
-pub async fn app_get_morrenus_stats(api_key: String) -> serde_json::Value {
-    let normalized_api_key = api_key.trim();
-    if normalized_api_key.is_empty() {
-        return serde_json::json!({
-            "success": false,
-            "error": "Informe uma API key do Hubcap's Manifest."
-        });
-    }
-
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-    {
-        Ok(client) => client,
-        Err(error) => {
-            return serde_json::json!({
-                "success": false,
-                "error": error.to_string()
-            });
-        }
-    };
-
-    let response = match client
-        .get("https://hubcapmanifest.com/api/v1/user/stats")
-        .header(
-            reqwest::header::AUTHORIZATION,
-            format!("Bearer {normalized_api_key}"),
-        )
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .await
-    {
-        Ok(response) => response,
-        Err(error) => {
-            return serde_json::json!({
-                "success": false,
-                "error": error.to_string()
-            });
-        }
-    };
-
-    let status = response.status();
-    let response_text = match response.text().await {
-        Ok(text) => text,
-        Err(error) => {
-            return serde_json::json!({
-                "success": false,
-                "error": error.to_string()
-            });
-        }
-    };
-
-    let data = serde_json::from_str::<serde_json::Value>(&response_text)
-        .unwrap_or_else(|_| serde_json::json!(response_text));
-
-    if !status.is_success() {
-        let message = data
-            .as_object()
-            .map(|object| {
-                text_value(object.get("error")).if_empty(text_value(object.get("message")))
-            })
-            .unwrap_or_else(|| text_value(Some(&data)));
-
-        return serde_json::json!({
-            "success": false,
-            "error": message.if_empty(format!("Hubcap's Manifest respondeu HTTP {status}"))
-        });
-    }
-
-    serde_json::json!({
-        "success": true,
-        "stats": data
-    })
 }

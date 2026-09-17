@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,16 +5,7 @@ import {
   isPortraitLibraryImageSource,
 } from "../src/utils/image";
 
-describe("Download modal image sources", () => {
-  it("filters portrait sources before building the modal chain", () => {
-    const modal = readFileSync(
-      "src/components/modals/DownloadDetailsModal.tsx",
-      "utf8",
-    );
-
-    expect(modal).toContain("!isPortraitLibraryImageSource(src)");
-  });
-
+describe("Steam library image sources", () => {
   it("recognizes legacy and hashed vertical library capsule assets", () => {
     expect(
       isPortraitLibraryImageSource(

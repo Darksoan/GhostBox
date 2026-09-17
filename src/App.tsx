@@ -17,7 +17,6 @@ import { useOverlay, type AchievementsViewState } from "./context/OverlayContext
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
 import { onAppNavigateToSettingsTab, resolveProfileAccess } from "./lib/appNavigation";
-import { startDownloadManager } from "./lib/downloadManager";
 import {
   getTrayHiddenNotificationCopy,
   showTrayHiddenDesktopNotification,
@@ -322,10 +321,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       void queryClient.invalidateQueries({ queryKey: ["home"] });
     });
   }, [queryClient]);
-
-  useEffect(() => {
-    return startDownloadManager();
-  }, []);
 
   useEffect(() => {
     return ghostboxApi.onWindowHiddenToTray(() => {
@@ -676,7 +671,6 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               steamPathModalLoading={steamPathModalLoading}
               setSteamPathModalLoading={setSteamPathModalLoading}
               onNavigateToCatalogue={() => handleNavigate("catalogue")}
-              onNavigateToDownloads={() => handleNavigate("downloads")}
               steamProfile={appData.steamProfile}
               isPremium={isPremium}
             />

@@ -10,7 +10,6 @@ export type AppNotificationType =
   | "backup"
   | "achievement"
   | "account"
-  | "download"
   | "favorite"
   | "collection";
 
@@ -52,7 +51,6 @@ function isNotificationType(value: unknown): value is AppNotificationType {
     value === "backup" ||
     value === "achievement" ||
     value === "account" ||
-    value === "download" ||
     value === "favorite" ||
     value === "collection";
 }

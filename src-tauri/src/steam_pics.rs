@@ -1,10 +1,10 @@
 //! Estado publico de um app na Steam: qual manifest cada depot esta usando em
 //! cada branch, e qual `buildid` corresponde a cada branch.
 //!
-//! Isso existe porque o pacote LuaTools fixa um `setManifestid` que envelhece —
-//! ver `crate::cdndownload::resolve_depots`. Sem saber o gid publico atual nao da
-//! para dizer se o manifest em maos e o de hoje ou o de 2022, nem para gravar um
-//! `buildid` honesto no `appmanifest_<appid>.acf`.
+//! Isso existe porque o pacote LuaTools fixa um `setManifestid` que envelhece.
+//! Sem saber o gid publico atual nao da para dizer se o manifest em maos e o
+//! de hoje ou o de 2022, nem para gravar um `buildid` honesto no
+//! `appmanifest_<appid>.acf`.
 //!
 //! Duas fontes, nessa ordem:
 //!

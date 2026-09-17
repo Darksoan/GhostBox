@@ -80,10 +80,6 @@ import {
 } from "../utils/steamAchievementMerge";
 import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { applySteamAppTypes, filterOutSteamDemos } from "../utils/steamAppType";
-import {
-  filterSteamLibraryGames,
-  mergeSteamOwnedLibraryGames,
-} from "../utils/libraryVisibility";
 import { useSteamAppTypes } from "../hooks/useSteamAppTypes";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
 import { ghostboxApi } from "../lib/ghostboxApi";
@@ -569,7 +565,7 @@ export function ProfilePage({
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
   const { account } = useAuth();
-  const { showSteamGames, showSteamLibraryGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
+  const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
   const [internalActiveCollectionId, setInternalActiveCollectionId] =
@@ -671,8 +667,8 @@ export function ProfilePage({
   }, []);
 
   const profileCollections = useMemo<ProfileCollection[]>(() => {
-    // Geral e Biblioteca do perfil espelham a Biblioteca global (Todos:
-    // Steam owned + GhostBox), então as contagens usam a mesma união por appId.
+    // Geral do perfil espelha a Biblioteca global (Todos:
+    // Steam owned + GhostBox), então a contagem usa a mesma união por appId.
     const uniqueAppIds = new Set<string>();
     for (const game of addedLibraryGames) {
       uniqueAppIds.add(game.appId || game.id);
@@ -688,11 +684,6 @@ export function ProfilePage({
       {
         id: "overview",
         name: t("profile.overview"),
-        count: libraryUniqueCount,
-      },
-      {
-        id: "library",
-        name: t("profile.library"),
         count: libraryUniqueCount,
       },
       {
@@ -1245,21 +1236,6 @@ export function ProfilePage({
     )
       return [];
 
-    if (activeCollection.id === "library") {
-      // Aba Biblioteca do perfil espelha a Biblioteca global (Todos:
-      // Steam owned + GhostBox), com o mesmo merge + toggle + filtro de demo.
-      const merged = mergeSteamOwnedLibraryGames(
-        enrichedAddedLibraryGames,
-        steamOwnedProfileGames,
-      );
-      const result: GhostBoxGame[] = [];
-      for (const game of filterOutSteamDemos(filterSteamLibraryGames(merged, showSteamLibraryGames))) {
-        if (seen.has(game.id)) continue;
-        seen.add(game.id);
-        result.push(game);
-      }
-      return result;
-    }
     const collection = userCollectionById.get(activeCollection.id);
     if (!collection) return [];
 
@@ -1277,10 +1253,7 @@ export function ProfilePage({
     return result;
   }, [
     activeCollection.id,
-    enrichedAddedLibraryGames,
     gamesById,
-    showSteamLibraryGames,
-    steamOwnedProfileGames,
     userCollectionById,
   ]);
 
@@ -2072,7 +2045,7 @@ export function ProfilePage({
       <div className="profile-page__content-section">
         <main className="profile-page__main">
           <>
-            {/* Abas (Geral/Biblioteca/Conquistas) e sair da conta vivem na
+            {/* Abas (Geral/Conquistas) e sair da conta vivem na
                 sidebar do app — ver `profileNavigationTabs`. */}
           <div className="profile-page__collection-content">
             <div
