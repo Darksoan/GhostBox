@@ -3004,6 +3004,16 @@ button > svg {
   background: var(--skeleton-fill);
 }
 
+/* Enquanto a arte ainda resolve, o banner é um skeleton. O scrim serve apenas
+   para legibilidade sobre a imagem real e criaria um degradê no placeholder. */
+.home-banner__frame:has(.home-banner__art):not(:has(.home-banner__art--loaded)) {
+  background: var(--skeleton-fill);
+}
+
+.home-banner__frame:has(.home-banner__art):not(:has(.home-banner__art--loaded)) .home-banner__scrim {
+  display: none;
+}
+
 .home-banner__surface {
   position: absolute;
   display: block;
@@ -6740,6 +6750,17 @@ html.no-animations {
   --content-max-width: 100%;
 }
 
+/* O painel de visualização pode ser mais largo que o gatilho ("Listagem" versus
+   "Grade"). No catálogo maximizado ele fica centrado no próprio gatilho. */
+.sidebar--maximized ~ .container .catalogue-page__view .settings-dropdown__menu,
+.app-main:has(.sidebar--maximized) .catalogue-page__view .settings-dropdown__menu {
+  left: 50%;
+  right: auto;
+  width: max-content;
+  min-width: 100%;
+  transform: translateX(-50%);
+}
+
 // Janela manualmente larga (arrasto, não maximizada) também ganha cap maior
 @media (min-width: 1600px) {
   .catalogue-page {
@@ -7612,6 +7633,7 @@ input[type="search"]::-ms-reveal {
   @include tag-chip;
   background: var(--pill-bg);
   border-color: transparent;
+  font-size: var(--type-size-pill);
 }
 
 .catalogue-card:hover .catalogue-card__genre-chip,
@@ -7643,7 +7665,7 @@ input[type="search"]::-ms-reveal {
 .app-main:has(.sidebar--maximized) .catalogue-card__genre-chip {
   min-height: 28px;
   padding: var(--space-2) var(--space-6);
-  font-size: var(--type-size-fluid-caption);
+  font-size: var(--type-size-micro);
 }
 
 .sidebar--maximized ~ .container .catalogue-card__genres,
@@ -7721,16 +7743,17 @@ input[type="search"]::-ms-reveal {
    capas é herdada aqui. */
 .catalogue-list--cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 460px));
   align-items: stretch;
-  gap: var(--space-4);
+  justify-content: center;
+  gap: clamp(var(--space-4), 2vw, var(--space-14));
 
   @media (max-width: 1100px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 460px));
   }
 
   @media (max-width: 600px) {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 460px);
   }
 
 }
@@ -7761,25 +7784,13 @@ input[type="search"]::-ms-reveal {
   padding: var(--space-7) var(--space-6);
 }
 
-/* O placeholder usa a mesma caixa do corpo real para a capa e as linhas
-   fecharem na altura que o card terá quando os dados chegarem. */
-.catalogue-card__grid-body--skeleton {
-  gap: calc(var(--space-3) - 1px);
-}
-
-.catalogue-card__skeleton-title,
-.catalogue-card__skeleton-developer {
+.catalogue-card__skeleton-title {
   display: block;
 }
 
 .catalogue-card__skeleton-title {
   width: 64%;
   height: var(--type-line-body-emphasis);
-}
-
-.catalogue-card__skeleton-developer {
-  width: 42%;
-  height: var(--type-line-compact);
 }
 
 .catalogue-card__title-row {
@@ -7802,17 +7813,9 @@ input[type="search"]::-ms-reveal {
   white-space: nowrap;
 }
 
-.catalogue-card__developer {
-  display: block;
-  min-width: 0;
-  height: var(--type-line-compact);
-  margin-top: calc(var(--space-3) - 1px);
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--type-size-compact);
-  line-height: var(--type-line-compact);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.catalogue-card__library-status {
+  color: var(--text-tertiary);
+  font-weight: var(--weight-regular);
 }
 
 .catalogue-card__rating {
@@ -8684,6 +8687,8 @@ input[type="search"]::-ms-reveal {
 }
 
 .game-card {
+  --game-card-progress-track: color-mix(in srgb, var(--white) 15%, transparent);
+
   position: relative;
   aspect-ratio: 460 / 215;
   // A proporção reserva a altura real também fora do viewport. Uma altura
@@ -8754,6 +8759,107 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  &__play-button {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    display: grid;
+    width: 64px;
+    height: 64px;
+    min-width: 44px;
+    min-height: 44px;
+    place-items: center;
+    margin: -32px 0 0 -32px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-circle);
+    background: transparent;
+    color: var(--white);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-base) var(--ease-out);
+
+    &::before {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      width: 64px;
+      height: 64px;
+      margin: auto;
+      border-radius: inherit;
+      background-color: var(--game-card-progress-track);
+      content: "";
+      transform: scale(0.875);
+      transform-origin: center;
+      will-change: transform;
+      transition:
+        background-color var(--motion-fast) var(--ease-out),
+        transform var(--motion-slow) var(--ease-out);
+    }
+
+    svg {
+      display: block;
+      position: relative;
+      left: 1px;
+      width: 32px;
+      height: 32px;
+      shape-rendering: geometricPrecision;
+      transform: scale(0.75);
+      transform-origin: center;
+      will-change: transform;
+      transition: transform var(--motion-slow) var(--ease-out);
+    }
+
+    &:hover:not(:disabled)::before {
+      background-color: color-mix(
+        in srgb,
+        var(--black) 8%,
+        var(--game-card-progress-track)
+      );
+      transform: scale(1);
+    }
+
+    &:hover:not(:disabled) svg {
+      transform: scale(0.875);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--white);
+      outline-offset: 3px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    &:active:not(:disabled) {
+      opacity: 0.86;
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  &:focus-within &__play-button {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover &__play-button {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  @media (hover: none) {
+    &__play-button {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
   &__achievement-badges {
     position: absolute;
     right: 0;
@@ -8794,7 +8900,7 @@ input[type="search"]::-ms-reveal {
     height: 4px;
     overflow: hidden;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--white) 15%, transparent);
+    background: var(--game-card-progress-track);
 
     > span {
       display: block;
@@ -9630,6 +9736,26 @@ border: 0;
  .favorites-grid__cover--loaded,
  .home-category-card__cover {
     animation: none;
+  }
+
+  .game-card__play-button,
+  .game-card:hover .game-card__play-button,
+  .game-card:focus-within .game-card__play-button {
+    transition: none;
+  }
+
+  .game-card__play-button::before,
+  .game-card__play-button:hover::before {
+    transition: none;
+    transform: scale(0.875);
+    will-change: auto;
+  }
+
+  .game-card__play-button svg,
+  .game-card__play-button:hover svg {
+    transition: none;
+    transform: scale(0.75);
+    will-change: auto;
   }
 
   .content-section--library .game-grid {
@@ -12268,6 +12394,15 @@ html.no-backdrop-blur {
   gap: var(--space-4);
   bottom: var(--space-10);
   right: clamp(16px, 1.8vw, 28px);
+}
+
+/* O indicador de adição ocupa a largura do banner e precisa continuar ancorado
+   na borda inferior, não no offset dos controles flutuantes do modo maximizado. */
+.modal--maximized .modal__actions--adding,
+.sidebar--maximized ~ .container .modal__actions--adding,
+.app-main:has(.sidebar--maximized) .modal__actions--adding {
+  bottom: 0;
+  right: 0;
 }
 
 .modal--maximized .modal__play-button,

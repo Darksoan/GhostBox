@@ -82,7 +82,7 @@ export function GameGridLoadingState({
 
 /**
  * A lista mantém só as duas massas do item real (capa + corpo), sem texto nem
- * chips. A grade reserva suas duas linhas para fechar na altura do card final.
+ * chips. A grade reserva a linha de título para fechar na altura do card final.
  */
 export function CatalogueListLoadingState({
   count,
@@ -111,7 +111,6 @@ export function CatalogueListLoadingState({
             {isGrid && (
               <div className="catalogue-card__grid-body catalogue-card__grid-body--skeleton">
                 <span className="catalogue-card__skeleton-title skeleton" />
-                <span className="catalogue-card__skeleton-developer skeleton" />
               </div>
             )}
           </div>

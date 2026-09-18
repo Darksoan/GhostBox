@@ -87,4 +87,10 @@ describe("Notification feed grouping", () => {
     expect(panelRules).toContain("grid-template-rows: 1fr");
     expect(reducedMotionRules).toContain("transition: none");
   });
+
+  it("waits for notification art to load before mounting its fade-in layer", () => {
+    const component = readFileSync("src/pages/NotificationsPage.tsx", "utf8");
+
+    expect(component).toContain("const hasArt = loaded && Boolean(artSource);");
+  });
 });

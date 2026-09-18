@@ -398,7 +398,6 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   isRemoving = false,
   onOpenGame,
   onHoverGame,
-  onRemoveGame,
   onHoverEnter,
   onGameContextMenu,
 }: CatalogueListItemProps) {
@@ -411,11 +410,6 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
   const ratingText = reviewScore
     ? ((reviewScore.percent / 100) * 5).toFixed(1)
     : null;
-  // Só a primeira desenvolvedora, como no card da Home: a linha é fechada em
-  // uma altura e um título com três estúdios viraria reticências logo no
-  // primeiro nome.
-  const developerName = game.developers?.find((name) => name.trim()) ?? "";
-
   return (
     <article
       ref={cardRef}
@@ -452,9 +446,18 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
         <span className="catalogue-card__cover" aria-hidden="true">
           <CatalogueHeaderImage game={game} />
         </span>
-        <span className="catalogue-card__grid-body">
-          <span className="catalogue-card__title-row">
-            <span className="catalogue-card__title">{game.title}</span>
+          <span className="catalogue-card__grid-body">
+            <span className="catalogue-card__title-row">
+              <span className="catalogue-card__title">
+                {game.title}
+                {isAdded && (
+                  <span className="catalogue-card__library-status">
+                    {isEnglish
+                      ? " is already in your library."
+                      : " está na sua biblioteca."}
+                  </span>
+                )}
+              </span>
             {ratingText ? (
               <span className="catalogue-card__rating" aria-label={ratingText}>
                 <Flame
@@ -465,49 +468,10 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
                 />
                 <span>{ratingText}</span>
               </span>
-            ) : null}
+              ) : null}
           </span>
-          <span className="catalogue-card__developer">{developerName}</span>
         </span>
       </button>
-      {isAdded && (
-        <div className="catalogue-card__actions catalogue-card__actions--overlay">
-          <button
-            type="button"
-            className="catalogue-card__added-status"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRemoveGame?.(game);
-            }}
-            disabled={!onRemoveGame || isRemoving}
-            aria-busy={isRemoving}
-            aria-label={
-              isEnglish ? `Remove ${game.title}` : `Remover ${game.title}`
-            }
-          >
-            {isRemoving ? (
-              <Loader2
-                size={20}
-                className="catalogue-card__remove-spinner"
-                aria-hidden="true"
-              />
-            ) : (
-              <>
-                <CircleCheck
-                  className="catalogue-card__added-check"
-                  size={20}
-                  aria-hidden="true"
-                />
-                <Trash2
-                  className="catalogue-card__added-trash"
-                  size={20}
-                  aria-hidden="true"
-                />
-              </>
-            )}
-          </button>
-        </div>
-      )}
     </article>
   );
 });
@@ -570,7 +534,7 @@ export function CatalogueList({
   );
 
   // Sem virtualização de propósito: a página do catálogo entrega no máximo
-  // `cataloguePageSize` (20) itens. As capas usam `<img>` nativo e são deixadas
+  // `cataloguePageSize` (21) itens. As capas usam `<img>` nativo e são deixadas
   // inteiramente a cargo do carregador do WebView.
   const isGrid = viewMode === "grid";
   return (

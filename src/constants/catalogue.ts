@@ -1,8 +1,8 @@
 import type { CatalogueFilters } from "../types";
 import type { GameDatabaseResult } from "../data";
 
-export const cataloguePageSize = 20;
-export const catalogueChunkPageCount = 10;
+export const cataloguePageSize = 21;
+export const catalogueChunkPageCount = 9;
 export const catalogueChunkSize = cataloguePageSize * catalogueChunkPageCount;
 export const searchDebounceMs = 300;
 export const favoriteGamesStorageKey = "ghostbox:favorites:v1";

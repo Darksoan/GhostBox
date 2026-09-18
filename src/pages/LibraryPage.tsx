@@ -83,6 +83,9 @@ interface LibraryPageProps {
   activeCollectionId?: string | null;
   onActiveCollectionChange?: (collectionId: string | null) => void;
   activeSessionAppIds?: Set<string>;
+  onPlayGame?: (game: GhostBoxGame) => void | Promise<void>;
+  playableGameAppIds?: ReadonlySet<string>;
+  launchingGameId?: string | null;
   isActive?: boolean;
 }
 
@@ -97,6 +100,9 @@ export function LibraryPage({
   activeCollectionId: propActiveCollectionId,
   onActiveCollectionChange,
   activeSessionAppIds = new Set(),
+  onPlayGame,
+  playableGameAppIds,
+  launchingGameId,
   isActive = true,
 }: LibraryPageProps) {
   const { appearance } = useSettings();
@@ -482,6 +488,9 @@ export function LibraryPage({
           portrait
           showAchievements
           activeSessionAppIds={activeSessionAppIds}
+          onPlayGame={onPlayGame}
+          playableGameAppIds={playableGameAppIds}
+          launchingGameId={launchingGameId}
           libraryCoverFade
           animateLayout
         />

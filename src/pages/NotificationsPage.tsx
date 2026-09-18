@@ -192,7 +192,9 @@ function NotificationRow({
   );
   const cachedSources = useCachedImageSources(artSources);
   const { source: artSource, loaded } = useLoadableImageCover(cachedSources);
-  const hasArt = Boolean(artSource);
+  // Não monte a arte na URL provisória: a animação de entrada começaria de
+  // novo quando o hook resolvesse um fallback e a capa piscaria.
+  const hasArt = loaded && Boolean(artSource);
   // A conquista mostra o ícone do tipo sobre a arte borrada do jogo: o feed não
   // guarda o ícone da conquista em si, e a arte nítida atrás de um selo fica
   // ilegível nos 172x80 da faixa.

@@ -92,6 +92,23 @@ describe("Home layout", () => {
     );
   });
 
+  it("only paints Home covers after their selected source has loaded", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const categoryCardStart = component.indexOf("function HomeCategoryCard");
+    const categoryCardEnd = component.indexOf("\nfunction ", categoryCardStart);
+    const exploreImageStart = component.indexOf("function HomeExploreCategoryImage");
+    const exploreImageEnd = component.indexOf("\nfunction ", exploreImageStart);
+    const categoryCardSource = component.slice(categoryCardStart, categoryCardEnd);
+    const exploreImageSource = component.slice(exploreImageStart, exploreImageEnd);
+
+    expect(categoryCardSource).toContain(
+      "const layeredSources = loaded && coverSource ? [coverSource] : [];"
+    );
+    expect(exploreImageSource).toContain(
+      "layeredImageStyle(loaded && imageSource ? [imageSource] : [], \"\")"
+    );
+  });
+
   it("caps Home pills at three, closed to a single line", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     expect(component).toContain("const homeMetadataCategoryLimit = 3;");

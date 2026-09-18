@@ -42,6 +42,17 @@ describe("Home most played rail", () => {
     expect(cardSource).toContain("<HomeTopRatedCardBodySkeleton />");
   });
 
+  it("waits for the selected cover before painting the Top rated card art", () => {
+    const component = readFileSync("src/pages/HomePage.tsx", "utf8");
+    const cardStart = component.indexOf("function HomeTopRatedCard");
+    const cardEnd = component.indexOf("\nfunction ", cardStart);
+    const cardSource = component.slice(cardStart, cardEnd);
+
+    expect(cardSource).toContain(
+      "const layeredSources = loaded && coverSource ? [coverSource] : [];"
+    );
+  });
+
   it("reveals the Top rated carousel atomically after every title is enriched", () => {
     const component = readFileSync("src/pages/HomePage.tsx", "utf8");
     const shelfStart = component.indexOf("function HomeTopRatedShelf");

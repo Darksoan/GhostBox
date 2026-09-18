@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Cup } from "reicon-react";
+import { Cup, Play } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
 import {
   useCachedImageSources,
@@ -27,6 +27,10 @@ interface GameCardProps {
   game: GhostBoxGame;
   onOpenGame: (game: GhostBoxGame) => void;
   onContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
+  onPlayGame?: (game: GhostBoxGame) => void | Promise<void>;
+  canPlay?: boolean;
+  isLaunching?: boolean;
+  isSessionActive?: boolean;
   /** Recheck de conquistas da conta ao hover/focus da capa. */
   onHoverGame?: (game: GhostBoxGame) => void;
   portrait?: boolean;
@@ -39,6 +43,10 @@ export const GameCard = memo(function GameCard({
   game,
   onOpenGame,
   onContextMenu,
+  onPlayGame,
+  canPlay = false,
+  isLaunching = false,
+  isSessionActive = false,
   onHoverGame,
   portrait = false,
   showAchievements = false,
@@ -119,12 +127,25 @@ export const GameCard = memo(function GameCard({
   const hasAchievementBadge =
     showAchievements && hasAvailableAchievements(badgeGame);
   const showLockedBadge = hasAchievementBadge && !areMetricsUnlocked;
+  const showPlayAction = Boolean(onPlayGame && canPlay);
+  const playIsDisabled = isLaunching || isSessionActive;
+  const playLabel = isSessionActive
+    ? `${game.title} já está em execução`
+    : isLaunching
+      ? `Iniciando ${game.title}`
+      : `Jogar ${game.title}`;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     if (onContextMenu) {
       event.preventDefault();
       onContextMenu(game, event.clientX, event.clientY);
     }
+  };
+
+  const handlePlayClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (playIsDisabled) return;
+    void onPlayGame?.(game);
   };
 
   // Hover/focus da capa: além de adiantar os assets do modal, reverifica as
@@ -187,6 +208,18 @@ export const GameCard = memo(function GameCard({
           </div>
         )}
       </div>
+      {showPlayAction && (
+        <button
+          type="button"
+          className="game-card__play-button"
+          aria-label={playLabel}
+          aria-busy={isLaunching}
+          disabled={playIsDisabled}
+          onClick={handlePlayClick}
+        >
+          <Play size={32} weight="Filled" aria-hidden="true" />
+        </button>
+      )}
       <div className="game-card__backdrop">
         <div className="game-card__content">
           <div className="game-card__title-container">
@@ -203,6 +236,9 @@ interface GameGridProps {
   className?: string;
   dense?: boolean;
   onOpenGame: (game: GhostBoxGame) => void;
+  onPlayGame?: (game: GhostBoxGame) => void | Promise<void>;
+  playableGameAppIds?: ReadonlySet<string>;
+  launchingGameId?: string | null;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
   onHoverGame?: (game: GhostBoxGame) => void;
   portrait?: boolean;
@@ -217,6 +253,9 @@ export function GameGrid({
   className = "",
   dense = false,
   onOpenGame,
+  onPlayGame,
+  playableGameAppIds,
+  launchingGameId,
   onGameContextMenu,
   onHoverGame,
   portrait = false,
@@ -276,6 +315,14 @@ export function GameGrid({
           key={game.id}
           game={game}
           onOpenGame={onOpenGame}
+          onPlayGame={onPlayGame}
+          canPlay={playableGameAppIds?.has(game.appId) ?? false}
+          isLaunching={
+            launchingGameId === game.id || launchingGameId === game.appId
+          }
+          isSessionActive={
+            activeSessionAppIds.has(game.appId) || activeSessionAppIds.has(game.id)
+          }
           onContextMenu={onGameContextMenu}
           onHoverGame={onHoverGame}
           portrait={portrait}

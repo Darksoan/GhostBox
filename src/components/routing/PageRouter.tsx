@@ -335,6 +335,9 @@ export function PageRouter({
           activeCollectionId={activeLibraryCollectionId}
           onActiveCollectionChange={setActiveLibraryCollectionId}
           activeSessionAppIds={appData.activeSessionAppIds}
+          onPlayGame={appData.handlePlayGame}
+          playableGameAppIds={appData.playableGameAppIds}
+          launchingGameId={appData.launchingGameId}
           isActive={targetPage === page}
         />
       );

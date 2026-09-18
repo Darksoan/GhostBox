@@ -330,13 +330,9 @@ function HomeCategoryCard({
   );
   const cachedSources = useCachedImageSources(fallbackCoverSources);
   const { source: coverSource, loaded } = useLoadableImageCover(cachedSources);
-  const layeredSources = variant === "portrait"
-    ? loaded && coverSource
-      ? [coverSource]
-      : []
-    : coverSource
-      ? [coverSource, ...fallbackCoverSources.filter((source) => source !== coverSource)]
-      : fallbackCoverSources;
+  // A fonte provisória do hook ainda pode falhar ou ser trocada por um fallback.
+  // Só a fonte decodificada entra no background para não repintar a capa visível.
+  const layeredSources = loaded && coverSource ? [coverSource] : [];
   const metadataCategoryPool = getGameTraits(game);
   // O badge ocupa uma vaga da primeira linha para a contagem de pills não mudar
   // — a linha tem altura fechada e não pode transbordar.
@@ -480,12 +476,9 @@ function HomeTopRatedCard({
   );
   const cachedSources = useCachedImageSources(fallbackCoverSources);
   const { source: coverSource, loaded } = useLoadableImageCover(cachedSources);
-  const layeredSources = coverSource
-    ? [
-        coverSource,
-        ...fallbackCoverSources.filter((source) => source !== coverSource),
-      ]
-    : fallbackCoverSources;
+  // Não pinte os fallbacks antes de a fonte escolhida terminar: quando o hook
+  // confirma a capa, o fade-in reiniciaria sobre a arte já visível.
+  const layeredSources = loaded && coverSource ? [coverSource] : [];
   const { appearance, t } = useSettings();
   // Mesma guarda do preview do catálogo (`getSteamReviewScore`): sem amostra de
   // review, a razão volta 0 e viraria uma nota 0,0 falsa.
@@ -796,12 +789,12 @@ function getHomeExplorePreviewRows(
 function HomeExploreCategoryImage({ game }: { game: GhostBoxGame }) {
   const sources = gameHeaderOnlySources(game);
   const cachedSources = useCachedImageSources(sources);
-  const { source: imageSource } = useLoadableImageCover(cachedSources);
+  const { source: imageSource, loaded } = useLoadableImageCover(cachedSources);
 
   return (
     <span
       className="home-explore-card__image"
-      style={layeredImageStyle(imageSource ? [imageSource] : [], "")}
+      style={layeredImageStyle(loaded && imageSource ? [imageSource] : [], "")}
       aria-hidden="true"
     />
   );
