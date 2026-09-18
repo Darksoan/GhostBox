@@ -1,13 +1,19 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { compile } from "sass-embedded";
 import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
-const UI_STYLES = [
-  "src/app.scss",
-  "src/pages/ProfilePage.scss",
-  "src/pages/GameAchievementsPage.scss",
-];
+function collectUiStyles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      return path === "src/styles" ? [] : collectUiStyles(path);
+    }
+    return path.endsWith(".scss") ? [path] : [];
+  });
+}
+
+const UI_STYLES = collectUiStyles("src");
 
 function collectTokens(): Map<string, string> {
   const stylesheet = postcss.parse(compile("src/app.scss").css);
@@ -34,8 +40,6 @@ describe("Typography tokens", () => {
   it("uses the contrast-equalized surface ramp", () => {
     const tokens = collectTokens();
 
-    // Rampa de superfície renomeada de --n-* para --c-*; o prefixo --n seguiu
-    // apenas para borda/texto (--n-5 em diante).
     expect(tokens.get("--c-0")).toBe("#0a0a0a");
     expect(tokens.get("--c-1")).toBe("#101010");
     expect(tokens.get("--c-2")).toBe("#121212");
@@ -52,9 +56,6 @@ describe("Typography tokens", () => {
 
     for (const name of tokens.keys()) {
       if (!surfaceRole.test(name)) continue;
-      // Estados de seleção forte ficam deliberadamente acima do teto da rampa
-      // (#202020, --c-5) — ver comentário em _semantic.scss. O hover do
-      // trigger herda do par de dropdowns de Configurações.
       if (name === "--settings-dropdown-surface-hover") continue;
       if (name === "--settings-dropdown-trigger-hover") continue;
       if (name === "--surface-option-selected") continue;
@@ -69,9 +70,6 @@ describe("Typography tokens", () => {
   it("keeps the toggle outside the surface ramp on purpose", () => {
     const tokens = collectTokens();
 
-    // O toggle é estado binário: ligado grita branco, desligado usa um cinza
-    // acima do teto da rampa. Reutilizar um degrau de superfície fazia o trilho
-    // sumir dentro do card — por isso ele fica fora da rampa, de propósito.
     expect(resolveToken("--toggle-track", tokens)).toBe("#303030");
     expect(resolveToken("--toggle-track-on", tokens)).toBe("#ffffff");
     expect(resolveToken("--toggle-thumb", tokens)).toBe("#6e6e6e");
@@ -128,35 +126,51 @@ describe("Typography tokens", () => {
       if (match) ramp[match[1]] = value;
     }
 
-    expect(ramp["100"]).toBe("14px");
+    expect(ramp["100"]).toBe("14.5px");
     expect(ramp["800"]).toBe("34px");
     expect(ramp["900"]).toBe("40px");
     expect(ramp["1000"]).toBe("48px");
   });
 
-  it("keeps 14px as the floor of every text size in the app", () => {
+  it("keeps 14.5px as the floor of every text size in the app", () => {
     const tokens = collectTokens();
 
-    // Piso único: nenhum degrau da rampa fixa e nenhum mínimo de clamp fluido
-    // pode cair abaixo de 14px — é o tamanho onde Inter ainda tem haste legível
-    // sobre as superfícies escuras do app.
     for (const [token, value] of tokens) {
       if (/^--fs-\d+$/.test(token)) {
-        expect(parseFloat(value), `${token} = ${value}`).toBeGreaterThanOrEqual(14);
+        expect(parseFloat(value), `${token} = ${value}`).toBeGreaterThanOrEqual(14.5);
         continue;
       }
       if (!/^--type-size-fluid-/.test(token)) continue;
       const minimum = value.match(/^clamp\(\s*([0-9.]+)px/)?.[1];
       expect(minimum, `${token} = ${value}`).toBeDefined();
-      expect(parseFloat(minimum ?? "0"), `${token} = ${value}`).toBeGreaterThanOrEqual(14);
+      expect(parseFloat(minimum ?? "0"), `${token} = ${value}`).toBeGreaterThanOrEqual(14.5);
+    }
+  });
+
+  it("keeps font weights at 500 or 600", () => {
+    const tokens = collectTokens();
+
+    expect(resolveToken("--weight-regular", tokens)).toBe("500");
+    expect(resolveToken("--weight-semibold", tokens)).toBe("600");
+
+    for (const file of UI_STYLES) {
+      const source = readFileSync(file, "utf8");
+      expect(source, `${file} font weight below 500`).not.toMatch(
+        /font-weight\s*:\s*(?:[1-4]\d{2}|normal|lighter)\b/,
+      );
+
+      for (const match of source.matchAll(/var\((--weight-[^)]+)\)/g)) {
+        expect(
+          ["--weight-regular", "--weight-semibold"],
+          `${file} references unknown weight ${match[1]}`,
+        ).toContain(match[1]);
+      }
     }
   });
 
   it("pairs the small steps with a line height that clears descenders", () => {
     const tokens = collectTokens();
 
-    // 14px em interlinha de 16px dava razão 1,14 e apertava descendente nas
-    // linhas de altura fechada (pill, badge, metadado).
     for (const [size, line] of [
       ["--type-size-micro", "--type-line-micro"],
       ["--type-size-caption", "--type-line-caption"],
@@ -207,8 +221,6 @@ describe("Typography tokens", () => {
   });
 
   it("forbids literal font-size and stray ramp references in UI styles", () => {
-    // Sem exceções ativas: o hero da página de Downloads (única exceção
-    // deliberada) foi removido junto com o downloader nativo.
     const allowedLiterals: Record<string, string[]> = {};
 
     for (const file of UI_STYLES) {
@@ -218,35 +230,29 @@ describe("Typography tokens", () => {
       ].map((match) => match[0].trim());
 
       expect(literals, `${file} literal font-size`).toEqual(
-        allowedLiterals[file] ?? []
+        allowedLiterals[file] ?? [],
       );
       expect(source, `${file} raw ramp reference`).not.toMatch(/var\(--fs-/);
     }
   });
 
-  it("gives compact metrics enough room for the 14px minimum", () => {
+  it("gives compact metrics enough room for the 14.5px minimum", () => {
     const source = readFileSync("src/app.scss", "utf8");
 
-    expect(source).toContain("min-width: var(--space-8);");
-    expect(source).toContain("height: var(--space-8);");
+    expect(source).toContain("min-width: var(--space-9);");
+    expect(source).toContain("height: var(--space-9);");
     expect(source).toContain("padding-inline: var(--space-4);");
     expect(source).toContain("text-overflow: ellipsis;");
   });
 
   it("keeps Home secondary copy above micro text size", () => {
     const source = readFileSync("src/app.scss", "utf8");
-
-    // A cópia secundária da Home hoje é o autor da review do jogador (a frase
-    // "Já que X está na sua lista de desejos" saiu junto com o seletor __reason).
-    // Nome e metadado fecham em caption — nada abaixo do piso de 12px.
-    // Âncora com "\n" para não pegar seletores que apenas contêm esse nome no
-    // meio (ex. variantes compostas), que não declaram tipografia.
     const authorBlockStart = source.indexOf(
-      "\n.home-wishlist-card__player-review-author {"
+      "\n.home-wishlist-card__player-review-author {",
     );
     const authorBlockEnd = source.indexOf(
       ".home-wishlist-card__player-review-author-skeleton",
-      authorBlockStart
+      authorBlockStart,
     );
     const authorBlock = source.slice(authorBlockStart, authorBlockEnd);
     expect(authorBlock).toContain("font-size: var(--type-size-caption);");

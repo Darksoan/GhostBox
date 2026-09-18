@@ -28,6 +28,7 @@ import type {
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { pushAppNotification } from "../lib/appNotifications";
 import { isBlockedSteamDemo } from "../utils/steamAppType";
+import { isLocallyInstalledGame } from "../utils/librarySourceFilter";
 import type {
   CloudSave,
   GamePlaytimeSnapshot,
@@ -336,7 +337,6 @@ interface AppDataContextValue {
   addedLibraryGameAppIds: Set<string>;
   availableLibraryGameAppIds: Set<string>;
   playableGameAppIds: Set<string>;
-  installedSteamGameAppIds: Set<string>;
   backupSettings: BackupSettings | null;
   startupSettings: StartupSettings | null;
   initialPage: StartupPage;
@@ -359,11 +359,9 @@ interface AppDataContextValue {
   refreshGameAchievements: (game: GhostBoxGame) => void;
   toggleFavoriteGame: (game: GhostBoxGame) => void;
   queueGame: (game: GhostBoxGame) => Promise<void>;
-  removeQueuedGame: (game: GhostBoxGame) => Promise<void>;
+  removeQueuedGame: (game: GhostBoxGame) => Promise<boolean>;
   /** Shows confirmation modal; also offers to delete local files when available. */
   requestRemoveGame: (game: GhostBoxGame) => void;
-  /** Removes from library AND deletes local install files (GhostBox CDN only). */
-  uninstallGame: (game: GhostBoxGame) => Promise<void>;
 
   handlePlayGame: (game: GhostBoxGame) => Promise<void>;
   addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
@@ -1679,25 +1677,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [addedLibraryGames],
   );
 
-  const installedSteamGameAppIds = useMemo(
-    () =>
-      new Set(
-        addedLibraryGames
-          .filter(
-            (game) =>
-              game.status === "installed" ||
-              game.librarySource === "steam-installed",
-          )
-          .flatMap((game) => [
-            game.appId,
-            game.id,
-            game.appId ? `steam-${game.appId}` : "",
-          ])
-          .filter(Boolean),
-      ),
-    [addedLibraryGames],
-  );
-
   const profileFavoriteGames = useMemo(
     () =>
       normalizeSteamGameTitles(favoriteGames, [
@@ -2058,7 +2037,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const removeQueuedGame = useCallback(
     async (game: GhostBoxGame) => {
-      if (addingGameId || removingGameId) return;
+      if (addingGameId || removingGameId) return false;
       setRemovingGameId(game.id);
 
       try {
@@ -2084,7 +2063,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               headerUrl: game.heroUrl,
             },
           });
-          return;
+          return false;
         }
 
         setScannedLibraryGames((current) =>
@@ -2145,6 +2124,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             headerUrl: game.heroUrl,
           },
         });
+        return true;
       } catch (error) {
         const errorMessage =
           error instanceof Error
@@ -2175,6 +2155,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             headerUrl: game.heroUrl,
           },
         });
+        return false;
       } finally {
         setRemovingGameId(null);
       }
@@ -2198,8 +2179,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const uninstallGame = useCallback(
     async (game: GhostBoxGame) => {
       const appId = game.appId || game.id.replace(/^steam-/, "");
-      // Remove the launcher entry before delegating file removal to Steam.
-      await removeQueuedGame(game);
+      const removed = await removeQueuedGame(game);
+      if (!removed) return;
       await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
     },
     [removeQueuedGame],
@@ -2784,7 +2765,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGameAppIds,
       availableLibraryGameAppIds,
       playableGameAppIds,
-      installedSteamGameAppIds,
       backupSettings,
       startupSettings,
       initialPage,
@@ -2803,7 +2783,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       requestRemoveGame,
-      uninstallGame,
       handlePlayGame,
 
       addGameToUserCollection,
@@ -2843,7 +2822,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addedLibraryGameAppIds,
       availableLibraryGameAppIds,
       playableGameAppIds,
-      installedSteamGameAppIds,
       backupSettings,
       startupSettings,
       initialPage,
@@ -2862,7 +2840,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       requestRemoveGame,
-      uninstallGame,
       handlePlayGame,
       addGameToUserCollection,
       removeGameFromCollection,
@@ -2881,9 +2858,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeConfirmHasLocalInstall = Boolean(
-    removeConfirmGame &&
-      (removeConfirmGame.status === "installed" ||
-        removeConfirmGame.librarySource === "steam-installed"),
+    removeConfirmGame && isLocallyInstalledGame(removeConfirmGame),
   );
 
   return (
@@ -2894,12 +2869,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         gameTitle={removeConfirmGame?.title ?? ""}
         hasLocalInstall={removeConfirmHasLocalInstall}
         onCancel={() => setRemoveConfirmGame(null)}
-        onRemoveOnly={() => {
-          if (removeConfirmGame) void removeQueuedGame(removeConfirmGame);
-          setRemoveConfirmGame(null);
-        }}
-        onRemoveAndUninstall={() => {
-          if (removeConfirmGame) void uninstallGame(removeConfirmGame);
+        onConfirm={() => {
+          if (removeConfirmGame) {
+            const action = removeConfirmHasLocalInstall
+              ? uninstallGame
+              : removeQueuedGame;
+            void action(removeConfirmGame);
+          }
           setRemoveConfirmGame(null);
         }}
       />

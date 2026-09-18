@@ -37,7 +37,7 @@
   padding: var(--space-2) var(--space-4) var(--space-1);
   color: var(--text-secondary);
   font-size: var(--type-size-caption);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
 }
 
 .tray-menu__game-list {
@@ -117,6 +117,12 @@
 .tray-menu__game-icon--skeleton {
   display: block;
   background: var(--skeleton-fill);
+}
+
+.tray-menu__game {
+  min-height: 29px;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
 }
 
 .tray-menu__separator {
@@ -388,8 +394,7 @@ body {
   background: var(--background-dark);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  /* Peso ótico de leitura (450): corpo em fundo escuro com hastes firmes sem
-     recorrer a medium, que é papel de controle/título.
+  /* Peso mínimo de leitura (500): corpo em fundo escuro com hastes firmes.
      `-webkit-font-smoothing` removido: propriedade macOS, sem efeito no
      Windows/WebView2 — mascarava onde a nitidez real era decidida. */
   font-weight: var(--weight-regular);
@@ -1288,9 +1293,9 @@ p {
       background: var(--sidebar-option-active);
     }
 
-    /* Collection rows rest muted; expand/active → strong */
+    /* Collection rows always in primary; hover/active keep the same tone */
     &.sidebar__collection-item {
-      color: var(--text-secondary);
+      color: var(--text-primary);
       font-weight: var(--weight-regular);
 
       .sidebar__collection-icon,
@@ -2016,8 +2021,8 @@ p {
     right: 0;
     z-index: 1;
     display: inline-flex;
-    min-width: var(--space-8);
-    height: var(--space-8);
+    min-width: var(--space-9);
+    height: var(--space-9);
     align-items: center;
     justify-content: center;
     padding: 0 var(--space-2);
@@ -2597,6 +2602,15 @@ p {
   }
 }
 
+/* SVGs inline carregam uma linha de base tipográfica que pode deslocar o
+   desenho ao lado do label. Todo ícone direto de botão usa uma caixa própria
+   e compartilha o centro transversal do controle. */
+button > svg {
+  display: block;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
 // Canonical uppercase section label (Home / Catalogue / Profile / Filters)
 .eyebrow {
   @include mixins.eyebrow;
@@ -2619,7 +2633,7 @@ p {
   /* One size, one color for every section title on a page — the section's
      weight comes from its content and spacing, not from the heading. Subido de
      body-emphasis (16px) para section (20px): a hierarquia real fica a dois
-     passos do corpo do card (14px), não um só — sem isso a seção não ancora,
+     passos do corpo do card (16px), não um só — sem isso a seção não ancora,
      ela compete com o próprio conteúdo. */
   &__title {
     margin: 0;
@@ -9275,9 +9289,13 @@ input[type="search"]::-ms-reveal {
   padding: 0 var(--library-inline-padding) var(--space-6) var(--library-inline-padding);
 
   .settings-dropdown {
-    // Mesma largura da capa portrait da grade (180px, 220px no maximizado):
-    // o trigger alinha com a primeira coluna.
-    width: min(180px, 100%);
+    // Base da capa portrait da grade (180px, 200px no maximizado): o trigger
+    // tem essa largura mínima para alinhar com a primeira coluna, mas cresce
+    // conforme o conteúdo (`width: auto`) para rótulos longos como
+    // "Jogados Recentemente" não truncarem.
+    width: auto;
+    min-width: min(180px, 100%);
+    max-width: 100%;
   }
 
   .settings-dropdown__trigger {
@@ -9286,6 +9304,7 @@ input[type="search"]::-ms-reveal {
     min-height: 32px;
     padding: 0 var(--space-6);
     border-radius: var(--radius-lg);
+    color: var(--text-secondary);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
     justify-content: center;
@@ -9293,8 +9312,11 @@ input[type="search"]::-ms-reveal {
     span {
       flex: 1;
       min-width: 0;
-      padding-right: var(--space-6);
-      padding-left: var(--space-6);
+      // Folga simétrica: o chevron absoluto ocupa 24px à direita (16px de
+      // ícone + 8px da borda); com 24px de padding o texto respira 12px dele
+      // e segue visualmente centrado, com o mesmo respiro do trigger de filtro.
+      padding-right: var(--space-10);
+      padding-left: var(--space-10);
       text-align: center;
       @include mixins.truncate;
     }
@@ -9303,23 +9325,24 @@ input[type="search"]::-ms-reveal {
       position: absolute;
       right: var(--space-4);
       flex-shrink: 0;
+      color: var(--text-secondary);
     }
 
     &:hover,
     &:focus-visible {
-      color: var(--text-secondary);
+      color: var(--text-primary);
 
       svg {
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
     }
   }
 
   .settings-dropdown--open .settings-dropdown__trigger {
-    color: var(--text-secondary);
+    color: var(--text-primary);
 
     svg {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -9444,7 +9467,7 @@ border: 0;
 
   &:hover {
     background: var(--sidebar-option-hover);
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
   &:focus-visible {
@@ -9459,7 +9482,7 @@ border: 0;
   &[aria-pressed="true"]:hover,
   &[aria-pressed="true"]:focus-visible {
     background: var(--sidebar-option-active);
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 }
 
@@ -9488,7 +9511,8 @@ border: 0;
 }
 
 .content-section--library .game-grid {
-  gap: var(--space-5);
+  row-gap: var(--space-5);
+  column-gap: var(--space-6);
   padding-right: var(--library-inline-padding);
   padding-bottom: var(--space-8);
   padding-left: var(--library-inline-padding);
@@ -9529,7 +9553,9 @@ border: 0;
 // Trigger de ordenação acompanha a largura-base da capa no maximizado.
 .sidebar--maximized ~ .container .library-toolbar .settings-dropdown,
 .app-main:has(.sidebar--maximized) .library-toolbar .settings-dropdown {
-  width: min(200px, 100%);
+  width: auto;
+  min-width: min(200px, 100%);
+  max-width: 100%;
 }
 
 .content-section--library > .empty-state {
@@ -9813,7 +9839,8 @@ html.no-backdrop-blur {
   }
 
   .content-section--library .game-grid {
-    gap: var(--space-4);
+    row-gap: var(--space-4);
+    column-gap: var(--space-6);
     padding-right: var(--space-8);
     padding-bottom: var(--space-6);
     padding-left: var(--library-inline-padding);
@@ -10073,35 +10100,37 @@ html.no-backdrop-blur {
     }
   }
 
-  /* `.button--primary` não tem folha de estilo em lugar nenhum: o botão de
-     confirmar herdava a superfície e a cor de texto do botão neutro e lia como
-     a ação mais fraca das duas. O destaque vem do degrau da rampa + peso. */
+  /* Os dois botões partem da mesma superfície (#101010) e mantêm o texto em
+     `--text-secondary`. Hover mexe só na superfície — sem clarear o texto. */
   &__actions {
     gap: var(--space-3);
 
     .button {
       min-width: 96px;
       border: 0;
+      font-weight: var(--weight-regular);
     }
 
     .button:not(.button--primary) {
-      background: transparent;
+      background: var(--surface-option);
+      color: var(--text-secondary);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        background: var(--surface-modal-control);
+        background: var(--surface-option-hover);
+        color: var(--text-secondary);
       }
     }
 
     .button--primary {
-      background: var(--surface-option-active);
-      color: var(--text-primary);
-      font-weight: var(--weight-semibold);
+      background: var(--surface-option);
+      color: var(--text-secondary);
+      font-weight: var(--weight-regular);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        background: var(--surface-option-selected);
-        color: var(--text-primary);
+        background: var(--surface-option-hover);
+        color: var(--text-secondary);
       }
 
       &:disabled {
@@ -10110,6 +10139,27 @@ html.no-backdrop-blur {
         opacity: 1;
       }
     }
+  }
+}
+
+/* O texto auxiliar define a largura útil deste diálogo. Ele deve aparecer
+   completo em uma linha; não truncar conteúdo para caber numa caixa estreita. */
+.collection-create-modal {
+  width: min(480px, calc(100vw - 48px));
+
+  .collection-modal__header > div {
+    min-width: 0;
+  }
+
+  .collection-modal__header p {
+    white-space: nowrap;
+  }
+
+  .collection-modal__field input {
+    font-size: var(--type-size-body-emphasis);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-body-emphasis);
+    letter-spacing: var(--ls-300);
   }
 }
 
@@ -10554,7 +10604,9 @@ html.no-backdrop-blur {
 
 .confirm-modal {
   display: flex;
-  width: min(460px, calc(100vw - 48px));
+  width: fit-content;
+  min-width: min(560px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
   max-height: min(360px, calc(100vh - 48px));
   flex-direction: column;
   overflow: hidden;
@@ -11787,7 +11839,7 @@ html.no-backdrop-blur {
     padding: var(--space-3) var(--space-5);
     border: none;
     border-radius: var(--radius-lg);
-    background: var(--surface-titlebar-popover);
+    background: #101010;
     box-shadow: none;
     color: var(--text-primary);
     opacity: 0;
@@ -11839,7 +11891,7 @@ html.no-backdrop-blur {
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-regular);
     transition: color var(--motion-base) var(--ease);
 
     &:hover,
@@ -11943,7 +11995,7 @@ html.no-backdrop-blur {
     &--active,
     &--active:hover {
       background: var(--surface-option-selected);
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
 
     &--placeholder {
@@ -12091,8 +12143,8 @@ html.no-backdrop-blur {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      background: var(--surface-option);
-      color: var(--text-primary);
+      background: var(--surface-option-hover);
+      color: var(--text-secondary);
 
       svg {
         transform: none;
@@ -12100,8 +12152,8 @@ html.no-backdrop-blur {
     }
   }
 
-  /* Superfície compartilhada para os controles da linha de ação: sem mudança
-     de cor no hover — o feedback é só no texto (secondary → primary). */
+  /* Superfície compartilhada para os controles da linha de ação: o feedback
+     é só na superfície (#101010 → #151515), sem clareamento do texto. */
   &__play-button,
   &__add-button,
   &__remove-button,
@@ -12120,18 +12172,22 @@ html.no-backdrop-blur {
     display: inline-flex;
     align-items: center;
     line-height: 1;
-    transform: translateY(0.5px);
+    transform: none;
+    text-transform: uppercase;
+    letter-spacing: var(--ls-100);
   }
 
   &__add-button {
     display: inline-flex;
     align-items: center;
+
+    &:active {
+      opacity: 1;
+    }
   }
 
   &__add-button &__action-label {
-    font-weight: var(--weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: var(--ls-100);
+    font-weight: var(--weight-regular);
     line-height: 1;
     transform: none;
   }
@@ -12139,7 +12195,7 @@ html.no-backdrop-blur {
   /* Mesmo "+" da sidebar de coleções (`sidebar__add-icon`, via
      `mixins.plus-icon`): barras preenchidas com cantos arredondados, mesma
      caneta de 2px. Caixa fixa de 12px para centralizar opticamente com o
-     label em uppercase semibold (cap-height ~10px): `1em` (14px) deixava o
+     label em uppercase regular (cap-height ~10px): `1em` (14px) deixava o
      ícone visualmente maior que o texto e quebrava o alinhamento ao meio. */
   &__add-icon {
     @include mixins.plus-icon;
@@ -12295,7 +12351,7 @@ html.no-backdrop-blur {
   position: fixed;
   z-index: var(--z-popover);
   display: grid;
-  width: 244px;
+  width: min(300px, calc(100vw - 24px));
   gap: var(--space-1);
   padding: var(--space-2);
   border: 0;
@@ -12318,6 +12374,7 @@ html.no-backdrop-blur {
   font: inherit;
   font-size: var(--type-size-caption);
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -14534,8 +14591,9 @@ button {
 
 /* Mesma regra do `game-settings-modal__action-button`: em modal o botão é ação
    direta, então o rótulo fica em `--text-primary` já no repouso. O hover
-   continua sinalizado pela superfície. */
-.collection-modal__actions .button:not(.button--primary),
+   continua sinalizado pela superfície. O modal de coleção fica de fora: o par
+   de botões usa texto `--text-secondary` (#A3A3A3) no repouso, com hierarquia
+   dada pelo degrau da rampa (#101010 → #151515). */
 .steam-path-modal__actions .button:not(.button--primary),
 .confirm-modal__actions .button:not(.button--primary),
 .feedback-modal__actions .button:not(.button--primary),
@@ -14549,6 +14607,12 @@ button {
    idioma próprio (vermelho translúcido), como nos confirm internos. */
 .uninstall-confirm-modal .collection-modal__header > div {
   gap: var(--space-4);
+}
+
+.uninstall-confirm-modal {
+  width: fit-content;
+  min-width: min(560px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
 }
 
 .uninstall-confirm-modal .collection-modal__actions .button {
@@ -14578,4 +14642,10 @@ button {
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
   line-height: var(--type-line-compact);
+}
+
+@media (max-width: 527px) {
+  .collection-create-modal .collection-modal__header p {
+    white-space: normal;
+  }
 }

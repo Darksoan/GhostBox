@@ -1,10 +1,9 @@
 import type { GhostBoxGame } from "../data";
 
-export type LibrarySourceFilter = "all" | "installed" | "steam" | "ghostbox";
+export type LibrarySourceFilter = "all" | "steam" | "ghostbox";
 
 const librarySourceFilters: readonly LibrarySourceFilter[] = [
   "all",
-  "installed",
   "steam",
   "ghostbox",
 ];
@@ -30,12 +29,23 @@ export function isLocallyInstalledGame(game: GhostBoxGame): boolean {
   );
 }
 
+function hasLuaToolsMarkers(game: GhostBoxGame): boolean {
+  return (
+    (Array.isArray(game.luaToolsManifests) &&
+      game.luaToolsManifests.length > 0) ||
+    (Array.isArray(game.luaToolsManifestFiles) &&
+      game.luaToolsManifestFiles.length > 0)
+  );
+}
+
 /**
  * Steam = procedência da biblioteca Steam. Mesma regra do toggle de Conexões
  * (`isSteamLibraryGame` em libraryVisibility.ts): scan atual, scan antigo sem
- * fonte persistida e stub possuído da conta.
+ * fonte persistida e stub possuído da conta. Marcadores LuaTools excluem —
+ * a procedência GhostBox sobrevive ao scan instalado.
  */
 export function isSteamSourceGame(game: GhostBoxGame): boolean {
+  if (hasLuaToolsMarkers(game)) return false;
 
   return (
     !game.librarySource ||
@@ -49,6 +59,7 @@ export function isSteamSourceGame(game: GhostBoxGame): boolean {
  * `registered` (Steam registrado pelo launcher) ou `plugin` (stplug-in).
  */
 export function isGhostboxSourceGame(game: GhostBoxGame): boolean {
+  if (hasLuaToolsMarkers(game)) return true;
   return (
     game.librarySource === "ghostbox" ||
     game.librarySource === "registered" ||
@@ -61,8 +72,6 @@ export function gameMatchesLibrarySourceFilter(
   filter: LibrarySourceFilter,
 ): boolean {
   switch (filter) {
-    case "installed":
-      return isLocallyInstalledGame(game);
     case "steam":
       return isSteamSourceGame(game);
     case "ghostbox":

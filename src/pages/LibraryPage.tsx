@@ -37,9 +37,8 @@ const sourceFilterOptions: Array<{
   en: string;
 }> = [
   { value: "all", pt: "Todos", en: "All" },
-  { value: "installed", pt: "Instalados", en: "Installed" },
   { value: "steam", pt: "Steam", en: "Steam" },
-  { value: "ghostbox", pt: "Ghostbox", en: "Ghostbox" },
+  { value: "ghostbox", pt: "GhostBox", en: "GhostBox" },
 ];
 
 function addLibraryGameKey(
@@ -150,7 +149,7 @@ export function LibraryPage({
   }, [changeActiveCollection, selectedCollectionId, userCollections]);
 
   const baseLibraryGames = useMemo(() => {
-    // O filtro de origem (Todos/Instalados/Steam/Ghostbox) aplica primeiro e
+    // O filtro de origem (Todos/Steam/Ghostbox) aplica primeiro e
     // compõe com favoritos/coleções via AND: quem filtra por coleção vê só os
     // jogos daquela coleção que também passam na origem selecionada.
     const sourceFilteredGames = filterByLibrarySource(
@@ -263,7 +262,7 @@ export function LibraryPage({
   }, [language, sortBy]);
   const sourceLabel = useMemo(() => {
     const option = sourceFilterOptions.find((o) => o.value === sourceFilter);
-    return option ? option[language] : option!.en;
+    return option ? option[language] : language === "en" ? "All" : "Todos";
   }, [language, sourceFilter]);
 
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -318,6 +317,13 @@ export function LibraryPage({
 
   useEffect(() => {
     writeStoredLibrarySourceFilter(sourceFilter);
+  }, [sourceFilter]);
+
+  // Migração: quem tinha "Instalados" persistido volta para "Todos".
+  useEffect(() => {
+    if (!sourceFilterOptions.some((o) => o.value === sourceFilter)) {
+      setSourceFilter("all");
+    }
   }, [sourceFilter]);
 
   useEffect(() => {

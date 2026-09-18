@@ -23,4 +23,11 @@ describe("game actions menu", () => {
     expect(menu).not.toContain("launchArguments");
     expect(menu).not.toContain("customExePath");
   });
+
+  it("keeps the desktop shortcut action on one line", () => {
+    const styles = readFileSync("src/app.scss", "utf8");
+
+    expect(menu).toContain("GAME_ACTIONS_MENU_WIDTH = 300");
+    expect(styles).toMatch(/\.game-actions-menu button\s*\{[\s\S]*?white-space: nowrap;/);
+  });
 });

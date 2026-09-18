@@ -572,29 +572,50 @@ pub fn build_scan_games_with_plugins(
     // Steam) vence e sairia sem marcador — ficando indistinguível de um
     // install feito pela própria Steam. Entrada sem `librarySource` no
     // registry (adds LuaTools antigos) conta como adicionada pelo GhostBox.
-    let mut registry_sources: HashMap<String, Value> = ghostbox_library_games
+    // Marcadores LuaTools (`luaToolsManifests`/`luaToolsManifestFiles`) forçam
+    // `ghostbox` mesmo se o registry estiver com fonte Steam — sem isso o
+    // jogo instalado aparece só em "Instalados" e some do filtro "Ghostbox".
+    fn has_lua_tools_markers(game: &Value) -> bool {
+        let has_list = |key: &str| {
+            game.get(key)
+                .and_then(|value| value.as_array())
+                .is_some_and(|values| !values.is_empty())
+        };
+        has_list("luaToolsManifests") || has_list("luaToolsManifestFiles")
+    }
+    let mut registry_games: HashMap<String, Value> = ghostbox_library_games
         .iter()
         .filter_map(|game| {
             let app_id = extract_app_id(game);
             if app_id.is_empty() {
                 return None;
             }
-            let source = game
-                .get("librarySource")
-                .cloned()
-                .unwrap_or_else(|| json!("ghostbox"));
-            Some((app_id, source))
+            Some((app_id, game.clone()))
         })
         .collect();
 
     let mut games = merge_library_games(steam_games, ghostbox_library_games);
     for game in games.iter_mut() {
         let app_id = extract_app_id(game);
-        let source = registry_sources.remove(&app_id);
-        if source.is_some() {
-            if let Some(object) = game.as_object_mut() {
-                if let Some(source) = source {
-                    object.insert("librarySource".to_string(), source);
+        let Some(registry_game) = registry_games.remove(&app_id) else {
+            continue;
+        };
+        let mut source = registry_game
+            .get("librarySource")
+            .cloned()
+            .unwrap_or_else(|| json!("ghostbox"));
+        if has_lua_tools_markers(&registry_game) {
+            source = json!("ghostbox");
+        }
+        if let Some(object) = game.as_object_mut() {
+            object.insert("librarySource".to_string(), source);
+            // Preserva os marcadores para o frontend/removal mesmo quando o
+            // stub instalado do scan vence o merge.
+            for key in ["luaToolsManifests", "luaToolsManifestFiles"] {
+                if object.get(key).is_none() {
+                    if let Some(value) = registry_game.get(key).cloned() {
+                        object.insert(key.to_string(), value);
+                    }
                 }
             }
         }
@@ -633,6 +654,34 @@ mod tests {
         assert_eq!(games.len(), 1);
         assert_eq!(games[0]["status"], "installed");
         assert_eq!(games[0]["librarySource"], "ghostbox");
+    }
+
+    #[test]
+    fn luatools_markers_force_ghostbox_source_and_survive_installed_merge() {
+        let installed = vec![serde_json::json!({
+            "appId": "1003",
+            "id": "steam-1003",
+            "title": "Installed GhostBox game",
+            "status": "installed",
+            "librarySource": "steam-installed"
+        })];
+        let registry = vec![serde_json::json!({
+            "appId": "1003",
+            "id": "steam-1003",
+            "title": "Installed GhostBox game",
+            "librarySource": "steam-installed",
+            "luaToolsManifests": ["manifest_1003.manifest"]
+        })];
+
+        let (_, games) = build_scan_games_with_plugins(installed, &[], registry);
+
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0]["status"], "installed");
+        assert_eq!(games[0]["librarySource"], "ghostbox");
+        assert_eq!(
+            games[0]["luaToolsManifests"],
+            serde_json::json!(["manifest_1003.manifest"])
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { HardDrive, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useSettings } from "../../context/settings";
 import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
@@ -7,8 +7,7 @@ interface UninstallConfirmModalProps {
   open: boolean;
   gameTitle: string;
   hasLocalInstall: boolean;
-  onRemoveOnly: () => void;
-  onRemoveAndUninstall: () => void;
+  onConfirm: () => void;
   onCancel: () => void;
 }
 
@@ -16,8 +15,7 @@ export function UninstallConfirmModal({
   open,
   gameTitle,
   hasLocalInstall,
-  onRemoveOnly,
-  onRemoveAndUninstall,
+  onConfirm,
   onCancel,
 }: UninstallConfirmModalProps) {
   const { appearance } = useSettings();
@@ -60,8 +58,8 @@ export function UninstallConfirmModal({
           {hasLocalInstall && (
             <p className="uninstall-confirm-modal__note">
               {lang === "en"
-                ? "This game is installed. Choose Remove & uninstall to also delete its local files."
-                : "Este jogo está instalado. Escolha Remover e desinstalar para também apagar os arquivos locais."}
+                ? "This game is installed. Removing it from the library will also uninstall its local files."
+                : "Este jogo está instalado. Removê-lo da biblioteca também desinstalará os arquivos locais."}
             </p>
           )}
 
@@ -77,28 +75,11 @@ export function UninstallConfirmModal({
             <button
               type="button"
               className="button button--danger"
-              onClick={onRemoveOnly}
+              onClick={onConfirm}
             >
-              {hasLocalInstall && <HardDrive size={14} />}
-              {hasLocalInstall
-                ? lang === "en"
-                  ? "Remove only"
-                  : "Só remover"
-                : lang === "en"
-                  ? "Remove"
-                  : "Remover"}
+              <Trash2 size={14} />
+              {lang === "en" ? "Remove" : "Remover"}
             </button>
-
-            {hasLocalInstall && (
-              <button
-                type="button"
-                className="button button--danger"
-                onClick={onRemoveAndUninstall}
-              >
-                <Trash2 size={14} />
-                {lang === "en" ? "Remove & uninstall" : "Remover e desinstalar"}
-              </button>
-            )}
           </div>
         </div>
       </div>

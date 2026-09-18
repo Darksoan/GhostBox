@@ -100,6 +100,11 @@ describe("filterByLibrarySource", () => {
     game("570", { status: "discover" }),
     game("1001", { librarySource: "ghostbox", status: "discover" }),
     game("1002", { librarySource: "ghostbox", status: "installed" }),
+    game("1003", {
+      librarySource: "steam-installed",
+      status: "installed",
+      luaToolsManifests: ["manifest_1003.manifest"],
+    }),
     game("730", { librarySource: "registered", status: "discover" }),
     game("1250", { librarySource: "plugin", status: "discover" }),
     game("99", { librarySource: "steam-owned", status: "discover" }),
@@ -107,13 +112,6 @@ describe("filterByLibrarySource", () => {
 
   it("all devolve a lista intacta", () => {
     expect(filterByLibrarySource(games, "all")).toBe(games);
-  });
-
-  it("installed lista só arquivos locais", () => {
-    expect(filterByLibrarySource(games, "installed").map((g) => g.id)).toEqual([
-      "620",
-      "1002",
-    ]);
   });
 
   it("steam lista scan atual, legado e possuídos", () => {
@@ -128,6 +126,7 @@ describe("filterByLibrarySource", () => {
     expect(filterByLibrarySource(games, "ghostbox").map((g) => g.id)).toEqual([
       "1001",
       "1002",
+      "1003",
       "730",
       "1250",
     ]);
@@ -138,19 +137,33 @@ describe("filterByLibrarySource", () => {
     expect(ids).not.toContain("730");
     expect(ids).not.toContain("1250");
   });
+
+  it("jogo LuaTools instalado aparece em Ghostbox, não em Steam", () => {
+    const installedGhostboxGame = game("1003", {
+      librarySource: "steam-installed",
+      status: "installed",
+      luaToolsManifestFiles: ["manifest_1003.manifest"],
+    });
+
+    expect(
+      gameMatchesLibrarySourceFilter(installedGhostboxGame, "ghostbox"),
+    ).toBe(true);
+    expect(
+      gameMatchesLibrarySourceFilter(installedGhostboxGame, "steam"),
+    ).toBe(false);
+  });
 });
 
 describe("gameMatchesLibrarySourceFilter + isLibrarySourceFilter", () => {
   it("match individual bate com filtro em lote", () => {
     const installed = game("1", { status: "installed" });
-    expect(gameMatchesLibrarySourceFilter(installed, "installed")).toBe(true);
     expect(gameMatchesLibrarySourceFilter(installed, "ghostbox")).toBe(false);
     expect(gameMatchesLibrarySourceFilter(installed, "all")).toBe(true);
   });
 
   it("guarda valida valores persistidos", () => {
     expect(isLibrarySourceFilter("all")).toBe(true);
-    expect(isLibrarySourceFilter("installed")).toBe(true);
+    expect(isLibrarySourceFilter("installed")).toBe(false);
     expect(isLibrarySourceFilter("steam")).toBe(true);
     expect(isLibrarySourceFilter("ghostbox")).toBe(true);
     expect(isLibrarySourceFilter("title")).toBe(false);

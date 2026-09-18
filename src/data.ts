@@ -80,6 +80,9 @@ export type GhostBoxGame = {
   trayInstalled?: boolean;
   /** Pasta local resolvida pela leitura do appmanifest/download do GhostBox. */
   installPath?: string;
+  /** Marcadores de instalação via LuaTools — forçam procedência GhostBox. */
+  luaToolsManifests?: string[];
+  luaToolsManifestFiles?: string[];
   title: string;
   subtitle: string;
   status: GameStatus;

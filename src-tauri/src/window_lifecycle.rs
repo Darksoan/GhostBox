@@ -25,8 +25,82 @@ fn ghostbox_icon() -> Option<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).ok()
 }
 
-fn ghostbox_tray_icon() -> Option<tauri::image::Image<'static>> {
-    tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png")).ok()
+#[cfg(windows)]
+fn primary_scale_factor(app: &tauri::AppHandle) -> f64 {
+    app.primary_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| monitor.scale_factor())
+        .unwrap_or(1.0)
+}
+
+#[cfg(windows)]
+fn ghostbox_window_icon(_app: &tauri::AppHandle) -> Option<tauri::image::Image<'static>> {
+    // A janela e a barra de tarefas usam a fonte de marca diretamente. Isso
+    // impede que um derivado antigo continue embutido quando desktopicon.png
+    // for substituído mantendo o mesmo nome.
+    tauri::image::Image::from_bytes(include_bytes!("../../Icons/desktopicon.png")).ok()
+}
+
+#[cfg(not(windows))]
+fn ghostbox_window_icon(_app: &tauri::AppHandle) -> Option<tauri::image::Image<'static>> {
+    ghostbox_icon()
+}
+
+#[cfg(windows)]
+fn ghostbox_tray_icon(
+    app: &tauri::AppHandle,
+    theme: tauri::Theme,
+) -> Option<tauri::image::Image<'static>> {
+    let physical_size = (16.0 * primary_scale_factor(app)).round() as u32;
+    let light_theme = matches!(theme, tauri::Theme::Light);
+    let bytes: &[u8] = match (light_theme, physical_size) {
+        (true, 0..=18) => include_bytes!("../icons/tray-light/16x16.png"),
+        (true, 19..=22) => include_bytes!("../icons/tray-light/20x20.png"),
+        (true, 23..=26) => include_bytes!("../icons/tray-light/24x24.png"),
+        (true, 27..=30) => include_bytes!("../icons/tray-light/28x28.png"),
+        (true, 31..=34) => include_bytes!("../icons/tray-light/32x32.png"),
+        (true, 35..=38) => include_bytes!("../icons/tray-light/36x36.png"),
+        (true, 39..=44) => include_bytes!("../icons/tray-light/40x40.png"),
+        (true, 45..=52) => include_bytes!("../icons/tray-light/48x48.png"),
+        (true, 53..=60) => include_bytes!("../icons/tray-light/56x56.png"),
+        (true, _) => include_bytes!("../icons/tray-light/64x64.png"),
+        (false, 0..=18) => include_bytes!("../icons/tray-icon.png"),
+        (false, 19..=22) => include_bytes!("../icons/tray-icon-20.png"),
+        (false, 23..=26) => include_bytes!("../icons/tray-icon-24.png"),
+        (false, 27..=30) => include_bytes!("../icons/tray-icon-28.png"),
+        (false, 31..=34) => include_bytes!("../icons/tray-icon-32.png"),
+        (false, 35..=38) => include_bytes!("../icons/tray-icon-36.png"),
+        (false, 39..=44) => include_bytes!("../icons/tray-icon-40.png"),
+        (false, 45..=52) => include_bytes!("../icons/tray-icon-48.png"),
+        (false, 53..=60) => include_bytes!("../icons/tray-icon-56.png"),
+        (false, _) => include_bytes!("../icons/tray-icon-64.png"),
+    };
+
+    tauri::image::Image::from_bytes(bytes).ok()
+}
+
+#[cfg(not(windows))]
+fn ghostbox_tray_icon(
+    _app: &tauri::AppHandle,
+    _theme: tauri::Theme,
+) -> Option<tauri::image::Image<'static>> {
+    ghostbox_icon()
+}
+
+fn system_theme(app: &tauri::AppHandle) -> tauri::Theme {
+    use tauri::Manager;
+
+    app.get_webview_window(MAIN_WINDOW_LABEL)
+        .and_then(|window| window.theme().ok())
+        .unwrap_or(tauri::Theme::Dark)
+}
+
+fn update_tray_icon(app: &tauri::AppHandle, theme: tauri::Theme) {
+    if let (Some(tray), Some(icon)) = (app.tray_by_id("main-tray"), ghostbox_tray_icon(app, theme))
+    {
+        let _ = tray.set_icon(Some(icon));
+    }
 }
 
 #[cfg(windows)]
@@ -42,6 +116,26 @@ fn configure_windows_app_identity() {
         windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr());
     }
 }
+
+#[cfg(windows)]
+fn refresh_windows_shell_icons() {
+    use std::ptr;
+    use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+
+    // O executável e o AppUserModelID não mudam entre versões, então o Explorer
+    // pode manter o bitmap antigo mesmo após icon.ico ser substituído.
+    unsafe {
+        SHChangeNotify(
+            SHCNE_ASSOCCHANGED as i32,
+            SHCNF_IDLIST,
+            ptr::null(),
+            ptr::null(),
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn refresh_windows_shell_icons() {}
 
 #[cfg(not(windows))]
 fn configure_windows_app_identity() {}
@@ -282,7 +376,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             _ => {}
         });
 
-    if let Some(icon) = ghostbox_tray_icon()
+    if let Some(icon) = ghostbox_tray_icon(app, system_theme(app))
         .or_else(ghostbox_icon)
         .or_else(|| app.default_window_icon().cloned())
     {
@@ -394,13 +488,18 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.set_background_color(Some(WINDOW_BACKGROUND));
 
-        if let Some(icon) = ghostbox_icon() {
+        if let Some(icon) = ghostbox_window_icon(&handle) {
             let _ = window.set_icon(icon);
         }
+        refresh_windows_shell_icons();
 
         let close_app = handle.clone();
         let close_window = window.clone();
         window.on_window_event(move |event| {
+            if let tauri::WindowEvent::ThemeChanged(theme) = event {
+                update_tray_icon(&close_app, *theme);
+            }
+
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Always handle close ourselves so a leftover tray-menu window
                 // cannot keep the process alive after the main UI is gone.

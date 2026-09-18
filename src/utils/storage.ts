@@ -994,11 +994,14 @@ export function readSidebarExpandedCollections(): Set<string> {
   if (typeof window === "undefined") return new Set(["__favorites__"]);
   try {
     const raw = window.localStorage.getItem(sidebarExpandedCollectionsStorageKey);
-    if (!raw) return new Set(["__favorites__"]);
+    // `null` = nunca salvo: abre Favoritos por padrão. Array vazio salvo (`[]`)
+    // significa "tudo fechado" e precisa ser respeitado — antes o fallback
+    // transformava `[]` em Favoritos aberto e o fechado nunca persistia.
+    if (raw === null) return new Set(["__favorites__"]);
     const parsed = JSON.parse(raw) as unknown;
     if (Array.isArray(parsed)) {
       const filtered = parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
-      return new Set(filtered.length ? filtered : ["__favorites__"]);
+      return new Set(filtered);
     }
     return new Set(["__favorites__"]);
   } catch {

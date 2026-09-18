@@ -43,7 +43,8 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": [
-      "binaries/gbe_fork/**/*"
+      "binaries/gbe_fork/**/*",
+      "icons/desktopicon.ico"
     ],
     "windows": {
       "nsis": {

@@ -164,7 +164,7 @@ export const GameCard = memo(function GameCard({
           coverSources,
           "",
           portrait ? "auto 100%" : "100% 100%",
-          portrait ? "auto 106%" : "100% 100%",
+          portrait ? "auto 104%" : "100% 100%",
         )}
       >
         {hasAchievementBadge && !showLockedBadge && (

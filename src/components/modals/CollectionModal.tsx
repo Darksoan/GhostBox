@@ -48,7 +48,7 @@ export function CollectionModal({
       onClick={onClose}
     >
       <form
-        className="collection-modal"
+        className="collection-modal collection-create-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="collection-modal-title"

@@ -4,7 +4,6 @@ import type { UserCollection } from "../types";
 import {
   Download,
   Folder,
-  HardDriveDownload,
   Heart,
   HeartOff,
   Play,
@@ -19,7 +18,6 @@ export interface UseCollectionContextMenuOptions {
   libraryGameAppIds?: Set<string>;
   removableGameAppIds?: Set<string>;
   playableGameAppIds?: Set<string>;
-  installedSteamGameAppIds?: Set<string>;
   addingGameId?: string | null;
   launchingGameId?: string | null;
   userCollections: UserCollection[];
@@ -27,7 +25,6 @@ export interface UseCollectionContextMenuOptions {
   onAddGame?: (game: GhostBoxGame) => void;
   onPlayGame?: (game: GhostBoxGame) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
-  onUninstallGame?: (game: GhostBoxGame) => Promise<void>;
   onToggleFavorite?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
@@ -43,7 +40,6 @@ export function useCollectionContextMenu({
   libraryGameAppIds,
   removableGameAppIds,
   playableGameAppIds,
-  installedSteamGameAppIds,
   addingGameId,
   launchingGameId,
   userCollections,
@@ -51,7 +47,6 @@ export function useCollectionContextMenu({
   onAddGame,
   onPlayGame,
   onRemoveGame,
-  onUninstallGame,
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
@@ -175,21 +170,6 @@ export function useCollectionContextMenu({
       });
     }
 
-    if (!onlyCollectionActions && onUninstallGame) {
-      const isSteamInstalled =
-        game.status === "installed" ||
-        game.librarySource === "steam-installed" ||
-        hasGameKey(installedSteamGameAppIds);
-      if (isSteamInstalled) {
-        items.push({
-          label: "Desinstalar",
-          icon: HardDriveDownload,
-          danger: true,
-          onClick: () => void onUninstallGame(game),
-        });
-      }
-    }
-
     return items;
   }, [
     game,
@@ -197,7 +177,6 @@ export function useCollectionContextMenu({
     libraryGameAppIds,
     removableGameAppIds,
     playableGameAppIds,
-    installedSteamGameAppIds,
     addingGameId,
     launchingGameId,
     userCollections,
@@ -209,7 +188,6 @@ export function useCollectionContextMenu({
     onAddGame,
     onPlayGame,
     onRemoveGame,
-    onUninstallGame,
     onToggleFavorite,
     onAddGameToCollection,
     onRemoveGameFromCollection,

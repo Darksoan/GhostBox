@@ -235,7 +235,7 @@ const translations: Record<Language, TranslationTree> = {
       pageAria: "Conquistas de {title}",
       progressSummary:
         "{unlocked} de {total} ({percent}%) conquistas alcançadas",
-      globalPercent: "dos jogadores",
+      globalPercent: "desbloquearam",
       viewMore: "Ver mais",
       empty: "Este jogo não possui conquistas.",
     },
@@ -516,7 +516,7 @@ const translations: Record<Language, TranslationTree> = {
           showOnProfile: "Mostrar dados Steam no perfil",
           showOnProfileDescription:
             "Exibe métricas e jogos da conta Steam no seu perfil GhostBox.",
-          showInLibrary: "Mostrar jogos da biblioteca Steam no Ghostbox",
+          showInLibrary: "Mostrar jogos da biblioteca Steam no GhostBox",
           showInLibraryDescription:
             "Exibe os jogos da sua biblioteca Steam na aba Biblioteca do GhostBox.",
         },
@@ -818,7 +818,7 @@ const translations: Record<Language, TranslationTree> = {
       title: "Achievements",
       pageAria: "Achievements for {title}",
       progressSummary: "{unlocked} of {total} ({percent}%) achievements earned",
-      globalPercent: "of players",
+      globalPercent: "unlocked",
       viewMore: "View more",
       empty: "This game has no achievements.",
     },
@@ -1097,7 +1097,7 @@ const translations: Record<Language, TranslationTree> = {
           showOnProfile: "Show Steam data on profile",
           showOnProfileDescription:
             "Show metrics and games from your Steam account on your GhostBox profile.",
-          showInLibrary: "Show Steam library games in Ghostbox",
+          showInLibrary: "Show Steam library games in GhostBox",
           showInLibraryDescription:
             "Show games from your Steam library in the GhostBox Library tab.",
         },

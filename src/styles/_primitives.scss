@@ -12,12 +12,9 @@
   --c-3: #151515;
   --c-4: #1a1a1a;
   --c-5: #202020;
-  // Rampa de borda: --b-0 é exclusivo de borda. --n-5/--n-6 ficam fora da rampa
-  // de superfície e sustentam delimitadores funcionais.
   --b-0: #2a2a2a;
   --n-5: #303030;
   --n-6: #474747;
-  // Não fazem parte da rampa de superfície. Mantêm contraste para bordas e texto.
   --n-7: #6e6e6e;
   --n-8: #8c8c8c;
   --n-9: #a3a3a3;
@@ -67,26 +64,24 @@
   --space-16: 48px;
 
   // --- Tipografia ---
-  // Piso de 14px em todo o app: micro, caption, compact e body colapsam no
-  // mesmo degrau. Inter abaixo disso sobre superfície escura perde definição de
-  // haste, e os papéis pequenos (badge, pill, contador, metadado) são
-  // exatamente onde o texto some. A hierarquia dos degraus pequenos passa a ser
-  // feita por cor e peso, não por tamanho.
-  --fs-100: 14px;
-  --fs-200: 14px;
-  --fs-300: 14px;
-  --fs-400: 14px;
+  // Piso de 14.5px (0.90625em sobre base de 16px): micro, caption, compact e
+  // body colapsam no mesmo degrau. A hierarquia dos papéis pequenos vem de cor,
+  // espaçamento e peso, sem sacrificar hinting no Windows/WebView2.
+  --fs-100: 14.5px;
+  --fs-200: 14.5px;
+  --fs-300: 14.5px;
+  --fs-400: 14.5px;
   --fs-500: 16px;
   --fs-600: 20px;
   --fs-700: 26px;
   --fs-800: 34px;
   --fs-900: 40px;
   --fs-1000: 48px;
-  // Interlinha dos degraus pequenos sobe junto com o piso de 14px: 16px deixava
-  // 1,14 de razão e apertava descendente nas linhas de altura fechada.
-  --lh-100: 18px;
-  --lh-200: 18px;
-  --lh-300: 18px;
+  // Interlinha dos degraus pequenos acompanha o piso de 14.5px e mantém pelo
+  // menos 1,25 de razão para liberar ascendentes e descendentes.
+  --lh-100: 20px;
+  --lh-200: 20px;
+  --lh-300: 20px;
   --lh-400: 20px;
   --lh-500: 22px;
   --lh-600: 26px;
@@ -139,6 +134,5 @@
   --z-popover: 1100;
   --z-toast: 1200;
   --z-tooltip: 1300;
-  // Tela de carregamento inicial — acima de tudo (herdado do HTML estático).
   --z-splash: 10000;
 }

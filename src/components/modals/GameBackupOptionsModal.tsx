@@ -6,6 +6,8 @@ import { useSettings } from "../../context/settings";
 import { useOverlay } from "../../context/OverlayContext";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 
+const GAME_ACTIONS_MENU_WIDTH = 300;
+
 interface GameActionsMenuProps {
   open: boolean;
   appId: string;
@@ -37,7 +39,10 @@ export function GameBackupOptionsModal({
     if (!open || !trigger) return;
     const updatePosition = () => {
       const rect = trigger.getBoundingClientRect();
-      setPosition({ left: Math.max(12, rect.right - 244), top: Math.max(12, rect.top - 8) });
+      setPosition({
+        left: Math.max(12, Math.min(rect.right - GAME_ACTIONS_MENU_WIDTH, window.innerWidth - GAME_ACTIONS_MENU_WIDTH - 12)),
+        top: Math.max(12, rect.top - 8),
+      });
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
