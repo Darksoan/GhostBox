@@ -285,6 +285,14 @@ export const ghostboxApi = {
     await invoke<void>("shell_open_external", { url });
   },
 
+  /**
+   * Abre a pasta de instalação no explorador do sistema. Validação de
+   * existência fica no comando Tauri (`shell_open_path`).
+   */
+  async openInstallFolder(path: string): Promise<void> {
+    await invoke<void>("shell_open_path", { path });
+  },
+
   /** Opens the browser for Discord OAuth; the returned URL already carries a
    * signed, per-account state token minted by the worker. */
   async getDiscordLinkUrl(): Promise<string | null> {

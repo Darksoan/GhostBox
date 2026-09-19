@@ -171,8 +171,6 @@ export const GameCard = memo(function GameCard({
       data-layout-id={game.id}
       className={`game-card${libraryCoverFade ? " game-card--library-cover-fade" : ""}${showLockedBadge ? " game-card--locked" : ""}`}
       style={gameStyle(game)}
-      onClick={() => onOpenGame(game)}
-      onFocus={handleHoverEnrich}
       onMouseEnter={handleHoverEnrich}
       onContextMenu={handleContextMenu}
     >
@@ -208,6 +206,13 @@ export const GameCard = memo(function GameCard({
           </div>
         )}
       </div>
+      <button
+        type="button"
+        className="game-card__open-button"
+        aria-label={game.title}
+        onClick={() => onOpenGame(game)}
+        onFocus={handleHoverEnrich}
+      />
       {showPlayAction && (
         <button
           type="button"

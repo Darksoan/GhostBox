@@ -25,6 +25,8 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      WINDOWS_SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE }}
+      WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -78,8 +80,49 @@ jobs:
             throw "Missing secret TAURI_SIGNING_PRIVATE_KEY. Paste the contents of src-tauri/keys/ghostbox.key."
           }
 
+      - name: Configure Authenticode signing
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_SIGNING_CERTIFICATE) {
+            throw "Missing secret WINDOWS_SIGNING_CERTIFICATE. Set it to the base64-encoded Authenticode PFX."
+          }
+          if (-not $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD) {
+            throw "Missing secret WINDOWS_SIGNING_CERTIFICATE_PASSWORD."
+          }
+
+          $certificatePath = Join-Path $env:RUNNER_TEMP "ghostbox-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE)
+          )
+          $password = ConvertTo-SecureString $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation "Cert:\CurrentUser\My" -Password $password
+          if (-not $certificate) { throw "The Authenticode certificate could not be imported." }
+
+          $configPath = "src-tauri/tauri.conf.json"
+          $config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+          $config.bundle.windows | Add-Member -NotePropertyName "certificateThumbprint" -NotePropertyValue $certificate.Thumbprint -Force
+          $config.bundle.windows | Add-Member -NotePropertyName "digestAlgorithm" -NotePropertyValue "sha256" -Force
+          $config.bundle.windows | Add-Member -NotePropertyName "timestampUrl" -NotePropertyValue "http://timestamp.digicert.com" -Force
+          $config | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $configPath -Encoding utf8
+          Remove-Item -LiteralPath $certificatePath -Force
+
       - name: Build NSIS installer
         run: npm run tauri -- build --bundles nsis
+
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $targets = @(
+            "src-tauri/target/release/ghostbox-tauri.exe",
+            (Get-ChildItem -LiteralPath "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1).FullName
+          )
+          foreach ($target in $targets) {
+            if (-not (Test-Path -LiteralPath $target)) { throw "Expected executable not found: $target" }
+            if ((Get-AuthenticodeSignature -LiteralPath $target).Status -ne "Valid") {
+              throw "Authenticode verification failed: $target"
+            }
+          }
 
       - name: Find installer artifacts
         id: installer

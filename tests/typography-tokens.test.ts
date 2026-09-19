@@ -85,11 +85,11 @@ describe("Typography tokens", () => {
     expect(resolveToken("--dropdown-option-hover", tokens)).toBe("#1a1a1a");
   });
 
-  it("keeps text tokens unchanged", () => {
+  it("maps text roles to evenly separated neutral steps", () => {
     const tokens = collectTokens();
 
-    expect(tokens.get("--text-primary")).toBe("var(--n-11)");
-    expect(tokens.get("--text-secondary")).toBe("var(--n-9)");
+    expect(tokens.get("--text-primary")).toBe("var(--n-12)");
+    expect(tokens.get("--text-secondary")).toBe("var(--n-10)");
     expect(tokens.get("--text-tertiary")).toBe("var(--n-8)");
     expect(tokens.get("--text-strong")).toBe("var(--text-primary)");
     expect(tokens.get("--text-muted")).toBe("var(--text-secondary)");

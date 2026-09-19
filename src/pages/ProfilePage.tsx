@@ -62,6 +62,10 @@ import {
 } from "../utils/gameCache";
 import { sortOverviewGames } from "../utils/overviewSort";
 import {
+  handleListboxKeyDown,
+  handleListboxTriggerKeyDown,
+} from "../utils/listboxNavigation";
+import {
   getProfileAchievementTotal as getAchievementTotal,
   getProfileUnlockedAchievementCount as getUnlockedAchievementCount,
   getRicherProfileAchievementGame as getRicherAchievementGame,
@@ -2052,6 +2056,12 @@ export function ProfilePage({
                             onClick={() =>
                               setOverviewSortDropdownOpen((current) => !current)
                             }
+                            onKeyDown={(event) =>
+                              handleListboxTriggerKeyDown(
+                                event,
+                                setOverviewSortDropdownOpen,
+                              )
+                            }
                           >
                             <span>{t(`profile.sort.${overviewSortBy}`)}</span>
                             <ChevronDown size={14} />
@@ -2061,6 +2071,12 @@ export function ProfilePage({
                               className="settings-dropdown__menu"
                               role="listbox"
                               aria-label={t("profile.sortAria")}
+                              onKeyDown={(event) =>
+                                handleListboxKeyDown(
+                                  event,
+                                  setOverviewSortDropdownOpen,
+                                )
+                              }
                             >
                               {overviewSortOptions
                                 .filter((option) => option !== overviewSortBy)
@@ -2068,6 +2084,8 @@ export function ProfilePage({
                                   <button
                                     key={option}
                                     type="button"
+                                    role="option"
+                                    aria-selected={false}
                                     className="settings-dropdown__option"
                                     onClick={() => {
                                       setOverviewSortBy(option);

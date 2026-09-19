@@ -1,4 +1,4 @@
-import { ChevronDown, Folder, Heart } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
@@ -12,6 +12,10 @@ import { useSettings } from "../context/settings";
 import { preloadGameListAssets } from "../utils/image";
 import { normalizeGameSearchText } from "../utils/gameSearch";
 import { sortLibraryGames } from "../utils/librarySort";
+import {
+  handleListboxKeyDown,
+  handleListboxTriggerKeyDown,
+} from "../utils/listboxNavigation";
 import {
   filterByLibrarySource,
   gameMatchesLibrarySourceFilter,
@@ -83,9 +87,6 @@ interface LibraryPageProps {
   activeCollectionId?: string | null;
   onActiveCollectionChange?: (collectionId: string | null) => void;
   activeSessionAppIds?: Set<string>;
-  onPlayGame?: (game: GhostBoxGame) => void | Promise<void>;
-  playableGameAppIds?: ReadonlySet<string>;
-  launchingGameId?: string | null;
   isActive?: boolean;
 }
 
@@ -100,9 +101,6 @@ export function LibraryPage({
   activeCollectionId: propActiveCollectionId,
   onActiveCollectionChange,
   activeSessionAppIds = new Set(),
-  onPlayGame,
-  playableGameAppIds,
-  launchingGameId,
   isActive = true,
 }: LibraryPageProps) {
   const { appearance } = useSettings();
@@ -351,6 +349,14 @@ export function LibraryPage({
         }
       >
         <div className="library-toolbar__row">
+          <p className="library-toolbar__summary" aria-live="polite">
+            <strong>{language === "en" ? "Library" : "Biblioteca"}</strong>
+            <span>
+              {language === "en"
+                ? `${libraryGames.length} ${libraryGames.length === 1 ? "game" : "games"}`
+                : `${libraryGames.length} ${libraryGames.length === 1 ? "jogo" : "jogos"}`}
+            </span>
+          </p>
           <div
             className={`settings-dropdown ${sortDropdownOpen ? "settings-dropdown--open" : ""}`}
             ref={sortDropdownRef}
@@ -361,6 +367,9 @@ export function LibraryPage({
               aria-haspopup="listbox"
               aria-expanded={sortDropdownOpen}
               onClick={() => setSortDropdownOpen((current) => !current)}
+              onKeyDown={(event) =>
+                handleListboxTriggerKeyDown(event, setSortDropdownOpen)
+              }
             >
               <span>{sortLabel}</span>
               <ChevronDown size={16} />
@@ -370,6 +379,9 @@ export function LibraryPage({
                 className="settings-dropdown__menu"
                 role="listbox"
                 aria-label={language === "en" ? "Sort by" : "Ordenar por"}
+                onKeyDown={(event) =>
+                  handleListboxKeyDown(event, setSortDropdownOpen)
+                }
               >
                 {sortOptions
                   .filter((option) => option.value !== sortBy)
@@ -377,6 +389,8 @@ export function LibraryPage({
                     <button
                       key={option.value}
                       type="button"
+                      role="option"
+                      aria-selected={false}
                       className={`settings-dropdown__option ${option.value === sortBy ? "settings-dropdown__option--active" : ""}`}
                       onClick={() => {
                         setSortBy(option.value);
@@ -400,6 +414,9 @@ export function LibraryPage({
               aria-haspopup="listbox"
               aria-expanded={sourceDropdownOpen}
               onClick={() => setSourceDropdownOpen((current) => !current)}
+              onKeyDown={(event) =>
+                handleListboxTriggerKeyDown(event, setSourceDropdownOpen)
+              }
             >
               <span>{sourceLabel}</span>
               <ChevronDown size={16} />
@@ -409,6 +426,9 @@ export function LibraryPage({
                 className="settings-dropdown__menu"
                 role="listbox"
                 aria-label={language === "en" ? "Source" : "Origem"}
+                onKeyDown={(event) =>
+                  handleListboxKeyDown(event, setSourceDropdownOpen)
+                }
               >
                 {sourceFilterOptions
                   .filter((option) => option.value !== sourceFilter)
@@ -416,6 +436,8 @@ export function LibraryPage({
                     <button
                       key={option.value}
                       type="button"
+                      role="option"
+                      aria-selected={false}
                       className={`settings-dropdown__option ${option.value === sourceFilter ? "settings-dropdown__option--active" : ""}`}
                       onClick={() => {
                         setSourceFilter(option.value);
@@ -429,50 +451,6 @@ export function LibraryPage({
             )}
           </div>
 
-          <div className="library-toolbar__chips">
-            {hasFavorites && (
-              <button
-                type="button"
-                className={
-                  favoritesOnly
-                    ? "library-chip library-chip--active"
-                    : "library-chip"
-                }
-                aria-pressed={favoritesOnly}
-                onClick={() => {
-                  changeActiveCollection(
-                    selectedCollectionId === "favorites" ? null : "favorites"
-                  );
-                }}
-              >
-                <Heart size={16} strokeWidth={2.0} fill="none" />
-                <span>{language === "en" ? "Favorites" : "Favoritos"}</span>
-              </button>
-            )}
-
-            {userCollections.map((collection) => (
-              <button
-                key={collection.id}
-                type="button"
-                className={
-                  activeCollectionId === collection.id
-                    ? "library-chip library-chip--active"
-                    : "library-chip"
-                }
-                aria-pressed={activeCollectionId === collection.id}
-                onClick={() => {
-                  changeActiveCollection(
-                    selectedCollectionId === collection.id
-                      ? null
-                      : collection.id,
-                  );
-                }}
-              >
-                <Folder size={16} strokeWidth={2.0} />
-                <span>{collection.name}</span>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -488,9 +466,6 @@ export function LibraryPage({
           portrait
           showAchievements
           activeSessionAppIds={activeSessionAppIds}
-          onPlayGame={onPlayGame}
-          playableGameAppIds={playableGameAppIds}
-          launchingGameId={launchingGameId}
           libraryCoverFade
           animateLayout
         />

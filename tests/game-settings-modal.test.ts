@@ -14,11 +14,18 @@ describe("game actions menu", () => {
     expect(menu).not.toContain("game-settings-modal");
   });
 
-  it("contains only installation and desktop shortcut actions", () => {
-    expect(menu).not.toContain('copy("Mover instalação", "Move installation")');
-    expect(menu).toContain('copy("Desinstalar", "Uninstall")');
-    expect(menu).toContain('copy("Criar atalho na área de trabalho", "Create desktop shortcut")');
-    expect(menu).toContain('createGameShortcut(game, "desktop")');
+  it("contains only GhostBox-exclusive actions, no Steam duplicates", () => {
+    expect(menu).toContain('copy("Abrir pasta", "Open folder")');
+    expect(menu).toContain('copy("Fazer backup", "Back up now")');
+    expect(menu).toContain('copy("Restaurar backup", "Restore backup")');
+    expect(menu).toContain('copy("Ocultar no perfil", "Hide from profile")');
+    expect(menu).toContain("openInstallFolder");
+    expect(menu).toContain("backupGameToCloud");
+    expect(menu).toContain("restoreCloudSave");
+    expect(menu).toContain("setProfileGameHidden");
+    expect(menu).not.toContain('copy("Desinstalar", "Uninstall")');
+    expect(menu).not.toContain('copy("Criar atalho na área de trabalho", "Create desktop shortcut")');
+    expect(menu).not.toContain("createGameShortcut");
     expect(menu).not.toContain("selectExeFile");
     expect(menu).not.toContain("launchArguments");
     expect(menu).not.toContain("customExePath");

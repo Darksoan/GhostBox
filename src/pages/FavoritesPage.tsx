@@ -12,6 +12,8 @@ interface FavoritesPageProps {
   games: GhostBoxGame[];
   onOpenGame: (game: GhostBoxGame) => void;
   emptyTitle?: string;
+  title?: string;
+  language?: "pt" | "en";
   isActive?: boolean;
   activeSessionAppIds?: Set<string>;
 }
@@ -20,6 +22,8 @@ export function FavoritesPage({
   games,
   onOpenGame,
   emptyTitle = "Sem favoritos",
+  title = "Favoritos",
+  language = "pt",
   isActive = true,
   activeSessionAppIds = new Set(),
 }: FavoritesPageProps) {
@@ -34,6 +38,10 @@ export function FavoritesPage({
   // seção precisa carregar essas classes e o mesmo `GameGrid`.
   const collectionGames = useEnrichedGameCards(games, 80, isActive);
   const { refreshGameAchievements } = useAppData();
+  const gameCountLabel =
+    language === "en"
+      ? `${collectionGames.length} ${collectionGames.length === 1 ? "game" : "games"}`
+      : `${collectionGames.length} ${collectionGames.length === 1 ? "jogo" : "jogos"}`;
 
   const contextMenuItems = useGameContextMenu({
     game: contextMenu?.game ?? null,
@@ -60,7 +68,15 @@ export function FavoritesPage({
 
   if (!collectionGames.length) {
     return (
-      <section className="favorites-page content-section content-section--full favorites-page--empty">
+      <section className="content-section content-section--full content-section--library favorites-page--empty">
+        <div className="library-toolbar">
+          <div className="library-toolbar__row">
+            <p className="library-toolbar__summary" aria-live="polite">
+              <strong>{title}</strong>
+              <span>{gameCountLabel}</span>
+            </p>
+          </div>
+        </div>
         <EmptyState title={emptyTitle} />
       </section>
     );
@@ -68,6 +84,14 @@ export function FavoritesPage({
 
   return (
     <section className="content-section content-section--full content-section--library">
+      <div className="library-toolbar">
+        <div className="library-toolbar__row">
+          <p className="library-toolbar__summary" aria-live="polite">
+            <strong>{title}</strong>
+            <span>{gameCountLabel}</span>
+          </p>
+        </div>
+      </div>
       <GameGrid
         games={collectionGames}
         onOpenGame={onOpenGame}

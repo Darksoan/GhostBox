@@ -97,6 +97,8 @@ const translations: Record<Language, TranslationTree> = {
       loading: "Carregando notificações...",
       filters: "Filtros de notificações",
       clear: "Limpar histórico",
+      cleared: "Histórico limpo.",
+      undo: "Desfazer",
       emptyTitle: "Nenhuma notificação por enquanto",
        emptyMessage: "Backups, conquistas, conta e alertas do sistema aparecerão aqui.",
     },
@@ -281,6 +283,7 @@ const translations: Record<Language, TranslationTree> = {
         account: "Conta GhostBox",
       },
       collections: "Coleções",
+      deleteCollectionConfirm: "Excluir a coleção \"{name}\"? Esta ação não pode ser desfeita.",
       searchCollections: "Pesquisar jogos nas coleções",
       collectionSearchPlaceholder: "Pesquisar nas coleções",
       noMatchingGames: "Nenhum jogo encontrado",
@@ -429,7 +432,7 @@ const translations: Record<Language, TranslationTree> = {
       tabs: {
         general: {
           label: "Geral",
-          description: "Idioma, apariência e comportamento de início.",
+          description: "Idioma, aparência e comportamento de início.",
         },
         performance: {
           label: "Desempenho",
@@ -441,11 +444,11 @@ const translations: Record<Language, TranslationTree> = {
         },
         connections: {
           label: "Conexões",
-          description: "Contas, perfiles e vínculos externos.",
+          description: "Contas, perfis e vínculos externos.",
         },
         subscription: {
           label: "Assinatura",
-          description: "Plano na nube, backup e recursos exclusivos.",
+          description: "Plano na nuvem, backup e recursos exclusivos.",
         },
         notifications: {
           label: "Notificações",
@@ -567,7 +570,7 @@ const translations: Record<Language, TranslationTree> = {
       library: {
         hiddenProfileGames: {
           label: "Ocultar jogos do perfil",
-          description: "Selecione os jogos que não devem aparecer em Overview e Conquistas.",
+          description: "Selecione os jogos que não devem aparecer em Visão geral e Conquistas.",
           back: "Voltar para Biblioteca",
           searchPlaceholder: "Pesquisar jogos",
           alphabetLabel: "Filtrar jogos por letra",
@@ -703,6 +706,8 @@ const translations: Record<Language, TranslationTree> = {
       loading: "Loading notifications...",
       filters: "Notification filters",
       clear: "Clear history",
+      cleared: "History cleared.",
+      undo: "Undo",
       emptyTitle: "No notifications yet",
        emptyMessage: "Backups, achievements, account, and system alerts will appear here.",
     },
@@ -863,6 +868,7 @@ const translations: Record<Language, TranslationTree> = {
         account: "GhostBox account",
       },
       collections: "Collections",
+      deleteCollectionConfirm: "Delete the \"{name}\" collection? This action cannot be undone.",
       searchCollections: "Search games in collections",
       collectionSearchPlaceholder: "Search collections",
       noMatchingGames: "No games found",

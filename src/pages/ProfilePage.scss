@@ -1363,7 +1363,6 @@
     &:hover,
     &:focus-visible {
       color: var(--text-primary);
-      outline: 0;
     }
   }
 
@@ -1406,7 +1405,7 @@
     color: var(--text-tertiary);
     font-weight: var(--weight-semibold);
     cursor: pointer;
-    opacity: 0;
+    opacity: 0.56;
     transition:
       opacity var(--motion-base) ease,
       color var(--motion-base) ease;
@@ -1628,7 +1627,11 @@
     --profile-banner-reveal-scale: 1;
     transition: none;
   }
-}
+
+  .profile-page__activity-progress .profile-page__progress-track > span::after {
+    animation: none;
+  }
+}
 
 html.no-backdrop-blur .profile-page {
   &__hero-action,
@@ -1960,7 +1963,8 @@ html.no-backdrop-blur .profile-page {
     }
 
     &:focus-visible {
-      outline: none;
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
     }
   }
 

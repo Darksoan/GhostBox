@@ -30,6 +30,10 @@ import {
   sortYearValues,
 } from "../utils/filters";
 import { CatalogueList } from "../components/ui/CatalogueList";
+import {
+  handleListboxKeyDown,
+  handleListboxTriggerKeyDown,
+} from "../utils/listboxNavigation";
 import { CatalogueHoverPreview } from "../components/ui/CatalogueHoverPreview";
 import { PaginationControls } from "../components/ui/PaginationControls";
 import {
@@ -873,6 +877,9 @@ export function CataloguePage({
                   aria-expanded={sortDropdownOpen}
                   aria-label={t("catalogue.sort.label")}
                   onClick={() => setSortDropdownOpen((open) => !open)}
+                  onKeyDown={(event) =>
+                    handleListboxTriggerKeyDown(event, setSortDropdownOpen)
+                  }
                 >
                   <span>{sortLabel}</span>
                   <ChevronDown size={14} aria-hidden="true" />
@@ -882,6 +889,9 @@ export function CataloguePage({
                     className="settings-dropdown__menu"
                     role="listbox"
                     aria-label={t("catalogue.sort.label")}
+                    onKeyDown={(event) =>
+                      handleListboxKeyDown(event, setSortDropdownOpen)
+                    }
                   >
                     {sortOptions
                       .filter((option) => option.value !== sort)
@@ -917,6 +927,9 @@ export function CataloguePage({
                   aria-expanded={viewDropdownOpen}
                   aria-label={t("catalogue.view.label")}
                   onClick={() => setViewDropdownOpen((open) => !open)}
+                  onKeyDown={(event) =>
+                    handleListboxTriggerKeyDown(event, setViewDropdownOpen)
+                  }
                 >
                   <span>{viewLabel}</span>
                   <ChevronDown size={14} aria-hidden="true" />
@@ -926,6 +939,9 @@ export function CataloguePage({
                     className="settings-dropdown__menu"
                     role="listbox"
                     aria-label={t("catalogue.view.label")}
+                    onKeyDown={(event) =>
+                      handleListboxKeyDown(event, setViewDropdownOpen)
+                    }
                   >
                     {viewOptions
                       .filter((option) => option.value !== viewMode)

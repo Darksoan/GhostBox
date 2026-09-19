@@ -19,6 +19,10 @@ import {
   SteamVisibilitySection,
 } from "../features/settings/ConnectionsPanel";
 import { AccountSection } from "../features/settings/AccountSection";
+import {
+  handleListboxKeyDown,
+  handleListboxTriggerKeyDown,
+} from "../utils/listboxNavigation";
 import { TempFilesSection } from "../features/settings/TempFilesSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
@@ -788,19 +792,27 @@ function SettingsDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => handleListboxTriggerKeyDown(event, setOpen)}
       >
         <span>{activeChoice.label}</span>
         <ChevronDown size={14} />
       </button>
 
       {open && (
-        <div className="settings-dropdown__menu" role="listbox" aria-label={option.label}>
+        <div
+          className="settings-dropdown__menu"
+          role="listbox"
+          aria-label={option.label}
+          onKeyDown={(event) => handleListboxKeyDown(event, setOpen)}
+        >
           {option.choices
             .filter((choice) => choice.value !== option.value)
             .map((choice) => (
             <button
               key={choice.value}
               type="button"
+              role="option"
+              aria-selected={false}
               className={`settings-dropdown__option ${choice.value === option.value ? "settings-dropdown__option--active" : ""}`}
               onClick={() => handleSelect(choice.value)}
             >

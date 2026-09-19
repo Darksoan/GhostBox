@@ -19,14 +19,22 @@ const OPENSTEAMTOOL_REPO: &str = "OpenSteam001/OpenSteamTool";
 const OPENSTEAMTOOL_FILES: &[&str] = &["OpenSteamTool.dll", "dwmapi.dll", "xinput1_4.dll"];
 const OPENSTEAMTOOL_CONFIG: &str = "opensteamtool.toml";
 
-/// Allowlist de hashes fixados de binários de terceiros. Quando um release
-/// (repo + tag + asset) está listado aqui, o GhostBox só instala o binário se o
-/// SHA-256 baixado casar exatamente com este valor — em vez de confiar no
-/// `digest` reportado pela própria API do GitHub (que sai da mesma resposta de
-/// rede que entrega o binário). Atualizar esta tabela a cada release oficial
-/// suportada. Entradas ausentes mantêm o comportamento atual (validação pelo
-/// digest do GitHub) como fallback.
-const TRUSTED_RELEASE_HASHES: &[TrustedReleaseHash] = &[];
+/// Allowlist auditada de binários de terceiros. Uma atualização só é aceita
+/// após adicionar manualmente aqui sua tag, asset e SHA-256 verificado.
+const TRUSTED_RELEASE_HASHES: &[TrustedReleaseHash] = &[
+    TrustedReleaseHash {
+        repo: LUATOOLS_REPO,
+        tag: "v1.3.1",
+        asset_name: "LuaTools-1.3.1-full.nupkg",
+        sha256: "50536b4583d0e7cc5d88db95e7b6f6f0c3ef68e8f99f10e99571a2bc18729a2c",
+    },
+    TrustedReleaseHash {
+        repo: OPENSTEAMTOOL_REPO,
+        tag: "1.4.8",
+        asset_name: "OpenSteamTool-1.4.8-Release.zip",
+        sha256: "966654604d258d5d5383e72fec616df7957bf86f760c67eeb3d0e18cd882c710",
+    },
+];
 
 #[derive(Clone, Copy)]
 struct TrustedReleaseHash {
@@ -36,12 +44,16 @@ struct TrustedReleaseHash {
     sha256: &'static str,
 }
 
-fn pinned_expected_hash(repo: &str, tag: &str, asset_name: &str) -> Option<&'static str> {
+fn trusted_expected_hash(repo: &str, tag: &str, asset_name: &str) -> Result<&'static str, String> {
     TRUSTED_RELEASE_HASHES.iter().find_map(|entry| {
         (entry.repo.eq_ignore_ascii_case(repo)
             && entry.tag == tag
             && entry.asset_name.eq_ignore_ascii_case(asset_name))
         .then_some(entry.sha256)
+    }).ok_or_else(|| {
+        format!(
+            "A versão {tag} de {repo} ({asset_name}) ainda não foi auditada pelo GhostBox. Instalação recusada."
+        )
     })
 }
 
@@ -227,15 +239,12 @@ async fn download_asset(
 
     let bytes = bytes.to_vec();
     let sha256 = sha256_hex(&bytes);
-    if let Some(pinned) = pinned_expected_hash(repo, tag, &asset.name) {
-        if sha256 != pinned.to_ascii_lowercase() {
-            return Err(format!(
-                "Asset {} não corresponde ao hash fixado pelo GhostBox; instalação recusada.",
-                asset.name
-            ));
-        }
-    } else if Some(sha256.as_str()) != expected_digest(&asset).as_deref() {
-        return Err(format!("Falha ao validar SHA-256 de {}.", asset.name));
+    let expected_hash = trusted_expected_hash(repo, tag, &asset.name)?;
+    if sha256 != expected_hash.to_ascii_lowercase() {
+        return Err(format!(
+            "Asset {} não corresponde ao hash auditado pelo GhostBox; instalação recusada.",
+            asset.name
+        ));
     }
 
     Ok(AssetDownload { asset, bytes })
@@ -831,8 +840,9 @@ pub fn luatools_dependencies_ensure(app: AppHandle) -> Value {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_opensteamtool_lua_path, opensteamtool_config_has_lua_path,
-        validate_opensteamtool_targets, BootstrapState, OPENSTEAMTOOL_FILES,
+        ensure_opensteamtool_lua_path, opensteamtool_config_has_lua_path, trusted_expected_hash,
+        validate_opensteamtool_targets, BootstrapState, LUATOOLS_REPO, OPENSTEAMTOOL_FILES,
+        OPENSTEAMTOOL_REPO,
     };
     use std::collections::HashMap;
 
@@ -874,5 +884,28 @@ mod tests {
         let updated = ensure_opensteamtool_lua_path(config).unwrap();
         assert!(opensteamtool_config_has_lua_path(&updated));
         assert_eq!(ensure_opensteamtool_lua_path(&updated).unwrap(), updated);
+    }
+
+    #[test]
+    fn trusted_releases_require_the_audited_tag_and_asset() {
+        assert_eq!(
+            trusted_expected_hash(LUATOOLS_REPO, "v1.3.1", "LuaTools-1.3.1-full.nupkg",).unwrap(),
+            "50536b4583d0e7cc5d88db95e7b6f6f0c3ef68e8f99f10e99571a2bc18729a2c"
+        );
+        assert_eq!(
+            trusted_expected_hash(
+                OPENSTEAMTOOL_REPO,
+                "1.4.8",
+                "OpenSteamTool-1.4.8-Release.zip",
+            )
+            .unwrap(),
+            "966654604d258d5d5383e72fec616df7957bf86f760c67eeb3d0e18cd882c710"
+        );
+        assert!(trusted_expected_hash(
+            OPENSTEAMTOOL_REPO,
+            "1.4.9",
+            "OpenSteamTool-1.4.9-Release.zip",
+        )
+        .is_err());
     }
 }

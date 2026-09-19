@@ -335,9 +335,6 @@ export function PageRouter({
           activeCollectionId={activeLibraryCollectionId}
           onActiveCollectionChange={setActiveLibraryCollectionId}
           activeSessionAppIds={appData.activeSessionAppIds}
-          onPlayGame={appData.handlePlayGame}
-          playableGameAppIds={appData.playableGameAppIds}
-          launchingGameId={appData.launchingGameId}
           isActive={targetPage === page}
         />
       );
@@ -358,6 +355,11 @@ export function PageRouter({
               : appData.favoriteGames
           }
           onOpenGame={openGame}
+          title={
+            selectedCollection?.name ??
+            (appearance.language === "en" ? "Favorites" : "Favoritos")
+          }
+          language={appearance.language}
           emptyTitle={
             selectedCollection
               ? appearance.language === "en"

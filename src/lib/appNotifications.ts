@@ -172,6 +172,10 @@ export function clearAppNotifications() {
   writeAppNotifications([]);
 }
 
+export function restoreAppNotifications(items: AppNotificationItem[]) {
+  writeAppNotifications([...items, ...readAppNotifications()]);
+}
+
 export function markAppNotificationsSeen(timestamp = Date.now()) {
   writeNotificationsLastSeenAt(timestamp);
   notifyChanged();

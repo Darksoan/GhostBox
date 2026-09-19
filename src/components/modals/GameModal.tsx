@@ -6,7 +6,6 @@ import {
   Heart,
   Image as ImageIcon,
   Languages,
-  Play,
   Settings,
   Tags as TagsIcon,
   Trash2,
@@ -756,13 +755,11 @@ const ModalActions = memo(function ModalActions({
           disabled={isPlaying || isSessionActive}
           aria-busy={isPlaying}
         >
-          {isPlaying ? (
+          {isPlaying && (
             <span
               className="modal__add-spinner modal__add-spinner--light"
               aria-hidden="true"
             />
-          ) : (
-            <Play size={20} strokeWidth={2.0} />
           )}
           <span className="button__label modal__action-label">
             {isSessionActive
@@ -792,27 +789,19 @@ const ModalActions = memo(function ModalActions({
         <>
           <button
             type="button"
-            className="button button--primary modal__remove-button"
+            className="button button--primary modal__remove-button modal__remove-button--icon-only"
             onClick={() => onRemove(game)}
             disabled={isRemoving}
+            aria-label={language === "en" ? "Remove" : "Remover"}
+            title={language === "en" ? "Remove" : "Remover"}
           >
             {isRemoving ? (
-              <>
-                <span
-                  className="modal__add-spinner modal__add-spinner--light"
-                  aria-hidden="true"
-                />
-                <span className="button__label modal__action-label">
-                  {language === "en" ? "Removing" : "Removendo"}
-                </span>
-              </>
+              <span
+                className="modal__add-spinner modal__add-spinner--light"
+                aria-hidden="true"
+              />
             ) : (
-              <>
-                <Trash2 size={18} aria-hidden="true" />
-                <span className="button__label modal__action-label">
-                  {language === "en" ? "Remove" : "Remover"}
-                </span>
-              </>
+              <Trash2 size={18} aria-hidden="true" />
             )}
           </button>
           <button
@@ -855,7 +844,6 @@ const ModalActions = memo(function ModalActions({
             className="button button--primary modal__add-button"
             onClick={() => onQueue(game)}
           >
-            <span className="modal__add-icon" aria-hidden="true" />
             <span className="button__label modal__action-label">
               {language === "en" ? "Add" : "Adicionar"}
             </span>
@@ -1912,10 +1900,6 @@ export function GameModal({
         <Suspense fallback={null}>
           <LazyGameBackupOptionsModal
             open={Boolean(displayGame)}
-            appId={displayGame?.appId ?? ""}
-            gameTitle={displayGame?.title ?? ""}
-            // A configuração de inicialização é local; o payload de detalhes
-            // da Steam não inclui o executável personalizado.
             game={game ?? displayGame}
             onClose={() => setIsBackupOptionsOpen(false)}
             trigger={gearButtonRef.current}

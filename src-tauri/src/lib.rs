@@ -1902,6 +1902,7 @@ pub fn run() {
             window_lifecycle::tray_hide_menu,
             window_lifecycle::tray_quit_application,
             window_lifecycle::shell_open_external,
+            window_lifecycle::shell_open_path,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

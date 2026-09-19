@@ -1267,7 +1267,7 @@ p {
     border: 0;
     border-radius: var(--radius-lg);
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     text-wrap: nowrap;
     transition:
       background var(--motion-fast) var(--ease),
@@ -1293,9 +1293,9 @@ p {
       background: var(--sidebar-option-active);
     }
 
-    /* Collection rows always in primary; hover/active keep the same tone */
+    /* Collection rows stay quiet until hover or selection. */
     &.sidebar__collection-item {
-      color: var(--text-primary);
+      color: var(--text-secondary);
       font-weight: var(--weight-regular);
 
       .sidebar__collection-icon,
@@ -1319,7 +1319,7 @@ p {
     }
 
     &.sidebar__collection-item--expanded {
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
 
     strong {
@@ -3106,6 +3106,7 @@ button > svg {
 .home-banner__description {
   display: -webkit-box;
   overflow: hidden;
+  max-width: 52ch;
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
   line-height: var(--lh-300);
@@ -4737,6 +4738,19 @@ button > svg {
     padding: var(--space-6) var(--space-10)
       var(--page-bottom-space);
   }
+
+  &__header {
+    padding-bottom: 0;
+    margin-bottom: var(--space-10);
+
+    h3 {
+      line-height: var(--type-line-section);
+    }
+
+    p {
+      line-height: var(--type-line-compact);
+    }
+  }
 }
 
 .settings-panel {
@@ -6185,7 +6199,6 @@ html.no-animations {
     background: var(--settings-dropdown-surface);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
-    outline: none;
     box-shadow: none;
   }
 
@@ -6201,7 +6214,6 @@ html.no-animations {
     left: auto;
     border-radius: var(--radius-lg);
     background: var(--settings-dropdown-menu);
-    outline: none;
     box-shadow: none;
   }
 
@@ -6209,7 +6221,6 @@ html.no-animations {
     border-radius: var(--radius-lg);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
-    outline: none;
     box-shadow: none;
   }
 
@@ -6585,23 +6596,26 @@ html.no-animations {
   }
 
   &__clear-filters {
+    display: inline-flex;
     flex: 0 0 auto;
     min-height: 32px;
+    align-items: center;
     padding: 0 var(--space-4);
     border: 0;
     border-radius: var(--radius-md);
     background: var(--surface-secondary);
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
+    line-height: 1;
     white-space: nowrap;
   }
 
   &__clear-filters:hover,
   &__clear-filters:focus-visible {
     background: var(--control-hover);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   /* Ordenação usa o dropdown compartilhado (`.settings-dropdown`), não um
@@ -6612,12 +6626,24 @@ html.no-animations {
     min-width: 210px;
 
     .settings-dropdown__trigger {
+      gap: var(--space-3);
       min-height: 36px;
+      align-items: center;
       padding: 0 var(--space-5);
       border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+      line-height: 1;
+
+      svg {
+        position: static;
+        color: var(--text-tertiary);
+      }
 
       span {
-        padding-right: var(--space-9);
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        padding-right: 0;
         padding-left: 0;
         text-align: left;
       }
@@ -6635,6 +6661,13 @@ html.no-animations {
     .settings-dropdown__option {
       min-height: 32px;
       border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+
+      &:hover,
+      &:focus-visible,
+      &--active {
+        color: var(--text-secondary);
+      }
 
       span {
         padding: 0 var(--space-4);
@@ -6656,10 +6689,16 @@ html.no-animations {
     .settings-dropdown__trigger {
       gap: var(--space-3);
       min-height: 36px;
+      align-items: center;
       padding: 0 var(--space-5);
       border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+      line-height: 1;
 
       span {
+        display: flex;
+        min-width: 0;
+        align-items: center;
         padding-right: 0;
         padding-left: 0;
         text-align: left;
@@ -6667,6 +6706,7 @@ html.no-animations {
 
       svg {
         position: static;
+        color: var(--text-tertiary);
       }
     }
 
@@ -6677,6 +6717,13 @@ html.no-animations {
     .settings-dropdown__option {
       min-height: 32px;
       border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+
+      &:hover,
+      &:focus-visible,
+      &--active {
+        color: var(--text-secondary);
+      }
     }
   }
 
@@ -6901,8 +6948,9 @@ html.no-animations {
     border: 0;
     border-radius: inherit;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-tertiary);
     cursor: pointer;
+    line-height: 1;
     text-align: left;
     white-space: nowrap;
     transition: color var(--motion-fast) var(--ease);
@@ -6919,7 +6967,8 @@ html.no-animations {
       flex: 0 0 auto;
       font-size: var(--type-size-compact);
       font-weight: var(--weight-regular);
-      color: var(--text-secondary);
+      color: var(--text-tertiary);
+      line-height: 1;
       transition: color var(--motion-fast) var(--ease);
     }
 
@@ -6942,12 +6991,15 @@ html.no-animations {
       line-height: 1;
     }
 
-    /* Texto/chevron fixos em secondary em todos estados: nem hover nem
-       dropdown aberto clareiam. Só a superfície do container muda. */
+    /* Texto e chevron sobem de terciário para secundário ao interagir. */
+    &:hover strong,
+    &:focus-visible strong,
     &[aria-expanded="true"] strong {
       color: var(--text-secondary);
     }
 
+    &:hover .catalogue-filter-section__chevron,
+    &:focus-visible .catalogue-filter-section__chevron,
     &[aria-expanded="true"] .catalogue-filter-section__chevron {
       color: var(--text-secondary);
     }
@@ -6955,7 +7007,7 @@ html.no-animations {
 
   &__chevron {
     flex-shrink: 0;
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     font-weight: var(--weight-semibold);
     transform: rotate(0deg);
     transition:
@@ -7217,6 +7269,7 @@ html.no-animations {
   gap: 0;
   padding: var(--space-3) var(--space-5);
   @include mixins.ghost-button;
+  color: var(--text-tertiary);
   font-size: var(--type-size-compact);
   font-weight: var(--weight-regular);
   line-height: var(--type-line-compact);
@@ -7283,7 +7336,7 @@ html.no-animations {
     gap: var(--space-5);
     border-color: transparent;
     background: var(--control-hover);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   &:has(input:checked) &__box,
@@ -7977,12 +8030,12 @@ input[type="search"]::-ms-reveal {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: 0 var(--space-10) var(--page-bottom-space);
-  gap: var(--space-6);
+  padding: 0 0 var(--page-bottom-space);
+  gap: 0;
 }
 
 .favorites-page--empty {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .notifications-page {
@@ -7990,8 +8043,8 @@ input[type="search"]::-ms-reveal {
   flex-direction: column;
   flex-shrink: 0;
   justify-content: flex-start;
-  padding: 0 var(--space-10) var(--page-bottom-space);
-  gap: var(--space-8);
+  padding: var(--space-6) var(--space-10) var(--page-bottom-space);
+  gap: var(--space-10);
   min-height: 100%;
   height: auto;
   overflow: visible;
@@ -8016,21 +8069,28 @@ input[type="search"]::-ms-reveal {
     gap: var(--space-8);
     padding: 0;
 
+    > div {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
     h2 {
-      margin: 0 0 var(--space-3);
+      margin: 0;
       color: var(--text-primary);
-      font-size: var(--type-size-page);
+      font-size: var(--type-size-section);
       font-weight: var(--weight-semibold);
-      line-height: var(--type-line-page);
+      line-height: var(--type-line-section);
     }
 
     p {
       max-width: 620px;
       margin: 0;
       color: var(--text-secondary);
-      font-size: var(--type-size-body);
+      font-size: var(--type-size-compact);
       font-weight: var(--weight-regular);
-      line-height: var(--type-line-body);
+      line-height: var(--type-line-compact);
     }
   }
 
@@ -8120,6 +8180,30 @@ input[type="search"]::-ms-reveal {
     // O botão desce da titlebar e cola no primeiro item: o gap do
     // `.notifications-page` já dá 16px até a lista, então a toolbar só
     // alinha à direita sem empurrar mais.
+  }
+
+  &__undo {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    padding: 0 var(--space-7);
+    border-radius: var(--radius-lg);
+    background: var(--surface-option);
+    color: var(--text-secondary);
+    font-size: var(--type-size-compact);
+
+    button {
+      min-height: 32px;
+      padding: 0 var(--space-4);
+      border: 0;
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      font-weight: var(--weight-semibold);
+      cursor: pointer;
+    }
   }
 
   &__list {
@@ -8237,14 +8321,15 @@ input[type="search"]::-ms-reveal {
   }
 
   &__message {
+    display: -webkit-box;
     overflow: hidden;
     margin: 0;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     font-size: var(--type-size-body);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-body);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   /* Coluna direita: tempo relativo e, quando existe, o botão de ação embaixo —
@@ -8841,6 +8926,24 @@ input[type="search"]::-ms-reveal {
     }
   }
 
+  &__open-button {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: -2px;
+    }
+  }
+
   &:focus-within &__play-button {
     opacity: 1;
     pointer-events: auto;
@@ -8984,6 +9087,7 @@ input[type="search"]::-ms-reveal {
     flex-direction: column;
     justify-content: flex-end;
     background: transparent;
+    pointer-events: none;
     transition: background var(--motion-base) ease;
   }
 
@@ -9381,7 +9485,8 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-.container:has(.page--library) {
+.container:has(.page--library),
+.container:has(.page--favorites) {
   --library-inline-padding: var(--space-10);
 }
 
@@ -9392,7 +9497,7 @@ input[type="search"]::-ms-reveal {
   flex-shrink: 0;
   flex-direction: column;
   gap: var(--space-5);
-  padding: 0 var(--library-inline-padding) var(--space-6) var(--library-inline-padding);
+  padding: var(--space-6) var(--library-inline-padding) var(--space-10);
 
   .settings-dropdown {
     // Base da capa portrait da grade (180px, 200px no maximizado): o trigger
@@ -9410,7 +9515,7 @@ input[type="search"]::-ms-reveal {
     min-height: 32px;
     padding: 0 var(--space-6);
     border-radius: var(--radius-lg);
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
     justify-content: center;
@@ -9431,24 +9536,24 @@ input[type="search"]::-ms-reveal {
       position: absolute;
       right: var(--space-4);
       flex-shrink: 0;
-      color: var(--text-secondary);
+      color: var(--text-tertiary);
     }
 
     &:hover,
     &:focus-visible {
-      color: var(--text-primary);
+      color: var(--text-secondary);
 
       svg {
-        color: var(--text-primary);
+        color: var(--text-secondary);
       }
     }
   }
 
   .settings-dropdown--open .settings-dropdown__trigger {
-    color: var(--text-primary);
+    color: var(--text-secondary);
 
     svg {
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
   }
 
@@ -9462,8 +9567,15 @@ input[type="search"]::-ms-reveal {
   .settings-dropdown__option {
     min-height: 32px;
     border-radius: var(--radius-lg);
+    color: var(--text-tertiary);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
+
+    &:hover,
+    &:focus-visible,
+    &--active {
+      color: var(--text-secondary);
+    }
   }
 
   &__row {
@@ -9472,6 +9584,27 @@ input[type="search"]::-ms-reveal {
     align-items: center;
     justify-content: flex-start;
     gap: var(--space-6);
+  }
+
+  &__summary {
+    display: grid;
+    flex: 1 1 160px;
+    gap: var(--space-2);
+    margin: 0;
+
+    strong {
+      color: var(--text-primary);
+      font-size: var(--type-size-section);
+      font-weight: var(--weight-semibold);
+      line-height: var(--type-line-section);
+    }
+
+    span {
+      color: var(--text-secondary);
+      font-size: var(--type-size-compact);
+      font-weight: var(--weight-regular);
+      line-height: var(--type-line-compact);
+    }
   }
 
   &__sort {
@@ -9534,62 +9667,6 @@ border: 0;
     }
   }
 
-  &__chips {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-  }
-}
-
-/* Vive lado a lado com o dropdown de ordenação na mesma barra: altura, raio e
-   tamanho de texto vêm de lá. Em repouso usava `--library-box` (--c-0), o mesmo
-   degrau do fundo da página — a chip não tinha superfície e o hover repetia a
-   cor de repouso, então nada respondia ao ponteiro. Hover e selecionado seguem
-   os tokens da sidebar (`--sidebar-option-hover` / `--sidebar-option-active`);
-   o repouso mantém superfície própria porque a chip fica sobre o canvas. */
-.library-chip {
-  display: inline-flex;
-  min-height: 32px;
-  height: 32px;
-  align-items: center;
-  gap: var(--space-4);
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface-option);
-  color: var(--text-secondary);
-  padding: 0 var(--space-6);
-  font-size: var(--type-size-compact);
-  font-weight: var(--weight-regular);
-  cursor: pointer;
-  transition:
-    color var(--motion-fast) var(--ease),
-    background-color var(--motion-fast) var(--ease);
-
-  svg {
-    flex: 0 0 auto;
-    color: currentcolor;
-  }
-
-  &:hover {
-    background: var(--sidebar-option-hover);
-    color: var(--text-primary);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--border-interactive);
-    outline-offset: 2px;
-  }
-
-  &.library-chip--active,
-  &[aria-pressed="true"],
-  &.library-chip--active:hover,
-  &.library-chip--active:focus-visible,
-  &[aria-pressed="true"]:hover,
-  &[aria-pressed="true"]:focus-visible {
-    background: var(--sidebar-option-active);
-    color: var(--text-primary);
-  }
 }
 
 @keyframes library-cover-format-out {
@@ -9943,7 +10020,8 @@ html.no-backdrop-blur {
 
   .library-toolbar {
     gap: var(--space-4);
-    padding: 0 var(--space-8) var(--space-6) var(--library-inline-padding);
+    padding: var(--space-6) var(--space-8) var(--space-10)
+      var(--library-inline-padding);
 
     &__row {
       align-items: stretch;
@@ -12207,8 +12285,8 @@ html.no-backdrop-blur {
   &__remove-button {
     min-width: 0;
     width: fit-content;
-    min-height: clamp(32px, 0.6vw + 25px, 36px);
-    height: clamp(32px, 0.6vw + 25px, 36px);
+    min-height: 32px;
+    height: 32px;
     gap: clamp(var(--space-3), 0.35vw + 4px, var(--space-4));
     padding: 0 clamp(var(--space-6), 0.6vw + 6px, var(--space-8));
     align-items: center;
@@ -12216,7 +12294,7 @@ html.no-backdrop-blur {
     text-align: center;
     border-radius: var(--radius-sm);
     font-size: var(--type-size-compact);
-    line-height: 1;
+    line-height: var(--type-line-compact);
     white-space: nowrap;
 
     svg,
@@ -12229,8 +12307,8 @@ html.no-backdrop-blur {
   &__favorite-button {
     display: grid;
     place-items: center;
-    width: clamp(32px, 0.6vw + 25px, 36px);
-    height: clamp(32px, 0.6vw + 25px, 36px);
+    width: 32px;
+    height: 32px;
     padding: 0;
     cursor: pointer;
   }
@@ -12238,8 +12316,8 @@ html.no-backdrop-blur {
   &__gear-button {
     display: grid;
     place-items: center;
-    width: clamp(32px, 0.6vw + 25px, 36px);
-    height: clamp(32px, 0.6vw + 25px, 36px);
+    width: 32px;
+    height: 32px;
     padding: 0;
   }
 
@@ -12261,18 +12339,19 @@ html.no-backdrop-blur {
       transform var(--motion-fast) ease;
 
     svg {
-      width: clamp(18px, 0.28vw + 15px, 20px);
-      height: clamp(18px, 0.28vw + 15px, 20px);
-      flex: 0 0 clamp(18px, 0.28vw + 15px, 20px);
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
       transition: color var(--motion-base) ease;
     }
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
       background: var(--surface-option-hover);
-      color: var(--text-secondary);
+      color: var(--text-primary);
 
       svg {
+        color: var(--text-primary);
         transform: none;
       }
     }
@@ -12288,8 +12367,20 @@ html.no-backdrop-blur {
     background: var(--surface-option);
   }
 
-  &__favorite-button--active,
-  &__gear-button--active {
+  /* Jogando/Iniciando: sem translucidez (`opacity` do `.button:disabled`),
+     só escurece para #0a0a0a com texto terciário. */
+  &__play-button:disabled,
+  &__play-button:disabled:hover {
+    background: var(--c-0);
+    color: var(--text-tertiary);
+    opacity: 1;
+
+    svg {
+      color: var(--text-tertiary);
+    }
+  }
+
+  &__favorite-button--active {
     color: var(--text-primary);
     background: var(--surface-option);
   }
@@ -12297,7 +12388,7 @@ html.no-backdrop-blur {
   &__action-label {
     display: inline-flex;
     align-items: center;
-    line-height: 1;
+    line-height: var(--type-line-compact);
     transform: none;
     text-transform: uppercase;
     letter-spacing: var(--ls-100);
@@ -12306,15 +12397,32 @@ html.no-backdrop-blur {
   &__add-button {
     display: inline-flex;
     align-items: center;
+  }
 
-    &:active {
-      opacity: 1;
-    }
+  /* Botões da capa: sem translucidez no clique (`opacity` do `.button:active`). */
+  &__play-button:active,
+  &__add-button:active,
+  &__remove-button:active,
+  &__favorite-button:active,
+  &__gear-button:active {
+    opacity: 1;
+  }
+
+  /* Remover virou só-ícone: mesma caixa quadrada dos botões de
+     favorito/engrenagem para alinhar na linha de ação. */
+  &__remove-button--icon-only {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    place-items: center;
+    gap: 0;
   }
 
   &__add-button &__action-label {
     font-weight: var(--weight-regular);
-    line-height: 1;
+    line-height: var(--type-line-compact);
     transform: none;
   }
 
@@ -12422,12 +12530,18 @@ html.no-backdrop-blur {
 
 .modal--maximized .modal__favorite-button,
 .modal--maximized .modal__gear-button,
+.modal--maximized .modal__remove-button--icon-only,
 .sidebar--maximized ~ .container .modal__favorite-button,
 .sidebar--maximized ~ .container .modal__gear-button,
+.sidebar--maximized ~ .container .modal__remove-button--icon-only,
 .app-main:has(.sidebar--maximized) .modal__favorite-button,
-.app-main:has(.sidebar--maximized) .modal__gear-button {
+.app-main:has(.sidebar--maximized) .modal__gear-button,
+.app-main:has(.sidebar--maximized) .modal__remove-button--icon-only {
   width: 36px;
   height: 36px;
+  min-height: 36px;
+  padding: 0;
+  gap: 0;
 }
 
 .modal--maximized .modal__play-button svg,
@@ -13810,6 +13924,16 @@ button {
 }
 
 @media (max-width: 820px) {
+  .container:has(.page--library),
+  .container:has(.page--favorites) {
+    --library-inline-padding: var(--space-6);
+  }
+
+  .notifications-page {
+    padding-right: var(--space-6);
+    padding-left: var(--space-6);
+  }
+
   :root {
     --content-edge-padding: var(--space-4);
   }
@@ -13946,7 +14070,7 @@ button {
   }
 
   .notifications-page {
-    padding: 0 var(--space-6) var(--page-bottom-space);
+    padding: var(--space-6) var(--space-6) var(--page-bottom-space);
   }
 
   .notifications-hub__header {
@@ -14692,13 +14816,6 @@ button {
 .library-toolbar__sort-placeholder {
   display: block;
   width: 180px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-}
-
-.library-chip-placeholder {
-  display: inline-block;
-  width: 100px;
   height: 32px;
   border-radius: var(--radius-sm);
 }

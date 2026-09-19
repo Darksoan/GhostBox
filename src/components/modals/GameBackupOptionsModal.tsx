@@ -1,17 +1,23 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, MonitorDown, Trash2 } from "lucide-react";
+import { Eye, EyeOff, FolderOpen, History, Loader2 } from "lucide-react";
+import { CloudUpload } from "reicon-react";
 import type { GhostBoxGame } from "../../data";
+import type { CloudSave } from "../../lib/ghostboxApi.types";
 import { useSettings } from "../../context/settings";
+import { useAppData } from "../../context/AppDataContext";
 import { useOverlay } from "../../context/OverlayContext";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+
+function cloudSaveTimestamp(save: CloudSave): number {
+  const parsed = Date.parse(save.updatedAt || save.createdAt || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 const GAME_ACTIONS_MENU_WIDTH = 300;
 
 interface GameActionsMenuProps {
   open: boolean;
-  appId: string;
-  gameTitle: string;
   game: GhostBoxGame | null;
   trigger: HTMLElement | null;
   onClose: () => void;
@@ -19,21 +25,22 @@ interface GameActionsMenuProps {
 
 export function GameBackupOptionsModal({
   open,
-  appId,
-  gameTitle,
   game,
   trigger,
   onClose,
 }: GameActionsMenuProps) {
   const { appearance } = useSettings();
   const { showToast } = useOverlay();
-  const [confirmAction, setConfirmAction] = useState<"uninstall" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { hiddenProfileGameIds, setProfileGameHidden } = useAppData();
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [folderBusy, setFolderBusy] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState(false);
   const isEnglish = appearance.language === "en";
   const copy = (pt: string, en: string) => (isEnglish ? en : pt);
-  const isSteamInstalled =
-    game?.status === "installed" || game?.librarySource === "steam-installed";
+  const installPath = game?.installPath?.trim() ?? "";
+  const isHidden = game ? hiddenProfileGameIds.has(game.appId) : false;
+  const busy = backupBusy || folderBusy || restoreBusy;
 
   useLayoutEffect(() => {
     if (!open || !trigger) return;
@@ -51,14 +58,8 @@ export function GameBackupOptionsModal({
 
   useEffect(() => {
     if (!open) return;
-    setConfirmAction(null);
-    setBusy(false);
-  }, [appId, open]);
-
-  useEffect(() => {
-    if (!open) return;
     const handlePointerDown = (event: MouseEvent) => {
-      if (confirmAction) return;
+      if (busy) return;
       if (trigger?.contains(event.target as Node)) return;
       const menu = document.querySelector(".game-actions-menu");
       if (!menu?.contains(event.target as Node)) onClose();
@@ -68,11 +69,7 @@ export function GameBackupOptionsModal({
       event.preventDefault();
       event.stopImmediatePropagation();
       if (busy) return;
-      if (confirmAction) {
-        setConfirmAction(null);
-      } else {
-        onClose();
-      }
+      onClose();
     };
     window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("keydown", handleKeyDown, true);
@@ -80,95 +77,139 @@ export function GameBackupOptionsModal({
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [busy, confirmAction, onClose, open, trigger]);
+  }, [busy, onClose, open, trigger]);
 
-  const createDesktopShortcut = async () => {
-    if (!game || busy) return;
-    setBusy(true);
+  const handleOpenFolder = async () => {
+    if (!installPath || folderBusy) return;
+    setFolderBusy(true);
     try {
-      await ghostboxApi.createGameShortcut(game, "desktop");
+      await ghostboxApi.openInstallFolder(installPath);
+      onClose();
+    } catch (error) {
       showToast(
-        copy("Atalho na área de trabalho", "Desktop shortcut"),
-        copy("Atalho criado na área de trabalho.", "Desktop shortcut created."),
+        copy("Abrir pasta", "Open folder"),
+        error instanceof Error ? error.message : copy("Não foi possível abrir a pasta de instalação.", "Could not open the installation folder."),
+        "error",
+      );
+    } finally {
+      setFolderBusy(false);
+    }
+  };
+
+  const handleBackup = async () => {
+    if (!game || backupBusy) return;
+    setBackupBusy(true);
+    try {
+      const result = await ghostboxApi.backupGameToCloud(game);
+      if (!result) {
+        showToast(
+          copy("Fazer backup", "Back up now"),
+          copy("Nenhum save encontrado para backup.", "No saves found to back up."),
+          "error",
+        );
+        return;
+      }
+      showToast(
+        copy("Backup concluído", "Backup complete"),
+        copy(`Saves de "${game.title}" enviados para a nuvem.`, `Saves for "${game.title}" uploaded to the cloud.`),
         "success",
       );
       onClose();
     } catch (error) {
       showToast(
-        copy("Atalho na área de trabalho", "Desktop shortcut"),
-        error instanceof Error ? error.message : copy("Não foi possível criar o atalho.", "Could not create the shortcut."),
+        copy("Fazer backup", "Back up now"),
+        error instanceof Error ? error.message : copy("Não foi possível concluir o backup.", "Could not complete the backup."),
         "error",
       );
     } finally {
-      setBusy(false);
+      setBackupBusy(false);
     }
   };
 
-  const confirm = async () => {
-    if (!confirmAction || busy) return;
-    setBusy(true);
+  const handleRestore = async () => {
+    if (!game?.appId || restoreBusy) return;
+    setRestoreBusy(true);
     try {
-      if (confirmAction === "uninstall") {
-        await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
-        showToast(copy("Desinstalar", "Uninstall"), copy("Desinstalação aberta na Steam.", "Uninstall opened in Steam."), "info");
+      const saves = await ghostboxApi.listCloudSaves(game.appId);
+      const latestSave = saves.reduce<CloudSave | null>((latest, save) => {
+        if (!latest) return save;
+        return cloudSaveTimestamp(save) > cloudSaveTimestamp(latest) ? save : latest;
+      }, null);
+      if (!latestSave) {
+        showToast(
+          copy("Restaurar backup", "Restore backup"),
+          copy("Nenhum backup em nuvem encontrado para este jogo.", "No cloud backups found for this game."),
+          "error",
+        );
+        return;
       }
-      setConfirmAction(null);
+      const result = await ghostboxApi.restoreCloudSave(game, latestSave.id);
+      if (!result?.success) {
+        showToast(
+          copy("Restaurar backup", "Restore backup"),
+          copy("Não foi possível restaurar o backup.", "Could not restore the backup."),
+          "error",
+        );
+        return;
+      }
+      showToast(
+        copy("Backup restaurado", "Backup restored"),
+        copy(`Saves de "${game.title}" restaurados.`, `Saves for "${game.title}" restored.`),
+        "success",
+      );
       onClose();
     } catch (error) {
       showToast(
-        copy("Ajustes do jogo", "Game settings"),
-        error instanceof Error ? error.message : copy("Não foi possível concluir a ação.", "Could not complete the action."),
+        copy("Restaurar backup", "Restore backup"),
+        error instanceof Error ? error.message : copy("Não foi possível restaurar o backup.", "Could not restore the backup."),
         "error",
       );
     } finally {
-      setBusy(false);
+      setRestoreBusy(false);
     }
+  };
+
+  const handleToggleHidden = () => {
+    if (!game?.appId || busy) return;
+    setProfileGameHidden(game.appId, !isHidden);
+    showToast(
+      isHidden
+        ? copy("Visível no perfil", "Visible on profile")
+        : copy("Ocultado no perfil", "Hidden from profile"),
+      isHidden
+        ? copy(`"${game.title}" voltará a aparecer no seu perfil.`, `"${game.title}" will appear on your profile again.`)
+        : copy(`"${game.title}" não aparecerá mais no seu perfil.`, `"${game.title}" will no longer appear on your profile.`),
+      "success",
+    );
+    onClose();
   };
 
   if (!open || !position || typeof document === "undefined") return null;
 
   return createPortal(
-    <>
-      <div
-        className="game-actions-menu"
-        role="menu"
-        aria-label={copy("Ajustes do jogo", "Game settings")}
-        style={{ left: position.left, top: position.top }}
-      >
-        <button type="button" role="menuitem" onClick={() => setConfirmAction("uninstall")} disabled={!isSteamInstalled || busy}>
-          <Trash2 size={17} aria-hidden="true" />
-          {copy("Desinstalar", "Uninstall")}
-        </button>
-        <button type="button" role="menuitem" onClick={() => void createDesktopShortcut()} disabled={!game || busy}>
-          {busy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <MonitorDown size={17} aria-hidden="true" />}
-          {copy("Criar atalho na área de trabalho", "Create desktop shortcut")}
-        </button>
-      </div>
-      {confirmAction && (
-        <div className="backdrop backdrop--profile game-actions-menu__confirm-backdrop">
-          <section className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="game-actions-confirm-title">
-            <header className="confirm-modal__header">
-              <h3 id="game-actions-confirm-title">
-                {copy("Desinstalar jogo", "Uninstall game")}
-              </h3>
-            </header>
-            <div className="confirm-modal__content">
-              <p>
-                {copy(`A Steam será aberta para desinstalar "${gameTitle}".`, `Steam will open to uninstall "${gameTitle}".`)}
-              </p>
-            </div>
-            <div className="confirm-modal__actions">
-              <button type="button" className="button button--outline" onClick={() => setConfirmAction(null)} disabled={busy}>
-                {copy("Cancelar", "Cancel")}
-              </button>
-              <button type="button" className="button game-actions-menu__danger" onClick={() => void confirm()} disabled={busy}>
-                {busy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : copy("Desinstalar", "Uninstall")}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-    </>,
+    <div
+      className="game-actions-menu"
+      role="menu"
+      aria-label={copy("Ajustes do jogo", "Game settings")}
+      style={{ left: position.left, top: position.top }}
+    >
+      <button type="button" role="menuitem" onClick={() => void handleOpenFolder()} disabled={!installPath || busy}>
+        {folderBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <FolderOpen size={17} aria-hidden="true" />}
+        {copy("Abrir pasta", "Open folder")}
+      </button>
+      <button type="button" role="menuitem" onClick={() => void handleBackup()} disabled={!game || busy}>
+        {backupBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <CloudUpload size={17} aria-hidden="true" />}
+        {copy("Fazer backup", "Back up now")}
+      </button>
+      <button type="button" role="menuitem" onClick={() => void handleRestore()} disabled={!game?.appId || busy}>
+        {restoreBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <History size={17} aria-hidden="true" />}
+        {copy("Restaurar backup", "Restore backup")}
+      </button>
+      <button type="button" role="menuitem" onClick={handleToggleHidden} disabled={!game?.appId || busy}>
+        {isHidden ? <Eye size={17} aria-hidden="true" /> : <EyeOff size={17} aria-hidden="true" />}
+        {isHidden ? copy("Mostrar no perfil", "Show on profile") : copy("Ocultar no perfil", "Hide from profile")}
+      </button>
+    </div>,
     document.body,
   );
 }

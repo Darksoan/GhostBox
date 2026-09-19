@@ -31,6 +31,7 @@ import {
   clearAppNotifications,
   markAppNotificationsSeen,
   readAppNotifications,
+  restoreAppNotifications,
   type AppNotificationItem,
   type AppNotificationSeverity,
   type AppNotificationType,
@@ -311,6 +312,7 @@ export function NotificationsPage() {
   const { appearance, t } = useSettings();
   const [items, setItems] = useState<AppNotificationItem[]>(() => readAppNotifications());
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [clearedItems, setClearedItems] = useState<AppNotificationItem[] | null>(null);
 
   const refreshItems = useCallback(() => {
     setItems(readAppNotifications());
@@ -347,6 +349,7 @@ export function NotificationsPage() {
           type="button"
           className="notifications-hub__clear"
           onClick={() => {
+            setClearedItems(items);
             clearAppNotifications();
             setItems([]);
           }}
@@ -355,6 +358,21 @@ export function NotificationsPage() {
           {t("notifications.clear")}
         </button>
       </header>
+
+      {clearedItems ? (
+        <div className="notifications-hub__undo" role="status">
+          <span>{t("notifications.cleared")}</span>
+          <button
+            type="button"
+            onClick={() => {
+              restoreAppNotifications(clearedItems);
+              setClearedItems(null);
+            }}
+          >
+            {t("notifications.undo")}
+          </button>
+        </div>
+      ) : null}
 
       {items.length > 0 ? (
         <div className="notifications-hub__list">

@@ -88,7 +88,48 @@ fn ghostbox_tray_icon(
     ghostbox_icon()
 }
 
+#[cfg(windows)]
+fn windows_system_theme() -> Option<tauri::Theme> {
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD,
+    };
+
+    let key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+        .encode_utf16()
+        .collect();
+    let value: Vec<u16> = "SystemUsesLightTheme\0".encode_utf16().collect();
+    let mut system_uses_light_theme = 0_u32;
+    let mut size = std::mem::size_of_val(&system_uses_light_theme) as u32;
+
+    // The taskbar follows the Windows app theme, which can differ from the
+    // WebView's reported theme during startup.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            &mut system_uses_light_theme as *mut u32 as *mut _,
+            &mut size,
+        )
+    };
+
+    (status == 0).then(|| {
+        if system_uses_light_theme == 0 {
+            tauri::Theme::Dark
+        } else {
+            tauri::Theme::Light
+        }
+    })
+}
+
 fn system_theme(app: &tauri::AppHandle) -> tauri::Theme {
+    #[cfg(windows)]
+    if let Some(theme) = windows_system_theme() {
+        return theme;
+    }
+
     use tauri::Manager;
 
     app.get_webview_window(MAIN_WINDOW_LABEL)
@@ -496,8 +537,8 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
         let close_app = handle.clone();
         let close_window = window.clone();
         window.on_window_event(move |event| {
-            if let tauri::WindowEvent::ThemeChanged(theme) = event {
-                update_tray_icon(&close_app, *theme);
+            if let tauri::WindowEvent::ThemeChanged(_) = event {
+                update_tray_icon(&close_app, system_theme(&close_app));
             }
 
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -595,6 +636,21 @@ pub fn shell_open_external(app: tauri::AppHandle, url: String) -> Result<(), Str
 
     app.opener()
         .open_url(url.trim(), None::<&str>)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn shell_open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Pasta de instalação não encontrada.".to_string());
+    }
+    if !std::path::Path::new(trimmed).exists() {
+        return Err("Pasta de instalação não encontrada.".to_string());
+    }
+    app.opener()
+        .open_path(trimmed, None::<&str>)
         .map_err(|error| error.to_string())
 }
 

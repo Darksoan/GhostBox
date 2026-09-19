@@ -586,7 +586,12 @@ export const Sidebar = memo(function Sidebar({
                 danger: true,
                 onClick: () => {
                   const collectionId = collectionContextMenu.collection?.id;
-                  if (collectionId && collectionId !== FAVORITES_COLLECTION_ID) {
+                  const collectionName = collectionContextMenu.collection?.name ?? "";
+                  if (
+                    collectionId &&
+                    collectionId !== FAVORITES_COLLECTION_ID &&
+                    window.confirm(t("sidebar.deleteCollectionConfirm", { name: collectionName }))
+                  ) {
                     onDeleteCollection?.(collectionId);
                   }
                   setCollectionContextMenu((prev) => ({ ...prev, visible: false }));

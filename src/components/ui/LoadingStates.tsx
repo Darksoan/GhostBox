@@ -555,10 +555,6 @@ function LibraryPageLoadingState() {
       <div className="library-toolbar">
         <div className="library-toolbar__row">
           <div className="library-toolbar__sort-placeholder skeleton" />
-          <div className="library-toolbar__chips">
-            <span className="library-chip-placeholder skeleton" />
-            <span className="library-chip-placeholder skeleton" />
-          </div>
         </div>
       </div>
       <GameGridLoadingState dense portrait count={8} libraryCoverFade />
