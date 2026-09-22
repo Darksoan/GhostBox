@@ -10,6 +10,7 @@ import type {
   FeaturedResult,
   GameDatabaseRequest,
   GameDatabaseResult,
+  GameInstallationFinishedEvent,
   GamePlaytimeSnapshot,
   GameShortcutResult,
   SteamGameReviewsResult,
@@ -832,6 +833,28 @@ export const ghostboxApi = {
         error: "Não foi possível adicionar o jogo à Biblioteca.",
       },
     );
+  },
+
+  onGameInstallationFinished(
+    callback: (event: GameInstallationFinishedEvent) => void,
+  ): () => void {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<GameInstallationFinishedEvent>(
+      "game-installation-finished",
+      (event) => callback(event.payload),
+    ).then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+      } else {
+        unlisten = nextUnlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   },
 
   registerSteamLibraryGame(game: GhostBoxGame): Promise<AddGameResult> {

@@ -184,7 +184,8 @@
   }
 
   &:disabled {
-    opacity: 0.6;
+    color: var(--text-disabled);
+    opacity: var(--control-disabled-opacity);
     cursor: default;
   }
 }
@@ -197,6 +198,12 @@
   &:hover:not(:disabled) {
     opacity: 0.88;
     background: var(--text-strong);
+  }
+
+  &:disabled {
+    border-color: transparent;
+    background: var(--surface-option);
+    color: var(--text-disabled);
   }
 }
 

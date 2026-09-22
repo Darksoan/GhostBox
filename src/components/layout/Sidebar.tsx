@@ -26,6 +26,7 @@ import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { isSteamConnected } from "../../lib/steamProfile";
 import { resolveSidebarIdentity } from "../../lib/sidebarIdentity";
+import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import {
   readSidebarCollectionsCollapsed,
   readSidebarExpandedCollections,
@@ -145,7 +146,17 @@ export const Sidebar = memo(function Sidebar({
       const steamId = id?.match(/^steam-(\d+)$/i)?.[1];
       if (steamId) keys.add(steamId);
       for (const key of keys) {
-        if (!map.has(key)) map.set(key, game);
+        const current = map.get(key);
+        // Cloud restoration can briefly supply a fallback title while a local
+        // library scan already knows the real name. Never let that placeholder
+        // win simply because its list happens to be traversed first.
+        if (
+          !current ||
+          (isSteamTitlePlaceholder(current.title, current.appId) &&
+            !isSteamTitlePlaceholder(game.title, game.appId))
+        ) {
+          map.set(key, game);
+        }
       }
     };
     const gamesByKey = new Map<string, GhostBoxGame>();

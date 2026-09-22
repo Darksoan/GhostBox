@@ -253,17 +253,52 @@ pub(crate) fn is_startup_setting_enabled(app: &tauri::AppHandle, key: &str) -> b
     startup_setting_enabled(&load_startup_settings(app), key)
 }
 
+#[cfg(all(windows, not(debug_assertions)))]
+fn quote_windows_autostart_executable(app: &tauri::AppHandle) -> Result<(), String> {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
+    use winreg::RegKey;
+
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let run_key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            KEY_SET_VALUE,
+        )
+        .map_err(|error| error.to_string())?;
+    let command = format!("\"{}\"", executable.display());
+
+    run_key
+        .set_value(&app.package_info().name, &command)
+        .map_err(|error| error.to_string())
+}
+
 pub(crate) fn apply_autostart_settings(
     app: &tauri::AppHandle,
     settings: &serde_json::Value,
 ) -> Result<(), String> {
-    use tauri_plugin_autostart::ManagerExt;
+    // A build de desenvolvimento depende do Vite em localhost e exibe console.
+    // Nunca a registre no login nem deixe que ela substitua a build instalada.
+    #[cfg(debug_assertions)]
+    {
+        let _ = (app, settings);
+        return Ok(());
+    }
 
-    let autostart = app.autolaunch();
-    if startup_setting_enabled(settings, "openAtLogin") {
-        autostart.enable().map_err(|error| error.to_string())
-    } else {
-        autostart.disable().map_err(|error| error.to_string())
+    #[cfg(not(debug_assertions))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+
+        let autostart = app.autolaunch();
+        if startup_setting_enabled(settings, "openAtLogin") {
+            autostart.enable().map_err(|error| error.to_string())?;
+
+            #[cfg(all(windows, not(debug_assertions)))]
+            quote_windows_autostart_executable(app)?;
+
+            Ok(())
+        } else {
+            autostart.disable().map_err(|error| error.to_string())
+        }
     }
 }
 

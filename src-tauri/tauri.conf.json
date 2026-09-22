@@ -42,10 +42,11 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
-    "resources": [
-      "binaries/gbe_fork/**/*",
-      "icons/desktopicon.ico"
-    ],
+    "resources": {
+      "binaries/gbe_fork/": "binaries/gbe_fork/",
+      "icons/desktopicon.ico": "icons/desktopicon.ico",
+      "../sidecars/steamkit-worker/": "steamkit-worker/"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",

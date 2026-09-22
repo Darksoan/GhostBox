@@ -519,8 +519,10 @@
     }
 
     &:disabled {
+      background: var(--surface-option);
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 0.5;
+      opacity: var(--control-disabled-opacity);
     }
   }
 
@@ -550,8 +552,9 @@
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 0.5;
+      opacity: var(--control-disabled-opacity);
     }
   }
 

@@ -119,7 +119,8 @@
   }
 
   &:disabled {
-    opacity: 0.68;
+    color: var(--text-disabled);
+    opacity: var(--control-disabled-opacity);
     cursor: default;
   }
 

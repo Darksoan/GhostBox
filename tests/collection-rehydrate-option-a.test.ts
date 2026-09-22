@@ -25,6 +25,16 @@ describe("option A: collections keep non-library games", () => {
     expect(result[0].games[0].title).toBe("Real Title");
   });
 
+  it("replaces a Steam fallback title with the resolved name", () => {
+    const fallback = { id: "steam-367520", appId: "367520", title: "Steam App 367520" } as never;
+    const resolved = { id: "steam-367520", appId: "367520", title: "Hollow Knight" } as never;
+    const collections = [
+      { id: "c1", name: "C", gameIds: ["steam-367520"], games: [fallback] },
+    ] as never;
+    const result = rehydrateUserCollectionGames(collections, [resolved]) as Array<{ games: Array<{ title: string }> }>;
+    expect(result[0].games[0].title).toBe("Hollow Knight");
+  });
+
   it("resolves steam- prefixed variants", () => {
     const known = { id: "steam-123", appId: "123", title: "Steam Game" } as never;
     const collections = [{ id: "c1", name: "C", gameIds: ["123"], games: [] }] as never;

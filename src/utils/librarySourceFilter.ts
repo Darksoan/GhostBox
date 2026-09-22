@@ -24,6 +24,7 @@ export function isLibrarySourceFilter(
  * "jogáveis", não necessariamente instalados.
  */
 export function isLocallyInstalledGame(game: GhostBoxGame): boolean {
+  if (game.steamDownloadPending) return false;
   return (
     game.status === "installed" || game.librarySource === "steam-installed"
   );

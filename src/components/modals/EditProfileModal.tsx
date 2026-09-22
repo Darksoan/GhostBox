@@ -359,6 +359,7 @@ export function EditProfileModal({
   const avatarCropImageStyle = pendingAvatar
     ? {
         objectPosition: `${avatarCropPosition.x}% ${avatarCropPosition.y}%`,
+        transformOrigin: `${avatarCropPosition.x}% ${avatarCropPosition.y}%`,
         transform: `scale(${avatarCropPosition.scale})`,
       }
     : undefined;

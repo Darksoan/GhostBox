@@ -3,7 +3,6 @@ import {
   Crop,
   ImageUp,
   SquareArrowOutUpRight,
-  createLucideIcon,
   Trash,
 } from "lucide-react";
 import {
@@ -27,14 +26,6 @@ import {
   encodeAvatarDataUrl,
   encodeBannerDataUrl,
 } from "../../utils/profileImages";
-
-// Lucide SaveCheck (ISC), ainda indisponível na versão instalada.
-const SaveCheck = createLucideIcon("SaveCheck", [
-  ["path", { d: "M12.5 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10.2a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4v4.35", key: "outline" }],
-  ["path", { d: "m16 19 2 2 4-4", key: "check" }],
-  ["path", { d: "M17 15.13V14a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7", key: "label" }],
-  ["path", { d: "M7 3v4a1 1 0 0 0 1 1h7", key: "slot" }],
-]);
 
 type BannerPosition = NonNullable<SteamProfile["bannerPosition"]>;
 type AvatarCropPosition = { x: number; y: number; scale: number };
@@ -86,6 +77,7 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
   const [avatarUrl, setAvatarUrl] = useState(() => profile?.avatarUrl || "");
   const [pendingAvatar, setPendingAvatar] = useState<{ source: string; type: string } | null>(null);
   const [avatarCropPosition, setAvatarCropPosition] = useState<AvatarCropPosition>(defaultAvatarCropPosition);
+  const [isAvatarCropDragging, setIsAvatarCropDragging] = useState(false);
   const [bannerUrl, setBannerUrl] = useState(() => profile?.bannerUrl || "");
   const [failedBannerPreviewSource, setFailedBannerPreviewSource] = useState("");
   const [bannerPosition, setBannerPosition] = useState<BannerPosition>(() =>
@@ -306,6 +298,7 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
     if (!pendingAvatar) return;
 
     event.currentTarget.setPointerCapture(event.pointerId);
+    setIsAvatarCropDragging(true);
     avatarDragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -332,6 +325,7 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
   const handleAvatarCropPointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (avatarDragRef.current?.pointerId === event.pointerId) {
       avatarDragRef.current = null;
+      setIsAvatarCropDragging(false);
     }
   }, []);
 
@@ -369,6 +363,7 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
   const avatarCropImageStyle = pendingAvatar
     ? {
         objectPosition: `${avatarCropPosition.x}% ${avatarCropPosition.y}%`,
+        transformOrigin: `${avatarCropPosition.x}% ${avatarCropPosition.y}%`,
         transform: `scale(${avatarCropPosition.scale})`,
       }
     : undefined;
@@ -389,12 +384,17 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
           </div>
 
           <div className="edit-profile-modal__avatar-cropper">
-            <div
-              className="edit-profile-modal__avatar-crop-stage"
-              onPointerDown={handleAvatarCropPointerDown}
-              onPointerMove={handleAvatarCropPointerMove}
-              onPointerUp={handleAvatarCropPointerEnd}
-              onPointerCancel={handleAvatarCropPointerEnd}
+              <div
+                className={`edit-profile-modal__avatar-crop-stage${
+                  isAvatarCropDragging
+                    ? " edit-profile-modal__avatar-crop-stage--dragging"
+                    : ""
+                }`}
+                onPointerDown={handleAvatarCropPointerDown}
+                onPointerMove={handleAvatarCropPointerMove}
+                onPointerUp={handleAvatarCropPointerEnd}
+                onPointerCancel={handleAvatarCropPointerEnd}
+                onLostPointerCapture={() => setIsAvatarCropDragging(false)}
               onWheel={handleAvatarCropWheel}
             >
               <img
@@ -439,50 +439,40 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
           <div className="profile-page__edit-form">
             <div className="profile-page__edit-identity">
               <div className="profile-page__edit-avatar-row">
-                <button
-                  type="button"
-                  className="profile-page__edit-avatar-btn"
-                  onClick={handleAvatarChange}
-                  aria-label={t("profile.changeAvatar")}
-                >
-                  <img
-                    src={avatarPreviewSource || avatarPlaceholder}
-                    alt=""
-                    decoding="async"
-                  />
-                  <span className="profile-page__edit-avatar-badge" aria-hidden="true">
-                    <Camera size={18} />
-                  </span>
-                </button>
+                <div className="profile-page__edit-avatar-preview">
+                  <button
+                    type="button"
+                    className="profile-page__edit-avatar-btn"
+                    onClick={handleAvatarChange}
+                    aria-label={t("profile.changeAvatar")}
+                  >
+                    <img
+                      src={avatarPreviewSource || avatarPlaceholder}
+                      alt=""
+                      decoding="async"
+                    />
+                    <span className="profile-page__edit-avatar-change-icon" aria-hidden="true">
+                      <Camera size={22} />
+                    </span>
+                  </button>
+                  {avatarUrl ? (
+                    <button
+                      type="button"
+                      className="profile-page__edit-avatar-badge"
+                      onClick={handleOpenAvatarCrop}
+                      aria-label={t("profile.cropAvatar")}
+                    >
+                      <Crop size={18} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
                 <div className="profile-page__edit-field">
                   <h4>{t("profile.profileAvatar")}</h4>
                   <p>{t("profile.avatarFormatHelp")}</p>
-                  <div className="profile-page__edit-avatar-actions">
-                    <button
-                      type="button"
-                      className="button"
-                      onClick={handleAvatarChange}
-                    >
-                      <ImageUp size={18} aria-hidden="true" />
-                      <span>{t("profile.changeAvatar")}</span>
-                    </button>
-                    {avatarUrl ? (
-                      <button
-                        type="button"
-                        className="button profile-page__edit-crop-btn"
-                        onClick={handleOpenAvatarCrop}
-                        aria-label={t("profile.cropAvatar")}
-                      >
-                        <Crop size={18} aria-hidden="true" />
-                        <span>{t("profile.cropAvatar")}</span>
-                      </button>
-                    ) : null}
-                  </div>
                 </div>
               </div>
               <div className="profile-page__edit-field profile-page__edit-name">
                 <label htmlFor="profile-display-name">{t("profile.displayName")}</label>
-                <p id="profile-display-name-help">{t("profile.displayNameHelp")}</p>
                 <input
                   id="profile-display-name"
                   className="profile-page__edit-input"
@@ -490,7 +480,6 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder={t("profile.displayNamePlaceholder")}
-                  aria-describedby="profile-display-name-help"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -584,7 +573,6 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
               disabled={!displayName.trim() || isSaving}
               onClick={handleSave}
             >
-              <SaveCheck size={18} aria-hidden="true" />
               <span>{isSaving ? t("profile.saving") : t("profile.saveChanges")}</span>
             </button>
           </div>

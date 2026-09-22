@@ -7,6 +7,7 @@ import { PagePlaceholder } from "../ui/LoadingStates";
 import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
+import { isLocallyInstalledGame } from "../../utils/librarySourceFilter";
 import {
   getLoadedGameModalModule,
   loadGameModalModule,
@@ -185,10 +186,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             }
             isAdded={appData.availableLibraryGameAppIds.has(selectedAppId)}
             isInstalled={appData.addedLibraryGameAppIds.has(selectedAppId)}
-            isLocallyInstalled={
-              mergedGame.status === "installed" ||
-              mergedGame.librarySource === "steam-installed"
-            }
+            isLocallyInstalled={isLocallyInstalledGame(mergedGame)}
             isRemoving={
               appData.removingGameId === selectedGame.id ||
               appData.removingGameId === mergedGame.id

@@ -90,9 +90,7 @@ fn ghostbox_tray_icon(
 
 #[cfg(windows)]
 fn windows_system_theme() -> Option<tauri::Theme> {
-    use windows_sys::Win32::System::Registry::{
-        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD,
-    };
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 
     let key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
         .encode_utf16()

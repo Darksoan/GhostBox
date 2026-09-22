@@ -80,13 +80,16 @@
 
   // --- Texto e ícones ---
   --text-primary: var(--n-12);
-  --text-secondary: var(--n-10);
-  --text-tertiary: var(--n-8);
+  --text-secondary: var(--n-11);
+  --text-tertiary: var(--n-10);
   --icon-default: var(--n-10);
   --text-strong: var(--text-primary);
   --color-text: var(--text-primary);
   --text-muted: var(--text-secondary);
   --text-faint: var(--text-tertiary);
+  --text-disabled: var(--text-tertiary);
+  --icon-disabled: var(--text-disabled);
+  --control-disabled-opacity: 0.6;
 
   // --- Overlay / scrim ---
   --overlay-subtle: var(--a-scrim-1);

@@ -83,6 +83,10 @@ export type GhostBoxGame = {
   /** Marcadores de instalação via LuaTools — forçam procedência GhostBox. */
   luaToolsManifests?: string[];
   luaToolsManifestFiles?: string[];
+  /** Download dos depots iniciado, mas appmanifest final ainda não gravado. */
+  installationPending?: boolean;
+  /** Bootstrap concluído; a Steam ainda precisa baixar o restante. */
+  steamDownloadPending?: boolean;
   title: string;
   subtitle: string;
   status: GameStatus;
@@ -205,10 +209,27 @@ export type AddGameResult =
       api: string;
       installedPath: string;
       manifestCount: number;
+      installationStarted?: boolean;
+      requiresSteamRestart?: boolean;
       libraryGame: GhostBoxGame;
     }
   | {
       success: false;
+      error: string;
+    };
+
+export type GameInstallationFinishedEvent =
+  | {
+      success: true;
+      appId: string;
+      requiresSteamRestart: boolean;
+      steamDownloadPending: boolean;
+      libraryGame: GhostBoxGame;
+    }
+  | {
+      success: false;
+      appId: string;
+      title: string;
       error: string;
     };
 

@@ -32,6 +32,8 @@ mod achievement_monitor;
 mod backup;
 mod catalogue;
 mod catalogue_cache;
+mod cdndownload;
+mod chunk_index;
 mod cloud_save;
 mod ghostbox_library;
 mod goldberg;
@@ -46,6 +48,7 @@ mod settings;
 mod steam;
 mod steam_appcache;
 mod steam_appinfo;
+mod steam_appmanifest;
 mod steam_assets;
 mod steam_localconfig;
 mod steam_pics;
@@ -1725,10 +1728,7 @@ async fn game_create_shortcut(
         .env("GHOSTBOX_SHORTCUT_NAME", &title)
         .env("GHOSTBOX_SHORTCUT_TARGET", &target)
         .env("GHOSTBOX_SHORTCUT_ARGUMENTS", &arguments)
-        .env(
-            "GHOSTBOX_SHORTCUT_WORKING_DIRECTORY",
-            &working_directory,
-        )
+        .env("GHOSTBOX_SHORTCUT_WORKING_DIRECTORY", &working_directory)
         .env("GHOSTBOX_SHORTCUT_ICON", &icon_path)
         .output()
         .map_err(|error| format!("Could not create shortcut: {error}"))?;
@@ -1908,6 +1908,7 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                cdndownload::shutdown_download_worker();
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });

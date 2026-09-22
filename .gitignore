@@ -53,9 +53,11 @@ src/app.css
 # Superpowers brainstorming session mockups (local scratch)
 .superpowers/
 
-# .NET intermediate build cache do sidecar. O binario em bin/Debug/net8.0/ e
-# versionado de proposito (ver sidecars/README.md); obj/ e so cache local.
+# .NET build artifacts. `npm run sidecar:build` publishes the self-contained
+# worker before Tauri starts or creates an installer.
 sidecars/steamkit-poc/obj/
+sidecars/steamkit-poc/bin/
+sidecars/steamkit-worker/
 
 # Config local do Claude Code (regras deny de leitura; nao compartilhado)
 .claude/settings.local.json

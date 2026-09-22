@@ -4,7 +4,7 @@ import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
 describe("Catalogue filter search layout", () => {
-  it("keeps the catalogue sort trigger secondary on hover and open", () => {
+  it("keeps catalogue triggers tertiary at rest and secondary on interaction", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     let baseColor: string | undefined;
     const catalogueOverrideColors: string[] = [];
@@ -25,6 +25,8 @@ describe("Catalogue filter search layout", () => {
 
     expect(baseColor).toBe("var(--text-secondary)");
     expect(catalogueOverrideColors).not.toContain("var(--text-primary)");
+    expect(catalogueOverrideColors).toContain("var(--text-tertiary)");
+    expect(catalogueOverrideColors).toContain("var(--text-secondary)");
   });
 
   it("keeps the filter searchbar flat on hover and focus without decorative border", () => {

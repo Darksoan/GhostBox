@@ -293,7 +293,9 @@ fn list_executables_blocking(install_path: &str, game_title: &str) -> Result<Vec
             let Ok(entry) = entry else { continue };
             entries_seen += 1;
             let path = entry.path();
-            let Ok(file_type) = entry.file_type() else { continue };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
 
             // Symlinks and Windows junctions can escape the installation root or
             // create cycles. Never traverse them during an automatic scan.
@@ -327,7 +329,8 @@ fn list_executables_blocking(install_path: &str, game_title: &str) -> Result<Vec
                 .iter()
                 .filter(|word| word.len() >= 3 && stem.contains(word.as_str()))
                 .count() as i64;
-            let score = title_matches * 100 + (if depth <= 1 { 20 } else { 0 })
+            let score = title_matches * 100
+                + (if depth <= 1 { 20 } else { 0 })
                 + ((size / (1024 * 1024)).min(50) as i64);
             let reason = if title_matches > 0 {
                 "title-match"
@@ -352,8 +355,14 @@ fn list_executables_blocking(install_path: &str, game_title: &str) -> Result<Vec
     }
 
     candidates.sort_by(|left, right| {
-        let right_score = right.get("score").and_then(Value::as_i64).unwrap_or_default();
-        let left_score = left.get("score").and_then(Value::as_i64).unwrap_or_default();
+        let right_score = right
+            .get("score")
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
+        let left_score = left
+            .get("score")
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
         right_score.cmp(&left_score).then_with(|| {
             text_value(left.get("relativePath")).cmp(&text_value(right.get("relativePath")))
         })
@@ -750,11 +759,8 @@ mod tests {
         std::fs::write(root.join("setup.exe"), b"setup").unwrap();
         std::fs::write(root.join("_CommonRedist").join("dxsetup.exe"), b"redist").unwrap();
 
-        let candidates = list_executables_blocking(
-            root.to_string_lossy().as_ref(),
-            "Portal 2",
-        )
-        .unwrap();
+        let candidates =
+            list_executables_blocking(root.to_string_lossy().as_ref(), "Portal 2").unwrap();
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0]["fileName"], "Portal2.exe");
@@ -795,12 +801,18 @@ mod tests {
             "ghostbox-executables-depth-{}",
             uuid::Uuid::new_v4().simple()
         ));
-        let nested = root.join("one").join("two").join("three").join("four").join("five").join("six");
+        let nested = root
+            .join("one")
+            .join("two")
+            .join("three")
+            .join("four")
+            .join("five")
+            .join("six");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(nested.join("DeepGame.exe"), b"game").unwrap();
 
-        let candidates = list_executables_blocking(root.to_string_lossy().as_ref(), "Deep Game")
-            .unwrap();
+        let candidates =
+            list_executables_blocking(root.to_string_lossy().as_ref(), "Deep Game").unwrap();
 
         assert_eq!(candidates[0]["fileName"], "DeepGame.exe");
         std::fs::remove_dir_all(root).ok();
@@ -813,8 +825,8 @@ mod tests {
             uuid::Uuid::new_v4().simple()
         ));
 
-        let error = list_executables_blocking(missing.to_string_lossy().as_ref(), "Missing")
-            .unwrap_err();
+        let error =
+            list_executables_blocking(missing.to_string_lossy().as_ref(), "Missing").unwrap_err();
 
         assert!(error.contains("Could not resolve installation folder"));
     }
@@ -834,8 +846,8 @@ mod tests {
         std::fs::write(outside.join("OutsideGame.exe"), b"game").unwrap();
         symlink(&outside, root.join("linked")).unwrap();
 
-        let candidates = list_executables_blocking(root.to_string_lossy().as_ref(), "Outside Game")
-            .unwrap();
+        let candidates =
+            list_executables_blocking(root.to_string_lossy().as_ref(), "Outside Game").unwrap();
 
         assert!(candidates.is_empty());
         std::fs::remove_dir_all(root).ok();
@@ -861,8 +873,8 @@ mod tests {
             return;
         }
 
-        let candidates = list_executables_blocking(root.to_string_lossy().as_ref(), "Outside Game")
-            .unwrap();
+        let candidates =
+            list_executables_blocking(root.to_string_lossy().as_ref(), "Outside Game").unwrap();
 
         assert!(candidates.is_empty());
         std::fs::remove_dir_all(root).ok();

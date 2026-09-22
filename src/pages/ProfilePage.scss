@@ -1957,14 +1957,9 @@ html.no-backdrop-blur .profile-page {
       color: var(--text-tertiary);
     }
 
-    &:hover,
-    &:focus {
-      background: var(--surface-option-hover);
-    }
-
     &:focus-visible {
-      outline: 2px solid var(--focus-ring-color);
-      outline-offset: 2px;
+      outline: none;
+      outline-offset: 0;
     }
   }
 
@@ -1976,11 +1971,11 @@ html.no-backdrop-blur .profile-page {
     min-width: 0;
   }
 
-  &__edit-avatar-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-4);
+  &__edit-avatar-preview {
+    position: relative;
+    flex: 0 0 auto;
+    width: 80px;
+    height: 80px;
   }
 
   &__edit-avatar-btn {
@@ -2000,11 +1995,37 @@ html.no-backdrop-blur .profile-page {
       height: 100%;
       border-radius: inherit;
       object-fit: cover;
+      transition: filter var(--motion-fast) var(--ease);
     }
 
-    &:hover .profile-page__edit-avatar-badge {
-      background: var(--surface-option-active);
+    &:hover img,
+    &:focus-visible img {
+      filter: brightness(0.72);
     }
+
+    &:hover .profile-page__edit-avatar-change-icon,
+    &:focus-visible .profile-page__edit-avatar-change-icon {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+    }
+
+  }
+
+  &__edit-avatar-change-icon {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--text-primary);
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.25);
+    transition: opacity var(--motion-fast) cubic-bezier(0.2, 0, 0, 1), transform var(--motion-fast) cubic-bezier(0.2, 0, 0, 1);
   }
 
   &__edit-avatar-badge {
@@ -2015,13 +2036,30 @@ html.no-backdrop-blur .profile-page {
     place-items: center;
     width: 28px;
     height: 28px;
+    padding: 0;
+    border: 0;
     border-radius: var(--radius-circle);
     background: var(--surface-raised);
-    color: var(--text-primary);
-    transition: background-color var(--motion-fast) var(--ease);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: background-color var(--motion-fast) var(--ease), transform var(--motion-fast) var(--ease);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-option-active);
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
   }
 
-  &__edit-avatar-actions .button,
   &__edit-banner-toolbar .button,
   &__edit-banner-overlay .button {
     align-items: center;
@@ -2030,7 +2068,7 @@ html.no-backdrop-blur .profile-page {
     padding: var(--space-4) var(--space-6);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
 
     > svg {
       flex: 0 0 auto;
@@ -2047,6 +2085,7 @@ html.no-backdrop-blur .profile-page {
 
   &__edit-save-btn {
     margin-left: auto;
+    color: var(--text-tertiary);
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
@@ -2099,7 +2138,7 @@ html.no-backdrop-blur .profile-page {
 
   &__edit-banner-overlay-btn {
     background: var(--surface-option);
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     border: 0;
 
     &:hover:not(:disabled),
@@ -2218,6 +2257,15 @@ html.no-backdrop-blur .profile-page {
     justify-content: flex-end;
     gap: var(--space-3);
     margin-top: var(--space-4);
+
+    .button {
+      color: var(--text-tertiary);
+
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        color: var(--text-secondary);
+      }
+    }
   }
-}
+}
 

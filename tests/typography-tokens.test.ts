@@ -85,19 +85,19 @@ describe("Typography tokens", () => {
     expect(resolveToken("--dropdown-option-hover", tokens)).toBe("#1a1a1a");
   });
 
-  it("maps text roles to evenly separated neutral steps", () => {
+  it("maps text roles to the canonical three-level neutral hierarchy", () => {
     const tokens = collectTokens();
 
     expect(tokens.get("--text-primary")).toBe("var(--n-12)");
-    expect(tokens.get("--text-secondary")).toBe("var(--n-10)");
-    expect(tokens.get("--text-tertiary")).toBe("var(--n-8)");
+    expect(tokens.get("--text-secondary")).toBe("var(--n-11)");
+    expect(tokens.get("--text-tertiary")).toBe("var(--n-10)");
     expect(tokens.get("--text-strong")).toBe("var(--text-primary)");
     expect(tokens.get("--text-muted")).toBe("var(--text-secondary)");
     expect(tokens.get("--text-faint")).toBe("var(--text-tertiary)");
     expect(tokens.get("--n-8")).toBe("#8c8c8c");
     expect(tokens.get("--n-9")).toBe("#a3a3a3");
     expect(tokens.get("--n-10")).toBe("#b8b8b8");
-    expect(tokens.get("--n-11")).toBe("#e9e9e9");
+    expect(tokens.get("--n-11")).toBe("#c8c8c8");
     expect(tokens.get("--n-12")).toBe("#f2f2f2");
   });
 

@@ -1101,7 +1101,8 @@ async fn connect_steam_account(app: &tauri::AppHandle) -> Result<serde_json::Val
     // propagated, never swallowed. Claiming "connected" on a failed link used
     // to leave users believing Steam was their way back in when only a local
     // profile existed.
-    match crate::cloud_save::cloud_claim_steam_callback(app, callback.url.as_str(), &profile).await {
+    match crate::cloud_save::cloud_claim_steam_callback(app, callback.url.as_str(), &profile).await
+    {
         Ok(cloud_session) => {
             let success_message = if display_name.is_empty() {
                 "Steam account connected.".to_string()
@@ -1447,8 +1448,7 @@ pub async fn steam_get_account_stats(
                                 &steam_id,
                                 &owned_app_ids_from_stats(&owned_games),
                             );
-                            let fallback_cache =
-                                load_steam_account_stats_cache(&app, &steam_id);
+                            let fallback_cache = load_steam_account_stats_cache(&app, &steam_id);
                             return Ok(build_steam_account_stats(
                                 &steam_id,
                                 &owned_games,
@@ -1480,9 +1480,7 @@ pub async fn steam_get_account_stats(
         // sobrescreveriam totais válidos e, pelo guarda de `fetchedAt` no
         // frontend, bloqueariam respostas boas posteriores (login novo travado
         // em zero conquistas). Mesmo princípio do caminho de proxy falho acima.
-        return Err(
-            "Steam stats unavailable without Web API key or stats proxy".to_string(),
-        );
+        return Err("Steam stats unavailable without Web API key or stats proxy".to_string());
     }
 
     let client = reqwest::Client::builder()
@@ -1857,6 +1855,9 @@ fn parse_app_manifest(path: &std::path::Path) -> Option<serde_json::Value> {
     let mut name = String::new();
     let mut install_dir = String::new();
     let mut size_on_disk = String::new();
+    let mut state_flags = String::new();
+    let mut bytes_to_download = String::new();
+    let mut bytes_downloaded = String::new();
 
     for line in contents.lines() {
         if app_id.is_empty() {
@@ -1870,6 +1871,15 @@ fn parse_app_manifest(path: &std::path::Path) -> Option<serde_json::Value> {
         }
         if size_on_disk.is_empty() {
             size_on_disk = parse_vdf_string_value(line, "SizeOnDisk").unwrap_or_default();
+        }
+        if state_flags.is_empty() {
+            state_flags = parse_vdf_string_value(line, "StateFlags").unwrap_or_default();
+        }
+        if bytes_to_download.is_empty() {
+            bytes_to_download = parse_vdf_string_value(line, "BytesToDownload").unwrap_or_default();
+        }
+        if bytes_downloaded.is_empty() {
+            bytes_downloaded = parse_vdf_string_value(line, "BytesDownloaded").unwrap_or_default();
         }
     }
 
@@ -1896,21 +1906,32 @@ fn parse_app_manifest(path: &std::path::Path) -> Option<serde_json::Value> {
     } else {
         String::new()
     };
+    let fully_installed = state_flags == "4";
+    let total_download_bytes = bytes_to_download.parse::<u64>().unwrap_or(0);
+    let downloaded_bytes = bytes_downloaded.parse::<u64>().unwrap_or(0);
+    let progress = if fully_installed {
+        100
+    } else if total_download_bytes > 0 {
+        (downloaded_bytes.saturating_mul(100) / total_download_bytes).min(100)
+    } else {
+        0
+    };
 
     Some(serde_json::json!({
         "appId": app_id,
         "id": format!("steam-{app_id}"),
         "librarySource": "steam-installed",
         "title": name,
-        "subtitle": "Instalado via Steam",
-        "status": "installed",
+        "subtitle": if fully_installed { "Instalado via Steam" } else { "Download pendente na Steam" },
+        "status": if fully_installed { "installed" } else { "queued" },
+        "steamDownloadPending": !fully_installed,
         "hours": 0,
         "playTimeInMilliseconds": 0,
         "lastTimePlayed": null,
         "rating": 0,
         "size": size,
         "release": "",
-        "progress": 100,
+        "progress": progress,
         "accent": "#66c0f4",
         "cover": cover_url,
         "hero": hero_url,
@@ -2185,4 +2206,32 @@ fn is_steam_process_running() -> bool {
 #[tauri::command]
 pub fn steam_is_running() -> bool {
     is_steam_process_running()
+}
+
+#[cfg(test)]
+mod appmanifest_scan_tests {
+    use super::parse_app_manifest;
+
+    #[test]
+    fn partial_appmanifest_is_not_reported_as_locally_installed() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-steam-scan-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        let steamapps = root.join("steamapps");
+        std::fs::create_dir_all(&steamapps).unwrap();
+        let manifest = steamapps.join("appmanifest_10.acf");
+        std::fs::write(
+            &manifest,
+            "\"AppState\"\n{\n\t\"appid\"\t\t\"10\"\n\t\"name\"\t\t\"Pending Game\"\n\t\"StateFlags\"\t\t\"2\"\n\t\"installdir\"\t\t\"Pending Game\"\n\t\"SizeOnDisk\"\t\t\"10485760\"\n\t\"BytesToDownload\"\t\t\"50000000\"\n\t\"BytesDownloaded\"\t\t\"10485760\"\n}\n",
+        )
+        .unwrap();
+
+        let game = parse_app_manifest(&manifest).unwrap();
+        assert_eq!(game["status"], "queued");
+        assert_eq!(game["steamDownloadPending"], true);
+        assert_ne!(game["progress"], 100);
+        std::fs::remove_dir_all(root).ok();
+    }
 }

@@ -114,8 +114,7 @@ fn filter_demo_games_with_disk_cache(app: &tauri::AppHandle, games: Vec<Value>) 
             if is_steam_demo(game) {
                 return false;
             }
-            let app_id = text(game.get("appId"))
-                .if_empty_then(|| text(game.get("app_id")));
+            let app_id = text(game.get("appId")).if_empty_then(|| text(game.get("app_id")));
             if app_id.is_empty() {
                 return true;
             }
@@ -876,7 +875,12 @@ fn steam_details_proxy_base_url() -> Option<reqwest::Url> {
 }
 
 fn steam_app_type_cache_path(app: &tauri::AppHandle) -> Option<PathBuf> {
-    Some(app.path().app_data_dir().ok()?.join(STEAM_APP_TYPE_CACHE_FILE))
+    Some(
+        app.path()
+            .app_data_dir()
+            .ok()?
+            .join(STEAM_APP_TYPE_CACHE_FILE),
+    )
 }
 
 fn steam_app_type_cache_memory() -> &'static Mutex<HashMap<String, String>> {
@@ -894,8 +898,7 @@ fn read_steam_app_type_cache(app: &tauri::AppHandle) -> HashMap<String, String> 
         .and_then(|path| fs::read_to_string(path).ok())
         .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
         .filter(|value| {
-            value.get("version").and_then(Value::as_u64)
-                == Some(STEAM_APP_TYPE_CACHE_VERSION)
+            value.get("version").and_then(Value::as_u64) == Some(STEAM_APP_TYPE_CACHE_VERSION)
         })
         .and_then(|value| value.get("types").cloned())
         .and_then(|value| serde_json::from_value::<HashMap<String, String>>(value).ok())
@@ -946,8 +949,7 @@ fn app_type_map_from_payload(value: &Value) -> HashMap<String, String> {
         .into_iter()
         .flatten()
         .filter_map(|entry| {
-            let app_id = text(entry.get("appId"))
-                .if_empty_then(|| text(entry.get("app_id")));
+            let app_id = text(entry.get("appId")).if_empty_then(|| text(entry.get("app_id")));
             let app_type = steam_app_type_of(entry);
             if app_id.is_empty() || app_type.is_empty() {
                 None
@@ -1059,7 +1061,12 @@ async fn resolve_steam_app_types(
     }
     app_ids
         .into_iter()
-        .filter_map(|app_id| cache.get(&app_id).cloned().map(|app_type| (app_id, app_type)))
+        .filter_map(|app_id| {
+            cache
+                .get(&app_id)
+                .cloned()
+                .map(|app_type| (app_id, app_type))
+        })
         .collect()
 }
 
@@ -1074,8 +1081,8 @@ async fn filter_featured_demos(app: &tauri::AppHandle, value: &mut Value) {
                 .into_iter()
                 .flatten()
                 .filter_map(|entry| {
-                    let app_id = text(entry.get("appId"))
-                        .if_empty_then(|| text(entry.get("app_id")));
+                    let app_id =
+                        text(entry.get("appId")).if_empty_then(|| text(entry.get("app_id")));
                     (!app_id.is_empty()).then_some(app_id)
                 })
         })
@@ -1094,8 +1101,7 @@ async fn filter_featured_demos(app: &tauri::AppHandle, value: &mut Value) {
             continue;
         };
         items.retain_mut(|entry| {
-            let app_id = text(entry.get("appId"))
-                .if_empty_then(|| text(entry.get("app_id")));
+            let app_id = text(entry.get("appId")).if_empty_then(|| text(entry.get("app_id")));
             let Some(app_type) = types.get(&app_id) else {
                 // Sem classificação não há garantia de que o card não seja
                 // demo; a Home prefere uma rail menor a exibir o app errado.
@@ -2123,10 +2129,7 @@ async fn download_ico_to_cache(app: &tauri::AppHandle, app_id: &str, url: &str) 
 /// Resolve o `.ico` do jogo para o atalho: prefere o arquivo local da Steam,
 /// reaproveita um `.ico` já baixado e, por último, baixa o `clienticon`
 /// (único hash que existe como `.ico` no CDN) para o cache do app.
-pub(crate) async fn game_ico_for_shortcut(
-    app: &tauri::AppHandle,
-    app_id: &str,
-) -> Option<PathBuf> {
+pub(crate) async fn game_ico_for_shortcut(app: &tauri::AppHandle, app_id: &str) -> Option<PathBuf> {
     let app_id: String = app_id.chars().filter(char::is_ascii_digit).collect();
     if app_id.is_empty() {
         return None;
@@ -2250,10 +2253,7 @@ pub async fn database_get_games(
             if let Some(object) = value.as_object_mut() {
                 if let Some(games) = object.get("games").and_then(|v| v.as_array()).cloned() {
                     let filtered = filter_demo_games_with_disk_cache(&app, games);
-                    object.insert(
-                        "games".to_string(),
-                        Value::Array(filtered),
-                    );
+                    object.insert("games".to_string(), Value::Array(filtered));
                 }
             }
             catalogue_cache::prepare_cached_response(&mut value, updated_at, from_cache);
@@ -2331,11 +2331,7 @@ pub async fn database_search_steam_store(
         .map_err(|error| error.to_string())?;
     let payload = client
         .get("https://store.steampowered.com/api/storesearch/")
-        .query(&[
-            ("term", query.as_str()),
-            ("l", language),
-            ("cc", country),
-        ])
+        .query(&[("term", query.as_str()), ("l", language), ("cc", country)])
         .send()
         .await
         .map_err(|error| error.to_string())?
@@ -3055,7 +3051,9 @@ mod tests {
 
     #[test]
     fn shortcut_icon_validates_ico_magic() {
-        assert!(is_valid_ico_bytes(&[0, 0, 1, 0, 1, 0, 32, 32, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 22, 0, 0, 0, 1]));
+        assert!(is_valid_ico_bytes(&[
+            0, 0, 1, 0, 1, 0, 32, 32, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 22, 0, 0, 0, 1
+        ]));
         assert!(!is_valid_ico_bytes(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 1, 0]));
         assert!(!is_valid_ico_bytes(&[]));
     }
@@ -3063,8 +3061,14 @@ mod tests {
     #[test]
     fn steam_store_search_validates_query_and_limit() {
         assert!(validate_steam_store_search("ab", 20).is_err());
-        assert_eq!(validate_steam_store_search("10", 100).unwrap(), ("10".into(), 20));
-        assert_eq!(validate_steam_store_search(" FragPunk ", 0).unwrap(), ("FragPunk".into(), 1));
+        assert_eq!(
+            validate_steam_store_search("10", 100).unwrap(),
+            ("10".into(), 20)
+        );
+        assert_eq!(
+            validate_steam_store_search(" FragPunk ", 0).unwrap(),
+            ("FragPunk".into(), 1)
+        );
     }
 
     #[test]

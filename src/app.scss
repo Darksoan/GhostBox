@@ -1572,7 +1572,9 @@ p {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
+      opacity: var(--control-disabled-opacity);
     }
 
     /* Selected: border + shared interactive surface */
@@ -1955,9 +1957,9 @@ p {
     }
 
     &:disabled {
-      color: var(--text-secondary);
+      color: var(--icon-disabled);
       font-weight: var(--weight-semibold);
-      opacity: 0.22;
+      opacity: var(--control-disabled-opacity);
       cursor: default;
     }
 
@@ -2236,8 +2238,9 @@ p {
     }
 
     &:disabled {
+      color: var(--icon-disabled);
       cursor: default;
-      opacity: 0.35;
+      opacity: var(--control-disabled-opacity);
 
       &::after {
         display: none;
@@ -2546,8 +2549,9 @@ p {
   }
 
   &:disabled {
+    color: var(--text-disabled);
     cursor: default;
-    opacity: 0.6;
+    opacity: var(--control-disabled-opacity);
   }
 
   &:disabled:hover {
@@ -2596,8 +2600,9 @@ p {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 0.5;
+      opacity: var(--control-disabled-opacity);
     }
   }
 }
@@ -3258,8 +3263,9 @@ button > svg {
   }
 
   &:disabled {
+    color: var(--text-disabled);
     cursor: default;
-    opacity: 0.55;
+    opacity: var(--control-disabled-opacity);
   }
 
   &:focus-visible {
@@ -5386,8 +5392,9 @@ html.no-animations {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 0.62;
+      opacity: var(--control-disabled-opacity);
     }
   }
 
@@ -6027,14 +6034,15 @@ html.no-animations {
     border-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 
-  &:hover,
-  &:focus-visible {
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
     border-color: var(--border-hover);
     background: var(--sidebar-option-active);
   }
 
   &:disabled {
-    opacity: 0.45;
+    color: var(--text-disabled);
+    opacity: var(--control-disabled-opacity);
     cursor: not-allowed;
   }
 }
@@ -7759,8 +7767,9 @@ input[type="search"]::-ms-reveal {
   cursor: pointer;
 
   &:disabled {
+    color: var(--icon-disabled);
     cursor: wait;
-    opacity: 0.64;
+    opacity: var(--control-disabled-opacity);
   }
 
   &:hover:not(:disabled) {
@@ -7941,8 +7950,9 @@ input[type="search"]::-ms-reveal {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 0.36;
+      opacity: var(--control-disabled-opacity);
     }
   }
 
@@ -8130,8 +8140,9 @@ input[type="search"]::-ms-reveal {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 0.55;
+      opacity: var(--control-disabled-opacity);
     }
   }
 
@@ -8509,12 +8520,12 @@ input[type="search"]::-ms-reveal {
   .confirm-modal__actions .button {
     border: 0;
     background: var(--surface-option);
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
       background: var(--surface-option-hover);
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
   }
 
@@ -8922,7 +8933,16 @@ input[type="search"]::-ms-reveal {
     }
 
     &:disabled {
+      color: var(--icon-disabled);
       cursor: default;
+
+      &::before {
+        background-color: var(--surface-option);
+      }
+
+      svg {
+        color: var(--icon-disabled);
+      }
     }
   }
 
@@ -9539,8 +9559,8 @@ input[type="search"]::-ms-reveal {
       color: var(--text-tertiary);
     }
 
-    &:hover,
-    &:focus-visible {
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
       color: var(--text-secondary);
 
       svg {
@@ -10304,8 +10324,8 @@ html.no-backdrop-blur {
     }
   }
 
-  /* Os dois botões partem da mesma superfície (#101010) e mantêm o texto em
-     `--text-secondary`. Hover mexe só na superfície — sem clarear o texto. */
+  /* Cancelar segue a hierarquia de ações neutras: terciário em repouso e
+     secundário quando recebe intenção. O botão Criar mantém sua própria regra. */
   &__actions {
     gap: var(--space-3);
 
@@ -10317,7 +10337,7 @@ html.no-backdrop-blur {
 
     .button:not(.button--primary) {
       background: var(--surface-option);
-      color: var(--text-secondary);
+      color: var(--text-tertiary);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
@@ -10339,8 +10359,8 @@ html.no-backdrop-blur {
 
       &:disabled {
         background: var(--surface-option);
-        color: var(--text-tertiary);
-        opacity: 1;
+        color: var(--text-disabled);
+        opacity: var(--control-disabled-opacity);
       }
     }
   }
@@ -10595,8 +10615,9 @@ html.no-backdrop-blur {
     }
 
     &:disabled {
+      color: var(--icon-disabled);
       cursor: default;
-      opacity: 0.38;
+      opacity: var(--control-disabled-opacity);
     }
   }
 
@@ -10694,8 +10715,13 @@ html.no-backdrop-blur {
     cursor: grab;
     touch-action: none;
 
-    &:active {
+    &:active,
+    &--dragging {
       cursor: grabbing;
+    }
+
+    &--dragging .edit-profile-modal__avatar-crop-grid {
+      opacity: 0.65;
     }
 
     img {
@@ -10706,6 +10732,7 @@ html.no-backdrop-blur {
       transform-origin: center;
       user-select: none;
       pointer-events: none;
+      transition: opacity var(--motion-fast) var(--ease);
     }
   }
 
@@ -10968,7 +10995,8 @@ html.no-backdrop-blur {
   }
 
   &:disabled {
-    opacity: 0.4;
+    color: var(--text-disabled);
+    opacity: var(--control-disabled-opacity);
     cursor: not-allowed;
   }
 }
@@ -11266,7 +11294,8 @@ html.no-backdrop-blur {
     }
 
     &:disabled {
-      opacity: 0.4;
+      color: var(--text-disabled);
+      opacity: var(--control-disabled-opacity);
       cursor: not-allowed;
     }
 
@@ -12104,8 +12133,9 @@ html.no-backdrop-blur {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: wait;
-      opacity: 0.72;
+      opacity: var(--control-disabled-opacity);
     }
   }
 
@@ -12187,13 +12217,14 @@ html.no-backdrop-blur {
     }
 
     &:disabled {
+      color: var(--text-disabled);
       cursor: default;
-      opacity: 1;
+      opacity: var(--control-disabled-opacity);
     }
 
     &:disabled:hover {
       background: var(--surface-option-hover);
-      color: var(--text-secondary);
+      color: var(--text-disabled);
     }
 
     &--active,
@@ -12367,16 +12398,16 @@ html.no-backdrop-blur {
     background: var(--surface-option);
   }
 
-  /* Jogando/Iniciando: sem translucidez (`opacity` do `.button:disabled`),
-     só escurece para #0a0a0a com texto terciário. */
+  /* Jogando/Iniciando mantém a superfície escura e usa o estado disabled
+     canônico; o rótulo continua identificando o estado da sessão. */
   &__play-button:disabled,
   &__play-button:disabled:hover {
     background: var(--c-0);
-    color: var(--text-tertiary);
-    opacity: 1;
+    color: var(--text-disabled);
+    opacity: var(--control-disabled-opacity);
 
     svg {
-      color: var(--text-tertiary);
+      color: var(--icon-disabled);
     }
   }
 
@@ -12633,8 +12664,9 @@ html.no-backdrop-blur {
 }
 
 .game-actions-menu button:disabled {
+  color: var(--text-disabled);
   cursor: default;
-  opacity: 0.45;
+  opacity: var(--control-disabled-opacity);
 }
 
 .game-actions-menu__spinner {
@@ -12826,7 +12858,8 @@ html.no-backdrop-blur {
 }
 
 .game-settings-modal__card--disabled .game-settings-modal__action-button:disabled {
-  opacity: 1;
+  color: var(--text-disabled);
+  opacity: var(--control-disabled-opacity);
 }
 
 .game-settings-modal__card-head {
@@ -13037,8 +13070,9 @@ html.no-backdrop-blur {
 }
 
 .game-settings-modal__action-button:disabled {
+  color: var(--text-disabled);
   cursor: default;
-  opacity: 0.45;
+  opacity: var(--control-disabled-opacity);
 }
 
 .game-settings-modal__confirm {
@@ -13362,7 +13396,8 @@ html.no-backdrop-blur {
 .game-settings-modal__icon-button:disabled,
 .game-settings-modal__icon-button:disabled:hover {
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--icon-disabled);
+  opacity: var(--control-disabled-opacity);
 }
 
 @media (max-width: 600px) {
@@ -13807,7 +13842,8 @@ html.no-animations {
     }
 
     &:disabled {
-      opacity: 0.5;
+      color: var(--text-disabled);
+      opacity: var(--control-disabled-opacity);
       cursor: not-allowed;
     }
   }
@@ -14854,6 +14890,21 @@ button {
   color: var(--text-primary);
 }
 
+/* Confirmações neutras seguem a mesma progressão dos triggers do catálogo:
+   repouso discreto e um único degrau de ênfase no hover/foco. Ações destrutivas
+   ficam fora deste seletor e preservam o tratamento vermelho abaixo. */
+.confirm-modal__actions
+  .button:not(.button--danger):not(.confirm-modal__confirm):not(.game-settings-modal__confirm-danger) {
+  background: var(--surface-option);
+  color: var(--text-tertiary);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: var(--surface-option-hover);
+    color: var(--text-secondary);
+  }
+}
+
 /* ── Uninstall confirm modal ──────────────────────────────────────── */
 /* Usa a caixa canônica `.collection-modal`; só o botão destrutivo tem
    idioma próprio (vermelho translúcido), como nos confirm internos. */
@@ -14867,14 +14918,14 @@ button {
   max-width: calc(100vw - 48px);
 }
 
-.uninstall-confirm-modal .collection-modal__actions .button {
+.uninstall-confirm-modal .collection-modal__actions .button:not(.button--danger) {
   background: var(--surface-option);
-  color: var(--text-primary);
+  color: var(--text-tertiary);
 
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
     background: var(--surface-option-hover);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 }
 
