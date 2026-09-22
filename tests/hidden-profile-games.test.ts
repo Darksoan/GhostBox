@@ -80,7 +80,10 @@ describe("filterAndSortHiddenProfileGames", () => {
   });
 
   it("uses the titlebar search styling and a four-column desktop grid", () => {
-    const styles = readFileSync("src/features/settings/ConnectionsPanel.scss", "utf8");
+    const styles = readFileSync(
+      "src/features/settings/ConnectionsPanel.scss",
+      "utf8",
+    ).replace(/\r\n/g, "\n");
 
     expect(styles).toContain("background: var(--surface-titlebar-control)");
     expect(styles).toContain("background: var(--surface-titlebar-control-hover)");

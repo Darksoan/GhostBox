@@ -427,7 +427,7 @@
 
     > span {
       width: 8px;
-      height: 2px;
+      height: 2.6px;
       justify-self: start;
       background: currentColor;
       opacity: 0.56;
@@ -542,11 +542,6 @@
   &:hover,
   &:focus-visible {
     color: var(--text-secondary);
-    opacity: 1;
-  }
-
-  &[aria-pressed="true"] {
-    color: var(--text-primary);
     opacity: 1;
   }
 

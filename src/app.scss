@@ -7827,11 +7827,12 @@ input[type="search"]::-ms-reveal {
   padding: var(--space-7) var(--space-6);
 }
 
-.catalogue-card__skeleton-title {
-  display: block;
+.catalogue-card__grid-body--skeleton {
+  justify-content: flex-start;
 }
 
 .catalogue-card__skeleton-title {
+  display: block;
   width: 64%;
   height: var(--type-line-body-emphasis);
 }
@@ -10340,8 +10341,8 @@ html.no-backdrop-blur {
 
       &:disabled {
         background: var(--surface-option);
-        color: var(--text-disabled);
-        opacity: var(--control-disabled-opacity);
+        color: var(--text-tertiary);
+        opacity: 0.6;
       }
     }
   }

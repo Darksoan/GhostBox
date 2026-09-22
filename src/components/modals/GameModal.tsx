@@ -793,7 +793,6 @@ const ModalActions = memo(function ModalActions({
             onClick={() => onRemove(game)}
             disabled={isRemoving}
             aria-label={language === "en" ? "Remove" : "Remover"}
-            title={language === "en" ? "Remove" : "Remover"}
           >
             {isRemoving ? (
               <span

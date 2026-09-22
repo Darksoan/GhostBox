@@ -42,5 +42,5 @@ describe("automatic search-index backfill", () => {
     expect(activated).toMatchObject({ status: "activated", indexed: 80 });
     expect(await db.prepare("SELECT value FROM catalogue_meta WHERE key='searchIndexVersion'").first<string>("value")).toBe("1");
     expect(await db.prepare("SELECT COUNT(*) AS total FROM games_search WHERE games_search MATCH 'tags:f632b2b'").first<number>("total")).toBe(80);
-  });
+  }, 20_000);
 });

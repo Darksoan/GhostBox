@@ -59,6 +59,7 @@ Development builds deliberately never manage that entry: they require Vite at `d
 
 Tauri bundle configuration -> `src-tauri/tauri.conf.json`
 Windows release workflow -> `.github/workflows/release.yml`
+CI workflow -> `.github/workflows/ci.yml` (root token/type/test checks, then subscriptions and catalogue worker typechecks/tests)
 SteamKit worker source/protocol -> `sidecars/steamkit-poc/`, `sidecars/README.md`
 Self-contained worker publish -> `package.json` (`sidecar:build`), output `sidecars/steamkit-worker/`
 
