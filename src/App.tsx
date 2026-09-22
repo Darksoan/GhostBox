@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
@@ -28,6 +28,7 @@ import { buildSteamOwnedGamesFromPlaytimes } from "./utils/steamLibraryMerge";
 import { buildKnownGameIndex } from "./utils/gameSearch";
 import { applySteamAppTypes } from "./utils/steamAppType";
 import { useSteamAppTypes } from "./hooks/useSteamAppTypes";
+import { useSilentBootUpdate } from "./hooks/useSilentBootUpdate";
 import ghostIconSource from "../Icons/ghost-solid.png";
 import "./app.scss";
 
@@ -52,6 +53,41 @@ function AppSplash() {
       <div className="app-splash__content">
         <img className="app-splash__icon" src={ghostIconSource} alt="GhostBox" />
         <div className="app-splash__bar" aria-hidden="true" />
+      </div>
+    </main>
+  );
+}
+
+function BootUpdateSplash({
+  percent,
+  phase,
+  language,
+}: {
+  percent: number;
+  phase: "download" | "install";
+  language: "pt" | "en";
+}) {
+  const statusText =
+    phase === "install"
+      ? language === "en"
+        ? "Installing update…"
+        : "instalando atualização…"
+      : language === "en"
+        ? `Downloading update… ${percent}%`
+        : `baixando atualização… ${percent}%`;
+  const progressStyle = {
+    ["--app-splash-progress"]: `${percent}%`,
+  } as CSSProperties;
+
+  return (
+    <main className="update-splash" role="dialog" aria-modal="true" aria-label={statusText}>
+      <div className="update-splash__panel">
+        <img className="update-splash__icon" src={ghostIconSource} alt="" />
+        <div className="update-splash__spinner" style={progressStyle} aria-hidden="true" />
+        <p className="update-splash__title">
+          {language === "en" ? "Updating GhostBox" : "Atualizando GhostBox"}
+        </p>
+        <p className="update-splash__status">{statusText}</p>
       </div>
     </main>
   );
@@ -662,12 +698,20 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
 function AppShell() {
   const appData = useAppData();
   const { status } = useAuth();
+  const { appearance } = useSettings();
+  const bootUpdate = useSilentBootUpdate();
   const isAuthenticated = status === "authenticated";
 
   return (
     <MetricsVisibilityProvider isAuthenticated={isAuthenticated}>
       <AppContent appData={appData} />
-      {appData.isInitialLoading ? (
+      {bootUpdate.status === "updating" ? (
+        <BootUpdateSplash
+          percent={bootUpdate.percent}
+          phase={bootUpdate.phase}
+          language={appearance.language}
+        />
+      ) : appData.isInitialLoading || bootUpdate.status === "checking" ? (
         <AppSplash />
       ) : null}
     </MetricsVisibilityProvider>

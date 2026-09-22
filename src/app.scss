@@ -519,23 +519,6 @@ body {
   text-align: center;
 }
 
-.update-splash__dismiss {
-  margin-top: 4px;
-  padding: var(--space-4) var(--space-7);
-  border: 1px solid var(--border-ui);
-  border-radius: var(--radius-sm);
-  background: var(--surface-canvas);
-  color: var(--text-strong);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
-}
-
-.update-splash__dismiss:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
 button,
 input {
   font: inherit;
@@ -2445,9 +2428,7 @@ p {
 .sidebar--maximized ~ .container .header__icon-button,
 .app-main:has(.sidebar--maximized) .header__icon-button,
 .sidebar--maximized ~ .container .header__notification-button,
-.app-main:has(.sidebar--maximized) .header__notification-button,
-.sidebar--maximized ~ .container .header__window-controls-update,
-.app-main:has(.sidebar--maximized) .header__window-controls-update {
+.app-main:has(.sidebar--maximized) .header__notification-button {
   width: var(--header-control);
   height: var(--header-control);
   min-width: var(--header-control);

@@ -62,6 +62,15 @@ Windows release workflow -> `.github/workflows/release.yml`
 SteamKit worker source/protocol -> `sidecars/steamkit-poc/`, `sidecars/README.md`
 Self-contained worker publish -> `package.json` (`sidecar:build`), output `sidecars/steamkit-worker/`
 
+## Silent Boot Updates
+
+`useSilentBootUpdate` -> `src/hooks/useSilentBootUpdate.ts` (single `checkForUpdates` on mount, 15s timeout; browser/dev and tray `?tray=1` skipped; failure/offline opens old version)
+Boot splash -> `BootUpdateSplash` in `src/App.tsx` (`Atualizando GhostBox` + `baixando… {percent}%` / `instalando…`); styles `.update-splash` in `src/app.scss` (around 458-521, `--app-splash-progress`)
+Install path -> `ghostboxApi.checkForUpdates/installUpdate` in `src/lib/ghostboxApi.tauri.ts` (plugin-updater `downloadAndInstall` + `relaunch`); types in `src/lib/ghostboxApi.types.ts`
+Backend -> `tauri-plugin-updater` in `src-tauri/Cargo.toml`, plugin register in `src-tauri/src/lib.rs` (around 1791), config in `src-tauri/tauri.conf.json` (NSIS `currentUser` + updater `installMode: quiet`, pubkey/endpoints), permission `updater:default` in `src-tauri/capabilities/default.json`
+Release flow -> tag `v*` triggers `.github/workflows/release.yml` (NSIS + `.sig`) -> worker serves manifest `workers/feedback/src/index.ts` (`/updates/latest`)
+Header has no update UI (removed manual button/hourly polling/splash).
+
 ## Design Tokens (Texto / Tipografia)
 
 Primitives -> `src/styles/_primitives.scss` (`--fs-*`, `--lh-*`, `--ls-*`, `--weight-*`, `--font-sans`)

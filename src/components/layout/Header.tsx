@@ -3,16 +3,14 @@ import {
   ChevronRight,
   Copy,
   Crown,
-  Download,
   Info,
-  LoaderCircle,
   Maximize2,
   MessageSquareShare,
   Minus,
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useState, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWindowMaximized } from "../../hooks/useWindowMaximized";
@@ -20,7 +18,6 @@ import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import type { UpdateCheckResult } from "../../lib/ghostboxApi.types";
 import { preloadGameModalAssetsThrottled } from "../../utils/image";
 import { SearchSuggestionsLoadingState } from "../ui/LoadingStates";
 import { FeedbackModal } from "../modals/FeedbackModal";
@@ -131,11 +128,6 @@ export const Header = memo(function Header({
   const { t, appearance } = useSettings();
   const [focused, setFocused] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-  const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [updatePercent, setUpdatePercent] = useState(0);
-  const [updatePhase, setUpdatePhase] = useState<"download" | "install" | "error">("download");
-  const [updateError, setUpdateError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titlebarDragRef = useRef<{
     pointerId: number;
@@ -199,71 +191,6 @@ export const Header = memo(function Header({
     },
     [onSelectSuggestion, suggestions]
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkForUpdates = () => {
-      void ghostboxApi.checkForUpdates().then((result) => {
-        if (!cancelled) setUpdate(result?.updateAvailable ? result : null);
-      });
-    };
-
-    checkForUpdates();
-    const interval = window.setInterval(checkForUpdates, 60 * 60 * 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  const handleInstallUpdate = useCallback(() => {
-    if (!update?.updateAvailable || isUpdating) return;
-
-    setIsUpdating(true);
-    setUpdatePercent(0);
-    setUpdatePhase("download");
-    setUpdateError(null);
-
-    void ghostboxApi
-      .installUpdate((progress) => {
-        if (progress.event === "Started" || progress.event === "Progress") {
-          setUpdatePhase("download");
-          setUpdatePercent(progress.percent);
-        }
-        if (progress.event === "Finished") {
-          setUpdatePhase("install");
-          setUpdatePercent(100);
-        }
-      })
-      .then((result) => {
-        if (!result.success) {
-          setUpdatePhase("error");
-          setUpdateError(result.error || (appearance.language === "en" ? "Update failed." : "Falha na atualização."));
-          setIsUpdating(false);
-        }
-      })
-      .catch((error: unknown) => {
-        setUpdatePhase("error");
-        setUpdateError(
-          error instanceof Error
-            ? error.message
-            : appearance.language === "en"
-              ? "Update failed."
-              : "Falha na atualização."
-        );
-        setIsUpdating(false);
-      });
-  }, [appearance.language, isUpdating, update?.updateAvailable]);
-
-  const updateLabel = appearance.language === "en"
-    ? `Update GhostBox ${update?.latestVersion ?? ""}`
-    : `Atualizar GhostBox ${update?.latestVersion ?? ""}`;
-
-  const tooltipText = appearance.language === "en"
-    ? `New version available: v${update?.latestVersion ?? ""}`
-    : `Nova versão disponível: v${update?.latestVersion ?? ""}`;
 
   const premiumExpiryText = formatSubscriptionExpiry(subscriptionPeriodEnd, appearance.language);
 
@@ -403,21 +330,6 @@ export const Header = memo(function Header({
       titlebarDragRef.current = null;
     };
   }, [endTitlebarDrag]);
-
-  const updateStatusText =
-    updatePhase === "error"
-      ? updateError || (appearance.language === "en" ? "Update failed." : "Falha na atualização.")
-      : updatePhase === "install"
-        ? appearance.language === "en"
-          ? "Installing update…"
-          : "instalando atualização…"
-        : appearance.language === "en"
-          ? `Downloading update… ${updatePercent}%`
-          : `baixando atualização… ${updatePercent}%`;
-
-  const updateSplashStyle = {
-    ["--app-splash-progress"]: `${updatePercent}%`,
-  } as CSSProperties;
 
   return (
     <header
@@ -612,25 +524,6 @@ export const Header = memo(function Header({
             </div>
           )}
         </div>
-
-        {update && (
-          <button
-            type="button"
-            className="header__window-controls-update"
-            aria-label={updateLabel}
-            onClick={handleInstallUpdate}
-            disabled={isUpdating}
-          >
-            {isUpdating ? (
-              <LoaderCircle className="header__window-controls-spinner" size={17} />
-            ) : (
-              <Download size={17} />
-            )}
-            <span className="header__tooltip">
-              {tooltipText}
-            </span>
-          </button>
-        )}
       </div>
 
       <div className="header__window-controls">
@@ -677,36 +570,6 @@ export const Header = memo(function Header({
         steamProfile={steamProfile}
         onClose={() => setFeedbackModalOpen(false)}
       />
-      {isUpdating && (
-        <div className="update-splash" role="dialog" aria-modal="true" aria-label={updateStatusText}>
-          <div className="update-splash__panel">
-            <img className="update-splash__icon" src="/ghost-solid.png" alt="" />
-            <div
-              className="update-splash__spinner"
-              style={updateSplashStyle}
-              aria-hidden="true"
-            />
-            <p className="update-splash__title">
-              {appearance.language === "en" ? "Updating GhostBox" : "Atualizando GhostBox"}
-            </p>
-            <p className="update-splash__status">{updateStatusText}</p>
-            {updatePhase === "error" && (
-              <button
-                type="button"
-                className="update-splash__dismiss"
-                onClick={() => {
-                  setIsUpdating(false);
-                  setUpdateError(null);
-                  setUpdatePhase("download");
-                  setUpdatePercent(0);
-                }}
-              >
-                {appearance.language === "en" ? "Close" : "Fechar"}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </header>
   );
 });
