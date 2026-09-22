@@ -28,6 +28,7 @@ import {
   showSteamGamesStorageKey,
   showSteamLibraryGamesStorageKey,
   hiddenProfileGameIdsStorageKey,
+  removedLibraryGameIdsStorageKey,
   personalCalendarStorageKey,
   steamWishlistRecommendationsStorageKey,
   steamWishlistReviewCacheStorageKey,
@@ -558,6 +559,29 @@ export function readStoredHiddenProfileGameIds(): string[] {
     );
   } catch {
     return [];
+  }
+}
+
+export function readStoredRemovedLibraryGameIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return storedStringArray(
+      JSON.parse(window.localStorage.getItem(removedLibraryGameIdsStorageKey) ?? "[]"),
+    ).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export function writeStoredRemovedLibraryGameIds(appIds: Iterable<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      removedLibraryGameIdsStorageKey,
+      JSON.stringify(Array.from(new Set(appIds)).filter(Boolean).sort()),
+    );
+  } catch {
+    // Keep the choice for this session when storage is unavailable.
   }
 }
 

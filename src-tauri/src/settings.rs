@@ -2,6 +2,7 @@ use crate::util::merge_object_defaults;
 
 pub(crate) const STARTUP_SETTINGS_FILE: &str = "startup-settings.json";
 pub(crate) const NOTIFICATION_SETTINGS_FILE: &str = "notification-settings.json";
+pub(crate) const STARTUP_MINIMIZED_ARG: &str = "--ghostbox-startup-minimized";
 const STEAM_WEB_API_KEY_FILE: &str = "steam-web-api-key.bin";
 const DEFAULT_STEAM_STATS_PROXY_URL: &str = "https://ghostbox-steam-stats.hella.workers.dev";
 
@@ -253,8 +254,15 @@ pub(crate) fn is_startup_setting_enabled(app: &tauri::AppHandle, key: &str) -> b
     startup_setting_enabled(&load_startup_settings(app), key)
 }
 
+pub(crate) fn is_startup_minimized_launch() -> bool {
+    std::env::args_os().any(|argument| argument == std::ffi::OsStr::new(STARTUP_MINIMIZED_ARG))
+}
+
 #[cfg(all(windows, not(debug_assertions)))]
-fn quote_windows_autostart_executable(app: &tauri::AppHandle) -> Result<(), String> {
+fn quote_windows_autostart_executable(
+    app: &tauri::AppHandle,
+    settings: &serde_json::Value,
+) -> Result<(), String> {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
     use winreg::RegKey;
 
@@ -265,7 +273,11 @@ fn quote_windows_autostart_executable(app: &tauri::AppHandle) -> Result<(), Stri
             KEY_SET_VALUE,
         )
         .map_err(|error| error.to_string())?;
-    let command = format!("\"{}\"", executable.display());
+    let command = if startup_setting_enabled(settings, "startMinimized") {
+        format!("\"{}\" {STARTUP_MINIMIZED_ARG}", executable.display())
+    } else {
+        format!("\"{}\"", executable.display())
+    };
 
     run_key
         .set_value(&app.package_info().name, &command)
@@ -293,7 +305,7 @@ pub(crate) fn apply_autostart_settings(
             autostart.enable().map_err(|error| error.to_string())?;
 
             #[cfg(all(windows, not(debug_assertions)))]
-            quote_windows_autostart_executable(app)?;
+            quote_windows_autostart_executable(app, settings)?;
 
             Ok(())
         } else {

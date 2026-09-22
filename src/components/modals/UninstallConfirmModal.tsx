@@ -6,7 +6,8 @@ import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 interface UninstallConfirmModalProps {
   open: boolean;
   gameTitle: string;
-  hasLocalInstall: boolean;
+  uninstall: boolean;
+  waitingForSteam: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -14,7 +15,8 @@ interface UninstallConfirmModalProps {
 export function UninstallConfirmModal({
   open,
   gameTitle,
-  hasLocalInstall,
+  uninstall,
+  waitingForSteam,
   onConfirm,
   onCancel,
 }: UninstallConfirmModalProps) {
@@ -35,12 +37,26 @@ export function UninstallConfirmModal({
         <header className="collection-modal__header">
           <div>
             <h3 id="uninstall-confirm-title">
-              {lang === "en" ? "Remove from library" : "Remover da biblioteca"}
+              {waitingForSteam
+                ? lang === "en"
+                  ? "Waiting for Steam"
+                  : "Aguardando a Steam"
+                : uninstall
+                  ? lang === "en"
+                    ? "Remove and uninstall"
+                    : "Remover e desinstalar"
+                  : lang === "en"
+                    ? "Remove from library"
+                    : "Remover da biblioteca"}
             </h3>
             <p>
-              {lang === "en"
-                ? `Remove "${gameTitle}" from your library?`
-                : `Remover "${gameTitle}" da sua biblioteca?`}
+              {waitingForSteam
+                ? lang === "en"
+                  ? `Finish uninstalling "${gameTitle}" in Steam. It will then be removed from your library.`
+                  : `Conclua a desinstalação de "${gameTitle}" na Steam. Depois, o jogo será removido da biblioteca.`
+                : lang === "en"
+                  ? `Remove "${gameTitle}" from your library?`
+                  : `Remover "${gameTitle}" da sua biblioteca?`}
             </p>
           </div>
 
@@ -55,11 +71,11 @@ export function UninstallConfirmModal({
         </header>
 
         <div className="collection-modal__content">
-          {hasLocalInstall && (
+          {uninstall && !waitingForSteam && (
             <p className="uninstall-confirm-modal__note">
               {lang === "en"
-                ? "This game is installed. Removing it from the library will also uninstall its local files."
-                : "Este jogo está instalado. Removê-lo da biblioteca também desinstalará os arquivos locais."}
+                ? "Steam will uninstall the game first. It will leave the library only after the uninstall finishes."
+                : "A Steam desinstalará o jogo primeiro. Ele só sairá da biblioteca após a desinstalação terminar."}
             </p>
           )}
 
@@ -69,17 +85,31 @@ export function UninstallConfirmModal({
               className="button button--outline"
               onClick={onCancel}
             >
-              {lang === "en" ? "Cancel" : "Cancelar"}
+              {waitingForSteam
+                ? lang === "en"
+                  ? "Stop waiting"
+                  : "Parar de aguardar"
+                : lang === "en"
+                  ? "Cancel"
+                  : "Cancelar"}
             </button>
 
-            <button
-              type="button"
-              className="button button--danger"
-              onClick={onConfirm}
-            >
-              <Trash2 size={14} />
-              {lang === "en" ? "Remove" : "Remover"}
-            </button>
+            {!waitingForSteam && (
+              <button
+                type="button"
+                className="button button--danger"
+                onClick={onConfirm}
+              >
+                <Trash2 size={14} />
+                {uninstall
+                  ? lang === "en"
+                    ? "Uninstall in Steam"
+                    : "Desinstalar pela Steam"
+                  : lang === "en"
+                    ? "Remove"
+                    : "Remover"}
+              </button>
+            )}
           </div>
         </div>
       </div>

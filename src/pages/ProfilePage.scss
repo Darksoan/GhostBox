@@ -779,7 +779,7 @@
     height: var(--activity-cover-height);
     padding: 0;
     padding-right: var(--space-6);
-    overflow: hidden;
+    overflow: visible;
     border: 0;
     border-radius: var(--radius-lg);
     background: var(--surface-secondary);
@@ -790,6 +790,7 @@
 
     &:hover,
     &:focus-visible {
+      z-index: 1;
       background: var(--surface-option-hover);
     }
 
@@ -1072,24 +1073,20 @@
     place-items: center;
     padding: 0;
     border: 0;
-    border-radius: var(--radius-panel);
-    background: var(--surface-canvas);
+    border-radius: 0;
+    background: transparent;
     cursor: inherit;
     overflow: visible;
-    outline: 1px solid var(--border-subtle);
-    outline-offset: -1px;
-    transition: outline-color var(--motion-fast) var(--ease);
-
-    &:hover,
-    &:focus-visible {
-      outline-color: var(--border-hover);
-    }
+    outline: 0;
 
     img {
       width: 100%;
       height: 100%;
-      border-radius: inherit;
       object-fit: cover;
+      clip-path: inset(7%);
+      // Os arquivos de algumas conquistas incluem uma moldura escura no
+      // próprio bitmap. O leve zoom a recorta sem adicionar decoração.
+      transform: scale(1.15);
     }
 
     &:hover .profile-page__activity-tooltip,

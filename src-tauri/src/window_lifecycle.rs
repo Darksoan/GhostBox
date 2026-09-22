@@ -4,7 +4,8 @@ use crate::playtime::{
     start_steam_running_app_monitor,
 };
 use crate::settings::{
-    apply_autostart_settings, is_startup_setting_enabled, startup_setting_enabled,
+    apply_autostart_settings, is_startup_minimized_launch, is_startup_setting_enabled,
+    startup_setting_enabled,
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -228,7 +229,9 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 }
 
 pub(crate) fn show_main_window_when_ready(app: &tauri::AppHandle) {
-    if !is_startup_setting_enabled(app, "startMinimized") {
+    let should_start_minimized =
+        is_startup_setting_enabled(app, "startMinimized") && is_startup_minimized_launch();
+    if !should_start_minimized {
         show_main_window(app);
     }
 }
@@ -558,7 +561,7 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
             }
         });
 
-        if startup_setting_enabled(&settings, "startMinimized") {
+        if startup_setting_enabled(&settings, "startMinimized") && is_startup_minimized_launch() {
             let _ = window.hide();
         }
     }

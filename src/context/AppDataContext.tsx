@@ -28,7 +28,6 @@ import type {
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { pushAppNotification } from "../lib/appNotifications";
 import { isBlockedSteamDemo } from "../utils/steamAppType";
-import { isLocallyInstalledGame } from "../utils/librarySourceFilter";
 import type {
   CloudSave,
   GamePlaytimeSnapshot,
@@ -84,6 +83,7 @@ import {
   readStoredShowSteamGames,
   readStoredShowSteamLibraryGames,
   readStoredHiddenProfileGameIds,
+  readStoredRemovedLibraryGameIds,
   readStoredCloudProfileUpdatedAt,
   readStoredAutoRestoredCloudSaves,
   writeStoredAutoRestoredCloudSaves,
@@ -96,6 +96,7 @@ import {
   writeStoredShowSteamGames,
   writeStoredShowSteamLibraryGames,
   writeStoredHiddenProfileGameIds,
+  writeStoredRemovedLibraryGameIds,
   writeStoredCloudProfileUpdatedAt,
 } from "../utils/storage";
 import {
@@ -363,6 +364,7 @@ interface AppDataContextValue {
   removeQueuedGame: (game: GhostBoxGame) => Promise<boolean>;
   /** Shows confirmation modal; also offers to delete local files when available. */
   requestRemoveGame: (game: GhostBoxGame) => void;
+  requestUninstallAndRemoveGame: (game: GhostBoxGame) => void;
 
   handlePlayGame: (game: GhostBoxGame) => Promise<void>;
   addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
@@ -412,6 +414,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [scannedLibraryGames, setScannedLibraryGames] = useState<GhostBoxGame[]>(
     [],
   );
+  const removedLibraryGameIdsRef = useRef(new Set(readStoredRemovedLibraryGameIds()));
   const [userCollections, setUserCollections] = useState<UserCollection[]>(() =>
     readStoredUserCollections(),
   );
@@ -1796,7 +1799,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (result.status !== "ok") return;
 
       const games = normalizeSteamGameTitles(
-        result.games.filter((game) => !isHiddenLibraryGame(game)),
+        result.games.filter((game) =>
+          !isHiddenLibraryGame(game) && !removedLibraryGameIdsRef.current.has(game.appId)
+        ),
         [...favoriteGamesRef.current, ...profileHistoryGamesRef.current],
       );
       setSteamPathInput(result.steamPath);
@@ -1989,6 +1994,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAddedLibraryGameAppIds((current) =>
         new Set(current).add(libraryGame.appId),
       );
+      removedLibraryGameIdsRef.current.delete(libraryGame.appId);
+      writeStoredRemovedLibraryGameIds(removedLibraryGameIdsRef.current);
       if (event.steamDownloadPending) {
         return;
       }
@@ -2082,6 +2089,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setAddedLibraryGameAppIds((current) =>
           new Set(current).add(libraryGame.appId),
         );
+        removedLibraryGameIdsRef.current.delete(libraryGame.appId);
+        writeStoredRemovedLibraryGameIds(removedLibraryGameIdsRef.current);
         showToast(
           "Jogo adicionado",
           isSteamOwnedGame
@@ -2155,7 +2164,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const removeQueuedGame = useCallback(
-    async (game: GhostBoxGame) => {
+    async (game: GhostBoxGame, hideFromScan = true) => {
       if (addingGameId || removingGameId) return false;
       setRemovingGameId(game.id);
 
@@ -2196,6 +2205,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           next.delete(result.appId);
           return next;
         });
+        if (hideFromScan) {
+          removedLibraryGameIdsRef.current.add(result.appId);
+          writeStoredRemovedLibraryGameIds(removedLibraryGameIdsRef.current);
+        }
 
         // Removing wipes local saves, so the same cloud save must be restorable
         // again when the game comes back.
@@ -2290,20 +2303,65 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const [removeConfirmGame, setRemoveConfirmGame] = useState<GhostBoxGame | null>(null);
+  const [removeAndUninstall, setRemoveAndUninstall] = useState(false);
+  const [pendingSteamUninstallGame, setPendingSteamUninstallGame] = useState<GhostBoxGame | null>(null);
 
   const requestRemoveGame = useCallback((game: GhostBoxGame) => {
+    setRemoveAndUninstall(false);
+    setRemoveConfirmGame(game);
+  }, []);
+
+  const requestUninstallAndRemoveGame = useCallback((game: GhostBoxGame) => {
+    setRemoveAndUninstall(true);
     setRemoveConfirmGame(game);
   }, []);
 
   const uninstallGame = useCallback(
     async (game: GhostBoxGame) => {
       const appId = game.appId || game.id.replace(/^steam-/, "");
-      const removed = await removeQueuedGame(game);
-      if (!removed) return;
-      await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
+      try {
+        if (!await ghostboxApi.isSteamGameInstalled(appId)) {
+          showToast("Jogo não instalado", "A Steam não confirmou uma instalação para este jogo.", "error");
+          return;
+        }
+        await ghostboxApi.openExternalUrl(`steam://uninstall/${appId}`);
+        setPendingSteamUninstallGame(game);
+      } catch (error) {
+        showToast("Falha ao desinstalar", error instanceof Error ? error.message : "Não foi possível abrir a desinstalação pela Steam.", "error");
+      }
     },
-    [removeQueuedGame],
+    [showToast],
   );
+
+  useEffect(() => {
+    if (!pendingSteamUninstallGame) return;
+    const game = pendingSteamUninstallGame;
+    const appId = game.appId || game.id.replace(/^steam-/, "");
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const check = async () => {
+      try {
+        const installed = await ghostboxApi.isSteamGameInstalled(appId);
+        if (cancelled) return;
+        if (!installed) {
+          setPendingSteamUninstallGame(null);
+          await removeQueuedGame(game, false);
+          return;
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setPendingSteamUninstallGame(null);
+        showToast("Falha ao verificar instalação", error instanceof Error ? error.message : "Não foi possível confirmar a desinstalação pela Steam.", "error");
+        return;
+      }
+      timer = setTimeout(check, 2000);
+    };
+    timer = setTimeout(check, 2000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pendingSteamUninstallGame, removeQueuedGame, showToast]);
 
   const handleGameDetailsLoaded = useCallback((details: GhostBoxGame) => {
     setProfileHistoryGames((current) => {
@@ -2902,6 +2960,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       requestRemoveGame,
+      requestUninstallAndRemoveGame,
       handlePlayGame,
 
       addGameToUserCollection,
@@ -2959,6 +3018,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       requestRemoveGame,
+      requestUninstallAndRemoveGame,
       handlePlayGame,
       addGameToUserCollection,
       removeGameFromCollection,
@@ -2976,23 +3036,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const removeConfirmHasLocalInstall = Boolean(
-    removeConfirmGame && isLocallyInstalledGame(removeConfirmGame),
-  );
-
   return (
     <AppDataContext.Provider value={value}>
       {children}
       <UninstallConfirmModal
-        open={removeConfirmGame !== null}
-        gameTitle={removeConfirmGame?.title ?? ""}
-        hasLocalInstall={removeConfirmHasLocalInstall}
-        onCancel={() => setRemoveConfirmGame(null)}
+        open={removeConfirmGame !== null || pendingSteamUninstallGame !== null}
+        gameTitle={removeConfirmGame?.title ?? pendingSteamUninstallGame?.title ?? ""}
+        uninstall={removeAndUninstall}
+        waitingForSteam={pendingSteamUninstallGame !== null}
+        onCancel={() => {
+          setRemoveConfirmGame(null);
+          setPendingSteamUninstallGame(null);
+        }}
         onConfirm={() => {
           if (removeConfirmGame) {
-            const action = removeConfirmHasLocalInstall
-              ? uninstallGame
-              : removeQueuedGame;
+            const action = removeAndUninstall ? uninstallGame : removeQueuedGame;
             void action(removeConfirmGame);
           }
           setRemoveConfirmGame(null);

@@ -1319,6 +1319,10 @@ export const ghostboxApi = {
     );
   },
 
+  isSteamGameInstalled(appId: string): Promise<boolean> {
+    return invoke<boolean>("steam_is_game_installed", { appId });
+  },
+
   async selectSteamPath(): Promise<SteamPathSelectionResult | undefined> {
     const selectedPath = await open({
       directory: true,

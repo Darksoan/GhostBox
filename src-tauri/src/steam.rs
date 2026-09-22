@@ -2022,6 +2022,18 @@ pub fn steam_select_path(
 }
 
 #[tauri::command]
+pub fn steam_is_game_installed(app: tauri::AppHandle, app_id: String) -> Result<bool, String> {
+    if app_id.is_empty() || !app_id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("AppID inválido para verificar a instalação.".to_string());
+    }
+    let (steam_path, _) = resolve_steam_path(&app, None);
+    let steam_path = steam_path.ok_or("Não foi possível localizar a instalação da Steam.")?;
+    Ok(read_steam_library_paths(&steam_path).iter().any(|library| {
+        crate::steam_appmanifest::appmanifest_path(std::path::Path::new(library), &app_id).is_file()
+    }))
+}
+
+#[tauri::command]
 pub fn steam_scan_library(
     app: tauri::AppHandle,
     steam_path: Option<String>,

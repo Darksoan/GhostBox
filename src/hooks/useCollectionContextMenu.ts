@@ -9,7 +9,9 @@ import {
   Play,
   TextSearch,
   Trash,
+  Trash2,
 } from "lucide-react";
+import { isLocallyInstalledGame } from "../utils/librarySourceFilter";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
 
 export interface UseCollectionContextMenuOptions {
@@ -25,6 +27,7 @@ export interface UseCollectionContextMenuOptions {
   onAddGame?: (game: GhostBoxGame) => void;
   onPlayGame?: (game: GhostBoxGame) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
+  onUninstallAndRemoveGame?: (game: GhostBoxGame) => void;
   onToggleFavorite?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
@@ -47,6 +50,7 @@ export function useCollectionContextMenu({
   onAddGame,
   onPlayGame,
   onRemoveGame,
+  onUninstallAndRemoveGame,
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
@@ -168,6 +172,14 @@ export function useCollectionContextMenu({
         danger: true,
         onClick: () => onRemoveGame(game),
       });
+      if (onUninstallAndRemoveGame && isLocallyInstalledGame(game)) {
+        items.push({
+          label: "Remover e desinstalar",
+          icon: Trash2,
+          danger: true,
+          onClick: () => onUninstallAndRemoveGame(game),
+        });
+      }
     }
 
     return items;
@@ -188,6 +200,7 @@ export function useCollectionContextMenu({
     onAddGame,
     onPlayGame,
     onRemoveGame,
+    onUninstallAndRemoveGame,
     onToggleFavorite,
     onAddGameToCollection,
     onRemoveGameFromCollection,

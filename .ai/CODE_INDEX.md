@@ -41,6 +41,12 @@ Cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` -> `r
 `EditProfileTab` -> `src/components/profile/EditProfileTab.tsx`; avatar upload/crop and premium banner editing, saved through `AppDataContext.handleUpdateProfile`.
 Styles -> `src/pages/ProfilePage.scss` (`profile-page__edit-*`, around 1880).
 
+## Profile Activity And Achievements
+
+`ProfileActivityCard` -> `src/pages/ProfilePage.tsx` (around 150-305); recent-game activity, progress, and the latest-achievement icons/tooltips.
+Achievement tab game cards -> `ProfilePage.tsx` (around 2145-2285); styles in `ProfilePage.scss` (`profile-page__achievement-*`, around 1274-1564).
+Activity achievement icons/tooltips -> `ProfilePage.scss` (`profile-page__activity-icon`, around 1068); bitmap edges are cropped to remove embedded decorative borders, and card overflow remains visible so tooltips are not clipped.
+
 ## Tauri Commands
 
 Command registration and shutdown -> `src-tauri/src/lib.rs` (around 1806-1913)

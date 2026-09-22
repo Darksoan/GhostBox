@@ -1880,6 +1880,7 @@ pub fn run() {
             backup::backup_get_details,
             steam::steam_select_path,
             steam::steam_scan_library,
+            steam::steam_is_game_installed,
             steam::steam_restart,
             game_launch,
             playtime::game_get_playtimes,
