@@ -118,13 +118,15 @@ export function mergeAchievementDetailsIntoGame(
     incoming.achievements?.total ?? 0,
     fallbackUnlocked,
   );
-  const achievements = achievementList.length > 0
-    ? calculated
-    : {
-        unlocked: fallbackUnlocked,
-        total: fallbackTotal,
-        progress: fallbackTotal > 0 ? Math.round((fallbackUnlocked / fallbackTotal) * 100) : 0,
-      };
+  // O schema local pode chegar sem os flags pessoais. Preserve o resumo da
+  // conta como piso até a lista de desbloqueios ser sincronizada.
+  const unlocked = Math.max(calculated.unlocked, fallbackUnlocked);
+  const total = Math.max(calculated.total, fallbackTotal, unlocked);
+  const achievements = {
+    unlocked,
+    total,
+    progress: total > 0 ? Math.round((unlocked / total) * 100) : 0,
+  };
 
   return {
     ...game,

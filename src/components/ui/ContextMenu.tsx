@@ -59,7 +59,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
 
     setPosition({ left, top });
     setReverseX(shouldReverseX);
-  }, [x, y]);
+  }, [x, y, items.length]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -51,7 +51,7 @@ function AppSplash() {
       role="progressbar"
     >
       <div className="app-splash__content">
-        <img className="app-splash__icon" src={ghostIconSource} alt="GhostBox" />
+        <img className="app-splash__icon" src="./ghost-solid.png" alt="GhostBox" />
         <div className="app-splash__bar" aria-hidden="true" />
       </div>
     </main>

@@ -465,7 +465,12 @@ export function PageRouter({
                 aria-hidden={!isActive || hasOverlay}
               >
                 <Suspense
-                  fallback={<PagePlaceholder page={targetPage} />}
+                  fallback={
+                    <PagePlaceholder
+                      page={targetPage}
+                      hasSteamProfile={Boolean(steamProfile?.steamId)}
+                    />
+                  }
                 >
                   {renderPage(targetPage)}
                 </Suspense>

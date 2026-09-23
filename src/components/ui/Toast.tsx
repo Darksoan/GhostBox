@@ -59,7 +59,7 @@ export function Toast({ toast, onClose }: ToastProps) {
         ) : (
           <CircleCheck className="toast__icon" size={20} />
         )}
-        <div>
+        <div className="toast__body">
           <strong>{toast.title}</strong>
           {toast.message && <span>{toast.message}</span>}
         </div>

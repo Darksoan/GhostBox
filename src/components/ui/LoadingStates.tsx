@@ -284,31 +284,17 @@ export function HomeTopRatedCardBodySkeleton() {
 export function HomeWishlistCardSkeleton() {
   return (
     <div className="home-wishlist-card home-wishlist-card--skeleton">
-      <span className="home-wishlist-card__content">
-        <span className="home-wishlist-card__text-skeleton home-wishlist-card__text-skeleton--title" />
-      </span>
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span className="home-wishlist-card__cover home-wishlist-card__cover--skeleton" />
         <span className="home-wishlist-card__details">
           <HomeWishlistReviewSkeleton />
-          <span className="home-wishlist-card__tag-skeleton-row">
-            <span className="home-wishlist-card__tag-skeleton" />
-            <span className="home-wishlist-card__tag-skeleton" />
-            <span className="home-wishlist-card__tag-skeleton" />
-          </span>
         </span>
       </span>
     </div>
   );
 }
 
-/**
- * Corpo skeleton do card de "Bem avaliados": espelha a composição do corpo
- * real (`HomeTopRatedCard`) — nome, as três métricas em colunas e uma linha
- * fechada de pills, na mesma contagem fixa definida em HomePage.tsx
- * (`homeTopRatedPrimaryPillCount`) — para o skeleton fechar na mesma altura do
- * card carregado.
- */
+/** Placeholder da review: citação, avatar, autor e tempo de jogo. */
 export function HomeWishlistReviewSkeleton({
   rootRef,
   ariaHidden = false,
@@ -357,7 +343,7 @@ function SectionHeaderSkeleton({ withSubtitle = false }: { withSubtitle?: boolea
   );
 }
 
-function HomePageLoadingState() {
+function HomePageLoadingState({ hasSteamProfile }: { hasSteamProfile: boolean }) {
   return (
     <section className="home-page" aria-hidden="true">
       <section className="home-banner">
@@ -419,14 +405,16 @@ function HomePageLoadingState() {
         </div>
       </section>
 
-      <section className="home-wishlist">
-        <SectionHeaderSkeleton withSubtitle />
-        <div className="home-wishlist__list">
-          {Array.from({ length: 4 }, (_, index) => (
-            <HomeWishlistCardSkeleton key={`wishlist-${index}`} />
-          ))}
-        </div>
-      </section>
+      {hasSteamProfile ? (
+        <section className="home-wishlist">
+          <SectionHeaderSkeleton withSubtitle />
+          <div className="home-wishlist__list">
+            {Array.from({ length: 4 }, (_, index) => (
+              <HomeWishlistCardSkeleton key={`wishlist-${index}`} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }
@@ -589,10 +577,16 @@ function NotificationsPageLoadingState() {
   );
 }
 
-export function PagePlaceholder({ page }: { page: Page | string }) {
+export function PagePlaceholder({
+  page,
+  hasSteamProfile = false,
+}: {
+  page: Page | string;
+  hasSteamProfile?: boolean;
+}) {
   switch (page) {
     case "home":
-      return <HomePageLoadingState />;
+      return <HomePageLoadingState hasSteamProfile={hasSteamProfile} />;
     case "catalogue":
       return <CatalogueLoadingState />;
     case "library":

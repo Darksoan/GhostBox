@@ -93,6 +93,25 @@ describe("aba de conquistas aberta pelo modal (prop churn)", () => {
     ).toBe(true);
   });
 
+  it("schema local sem flags mantém o progresso conhecido da conta", () => {
+    const accountGame = makeGame({
+      achievements: { unlocked: 2, total: 3, progress: 67 },
+    });
+    const localSchema = makeGame({
+      achievementList: [
+        makeAchievement("first"),
+        makeAchievement("second"),
+        makeAchievement("third"),
+      ],
+      achievements: { unlocked: 0, total: 3, progress: 0 },
+    });
+
+    const merged = mergeAchievementDetailsIntoGame(accountGame, localSchema);
+
+    expect(merged.achievementList).toHaveLength(3);
+    expect(merged.achievements).toEqual({ unlocked: 2, total: 3, progress: 67 });
+  });
+
   it("página sincroniza sem substituir: guarda sameGame e une em vez de trocar", () => {
     const source = readFileSync(
       "src/pages/GameAchievementsPage.tsx",

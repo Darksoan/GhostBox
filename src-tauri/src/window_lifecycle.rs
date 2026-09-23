@@ -5,7 +5,7 @@ use crate::playtime::{
 };
 use crate::settings::{
     apply_autostart_settings, is_startup_minimized_launch, is_startup_setting_enabled,
-    startup_setting_enabled,
+    startup_setting_enabled, STARTUP_MINIMIZED_ARG,
 };
 
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -231,6 +231,14 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
 pub(crate) fn show_main_window_when_ready(app: &tauri::AppHandle) {
     let should_start_minimized =
         is_startup_setting_enabled(app, "startMinimized") && is_startup_minimized_launch();
+    if !should_start_minimized {
+        show_main_window(app);
+    }
+}
+
+pub(crate) fn show_main_window_for_launch_args(app: &tauri::AppHandle, args: &[String]) {
+    let should_start_minimized = is_startup_setting_enabled(app, "startMinimized")
+        && args.iter().any(|arg| arg == STARTUP_MINIMIZED_ARG);
     if !should_start_minimized {
         show_main_window(app);
     }

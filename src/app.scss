@@ -2378,6 +2378,7 @@ p {
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
+    white-space: nowrap;
   }
 
   &__search-spinner-state {
@@ -3432,8 +3433,8 @@ button > svg {
   scroll-snap-align: start;
   @include media-depth(sm);
 
-  &:hover,
-  &:focus-visible {
+  &:hover:not(.home-explore-card--skeleton),
+  &:focus-visible:not(.home-explore-card--skeleton) {
     filter: brightness(1.08);
   }
 }
@@ -3627,7 +3628,7 @@ button > svg {
   transform: translateZ(0);
   transition: background var(--motion-base) var(--ease);
 
-  &:hover {
+  &:hover:not(.home-top-rated-card--skeleton) {
     /* Mesmo degrau do hover dos cards da grade (--surface-option-hover =
        --c-2, #121212): um passo acima do painel (#101010) sem saltar direto
        para o --surface-raised (#151515). */
@@ -4371,7 +4372,7 @@ button > svg {
   isolation: isolate;
   transition: background var(--motion-base) var(--ease);
 
-  &:hover {
+  &:hover:not(.home-wishlist-card--skeleton):not(:has(.home-wishlist-card__player-review--skeleton, .home-wishlist-card__cover--skeleton)) {
     background: var(--surface-raised);
   }
 }
@@ -4502,6 +4503,10 @@ button > svg {
 .home-wishlist-card__player-review--skeleton {
   width: 100%;
   min-height: 92px;
+
+  .home-wishlist-card__player-review-author {
+    width: 100%;
+  }
 }
 
 .home-wishlist-card__player-review-quote {
@@ -4514,6 +4519,10 @@ button > svg {
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+
+  &--fallback {
+    font-style: normal;
+  }
 }
 
 .home-wishlist-card__player-review-author {
@@ -4584,16 +4593,6 @@ button > svg {
   min-width: 0;
 }
 
-.home-wishlist-card__text-skeleton--author-name {
-  width: 92px;
-  height: 12px;
-}
-
-.home-wishlist-card__text-skeleton--author-meta {
-  width: 132px;
-  height: 11px;
-}
-
 .home-wishlist-card__tags {
   display: flex;
   flex-wrap: wrap;
@@ -4645,6 +4644,16 @@ button > svg {
     width: min(78%, 430px);
     height: 15px;
   }
+
+  &--author-name {
+    width: 92px;
+    height: 12px;
+  }
+
+  &--author-meta {
+    width: 132px;
+    height: 11px;
+  }
 }
 
 .home-wishlist-card__tag-skeleton-row {
@@ -4672,7 +4681,6 @@ button > svg {
 
   .home-wishlist-card__details {
     justify-content: flex-start;
-    padding-top: 1px;
   }
 
   .home-wishlist-card__player-review {
@@ -8986,10 +8994,10 @@ input[type="search"]::-ms-reveal {
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
     transition:
-      opacity var(--motion-base) var(--ease),
-      transform var(--motion-base) var(--ease);
+      opacity var(--motion-fast) var(--ease),
+      transform var(--motion-fast) var(--ease);
 
     svg {
       display: block;
@@ -9177,6 +9185,10 @@ input[type="search"]::-ms-reveal {
     padding: var(--space-8);
   }
 
+  &__body {
+    min-width: 0;
+  }
+
   &__icon {
     color: var(--text-primary);
     // Secondary layer — ícone chega 80ms depois do card e termina junto
@@ -9229,6 +9241,7 @@ input[type="search"]::-ms-reveal {
   strong,
   span {
     display: block;
+    @include mixins.truncate;
   }
 
   strong {

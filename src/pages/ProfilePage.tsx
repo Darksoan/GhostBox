@@ -1682,6 +1682,8 @@ export function ProfilePage({
     ? loadedBannerSource
     : lastPaintedBannerSourceRef.current;
   const isBannerPlaceholder = !paintedBannerSource || isHoldingForCloudSync;
+  const showBannerPlaceholderIcon =
+    !isHoldingForCloudSync && (!bannerUrl || bannerFailed);
   const bannerImageSource = isBannerPlaceholder
     ? profileBannerPlaceholderSource
     : paintedBannerSource;
@@ -1878,15 +1880,16 @@ export function ProfilePage({
           <div
             className="profile-page__banner-viewport"
           >
-            {/* O placeholder fica embaixo até a capa revelar, para o logo sair
-                em fade cruzado em vez de sumir no meio da entrada. */}
-            <img
-              className={`profile-page__banner-image profile-page__banner-image--placeholder${isBannerRevealed ? " profile-page__banner-image--placeholder-hidden" : ""}`}
-              src={profileBannerPlaceholderSource}
-              alt=""
-              aria-hidden="true"
-              decoding="async"
-            />
+            {/* O logo só aparece quando não há capa ou todas as fontes falharam. */}
+            {showBannerPlaceholderIcon && (
+              <img
+                className={`profile-page__banner-image profile-page__banner-image--placeholder${isBannerRevealed ? " profile-page__banner-image--placeholder-hidden" : ""}`}
+                src={profileBannerPlaceholderSource}
+                alt=""
+                aria-hidden="true"
+                decoding="async"
+              />
+            )}
             {!isBannerPlaceholder && (
               <img
                 ref={attachBannerImage}

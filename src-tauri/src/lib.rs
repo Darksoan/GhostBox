@@ -1766,7 +1766,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             launch_registered_game_from_args(app, &args);
-            window_lifecycle::show_main_window(app);
+            window_lifecycle::show_main_window_for_launch_args(app, &args);
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

@@ -238,8 +238,26 @@ fn local_achievement_display_description(achievement: &VdfObject) -> String {
     local_achievement_localized_field(achievement, "desc")
 }
 
-/// Full achievement definitions from local Steam schema (name/title/description).
-/// Icons are left empty; callers should prefer network schema/community when available.
+fn local_achievement_icon_url(achievement: &VdfObject, app_id: &str, field: &str) -> String {
+    let file_name = achievement
+        .get("display")
+        .and_then(vdf_object)
+        .and_then(|display| display.get(field))
+        .map(vdf_string)
+        .unwrap_or_default();
+    if file_name.is_empty()
+        || !file_name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+        || file_name == "."
+        || file_name == ".."
+    {
+        return String::new();
+    }
+    format!("https://shared.fastly.steamstatic.com/community_assets/images/apps/{app_id}/{file_name}")
+}
+
+/// Full achievement definitions from the local Steam schema.
 pub fn read_local_achievement_definitions(steam_path: &str, app_id: &str) -> Vec<Value> {
     let stats_path = stats_directory(steam_path);
     let schema_buffer =
@@ -286,8 +304,8 @@ pub fn read_local_achievement_definitions(steam_path: &str, app_id: &str) -> Vec
                 "name": name,
                 "title": if title.is_empty() { name.clone() } else { title },
                 "description": local_achievement_display_description(achievement),
-                "icon": "",
-                "iconGray": ""
+                "icon": local_achievement_icon_url(achievement, app_id, "icon"),
+                "iconGray": local_achievement_icon_url(achievement, app_id, "icon_gray")
             }));
         }
     }

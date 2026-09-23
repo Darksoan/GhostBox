@@ -498,7 +498,7 @@ function HomeTopRatedCard({
   // sai do skeleton no momento em que os dados dele chegam.
   if (isSteamTitlePlaceholder(game.title, game.appId)) {
     return (
-      <div className="home-top-rated-card">
+      <div className="home-top-rated-card home-top-rated-card--skeleton">
         <span className="home-top-rated-card__art skeleton" />
         <HomeTopRatedCardBodySkeleton />
       </div>
@@ -590,7 +590,7 @@ function HomeTopRatedShelf({
           <div className="home-top-rated__carousel">
             <div className="home-top-rated__track">
               {Array.from({ length: homeTopRatedCardCount }, (_, index) => (
-                <div className="home-top-rated-card" key={`top-rated-${index}`}>
+                <div className="home-top-rated-card home-top-rated-card--skeleton" key={`top-rated-${index}`}>
                   <span className="home-top-rated-card__art skeleton" />
                   <HomeTopRatedCardBodySkeleton />
                 </div>
@@ -1496,7 +1496,7 @@ function HomePlayerReview({
     void loadGameReviews(appId, reviewLanguage, "positive")
       .then((result) => {
         if (cancelled) return;
-        const nextReview = result.reviews?.find((item) => item.review.trim()) ?? null;
+        const nextReview = result.reviews?.find((item) => normalizeSteamReviewText(item.review)) ?? null;
         setReview(nextReview);
         if (nextReview) {
           writeStoredSteamWishlistReview({
@@ -1529,13 +1529,23 @@ function HomePlayerReview({
     );
   }
 
-  if (!review) return null;
+  const reviewText = review ? normalizeSteamReviewText(review.review) : "";
+  if (!review || !reviewText) {
+    return (
+      <span className={`home-wishlist-card__player-review home-wishlist-card__player-review--fallback${
+        className ? ` ${className}` : ""
+      }`}>
+        <span className="home-wishlist-card__title">{game.title}</span>
+        <span className="home-wishlist-card__player-review-quote home-wishlist-card__player-review-quote--fallback">
+          {getHomeShortDescription(game, language)}
+        </span>
+      </span>
+    );
+  }
 
   const avatarUrl = steamReviewAvatarUrl(review.author.avatar);
   const authorName = review.author.personaname || "Steam user";
   const playtimeAtReview = review.author.playtime_at_review ?? 0;
-  const reviewText = normalizeSteamReviewText(review.review);
-  if (!reviewText) return null;
 
   return (
     <span
@@ -1599,9 +1609,9 @@ function HomeWishlistCardComponent({
       />
       <span className="home-wishlist-card__media home-wishlist-card__media--single">
         <span
-          className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : ""}`}
+          className={`home-wishlist-card__cover${loaded ? " home-wishlist-card__cover--loaded" : " home-wishlist-card__cover--skeleton"}`}
         >
-          {imageSource && (
+          {loaded && imageSource && (
             <img
               src={imageSource}
               alt=""
@@ -1841,6 +1851,7 @@ export function HomePage({
     async function loadWishlistCycle() {
       if (!steamProfile?.steamId) {
         setWishlistRecommendations([]);
+        setIsLoadingWishlistRecommendations(false);
         return;
       }
       setIsLoadingWishlistRecommendations(true);
@@ -2112,14 +2123,16 @@ export function HomePage({
         onOpenGame={onOpenGame}
         onGameContextMenu={handleGameContextMenu}
       />
-      <HomeWishlistRecommendations
-        title={t("home.steamWishlist")}
-        games={wishlistRecommendations}
-        loading={isLoadingWishlistRecommendations}
-        language={appearance.language}
-        onOpenGame={onOpenGame}
-        onGameContextMenu={handleGameContextMenu}
-      />
+      {steamProfile?.steamId ? (
+        <HomeWishlistRecommendations
+          title={t("home.steamWishlist")}
+          games={wishlistRecommendations}
+          loading={isLoadingWishlistRecommendations}
+          language={appearance.language}
+          onOpenGame={onOpenGame}
+          onGameContextMenu={handleGameContextMenu}
+        />
+      ) : null}
       {homeContextMenu && homeContextMenuItems.length > 0 && (
         <ContextMenu
           x={homeContextMenu.x}

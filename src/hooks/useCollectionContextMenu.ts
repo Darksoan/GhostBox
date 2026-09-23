@@ -11,7 +11,6 @@ import {
   Trash,
   Trash2,
 } from "lucide-react";
-import { isLocallyInstalledGame } from "../utils/librarySourceFilter";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
 
 export interface UseCollectionContextMenuOptions {
@@ -19,6 +18,7 @@ export interface UseCollectionContextMenuOptions {
   favoriteGameIds: Set<string>;
   libraryGameAppIds?: Set<string>;
   removableGameAppIds?: Set<string>;
+  steamInstallConfirmed?: boolean;
   playableGameAppIds?: Set<string>;
   addingGameId?: string | null;
   launchingGameId?: string | null;
@@ -42,6 +42,7 @@ export function useCollectionContextMenu({
   favoriteGameIds,
   libraryGameAppIds,
   removableGameAppIds,
+  steamInstallConfirmed = false,
   playableGameAppIds,
   addingGameId,
   launchingGameId,
@@ -172,14 +173,15 @@ export function useCollectionContextMenu({
         danger: true,
         onClick: () => onRemoveGame(game),
       });
-      if (onUninstallAndRemoveGame && isLocallyInstalledGame(game)) {
-        items.push({
-          label: "Remover e desinstalar",
-          icon: Trash2,
-          danger: true,
-          onClick: () => onUninstallAndRemoveGame(game),
-        });
-      }
+    }
+
+    if (!onlyCollectionActions && onUninstallAndRemoveGame && isInLibrary && steamInstallConfirmed) {
+      items.push({
+        label: "Remover e desinstalar",
+        icon: Trash2,
+        danger: true,
+        onClick: () => onUninstallAndRemoveGame(game),
+      });
     }
 
     return items;
@@ -188,6 +190,7 @@ export function useCollectionContextMenu({
     favoriteGameIds,
     libraryGameAppIds,
     removableGameAppIds,
+    steamInstallConfirmed,
     playableGameAppIds,
     addingGameId,
     launchingGameId,

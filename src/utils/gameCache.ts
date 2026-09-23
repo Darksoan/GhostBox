@@ -22,7 +22,11 @@ const gameAchievementDetailsRequestCache = new Map<
   string,
   Promise<GhostBoxGame | null>
 >();
-const gameAchievementNegativeCache = new Map<string, number>();
+const gameAchievementNegativeCache = new Map<
+  string,
+  | { expiresAt: number; result: GhostBoxGame | null }
+  | { expiresAt: number; error: unknown }
+>();
 const queuedGameDetailsPreloadIds = new Set<string>();
 export let hasLoadedCatalogueGlobally = false;
 
@@ -222,9 +226,11 @@ export function loadGameStoreDetailsCached(gameId: string) {
 export function loadGameAchievementDetailsCached(gameId: string) {
   const appId = normalizeGameCacheId(gameId);
   const negativeCacheKey = `${appId}::${getCurrentAppearanceLanguage()}`;
-  const negativeExpiresAt = gameAchievementNegativeCache.get(negativeCacheKey) ?? 0;
-  if (negativeExpiresAt > Date.now()) {
-    return Promise.resolve(null);
+  const negative = gameAchievementNegativeCache.get(negativeCacheKey);
+  if (negative && negative.expiresAt > Date.now()) {
+    return "error" in negative
+      ? Promise.reject(negative.error)
+      : Promise.resolve(negative.result);
   }
   gameAchievementNegativeCache.delete(negativeCacheKey);
 
@@ -247,12 +253,15 @@ export function loadGameAchievementDetailsCached(gameId: string) {
               : 5 * 60 * 1000;
           gameAchievementNegativeCache.set(
             negativeCacheKey,
-            Date.now() + ttlMs,
+            { expiresAt: Date.now() + ttlMs, result: game },
           );
         }
         return game;
       } catch (error) {
-        gameAchievementNegativeCache.set(negativeCacheKey, Date.now() + 5 * 60 * 1000);
+        gameAchievementNegativeCache.set(negativeCacheKey, {
+          expiresAt: Date.now() + 5 * 60 * 1000,
+          error,
+        });
         throw error;
       }
     },

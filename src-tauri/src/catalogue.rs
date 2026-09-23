@@ -52,6 +52,7 @@ struct AchievementFetchResult {
     achievements: Vec<Value>,
     status: String,
     retry_after: Option<u64>,
+    source: Option<&'static str>,
 }
 
 fn text(value: Option<&Value>) -> String {
@@ -1401,7 +1402,50 @@ async fn fetch_steam_achievements_from_proxy(
             .and_then(|value| value.as_u64())
             .or(retry_after),
         achievements,
+        source: None,
     }
+}
+
+async fn fetch_steam_achievements_with_user_key(
+    app: &tauri::AppHandle,
+    app_id: &str,
+    language: &str,
+) -> Option<AchievementFetchResult> {
+    let api_key = crate::settings::load_steam_web_api_key(app);
+    if api_key.is_empty() {
+        return None;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .ok()?;
+    let value = client
+        .get("https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/")
+        .query(&[("key", api_key.as_str()), ("appid", app_id), ("l", language)])
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Value>()
+        .await
+        .ok()?;
+    let achievements: Vec<Value> = value
+        .pointer("/game/availableGameStats/achievements")?
+        .as_array()?
+        .iter()
+        .filter_map(normalize_achievement)
+        .collect();
+    if achievements.is_empty() {
+        return None;
+    }
+
+    Some(AchievementFetchResult {
+        status: "ready".to_string(),
+        achievements,
+        ..Default::default()
+    })
 }
 
 async fn fetch_steam_achievements(
@@ -1411,6 +1455,7 @@ async fn fetch_steam_achievements(
     ui_language: Option<&str>,
 ) -> AchievementFetchResult {
     let proxy_url = crate::settings::load_steam_stats_proxy_url();
+    let mut failed_proxy_result = None;
     if !proxy_url.is_empty() {
         // Tenta primeiro o idioma da UI; os demais ficam como fallback caso o
         // schema não exista naquele idioma (comportamento antigo preservado
@@ -1432,23 +1477,45 @@ async fn fetch_steam_achievements(
             }
         }
         if !last_result.status.is_empty() {
-            return last_result;
+            failed_proxy_result = Some(last_result);
         }
     }
 
-    // Offline / proxy miss: local Steam schema only (no HTML community scrape).
-    let _ = app;
+    // A falha do proxy não deve impedir o uso do schema já instalado pela
+    // Steam. Consultá-lo primeiro evita outra espera de rede no modal.
     let achievements =
         crate::steam_appcache::read_local_achievement_definitions(steam_path, app_id);
-    AchievementFetchResult {
-        status: if achievements.is_empty() {
-            "no-achievements".to_string()
-        } else {
-            "ready".to_string()
-        },
-        achievements,
-        ..Default::default()
+    if !achievements.is_empty() {
+        return AchievementFetchResult {
+            status: "ready".to_string(),
+            achievements,
+            source: Some("local"),
+            ..Default::default()
+        };
     }
+
+    if failed_proxy_result
+        .as_ref()
+        .is_some_and(|result| result.status == "no-achievements")
+    {
+        return failed_proxy_result.unwrap();
+    }
+
+    // Para jogos sem schema local, a chave pessoal pode recuperar a lista
+    // diretamente da Steam quando o proxy compartilhado falha.
+    let language = if ui_language == Some("en") {
+        "english"
+    } else {
+        "brazilian"
+    };
+    if let Some(result) = fetch_steam_achievements_with_user_key(app, app_id, language).await {
+        return result;
+    }
+
+    failed_proxy_result.unwrap_or(AchievementFetchResult {
+        status: "no-achievements".to_string(),
+        ..Default::default()
+    })
 }
 
 fn merge_achievement_list(game: &mut Value, achievements: Vec<Value>) {
@@ -2502,7 +2569,7 @@ pub async fn database_get_game_achievement_details(
                 serde_json::json!({
                     "status": achievement_result.status,
                     "retryAfter": achievement_result.retry_after,
-                    "source": "steam-schema",
+                    "source": achievement_result.source.unwrap_or("steam-schema"),
                     "fetchedAt": now,
                 }),
             );
