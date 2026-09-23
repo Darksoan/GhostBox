@@ -126,8 +126,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
@@ -199,4 +199,8 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.account-section__confirm .collection-modal__header > div {
+  gap: var(--space-4);
 }

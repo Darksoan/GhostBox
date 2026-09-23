@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, CircleX } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -963,17 +963,19 @@ export function CataloguePage({
                   </div>
                 )}
               </div>
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  className="catalogue-page__clear-filters"
-                  onClick={clearAllFilters}
-                >
-                  {t("catalogue.filters.clearAll")}
-                </button>
-              )}
             </div>
       </div>
+
+      {hasActiveFilters && (
+        <button
+          type="button"
+          className="catalogue-page__clear-filters"
+          onClick={clearAllFilters}
+        >
+          <CircleX size={18} aria-hidden="true" />
+          {t("catalogue.filters.clearAll")}
+        </button>
+      )}
 
       <div
         className={`catalogue-page__content${

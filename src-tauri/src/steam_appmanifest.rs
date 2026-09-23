@@ -234,7 +234,7 @@ pub fn write_appmanifest(
 }
 
 /// Grava um ACF de update pendente. Diferente da instalação completa, não exige
-/// `.exe`: os primeiros 10 MiB podem pertencer a qualquer arquivo do depot.
+/// `.exe`: os primeiros chunks (ate 1 MiB) podem pertencer a qualquer arquivo do depot.
 #[allow(clippy::too_many_arguments)]
 pub fn write_partial_appmanifest(
     library_root: &Path,

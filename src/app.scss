@@ -6593,27 +6593,39 @@ html.no-animations {
   }
 
   &__clear-filters {
+    position: fixed;
+    z-index: var(--z-sticky);
+    bottom: var(--space-10);
+    right: var(--space-10);
     display: inline-flex;
-    flex: 0 0 auto;
-    min-height: 32px;
+    min-height: 40px;
     align-items: center;
-    padding: 0 var(--space-4);
+    justify-content: center;
+    gap: var(--space-3);
+    padding: 0 var(--space-8);
     border: 0;
     border-radius: var(--radius-md);
     background: var(--surface-secondary);
+    box-shadow: var(--shadow-2);
     color: var(--text-tertiary);
     cursor: pointer;
     font-size: var(--type-size-compact);
-    font-weight: var(--weight-regular);
+    font-weight: var(--weight-semibold);
     line-height: 1;
     white-space: nowrap;
+
+    &:focus-visible {
+      outline: 2px solid var(--icon-default);
+      outline-offset: 2px;
+    }
   }
 
   &__clear-filters:hover,
   &__clear-filters:focus-visible {
     background: var(--control-hover);
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
+
 
   /* Ordenação usa o dropdown compartilhado (`.settings-dropdown`), não um
      `<select>` nativo: o menu nativo é desenhado pelo sistema e ignorava
@@ -6974,8 +6986,8 @@ html.no-animations {
        do nome da facet. */
     span {
       display: inline-grid;
-      min-width: 17px;
-      height: 17px;
+      min-width: 20px;
+      height: 20px;
       flex-shrink: 0;
       place-items: center;
       padding: 0 var(--space-2);
@@ -6983,9 +6995,10 @@ html.no-animations {
       background: var(--text-primary);
       color: var(--surface-canvas);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-regular);
+      font-weight: var(--weight-semibold);
       font-variant-numeric: tabular-nums;
       line-height: 1;
+      white-space: nowrap;
     }
 
     /* Texto e chevron sobem de terciário para secundário ao interagir. */
@@ -7104,7 +7117,7 @@ html.no-animations {
     flex-direction: column;
     gap: var(--space-2);
     overflow: auto;
-    padding: 0 var(--space-4);
+    padding: 0;
   }
 
   &__empty {
@@ -14081,10 +14094,6 @@ button {
     min-width: 0;
     flex: 1;
     width: 100%;
-  }
-
-  .catalogue-page__clear-filters {
-    white-space: nowrap;
   }
 
   .catalogue-page__notice {

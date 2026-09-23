@@ -981,13 +981,21 @@ public class SteamKitPocRunner
                             if (state.ValidChunks[chunkIndex]) continue;
 
                             var chunkBytes = state.File.Chunks[chunkIndex].UncompressedLength;
-                            if (_config.MaxDownloadBytes > 0 &&
-                                (plannedBytes >= _config.MaxDownloadBytes ||
-                                 (plannedBytes > 0 && chunkBytes > _config.MaxDownloadBytes - plannedBytes)))
+                            if (_config.MaxDownloadBytes > 0)
                             {
-                                Interlocked.Exchange(ref reachedDownloadLimit, 1);
-                                channel.Writer.TryComplete();
-                                return;
+                                if (plannedBytes >= _config.MaxDownloadBytes)
+                                {
+                                    Interlocked.Exchange(ref reachedDownloadLimit, 1);
+                                    channel.Writer.TryComplete();
+                                    return;
+                                }
+                                if (chunkBytes > _config.MaxDownloadBytes - plannedBytes)
+                                {
+                                    // Um chunk indivisivel pode exceder o orçamento inteiro.
+                                    // Pule-o e tente os menores em vez de baixar o arquivo todo.
+                                    Interlocked.Exchange(ref reachedDownloadLimit, 1);
+                                    continue;
+                                }
                             }
 
                             await channel.Writer.WriteAsync(

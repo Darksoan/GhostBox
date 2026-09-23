@@ -14,7 +14,7 @@ const POC_RELATIVE_PATH: &str = "../sidecars/steamkit-worker/steamkit-poc.exe";
 /// justificava valores baixos foi resolvido marcando os arquivos como sparse.
 const MAX_PARALLEL_CHUNKS: u32 = 32;
 /// O GhostBox só faz o bootstrap. A Steam recebe o ACF parcial e baixa o resto.
-const STEAM_BOOTSTRAP_BYTES: u64 = 10 * 1024 * 1024;
+const STEAM_BOOTSTRAP_BYTES: u64 = 1024 * 1024;
 
 static ACTIVE_DOWNLOAD_PROCESSES: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
 static CANCELLED_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();

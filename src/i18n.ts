@@ -497,6 +497,9 @@ const translations: Record<Language, TranslationTree> = {
           deleteError: "Não foi possível excluir a conta.",
           signOut: "Sair",
           signOutDescription: "Encerra sua sessão neste dispositivo.",
+          signOutConfirmTitle: "Sair da conta?",
+          signOutCancel: "Cancelar",
+          signOutClose: "Fechar",
         },
       },
       connections: {
@@ -1081,6 +1084,9 @@ const translations: Record<Language, TranslationTree> = {
           deleteError: "Could not delete the account.",
           signOut: "Sign out",
           signOutDescription: "Ends your session on this device.",
+          signOutConfirmTitle: "Sign out of your account?",
+          signOutCancel: "Cancel",
+          signOutClose: "Close",
         },
       },
       connections: {

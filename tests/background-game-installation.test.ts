@@ -25,9 +25,11 @@ describe("background game installation", () => {
       "utf8",
     );
 
-    expect(download).toContain("const STEAM_BOOTSTRAP_BYTES: u64 = 10 * 1024 * 1024");
+    expect(download).toContain("const STEAM_BOOTSTRAP_BYTES: u64 = 1024 * 1024");
     expect(download).toContain('"MaxDownloadBytes": remaining_bootstrap_bytes');
     expect(worker).toContain('Type = depotResult.ReachedDownloadLimit ? "partial-complete"');
+    expect(worker).toContain('chunkBytes > _config.MaxDownloadBytes - plannedBytes');
+    expect(worker).not.toContain('plannedBytes > 0 && chunkBytes >');
     expect(manifest).toContain('const STATE_FLAG_UPDATE_REQUIRED: &str = "2"');
     expect(manifest).toContain("write_partial_appmanifest");
   });

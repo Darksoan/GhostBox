@@ -6,11 +6,11 @@
 `ghostboxApi.addGameViaLuaTools` -> `src/lib/ghostboxApi.tauri.ts`
 `luatools_add_game` -> `src-tauri/src/luatools.rs` (around 321); returns after package setup and spawns depot installation
 `install_lua_tools_package` -> `src-tauri/src/luatools.rs` (around 137)
-`install_added_game`, `cdndownload_download_game` -> `src-tauri/src/cdndownload.rs` (around 1250-1980); bootstrap limitado por `STEAM_BOOTSTRAP_BYTES` (10 MiB)
+`install_added_game`, `cdndownload_download_game` -> `src-tauri/src/cdndownload.rs` (around 1250-1980); bootstrap limitado por `STEAM_BOOTSTRAP_BYTES` (1 MiB)
 `upsert_ghostbox_library_game` -> `src-tauri/src/ghostbox_library.rs`
 
 Relationships:
-`GameModal` -> `ContentOverlay` -> `AppDataContext.queueGame` -> `luatools_add_game` -> background `install_added_game` -> SteamKit worker (`MaxDownloadBytes`) -> `write_partial_appmanifest` -> Steam conclui o download
+`GameModal` -> `ContentOverlay` -> `AppDataContext.queueGame` -> `luatools_add_game` -> background `install_added_game` -> `sidecars/steamkit-poc/Program.cs` (`downloadDepot`/`MaxDownloadBytes`) -> `SteamKitPocRunner.DownloadDepotFilesAsync` (chunk budget, `partial-complete`) -> `write_partial_appmanifest` -> Steam conclui o download
 
 Background completion:
 Rust emits `game-installation-finished` -> `ghostboxApi.onGameInstallationFinished` -> `AppDataContext` updates/removes the game silently on success and notifies only on failure. The immediate `queueGame` result emits the single “Jogo adicionado” success toast.
@@ -40,6 +40,11 @@ Cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` -> `r
 
 `EditProfileTab` -> `src/components/profile/EditProfileTab.tsx`; avatar upload/crop and premium banner editing, saved through `AppDataContext.handleUpdateProfile`.
 Styles -> `src/pages/ProfilePage.scss` (`profile-page__edit-*`, around 1880).
+
+## Settings Account / Sign Out
+
+`AccountSection` -> `src/features/settings/AccountSection.tsx`; rendered by `SettingsPage` in `src/pages/SettingsPage.tsx` (general tab, around 360). Sign-out icon opens a confirmation dialog, then calls `AuthContext.logout` -> `ghostboxApi.signOutCloud`.
+Styles -> `src/features/settings/AccountSection.scss`; dialog reuses `collection-modal` styles from `src/app.scss`. Copy -> `src/i18n.ts` (`settings.general.account`).
 
 ## Profile Activity And Achievements
 
@@ -90,6 +95,7 @@ Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n
 `CataloguePage`, `CatalogueFilterSection`, `CatalogueYearRange` -> `src/pages/CataloguePage.tsx` (filter triggers/panels around 98-383; sort/view triggers around 827-976)
 Catalogue toolbar, filters, cards and pagination styles -> `src/app.scss` (around 6486-7980); controls use `--surface-secondary` (`#101010`) at rest and `--control-hover` (`#151515`) on interaction, with tertiary -> secondary -> primary text hierarchy.
 `CatalogueList`, `CatalogueListItem`, `CatalogueGridCard` -> `src/components/ui/CatalogueList.tsx`
+Active-filter clear action -> `CataloguePage.clearAllFilters` in `src/pages/CataloguePage.tsx`; floating bottom-right viewport control `.catalogue-page__clear-filters` in `src/app.scss` (around 6595).
 
 ## Confirmation Modals
 
