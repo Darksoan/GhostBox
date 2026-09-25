@@ -106,7 +106,7 @@ export function AccountSection() {
                 <button ref={cancelRef} type="button" className="button button--outline" onClick={closeConfirm}>
                   {t("settings.general.account.signOutCancel")}
                 </button>
-                <button type="button" className="button button--primary" onClick={() => void logout()}>
+                <button type="button" className="button button--danger" onClick={() => void logout()}>
                   {t("settings.general.account.signOut")}
                 </button>
               </div>

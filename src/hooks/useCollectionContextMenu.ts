@@ -9,7 +9,6 @@ import {
   Play,
   TextSearch,
   Trash,
-  Trash2,
 } from "lucide-react";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
 
@@ -27,7 +26,6 @@ export interface UseCollectionContextMenuOptions {
   onAddGame?: (game: GhostBoxGame) => void;
   onPlayGame?: (game: GhostBoxGame) => void;
   onRemoveGame?: (game: GhostBoxGame) => void;
-  onUninstallAndRemoveGame?: (game: GhostBoxGame) => void;
   onToggleFavorite?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
   onRemoveGameFromCollection?: (game: GhostBoxGame, collectionId: string) => void;
@@ -51,7 +49,6 @@ export function useCollectionContextMenu({
   onAddGame,
   onPlayGame,
   onRemoveGame,
-  onUninstallAndRemoveGame,
   onToggleFavorite,
   onAddGameToCollection,
   onRemoveGameFromCollection,
@@ -166,21 +163,12 @@ export function useCollectionContextMenu({
       });
     }
 
-    if (!onlyCollectionActions && onRemoveGame && isRemovableFromLibrary) {
+    if (!onlyCollectionActions && onRemoveGame && (isRemovableFromLibrary || (isInLibrary && steamInstallConfirmed))) {
       items.push({
         label: "Remover da biblioteca",
         icon: Trash,
         danger: true,
         onClick: () => onRemoveGame(game),
-      });
-    }
-
-    if (!onlyCollectionActions && onUninstallAndRemoveGame && isInLibrary && steamInstallConfirmed) {
-      items.push({
-        label: "Remover e desinstalar",
-        icon: Trash2,
-        danger: true,
-        onClick: () => onUninstallAndRemoveGame(game),
       });
     }
 
@@ -203,7 +191,6 @@ export function useCollectionContextMenu({
     onAddGame,
     onPlayGame,
     onRemoveGame,
-    onUninstallAndRemoveGame,
     onToggleFavorite,
     onAddGameToCollection,
     onRemoveGameFromCollection,

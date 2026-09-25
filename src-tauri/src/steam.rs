@@ -1561,10 +1561,7 @@ pub async fn steam_get_wishlist(steam_id: String) -> Result<Vec<serde_json::Valu
     if proxy_url.is_empty() {
         return Ok(Vec::new());
     }
-    match fetch_steam_wishlist_from_proxy(&proxy_url, steam_id).await {
-        Ok(items) => Ok(items),
-        Err(_) => Ok(Vec::new()),
-    }
+    fetch_steam_wishlist_from_proxy(&proxy_url, steam_id).await
 }
 
 async fn fetch_steam_recommended_tags_from_proxy(

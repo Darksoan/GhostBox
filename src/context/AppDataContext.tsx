@@ -362,9 +362,8 @@ interface AppDataContextValue {
   toggleFavoriteGame: (game: GhostBoxGame) => void;
   queueGame: (game: GhostBoxGame) => Promise<void>;
   removeQueuedGame: (game: GhostBoxGame) => Promise<boolean>;
-  /** Shows confirmation modal; also offers to delete local files when available. */
+  /** Shows confirmation modal; offers Steam uninstall when installation is confirmed. */
   requestRemoveGame: (game: GhostBoxGame) => void;
-  requestUninstallAndRemoveGame: (game: GhostBoxGame) => void;
 
   handlePlayGame: (game: GhostBoxGame) => Promise<void>;
   addGameToUserCollection: (game: GhostBoxGame, collectionId: string) => void;
@@ -2303,16 +2302,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const [removeConfirmGame, setRemoveConfirmGame] = useState<GhostBoxGame | null>(null);
-  const [removeAndUninstall, setRemoveAndUninstall] = useState(false);
   const [pendingSteamUninstallGame, setPendingSteamUninstallGame] = useState<GhostBoxGame | null>(null);
 
   const requestRemoveGame = useCallback((game: GhostBoxGame) => {
-    setRemoveAndUninstall(false);
-    setRemoveConfirmGame(game);
-  }, []);
-
-  const requestUninstallAndRemoveGame = useCallback((game: GhostBoxGame) => {
-    setRemoveAndUninstall(true);
     setRemoveConfirmGame(game);
   }, []);
 
@@ -2960,7 +2952,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       requestRemoveGame,
-      requestUninstallAndRemoveGame,
       handlePlayGame,
 
       addGameToUserCollection,
@@ -3018,7 +3009,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueGame,
       removeQueuedGame,
       requestRemoveGame,
-      requestUninstallAndRemoveGame,
       handlePlayGame,
       addGameToUserCollection,
       removeGameFromCollection,
@@ -3042,15 +3032,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       <UninstallConfirmModal
         open={removeConfirmGame !== null || pendingSteamUninstallGame !== null}
         gameTitle={removeConfirmGame?.title ?? pendingSteamUninstallGame?.title ?? ""}
-        uninstall={removeAndUninstall}
+        gameAppId={removeConfirmGame?.appId || removeConfirmGame?.id.replace(/^steam-/, "") || ""}
         waitingForSteam={pendingSteamUninstallGame !== null}
         onCancel={() => {
           setRemoveConfirmGame(null);
           setPendingSteamUninstallGame(null);
         }}
-        onConfirm={() => {
+        onConfirm={(uninstall) => {
           if (removeConfirmGame) {
-            const action = removeAndUninstall ? uninstallGame : removeQueuedGame;
+            const action = uninstall ? uninstallGame : removeQueuedGame;
             void action(removeConfirmGame);
           }
           setRemoveConfirmGame(null);

@@ -4525,6 +4525,31 @@ button > svg {
   }
 }
 
+.home-wishlist__empty {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.home-wishlist__empty p {
+  margin: 0;
+}
+
+.home-wishlist__empty button {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.home-wishlist__empty button:hover {
+  background: var(--control-hover);
+}
+
 .home-wishlist-card__player-review-author {
   display: flex;
   align-items: center;
@@ -6995,7 +7020,7 @@ html.no-animations {
       background: var(--text-primary);
       color: var(--surface-canvas);
       font-size: var(--type-size-compact);
-      font-weight: var(--weight-semibold);
+      font-weight: var(--weight-regular);
       font-variant-numeric: tabular-nums;
       line-height: 1;
       white-space: nowrap;
@@ -14909,6 +14934,22 @@ button {
   }
 }
 
+/* ── Confirmation modals ──────────────────────────────────────────── */
+/* Separe o texto das ações e dê mais altura aos diálogos de confirmação. */
+.backdrop--confirm > .collection-modal {
+  .collection-modal__header {
+    padding-bottom: var(--space-12);
+  }
+
+  .collection-modal__content {
+    padding-bottom: var(--space-10);
+  }
+}
+
+.confirm-modal__actions {
+  padding-top: var(--space-8);
+}
+
 /* ── Uninstall confirm modal ──────────────────────────────────────── */
 /* Usa a caixa canônica `.collection-modal`; só o botão destrutivo tem
    idioma próprio (vermelho translúcido), como nos confirm internos. */
@@ -14944,11 +14985,110 @@ button {
   }
 }
 
-.uninstall-confirm-modal__note {
-  margin: 0;
-  color: var(--text-secondary);
+.uninstall-confirm-modal .collection-modal__actions .button.uninstall-confirm-modal__remove {
+  background: var(--surface-option);
+  color: var(--text-tertiary);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: var(--danger);
+    color: var(--text-primary);
+  }
+}
+
+.uninstall-confirm-modal__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
   font-size: var(--type-size-compact);
-  line-height: var(--type-line-compact);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease);
+
+  &:hover {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+
+  input {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &-box {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--surface-secondary);
+    color: transparent;
+    transition:
+      background var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out);
+  }
+
+  &-box svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+    overflow: visible;
+  }
+
+  &-box svg path {
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 16;
+    stroke-dashoffset: 16;
+    transition: stroke-dashoffset var(--motion-fast) var(--ease-out);
+  }
+
+  input:checked + &-box {
+    border: 0;
+    background: var(--text-primary);
+    color: var(--surface-canvas);
+  }
+
+  input:checked + &-box svg path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset var(--motion-slow) var(--ease-out) var(--motion-fast);
+  }
+
+  &:hover input:checked + &-box {
+    border: 0;
+    background: var(--text-primary);
+    color: var(--surface-canvas);
+  }
+
+  input:focus-visible + &-box {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &-box,
+    &-box svg path {
+      transition: none;
+    }
+  }
+}
+
+html.no-animations .uninstall-confirm-modal__option-box,
+html.no-animations .uninstall-confirm-modal__option-box svg path {
+  transition: none;
 }
 
 @media (max-width: 527px) {

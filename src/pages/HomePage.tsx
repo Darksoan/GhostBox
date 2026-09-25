@@ -1634,6 +1634,8 @@ function HomeWishlistRecommendations({
   title,
   games,
   loading,
+  emptyState,
+  onRetry,
   language,
   onOpenGame,
   onGameContextMenu,
@@ -1641,12 +1643,12 @@ function HomeWishlistRecommendations({
   title: string;
   games: GhostBoxGame[];
   loading: boolean;
+  emptyState: "empty" | "error" | null;
+  onRetry: () => void;
   language: "pt" | "en";
   onOpenGame: (game: GhostBoxGame) => void;
   onGameContextMenu?: (game: GhostBoxGame, x: number, y: number) => void;
 }) {
-  if (!games.length && !loading) return null;
-
   return (
     <section className="home-wishlist" aria-label={title}>
       <SectionHeader title={title} />
@@ -1664,6 +1666,22 @@ function HomeWishlistRecommendations({
                 onGameContextMenu={onGameContextMenu}
               />
             ))}
+        {!games.length && !loading && (
+          <div className="home-wishlist__empty" role={emptyState === "error" ? "alert" : "status"}>
+            <p>
+              {emptyState === "error"
+                ? language === "en"
+                  ? "Could not load your Steam wishlist."
+                  : "Não foi possível carregar sua wishlist da Steam."
+                : language === "en"
+                  ? "No Steam wishlist games available for recommendations yet."
+                  : "Ainda não há jogos da wishlist da Steam disponíveis para recomendações."}
+            </p>
+            <button type="button" onClick={onRetry}>
+              {language === "en" ? "Try again" : "Tentar novamente"}
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -1700,7 +1718,9 @@ export function HomePage({
   const [personalCalendarGames, setPersonalCalendarGames] = useState<GhostBoxGame[]>([]);
   const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
   const [wishlistRecommendations, setWishlistRecommendations] = useState<GhostBoxGame[]>([]);
-  const [isLoadingWishlistRecommendations, setIsLoadingWishlistRecommendations] = useState(false);
+  const [isLoadingWishlistRecommendations, setIsLoadingWishlistRecommendations] = useState(Boolean(steamProfile?.steamId));
+  const [wishlistEmptyState, setWishlistEmptyState] = useState<"empty" | "error" | null>(null);
+  const [wishlistRetry, setWishlistRetry] = useState(0);
   const [homeContextMenu, setHomeContextMenu] = useState<{
     game: GhostBoxGame;
     x: number;
@@ -1852,9 +1872,11 @@ export function HomePage({
       if (!steamProfile?.steamId) {
         setWishlistRecommendations([]);
         setIsLoadingWishlistRecommendations(false);
+        setWishlistEmptyState(null);
         return;
       }
       setIsLoadingWishlistRecommendations(true);
+      setWishlistEmptyState(null);
 
       try {
         const storedCycle = readStoredSteamWishlistCycle();
@@ -1865,7 +1887,9 @@ export function HomePage({
         );
         let retainedGames: GhostBoxGame[] = [];
 
-        if (hasFreshStoredCycle) {
+        // An expired cycle is still useful while Steam is unavailable. Never
+        // reuse another account's recommendations after switching accounts.
+        if (storedCycle?.steamId === steamProfile.steamId) {
           const cachedAppIds = storedCycle.gameIds.filter(
             (appId) => appId && !libraryGameAppIds.has(appId)
           );
@@ -1875,7 +1899,7 @@ export function HomePage({
           if (cancelled) return;
           setWishlistRecommendations(retainedGames);
 
-          if (retainedGames.length === homeWishlistCycleGameCount) {
+          if (hasFreshStoredCycle && retainedGames.length === homeWishlistCycleGameCount) {
             scheduleWishlistCycleRefresh(storedCycle);
             return;
           }
@@ -1893,7 +1917,8 @@ export function HomePage({
         );
 
         if (newAppIds.length === 0) {
-          setWishlistRecommendations(retainedGames);
+          setWishlistRecommendations([]);
+          setWishlistEmptyState("empty");
           scheduleWishlistCycleRetry();
           return;
         }
@@ -1956,7 +1981,9 @@ export function HomePage({
           ...(recentCalendar?.gameIds ?? []),
           ...retainedGames.map(homeGameAppId),
         ];
-        const wishlistHistory = storedCycle?.history ?? [];
+        const wishlistHistory = storedCycle?.steamId === steamProfile.steamId
+          ? storedCycle.history
+          : [];
         const calendarHistory = Object.values(recentCalendar?.monthGameIds ?? {}).flat();
         const exclusionsFor = (historyDays: number, includeCalendarHistory: boolean) =>
           new Set([
@@ -2001,6 +2028,7 @@ export function HomePage({
         const selectedGames = [...retainedGames, ...replacementGames];
         if (selectedGames.length < homeWishlistCycleGameCount) {
           setWishlistRecommendations(selectedGames);
+          if (!selectedGames.length) setWishlistEmptyState("empty");
           scheduleWishlistCycleRetry();
           return;
         }
@@ -2017,7 +2045,10 @@ export function HomePage({
         writeStoredSteamWishlistCycle(nextCycle);
         scheduleWishlistCycleRefresh(nextCycle);
       } catch {
-        if (!cancelled) scheduleWishlistCycleRetry();
+        if (!cancelled) {
+          setWishlistEmptyState("error");
+          scheduleWishlistCycleRetry();
+        }
       } finally {
         if (!cancelled) setIsLoadingWishlistRecommendations(false);
       }
@@ -2057,7 +2088,7 @@ export function HomePage({
       if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [steamProfile?.steamId, libraryGameAppIds]);
+  }, [steamProfile?.steamId, libraryGameAppIds, wishlistRetry]);
 
   const exploreCategories = useMemo(
     () => getHomeExploreCategories(explorePool),
@@ -2128,6 +2159,8 @@ export function HomePage({
           title={t("home.steamWishlist")}
           games={wishlistRecommendations}
           loading={isLoadingWishlistRecommendations}
+          emptyState={wishlistEmptyState}
+          onRetry={() => setWishlistRetry((value) => value + 1)}
           language={appearance.language}
           onOpenGame={onOpenGame}
           onGameContextMenu={handleGameContextMenu}

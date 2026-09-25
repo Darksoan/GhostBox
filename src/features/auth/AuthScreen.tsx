@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
-import { Check } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
 import ghostLogo from "../../../Icons/ghost-solid.png";
@@ -171,7 +170,9 @@ export function AuthScreen() {
                 onChange={(event) => setTermsAccepted(event.target.checked)}
               />
               <span className="auth-form__consent-toggle" aria-hidden="true">
-                {termsAccepted && <Check size={12} strokeWidth={2.5} />}
+                <svg viewBox="0 0 10.1668 10.1668" width={12} height={12}>
+                  <path d="M1 5.52L3.92 9.17L9.17 1" />
+                </svg>
               </span>
               <span>{t("auth.login.legalNotice")}</span>
             </label>

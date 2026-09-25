@@ -184,28 +184,65 @@
 }
 
 .auth-form__consent-toggle {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  place-items: center;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-circle);
-  background: var(--surface-canvas);
-  color: var(--surface-canvas);
-  transition-property: background-color, border-color;
-  transition-duration: 150ms;
-  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
+  color: transparent;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.auth-form__consent-toggle svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  overflow: visible;
+}
+
+.auth-form__consent-toggle svg path {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+  transition: stroke-dashoffset var(--motion-fast) var(--ease-out);
 }
 
 .auth-form__consent input:checked + .auth-form__consent-toggle {
-  border-color: var(--text-primary);
+  border: 0;
   background: var(--text-primary);
+  color: var(--surface-canvas);
+}
+
+.auth-form__consent input:checked + .auth-form__consent-toggle svg path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--motion-slow) var(--ease-out) var(--motion-fast);
 }
 
 .auth-form__consent input:focus-visible + .auth-form__consent-toggle {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-form__consent-toggle,
+  .auth-form__consent-toggle svg path {
+    transition: none;
+  }
+}
+
+html.no-animations .auth-form__consent-toggle,
+html.no-animations .auth-form__consent-toggle svg path {
+  transition: none;
 }
 
 .auth-form__legal-links {

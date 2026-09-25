@@ -1,27 +1,50 @@
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Trash2 } from "lucide-react";
 import { useSettings } from "../../context/settings";
+import { ghostboxApi } from "../../lib/ghostboxApi";
 import { ModalCloseIcon } from "../ui/ModalCloseIcon";
 
 interface UninstallConfirmModalProps {
   open: boolean;
   gameTitle: string;
-  uninstall: boolean;
+  gameAppId: string;
   waitingForSteam: boolean;
-  onConfirm: () => void;
+  onConfirm: (uninstall: boolean) => void;
   onCancel: () => void;
 }
 
 export function UninstallConfirmModal({
   open,
   gameTitle,
-  uninstall,
+  gameAppId,
   waitingForSteam,
   onConfirm,
   onCancel,
 }: UninstallConfirmModalProps) {
   const { appearance } = useSettings();
   const lang = appearance.language;
+  const [uninstallSelected, setUninstallSelected] = useState(false);
+  const [installCheck, setInstallCheck] = useState<{ appId: string; installed: boolean } | null>(null);
+
+  useEffect(() => {
+    setUninstallSelected(false);
+    setInstallCheck(null);
+    if (!open || waitingForSteam || !gameAppId) return;
+
+    let cancelled = false;
+    void ghostboxApi.isSteamGameInstalled(gameAppId)
+      .then((installed) => {
+        if (!cancelled) setInstallCheck({ appId: gameAppId, installed });
+      })
+      .catch(() => {
+        if (!cancelled) setInstallCheck({ appId: gameAppId, installed: false });
+      });
+
+    return () => { cancelled = true; };
+  }, [open, waitingForSteam, gameAppId]);
+
+  const canUninstall = !waitingForSteam && installCheck?.appId === gameAppId && installCheck.installed;
+  const uninstall = Boolean(canUninstall && uninstallSelected);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -41,13 +64,9 @@ export function UninstallConfirmModal({
                 ? lang === "en"
                   ? "Waiting for Steam"
                   : "Aguardando a Steam"
-                : uninstall
-                  ? lang === "en"
-                    ? "Remove and uninstall"
-                    : "Remover e desinstalar"
-                  : lang === "en"
-                    ? "Remove from library"
-                    : "Remover da biblioteca"}
+                : lang === "en"
+                  ? "Remove from library"
+                  : "Remover da biblioteca"}
             </h3>
             <p>
               {waitingForSteam
@@ -71,12 +90,20 @@ export function UninstallConfirmModal({
         </header>
 
         <div className="collection-modal__content">
-          {uninstall && !waitingForSteam && (
-            <p className="uninstall-confirm-modal__note">
-              {lang === "en"
-                ? "Steam will uninstall the game first. It will leave the library only after the uninstall finishes."
-                : "A Steam desinstalará o jogo primeiro. Ele só sairá da biblioteca após a desinstalação terminar."}
-            </p>
+          {canUninstall && (
+            <label className="uninstall-confirm-modal__option">
+              <input
+                type="checkbox"
+                checked={uninstall}
+                onChange={(event) => setUninstallSelected(event.target.checked)}
+              />
+              <span className="uninstall-confirm-modal__option-box" aria-hidden="true">
+                <svg viewBox="0 0 10.1668 10.1668" width={12} height={12}>
+                  <path d="M1 5.52L3.92 9.17L9.17 1" />
+                </svg>
+              </span>
+              <span>{lang === "en" ? "Remove and uninstall" : "Remover e desinstalar"}</span>
+            </label>
           )}
 
           <div className="collection-modal__actions">
@@ -97,17 +124,10 @@ export function UninstallConfirmModal({
             {!waitingForSteam && (
               <button
                 type="button"
-                className="button button--danger"
-                onClick={onConfirm}
+                className="button button--outline uninstall-confirm-modal__remove"
+                onClick={() => onConfirm(uninstall)}
               >
-                <Trash2 size={14} />
-                {uninstall
-                  ? lang === "en"
-                    ? "Uninstall in Steam"
-                    : "Desinstalar pela Steam"
-                  : lang === "en"
-                    ? "Remove"
-                    : "Remover"}
+                {lang === "en" ? "Remove" : "Remover"}
               </button>
             )}
           </div>

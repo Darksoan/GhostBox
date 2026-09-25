@@ -30,6 +30,13 @@ Chunk resume/validation state -> `src-tauri/src/chunk_index.rs`
 Public depot/build metadata -> `src-tauri/src/steam_pics.rs`
 Manifest package selection -> `src-tauri/src/manifest_sources.rs`
 
+## Home Steam Wishlist
+
+`HomeWishlistRecommendations`, `HomePage.loadWishlistCycle` -> `src/pages/HomePage.tsx` (around 1633-1684, 1845-2080); Steam-linked account gates section, cached daily cycle displays while upstream is unavailable, failed/empty fetch shows retry state.
+Daily selection / freshness -> `src/utils/wishlistCycle.ts`; local cache -> `readStoredSteamWishlistCycle` / `writeStoredSteamWishlistCycle` in `src/utils/storage.ts`.
+Fetch path -> `src/data.ts` (`loadSteamWishlist`) -> `src/lib/ghostboxApi.tauri.ts` (`getSteamWishlist`) -> `src-tauri/src/steam.rs` (`steam_get_wishlist`) -> `workers/steam-stats/src/index.ts` (`handleWishlist`, `fetchWishlist`).
+Linked Steam identity -> `AppDataContext.steamProfile` in `src/context/AppDataContext.tsx` -> `PageRouter` -> `HomePage`.
+
 ## Collections
 
 Collection storage/rehydration -> `src/lib/collectionGames.ts` (`rehydrateUserCollectionGames`); keeps stored games and prefers non-placeholder titles.
@@ -94,10 +101,15 @@ Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n
 
 `CataloguePage`, `CatalogueFilterSection`, `CatalogueYearRange` -> `src/pages/CataloguePage.tsx` (filter triggers/panels around 98-383; sort/view triggers around 827-976)
 Catalogue toolbar, filters, cards and pagination styles -> `src/app.scss` (around 6486-7980); controls use `--surface-secondary` (`#101010`) at rest and `--control-hover` (`#151515`) on interaction, with tertiary -> secondary -> primary text hierarchy.
+Filter checkbox markup -> `CatalogueFilterSection` in `src/pages/CataloguePage.tsx` (around 350); `.catalogue-filter-option` in `src/app.scss` (around 7297, white selected check).
 `CatalogueList`, `CatalogueListItem`, `CatalogueGridCard` -> `src/components/ui/CatalogueList.tsx`
 Active-filter clear action -> `CataloguePage.clearAllFilters` in `src/pages/CataloguePage.tsx`; floating bottom-right viewport control `.catalogue-page__clear-filters` in `src/app.scss` (around 6595).
 
+## Auth
+
+`AuthScreen` -> `src/features/auth/AuthScreen.tsx`; terms checkbox `.auth-form__consent-toggle` in `src/features/auth/AuthScreen.scss` shares the uninstall-modal checkbox language (18px, `--radius-sm`, `--surface-secondary` rest / white checked, stroke-draw motion).
+
 ## Confirmation Modals
 
-`UninstallConfirmModal` -> `src/components/modals/UninstallConfirmModal.tsx`; active remove/uninstall confirmation rendered by `AppDataContext`.
-Canonical confirmation action styles -> `src/app.scss` (`.confirm-modal` around 8505/10815; `collection-modal` around 10234; final neutral-action overrides and `.uninstall-confirm-modal` around 14850). Neutral buttons use tertiary text on `--surface-option`, then secondary text on `--surface-option-hover`; danger selectors and the collection primary action remain separate.
+`useGameContextMenu` -> `src/hooks/useGameContextMenu.ts` (Steam installation check) -> `useCollectionContextMenu` in `src/hooks/useCollectionContextMenu.ts` (single remove entry) -> `AppDataContext.requestRemoveGame` -> `UninstallConfirmModal` in `src/components/modals/UninstallConfirmModal.tsx` (checkbox after installed-game check, styled by `.uninstall-confirm-modal__option` in `src/app.scss`) -> `AppDataContext` (`removeQueuedGame` or `uninstallGame` + Steam wait).
+Canonical confirmation action styles -> `src/app.scss` (`.confirm-modal` around 8540/10870; `.collection-modal` around 10287; shared confirmation spacing and `.uninstall-confirm-modal` around 14940). Neutral buttons use tertiary text on `--surface-option`, then secondary text on `--surface-option-hover`; danger selectors and the collection primary action remain separate. Account sign-out button hover -> `src/features/settings/AccountSection.scss` (`.account-section__confirm`).

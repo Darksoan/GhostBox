@@ -204,3 +204,18 @@
 .account-section__confirm .collection-modal__header > div {
   gap: var(--space-4);
 }
+
+.collection-modal.account-section__confirm .collection-modal__actions .button.button--danger {
+  background: var(--surface-option);
+  color: var(--text-primary);
+
+  &:focus-visible:not(:disabled) {
+    background: var(--surface-option-hover);
+    color: var(--text-primary);
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--danger);
+    color: var(--text-primary);
+  }
+}

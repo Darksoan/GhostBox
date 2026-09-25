@@ -1273,7 +1273,7 @@ export const ghostboxApi = {
   },
 
   getSteamWishlist(steamId: string): Promise<SteamWishlistItem[]> {
-    return invokeOr<SteamWishlistItem[]>("steam_get_wishlist", { steamId }, []);
+    return invoke<SteamWishlistItem[]>("steam_get_wishlist", { steamId });
   },
 
   getSteamRecommendedTagsForUser(
