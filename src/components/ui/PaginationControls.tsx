@@ -6,9 +6,10 @@ interface PaginationControlsProps {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  ariaLabel?: string;
 }
 
-export function PaginationControls({ page, totalPages, onPageChange }: PaginationControlsProps) {
+export function PaginationControls({ page, totalPages, onPageChange, ariaLabel }: PaginationControlsProps) {
   const { t } = useSettings();
   const pages = useMemo(() => {
     const result: (number | string)[] = [];
@@ -37,7 +38,7 @@ export function PaginationControls({ page, totalPages, onPageChange }: Paginatio
   }, [page, totalPages]);
 
   return (
-    <nav className="pagination-controls" aria-label={t("catalogue.pagination.label")}>
+    <nav className="pagination-controls" aria-label={ariaLabel ?? t("catalogue.pagination.label")}>
       <button
         type="button"
         disabled={page <= 1}

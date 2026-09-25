@@ -21,6 +21,9 @@ import {
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import { PremiumOffer } from "./PremiumOffer";
+import { PaginationControls } from "../ui/PaginationControls";
+
+const backupsPerPage = 10;
 
 type SubscriptionPlansProps = {
   surface?: "modal" | "settings";
@@ -182,6 +185,8 @@ export function SubscriptionPlans({
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
+  const [backupPage, setBackupPage] = useState(1);
+  const backupListRef = useRef<HTMLUListElement>(null);
   const [resolvedCloudGameTitles, setResolvedCloudGameTitles] = useState<Map<string, string>>(new Map());
   const subscriptionRequestIdRef = useRef(0);
   const language = appearance.language;
@@ -362,12 +367,18 @@ export function SubscriptionPlans({
           : paymentStatus === "cancelled"
             ? "cancelled"
             : "pending";
-    // Full list: this panel is the only place backed-up games are listed.
+    // Keep the most recent backups first across all pages.
     const recentBackups = [...cloudBackupSummaries].sort((a, b) => {
       const dateA = a.lastBackupAt ? Date.parse(a.lastBackupAt) : 0;
       const dateB = b.lastBackupAt ? Date.parse(b.lastBackupAt) : 0;
       return dateB - dateA;
     });
+    const totalBackupPages = Math.ceil(recentBackups.length / backupsPerPage);
+    const currentBackupPage = Math.min(backupPage, Math.max(1, totalBackupPages));
+    const visibleBackups = recentBackups.slice(
+      (currentBackupPage - 1) * backupsPerPage,
+      currentBackupPage * backupsPerPage,
+    );
 
     return (
       <section
@@ -455,8 +466,8 @@ export function SubscriptionPlans({
           <article className="subscription-account__panel">
             <h4>{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
             {recentBackups.length > 0 ? (
-              <ul className="subscription-account__backup-list">
-                {recentBackups.map((game) => (
+              <ul className="subscription-account__backup-list" ref={backupListRef}>
+                {visibleBackups.map((game) => (
                   <li key={game.appId}>
                     <BackupGameThumb appId={game.appId} />
                     <div className="subscription-account__backup-title">
@@ -513,6 +524,17 @@ export function SubscriptionPlans({
                 <strong>{copy("Nenhum backup em nuvem", "No cloud backups yet")}</strong>
                 <p>{copy("Faça backup de um jogo para ver o histórico aqui.", "Back up a game to see history here.")}</p>
               </div>
+            )}
+            {totalBackupPages > 1 && (
+              <PaginationControls
+                page={currentBackupPage}
+                totalPages={totalBackupPages}
+                onPageChange={(page) => {
+                  setBackupPage(page);
+                  backupListRef.current?.scrollTo({ top: 0 });
+                }}
+                ariaLabel={copy("Páginas dos jogos com backup", "Backed-up games pages")}
+              />
             )}
           </article>
         </div>

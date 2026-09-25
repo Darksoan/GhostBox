@@ -1260,9 +1260,8 @@ p {
       content: none;
     }
 
-    // Hover and active share the same selector color.
+    // Hover changes only the surface; selected items brighten the text.
     &:hover:not(.sidebar__menu-item--active) {
-      color: var(--text-primary);
       background: var(--sidebar-option-hover);
     }
 
@@ -1287,7 +1286,6 @@ p {
       }
 
       &:hover:not(.sidebar__menu-item--active) {
-        color: var(--text-primary);
         background: var(--sidebar-selector);
       }
 
@@ -1477,7 +1475,6 @@ p {
     &:hover,
     &:focus-visible {
       background: var(--sidebar-option-selected);
-      color: var(--text-primary);
     }
   }
 
@@ -2079,7 +2076,7 @@ p {
     border: 1px solid transparent;
     border-radius: var(--radius-pill);
     background: var(--surface-option);
-    color: var(--text-secondary);
+    color: var(--text-placeholder);
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
@@ -2092,7 +2089,7 @@ p {
 
     &:hover,
     &:focus-visible {
-      background: var(--surface-dropdown-menu);
+      background: var(--surface-option-hover);
 
       .header__tooltip {
         opacity: 1;
@@ -2178,6 +2175,8 @@ p {
       line-height: var(--type-line-compact);
 
       &::placeholder {
+        color: var(--text-placeholder);
+        opacity: 1;
         font-weight: var(--weight-regular);
       }
     }
@@ -3709,25 +3708,25 @@ button > svg {
   white-space: nowrap;
 }
 
-/* Desenvolvedora, uma linha abaixo do nome e um degrau de cor abaixo dele. A
+/* Contagem de avaliações, uma linha abaixo do nome e um degrau de cor abaixo dele. A
    altura é fechada (`--type-line-compact`) e vale também quando o texto está
    vazio: o dado só chega no enriquecimento e o card não pode crescer depois. */
 .home-top-rated-card__developer {
   display: block;
   overflow: hidden;
   /* 5px: um passo abaixo do --space-3 (6px), fora da escala de propósito — o
-     nome e a desenvolvedora leem como um bloco só. */
+      nome e as avaliações leem como um bloco só. */
   margin-top: calc(var(--space-3) - 1px);
   min-width: 0;
   height: var(--type-line-compact);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: var(--type-size-compact);
   line-height: var(--type-line-compact);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Placeholder da desenvolvedora: largura parcial, como o do título. */
+/* Placeholder das avaliações: largura parcial, como o do título. */
 .home-top-rated-card__developer--skeleton {
   width: 42%;
 }
@@ -4590,7 +4589,7 @@ button > svg {
   }
 
   small {
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
@@ -12392,7 +12391,7 @@ html.no-backdrop-blur {
   &__gear-button {
     border: none;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--black) 72%, transparent);
+    background: var(--surface-option);
     color: var(--text-secondary);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -12412,23 +12411,18 @@ html.no-backdrop-blur {
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
       background: var(--surface-option-hover);
-      color: var(--text-primary);
-
-      svg {
-        color: var(--text-primary);
-        transform: none;
-      }
     }
   }
 
-  /* Superfície compartilhada para os controles da linha de ação: o feedback
-     é só na superfície (#101010 → #151515), sem clareamento do texto. */
+  /* Os botões com `.button` herdam clareamento no hover global; aqui só a
+     superfície muda, mantendo texto e ícones na cor de repouso. */
   &__play-button,
   &__add-button,
-  &__remove-button,
-  &__favorite-button,
-  &__gear-button {
-    background: var(--surface-option);
+  &__remove-button {
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      color: var(--text-secondary);
+    }
   }
 
   /* Jogando/Iniciando mantém a superfície escura e usa o estado disabled

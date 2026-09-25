@@ -11,6 +11,7 @@
 
 Relationships:
 `GameModal` -> `ContentOverlay` -> `AppDataContext.queueGame` -> `luatools_add_game` -> background `install_added_game` -> `sidecars/steamkit-poc/Program.cs` (`downloadDepot`/`MaxDownloadBytes`) -> `SteamKitPocRunner.DownloadDepotFilesAsync` (chunk budget, `partial-complete`) -> `write_partial_appmanifest` -> Steam conclui o download
+`GameModal` / `ModalActions` -> `src/components/modals/GameModal.tsx` (around 706-885: Jogar/Adicionar/Remover/Favoritos/Ajustes); action hover/selected styles -> `src/app.scss` (`.modal__play-button` through `.modal__gear-button`, around 12300-12485).
 
 Background completion:
 Rust emits `game-installation-finished` -> `ghostboxApi.onGameInstallationFinished` -> `AppDataContext` updates/removes the game silently on success and notifies only on failure. The immediate `queueGame` result emits the single “Jogo adicionado” success toast.
@@ -32,6 +33,8 @@ Manifest package selection -> `src-tauri/src/manifest_sources.rs`
 
 ## Home Steam Wishlist
 
+Top-rated card review count -> `HomeTopRatedCard` in `src/pages/HomePage.tsx` (around 483-555); `.home-top-rated-card__developer` in `src/app.scss` (around 3714).
+Wishlist player review/author playtime -> `HomePlayerReview` in `src/pages/HomePage.tsx` (around 1415-1573); `.home-wishlist-card__player-review-author small` in `src/app.scss` (around 4552-4597).
 `HomeWishlistRecommendations`, `HomePage.loadWishlistCycle` -> `src/pages/HomePage.tsx` (around 1633-1684, 1845-2080); Steam-linked account gates section, cached daily cycle displays while upstream is unavailable, failed/empty fetch shows retry state.
 Daily selection / freshness -> `src/utils/wishlistCycle.ts`; local cache -> `readStoredSteamWishlistCycle` / `writeStoredSteamWishlistCycle` in `src/utils/storage.ts`.
 Fetch path -> `src/data.ts` (`loadSteamWishlist`) -> `src/lib/ghostboxApi.tauri.ts` (`getSteamWishlist`) -> `src-tauri/src/steam.rs` (`steam_get_wishlist`) -> `workers/steam-stats/src/index.ts` (`handleWishlist`, `fetchWishlist`).
@@ -41,6 +44,7 @@ Linked Steam identity -> `AppDataContext.steamProfile` in `src/context/AppDataCo
 
 Collection storage/rehydration -> `src/lib/collectionGames.ts` (`rehydrateUserCollectionGames`); keeps stored games and prefers non-placeholder titles.
 Sidebar collection tree -> `src/components/layout/Sidebar.tsx`; resolves IDs across favorites, library, and stored collection games.
+Sidebar navigation (main/settings/profile tabs and collections) -> `Sidebar.tsx` (around 279-577); option/collection/game hover and selected colors -> `src/app.scss` (`.sidebar__menu-item`, `.sidebar__collection-game-button`, around 1237-1482).
 Cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` -> `resolveCloudGames` -> `rehydrateCollectionGames`; placeholder titles receive one store-details retry after restore.
 
 ## Profile Editing
@@ -93,9 +97,14 @@ Header has no update UI (removed manual button/hourly polling/splash).
 ## Design Tokens (Texto / Tipografia)
 
 Primitives -> `src/styles/_primitives.scss` (`--fs-*`, `--lh-*`, `--ls-*`, `--weight-*`, `--font-sans`)
-Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#b8b8b8`; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`)
+Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#b8b8b8`, titlebar placeholder `--text-placeholder`; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`)
 Mixins -> `src/styles/_mixins.scss` (`type-label/meta/body/body-strong/title/section/page/hero/showcase`, `eyebrow`, `truncate`)
 Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n-*/--a-*` in components; use `--text-*` / `--type-*`)
+
+## Titlebar
+
+`Header` -> `src/components/layout/Header.tsx` (premium/subscription button around 407-456)
+Premium button appearance -> `src/app.scss` (`.header__premium-indicator`, around 2064; crown and label immediately after); resting label matches `.header__search input::placeholder` via `--text-placeholder`; hover/focus changes only the surface to `--surface-option-hover` (`#151515`).
 
 ## Catalogue UI
 
@@ -104,6 +113,11 @@ Catalogue toolbar, filters, cards and pagination styles -> `src/app.scss` (aroun
 Filter checkbox markup -> `CatalogueFilterSection` in `src/pages/CataloguePage.tsx` (around 350); `.catalogue-filter-option` in `src/app.scss` (around 7297, white selected check).
 `CatalogueList`, `CatalogueListItem`, `CatalogueGridCard` -> `src/components/ui/CatalogueList.tsx`
 Active-filter clear action -> `CataloguePage.clearAllFilters` in `src/pages/CataloguePage.tsx`; floating bottom-right viewport control `.catalogue-page__clear-filters` in `src/app.scss` (around 6595).
+
+## Subscription / Cloud Backups
+
+`SubscriptionPlans` -> `src/components/subscription/SubscriptionPlans.tsx` (cloud-save summaries around 280-306; active subscription, backup sorting and pagination around 339-535). Receives `cloudBackupGames` from `SettingsPage` (`src/pages/SettingsPage.tsx`, around 315-386); remote saves via `ghostboxApi.listCloudSaves`.
+Backup list styles -> `src/app.scss` (`.subscription-account__backup-list`, around 5613). Pagination reuses `PaginationControls` -> `src/components/ui/PaginationControls.tsx` (also used by `CataloguePage`).
 
 ## Auth
 
