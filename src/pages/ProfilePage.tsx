@@ -517,7 +517,7 @@ export function ProfilePage({
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
-  const { account } = useAuth();
+  const { account, linkedSteamId } = useAuth();
   const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
@@ -557,7 +557,14 @@ export function ProfilePage({
   const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(() =>
     ghostboxApi.getCachedDiscordLinkStatus(),
   );
-  const [steamLevel, setSteamLevel] = useState<number | null>(null);
+  const [steamLevelResult, setSteamLevelResult] = useState<{
+    steamId: string;
+    level: number | null;
+  } | null>(null);
+  const connectedSteamId = linkedSteamId?.trim() || "";
+  const steamLevel = steamLevelResult?.steamId === connectedSteamId
+    ? steamLevelResult.level
+    : null;
   // Avatar e capa vivem em URLs remotas (nuvem). Um erro de rede pontual não
   // pode deixá-las quebradas até a próxima navegação: mexer neste token refaz
   // a cadeia de carregamento com as mesmas URLs.
@@ -1759,9 +1766,9 @@ export function ProfilePage({
   }, []);
 
   useEffect(() => {
-    const steamId = steamProfile?.steamId?.trim();
+    const steamId = connectedSteamId;
     if (!steamId) {
-      setSteamLevel(null);
+      setSteamLevelResult(null);
       return;
     }
 
@@ -1769,23 +1776,23 @@ export function ProfilePage({
     void (async () => {
       try {
         const level = await ghostboxApi.getSteamPlayerLevel(steamId);
-        if (
-          !cancelled &&
-          typeof level === "number" &&
-          Number.isFinite(level) &&
-          level >= 0
-        ) {
-          setSteamLevel(Math.floor(level));
+        if (!cancelled) {
+          setSteamLevelResult({
+            steamId,
+            level: typeof level === "number" && Number.isFinite(level) && level >= 0
+              ? Math.floor(level)
+              : null,
+          });
         }
       } catch {
-        if (!cancelled) setSteamLevel(null);
+        if (!cancelled) setSteamLevelResult({ steamId, level: null });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [steamProfile?.steamId]);
+  }, [connectedSteamId]);
 
   useEffect(() => {
     preloadGameListAssets(visibleGames, {
@@ -1928,7 +1935,7 @@ export function ProfilePage({
                 <h2 className="profile-page__display-name">
                   {profileDisplayName}
                 </h2>
-                {steamConnected && (
+                {connectedSteamId && (
                   <span
                     className="profile-page__level"
                     aria-label={steamLevelLabel}

@@ -6,6 +6,7 @@ import {
   normalizeGlobalPercentages,
   mergeGlobalPercentages,
   parseRetryAfter,
+  parseSteamLevelResponse,
   parseSimilarAppIds,
   sortWishlistItems,
   validAppId,
@@ -16,6 +17,14 @@ test("validSteamId accepts 15-20 digit ids", () => {
   assert.equal(validSteamId("76561197960287930"), true);
   assert.equal(validSteamId("bad"), false);
   assert.equal(validSteamId("123"), false);
+});
+
+test("parseSteamLevelResponse distinguishes level zero from a missing Steam response", () => {
+  assert.equal(parseSteamLevelResponse({ response: { player_level: 0 } }), 0);
+  assert.equal(parseSteamLevelResponse({ response: { player_level: 42 } }), 42);
+  assert.equal(parseSteamLevelResponse({ response: {} }), null);
+  assert.equal(parseSteamLevelResponse({ response: { player_level: -1 } }), null);
+  assert.equal(parseSteamLevelResponse({ response: { player_level: "42" } }), null);
 });
 
 test("validAppId accepts numeric app ids", () => {

@@ -42,6 +42,7 @@ import {
 import {
   haveCollectionGamesChanged,
   rehydrateUserCollectionGames,
+  resolveCloudCollectionGames,
 } from "../lib/collectionGames";
 import {
   formatSteamLoginError,
@@ -196,30 +197,6 @@ function sanitizeDependencyMessage(value: unknown): string {
     .replace(/\bBetterSteamTools\b/gi, "dependências")
     .replace(/\bLuaTools\.exe\b/gi, "dependências")
     .replace(/\bLuaTools\b/gi, "dependências");
-}
-
-async function resolveCloudGames(
-  gameIds: string[],
-  knownGames: GhostBoxGame[],
-) {
-  const gamesById = new Map(knownGames.map((game) => [game.id, game]));
-  const missingIds = gameIds.filter((gameId) => !gamesById.has(gameId));
-  const batchSize = 8;
-
-  for (let index = 0; index < missingIds.length; index += batchSize) {
-    const loaded = await Promise.all(
-      missingIds
-        .slice(index, index + batchSize)
-        // A game that no longer resolves must not sink the whole restore:
-        // the caller also depends on this for the profile images.
-        .map((gameId) => loadGameDetailsCached(gameId).catch(() => null)),
-    );
-    for (const game of loaded) {
-      if (game) gamesById.set(game.id, game);
-    }
-  }
-
-  return { gamesById, games: Array.from(gamesById.values()) };
 }
 
 function resolvePlaytimeAppId(game: GhostBoxGame) {
@@ -1119,11 +1096,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ),
         ]),
       );
-      const { gamesById, games } = await resolveCloudGames(cloudGameIds, [
-        ...favoriteGamesRef.current,
-        ...addedLibraryGamesRef.current,
-        ...profileHistoryGamesRef.current,
-      ]);
+      const { gamesById, games } = await resolveCloudCollectionGames(
+        cloudGameIds,
+        [
+          ...favoriteGamesRef.current,
+          ...addedLibraryGamesRef.current,
+          ...profileHistoryGamesRef.current,
+        ],
+        loadGameDetailsCached,
+      );
       const favoriteGames = applied.favoriteGameIds.flatMap((gameId) => {
         const game = gamesById.get(gameId);
         return game ? [game] : [];

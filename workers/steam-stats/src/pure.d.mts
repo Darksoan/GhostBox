@@ -1,5 +1,6 @@
 export function validSteamId(value: string | null): value is string;
 export function validAppId(value: string | null): value is string;
+export function parseSteamLevelResponse(payload: unknown): number | null;
 export function parseRetryAfter(
   value: string | null,
   now?: number,

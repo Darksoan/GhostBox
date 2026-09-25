@@ -1,6 +1,7 @@
 import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
 import { isSteamTitlePlaceholder } from "../utils/steamTitles";
+import { createProfileHistoryFallbackGame } from "./profileHistoryGames";
 
 function gameLookupKeys(game: GhostBoxGame) {
   const keys = new Set<string>();
@@ -32,6 +33,52 @@ function shouldPreferGame(current: GhostBoxGame | undefined, next: GhostBoxGame)
     .filter(Boolean).length;
 
   return nextAssetCount > currentAssetCount;
+}
+
+/** Keep cloud collection IDs visible even when game details fail to load at sign-in. */
+export async function resolveCloudCollectionGames(
+  gameIds: string[],
+  knownGames: GhostBoxGame[],
+  loadGame: (gameId: string) => Promise<GhostBoxGame | null>,
+) {
+  const knownByKey = new Map<string, GhostBoxGame>();
+  for (const game of knownGames) {
+    for (const key of gameLookupKeys(game)) {
+      if (shouldPreferGame(knownByKey.get(key), game)) knownByKey.set(key, game);
+    }
+  }
+
+  const gamesById = new Map<string, GhostBoxGame>();
+  const missingIds: string[] = [];
+  for (const gameId of gameIds) {
+    const known = knownByKey.get(gameId);
+    if (known) gamesById.set(gameId, known);
+    else missingIds.push(gameId);
+  }
+
+  for (let index = 0; index < missingIds.length; index += 8) {
+    const batch = missingIds.slice(index, index + 8);
+    const loaded = await Promise.all(batch.map((id) => loadGame(id).catch(() => null)));
+    loaded.forEach((game, offset) => {
+      const requestedId = batch[offset];
+      if (game) {
+        gamesById.set(requestedId, game);
+        return;
+      }
+
+      const steamAppId = requestedId.match(/^(?:steam-)?(\d+)$/i)?.[1];
+      const fallback = createProfileHistoryFallbackGame(
+        steamAppId ?? requestedId,
+        steamAppId ? `Steam App ${steamAppId}` : requestedId,
+      );
+      gamesById.set(requestedId, steamAppId ? fallback : { ...fallback, id: requestedId });
+    });
+  }
+
+  return {
+    gamesById,
+    games: Array.from(new Map([...knownGames, ...gamesById.values()].map((game) => [game.id, game])).values()),
+  };
 }
 
 export function rehydrateUserCollectionGames(

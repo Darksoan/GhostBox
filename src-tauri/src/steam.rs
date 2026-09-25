@@ -1359,7 +1359,7 @@ async fn fetch_steam_level(
         .ok_or_else(|| "Steam player level missing from response".to_string())
 }
 
-/// Get Steam player level via official Web API first, then proxy/profile fallbacks.
+/// Get Steam player level through the shared proxy, then a configured local key.
 #[tauri::command]
 pub async fn steam_get_player_level(
     app: tauri::AppHandle,
@@ -1371,13 +1371,20 @@ pub async fn steam_get_player_level(
     }
 
     let proxy_url = load_steam_stats_proxy_url();
-    if !proxy_url.is_empty() {
-        return fetch_steam_level_from_proxy(&proxy_url, &steam_id).await;
-    }
+    let proxy_error = if proxy_url.is_empty() {
+        None
+    } else {
+        match fetch_steam_level_from_proxy(&proxy_url, &steam_id).await {
+            Ok(level) => return Ok(level),
+            Err(error) => Some(error),
+        }
+    };
 
     let api_key = load_steam_web_api_key(&app);
     if api_key.is_empty() {
-        return Err("Steam player level unavailable without Web API or stats proxy".to_string());
+        return Err(proxy_error.unwrap_or_else(|| {
+            "Steam player level unavailable without Web API or stats proxy".to_string()
+        }));
     }
 
     let client = reqwest::Client::builder()

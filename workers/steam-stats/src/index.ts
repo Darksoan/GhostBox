@@ -5,6 +5,7 @@ import {
   mergeGlobalPercentages,
   parseRetryAfter,
   parseSimilarAppIds,
+  parseSteamLevelResponse,
   sortWishlistItems,
   validAppId,
   validSteamId,
@@ -1658,8 +1659,8 @@ async function handlePlayerLevel(request: Request, env: Env, context: ExecutionC
       env,
       "player-level"
     );
-    const playerLevel = Number(data?.response?.player_level ?? 0);
-    if (!Number.isFinite(playerLevel) || playerLevel < 0) {
+    const playerLevel = parseSteamLevelResponse(data);
+    if (playerLevel === null) {
       return jsonResponse({ error: "Invalid player level" }, env, 502);
     }
     await env.STATS_CACHE.put(

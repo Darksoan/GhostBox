@@ -24,7 +24,6 @@ import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCa
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
 import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import { isSteamConnected } from "../../lib/steamProfile";
 import { resolveSidebarIdentity } from "../../lib/sidebarIdentity";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import {
@@ -679,7 +678,7 @@ const SidebarProfile = memo(function SidebarProfile({
   onOpenProfile,
 }: SidebarProfileProps) {
   const { appearance, t } = useSettings();
-  const { account, connections, authenticatedVia, status } = useAuth();
+  const { account, connections, authenticatedVia, linkedSteamId, status } = useAuth();
   // The app stays mounted behind the login modal, and a Steam profile can
   // briefly outlive a sign-out (in-flight restores, leftover disk cache).
   // While anonymous the sidebar must never paint a profile.
@@ -703,7 +702,16 @@ const SidebarProfile = memo(function SidebarProfile({
   // the placeholder avatar and no username instead of the provisional Steam
   // data — for any URL kind, not just non-custom ones.
   const isHoldingForCloudSync = Boolean(isCloudProfileRestoring);
-  const [steamLevel, setSteamLevel] = useState<number | null>(null);
+  const [steamLevelResult, setSteamLevelResult] = useState<{
+    steamId: string;
+    level: number | null;
+  } | null>(null);
+  const connectedSteamId = status === "authenticated"
+    ? linkedSteamId?.trim() || ""
+    : "";
+  const steamLevel = steamLevelResult?.steamId === connectedSteamId
+    ? steamLevelResult.level
+    : null;
 
   useEffect(() => {
     preloadProfileImages(visibleProfile);
@@ -711,32 +719,32 @@ const SidebarProfile = memo(function SidebarProfile({
 
   useEffect(() => {
     let cancelled = false;
-    const steamId = visibleProfile?.steamId?.trim();
+    const steamId = connectedSteamId;
     if (!steamId) {
-      setSteamLevel(null);
+      setSteamLevelResult(null);
       return;
     }
 
     void (async () => {
       try {
         const level = await ghostboxApi.getSteamPlayerLevel(steamId);
-        if (
-          !cancelled &&
-          typeof level === "number" &&
-          Number.isFinite(level) &&
-          level >= 0
-        ) {
-          setSteamLevel(Math.floor(level));
+        if (!cancelled) {
+          setSteamLevelResult({
+            steamId,
+            level: typeof level === "number" && Number.isFinite(level) && level >= 0
+              ? Math.floor(level)
+              : null,
+          });
         }
       } catch {
-        if (!cancelled) setSteamLevel(null);
+        if (!cancelled) setSteamLevelResult({ steamId, level: null });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [visibleProfile?.steamId]);
+  }, [connectedSteamId]);
 
   const levelLabel =
     steamLevel === null
@@ -777,7 +785,7 @@ const SidebarProfile = memo(function SidebarProfile({
               <span className="sidebar-profile__button-title">
                 {isHoldingForCloudSync ? "" : identity.title}
               </span>
-              {isSteamConnected(visibleProfile) ? (
+              {connectedSteamId ? (
                 <span
                   className="sidebar-profile__level"
                   aria-label={levelLabel}

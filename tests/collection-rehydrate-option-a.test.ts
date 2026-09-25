@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rehydrateUserCollectionGames } from "../src/lib/collectionGames";
+import { rehydrateUserCollectionGames, resolveCloudCollectionGames } from "../src/lib/collectionGames";
 
 const catalogOnlyGame = {
   id: "460790",
@@ -40,5 +40,47 @@ describe("option A: collections keep non-library games", () => {
     const collections = [{ id: "c1", name: "C", gameIds: ["123"], games: [] }] as never;
     const result = rehydrateUserCollectionGames(collections, [known]) as Array<{ games: unknown[] }>;
     expect(result[0].games).toHaveLength(1);
+  });
+});
+
+describe("loading cloud collections on sign-in", () => {
+  it("keeps games in the sidebar when the catalogue cannot resolve them", async () => {
+    const { gamesById, games } = await resolveCloudCollectionGames(
+      ["steam-367520"],
+      [],
+      async () => null,
+    );
+    const collections = rehydrateUserCollectionGames(
+      [{ id: "c1", name: "Jogos", gameIds: ["steam-367520"], games: [] }],
+      games,
+    );
+
+    expect(gamesById.get("steam-367520")?.appId).toBe("367520");
+    expect(collections[0].games?.map((game) => game.title)).toEqual(["Steam App 367520"]);
+  });
+
+  it("resolves appId and steam-prefixed IDs against installed games before fetching", async () => {
+    const loaded = { id: "steam-123", appId: "123", title: "Installed game" } as never;
+    let requests = 0;
+    const result = await resolveCloudCollectionGames(["123"], [loaded], async () => {
+      requests += 1;
+      return null;
+    });
+
+    expect(requests).toBe(0);
+    expect(result.gamesById.get("123")).toBe(loaded);
+    expect(rehydrateUserCollectionGames(
+      [{ id: "c1", name: "C", gameIds: ["123"], games: [] }], result.games,
+    )[0].games).toEqual([loaded]);
+  });
+
+  it("keeps requested IDs when a detail response uses a different ID or rejects", async () => {
+    const result = await resolveCloudCollectionGames(["123", "steam-456"], [], async (gameId) => {
+      if (gameId === "steam-456") throw new Error("catalogue offline");
+      return { id: "steam-123", appId: "123", title: "Real title" } as never;
+    });
+
+    expect(result.gamesById.get("123")?.title).toBe("Real title");
+    expect(result.gamesById.get("steam-456")?.title).toBe("Steam App 456");
   });
 });

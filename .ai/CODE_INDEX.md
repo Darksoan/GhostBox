@@ -45,7 +45,7 @@ Linked Steam identity -> `AppDataContext.steamProfile` in `src/context/AppDataCo
 Collection storage/rehydration -> `src/lib/collectionGames.ts` (`rehydrateUserCollectionGames`); keeps stored games and prefers non-placeholder titles.
 Sidebar collection tree -> `src/components/layout/Sidebar.tsx`; resolves IDs across favorites, library, and stored collection games.
 Sidebar navigation (main/settings/profile tabs and collections) -> `Sidebar.tsx` (around 279-577); option/collection/game hover and selected colors -> `src/app.scss` (`.sidebar__menu-item`, `.sidebar__collection-game-button`, around 1237-1482).
-Cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` -> `resolveCloudGames` -> `rehydrateCollectionGames`; placeholder titles receive one store-details retry after restore.
+Premium cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` in `src/context/AppDataContext.tsx` (around 997-1157) -> `resolveCloudCollectionGames` / `rehydrateUserCollectionGames` in `src/lib/collectionGames.ts` -> `Sidebar.sidebarCollections` in `src/components/layout/Sidebar.tsx` (around 134-193); unresolvable game IDs stay visible as placeholders and receive a store-details retry. Free accounts load collections from `src/utils/storage.ts` (`readStoredUserCollections`) on this device; cloud snapshot GET/PUT in `workers/subscriptions/src/index.ts` still requires Premium.
 
 ## Profile Editing
 
@@ -64,6 +64,11 @@ Styles -> `src/features/settings/AccountSection.scss`; dialog reuses `collection
 `ProfileActivityCard` -> `src/pages/ProfilePage.tsx` (around 150-305); recent-game activity, progress, and the latest-achievement icons/tooltips.
 Achievement tab game cards -> `ProfilePage.tsx` (around 2145-2285); styles in `ProfilePage.scss` (`profile-page__achievement-*`, around 1274-1564).
 Activity achievement icons/tooltips -> `ProfilePage.scss` (`profile-page__activity-icon`, around 1068); bitmap edges are cropped to remove embedded decorative borders, and card overflow remains visible so tooltips are not clipped.
+
+## Linked Steam Profile Level
+
+Steam link -> `AuthContext.linkedSteamId` in `src/context/AuthContext.tsx` (boot/account refresh around 51-126) -> `SidebarProfile` in `src/components/layout/Sidebar.tsx` (around 675-800) and `ProfilePage` in `src/pages/ProfilePage.tsx` (around 1760-1790, 1927-1947); level results are scoped to Steam ID so an earlier account's value does not linger.
+Fetch -> `ghostboxApi.getSteamPlayerLevel` in `src/lib/ghostboxApi.tauri.ts` -> `steam_get_player_level` in `src-tauri/src/steam.rs` (around 1308-1395) -> `workers/steam-stats/src/index.ts` (`handlePlayerLevel` around 1620-1690; response parser `parseSteamLevelResponse` in `src/pure.mjs`); local Steam Web API key fallback via `settings::load_steam_web_api_key` when proxy fails.
 
 ## Tauri Commands
 

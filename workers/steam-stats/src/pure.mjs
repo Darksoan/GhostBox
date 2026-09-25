@@ -6,6 +6,11 @@ export function validAppId(value) {
   return typeof value === "string" && /^[0-9]{1,12}$/.test(value);
 }
 
+export function parseSteamLevelResponse(payload) {
+  const level = payload?.response?.player_level;
+  return Number.isSafeInteger(level) && level >= 0 ? level : null;
+}
+
 export function parseRetryAfter(value, now = Date.now(), maxSeconds = 24 * 60 * 60) {
   if (!value) return undefined;
   const seconds = Number(value);
