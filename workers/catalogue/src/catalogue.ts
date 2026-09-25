@@ -109,13 +109,20 @@ export function toGame(row: GameRow, origin: string, snapshot?: SteamSpySnapshot
   const appId = String(row.app_id);
   const imageBase = `${origin}/images/steam/apps/${appId}`;
   const cdnBase = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`;
+  const storeHeader = row.header_image?.trim() ?? "";
+  // New Steam releases publish their headers only at a hashed asset URL. The
+  // generic image proxy points at an unversioned 404 for those games, delaying
+  // every cover behind failed requests even though ingestion knows the URL.
+  const directHeader = /^https:\/\/(?:[^/]+\.)?steamstatic\.com\/store_item_assets\/steam\/apps\/\d+\/(?:[a-f0-9]{20,}\/)?header\.jpg(?:\?[^\s]*)?$/i.test(storeHeader)
+    ? storeHeader
+    : "";
   const developers = stringArray(row.developers_json);
   const publishers = stringArray(row.publishers_json);
   const genres = stringArray(row.genres_json).slice(0, 6);
   const rawTags = stringArray(row.tags_json);
   const tags = (rawTags.length ? rawTags : stringArray(row.categories_json)).slice(0, 12);
   const screenshots = stringArray(row.screenshots_json).slice(0, 8);
-  const coverUrl = `${imageBase}/header.jpg`;
+  const coverUrl = directHeader || `${imageBase}/header.jpg`;
   const heroUrl = `${imageBase}/library_hero.jpg`;
   const subtitle = [genres.slice(0, 2).join(" / "), developers[0]].filter(Boolean).join(" - ");
 
@@ -661,16 +668,32 @@ export async function searchCatalogue(
   const orderBindings: unknown[] = [];
   let order = indexed ? "games.ranking_tier DESC, CAST(games.app_id AS INTEGER) ASC" : POPULAR_ORDER;
   if (normalizedQuery) {
+    // FTS indexes app ID, title, developers, publishers and tags in the same
+    // text column. bm25 alone can put a match in a developer's name ahead of
+    // a popular game whose *title* contains the query. Rank title and AppID
+    // matches first, then use quality within each group (also for short
+    // partial queries, where dozens of equally short names may match).
+    const titleOrder = `CASE
+      WHEN games.app_id = ? THEN 0
+      WHEN lower(games.name) = ? THEN 1
+      WHEN lower(games.name) LIKE ? ESCAPE '\\' THEN 2
+      WHEN lower(games.name) LIKE ? ESCAPE '\\' THEN 3
+      WHEN games.app_id LIKE ? ESCAPE '\\' THEN 4
+      WHEN lower(games.name) LIKE ? ESCAPE '\\' THEN 5
+      ELSE 6
+    END, games.ranking_tier DESC`;
+    orderBindings.push(
+      normalizedQuery,
+      normalizedQuery,
+      `${escapedQuery}%`,
+      `% ${escapedQuery}%`,
+      `${escapedQuery}%`,
+      `%${escapedQuery}%`,
+    );
     if (indexed) {
-      order = "bm25(games_search), LENGTH(games.name) ASC, games.name COLLATE NOCASE ASC";
+      order = `${titleOrder}, bm25(games_search), LENGTH(games.name) ASC, games.name COLLATE NOCASE ASC`;
     } else {
-      order = `CASE
-        WHEN games.search_text = ? THEN 0
-        WHEN games.search_text LIKE ? ESCAPE '\\' THEN 1
-        WHEN games.search_text LIKE ? ESCAPE '\\' THEN 2
-        ELSE 3
-      END, LENGTH(games.name) ASC, games.name COLLATE NOCASE ASC`;
-      orderBindings.push(normalizedQuery, `${escapedQuery}%`, `%${escapedQuery}%`);
+      order = `${titleOrder}, LENGTH(games.name) ASC, games.name COLLATE NOCASE ASC`;
     }
   } else if (request.sort === "recentlyAdded") {
     order = "games.updated_at DESC, CAST(games.app_id AS INTEGER) DESC";

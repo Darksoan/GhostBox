@@ -3092,7 +3092,7 @@ button > svg {
 .home-banner__description {
   display: -webkit-box;
   overflow: hidden;
-  max-width: 52ch;
+  max-width: min(92ch, 100%);
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
   line-height: var(--lh-300);
@@ -7488,7 +7488,7 @@ html.no-animations {
 
   &__developer {
     overflow: hidden;
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
@@ -7720,6 +7720,7 @@ input[type="search"]::-ms-reveal {
   @include tag-chip;
   background: var(--pill-bg);
   border-color: transparent;
+  color: var(--text-tertiary);
   font-size: var(--type-size-pill);
 }
 

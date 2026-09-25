@@ -227,9 +227,14 @@ export function invalidateSteamSpySnapshotCache() {
  */
 export async function fetchLivePlayerCount(appId: string): Promise<number | null> {
   if (!/^\d+$/.test(appId)) return null;
+  const controller = new AbortController();
+  // /games/:id awaits this optional live metric; do not stall the entire
+  // details response when Steam is slow (the D1 snapshot is already available).
+  const timeout = setTimeout(() => controller.abort(), 1_500);
   try {
     const response = await fetch(`${STEAM_PLAYER_COUNT_URL}?appid=${appId}`, {
       headers: { accept: "application/json" },
+      signal: controller.signal,
     });
     if (!response.ok) return null;
     const payload = (await response.json()) as {
@@ -243,5 +248,7 @@ export async function fetchLivePlayerCount(appId: string): Promise<number | null
       : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }

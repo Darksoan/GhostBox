@@ -91,6 +91,21 @@ describe("production schema", () => {
     expect(game.coverUrl).toBe("https://catalogue.example/images/steam/apps/413150/header.jpg");
   });
 
+  it("prefers a known hashed Steam header over an unversioned image proxy", () => {
+    const row = {
+      app_id: "3764200", name: "Resident Evil Requiem", release_date: "", release_year: "2026",
+      header_image: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3764200/ce5437442768e38eb575f205ab9397d0264017b0/header.jpg?t=1",
+      developers_json: "[]", publishers_json: "[]", categories_json: "[]", genres_json: "[]",
+      screenshots_json: "[]", tags_json: "[]", updated_at: 0, popularity_score: 0,
+      popularity_rank: null, steam_review_count: 0, steam_positive_ratio: 0, metacritic_score: 0,
+      recommendations: 0, ranking_score: 0, ranking_tier: 0, steamspy_ccu: 0,
+      steamspy_owners_max: 0, app_type: "game",
+    };
+    const game = toGame(row, "https://catalogue.example");
+    expect(game.coverUrl).toBe(row.header_image);
+    expect(game.coverFallbacks[0]).toBe(row.header_image);
+  });
+
   it("omits playingNow/ownersEstimate instead of leaking a zero for unsampled games", () => {
     const game = toGame({
       app_id: "1",

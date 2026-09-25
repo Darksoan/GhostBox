@@ -10,10 +10,11 @@ import type { GhostBoxGame } from "../../data";
 import { useSettings } from "../../context/settings";
 import { gameCataloguePreviewScreenshotSourceGroups } from "../../utils/image";
 import {
+  cacheImageSourceAfterLoad,
   forgetCachedImageSource,
+  getCachedImageSource,
   loadedImageSources,
   markImageSourceLoaded,
-  resolveCachedImageSource,
 } from "../../utils/imageCache";
 import { getSteamReviewScore } from "../../utils/gameMetrics";
 
@@ -99,23 +100,22 @@ export function CatalogueHoverPreview({
       return;
     }
 
-    void resolveCachedImageSource(candidate, { cachePredictable: true }).then(
-      (resolvedSource) => {
-        const source = resolvedSource || candidate;
-        updatePending(generation, (batch) => ({
-          ...batch,
-          shots: batch.shots.map((shot, index) =>
-            index === shotIndex && shot.candidateIndex === candidateIndex
-              ? {
-                  ...shot,
-                  source,
-                  status: loadedImageSources.has(source) ? "ready" : "loading",
-                }
-              : shot
-          ),
-        }));
-      }
-    );
+    // A native cache miss starts a download before returning a source. On hover
+    // that held back the preview behind IPC + network; use an existing cached
+    // file or let the WebView load the thumbnail immediately.
+    const source = getCachedImageSource(candidate) || candidate;
+    updatePending(generation, (batch) => ({
+      ...batch,
+      shots: batch.shots.map((shot, index) =>
+        index === shotIndex && shot.candidateIndex === candidateIndex
+          ? {
+              ...shot,
+              source,
+              status: loadedImageSources.has(source) ? "ready" : "loading",
+            }
+          : shot
+      ),
+    }));
   };
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export function CatalogueHoverPreview({
       return;
     }
 
-    if (displayedRef.current?.key === previewKey) {
+    if (displayedRef.current?.key === previewKey && displayedRef.current.shots.every(isSettled)) {
       pendingRef.current = null;
       setPendingPreview(null);
       return;
@@ -155,6 +155,10 @@ export function CatalogueHoverPreview({
     };
     pendingRef.current = batch;
     setPendingPreview(batch);
+    // The title and already-known metrics can paint right away; each image
+    // fills its own slot when ready instead of gating the entire preview.
+    displayedRef.current = batch;
+    setDisplayedPreview(batch);
 
     batch.shots.forEach((_, shotIndex) => {
       resolvePendingShot(generation, shotIndex, 0);
@@ -166,12 +170,13 @@ export function CatalogueHoverPreview({
   }, [game, paused, previewKey, screenshotGroups]);
 
   useEffect(() => {
-    if (!pendingPreview || !pendingPreview.shots.every(isSettled)) return;
+    if (!pendingPreview) return;
     if (pendingRef.current?.generation !== pendingPreview.generation) return;
 
     displayedRef.current = pendingPreview;
-    pendingRef.current = null;
     setDisplayedPreview(pendingPreview);
+    if (!pendingPreview.shots.every(isSettled)) return;
+    pendingRef.current = null;
     setPendingPreview(null);
   }, [pendingPreview]);
 
@@ -190,6 +195,7 @@ export function CatalogueHoverPreview({
       shots: batch.shots.map((shot, index) => {
         if (index !== shotIndex || shot.source !== source) return shot;
         markImageSourceLoaded(source);
+        cacheImageSourceAfterLoad(source);
         return { ...shot, status: "ready" };
       }),
     }));

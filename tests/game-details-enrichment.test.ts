@@ -148,7 +148,7 @@ describe("enriquecimento sem conquistas", () => {
     expect(modal).toContain("aboutSourceText");
     expect(modal).toContain("displayGame?.shortDescription");
     // Store e conquistas continuam em loads paralelos/independentes.
-    expect(modal).toContain("loadGameStoreDetailsCached(detailsGameId)");
-    expect(modal).toContain("loadGameAchievementDetailsCached(detailsGameId)");
+    expect(modal).toContain("loadGameStoreDetailsCached(detailsGameId, game)");
+    expect(modal).toContain("loadGameAchievementDetailsCached(detailsGameId, game)");
   });
 });

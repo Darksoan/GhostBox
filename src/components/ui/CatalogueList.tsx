@@ -199,11 +199,11 @@ export const CatalogueListItem = memo(function CatalogueListItem({
   // linha-espelho fora do fluxo. Antes o card pintava todas e recolhia depois
   // de medir — era esse recolhimento que aparecia na tela.
   const [genreDisplay, setGenreDisplay] = useState(() => ({
-    count: maxGenreLabels.length <= 1 ? maxGenreLabels.length : 0,
+    count: maxGenreLabels.length <= 1 ? maxGenreLabels.length : 1,
     key: genreLabelsKey,
   }));
   const visibleGenreCount =
-    genreDisplay.key === genreLabelsKey ? genreDisplay.count : 0;
+    genreDisplay.key === genreLabelsKey ? genreDisplay.count : Math.min(maxGenreLabels.length, 1);
   const renderedGenreLabels = maxGenreLabels.slice(0, visibleGenreCount);
 
   useLayoutEffect(() => {

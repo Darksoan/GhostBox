@@ -973,11 +973,6 @@ export function GameModal({
       };
 
     setIsLoadingDetails(true);
-    let pendingRequests = 2;
-    const finishRequest = () => {
-      pendingRequests -= 1;
-      if (!cancelled && pendingRequests === 0) setIsLoadingDetails(false);
-    };
     const mergeStoreDetails = (details: GhostBoxGame | null) => {
       if (cancelled || !details) return;
 
@@ -1036,17 +1031,20 @@ export function GameModal({
     // mudou, o Rust responde vazio e ninguém repinta.
     if (game.appId) void refreshSteamAssetManifest(game.appId);
 
-    loadGameStoreDetailsCached(detailsGameId)
+    loadGameStoreDetailsCached(detailsGameId, game)
       .then(mergeStoreDetails)
       .catch(() => undefined)
-      .finally(finishRequest);
+      // Achievements have their own loading state: they must not keep the
+      // store details/screenshot skeleton up after the store data arrived.
+      .finally(() => {
+        if (!cancelled) setIsLoadingDetails(false);
+      });
 
-    loadGameAchievementDetailsCached(detailsGameId)
+    loadGameAchievementDetailsCached(detailsGameId, game)
       .then(mergeAchievementDetails)
       .catch(() => {
         if (!cancelled) setAchievementLoadState("unavailable");
-      })
-      .finally(finishRequest);
+      });
 
     return () => {
       cancelled = true;

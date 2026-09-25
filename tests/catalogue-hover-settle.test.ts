@@ -6,20 +6,18 @@ describe("catalogue preview hover loading", () => {
     const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
     const utils = readFileSync("src/utils/cataloguePreview.ts", "utf8");
 
-    expect(page).toContain("preloadCataloguePreviewAssets([game], { idle: false, limit: 1 })");
+    expect(page).not.toContain("preloadCataloguePreviewAssets([game]");
     expect(page).toContain("commitHoveredPreview(game)");
     expect(page).not.toContain("createCatalogueHoverPreviewIntent");
     expect(utils).not.toContain("CATALOGUE_HOVER_PREVIEW_INTENT_DELAY_MS");
     expect(utils).not.toContain("CATALOGUE_HOVER_PREVIEW_SETTLE_DELAY_MS");
   });
 
-  it("prefetches only the first three visible games while idle", () => {
+  it("lets the visible preview load without duplicate background prefetches", () => {
     const page = readFileSync("src/pages/CataloguePage.tsx", "utf8");
 
-    expect(page).toContain("preloadCataloguePreviewAssets(visibleGames");
-    expect(page).toContain("limit: 3");
-    expect(page).toContain("idle: true");
-    expect(page).toContain("cancelPreviewPreload()");
+    expect(page).not.toContain("preloadCataloguePreviewAssets");
+    expect(page).toContain("<CatalogueHoverPreview");
   });
 
   it("commits the last card entered while scrolling when scrolling settles", () => {

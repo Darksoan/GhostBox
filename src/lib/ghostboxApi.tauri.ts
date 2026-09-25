@@ -687,10 +687,11 @@ export const ghostboxApi = {
   getGameStoreDetails(
     gameId: string,
     language?: "pt" | "en",
+    baseGame?: GhostBoxGame,
   ): Promise<GhostBoxGame | null> {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_store_details",
-      { gameId, apiUrl: getGamesApiUrl(), language },
+      { gameId, apiUrl: getGamesApiUrl(), language, baseGame },
       null,
     );
   },
@@ -710,10 +711,11 @@ export const ghostboxApi = {
   getGameAchievementDetails(
     gameId: string,
     language?: "pt" | "en",
+    baseGame?: GhostBoxGame,
   ): Promise<GhostBoxGame | null> {
     return invokeOr<GhostBoxGame | null>(
       "database_get_game_achievement_details",
-      { gameId, apiUrl: getGamesApiUrl(), language },
+      { gameId, apiUrl: getGamesApiUrl(), language, baseGame },
       null,
     );
   },

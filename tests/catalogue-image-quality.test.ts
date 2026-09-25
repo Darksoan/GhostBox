@@ -53,6 +53,17 @@ describe("Catalogue image quality", () => {
     expect(sources[0]).toBe(game.coverUrl);
   });
 
+  it("uses the hashed header from an older cached result before its broken proxy URL", () => {
+    const hashed = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3764200/ce5437442768e38eb575f205ab9397d0264017b0/header.jpg?t=1";
+    const sources = gameCatalogueHeaderSources({
+      ...game,
+      appId: "3764200",
+      coverUrl: "https://catalogue.example/images/steam/apps/3764200/header.jpg",
+      coverFallbacks: ["https://catalogue.example/images/steam/apps/3764200/header.jpg", hashed],
+    });
+    expect(sources[0]).toBe(hashed);
+  });
+
   it("uses 600x338 with a 1280x720 fallback and never loads the 1920x1080 source", () => {
     const source =
       "https://cdn.cloudflare.steamstatic.com/steam/apps/1222140/ss_abc.1920x1080.jpg?t=1";
@@ -60,6 +71,13 @@ describe("Catalogue image quality", () => {
     expect(cataloguePreviewScreenshotSourceGroup(source)).toEqual([
       "https://cdn.cloudflare.steamstatic.com/steam/apps/1222140/ss_abc.600x338.jpg?t=1",
       "https://cdn.cloudflare.steamstatic.com/steam/apps/1222140/ss_abc.1280x720.jpg?t=1",
+    ]);
+  });
+
+  it("falls back to the original hashed screenshot when its thumbnail is unavailable", () => {
+    const source = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3764200/08af4e9398b8e45152bfbedce3bc24d22e2c0990/ss_08af4e9398b8e45152bfbedce3bc24d22e2c0990.1920x1080.jpg?t=1";
+    expect(cataloguePreviewScreenshotSourceGroup(source)).toEqual([
+      source.replace(".1920x1080.", ".600x338."), source,
     ]);
   });
 

@@ -45,7 +45,6 @@ import {
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useGameContextMenu } from "../hooks/useGameContextMenu";
 import { useSettings } from "../context/settings";
-import { preloadCataloguePreviewAssets } from "../utils/image";
 import {
   CATALOGUE_SCROLL_IDLE_DELAY_MS,
   createCatalogueHoverPreviewRetention,
@@ -671,10 +670,8 @@ export function CataloguePage({
         }
         deferredHoverGameRef.current = null;
         hoverPreviewRetention.cancelClear();
-        // Inicia as três shots no próprio pointerenter. O componente só troca
-        // o painel após o lote inteiro decodificar, então não há debounce
-        // visual nem troca de jogo durante uma varredura rápida.
-        preloadCataloguePreviewAssets([game], { idle: false, limit: 1 });
+        // O painel inicia suas próprias imagens ao entrar; pré-carregar as
+        // mesmas três shots aqui duplicaria o trabalho enquanto capas carregam.
         commitHoveredPreview(game);
         return;
       }
@@ -702,7 +699,6 @@ export function CataloguePage({
       deferredHoverGameRef.current = null;
       if (commitDeferredHover && deferredGame) {
         hoverPreviewRetention.cancelClear();
-        preloadCataloguePreviewAssets([deferredGame], { idle: false, limit: 1 });
         commitHoveredPreview(deferredGame);
       }
     };
@@ -755,24 +751,6 @@ export function CataloguePage({
   const handlePreviewPointerLeave = useCallback(() => {
     hoverPreviewRetention.scheduleClear();
   }, [hoverPreviewRetention]);
-
-  useEffect(() => {
-    if (loading || isCatalogueScrolling || !visibleGames.length) return;
-
-    const cancelPreviewPreload = preloadCataloguePreviewAssets(visibleGames, {
-      limit: 3,
-      idle: true,
-    });
-
-    return () => {
-      cancelPreviewPreload();
-    };
-  }, [
-    isCatalogueScrolling,
-    loading,
-    visibleGames,
-    visibleGamesCacheKey,
-  ]);
 
   // Estáveis de propósito: `CatalogueFilterSection` e `CatalogueListItem` são
   // `memo` e qualquer callback recriado por render anula a memoização — cada

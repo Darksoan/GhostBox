@@ -146,7 +146,7 @@ describe("catalogue preview manual navigation", () => {
 
     // Sem controles manuais desde o redesign: o painel é só leitura. A
     // acessibilidade vive no rótulo da seção e no espelhamento hover↔foco; as
-    // shots só trocam quando o lote inteiro terminou, inclusive fallbacks.
+    // shots chegam individualmente enquanto o título já está visível.
     expect(component).toContain("aria-label={");
     expect(component).toContain("onFocusCapture={handlePreviewFocus}");
     expect(component).toContain("onBlurCapture={handlePreviewBlur}");

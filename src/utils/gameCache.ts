@@ -181,7 +181,7 @@ export function loadGameDetailsCached(gameId: string) {
   );
 }
 
-export function loadGameStoreDetailsCached(gameId: string) {
+export function loadGameStoreDetailsCached(gameId: string, baseGame?: GhostBoxGame) {
   const appId = normalizeGameCacheId(gameId);
   const language = getCurrentAppearanceLanguage();
   const cacheKey = `${appId}::${language}`;
@@ -201,7 +201,7 @@ export function loadGameStoreDetailsCached(gameId: string) {
   const pending = gameStoreDetailsRequestCache.get(cacheKey);
   if (pending) return pending;
 
-  const request = loadGameStoreDetails(appId, language)
+  const request = loadGameStoreDetails(appId, language, baseGame)
     .then((game) => {
       // Só fixa no cache o que tem enriquecimento real. Payload vazio ou só
       // com fallback (sem screenshots/sobre/idiomas) não é fixado para a
@@ -223,7 +223,7 @@ export function loadGameStoreDetailsCached(gameId: string) {
   return request;
 }
 
-export function loadGameAchievementDetailsCached(gameId: string) {
+export function loadGameAchievementDetailsCached(gameId: string, baseGame?: GhostBoxGame) {
   const appId = normalizeGameCacheId(gameId);
   const negativeCacheKey = `${appId}::${getCurrentAppearanceLanguage()}`;
   const negative = gameAchievementNegativeCache.get(negativeCacheKey);
@@ -240,7 +240,7 @@ export function loadGameAchievementDetailsCached(gameId: string) {
     gameAchievementDetailsRequestCache,
     async (normalizedGameId, language) => {
       try {
-        const game = await loadGameAchievementDetails(normalizedGameId, language);
+        const game = await loadGameAchievementDetails(normalizedGameId, language, baseGame);
         const hasAchievements =
           (game?.achievementList?.length ?? 0) > 0 ||
           (game?.achievements?.total ?? 0) > 0;

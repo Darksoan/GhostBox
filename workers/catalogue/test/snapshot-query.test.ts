@@ -126,10 +126,37 @@ describe("snapshot queries in local D1", () => {
     expect(pageSql).not.toContain("json_each");
     expect(pageSql).not.toContain("search_text LIKE");
     const plan = await db.prepare(`EXPLAIN QUERY PLAN ${pageSql}`)
-      .bind(searchIndexMatch(request), 21, 0)
+      .bind(searchIndexMatch(request), "port", "port", "port%", "% port%", "port%", "%port%", 21, 0)
       .all<{ detail: string }>();
     expect(plan.results.some((row) => /SCAN games$/i.test(row.detail))).toBe(false);
     expect(plan.results.some((row) => /SEARCH games .*app_id/i.test(row.detail))).toBe(true);
+  });
+
+  it("puts partial title matches ahead of shorter metadata matches in indexed and legacy search", async () => {
+    await db.batch([
+      db.prepare("INSERT INTO games (app_id, name, search_text, ranking_tier, app_type) VALUES ('3764200', 'Resident Evil Requiem', '3764200 resident evil requiem', 43, 'game')"),
+      db.prepare("INSERT INTO games (app_id, name, search_text, ranking_tier, app_type) VALUES ('1436210', 'Requiem', '1436210 requiem', 6, 'game')"),
+      db.prepare("INSERT INTO games (app_id, name, search_text, ranking_tier, app_type) VALUES ('443850', 'Tross', '443850 tross requiem', 8, 'game')"),
+      db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (3764200, '3764200', '3764200 resident evil requiem', '', '', '', '', '')"),
+      db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (1436210, '1436210', '1436210 requiem', '', '', '', '', '')"),
+      db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (443850, '443850', '443850 tross requiem', '', '', '', '', '')"),
+    ]);
+    try {
+      for (const indexed of [true, false]) {
+        const find = async (q: string) => searchCatalogue(
+          db,
+          parseSearch(new URL(`https://example.com/catalogue/search?q=${encodeURIComponent(q)}&limit=2`)),
+          7, "https://example.com", undefined, null, "partial-title-test", indexed,
+        );
+        expect((await find("requ")).games.map((game) => game.appId)).toEqual(["1436210", "3764200"]);
+        expect((await find("requiem")).games.map((game) => game.appId)).toEqual(["1436210", "3764200"]);
+        expect((await find("resident evil")).games[0].appId).toBe("3764200");
+        expect((await find("3764200")).games[0].appId).toBe("3764200");
+      }
+    } finally {
+      await db.prepare("DELETE FROM games WHERE app_id IN ('3764200', '1436210', '443850')").run();
+      await db.prepare("DELETE FROM games_search WHERE app_id IN ('3764200', '1436210', '443850')").run();
+    }
   });
 
   it("overlays statistics on other sorts and details, with a read-only D1 fallback", async () => {

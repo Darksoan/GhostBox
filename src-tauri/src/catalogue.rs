@@ -2436,6 +2436,7 @@ pub async fn database_get_game_store_details(
     game_id: String,
     api_url: Option<String>,
     language: Option<String>,
+    base_game: Option<Value>,
 ) -> Result<Option<serde_json::Value>, String> {
     let app_id: String = game_id.chars().filter(char::is_ascii_digit).collect();
     if app_id.is_empty() {
@@ -2446,11 +2447,22 @@ pub async fn database_get_game_store_details(
     // português da Steam, ignorando o idioma escolhido no app.
     let steam_language = steam_ui_language(language.as_deref());
 
-    let mut game = fetch_remote_game(&app, game_id, api_url)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| steam_app_fallback_game(&app_id));
+    // The modal already has the catalogue result. Fetching /games/:id before
+    // even reading the local Steam details used to put an optional network
+    // request on the critical path for every first open.
+    let supplied_game = base_game.filter(|game| text(game.get("appId")) == app_id);
+    let mut game = if let Some(game) = supplied_game {
+        game
+    } else {
+        fetch_remote_game(&app, game_id, api_url)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| steam_app_fallback_game(&app_id))
+    };
+    if is_steam_demo(&game) {
+        return Ok(None);
+    }
 
     let latest_cached_details = read_cached_steam_store_details(&app, &app_id, steam_language);
     if let Some(cached_details) = latest_cached_details.as_ref() {
@@ -2523,17 +2535,28 @@ pub async fn database_get_game_achievement_details(
     game_id: String,
     api_url: Option<String>,
     language: Option<String>,
+    base_game: Option<Value>,
 ) -> Result<Option<serde_json::Value>, String> {
     let app_id: String = game_id.chars().filter(char::is_ascii_digit).collect();
     if app_id.is_empty() {
         return Ok(None);
     }
 
-    let mut game = fetch_remote_game(&app, game_id, api_url)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| steam_app_fallback_game(&app_id));
+    // The modal can supply the catalogue record here as well, so opening it
+    // never launches two duplicate /games/:id requests just for enrichment.
+    let supplied_game = base_game.filter(|game| text(game.get("appId")) == app_id);
+    let mut game = if let Some(game) = supplied_game {
+        game
+    } else {
+        fetch_remote_game(&app, game_id, api_url)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| steam_app_fallback_game(&app_id))
+    };
+    if is_steam_demo(&game) {
+        return Ok(None);
+    }
 
     let (steam_path, _) = crate::resolve_steam_path(&app, None);
     let steam_path = steam_path.as_deref().unwrap_or_default();

@@ -271,9 +271,10 @@ export async function loadGameStoreDetails(
   gameId: string,
   // Sem idioma explícito, cai no idioma atual da UI — quem chama sem passar
   // nada (a maioria dos call sites, via gameCache) continua correto.
-  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage()
+  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage(),
+  baseGame?: GhostBoxGame,
 ): Promise<GhostBoxGame | null> {
-  return ghostboxApi.getGameStoreDetails(gameId, language);
+  return ghostboxApi.getGameStoreDetails(gameId, language, baseGame);
 }
 
 export async function searchSteamStoreGames(
@@ -325,9 +326,10 @@ export async function loadSteamSimilarAppIds(appId: string): Promise<string[]> {
 
 export async function loadGameAchievementDetails(
   gameId: string,
-  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage()
+  language: AppearanceSettings["language"] = getCurrentAppearanceLanguage(),
+  baseGame?: GhostBoxGame,
 ): Promise<GhostBoxGame | null> {
-  return ghostboxApi.getGameAchievementDetails(gameId, language);
+  return ghostboxApi.getGameAchievementDetails(gameId, language, baseGame);
 }
 
 export async function loadGameReviews(

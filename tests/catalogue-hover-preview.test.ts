@@ -9,9 +9,10 @@ describe("Catalogue hover preview", () => {
     "utf8"
   );
 
-  it("waits for the three decoded slots and swaps the batch atomically", () => {
+  it("shows game details immediately and fills decoded screenshots as they arrive", () => {
     expect(component).toContain("gameCataloguePreviewScreenshotSourceGroups");
-    expect(component).toContain("resolveCachedImageSource(candidate, { cachePredictable: true })");
+    expect(component).toContain("getCachedImageSource(candidate) || candidate");
+    expect(component).toContain("setDisplayedPreview(batch)");
     expect(component).toContain("pendingPreview.shots.every(isSettled)");
     expect(component).toContain("setDisplayedPreview(pendingPreview)");
     expect(component).toContain("generation");
@@ -19,7 +20,7 @@ describe("Catalogue hover preview", () => {
     expect(component).toContain('loading="eager"');
   });
 
-  it("keeps the prior preview visible and settles failed slots without a skeleton", () => {
+  it("settles failed slots without leaving the previous game's images in the panel", () => {
     expect(component).toContain("displayedPreview");
     expect(component).toContain("pendingPreview");
     expect(component).toContain("status: \"failed\"");

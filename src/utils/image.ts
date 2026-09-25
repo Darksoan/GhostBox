@@ -105,6 +105,12 @@ export function cataloguePreviewScreenshotSourceGroup(source: string) {
     /\.\d+x\d+\.(jpe?g|png|webp)(?=[?#]|$)/i,
     ".600x338.$1"
   );
+  // Hashed store_item_assets often publish the 600px and original variants,
+  // but no 1280px file. Fall back to the known original instead of a 404 and
+  // an empty preview when the thumbnail is missing.
+  if (/\/store_item_assets\/steam\/apps\/\d+\/[a-f0-9]{20,}\//i.test(normalizedSource)) {
+    return uniqueSources([thumbnailSource, normalizedSource]);
+  }
   const fallbackSource = normalizedSource.replace(
     /\.\d+x\d+\.(jpe?g|png|webp)(?=[?#]|$)/i,
     ".1280x720.$1"
@@ -118,32 +124,20 @@ export function gameCataloguePreviewScreenshotSourceGroups(game: GhostBoxGame) {
     .map(cataloguePreviewScreenshotSourceGroup);
 }
 
-export function preloadCataloguePreviewAssets(
-  games: GhostBoxGame[],
-  options: { idle?: boolean; limit?: number } = {}
-) {
-  const sources = games
-    .slice(0, options.limit ?? 3)
-    .flatMap((game) =>
-      gameCataloguePreviewScreenshotSourceGroups(game).map(
-        ([thumbnailSource]) => thumbnailSource
-      )
-    );
-
-  return preloadImageSources(sources, {
-    decode: true,
-    idle: options.idle ?? true,
-    nativeFirst: true,
-  });
-}
-
 export function gameCatalogueHeaderSources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const catalogueCoverSource = isHeaderImageSource(game.coverUrl)
     ? game.coverUrl
     : "";
+  // Older cached search payloads still point coverUrl at the proxy, but carry
+  // the working hashed Steam URL in coverFallbacks. Try it before the proxy.
+  const hashedHeaders = (game.coverFallbacks ?? []).filter(
+    (source) => isHeaderImageSource(source) &&
+      /\/store_item_assets\/steam\/apps\/\d+\/[a-f0-9]{20,}\/header\.jpg(?:[?#]|$)/i.test(source)
+  );
 
   return uniqueSources([
+    ...hashedHeaders,
     catalogueCoverSource,
     `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
