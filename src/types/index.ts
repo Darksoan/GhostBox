@@ -12,59 +12,15 @@ export type StartupSettings = {
 };
 
 export type BackupSettings = {
-  outputPath: string;
-  automaticBackupsForLibrary: boolean;
-  automaticBackups: Record<string, boolean>;
   backupRecords: Record<string, BackupRecord>;
-};
-
-export type BackupRootStatus = {
-  status: "ok" | "missing" | "invalid";
-  outputPath: string;
-  settings: BackupSettings;
-  message: string;
 };
 
 export type BackupRecord = {
   title: string;
   lastBackupAt: string;
   lastBackupSuccess: boolean;
-  lastBackupPath?: string;
   lastBackupError?: string;
   lastBackupSizeBytes?: number;
-  entries?: BackupEntry[];
-};
-
-type BackupEntry = {
-  path: string;
-  backupAt: string;
-  sizeBytes?: number;
-  pinned?: boolean;
-};
-
-type BackupFileTreeEntry = {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  extension?: string;
-  sizeBytes?: number;
-  children?: BackupFileTreeEntry[];
-};
-
-export type BackupDetails = {
-  appId: string;
-  backupPath: string;
-  files: BackupFileTreeEntry[];
-  fileCount: number;
-  directoryCount: number;
-  truncated: boolean;
-  achievements: Array<{
-    name: string;
-    title: string;
-    unlockedAt?: string;
-    icon?: string;
-    iconGray?: string;
-  }>;
 };
 
 export type CatalogueFilterKey = "genres" | "tags" | "developers" | "publishers" | "years";

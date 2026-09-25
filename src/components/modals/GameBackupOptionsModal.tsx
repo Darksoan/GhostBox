@@ -36,11 +36,28 @@ export function GameBackupOptionsModal({
   const [backupBusy, setBackupBusy] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [premiumGameId, setPremiumGameId] = useState<string | null>(null);
   const isEnglish = appearance.language === "en";
   const copy = (pt: string, en: string) => (isEnglish ? en : pt);
   const installPath = game?.installPath?.trim() ?? "";
   const isHidden = game ? hiddenProfileGameIds.has(game.appId) : false;
   const busy = backupBusy || folderBusy || restoreBusy;
+  const canUseCloudBackups = Boolean(game?.appId && premiumGameId === game.appId);
+
+  useLayoutEffect(() => {
+    setPremiumGameId(null);
+    if (!open || !game?.appId) return;
+
+    let cancelled = false;
+    void (async () => {
+      const session = await ghostboxApi.getCloudSession();
+      if (!session?.token) return;
+      const status = await ghostboxApi.getSubscriptionStatus();
+      if (!cancelled && status?.subscription.isPremium) setPremiumGameId(game.appId);
+    })().catch(() => undefined);
+
+    return () => { cancelled = true; };
+  }, [open, game?.appId]);
 
   useLayoutEffect(() => {
     if (!open || !trigger) return;
@@ -97,7 +114,7 @@ export function GameBackupOptionsModal({
   };
 
   const handleBackup = async () => {
-    if (!game || backupBusy) return;
+    if (!game || !canUseCloudBackups || backupBusy) return;
     setBackupBusy(true);
     try {
       const result = await ghostboxApi.backupGameToCloud(game);
@@ -127,7 +144,7 @@ export function GameBackupOptionsModal({
   };
 
   const handleRestore = async () => {
-    if (!game?.appId || restoreBusy) return;
+    if (!game?.appId || !canUseCloudBackups || restoreBusy) return;
     setRestoreBusy(true);
     try {
       const saves = await ghostboxApi.listCloudSaves(game.appId);
@@ -197,14 +214,18 @@ export function GameBackupOptionsModal({
         {folderBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <FolderOpen size={17} aria-hidden="true" />}
         {copy("Abrir pasta", "Open folder")}
       </button>
-      <button type="button" role="menuitem" onClick={() => void handleBackup()} disabled={!game || busy}>
-        {backupBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <CloudUpload size={17} aria-hidden="true" />}
-        {copy("Fazer backup", "Back up now")}
-      </button>
-      <button type="button" role="menuitem" onClick={() => void handleRestore()} disabled={!game?.appId || busy}>
-        {restoreBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <History size={17} aria-hidden="true" />}
-        {copy("Restaurar backup", "Restore backup")}
-      </button>
+      {canUseCloudBackups && (
+        <>
+          <button type="button" role="menuitem" onClick={() => void handleBackup()} disabled={busy}>
+            {backupBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <CloudUpload size={17} aria-hidden="true" />}
+            {copy("Fazer backup", "Back up now")}
+          </button>
+          <button type="button" role="menuitem" onClick={() => void handleRestore()} disabled={busy}>
+            {restoreBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <History size={17} aria-hidden="true" />}
+            {copy("Restaurar backup", "Restore backup")}
+          </button>
+        </>
+      )}
       <button type="button" role="menuitem" onClick={handleToggleHidden} disabled={!game?.appId || busy}>
         {isHidden ? <Eye size={17} aria-hidden="true" /> : <EyeOff size={17} aria-hidden="true" />}
         {isHidden ? copy("Mostrar no perfil", "Show on profile") : copy("Ocultar no perfil", "Hide from profile")}

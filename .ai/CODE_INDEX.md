@@ -2,7 +2,7 @@
 
 ## Library Add Flow
 
-`queueGame` -> `src/context/AppDataContext.tsx` (around 1894)
+`queueGame` -> `src/context/AppDataContext.tsx` (around 1973)
 `ghostboxApi.addGameViaLuaTools` -> `src/lib/ghostboxApi.tauri.ts`
 `luatools_add_game` -> `src-tauri/src/luatools.rs` (around 321); returns after package setup and spawns depot installation
 `install_lua_tools_package` -> `src-tauri/src/luatools.rs` (around 137)
@@ -25,7 +25,7 @@ Chunk resume/validation state -> `src-tauri/src/chunk_index.rs`
 
 ## Steam Libraries
 
-`resolve_steam_path`, `steamapps_path` -> `src-tauri/src/lib.rs` (around 310-460)
+`resolve_steam_path`, `steamapps_path` -> `src-tauri/src/lib.rs` (around 270-390)
 `read_steam_library_paths`, `steam_scan_library` -> `src-tauri/src/steam.rs` (around 1824-2050)
 `AppInfo` / `resolve_install_dir` -> `src-tauri/src/steam_appinfo.rs`
 Public depot/build metadata -> `src-tauri/src/steam_pics.rs`
@@ -65,9 +65,19 @@ Activity achievement icons/tooltips -> `ProfilePage.scss` (`profile-page__activi
 
 ## Tauri Commands
 
-Command registration and shutdown -> `src-tauri/src/lib.rs` (around 1806-1913)
+Command registration and shutdown -> `src-tauri/src/lib.rs` (around 1140-1305)
 Frontend invoke bridge -> `src/lib/ghostboxApi.tauri.ts`
 Frontend API types -> `src/lib/ghostboxApi.types.ts`
+
+## Premium Cloud Game Saves
+
+Manual actions -> `GameBackupOptionsModal` in `src/components/modals/GameBackupOptionsModal.tsx` (entitlement + backup/restore); `ghostboxApi.getSubscriptionStatus/backupGameToCloud/restoreCloudSave` -> `src/lib/ghostboxApi.tauri.ts`.
+Auto-restore before play/re-add -> `AppDataContext.autoRestoreCloudBackup` / `handlePlayGame` in `src/context/AppDataContext.tsx` (around 1852-1950, 2380-2410).
+Automatic backup after game exit -> `window_lifecycle::setup_window_lifecycle` -> `playtime::start_steam_running_app_monitor` / `run_automatic_backup_after_close` in `src-tauri/src/playtime.rs` (around 320-396, 480-619).
+Native backup/restore -> `cloud_save::cloud_backup_game` / `cloud_restore_save` in `src-tauri/src/cloud_save.rs`; `subscription::has_premium_access` in `src-tauri/src/subscription.rs` gates before staging; `ludusavi::run_ludusavi` in `src-tauri/src/ludusavi.rs` reads/writes game saves.
+Progress export/import -> `export_game_profile_progress` / `import_game_profile_progress` in `src-tauri/src/lib.rs` (around 619-745); transfer staging under `app_cache_dir/cloud-save`, removed after each operation; `storage_audit::startup_temp_sweep` clears stale UUID staging after crashes.
+Cloud-only status metadata -> `backup::backup_get_settings` in `src-tauri/src/backup.rs` -> `normalize_backup_settings` / `save_backup_record` in `src-tauri/src/lib.rs` (around 59-160, 770); frontend `AppDataContext.backupSettings` -> `SubscriptionPlans` in `src/components/subscription/SubscriptionPlans.tsx`. No local backup root/details API.
+Server authorization -> `workers/subscriptions/src/index.ts` (`requirePremiumSession`, `handleCloudSavesList/Upload/Download/Delete` around 669, 2085-2300).
 
 ## Windows Startup
 

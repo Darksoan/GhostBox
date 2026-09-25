@@ -5,7 +5,6 @@ import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
   AppStatus,
-  BackupDetails,
   BackupSettings,
   FeaturedResult,
   GameDatabaseRequest,
@@ -1394,25 +1393,6 @@ export const ghostboxApi = {
       "backup_get_settings",
       {},
       undefined,
-    );
-  },
-
-  removeBackupRecord(appId: string): Promise<BackupSettings | undefined> {
-    return invokeOr<BackupSettings | undefined>(
-      "backup_remove_record",
-      { appId },
-      undefined,
-    );
-  },
-
-  getBackupDetails(
-    appId: string,
-    backupPath?: string | null,
-  ): Promise<BackupDetails | null> {
-    return invokeOr<BackupDetails | null>(
-      "backup_get_details",
-      { appId, backupPath: backupPath ?? null, apiUrl: getGamesApiUrl() },
-      null,
     );
   },
 

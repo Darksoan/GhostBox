@@ -212,6 +212,9 @@ pub async fn cloud_backup_game(
     app: tauri::AppHandle,
     game: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    if !crate::subscription::has_premium_access(&app).await {
+        return Err("Backup em nuvem requer GhostBox Premium.".to_string());
+    }
     let token = session_token(&app)?;
     let app_id = extract_app_id(&game);
     let title = resolved_game_title(&app, &game, &app_id);
@@ -384,59 +387,7 @@ pub async fn cloud_list_saves(
     if !status.is_success() {
         return Err(format_cloud_api_error(&body, status.as_u16()));
     }
-    let mut parsed =
-        serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())?;
-    if let Some(saves) = parsed
-        .get_mut("saves")
-        .and_then(|value| value.as_array_mut())
-    {
-        for save in saves {
-            if save
-                .pointer("/manifest/profileProgress/achievementCount")
-                .and_then(|value| value.as_u64())
-                .is_some()
-            {
-                continue;
-            }
-            let app_id = save
-                .get("appId")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let title = save
-                .get("gameTitle")
-                .and_then(|value| value.as_str())
-                .unwrap_or(&app_id)
-                .to_string();
-            let Some(count) = crate::local_backup_achievement_count(&app, &app_id, &title) else {
-                continue;
-            };
-            let Some(save_object) = save.as_object_mut() else {
-                continue;
-            };
-            let manifest = save_object
-                .entry("manifest")
-                .or_insert_with(|| serde_json::json!({}));
-            if !manifest.is_object() {
-                *manifest = serde_json::json!({});
-            }
-            let Some(manifest_object) = manifest.as_object_mut() else {
-                continue;
-            };
-            let profile_progress = manifest_object
-                .entry("profileProgress")
-                .or_insert_with(|| serde_json::json!({}));
-            if !profile_progress.is_object() {
-                *profile_progress = serde_json::json!({});
-            }
-            let Some(profile_progress_object) = profile_progress.as_object_mut() else {
-                continue;
-            };
-            profile_progress_object
-                .insert("achievementCount".to_string(), serde_json::json!(count));
-        }
-    }
-    Ok(parsed)
+    serde_json::from_str::<serde_json::Value>(&body).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -445,6 +396,9 @@ pub async fn cloud_restore_save(
     game: serde_json::Value,
     save_id: String,
 ) -> Result<serde_json::Value, String> {
+    if !crate::subscription::has_premium_access(&app).await {
+        return Err("Restauração em nuvem requer GhostBox Premium.".to_string());
+    }
     let token = session_token(&app)?;
     let app_id = extract_app_id(&game);
     let title = resolved_game_title(&app, &game, &app_id);
@@ -510,8 +464,7 @@ pub async fn cloud_restore_save(
             }
             None => Some(format!("Ludusavi não conhece saves para {title}.")),
         };
-        let profile_progress =
-            crate::import_game_profile_progress(&app, &app_id, &title, &restore_dir);
+        let profile_progress = crate::import_game_profile_progress(&app, &app_id, &restore_dir);
         if ludusavi_error.is_some() && !profile_progress.has_any() {
             return Err(ludusavi_error.unwrap_or_else(|| {
                 "Nenhum save ou progresso de perfil encontrado para restaurar da nuvem.".to_string()

@@ -1,10 +1,8 @@
 import type { BackupRecord, BackupSettings } from "../types";
 
 export function getBackupRecordLatestKey(record: BackupRecord) {
-  const latestEntry = record.entries?.[0];
   return [
-    latestEntry?.path ?? record.lastBackupPath ?? "",
-    latestEntry?.backupAt ?? record.lastBackupAt ?? "",
+    record.lastBackupAt ?? "",
     record.lastBackupSuccess ? "ok" : "failed",
   ].join("|");
 }

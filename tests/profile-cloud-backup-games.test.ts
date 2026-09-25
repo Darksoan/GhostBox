@@ -3,7 +3,6 @@ import type { GhostBoxGame } from "../src/data";
 import type { BackupRecord } from "../src/types";
 import {
   createProfileHistoryFallbackGame,
-  mergeBackupAchievementsIntoGame,
   upsertProfileHistoryGame,
   withBackupRecordLastPlayed,
 } from "../src/lib/profileHistoryGames";
@@ -22,11 +21,8 @@ function makeRecord(overrides: Partial<BackupRecord> = {}): BackupRecord {
 }
 
 describe("cloud backup games on the profile", () => {
-  it("creates a history entry even when local backup details are missing", () => {
-    // `backup_get_details` returns null when the backup file is not on this
-    // machine — the merge must be a no-op, not a reason to drop the game.
+  it("creates a history entry for a save that exists only in the cloud", () => {
     const fallback = createProfileHistoryFallbackGame("3145", "REMATCH");
-    expect(mergeBackupAchievementsIntoGame(fallback, null)).toBe(fallback);
 
     const games = upsertProfileHistoryGame([], fallback);
     expect(games).toHaveLength(1);
@@ -38,15 +34,9 @@ describe("cloud backup games on the profile", () => {
     const fallback = createProfileHistoryFallbackGame("3145", "REMATCH");
     const touched = withBackupRecordLastPlayed(
       fallback,
-      makeRecord({
-        entries: [{ path: "C:/backups/3145", backupAt: "2026-08-27T21:40:00.000Z" }],
-      }),
+      makeRecord(),
     );
     expect(touched.lastTimePlayed).toBe("2026-08-27T21:40:00.000Z");
-
-    // Falls back to the record level date when there are no entries.
-    const fromRecord = withBackupRecordLastPlayed(fallback, makeRecord());
-    expect(fromRecord.lastTimePlayed).toBe("2026-08-27T21:40:00.000Z");
   });
 
   it("never overwrites a last-played date the game already had", () => {

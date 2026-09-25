@@ -1,15 +1,10 @@
 import type { GhostBoxGame } from "../data";
-import type { BackupDetails, BackupSettings } from "../types";
-import type { SteamAchievement } from "../data";
+import type { BackupSettings } from "../types";
 import {
   getUnlockedAchievementCount,
   isAchievementUnlocked,
 } from "../utils/achievementStats";
 import { isSteamTitlePlaceholder, normalizeSteamGameTitle } from "../utils/steamTitles";
-
-function normalizeAchievementKey(value: string) {
-  return value.trim().toLowerCase();
-}
 
 export function upsertProfileHistoryGame(
   games: GhostBoxGame[],
@@ -32,10 +27,8 @@ export function upsertProfileHistoryGame(
 export function getBackupRecordLatestKey(
   record: BackupSettings["backupRecords"][string]
 ) {
-  const latestEntry = record.entries?.[0];
   return [
-    latestEntry?.path ?? record.lastBackupPath ?? "",
-    latestEntry?.backupAt ?? record.lastBackupAt ?? "",
+    record.lastBackupAt ?? "",
     record.lastBackupSuccess ? "ok" : "failed",
   ].join("|");
 }
@@ -224,75 +217,6 @@ export function mergeGameDetailsPreservingAchievements(
   };
 }
 
-export function mergeBackupAchievementsIntoGame(
-  game: GhostBoxGame,
-  backupDetails: BackupDetails | null
-): GhostBoxGame {
-  const backupAchievements = backupDetails?.achievements ?? [];
-  if (!backupAchievements.length) return game;
-
-  const achievementList = [...(game.achievementList ?? [])];
-  const achievementIndexes = new Map<string, number>();
-  achievementList.forEach((achievement, index) => {
-    if (achievement.name) {
-      achievementIndexes.set(normalizeAchievementKey(achievement.name), index);
-    }
-    if (achievement.title) {
-      achievementIndexes.set(normalizeAchievementKey(achievement.title), index);
-    }
-  });
-
-  for (const backupAchievement of backupAchievements) {
-    const nameKey = normalizeAchievementKey(backupAchievement.name);
-    const titleKey = normalizeAchievementKey(backupAchievement.title);
-    const index = achievementIndexes.get(nameKey) ?? achievementIndexes.get(titleKey);
-    const fallbackAchievement: SteamAchievement = {
-      name: backupAchievement.name,
-      title: backupAchievement.title || backupAchievement.name,
-      description: "",
-      icon: backupAchievement.icon ?? "",
-      iconGray: backupAchievement.iconGray ?? backupAchievement.icon ?? "",
-      unlocked: true,
-      unlockedAt: backupAchievement.unlockedAt,
-    };
-
-    if (index === undefined) {
-      achievementIndexes.set(nameKey, achievementList.length);
-      if (titleKey) {
-        achievementIndexes.set(titleKey, achievementList.length);
-      }
-      achievementList.push(fallbackAchievement);
-      continue;
-    }
-
-    const existingAchievement = achievementList[index];
-    achievementList[index] = {
-      ...existingAchievement,
-      title: existingAchievement.title || fallbackAchievement.title,
-      icon: existingAchievement.icon || fallbackAchievement.icon,
-      iconGray: existingAchievement.iconGray || fallbackAchievement.iconGray,
-      unlocked: true,
-      unlockedAt: existingAchievement.unlockedAt || backupAchievement.unlockedAt,
-    };
-  }
-
-  const unlocked = Math.max(
-    countUnlockedAchievements({ ...game, achievementList }),
-    backupAchievements.length
-  );
-  const total = Math.max(game.achievements.total, achievementList.length, unlocked);
-
-  return {
-    ...game,
-    achievements: {
-      unlocked,
-      total,
-      progress: total ? Math.round((unlocked / total) * 100) : 0,
-    },
-    achievementList,
-  };
-}
-
 export function createProfileHistoryFallbackGame(
   appId: string,
   title: string
@@ -338,7 +262,7 @@ export function withBackupRecordLastPlayed(
   record: BackupSettings["backupRecords"][string]
 ): GhostBoxGame {
   if (game.lastTimePlayed) return game;
-  const lastBackupAt = record.entries?.[0]?.backupAt ?? record.lastBackupAt;
+  const lastBackupAt = record.lastBackupAt;
   if (!lastBackupAt) return game;
   return { ...game, lastTimePlayed: lastBackupAt };
 }

@@ -168,6 +168,18 @@ fn cache_status(app: &tauri::AppHandle, status: &SubscriptionStatusResponse) -> 
     write_binary_file(app, SUBSCRIPTION_STATUS_CACHE_FILE, &encrypted)
 }
 
+fn cached_premium_is_active(subscription: &SubscriptionInfo) -> bool {
+    subscription.is_premium
+        && (subscription.access_type.as_deref() == Some("lifetime")
+            || subscription
+                .current_period_end
+                .as_deref()
+                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                .is_some_and(|expires_at| {
+                    expires_at.with_timezone(&chrono::Utc) > chrono::Utc::now()
+                }))
+}
+
 fn load_cached_status(app: &tauri::AppHandle, user_id: &str) -> Option<SubscriptionStatusResponse> {
     let bytes = read_binary_file(app, SUBSCRIPTION_STATUS_CACHE_FILE).ok()?;
     let payload = decrypt_secret_for_current_user(&bytes).ok()?;
@@ -176,16 +188,9 @@ fn load_cached_status(app: &tauri::AppHandle, user_id: &str) -> Option<Subscript
         return None;
     }
     let mut subscription = cache.subscription;
-    if subscription.is_premium {
-        let still_active = subscription
-            .current_period_end
-            .as_deref()
-            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-            .is_some_and(|expires_at| expires_at.with_timezone(&chrono::Utc) > chrono::Utc::now());
-        if !still_active {
-            subscription.is_premium = false;
-            subscription.status = "expired".to_string();
-        }
+    if subscription.is_premium && !cached_premium_is_active(&subscription) {
+        subscription.is_premium = false;
+        subscription.status = "expired".to_string();
     }
 
     Some(SubscriptionStatusResponse {
@@ -211,6 +216,18 @@ pub(crate) fn cached_is_premium(app: &tauri::AppHandle) -> bool {
     };
     let user_id = decode_session_user_id(&token).unwrap_or_default();
     load_cached_status(app, &user_id)
+        .map(|status| status.subscription.is_premium)
+        .unwrap_or(false)
+}
+
+/// Cache evita rede no backup automático; um Premium recém-ativado ainda pode
+/// não ter cache local, então confirme a assinatura antes de preparar saves.
+pub(crate) async fn has_premium_access(app: &tauri::AppHandle) -> bool {
+    if cached_is_premium(app) {
+        return true;
+    }
+    subscription_get_status(app.clone())
+        .await
         .map(|status| status.subscription.is_premium)
         .unwrap_or(false)
 }
@@ -424,4 +441,31 @@ fn decode_session_user_id(token: &str) -> Option<String> {
         .get("userId")
         .and_then(|v| v.as_str())
         .map(str::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lifetime_premium_remains_active_without_an_expiry_date() {
+        let mut subscription = SubscriptionInfo {
+            status: "active".to_string(),
+            is_premium: true,
+            access_type: Some("lifetime".to_string()),
+            can_manage_billing: false,
+            plan_id: None,
+            current_period_start: None,
+            current_period_end: None,
+            last_payment_id: None,
+            cancel_at_period_end: None,
+            updated_at: None,
+        };
+        assert!(cached_premium_is_active(&subscription));
+
+        subscription.access_type = None;
+        assert!(!cached_premium_is_active(&subscription));
+        subscription.current_period_end = Some("2000-01-01T00:00:00Z".to_string());
+        assert!(!cached_premium_is_active(&subscription));
+    }
 }

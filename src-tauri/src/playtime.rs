@@ -384,7 +384,7 @@ pub(crate) fn run_automatic_backup_after_close(
         // the session expired, premium lapsed, or nothing was found to back up.
         if let Some(error) = cloud_error {
             let title = resolved_game_title(&app, &backup_game, &app_id);
-            let _ = crate::save_failed_backup_record(&app, &app_id, &title, "", &error);
+            let _ = crate::save_failed_backup_record(&app, &app_id, &title, &error);
         }
 
         if let Ok(mut guard) = steam_monitor_state().lock() {

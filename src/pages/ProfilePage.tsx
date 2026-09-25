@@ -972,9 +972,8 @@ export function ProfilePage({
         ) {
           return false;
         }
-        // Jogos com save na nuvem precisam hidratar local mesmo com Steam visível:
-        // o `steamAccountStats` pode dizer 0/3 mas o backup local tem desbloqueios
-        // que só aparecem após `merge_game_achievement_details` (modal).
+        // Jogos com save na nuvem ainda precisam consultar o estado de conquistas
+        // da Steam no PC: o resumo remoto pode estar defasado após restauração.
         if (
           remoteAchievementAppIds.has(game.appId) &&
           !cloudSaveAppIds.has(game.appId)

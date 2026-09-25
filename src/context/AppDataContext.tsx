@@ -108,7 +108,6 @@ import {
   createProfileHistoryFallbackGame,
   getBackupRecordLatestKey,
   mergeGameDetailsPreservingAchievements,
-  mergeBackupAchievementsIntoGame,
   withBackupRecordLastPlayed,
   upsertProfileHistoryGame,
 } from "../lib/profileHistoryGames";
@@ -117,7 +116,6 @@ import { useSettings } from "./settings";
 import { useAuth } from "./AuthContext";
 
 type InitialLoadStep =
-  | "backupRoot"
   | "playtimes"
   | "startupSettings"
   | "steamLibrary"
@@ -136,9 +134,6 @@ function cloudSaveTimestamp(save: CloudSave): number {
 }
 
 const defaultBackupSettings: BackupSettings = {
-  outputPath: "",
-  automaticBackupsForLibrary: false,
-  automaticBackups: {},
   backupRecords: {},
 };
 
@@ -859,27 +854,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     profileHistoryGamesRef.current = profileHistoryGames;
   }, [profileHistoryGames]);
 
-  const applyBackupAchievementsToProfileHistory = useCallback(
-    async (game: GhostBoxGame, backupPath?: string | null) => {
-      // Local details may not exist (backup made on another machine, moved
-      // outputPath, deleted file) — `backup_get_details` returns null then.
-      // The game still belongs to the profile because its save lives in the
-      // cloud, so it must enter the history even without achievements to merge.
-      const backupDetails = await ghostboxApi
-        .getBackupDetails(game.appId, backupPath)
-        .catch(() => null);
-
-      const trackedGame = backupDetails?.achievements.length
-        ? mergeBackupAchievementsIntoGame(game, backupDetails)
-        : game;
-
-      setProfileHistoryGames((current) =>
-        upsertProfileHistoryGame(current, trackedGame),
-      );
-    },
-    [],
-  );
-
   const rehydrateCollectionGames = useCallback(
     (
       collections: UserCollection[],
@@ -1190,9 +1164,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (cancelled || !settings) return;
         backupSettingsRef.current = settings;
         setBackupSettings(settings);
-      })
-      .finally(() => {
-        if (!cancelled) markInitialLoadStepComplete("backupRoot");
       });
 
     const unsubscribe = ghostboxApi.onBackupSettingsChanged((settings) => {
@@ -1211,7 +1182,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe();
     };
-  }, [markInitialLoadStepComplete, queueBackupToast]);
+  }, [queueBackupToast]);
 
   // The cloud save list is the authoritative "games owned by this GhostBox
   // account" set. Backup records change whenever a save is pushed, so they
@@ -1236,11 +1207,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             : nextAppIds,
         );
 
-        // Fresh install / bundle login: the machine holds no local backup
-        // records, so the `backupSettings` -> `profileHistoryGames` bridge below
-        // never fires. A game that only lives in the cloud must still enter
-        // `profileHistoryGames`, otherwise `ProfilePage` (which only renders
-        // games from `addedLibraryGames` / `favoriteGames` / history) shows a
+        // A fresh install has no cloud backup records yet, so the records ->
+        // history bridge below never fires. A cloud-only game must still enter
+        // `profileHistoryGames`, otherwise `ProfilePage` shows a
         // bare local library instead of the account's real saves.
         if (saves.length > 0) {
           const latestByAppId = new Map<string, CloudSave>();
@@ -1319,39 +1288,33 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const recordEntries = Object.entries(records);
     if (!recordEntries.length) return;
 
-    let cancelled = false;
+    const knownGames = [
+      ...profileHistoryGamesRef.current,
+      ...addedLibraryGamesRef.current,
+      ...favoriteGamesRef.current,
+    ];
+    const changedGames: GhostBoxGame[] = [];
 
-    void (async () => {
-      const knownGames = [
-        ...profileHistoryGamesRef.current,
-        ...addedLibraryGamesRef.current,
-        ...favoriteGamesRef.current,
-      ];
-
-      for (const [appId, record] of recordEntries) {
-        if (cancelled) return;
-        const latestKey = getBackupRecordLatestKey(record);
-        if (appliedProfileBackupKeysRef.current.get(appId) === latestKey) {
-          continue;
-        }
-
-        appliedProfileBackupKeysRef.current.set(appId, latestKey);
-        const game =
-          knownGames.find((item) => item.appId === appId) ??
-          createProfileHistoryFallbackGame(appId, record.title || appId);
-
-        // The latest backup counts as recent activity when the game has no
-        // local last-played date (fresh install, saves only in the cloud).
-        await applyBackupAchievementsToProfileHistory(
-          withBackupRecordLastPlayed(game, record),
-        ).catch(() => undefined);
+    for (const [appId, record] of recordEntries) {
+      const latestKey = getBackupRecordLatestKey(record);
+      if (appliedProfileBackupKeysRef.current.get(appId) === latestKey) {
+        continue;
       }
-    })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [applyBackupAchievementsToProfileHistory, backupSettings]);
+      appliedProfileBackupKeysRef.current.set(appId, latestKey);
+      const game =
+        knownGames.find((item) => item.appId === appId) ??
+        createProfileHistoryFallbackGame(appId, record.title || appId);
+
+      // Um save na nuvem também identifica jogos ainda não instalados aqui.
+      changedGames.push(withBackupRecordLastPlayed(game, record));
+    }
+    if (changedGames.length) {
+      setProfileHistoryGames((current) =>
+        changedGames.reduce(upsertProfileHistoryGame, current),
+      );
+    }
+  }, [backupSettings]);
 
   useEffect(() => {
     writeStoredFavoriteGames(favoriteGames);
@@ -2222,9 +2185,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setProfileHistoryGames((current) =>
           upsertProfileHistoryGame(current, historyGame),
         );
-        void applyBackupAchievementsToProfileHistory(historyGame).catch(
-          () => undefined,
-        );
         void loadGameAchievementDetailsCached(game.id)
           .then((details) => {
             if (!details) return;
@@ -2294,7 +2254,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [
       addingGameId,
       appearance.language,
-      applyBackupAchievementsToProfileHistory,
       mergeGamePlaytime,
       removingGameId,
       showToast,

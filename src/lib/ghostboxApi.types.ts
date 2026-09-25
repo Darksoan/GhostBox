@@ -10,8 +10,6 @@ import type {
 } from "../data";
 
 import type {
-  BackupDetails,
-  BackupRootStatus,
   BackupSettings,
   StartupSettings,
   SteamLibraryScanResult,
@@ -29,8 +27,6 @@ export type {
   HomeResult,
   GhostBoxGame,
   RemoveGameResult,
-  BackupDetails,
-  BackupRootStatus,
   BackupSettings,
   StartupSettings,
   SteamLibraryScanResult,
@@ -177,21 +173,6 @@ export type UpdateProgressEvent = {
 export type UpdateInstallResult = {
   success: boolean;
   error?: string;
-};
-
-export type BackupOutputPathSelectionResult = {
-  status: "ok" | "cancelled";
-  settings: BackupSettings;
-};
-
-export type BackupPathActionResult = {
-  success: boolean;
-  path?: string;
-  error?: string;
-};
-
-export type BackupFolderDeletionResult = BackupPathActionResult & {
-  settings?: BackupSettings;
 };
 
 export type LocalAchievementsUnlockedPayload = {

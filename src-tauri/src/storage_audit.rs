@@ -5,8 +5,8 @@
 //! (`clear_storage_category` / `clear_app_caches`) e uma varredura de
 //! temporários órfãos na inicialização (`startup_temp_sweep`).
 //!
-//! Nunca toca em: configurações do usuário, saves/backups de jogos
-//! (`GhostBoxBackups`), playtime ou status de assinatura — só em dados
+//! Nunca toca em: configurações do usuário, saves dos jogos,
+//! playtime ou status de assinatura — só em dados
 //! re-deriváveis (caches, ferramentas baixadas) e no progresso offline do
 //! emulador quando o usuário pede explicitamente.
 
@@ -277,17 +277,50 @@ pub fn webview_cache_boot_maintenance() {
     }
 }
 
+/// Staging de backups em nuvem interrompidos por crash não deve virar cópia
+/// persistente. Só remove diretórios UUID do GhostBox com mais de 24 horas.
+fn sweep_stale_cloud_staging(root: &Path, cutoff: std::time::SystemTime) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir()
+            || !entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| uuid::Uuid::parse_str(name).is_ok())
+        {
+            continue;
+        }
+        let stale = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .is_some_and(|modified| modified <= cutoff);
+        if stale {
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+}
+
 /// Varredura leve na inicialização: temporários órfãos de escritas atômicas
-/// interrompidas por crash. Só arquivos soltos na raiz do app data com mais
-/// de 24h — nada recursivo, nada recente (evita brigar com escrita em andamento).
+/// interrompidas por crash e staging de backup em nuvem. Preserva arquivos
+/// recentes para não interferir em outra operação em andamento.
 pub fn startup_temp_sweep(app: &AppHandle) {
+    const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+    let cutoff_time = std::time::SystemTime::now()
+        .checked_sub(STALE_AFTER)
+        .unwrap_or(std::time::UNIX_EPOCH);
+    if let Ok(cache_dir) = app.path().app_cache_dir() {
+        sweep_stale_cloud_staging(&cache_dir.join("cloud-save"), cutoff_time);
+    }
+
     let Ok(app_data) = app.path().app_data_dir() else {
         return;
     };
-    const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
-    let cutoff = std::time::SystemTime::now()
+    let cutoff = cutoff_time
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|now| now.saturating_sub(STALE_AFTER))
         .unwrap_or_default();
 
     let Ok(entries) = std::fs::read_dir(&app_data) else {
@@ -317,6 +350,29 @@ pub fn startup_temp_sweep(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloud_staging_sweep_only_removes_old_ghostbox_directories() {
+        let root = std::env::temp_dir().join(format!(
+            "ghostbox-cloud-staging-test-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let old = root.join(uuid::Uuid::new_v4().to_string());
+        let recent = root.join(uuid::Uuid::new_v4().to_string());
+        let unrelated = root.join("user-files");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::create_dir_all(&unrelated).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        let cutoff = std::time::SystemTime::now();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        std::fs::create_dir_all(&recent).unwrap();
+
+        sweep_stale_cloud_staging(&root, cutoff);
+        assert!(!old.exists());
+        assert!(recent.exists());
+        assert!(unrelated.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn pure_cache_categories_never_include_user_progress() {

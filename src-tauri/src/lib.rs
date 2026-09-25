@@ -2,17 +2,9 @@ pub(crate) const FACETS_VERSION: &str = "catalogue-response-v2";
 pub(crate) const RANKING_VERSION: &str = "ranking-v9-quality-score";
 const BACKUP_SETTINGS_FILE: &str = "backup-settings.json";
 const STEAM_LIBRARY_PATH_FILE: &str = "steam-library-path.json";
-const BACKUP_ROOT_FOLDER_NAME: &str = "GhostBoxBackups";
-const LEGACY_EDEN_BACKUP_ROOT_FOLDER_NAME: &str = "EdenBackups";
-const LEGACY_BACKUP_ROOT_FOLDER_NAME: &str = "PirateBoxBackups";
-const BACKUP_ROOT_MARKER_FILE: &str = "ghostbox-backup-root.json";
-const LEGACY_EDEN_BACKUP_ROOT_MARKER_FILE: &str = "eden-backup-root.json";
-const LEGACY_BACKUP_ROOT_MARKER_FILE: &str = "piratebox-backup-root.json";
 const BACKUP_SETTINGS_CHANGED_EVENT: &str = "backup-settings-changed";
 
 const GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE: &str = "ghostbox-achievements.json";
-const LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE: &str = "eden-achievements.json";
-const LEGACY_ACHIEVEMENTS_BACKUP_FILE: &str = "piratebox-achievements.json";
 const GHOSTBOX_PLAYTIME_BACKUP_FILE: &str = "ghostbox-playtime.json";
 
 #[derive(Debug, Clone, Default)]
@@ -60,85 +52,45 @@ mod window_lifecycle;
 pub(crate) use catalogue::normalize_api_url;
 pub(crate) use settings::load_startup_settings;
 
-use ludusavi::resolved_game_title;
 use settings::{read_json_file, write_json_file};
 use tauri::Manager;
-use util::{merge_object_defaults, object_or_empty, text_value, EmptyStringExt};
+use util::{object_or_empty, text_value, EmptyStringExt};
 
-fn default_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
-    serde_json::json!({
-        "outputPath": default_backup_output_path(app),
-        "automaticBackupsForLibrary": false,
-        "automaticBackups": {},
-        "backupRecords": {}
-    })
+fn default_backup_settings() -> serde_json::Value {
+    serde_json::json!({ "backupRecords": {} })
 }
 
-pub(crate) fn default_backup_output_path(app: &tauri::AppHandle) -> String {
-    use tauri::Manager;
-
-    app.path()
-        .document_dir()
-        .ok()
-        .or_else(|| app.path().app_data_dir().ok())
-        .map(|path| to_backup_root_path(path.to_string_lossy().as_ref()))
-        .unwrap_or_else(|| BACKUP_ROOT_FOLDER_NAME.to_string())
-}
-
-pub(crate) fn to_backup_root_path(output_path: &str) -> String {
-    let path = std::path::PathBuf::from(output_path.trim());
-    if path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| {
-            name.eq_ignore_ascii_case(BACKUP_ROOT_FOLDER_NAME)
-                || name.eq_ignore_ascii_case(LEGACY_EDEN_BACKUP_ROOT_FOLDER_NAME)
-                || name.eq_ignore_ascii_case(LEGACY_BACKUP_ROOT_FOLDER_NAME)
-        })
-    {
-        path.to_string_lossy().to_string()
-    } else {
-        path.join(BACKUP_ROOT_FOLDER_NAME)
-            .to_string_lossy()
-            .to_string()
-    }
-}
-
-fn normalize_backup_settings(
-    app: &tauri::AppHandle,
-    value: Option<serde_json::Value>,
-) -> serde_json::Value {
-    let fallback = default_backup_settings(app);
+fn normalize_backup_settings(value: Option<serde_json::Value>) -> serde_json::Value {
     let Some(value) = value.and_then(|value| value.as_object().cloned()) else {
-        return fallback;
+        return default_backup_settings();
     };
 
-    let fallback_output_path = text_value(fallback.get("outputPath"));
-    let output_path =
-        to_backup_root_path(&text_value(value.get("outputPath")).if_empty(fallback_output_path));
-
-    let mut normalized = serde_json::json!({
-        "outputPath": output_path,
-        "automaticBackupsForLibrary": value
-            .get("automaticBackupsForLibrary")
-            .and_then(|value| value.as_bool())
-            .unwrap_or(false),
-        "automaticBackups": object_or_empty(value.get("automaticBackups")),
-        "backupRecords": object_or_empty(value.get("backupRecords"))
-    });
+    let mut records = object_or_empty(value.get("backupRecords"));
 
     // Migração: registros de falha que na verdade eram bloqueio de plano
     // ("requer Premium" / "faça login") não são falhas reais e hoje o gate no
     // playtime nem os produz mais. Saem na primeira leitura para a UI nunca
     // mais exibir erro vermelho por causa deles.
-    if let Some(records) = normalized
-        .get_mut("backupRecords")
-        .and_then(|value| value.as_object_mut())
-    {
+    if let Some(records) = records.as_object_mut() {
         strip_blocked_plan_backup_errors(records);
+        // Registros locais antigos não representam saves na nuvem. Não os
+        // exponha como backups atuais; os arquivos dos jogos não são apagados.
+        records.retain(|_, record| {
+            record.get("cloud").and_then(|value| value.as_bool()) == Some(true)
+                || record
+                    .get("lastCloudBackupAt")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|date| !date.is_empty())
+        });
+        for record in records.values_mut() {
+            if let Some(record) = record.as_object_mut() {
+                record.remove("lastBackupPath");
+                record.remove("entries");
+            }
+        }
     }
 
-    normalized
+    serde_json::json!({ "backupRecords": records })
 }
 
 /// Remove dos `backupRecords` as falhas que eram bloqueio de plano.
@@ -163,7 +115,7 @@ fn is_blocked_plan_backup_error(error: &str) -> bool {
 }
 
 pub(crate) fn load_backup_settings(app: &tauri::AppHandle) -> serde_json::Value {
-    normalize_backup_settings(app, read_json_file(app, BACKUP_SETTINGS_FILE))
+    normalize_backup_settings(read_json_file(app, BACKUP_SETTINGS_FILE))
 }
 
 pub(crate) fn save_backup_settings(
@@ -171,30 +123,27 @@ pub(crate) fn save_backup_settings(
     patch: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let current = load_backup_settings(app);
-    let mut next = merge_object_defaults(current.clone(), patch.clone());
-
-    for key in ["automaticBackups", "backupRecords"] {
-        let mut merged = current
-            .get(key)
-            .and_then(|value| value.as_object())
-            .cloned()
-            .unwrap_or_default();
-        if let Some(patch_object) = patch.get(key).and_then(|value| value.as_object()) {
-            for (entry_key, entry_value) in patch_object {
-                merged.insert(entry_key.clone(), entry_value.clone());
-            }
+    let mut records = current
+        .get("backupRecords")
+        .and_then(|value| value.as_object())
+        .cloned()
+        .unwrap_or_default();
+    if let Some(changed) = patch
+        .get("backupRecords")
+        .and_then(|value| value.as_object())
+    {
+        for (app_id, record) in changed {
+            records.insert(app_id.clone(), record.clone());
         }
-        next[key] = serde_json::Value::Object(merged);
     }
-
-    persist_backup_settings(app, next)
+    persist_backup_settings(app, serde_json::json!({ "backupRecords": records }))
 }
 
 pub(crate) fn persist_backup_settings(
     app: &tauri::AppHandle,
     settings: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let normalized = normalize_backup_settings(app, Some(settings));
+    let normalized = normalize_backup_settings(Some(settings));
     write_json_file(app, BACKUP_SETTINGS_FILE, &normalized)?;
     emit_backup_settings_changed(app, &normalized);
     Ok(normalized)
@@ -274,36 +223,6 @@ pub(crate) fn is_path_inside_or_equal(
     };
 
     path_starts_with_or_equals(&parent, &child)
-}
-
-pub(crate) fn selected_backup_path(
-    settings: &serde_json::Value,
-    app_id: &str,
-    backup_path: Option<String>,
-) -> String {
-    if let Some(path) = backup_path
-        .map(|path| path.trim().to_string())
-        .filter(|path| !path.is_empty())
-    {
-        return path;
-    }
-
-    let Some(record) = settings
-        .get("backupRecords")
-        .and_then(|records| records.get(app_id))
-    else {
-        return String::new();
-    };
-
-    record
-        .get("entries")
-        .and_then(|entries| entries.as_array())
-        .and_then(|entries| entries.first())
-        .and_then(|entry| entry.get("path"))
-        .and_then(|path| path.as_str())
-        .or_else(|| record.get("lastBackupPath").and_then(|path| path.as_str()))
-        .unwrap_or_default()
-        .to_string()
 }
 
 pub(crate) fn steam_asset_url(app_id: &str, file_name: &str) -> String {
@@ -485,69 +404,8 @@ fn normalize_search_text(value: &str) -> String {
         .collect()
 }
 
-fn string_similarity(left: &str, right: &str) -> f64 {
-    if left.is_empty() || right.is_empty() {
-        return 0.0;
-    }
-    if left == right {
-        return 1.0;
-    }
-
-    let left_chars: Vec<char> = left.chars().collect();
-    let right_chars: Vec<char> = right.chars().collect();
-    let mut distances = (0..=left_chars.len())
-        .map(|index| index)
-        .collect::<Vec<_>>();
-
-    for (right_index, right_char) in right_chars.iter().enumerate() {
-        let mut previous = distances[0];
-        distances[0] = right_index + 1;
-
-        for (left_index, left_char) in left_chars.iter().enumerate() {
-            let current = distances[left_index + 1];
-            let substitution_cost = if left_char == right_char { 0 } else { 1 };
-            distances[left_index + 1] = (distances[left_index + 1] + 1)
-                .min(distances[left_index] + 1)
-                .min(previous + substitution_cost);
-            previous = current;
-        }
-    }
-
-    1.0 - (distances[left_chars.len()] as f64 / left_chars.len().max(right_chars.len()) as f64)
-}
-
-fn read_persisted_achievement_stats(
-    app: &tauri::AppHandle,
-    app_id: &str,
-    title: &str,
-) -> serde_json::Value {
-    let backup_file = read_ghostbox_achievements_backup_file(app, app_id, title, None);
-    let total = backup_file
-        .as_ref()
-        .and_then(|file| file.get("total"))
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0) as u32;
-    let unlocked = backup_file
-        .as_ref()
-        .and_then(|file| file.get("unlocked"))
-        .and_then(|value| value.as_array())
-        .map(|items| items.len())
-        .unwrap_or(0)
-        .min(total as usize) as u32;
-
-    serde_json::json!({
-        "unlocked": unlocked,
-        "total": total,
-        "progress": if total > 0 {
-            ((unlocked as f64 / total as f64) * 100.0).round() as u32
-        } else {
-            0
-        }
-    })
-}
-
 pub(crate) fn enrich_game_with_local_achievement_stats(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     mut game: serde_json::Value,
     steam_path: &str,
 ) -> serde_json::Value {
@@ -556,10 +414,11 @@ pub(crate) fn enrich_game_with_local_achievement_stats(
         return game;
     }
 
-    let title = resolved_game_title(app, &game, &app_id);
-    let persisted = read_persisted_achievement_stats(app, &app_id, &title);
-    let achievements =
-        steam_appcache::read_local_achievement_stats(steam_path, &app_id, &persisted);
+    let achievements = steam_appcache::read_local_achievement_stats(
+        steam_path,
+        &app_id,
+        &serde_json::json!({ "unlocked": 0, "total": 0, "progress": 0 }),
+    );
     if achievements
         .get("total")
         .and_then(|value| value.as_u64())
@@ -576,9 +435,7 @@ pub(crate) fn enrich_game_with_local_achievement_stats(
 }
 
 fn mark_local_unlocked_achievements(
-    app: &tauri::AppHandle,
     app_id: &str,
-    title: &str,
     steam_path: &str,
     achievements: Vec<serde_json::Value>,
 ) -> Vec<serde_json::Value> {
@@ -586,27 +443,7 @@ fn mark_local_unlocked_achievements(
         return achievements;
     }
 
-    let backup_file = read_ghostbox_achievements_backup_file(app, app_id, title, None);
-    let backup_unlocked = backup_file
-        .as_ref()
-        .and_then(|file| file.get("unlocked"))
-        .and_then(|value| value.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    let unlocked_names = if !backup_unlocked.is_empty() {
-        backup_unlocked
-            .iter()
-            .flat_map(|achievement| {
-                let name = text_value(achievement.get("name"));
-                let title = text_value(achievement.get("title"));
-                [name, title]
-            })
-            .filter(|value| !value.is_empty())
-            .collect::<std::collections::HashSet<_>>()
-    } else {
-        steam_appcache::read_local_unlocked_achievement_names(steam_path, app_id)
-    };
+    let unlocked_names = steam_appcache::read_local_unlocked_achievement_names(steam_path, app_id);
 
     if unlocked_names.is_empty() {
         return achievements;
@@ -616,23 +453,6 @@ fn mark_local_unlocked_achievements(
         .iter()
         .map(|value| normalize_search_text(value))
         .collect::<std::collections::HashSet<_>>();
-    let mut unlocked_at_by_name = std::collections::HashMap::new();
-    for achievement in &backup_unlocked {
-        let name = normalize_search_text(&text_value(achievement.get("name")));
-        let title = normalize_search_text(&text_value(achievement.get("title")));
-        let unlocked_at = achievement
-            .get("unlockedAt")
-            .and_then(|value| value.as_str())
-            .unwrap_or_default()
-            .to_string();
-        if !name.is_empty() {
-            unlocked_at_by_name.insert(name, unlocked_at.clone());
-        }
-        if !title.is_empty() {
-            unlocked_at_by_name.insert(title, unlocked_at);
-        }
-    }
-
     achievements
         .into_iter()
         .map(|achievement| {
@@ -641,54 +461,16 @@ fn mark_local_unlocked_achievements(
             let normalized_name = normalize_search_text(&name);
             let normalized_title = normalize_search_text(&title);
 
-            let backup_match = backup_unlocked
-                .iter()
-                .find(|backup| {
-                    normalize_search_text(&text_value(backup.get("name"))) == normalized_name
-                        || normalize_search_text(&text_value(backup.get("title")))
-                            == normalized_title
-                })
-                .or_else(|| {
-                    backup_unlocked.iter().find(|backup| {
-                        if normalized_title.is_empty() {
-                            return false;
-                        }
-                        string_similarity(
-                            &normalize_search_text(&text_value(backup.get("title"))),
-                            &normalized_title,
-                        ) >= 0.72
-                    })
-                });
-
-            let unlocked = backup_match.is_some()
-                || normalized_unlocked_names.contains(&normalized_name)
+            let unlocked = normalized_unlocked_names.contains(&normalized_name)
                 || normalized_unlocked_names.contains(&normalized_title)
                 || achievement
                     .get("unlocked")
                     .and_then(|value| value.as_bool())
                     .unwrap_or(false);
-            let unlocked_at = backup_match
-                .and_then(|backup| backup.get("unlockedAt"))
-                .and_then(|value| value.as_str())
-                .map(str::to_string)
-                .or_else(|| unlocked_at_by_name.get(&normalized_name).cloned())
-                .or_else(|| unlocked_at_by_name.get(&normalized_title).cloned())
-                .or_else(|| {
-                    achievement
-                        .get("unlockedAt")
-                        .and_then(|value| value.as_str())
-                        .map(str::to_string)
-                });
 
             let mut next = achievement;
             if let Some(object) = next.as_object_mut() {
                 object.insert("unlocked".to_string(), serde_json::Value::Bool(unlocked));
-                if let Some(unlocked_at) = unlocked_at.filter(|value| !value.is_empty()) {
-                    object.insert(
-                        "unlockedAt".to_string(),
-                        serde_json::Value::String(unlocked_at),
-                    );
-                }
             }
             next
         })
@@ -696,7 +478,7 @@ fn mark_local_unlocked_achievements(
 }
 
 pub(crate) fn merge_game_achievement_details(
-    app: &tauri::AppHandle,
+    _app: &tauri::AppHandle,
     mut game: serde_json::Value,
     steam_path: &str,
 ) -> serde_json::Value {
@@ -705,7 +487,6 @@ pub(crate) fn merge_game_achievement_details(
         return game;
     }
 
-    let title = resolved_game_title(app, &game, &app_id);
     let achievement_list = game
         .get("achievementList")
         .and_then(|value| value.as_array())
@@ -715,8 +496,7 @@ pub(crate) fn merge_game_achievement_details(
         return game;
     }
 
-    let achievement_list =
-        mark_local_unlocked_achievements(app, &app_id, &title, steam_path, achievement_list);
+    let achievement_list = mark_local_unlocked_achievements(&app_id, steam_path, achievement_list);
     let unlocked_count = achievement_list
         .iter()
         .filter(|achievement| {
@@ -748,90 +528,6 @@ pub(crate) fn merge_game_achievement_details(
         );
     }
     game
-}
-
-fn enrich_backup_achievements_with_icons(
-    unlocked: Vec<serde_json::Value>,
-    steam_achievements: &[serde_json::Value],
-) -> Vec<serde_json::Value> {
-    if unlocked.is_empty() {
-        return unlocked;
-    }
-
-    let mut achievement_by_name = std::collections::HashMap::new();
-    for achievement in steam_achievements {
-        let name = normalize_search_text(&text_value(achievement.get("name")));
-        let title = normalize_search_text(&text_value(achievement.get("title")));
-        if !name.is_empty() {
-            achievement_by_name.insert(name, achievement);
-        }
-        if !title.is_empty() {
-            achievement_by_name.insert(title, achievement);
-        }
-    }
-
-    unlocked
-        .into_iter()
-        .map(|achievement| {
-            let normalized_name = normalize_search_text(&text_value(achievement.get("name")));
-            let normalized_title = normalize_search_text(&text_value(achievement.get("title")));
-            let steam_match = achievement_by_name
-                .get(&normalized_name)
-                .or_else(|| achievement_by_name.get(&normalized_title))
-                .copied()
-                .or_else(|| {
-                    steam_achievements.iter().find(|steam_achievement| {
-                        let steam_title =
-                            normalize_search_text(&text_value(steam_achievement.get("title")));
-                        !steam_title.is_empty()
-                            && !normalized_title.is_empty()
-                            && string_similarity(&steam_title, &normalized_title) >= 0.7
-                    })
-                });
-
-            let mut next = achievement;
-            if let Some(steam_match) = steam_match {
-                if let Some(object) = next.as_object_mut() {
-                    if let Some(icon) = steam_match.get("icon").filter(|value| !value.is_null()) {
-                        object.insert("icon".to_string(), icon.clone());
-                    }
-                    if let Some(icon_gray) =
-                        steam_match.get("iconGray").filter(|value| !value.is_null())
-                    {
-                        object.insert("iconGray".to_string(), icon_gray.clone());
-                    }
-                }
-            }
-            next
-        })
-        .collect()
-}
-
-fn ghostbox_achievements_backup_path(
-    settings: &serde_json::Value,
-    title: &str,
-) -> std::path::PathBuf {
-    std::path::PathBuf::from(text_value(settings.get("outputPath")))
-        .join(sanitize_folder_name(title))
-        .join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE)
-}
-
-fn legacy_achievements_backup_path(
-    settings: &serde_json::Value,
-    title: &str,
-) -> std::path::PathBuf {
-    std::path::PathBuf::from(text_value(settings.get("outputPath")))
-        .join(sanitize_folder_name(title))
-        .join(LEGACY_ACHIEVEMENTS_BACKUP_FILE)
-}
-
-fn legacy_eden_achievements_backup_path(
-    settings: &serde_json::Value,
-    title: &str,
-) -> std::path::PathBuf {
-    std::path::PathBuf::from(text_value(settings.get("outputPath")))
-        .join(sanitize_folder_name(title))
-        .join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE)
 }
 
 fn normalize_ghostbox_achievements_backup_file(
@@ -880,156 +576,40 @@ fn normalize_ghostbox_achievements_backup_file(
     }))
 }
 
-fn read_ghostbox_achievements_backup_file(
-    app: &tauri::AppHandle,
+fn read_cloud_achievements_file(
     app_id: &str,
-    title: &str,
-    backup_path: Option<&str>,
+    restore_path: &std::path::Path,
 ) -> Option<serde_json::Value> {
-    let settings = load_backup_settings(app);
-    let mut candidates = vec![
-        ghostbox_achievements_backup_path(&settings, title),
-        legacy_eden_achievements_backup_path(&settings, title),
-        legacy_achievements_backup_path(&settings, title),
-    ];
-    if let Some(path) = backup_path.filter(|value| !value.is_empty()) {
-        let backup = std::path::PathBuf::from(path);
-        candidates.push(backup.join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE));
-        candidates.push(backup.join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE));
-        candidates.push(backup.join(LEGACY_ACHIEVEMENTS_BACKUP_FILE));
-        if let Some(parent) = backup.parent() {
-            candidates.push(parent.join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE));
-            candidates.push(parent.join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE));
-            candidates.push(parent.join(LEGACY_ACHIEVEMENTS_BACKUP_FILE));
-        }
-        if let Some(record) = settings
-            .get("backupRecords")
-            .and_then(|records| records.get(app_id))
-        {
-            if let Some(last_path) = record
-                .get("lastBackupPath")
-                .and_then(|value| value.as_str())
-            {
-                candidates.push(
-                    std::path::PathBuf::from(last_path).join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE),
-                );
-                candidates.push(
-                    std::path::PathBuf::from(last_path).join(LEGACY_EDEN_ACHIEVEMENTS_BACKUP_FILE),
-                );
-                candidates.push(
-                    std::path::PathBuf::from(last_path).join(LEGACY_ACHIEVEMENTS_BACKUP_FILE),
-                );
-            }
-        }
-    }
-
-    for candidate in candidates {
-        let Ok(raw) = std::fs::read_to_string(&candidate) else {
-            continue;
-        };
-        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw) else {
-            continue;
-        };
-        if let Some(normalized) = normalize_ghostbox_achievements_backup_file(&parsed, app_id) {
-            if normalized
-                .get("unlocked")
-                .and_then(|value| value.as_array())
-                .is_some_and(|items| !items.is_empty())
-            {
-                return Some(normalized);
-            }
-        }
-    }
-
-    None
+    let raw = std::fs::read_to_string(restore_path.join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE)).ok()?;
+    let parsed = serde_json::from_str::<serde_json::Value>(&raw).ok()?;
+    normalize_ghostbox_achievements_backup_file(&parsed, app_id)
 }
 
-pub(crate) fn local_backup_achievement_count(
-    app: &tauri::AppHandle,
-    app_id: &str,
-    title: &str,
-) -> Option<usize> {
-    read_ghostbox_achievements_backup_file(app, app_id, title, None).and_then(|file| {
-        file.get("unlocked")
-            .and_then(|value| value.as_array())
-            .map(Vec::len)
-    })
-}
-
-fn write_ghostbox_achievements_backup_file(
-    app: &tauri::AppHandle,
+fn write_cloud_achievements_file(
     file: &serde_json::Value,
-    target_directory: Option<&str>,
-) -> Result<String, String> {
-    let app_id = text_value(file.get("appId"));
-    let title = text_value(file.get("title")).if_empty(app_id.clone());
-    let file_path = if let Some(directory) = target_directory.filter(|value| !value.is_empty()) {
-        std::path::PathBuf::from(directory).join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE)
-    } else {
-        ghostbox_achievements_backup_path(&load_backup_settings(app), &title)
-    };
-    if let Some(parent) = file_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
+    staging_path: &std::path::Path,
+) -> Result<(), String> {
+    let file_path = staging_path.join(GHOSTBOX_ACHIEVEMENTS_BACKUP_FILE);
     let contents = serde_json::to_string_pretty(file).map_err(|error| error.to_string())?;
     std::fs::write(&file_path, contents).map_err(|error| error.to_string())?;
-    Ok(file_path.to_string_lossy().to_string())
-}
-
-pub(crate) fn get_backup_record_entries(
-    record: Option<&serde_json::Value>,
-) -> Vec<serde_json::Value> {
-    let Some(record) = record else {
-        return Vec::new();
-    };
-    if let Some(entries) = record
-        .get("entries")
-        .and_then(|value| value.as_array())
-        .filter(|entries| !entries.is_empty())
-    {
-        return entries.clone();
-    }
-    let backup_path = text_value(record.get("lastBackupPath"));
-    let backup_at = text_value(record.get("lastBackupAt"));
-    if record
-        .get("lastBackupSuccess")
-        .and_then(|value| value.as_bool())
-        != Some(true)
-        || backup_path.is_empty()
-        || backup_at.is_empty()
-    {
-        return Vec::new();
-    }
-    vec![serde_json::json!({
-        "path": backup_path,
-        "backupAt": backup_at,
-        "sizeBytes": record.get("lastBackupSizeBytes"),
-        "pinned": false
-    })]
+    Ok(())
 }
 
 pub(crate) fn save_failed_backup_record(
     app: &tauri::AppHandle,
     app_id: &str,
     title: &str,
-    backup_path: &str,
     error: &str,
 ) -> Result<serde_json::Value, String> {
-    let settings = load_backup_settings(app);
-    let current_record = settings
-        .get("backupRecords")
-        .and_then(|records| records.get(app_id));
-
     save_backup_record(
         app,
         app_id,
         serde_json::json!({
             "title": title,
+            "cloud": true,
             "lastBackupAt": current_timestamp_string(),
             "lastBackupSuccess": false,
-            "lastBackupPath": backup_path,
             "lastBackupError": error,
-            "entries": get_backup_record_entries(current_record)
         }),
     )
 }
@@ -1057,37 +637,17 @@ pub(crate) fn export_game_profile_progress(
         }
     }
 
-    let achievements_file = read_ghostbox_achievements_backup_file(app, app_id, title, None)
-        .or_else(|| {
-            steam_path.as_ref().and_then(|steam_path| {
-                steam_appcache::read_steam_local_achievement_backup_file(steam_path, app_id, title)
-            })
-        })
-        .or_else(|| {
-            // Prefer achievements already stored inside this backup folder (re-export).
-            read_ghostbox_achievements_backup_file(
-                app,
-                app_id,
-                title,
-                Some(backup_path.to_string_lossy().as_ref()),
-            )
-        });
+    let achievements_file = steam_path.as_ref().and_then(|steam_path| {
+        steam_appcache::read_steam_local_achievement_backup_file(steam_path, app_id, title)
+    });
 
     if let Some(file) = achievements_file {
         snapshot.achievement_count = file
             .get("unlocked")
             .and_then(|value| value.as_array())
             .map(Vec::len);
-        if write_ghostbox_achievements_backup_file(
-            app,
-            &file,
-            Some(backup_path.to_string_lossy().as_ref()),
-        )
-        .is_ok()
-        {
+        if write_cloud_achievements_file(&file, backup_path).is_ok() {
             snapshot.has_achievements = true;
-            // Keep the canonical per-game achievements file in the backup root in sync.
-            let _ = write_ghostbox_achievements_backup_file(app, &file, None);
         }
     }
 
@@ -1125,7 +685,6 @@ pub(crate) fn export_game_profile_progress(
 pub(crate) fn import_game_profile_progress(
     app: &tauri::AppHandle,
     app_id: &str,
-    title: &str,
     backup_path: &std::path::Path,
 ) -> ProfileProgressSnapshot {
     let mut snapshot = ProfileProgressSnapshot::default();
@@ -1148,19 +707,12 @@ pub(crate) fn import_game_profile_progress(
         }
     }
 
-    if let Some(file) = read_ghostbox_achievements_backup_file(
-        app,
-        app_id,
-        title,
-        Some(backup_path.to_string_lossy().as_ref()),
-    ) {
+    if let Some(file) = read_cloud_achievements_file(app_id, backup_path) {
         snapshot.achievement_count = file
             .get("unlocked")
             .and_then(|value| value.as_array())
             .map(Vec::len);
-        if write_ghostbox_achievements_backup_file(app, &file, None).is_ok() {
-            snapshot.has_achievements = true;
-        }
+        snapshot.has_achievements = true;
     }
 
     let playtime_path = backup_path.join(GHOSTBOX_PLAYTIME_BACKUP_FILE);
@@ -1184,52 +736,18 @@ pub(crate) fn save_cloud_backup_success_record(
     title: &str,
     size_bytes: u64,
 ) -> Result<serde_json::Value, String> {
-    let settings = load_backup_settings(app);
-    let current_record = settings
-        .get("backupRecords")
-        .and_then(|records| records.get(app_id));
-    let entries = get_backup_record_entries(current_record);
-    let last_path = current_record
-        .and_then(|record| record.get("lastBackupPath"))
-        .cloned()
-        .or_else(|| entries.first().and_then(|entry| entry.get("path")).cloned())
-        .unwrap_or_else(|| serde_json::json!(""));
-
     save_backup_record(
         app,
         app_id,
         serde_json::json!({
             "title": title,
+            "cloud": true,
             "lastBackupAt": current_timestamp_string(),
             "lastBackupSuccess": true,
-            "lastBackupPath": last_path,
             "lastBackupSizeBytes": size_bytes,
             "lastCloudBackupAt": current_timestamp_string(),
-            "entries": entries
         }),
     )
-}
-
-pub(crate) fn sanitize_folder_name(value: &str) -> String {
-    let invalid = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
-    let name = value
-        .chars()
-        .map(|ch| {
-            if invalid.contains(&ch) || ch.is_control() {
-                ' '
-            } else {
-                ch
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    name.chars()
-        .take(80)
-        .collect::<String>()
-        .if_empty("Game".to_string())
 }
 
 pub(crate) fn save_backup_record(
@@ -1242,143 +760,12 @@ pub(crate) fn save_backup_record(
     save_backup_settings(app, serde_json::json!({ "backupRecords": records }))
 }
 
-pub(crate) fn remove_backup_record(
-    app: &tauri::AppHandle,
-    app_id: &str,
-) -> Result<serde_json::Value, String> {
-    let mut settings = load_backup_settings(app);
-    if let Some(records) = settings
-        .get_mut("backupRecords")
-        .and_then(|value| value.as_object_mut())
-    {
-        records.remove(app_id);
-    }
-    persist_backup_settings(app, settings)
-}
-
 pub(crate) fn directory_has_content(path: &std::path::Path) -> bool {
     let Ok(entries) = std::fs::read_dir(path) else {
         return false;
     };
 
-    entries.flatten().any(|entry| {
-        entry.file_name().to_str().is_some_and(|name| {
-            name != BACKUP_ROOT_MARKER_FILE
-                && name != LEGACY_EDEN_BACKUP_ROOT_MARKER_FILE
-                && name != LEGACY_BACKUP_ROOT_MARKER_FILE
-        })
-    })
-}
-
-pub(crate) fn selected_backup_entry_path(
-    settings: &serde_json::Value,
-    app_id: &str,
-    backup_path: Option<String>,
-) -> String {
-    selected_backup_path(settings, app_id, backup_path)
-}
-
-pub(crate) fn backup_details_for_path(
-    app: &tauri::AppHandle,
-    app_id: &str,
-    backup_path: &str,
-    steam_path: &str,
-    steam_achievements: &[serde_json::Value],
-) -> Result<serde_json::Value, String> {
-    let settings = load_backup_settings(app);
-    let title = settings
-        .get("backupRecords")
-        .and_then(|records| records.get(app_id))
-        .and_then(|record| record.get("title"))
-        .and_then(|value| value.as_str())
-        .unwrap_or(app_id);
-    let mut achievements =
-        read_ghostbox_achievements_backup_file(app, app_id, title, Some(backup_path))
-            .and_then(|file| file.get("unlocked").cloned())
-            .and_then(|value| value.as_array().cloned())
-            .unwrap_or_default();
-
-    if achievements.is_empty() {
-        achievements =
-            steam_appcache::read_steam_local_achievement_backup_file(steam_path, app_id, title)
-                .and_then(|file| file.get("unlocked").cloned())
-                .and_then(|value| value.as_array().cloned())
-                .unwrap_or_default();
-    }
-
-    let achievements = enrich_backup_achievements_with_icons(achievements, steam_achievements);
-    let root = std::path::PathBuf::from(backup_path);
-    let mut files = Vec::new();
-    let mut file_count = 0u64;
-    let mut directory_count = 0u64;
-    let mut truncated = false;
-
-    fn visit(
-        current: &std::path::Path,
-        files: &mut Vec<serde_json::Value>,
-        file_count: &mut u64,
-        directory_count: &mut u64,
-        truncated: &mut bool,
-    ) {
-        if files.len() >= 500 {
-            *truncated = true;
-            return;
-        }
-
-        let Ok(entries) = std::fs::read_dir(current) else {
-            return;
-        };
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
-
-            if metadata.is_dir() {
-                *directory_count += 1;
-                files.push(serde_json::json!({
-                    "name": name,
-                    "path": path.to_string_lossy(),
-                    "type": "directory"
-                }));
-                visit(&path, files, file_count, directory_count, truncated);
-            } else if metadata.is_file() {
-                *file_count += 1;
-                files.push(serde_json::json!({
-                    "name": name,
-                    "path": path.to_string_lossy(),
-                    "type": "file",
-                    "extension": path.extension().and_then(|value| value.to_str()).unwrap_or_default(),
-                    "sizeBytes": metadata.len()
-                }));
-            }
-
-            if files.len() >= 500 {
-                *truncated = true;
-                break;
-            }
-        }
-    }
-
-    visit(
-        &root,
-        &mut files,
-        &mut file_count,
-        &mut directory_count,
-        &mut truncated,
-    );
-
-    Ok(serde_json::json!({
-        "appId": app_id,
-        "backupPath": backup_path,
-        "files": files,
-        "fileCount": file_count,
-        "directoryCount": directory_count,
-        "truncated": truncated,
-        "achievements": achievements
-    }))
+    entries.flatten().next().is_some()
 }
 
 pub(crate) fn launch_game_from_value(
@@ -1876,8 +1263,6 @@ pub fn run() {
             subscription::discord_link_start,
             subscription::discord_link_status,
             backup::backup_get_settings,
-            backup::backup_remove_record,
-            backup::backup_get_details,
             steam::steam_select_path,
             steam::steam_scan_library,
             steam::steam_is_game_installed,
@@ -1986,6 +1371,33 @@ mod path_containment_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_local_backup_paths_are_not_exposed_as_cloud_backups() {
+        let settings = normalize_backup_settings(Some(serde_json::json!({
+            "outputPath": "C:\\Users\\player\\Documents\\GhostBoxBackups",
+            "automaticBackupsForLibrary": true,
+            "backupRecords": {
+                "10": { "title": "Local only", "lastBackupPath": "C:\\local", "lastBackupSuccess": true },
+                "20": {
+                    "title": "Cloud",
+                    "lastCloudBackupAt": "2026-09-24T21:38:00Z",
+                    "lastBackupPath": "C:\\old-local",
+                    "entries": [{ "path": "C:\\old-local" }]
+                },
+                "30": { "title": "Cloud attempt", "cloud": true, "lastBackupSuccess": false }
+            }
+        })));
+
+        assert!(settings.get("outputPath").is_none());
+        assert!(settings.get("automaticBackupsForLibrary").is_none());
+        assert!(settings["backupRecords"].get("10").is_none());
+        assert!(settings["backupRecords"]["20"]
+            .get("lastBackupPath")
+            .is_none());
+        assert!(settings["backupRecords"]["20"].get("entries").is_none());
+        assert_eq!(settings["backupRecords"]["30"]["cloud"], true);
+    }
 
     #[test]
     fn strips_legacy_blocked_plan_records_but_keeps_real_failures() {
