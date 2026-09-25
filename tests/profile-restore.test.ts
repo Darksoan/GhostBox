@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applyCloudProfileToLocal } from "../src/lib/cloudProfile";
+import { applyCloudAvatarToLocal, applyCloudProfileToLocal } from "../src/lib/cloudProfile";
 import { isCustomProfileAvatar, mergeSteamProfile } from "../src/lib/steamProfile";
 import type { SteamProfile } from "../src/types";
 
@@ -151,6 +151,31 @@ describe("applyCloudProfileToLocal", () => {
     expect(applied.steamProfile?.avatarUrl).toBe(UPLOADED_AVATAR);
     expect(applied.steamProfile?.bannerUrl).toBe(UPLOADED_BANNER);
     expect(applied.steamProfile?.steamId).toBe("76561198000000000");
+  });
+});
+
+describe("free account avatar restore", () => {
+  it("restores the avatar without replacing Steam identity or Premium banner", () => {
+    const current = {
+      ...steamNativeProfile(),
+      bannerUrl: UPLOADED_BANNER,
+      bannerPosition: { x: 40, y: 60, scale: 1.5 },
+    };
+    const restored = applyCloudAvatarToLocal(current, UPLOADED_AVATAR);
+
+    expect(restored).toEqual({ ...current, avatarUrl: UPLOADED_AVATAR });
+    expect(mergeSteamProfile(steamNativeProfile(), restored)?.avatarUrl).toBe(UPLOADED_AVATAR);
+  });
+
+  it("keeps an existing avatar when the account has not saved one yet", () => {
+    const current = steamNativeProfile();
+    expect(applyCloudAvatarToLocal(current, null)).toBe(current);
+    const restored = applyCloudAvatarToLocal(null, UPLOADED_AVATAR);
+    expect(restored).toMatchObject({
+      steamId: "",
+      avatarUrl: UPLOADED_AVATAR,
+    });
+    expect(restored?.bannerUrl).toBeUndefined();
   });
 });
 

@@ -23,6 +23,10 @@ Cloudflare Worker responsible for GhostBox Premium subscriptions. Billing is Str
 - `GET /cloud-saves?appId=...` — Bearer + premium
 - `POST /cloud-saves` — Bearer + premium
 - `GET /cloud-saves/:id/download` — Bearer + premium
+- `GET /cloud-profile/avatar` — Bearer; returns the account avatar URL (free and Premium)
+- `PUT /cloud-profile/avatar` — Bearer, `{ avatarUrl }`; updates only the avatar without touching Premium profile data
+- `POST /cloud-profile/avatar` — Bearer, image bytes; uploads an avatar for either plan
+- `GET /cloud-profile` / `PUT /cloud-profile` and banner upload/delete — Bearer + premium
 
 Retired password-era routes (`/auth/register`, `/auth/login`, `/auth/change-password`, `/auth/recover/*`, `/auth/discord/send-code`, `/auth/discord/confirm-code`) answer `410 password_auth_removed` so old app builds fail with a clear message.
 

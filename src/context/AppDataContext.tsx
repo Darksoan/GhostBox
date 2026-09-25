@@ -34,6 +34,7 @@ import type {
   SteamPathSelectionResult,
 } from "../lib/ghostboxApi.types";
 import {
+  applyCloudAvatarToLocal,
   applyCloudProfileToLocal,
   buildCloudProfileSnapshot,
   isCloudSnapshotNewer,
@@ -1003,7 +1004,40 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     cloudProfileRestoreInFlightRef.current = true;
     let shouldFlushPendingUpload = false;
     try {
-      if (!(await hasPremiumCloudProfileAccess())) return false;
+      const session = await ghostboxApi.getCloudSession();
+      if (!session?.token) return false;
+      // An unavailable subscription response is not a free account. Retrying
+      // prevents a temporary outage from skipping a Premium snapshot forever.
+      const status = await ghostboxApi.getSubscriptionStatus();
+      if (!status || accountUserIdRef.current !== accountId) return false;
+      if (!status.subscription.isPremium) {
+        // A conta free recupera apenas seu avatar; saves, capa, favoritos e
+        // coleções seguem o fluxo Premium abaixo. Um avatar inline salvo por
+        // versões antigas é enviado uma vez para não se perder ao trocar de PC.
+        setIsCloudProfileRestoring(true);
+        let avatarUrl = await ghostboxApi.getCloudAvatar();
+        if (accountUserIdRef.current !== accountId) return false;
+        const localAvatar = steamProfileRef.current?.avatarUrl;
+        if (!avatarUrl && localAvatar) {
+          const candidate = /^data:/i.test(localAvatar)
+            ? await ghostboxApi.uploadProfileImage(localAvatar, "avatar")
+            : localAvatar;
+          if (accountUserIdRef.current !== accountId) return false;
+          if (/^https:\/\//i.test(candidate)) {
+            avatarUrl = await ghostboxApi.saveCloudAvatar(candidate);
+          }
+        }
+        if (accountUserIdRef.current !== accountId) return false;
+        const restoredProfile = applyCloudAvatarToLocal(steamProfileRef.current, avatarUrl);
+        if (restoredProfile && restoredProfile !== steamProfileRef.current) {
+          steamProfileRef.current = restoredProfile;
+          setSteamProfile(restoredProfile);
+          writeStoredSteamProfile(restoredProfile);
+          await ghostboxApi.saveSteamProfile(restoredProfile).catch(() => undefined);
+        }
+        cloudProfileRestoredUserIdRef.current = accountId;
+        return true;
+      }
       setIsCloudProfileRestoring(true);
 
       // A failed request is not an empty cloud profile. Returning false here
@@ -1120,7 +1154,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         window.setTimeout(() => void pushCloudProfileSnapshot(), 0);
       }
     }
-  }, [hasPremiumCloudProfileAccess, pushCloudProfileSnapshot, rehydrateCollectionGames]);
+  }, [pushCloudProfileSnapshot, rehydrateCollectionGames]);
 
   const queueBackupToast = useCallback(
     (_appId: string, record: BackupSettings["backupRecords"][string]) => {
@@ -2671,14 +2705,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         (currentBannerPosition.scale ?? 1) !== (bannerPosition.scale ?? 1);
       const canUseCloudImages = await hasPremiumCloudProfileAccess();
       if (bannerChanged && !canUseCloudImages) {
+        const message = appearance.language === "en"
+          ? "Changing the profile banner is available with Premium."
+          : "A alteração da capa do perfil está disponível no Premium.";
         showToast(
           appearance.language === "en" ? "Premium feature" : "Recurso Premium",
-          appearance.language === "en"
-            ? "Changing the profile banner is available with Premium."
-            : "A alteração da capa do perfil está disponível no Premium.",
+          message,
           "error",
         );
-        return;
+        throw new Error(message);
       }
 
       const optimisticProfile: SteamProfile = {
@@ -2692,15 +2727,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       let persistedAvatarUrl = avatarUrl;
       let persistedBannerUrl = bannerUrl;
       try {
-        if (canUseCloudImages) {
-          if (/^data:/i.test(persistedAvatarUrl)) {
-            persistedAvatarUrl =
-              (await ghostboxApi.uploadProfileImage(
-                persistedAvatarUrl,
-                "avatar",
-              )) || "";
-            if (!persistedAvatarUrl) throw new Error("avatar upload failed");
-          }
+        if (/^data:/i.test(persistedAvatarUrl)) {
+          persistedAvatarUrl =
+            (await ghostboxApi.uploadProfileImage(
+              persistedAvatarUrl,
+              "avatar",
+            )) || "";
+          if (!persistedAvatarUrl) throw new Error("avatar upload failed");
+        }
+        if (!canUseCloudImages) {
+          persistedAvatarUrl = await ghostboxApi.saveCloudAvatar(persistedAvatarUrl) ?? "";
+          if (avatarUrl && !persistedAvatarUrl) throw new Error("avatar save failed");
+        } else {
           if (/^data:/i.test(persistedBannerUrl)) {
             persistedBannerUrl =
               (await ghostboxApi.uploadProfileImage(
@@ -2725,7 +2763,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : "Não foi possível enviar as imagens para a nuvem.";
         setSteamProfile(steamProfile);
         showToast("Falha ao salvar perfil", message, "error");
-        return;
+        throw error;
       }
 
       const nextProfile: SteamProfile = {
@@ -2738,8 +2776,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       setSteamProfile(nextProfile);
       writeStoredSteamProfile(nextProfile);
-      await ghostboxApi.saveSteamProfile(nextProfile);
-      scheduleCloudProfileSync();
+      await ghostboxApi.saveSteamProfile(nextProfile).catch(() => undefined);
+      if (canUseCloudImages) scheduleCloudProfileSync();
     },
     [
       hasPremiumCloudProfileAccess,

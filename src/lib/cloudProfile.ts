@@ -316,6 +316,23 @@ export function applyCloudProfileToLocal(input: {
   };
 }
 
+/** Restore only the account avatar for free users; never touch Premium fields. */
+export function applyCloudAvatarToLocal(
+  currentProfile: SteamProfile | null,
+  avatarUrl: string | null,
+): SteamProfile | null {
+  if (!avatarUrl) return currentProfile;
+  return {
+    ...(currentProfile ?? {
+      steamId: "",
+      displayName: "",
+      avatarUrl: "",
+      profileUrl: "",
+    }),
+    avatarUrl,
+  };
+}
+
 export function isCloudSnapshotNewer(
   remoteUpdatedAt: string | null | undefined,
   localUpdatedAt: string | null | undefined

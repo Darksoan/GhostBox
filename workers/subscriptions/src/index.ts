@@ -2522,6 +2522,47 @@ async function loadCloudProfileRows(database: D1Database, userId: string) {
   };
 }
 
+// An account avatar belongs to every signed-in user. Keep this endpoint
+// separate from the Premium snapshot so a free account cannot read or replace
+// banners, favorites, collections or hidden games.
+async function handleCloudAvatarGet(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const row = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT avatar_url FROM user_profile_cloud WHERE user_id = ? LIMIT 1`
+  ).bind(auth.session!.userId).first<{ avatar_url: string | null }>();
+  return jsonResponse({ avatarUrl: expandCloudUrl(row?.avatar_url) }, env);
+}
+
+async function handleCloudAvatarPut(request: Request, env: Env) {
+  const auth = await requireSession(request, env);
+  if (auth.response) return auth.response;
+  const body = await readJson(request);
+  if (!body || !("avatarUrl" in body) || (body.avatarUrl !== null && typeof body.avatarUrl !== "string")) {
+    return jsonResponse({ error: "invalid_avatar_url" }, env, 400);
+  }
+
+  let avatarUrl: string | null;
+  try {
+    avatarUrl = compactCloudUrl(body.avatarUrl);
+  } catch (error) {
+    return jsonResponse({ error: error instanceof Error ? error.message : "invalid_avatar_url" }, env, 400);
+  }
+  if (avatarUrl && !/^https:\/\//i.test(String(body.avatarUrl))) {
+    return jsonResponse({ error: "invalid_avatar_url" }, env, 400);
+  }
+
+  const userId = auth.session!.userId;
+  await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO user_profile_cloud (user_id, avatar_url, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       avatar_url = excluded.avatar_url,
+       updated_at = excluded.updated_at`
+  ).bind(userId, avatarUrl, nowIso()).run();
+  return jsonResponse({ avatarUrl: expandCloudUrl(avatarUrl) }, env);
+}
+
 async function handleCloudProfileGet(request: Request, env: Env) {
   const auth = await requirePremiumSession(request, env);
   if (auth.response) return auth.response;
@@ -3918,6 +3959,12 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   }
   if (request.method === "PUT" && url.pathname === "/cloud-profile") {
     return handleCloudProfilePut(request, env);
+  }
+  if (request.method === "GET" && url.pathname === "/cloud-profile/avatar") {
+    return handleCloudAvatarGet(request, env);
+  }
+  if (request.method === "PUT" && url.pathname === "/cloud-profile/avatar") {
+    return handleCloudAvatarPut(request, env);
   }
   if (request.method === "POST" && url.pathname === "/cloud-profile/avatar") {
     return handleCloudProfileImageUpload(request, env, "avatar");

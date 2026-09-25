@@ -43,7 +43,7 @@ describe("premium profile banner", () => {
 
     expect(source).toContain("if (bannerChanged && !canUseCloudImages)");
     expect(source).toMatch(
-      /if \(bannerChanged && !canUseCloudImages\) \{[\s\S]*?return;[\s\S]*?\}\s*const optimisticProfile/,
+      /if \(bannerChanged && !canUseCloudImages\) \{[\s\S]*?throw new Error\(message\);[\s\S]*?\}\s*const optimisticProfile/,
     );
   });
 });

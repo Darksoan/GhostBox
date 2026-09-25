@@ -1252,6 +1252,8 @@ pub fn run() {
             cloud_save::cloud_restore_save,
             cloud_save::cloud_delete_save,
             cloud_save::cloud_set_save_pinned,
+            cloud_save::cloud_get_profile_avatar,
+            cloud_save::cloud_put_profile_avatar,
             cloud_save::cloud_get_profile_snapshot,
             cloud_save::cloud_put_profile_snapshot,
             cloud_save::cloud_upload_profile_image,

@@ -51,6 +51,8 @@ Cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` -> `r
 
 `EditProfileTab` -> `src/components/profile/EditProfileTab.tsx`; avatar upload/crop and premium banner editing, saved through `AppDataContext.handleUpdateProfile`.
 Styles -> `src/pages/ProfilePage.scss` (`profile-page__edit-*`, around 1880).
+Free avatar sync -> `AppDataContext.handleUpdateProfile` / `restoreCloudProfileFromRemote` in `src/context/AppDataContext.tsx` (around 997-1060, 2674): `ghostboxApi.uploadProfileImage` -> `saveCloudAvatar` / `getCloudAvatar` in `src/lib/ghostboxApi.tauri.ts` -> `cloud_upload_profile_image` / `cloud_put_profile_avatar` / `cloud_get_profile_avatar` in `src-tauri/src/cloud_save.rs` (around 557-690) -> `workers/subscriptions/src/index.ts` (`handleCloudProfileImageUpload` around 560; `handleCloudAvatarGet/Put` around 2528-2564). Free restore uses `applyCloudAvatarToLocal` in `src/lib/cloudProfile.ts`; server GET/PUT avatar require a session, update only `user_profile_cloud.avatar_url`.
+Premium profile sync -> `AppDataContext.pushCloudProfileSnapshot` / `restoreCloudProfileFromRemote` -> `cloud_get/put_profile_snapshot` -> worker `handleCloudProfileGet/Put` (around 2566-2650; `requirePremiumSession`); includes banner, favorites and collections. Banner image upload/delete stays Premium.
 
 ## Settings Account / Sign Out
 

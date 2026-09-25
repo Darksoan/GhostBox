@@ -1205,6 +1205,16 @@ export const ghostboxApi = {
     });
   },
 
+  getCloudAvatar(): Promise<string | null> {
+    return invoke<{ avatarUrl: string | null }>("cloud_get_profile_avatar", {})
+      .then((result) => result.avatarUrl);
+  },
+
+  saveCloudAvatar(avatarUrl: string): Promise<string | null> {
+    return invoke<{ avatarUrl: string | null }>("cloud_put_profile_avatar", { avatarUrl })
+      .then((result) => result.avatarUrl);
+  },
+
   /**
    * Rejects when the request itself fails. A resolved `null` means the account
    * genuinely has no cloud profile yet — callers upload the local state in that

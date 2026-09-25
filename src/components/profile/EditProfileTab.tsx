@@ -348,6 +348,8 @@ export function EditProfileTab({ profile, isPremium, onUpdateProfile }: EditProf
     try {
       await onUpdateProfile(trimmedName, avatarUrl, bannerUrl, bannerPosition);
       showToast(t("profile.editProfile"), t("profile.changesSaved"), "success");
+    } catch {
+      // AppDataContext already shows the upload error; do not claim success.
     } finally {
       setIsSaving(false);
     }
