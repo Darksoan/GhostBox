@@ -189,7 +189,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "POST, OPTIONS" });
     const result = await ingestSteamApp(env.DB, ingestMatch[1], url.origin,
       () => edgeCache().delete(metaKey).catch(() => undefined));
-    return json(result, result.ok ? 200 : 404, { "cache-control": "private, no-store" });
+    const status = result.ok ? 200
+      : result.error === "catalogue_capacity_reached" ? 507
+      : result.error === "catalogue_daily_ingest_limit" ? 429 : 404;
+    return json(result, status, { "cache-control": "private, no-store" });
   }
 
   if (request.method !== "GET") return json({ error: "method not allowed" }, 405, { "cache-control": "private, no-store", allow: "GET, POST, OPTIONS" });
@@ -203,6 +206,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const meta = await cachedValue(metaKey, 300, () => getCatalogueMeta(env.DB));
   if (url.pathname === "/catalogue/search") {
     const search = parseSearch(url);
+    const hasCriteria = Boolean(search.q) || FILTER_NAMES.some((name) => search.filters[name].length > 0);
+    // Never fall back to LIKE over the entire games table when the index is
+    // incomplete. Production v1 spent ~113k D1 rows per page and per COUNT.
+    if (hasCriteria && meta.searchIndexVersion !== "2") {
+      return json({ error: "search_index_unavailable" }, 503, { "cache-control": "private, no-store" });
+    }
     const snapshot = !search.facetsOnly && env.STEAMSPY_SNAPSHOT
       ? await getSteamSpySnapshot(env.STEAMSPY_SNAPSHOT)
       : null;
@@ -224,7 +233,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
           facets,
           snapshot,
           `${meta.updatedAt}:${meta.searchIndexVersion || "legacy"}`,
-          meta.searchIndexVersion === "1",
+          meta.searchIndexVersion === "2",
         ),
       };
     }, false);

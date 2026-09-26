@@ -1,0 +1,21 @@
+# Deployment configuration for the validated replacement database only.
+# Keep wrangler.toml on v1 until migrate:v2 -- --finalize succeeds.
+name = "piratebox-catalogue"
+main = "src/index.ts"
+compatibility_date = "2026-07-19"
+
+[triggers]
+crons = ["0-44/2 0 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "piratebox-games-v2"
+database_id = "16334986-75dd-44a2-84c6-6c85bd97cfa4"
+
+[[kv_namespaces]]
+binding = "STEAMSPY_SNAPSHOT"
+id = "b5996f474a2a4196b375960235599e70"
+preview_id = "183f9da6fca2465a934a59a4c3a502bb"
+
+[observability]
+enabled = true

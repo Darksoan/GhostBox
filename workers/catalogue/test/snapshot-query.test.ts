@@ -54,7 +54,7 @@ beforeAll(async () => {
 afterAll(async () => { await runtime?.dispose(); });
 
 function search(query: string, source: SteamSpySnapshot | null = snapshot) {
-  return searchCatalogue(db, parseSearch(new URL(`https://example.com/catalogue/search?${query}`)), 4, "https://example.com", undefined, source);
+  return searchCatalogue(db, parseSearch(new URL(`https://example.com/catalogue/search?${query}`)), 4, "https://example.com", undefined, source, "v2", true);
 }
 
 describe("snapshot queries in local D1", () => {
@@ -132,7 +132,7 @@ describe("snapshot queries in local D1", () => {
     expect(plan.results.some((row) => /SEARCH games .*app_id/i.test(row.detail))).toBe(true);
   });
 
-  it("puts partial title matches ahead of shorter metadata matches in indexed and legacy search", async () => {
+  it("puts partial title matches ahead of shorter metadata matches in indexed search", async () => {
     await db.batch([
       db.prepare("INSERT INTO games (app_id, name, search_text, ranking_tier, app_type) VALUES ('3764200', 'Resident Evil Requiem', '3764200 resident evil requiem', 43, 'game')"),
       db.prepare("INSERT INTO games (app_id, name, search_text, ranking_tier, app_type) VALUES ('1436210', 'Requiem', '1436210 requiem', 6, 'game')"),
@@ -142,7 +142,7 @@ describe("snapshot queries in local D1", () => {
       db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (443850, '443850', '443850 tross requiem', '', '', '', '', '')"),
     ]);
     try {
-      for (const indexed of [true, false]) {
+      for (const indexed of [true]) {
         const find = async (q: string) => searchCatalogue(
           db,
           parseSearch(new URL(`https://example.com/catalogue/search?q=${encodeURIComponent(q)}&limit=2`)),

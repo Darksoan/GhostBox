@@ -6,7 +6,9 @@ compatibility_date = "2026-07-19"
 # 00:40–00:44 consolidam/repetem a publicação do snapshot KV; fora dessa janela
 # não há chamadas nem gravações relacionadas à SteamSpy.
 [triggers]
-crons = ["0-44/2 0 * * *", "*/2 * * * *"]
+# Search-index backfill is paused: the production D1 reached its size limit.
+# Reactivate only against a compact replacement DB with measured headroom.
+crons = ["0-44/2 0 * * *"]
 
 [[d1_databases]]
 binding = "DB"

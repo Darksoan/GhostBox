@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Miniflare } from "miniflare";
-import { ingestSteamApp } from "../src/catalogue";
+import { ingestSteamApp, reserveDailyIngest } from "../src/catalogue";
 
 let runtime: Miniflare;
 let db: D1Database;
@@ -53,15 +53,15 @@ describe("catalogue ingestion", () => {
 
     const onChanged = vi.fn(async () => undefined);
     const first = await ingestSteamApp(db, "424242", "https://example.com", onChanged);
-    const indexed = await db.prepare("SELECT app_id FROM games_search WHERE games_search MATCH ?")
+    const indexed = await db.prepare("SELECT rowid FROM games_search WHERE games_search MATCH ?")
       .bind("text:acao* AND genres:f616374696f6e")
-      .all<{ app_id: string }>();
+      .all<{ rowid: number }>();
     const before = await db.prepare("SELECT value FROM catalogue_meta WHERE key = 'updatedAt'").first<string>("value");
     const second = await ingestSteamApp(db, "424242", "https://example.com", onChanged);
     const after = await db.prepare("SELECT value FROM catalogue_meta WHERE key = 'updatedAt'").first<string>("value");
 
     expect(first.ok).toBe(true);
-    expect(indexed.results.map((row) => row.app_id)).toEqual(["424242"]);
+    expect(indexed.results.map((row) => row.rowid)).toEqual([424242]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(second.ok).toBe(true);
@@ -89,5 +89,46 @@ describe("catalogue ingestion", () => {
     expect(dlc.game?.appType).toBe("dlc");
     await db.prepare("DELETE FROM games WHERE app_id IN ('777001', '777002')").run();
     await db.prepare("DELETE FROM games_search WHERE app_id IN ('777001', '777002')").run();
+  });
+
+  it("caps new games by total capacity and daily write reservations", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      "777003": { success: true, data: { name: "New Game", type: "game" } },
+    })));
+    vi.stubGlobal("fetch", fetchMock);
+    await db.prepare("INSERT INTO catalogue_meta(key,value) VALUES('totalGames','115000') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    await db.prepare("INSERT INTO catalogue_meta(key,value) VALUES('storedGames','115000') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+    expect(await ingestSteamApp(db, "777003", "https://example.com")).toMatchObject({ ok: false, error: "catalogue_capacity_reached" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    await db.prepare("UPDATE catalogue_meta SET value='0' WHERE key='totalGames'").run();
+    await db.prepare("UPDATE catalogue_meta SET value='0' WHERE key='storedGames'").run();
+    const day = new Date().toISOString().slice(0, 10);
+    await db.prepare("INSERT INTO catalogue_meta(key,value) VALUES(?, '25') ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(`ingestCount:${day}`).run();
+    expect(await ingestSteamApp(db, "777003", "https://example.com")).toMatchObject({ ok: false, error: "catalogue_daily_ingest_limit" });
+    expect(await db.prepare("SELECT app_id FROM games WHERE app_id='777003'").first()).toBeNull();
+    await db.prepare("DELETE FROM catalogue_meta WHERE key IN ('totalGames','storedGames', ?)").bind(`ingestCount:${day}`).run();
+  });
+
+  it("keeps storage count while removing a newly classified demo from visible totals", async () => {
+    await db.prepare("INSERT INTO games(app_id,name,app_type,updated_at) VALUES('777004','Legacy Demo','unclassified',1)").run();
+    await db.batch([
+      db.prepare("INSERT INTO catalogue_meta(key,value) VALUES('totalGames','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"),
+      db.prepare("INSERT INTO catalogue_meta(key,value) VALUES('storedGames','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"),
+    ]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      "777004": { success: true, data: { name: "Legacy Demo", type: "demo" } },
+    }))));
+    const result = await ingestSteamApp(db, "777004", "https://example.com");
+    expect(result).toMatchObject({ ok: false, error: "steam_app_is_demo" });
+    expect(await db.prepare("SELECT value FROM catalogue_meta WHERE key='totalGames'").first("value")).toBe("0");
+    expect(await db.prepare("SELECT value FROM catalogue_meta WHERE key='storedGames'").first("value")).toBe("1");
+    await db.prepare("DELETE FROM games WHERE app_id='777004'").run();
+    await db.prepare("DELETE FROM catalogue_meta WHERE key IN ('totalGames','storedGames')").run();
+  });
+
+  it("stops writes before the physical database reaches the Free-tier limit", async () => {
+    const prepare = vi.fn(() => ({ bind: () => ({ all: async () => ({ meta: { size_after: 400_000_000 }, results: [] }) }) }));
+    expect(await reserveDailyIngest({ prepare } as unknown as D1Database)).toBe("capacity");
+    expect(prepare).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "deploy:dry-run": "wrangler deploy --dry-run",
     "backfill:search-index": "node scripts/backfill-search-index.mjs",
-    "backfill:app-type": "node scripts/backfill-app-type.mjs"
+    "backfill:app-type": "node scripts/backfill-app-type.mjs",
+    "migrate:v2": "node scripts/migrate-v2.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260719.1",

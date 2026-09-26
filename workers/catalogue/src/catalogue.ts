@@ -9,8 +9,15 @@ import {
 } from "./ranking";
 import { steamSpySnapshotSample, type SteamSpySnapshot } from "./steamspy";
 import { cachedValue, cacheKey, countCacheKey } from "./cache";
+import { packScreenshots, unpackScreenshots } from "./screenshots";
 
 const SOURCE = "cloudflare-d1";
+// Hard growth cap for the 500 MB Free-tier D1. Release a higher ceiling only
+// after measuring the complete indexed database and its per-game growth.
+export const MAX_CATALOGUE_GAMES = 115_000;
+export const MAX_DAILY_INGESTS = 25;
+export const MAX_CATALOGUE_DB_BYTES = 400_000_000;
+const MAX_INGEST_PAYLOAD_BYTES = 30_000;
 
 export const GAME_COLUMNS = `games.app_id, games.name, games.release_date, games.release_year, games.header_image,
   games.developers_json, games.publishers_json, games.categories_json, games.genres_json, games.screenshots_json, games.tags_json,
@@ -121,7 +128,7 @@ export function toGame(row: GameRow, origin: string, snapshot?: SteamSpySnapshot
   const genres = stringArray(row.genres_json).slice(0, 6);
   const rawTags = stringArray(row.tags_json);
   const tags = (rawTags.length ? rawTags : stringArray(row.categories_json)).slice(0, 12);
-  const screenshots = stringArray(row.screenshots_json).slice(0, 8);
+  const screenshots = unpackScreenshots(appId, row.screenshots_json).slice(0, 8);
   const coverUrl = directHeader || `${imageBase}/header.jpg`;
   const heroUrl = `${imageBase}/library_hero.jpg`;
   const subtitle = [genres.slice(0, 2).join(" / "), developers[0]].filter(Boolean).join(" - ");
@@ -236,10 +243,6 @@ function releaseSort(date: string): number {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function listText(values: string[]): string {
-  return values.length ? `\n${values.join("\n")}\n` : "";
-}
-
 export function facetToken(value: string): string {
   const normalized = value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ");
   if (!normalized) return "";
@@ -327,6 +330,16 @@ async function fetchSteamStoreItem(appId: string): Promise<SteamStoreItem | null
   return result.data;
 }
 
+export async function reserveDailyIngest(db: D1Database): Promise<"ok" | "capacity" | "daily-limit"> {
+  const dayKey = `ingestCount:${new Date().toISOString().slice(0, 10)}`;
+  const storage = await db.prepare("SELECT value FROM catalogue_meta WHERE key=? LIMIT 1").bind(dayKey).all<{ value: string }>();
+  if (!Number.isFinite(storage.meta.size_after) || storage.meta.size_after >= MAX_CATALOGUE_DB_BYTES) return "capacity";
+  const reservation = await db.prepare(`INSERT INTO catalogue_meta(key,value) VALUES(?,'1')
+    ON CONFLICT(key) DO UPDATE SET value=CAST(value AS INTEGER)+1 WHERE CAST(value AS INTEGER) < ?`)
+    .bind(dayKey, MAX_DAILY_INGESTS).run();
+  return Number(reservation.meta.changes) === 1 ? "ok" : "daily-limit";
+}
+
 export async function ingestSteamApp(db: D1Database, appId: string, origin: string, onChanged?: () => Promise<unknown>) {
   if (!/^\d{1,10}$/.test(appId)) return { ok: false, error: "invalid_appid" };
 
@@ -335,9 +348,11 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
     .first<{ updated_at: number; app_type: string | null }>();
   if (existing) {
     if (isCatalogueDemo(existing.app_type)) return { ok: false, error: "steam_app_is_demo" };
-    if (!normalizeCatalogueAppType(existing.app_type)) {
+    if (!normalizeCatalogueAppType(existing.app_type) || existing.app_type === "unclassified") {
       // Rows created before app_type existed are classified lazily when an
       // explicit ingest is requested. A missing type is not safe to expose.
+      const budget = await reserveDailyIngest(db);
+      if (budget !== "ok") return { ok: false, error: budget === "capacity" ? "catalogue_capacity_reached" : "catalogue_daily_ingest_limit" };
       const data = await fetchSteamStoreItem(appId);
       const appType = normalizeCatalogueAppType(data?.type);
       if (!data || !appType) return { ok: false, error: "steam_app_type_unavailable" };
@@ -347,6 +362,12 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
       invalidateCatalogueMetaCache();
       poolCache.clear();
       if (appType === "demo") {
+        const updatedAt = new Date().toISOString();
+        await db.batch([
+          db.prepare("UPDATE catalogue_meta SET value=CAST(value AS INTEGER)-1 WHERE key='totalGames'"),
+          db.prepare("INSERT INTO catalogue_meta(key,value) VALUES('updatedAt',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+            .bind(updatedAt),
+        ]);
         await onChanged?.();
         return { ok: false, error: "steam_app_is_demo" };
       }
@@ -356,6 +377,13 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
     if (!game) return { ok: false, error: "steam_app_is_demo" };
     return { ok: true, appId, updatedAt: new Date(existing.updated_at).toISOString(), game };
   }
+
+  const [storedTotal, storedCount] = await Promise.all([metaValue(db, "totalGames"), metaValue(db, "storedGames")]);
+  const parsedTotal = Number.parseInt(storedCount ?? storedTotal ?? "", 10);
+  const totalBefore = Number.isFinite(parsedTotal)
+    ? parsedTotal
+    : Number((await db.prepare("SELECT COUNT(*) AS total FROM games").first<{ total: number }>())?.total ?? 0);
+  if (totalBefore >= MAX_CATALOGUE_GAMES) return { ok: false, error: "catalogue_capacity_reached" };
 
   const data = await fetchSteamStoreItem(appId);
   if (!data) return { ok: false, error: "steam_app_not_found" };
@@ -380,21 +408,24 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
   const year = releaseYear(releaseDate);
   const document = searchDocument(appId, name, developers, publishers, genres, tags, year);
   document.text = normalizeSearchText([appId, name, ...developers, ...publishers, ...genres, ...categories].join(" "));
-  const [storedTotal, storedFacets] = await Promise.all([
-    metaValue(db, "totalGames"),
-    metaValue(db, "facets"),
-  ]);
-  const parsedTotal = Number.parseInt(storedTotal ?? "", 10);
-  const total = Number.isFinite(parsedTotal)
-    ? parsedTotal + 1
-    : Number((await db.prepare("SELECT COUNT(*) AS total FROM games").first<{ total: number }>())?.total ?? 0) + 1;
+  const packedScreenshots = packScreenshots(appId, screenshots);
+  const payloadBytes = [name, releaseDate, data.header_image ?? "", ...developers, ...publishers, ...categories, ...genres, ...tags, packedScreenshots, document.text]
+    .reduce((size, value) => size + new TextEncoder().encode(value).length, 0);
+  if (payloadBytes > MAX_INGEST_PAYLOAD_BYTES) return { ok: false, error: "steam_app_too_large" };
+
+  const budget = await reserveDailyIngest(db);
+  if (budget !== "ok") return { ok: false, error: budget === "capacity" ? "catalogue_capacity_reached" : "catalogue_daily_ingest_limit" };
+
+  const storedFacets = await metaValue(db, "facets");
+  const visibleBefore = Number.parseInt(storedTotal ?? "", 10);
+  const total = (Number.isFinite(visibleBefore) ? visibleBefore : totalBefore) + 1;
   const nowFacets = mergeFacets(parseFacets(storedFacets), facetsFromGame(developers, publishers, genres, tags, year));
   const gameStatement = db.prepare(`INSERT INTO games (
       app_id, name, release_date, release_year, release_sort, header_image,
       developers_json, publishers_json, categories_json, genres_json, screenshots_json, tags_json,
-      genres_text, tags_text, updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
-      metacritic_score, recommendations, search_text, app_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?, ?)`)
+      updated_at, popularity_score, popularity_rank, steam_review_count, steam_positive_ratio,
+      metacritic_score, recommendations, app_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, ?, ?, ?)`)
     .bind(
       appId,
       name,
@@ -406,23 +437,22 @@ export async function ingestSteamApp(db: D1Database, appId: string, origin: stri
       JSON.stringify(publishers),
       JSON.stringify(categories),
       JSON.stringify(genres),
-      JSON.stringify(screenshots),
+      packedScreenshots,
       JSON.stringify(tags),
-      listText(genres),
-      listText(tags),
       now,
       metacriticScore,
       recommendations,
-      document.text,
       appType || null,
     );
   const updatedAt = new Date(now).toISOString();
   await db.batch([
     gameStatement,
-    db.prepare("INSERT INTO games_search (rowid, app_id, text, genres, tags, developers, publishers, years) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(Number(appId), appId, document.text, document.genres, document.tags, document.developers, document.publishers, document.years),
+    db.prepare("INSERT INTO games_search (rowid, text, genres, tags, developers, publishers, years) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(Number(appId), document.text, document.genres, document.tags, document.developers, document.publishers, document.years),
     db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('totalGames', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .bind(String(total)),
+    db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('storedGames', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(String(totalBefore + 1)),
     db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('updatedAt', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .bind(updatedAt),
     db.prepare("INSERT INTO catalogue_meta (key, value) VALUES ('facets', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
@@ -530,7 +560,7 @@ type WhereClause = ReturnType<typeof searchConditions>;
 
 async function loadRotationPool(db: D1Database, seed: number, where: WhereClause, indexed: boolean): Promise<RotationEntry[]> {
   // Index-only walk over idx_games_ranking: ids and tiers, never full rows.
-  const source = indexed ? "FROM games_search CROSS JOIN games ON games.app_id = games_search.app_id" : "FROM games";
+  const source = indexed ? "FROM games_search CROSS JOIN games ON games.app_id = CAST(games_search.rowid AS TEXT)" : "FROM games";
   const order = indexed ? "games.ranking_tier DESC, CAST(games.app_id AS INTEGER) ASC" : RANKING_ORDER;
   const rows = await db.prepare(`SELECT games.app_id, games.ranking_tier ${source} ${where.sql} ORDER BY ${order} LIMIT ?`)
     .bind(...where.bindings, ROTATION_POOL_SIZE)
@@ -597,6 +627,9 @@ export async function searchCatalogue(
   if (request.facetsOnly) {
     return { games: [], total, matched: total, limited: false, source: SOURCE, facets };
   }
+  if (hasSearchCriteria(request) && !useSearchIndex) {
+    throw new Error("Search index must be activated before filtered catalogue queries");
+  }
   const useSnapshot = Boolean(snapshot && request.sort === "playingNow");
   if (useSnapshot && !hasSearchCriteria(request)) {
     const ids = await cachedValue(cacheKey("count", `playing-ids:${snapshot!.sampledAt}`, catalogueUpdatedAt), 3600, async () => {
@@ -627,7 +660,7 @@ export async function searchCatalogue(
       : "WITH steamspy AS (SELECT key AS snapshot_app_id, CAST(json_extract(value, '$[0]') AS INTEGER) AS sample_ccu FROM json_each(?)) "
     : "";
   const gamesSource = indexed
-    ? "games_search CROSS JOIN games ON games.app_id = games_search.app_id"
+    ? "games_search CROSS JOIN games ON games.app_id = CAST(games_search.rowid AS TEXT)"
     : "games";
   const fromClause = useSnapshot
     ? indexed
@@ -637,9 +670,11 @@ export async function searchCatalogue(
   // Quando indexado, o COUNT precisa do JOIN com `games` para aplicar a
   // exclusão de demos (`games.app_type` não existe em `games_search`).
   const countFrom = indexed && !useSnapshot && request.sort !== "playingNow"
-    ? "FROM games_search CROSS JOIN games ON games.app_id = games_search.app_id"
+    ? "FROM games_search CROSS JOIN games ON games.app_id = CAST(games_search.rowid AS TEXT)"
     : fromClause;
-  const countQuery = () => (where.sql
+  const countQuery = () => (!hasSearchCriteria(request) && request.sort !== "playingNow"
+    ? Promise.resolve({ matched: total })
+    : where.sql
     ? cachedValue(
       countCacheKey(request, `${catalogueUpdatedAt}:${useSnapshot ? snapshot!.sampledAt : "d1"}`, origin),
       request.sort === "playingNow" ? 300 : 86400,

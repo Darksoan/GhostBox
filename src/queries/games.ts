@@ -97,6 +97,7 @@ export function useGamesQuery(
     // Mantém a página anterior visível enquanto o próximo chunk chega — sem
     // isso cada tecla do debounce troca a lista inteira por skeleton.
     placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
     retry: 1,
   });
 }

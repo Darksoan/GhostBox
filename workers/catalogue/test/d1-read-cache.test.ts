@@ -63,11 +63,11 @@ describe("D1 read cache", () => {
     const rows = vi.fn(async () => ({ results: [] }));
     const db = { prepare: vi.fn(() => ({ bind: () => ({ first: count, all: rows }) })) } as unknown as D1Database;
     for (const offset of [0, 20, 40]) {
-      await searchCatalogue(db, search(`q=portal&offset=${offset}`), 3, origin, undefined, null, "v1");
+      await searchCatalogue(db, search(`q=portal&offset=${offset}`), 3, origin, undefined, null, "v1", true);
     }
     expect(count).toHaveBeenCalledTimes(1);
     expect(rows).toHaveBeenCalledTimes(3);
-    await searchCatalogue(db, search("q=portal"), 3, origin, undefined, null, "v2");
+    await searchCatalogue(db, search("q=portal"), 3, origin, undefined, null, "v2", true);
     expect(count).toHaveBeenCalledTimes(2);
   });
 
@@ -86,5 +86,15 @@ describe("D1 read cache", () => {
     const response = await worker.fetch(new Request(`${origin}/unknown`), { DB: { prepare } } as unknown as Env, {} as ExecutionContext);
     expect(response.status).toBe(404);
     expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without a complete v2 search index", async () => {
+    await cachedValue(cacheKey("meta", origin, "v1"), 300, async () => metadata);
+    const prepare = vi.fn(() => { throw new Error("Never scan an unindexed catalogue"); });
+    const response = await worker.fetch(new Request(`${origin}/catalogue/search?q=portal`), { DB: { prepare } } as unknown as Env, {} as ExecutionContext);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: "search_index_unavailable" });
+    expect(prepare).not.toHaveBeenCalled();
+    await expect(searchCatalogue({} as D1Database, search("q=portal"), 3, origin)).rejects.toThrow("Search index must be activated");
   });
 });

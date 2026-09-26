@@ -4,7 +4,7 @@ import type { GameDatabaseResult } from "../data";
 export const cataloguePageSize = 21;
 export const catalogueChunkPageCount = 9;
 export const catalogueChunkSize = cataloguePageSize * catalogueChunkPageCount;
-export const searchDebounceMs = 300;
+export const searchDebounceMs = 500;
 export const favoriteGamesStorageKey = "ghostbox:favorites:v1";
 export const userCollectionsStorageKey = "ghostbox:user-collections:v1";
 export const steamProfileStorageKey = "ghostbox:steam-profile:v1";

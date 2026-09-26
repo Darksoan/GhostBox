@@ -1,0 +1,21 @@
+name = "piratebox-catalogue-migrator"
+main = "src/migrator.ts"
+compatibility_date = "2026-07-19"
+
+# Isolated from the public Worker. Stops at the daily write budget, target
+# size ceiling or an explicit pause in catalogue_meta; never writes the source.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "SOURCE_DB"
+database_name = "piratebox-games"
+database_id = "38bcabba-004a-4e75-bef0-4a1c0559f52c"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "piratebox-games-v2"
+database_id = "16334986-75dd-44a2-84c6-6c85bd97cfa4"
+
+[observability]
+enabled = true
