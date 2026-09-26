@@ -1,4 +1,4 @@
-import { CalendarClock, CloudUpload, CreditCard, ExternalLink, Settings2, Wallet } from "lucide-react";
+import { CreditCard, ExternalLink, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import { Trophy } from "reicon-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
@@ -22,6 +22,8 @@ import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import ghostIcon from "../../../Icons/ghost-solid.png";
 import { PremiumOffer } from "./PremiumOffer";
 import { PaginationControls } from "../ui/PaginationControls";
+import { useOverlay } from "../../context/OverlayContext";
+import { BackupConfirmModal, type BackupConfirmAction } from "./BackupConfirmModal";
 
 const backupsPerPage = 10;
 
@@ -41,6 +43,7 @@ type SubscriptionPlansProps = {
 
 type CloudBackupGameSummary = BackupFailureRecord & {
   appId: string;
+  saveId: string;
   title: string;
   achievementCount: number | null;
   lastBackupAt: string | null;
@@ -181,23 +184,37 @@ export function SubscriptionPlans({
   const { appearance, t } = useSettings();
   const { portalFlow, openBillingPortal } = useSubscriptionCheckout();
   const appData = useAppData();
+  const { showToast } = useOverlay();
   const steamProfile = steamProfileProp ?? appData.steamProfile;
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
   const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
   const [backupPage, setBackupPage] = useState(1);
   const backupListRef = useRef<HTMLUListElement>(null);
+  const backupHeadingRef = useRef<HTMLHeadingElement>(null);
+  const backupTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const cloudSavesRequestIdRef = useRef(0);
+  const [backupConfirm, setBackupConfirm] = useState<{
+    action: BackupConfirmAction;
+    appId: string;
+    saveId: string;
+    title: string;
+  } | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
   const [resolvedCloudGameTitles, setResolvedCloudGameTitles] = useState<Map<string, string>>(new Map());
   const subscriptionRequestIdRef = useRef(0);
   const language = appearance.language;
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
 
   function refreshCloudSaves() {
+    const requestId = ++cloudSavesRequestIdRef.current;
     void ghostboxApi.listCloudSaves()
-      .then((saves) => setCloudSaves(saves))
+      .then((saves) => {
+        if (requestId === cloudSavesRequestIdRef.current) setCloudSaves(saves);
+      })
       .catch((error) => {
         console.warn("Could not list cloud saves", error);
-        setCloudSaves([]);
       });
   }
 
@@ -297,6 +314,7 @@ export function SubscriptionPlans({
       if (!current || (updatedAt && (!current.lastBackupAt || Date.parse(updatedAt) > Date.parse(current.lastBackupAt)))) {
         byAppId.set(save.appId, {
           appId: save.appId,
+          saveId: save.id,
           title: remoteTitle || fallbackTitle || resolvedCloudGameTitles.get(save.appId) || localTitle || save.appId,
           achievementCount: typeof achievementCount === "number" ? achievementCount : null,
           lastBackupAt: updatedAt,
@@ -309,6 +327,75 @@ export function SubscriptionPlans({
     }
     return Array.from(byAppId.values()).sort((left, right) => left.title.localeCompare(right.title));
   })();
+
+  const closeBackupConfirm = () => {
+    if (backupBusy) return;
+    setBackupConfirm(null);
+    setBackupError(null);
+    window.requestAnimationFrame(() => {
+      if (backupTriggerRef.current?.isConnected) backupTriggerRef.current.focus();
+      else backupHeadingRef.current?.focus();
+    });
+  };
+
+  const confirmBackupAction = async () => {
+    if (!backupConfirm || backupBusy) return;
+    const { action, appId, saveId, title } = backupConfirm;
+    setBackupBusy(true);
+    setBackupError(null);
+    try {
+      if (action === "restore") {
+        const saves = await ghostboxApi.listCloudSaves(appId).catch(() => null);
+        const newest = (saves ?? []).reduce<CloudSave | null>((latest, save) => {
+          if (!latest) return save;
+          return Date.parse(save.updatedAt || save.createdAt || "") > Date.parse(latest.updatedAt || latest.createdAt || "")
+            ? save
+            : latest;
+        }, null);
+        const targetSaveId = newest?.id ?? saveId;
+        const game = appData.addedLibraryGames.find((candidate) => candidate.appId === appId) ?? { appId, title };
+        const result = await ghostboxApi.restoreCloudSave(game, targetSaveId);
+        if (!result?.success) throw new Error(copy("Não foi possível restaurar o backup.", "Could not restore the backup."));
+        showToast(
+          copy("Backup restaurado", "Backup restored"),
+          copy(`Backup de "${title}" restaurado.`, `Backup for "${title}" restored.`),
+          "success",
+        );
+      } else {
+        const result = await ghostboxApi.deleteCloudGameSaves(appId);
+        if (!result?.success) throw new Error(copy("Não foi possível excluir o backup.", "Could not delete the backup."));
+        // Invalidate polls started before deletion, or an older response could resurrect the row.
+        cloudSavesRequestIdRef.current += 1;
+        setCloudSaves((current) => current.filter((save) => save.appId !== appId));
+        refreshCloudSaves();
+        showToast(
+          copy("Backup excluído", "Backup deleted"),
+          copy(`Backup de "${title}" removido da nuvem.`, `Cloud backup for "${title}" deleted.`),
+          "success",
+        );
+      }
+      setBackupConfirm(null);
+      setBackupError(null);
+      window.requestAnimationFrame(() => {
+        if (backupTriggerRef.current?.isConnected) backupTriggerRef.current.focus();
+        else backupHeadingRef.current?.focus();
+      });
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : copy("Não foi possível concluir a operação.", "Could not complete this action.");
+      setBackupError(message);
+      showToast(
+        action === "restore" ? copy("Falha na restauração", "Restore failed") : copy("Falha na exclusão", "Delete failed"),
+        message,
+        "error",
+      );
+    } finally {
+      setBackupBusy(false);
+    }
+  };
 
   if (surface === "settings" && steamProfile?.steamId && subscriptionLoading && !subscriptionStatus) {
     return (
@@ -331,7 +418,6 @@ export function SubscriptionPlans({
         <div className="subscription-account__summary-grid">
           {Array.from({ length: 3 }, (_, index) => (
             <article className="subscription-account__summary-card subscription-account__summary-card--skeleton" key={`subscription-summary-${index}`}>
-              <span className="subscription-account__summary-icon-skeleton skeleton" />
               <span className="subscription-account__line subscription-account__line--copy skeleton" />
               <strong className="subscription-account__line subscription-account__line--value skeleton" />
             </article>
@@ -398,7 +484,6 @@ export function SubscriptionPlans({
 
         <div className="subscription-account__summary-grid">
           <article className="subscription-account__summary-card">
-            <CalendarClock size={18} strokeWidth={2.15} aria-hidden="true" />
             <span>
               {isLifetime
                 ? copy("Tipo de acesso", "Access type")
@@ -413,7 +498,6 @@ export function SubscriptionPlans({
             </strong>
           </article>
           <article className="subscription-account__summary-card">
-            <Wallet size={18} strokeWidth={2.15} aria-hidden="true" />
             <span>{isLifetime ? copy("Cobrança", "Billing") : copy("Método de pagamento", "Payment method")}</span>
             <strong>
               {isLifetime
@@ -422,7 +506,6 @@ export function SubscriptionPlans({
             </strong>
           </article>
           <article className="subscription-account__summary-card">
-            <CloudUpload size={18} strokeWidth={2.15} aria-hidden="true" />
             <span>{copy("Backups em nuvem", "Cloud backups")}</span>
             <strong>{cloudBackupSummaries.length}</strong>
           </article>
@@ -449,11 +532,9 @@ export function SubscriptionPlans({
               </ul>
             ) : (
               <div className="subscription-account__empty">
-                <strong>
-                  {isLifetime
-                    ? copy("Ativação vitalícia", "Lifetime activation")
-                    : copy("Nenhum pagamento listado", "No payments listed")}
-                </strong>
+                {!isLifetime && (
+                  <strong>{copy("Nenhum pagamento listado", "No payments listed")}</strong>
+                )}
                 <p>
                   {isLifetime
                     ? copy("Seu acesso não exige pagamentos recorrentes.", "Your access requires no recurring payments.")
@@ -464,7 +545,7 @@ export function SubscriptionPlans({
           </article>
 
           <article className="subscription-account__panel">
-            <h4>{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
+            <h4 ref={backupHeadingRef} tabIndex={-1}>{copy("Jogos com backup em nuvem", "Games with cloud backup")}</h4>
             {recentBackups.length > 0 ? (
               <ul className="subscription-account__backup-list" ref={backupListRef}>
                 {visibleBackups.map((game) => (
@@ -484,38 +565,63 @@ export function SubscriptionPlans({
                         </span>
                       ) : null}
                     </div>
-                    {(() => {
-                      // Chip de estado bloqueado: para não-Premium uma falha
-                      // de backup vira aviso informativo com CTA "Ver planos"
-                      // (mesma navegação das ações de notificação), nunca um
-                      // erro vermelho. Premium continua vendo a falha real.
-                      const failureView = resolveBackupFailureView(isPremium, game);
-                      if (failureView.kind === "premium-locked") {
-                        return (
-                          <span className="subscription-account__backup-state subscription-account__backup-state--premium">
-                            <span>{t("premium.lockedBackup.chipLabel")}</span>
-                            <button
-                              type="button"
-                              className="app-notification__action"
-                              onClick={() => requestNavigateToSettingsTab("subscription")}
-                            >
-                              {t("premium.lockedBackup.viewPlans")}
-                            </button>
-                          </span>
-                        );
-                      }
-                      if (failureView.kind === "failed") {
-                        return (
-                          <span
-                            className="subscription-account__backup-state subscription-account__backup-state--failed"
-                            aria-label={game.lastBackupError || t("premium.lockedBackup.failedLabel")}
-                          >
-                            {t("premium.lockedBackup.failedLabel")}
-                          </span>
-                        );
-                      }
-                      return game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null;
-                    })()}
+                    <div className="subscription-account__backup-meta">
+                      <div className="subscription-account__backup-date">
+                        {(() => {
+                          // Falha local vence o "ok" implícito do save remoto.
+                          const failureView = resolveBackupFailureView(isPremium, game);
+                          if (failureView.kind === "premium-locked") {
+                            return (
+                              <span className="subscription-account__backup-state subscription-account__backup-state--premium">
+                                <span>{t("premium.lockedBackup.chipLabel")}</span>
+                                <button
+                                  type="button"
+                                  className="app-notification__action"
+                                  onClick={() => requestNavigateToSettingsTab("subscription")}
+                                >
+                                  {t("premium.lockedBackup.viewPlans")}
+                                </button>
+                              </span>
+                            );
+                          }
+                          if (failureView.kind === "failed") {
+                            return (
+                              <span
+                                className="subscription-account__backup-state subscription-account__backup-state--failed"
+                                aria-label={game.lastBackupError || t("premium.lockedBackup.failedLabel")}
+                              >
+                                {t("premium.lockedBackup.failedLabel")}
+                              </span>
+                            );
+                          }
+                          return game.lastBackupAt ? <span>{formatDate(game.lastBackupAt, language)}</span> : null;
+                        })()}
+                      </div>
+                      <div className="subscription-account__backup-row-actions" role="group" aria-label={copy(`Ações de backup de ${game.title}`, `Backup actions for ${game.title}`)}>
+                        <button
+                          type="button"
+                          aria-label={copy(`Restaurar backup de ${game.title}`, `Restore backup for ${game.title}`)}
+                          onClick={(event) => {
+                            backupTriggerRef.current = event.currentTarget;
+                            setBackupError(null);
+                            setBackupConfirm({ action: "restore", appId: game.appId, saveId: game.saveId, title: game.title });
+                          }}
+                        >
+                          <RotateCcw size={17} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={copy(`Excluir backup de ${game.title}`, `Delete backup for ${game.title}`)}
+                          onClick={(event) => {
+                            backupTriggerRef.current = event.currentTarget;
+                            setBackupError(null);
+                            setBackupConfirm({ action: "delete", appId: game.appId, saveId: game.saveId, title: game.title });
+                          }}
+                        >
+                          <Trash2 size={17} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -569,6 +675,16 @@ export function SubscriptionPlans({
             <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
           </button>
         </div> : null}
+        {backupConfirm && (
+          <BackupConfirmModal
+            action={backupConfirm.action}
+            gameTitle={backupConfirm.title}
+            busy={backupBusy}
+            error={backupError}
+            onCancel={closeBackupConfirm}
+            onConfirm={() => void confirmBackupAction()}
+          />
+        )}
       </section>
     );
   }

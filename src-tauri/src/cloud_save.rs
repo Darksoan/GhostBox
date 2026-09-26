@@ -520,6 +520,34 @@ pub async fn cloud_delete_save(
 }
 
 #[tauri::command]
+pub async fn cloud_delete_game_saves(
+    app: tauri::AppHandle,
+    app_id: String,
+) -> Result<serde_json::Value, String> {
+    let token = session_token(&app)?;
+    let app_id = app_id.trim();
+    if app_id.is_empty() || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("Jogo inválido para excluir o backup em nuvem.".to_string());
+    }
+
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?
+        .delete(format!("{}/cloud-saves/game/{}", cloud_api_url(), app_id))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    if !status.is_success() {
+        return Err(format_cloud_api_error(&body, status.as_u16()));
+    }
+    serde_json::from_str(&body).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn cloud_set_save_pinned(
     app: tauri::AppHandle,
     save_id: String,

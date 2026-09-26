@@ -430,6 +430,12 @@ export type CloudSaveDeletionResult = {
   error?: string;
 };
 
+export type CloudGameSavesDeletionResult = {
+  success: boolean;
+  appId: string;
+  deletedSaves: number;
+};
+
 export type CloudSavePinnedResult = {
   save: CloudSave;
 };

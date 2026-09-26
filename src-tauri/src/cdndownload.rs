@@ -1251,12 +1251,15 @@ fn install_library_for_app(steam_path: &str, app_id: &str) -> PathBuf {
         .into_iter()
         .map(PathBuf::from)
         .find(|library| crate::steam_appmanifest::appmanifest_path(library, app_id).is_file())
-        .unwrap_or_else(|| PathBuf::from(steam_path))
+        .unwrap_or_else(|| {
+            PathBuf::from(crate::steam::resolve_default_install_library(steam_path))
+        })
 }
 
 /// Instala um jogo recém-adicionado diretamente em uma biblioteca já conhecida
 /// pela Steam. Um ACF pendente tem prioridade para respeitar o destino escolhido
-/// no cliente; sem ele, usamos a biblioteca principal.
+/// no cliente; sem ele, usamos a biblioteca favorita (`LastInstallFolderIndex`
+/// ou primeira secundária, ex. `E:\SteamLibrary`).
 pub async fn install_added_game(
     app: tauri::AppHandle,
     app_id: String,
@@ -2054,9 +2057,11 @@ mod tests {
             install_library_for_app(&steam.to_string_lossy(), "10"),
             secondary
         );
+        // Sem ACF em nenhuma lib, cai na favorita (secundária), não na raiz
+        // `C:\Program Files` — evita UAC e o `Pasta de instalacao nao encontrada`.
         assert_eq!(
             install_library_for_app(&steam.to_string_lossy(), "20"),
-            steam
+            secondary
         );
         std::fs::remove_dir_all(root).ok();
     }

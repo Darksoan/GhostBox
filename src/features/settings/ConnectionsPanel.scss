@@ -20,7 +20,7 @@
   p {
     margin: 0;
     font-size: var(--type-size-compact);
-    color: var(--text-muted);
+    color: var(--text-tertiary);
   }
 }
 
@@ -71,7 +71,7 @@
   p {
     margin: 0;
     font-size: var(--type-size-caption);
-    color: var(--text-muted);
+    color: var(--text-tertiary);
     line-height: 1.4;
   }
 }
@@ -82,12 +82,12 @@
   gap: 6px;
   font-size: var(--type-size-caption);
   font-weight: var(--weight-regular);
-  color: var(--text-muted);
+  color: var(--text-tertiary);
 }
 
 .connection-card__connected-name {
   font-weight: var(--weight-regular);
-  color: var(--text-primary);
+  color: inherit;
 }
 
 /* Mirrors the profile page's Steam ID copy button: same 24px target, same
@@ -282,7 +282,7 @@
   }
 
   span {
-    color: var(--text-muted);
+    color: var(--text-tertiary);
     font-size: var(--type-size-caption);
     line-height: 1.4;
   }
@@ -319,7 +319,7 @@
     }
 
     p {
-      color: var(--text-muted);
+      color: var(--text-tertiary);
       font-size: var(--type-size-caption);
       line-height: 1.4;
     }
@@ -755,7 +755,7 @@ html.no-animations .hidden-profile-games__item {
   span {
     margin: 0;
     font-size: var(--type-size-caption);
-    color: var(--text-muted);
+    color: var(--text-tertiary);
     line-height: 1.4;
   }
 }

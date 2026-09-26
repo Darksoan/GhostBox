@@ -444,6 +444,10 @@ fn normalized_path_key(value: &str) -> String {
 /// Registra `library_root` como Steam Library em `libraryfolders.vdf` e garante
 /// que `app_id` conste no bloco `apps` dessa entrada.
 ///
+/// Escreve nos dois `libraryfolders.vdf` (`steamapps/` e `config/` — o segundo
+/// é o autoritativo nas Steam atuais). O `config/` é best-effort: se não
+/// existir, só o `steamapps/` é atualizado sem falhar.
+///
 /// Escreve mesmo com a Steam aberta: o cliente pode reescrever o arquivo ao
 /// sair e descartar a entrada, mas a entrada em disco é inofensiva e o reparo
 /// automático (`cdndownload_register_library`) reaplica até ficar. A decisão de
@@ -454,10 +458,32 @@ pub fn register_library_folder(
     app_id: &str,
     size_on_disk: u64,
 ) -> Result<(), String> {
-    let libraryfolders = Path::new(steam_path)
+    let steamapps_vdf = Path::new(steam_path)
         .join("steamapps")
         .join("libraryfolders.vdf");
-    let contents = std::fs::read_to_string(&libraryfolders)
+    // Obrigatório: mantém o comportamento anterior e os testes.
+    write_single_libraryfolders(&steamapps_vdf, library_root, app_id, size_on_disk)?;
+
+    // Autoritativo nas Steam atuais; best-effort para não quebrar installs
+    // antigas que só têm o `steamapps/` e para não falhar o download por
+    // causa do espelho.
+    let config_vdf = Path::new(steam_path)
+        .join("config")
+        .join("libraryfolders.vdf");
+    if config_vdf.is_file() {
+        let _ = write_single_libraryfolders(&config_vdf, library_root, app_id, size_on_disk);
+    }
+
+    Ok(())
+}
+
+fn write_single_libraryfolders(
+    libraryfolders: &Path,
+    library_root: &Path,
+    app_id: &str,
+    size_on_disk: u64,
+) -> Result<(), String> {
+    let contents = std::fs::read_to_string(libraryfolders)
         .map_err(|error| format!("Falha ao ler libraryfolders.vdf: {error}"))?;
 
     let root_display = library_root.to_string_lossy().to_string();
@@ -481,17 +507,19 @@ pub fn register_library_folder(
     // Backup antes de escrever: libraryfolders.vdf lista TODAS as bibliotecas do
     // usuario, e um erro aqui esconderia jogos legitimos da Steam.
     let backup = libraryfolders.with_extension(format!("vdf.ghostbox-{}.bak", now_unix()));
-    std::fs::copy(&libraryfolders, &backup)
+    std::fs::copy(libraryfolders, &backup)
         .map_err(|error| format!("Falha ao fazer backup de libraryfolders.vdf: {error}"))?;
 
     // Cada novo backup e a chance de podar os antigos: sem isso um backup por
     // download se acumula para sempre dentro da pasta da Steam. O recem-criado
     // e sempre o mais recente, entao sobram ele + KEEP-1 anteriores.
-    prune_libraryfolders_artifacts(steam_path);
+    if let Some(dir) = libraryfolders.parent() {
+        prune_libraryfolders_dir(dir);
+    }
 
     let temporary = libraryfolders.with_extension("vdf.tmp");
     std::fs::write(&temporary, updated).map_err(|error| error.to_string())?;
-    std::fs::rename(&temporary, &libraryfolders).map_err(|error| {
+    std::fs::rename(&temporary, libraryfolders).map_err(|error| {
         let _ = std::fs::remove_file(&temporary);
         error.to_string()
     })?;
@@ -502,13 +530,19 @@ pub fn register_library_folder(
 /// Quantos backups de `libraryfolders.vdf` manter antes de comecar a podar.
 const LIBRARYFOLDERS_BACKUPS_TO_KEEP: usize = 5;
 
-/// Remove residuos nossos da pasta `steamapps` da Steam: o temporario
+/// Remove residuos nossos da pasta `steamapps`/`config` da Steam: o temporario
 /// `.vdf.tmp` que pode ter ficado de um crash no meio do rename, e os backups
 /// `libraryfolders.vdf.ghostbox-*.bak` excedentes (mantem os mais recentes).
 /// Best-effort: qualquer falha individual e ignorada — nunca pode atrapalhar
 /// a operacao do chamador.
 pub(crate) fn prune_libraryfolders_artifacts(steam_path: &str) {
-    let steamapps = Path::new(steam_path).join("steamapps");
+    let root = Path::new(steam_path);
+    prune_libraryfolders_dir(&root.join("steamapps"));
+    prune_libraryfolders_dir(&root.join("config"));
+}
+
+fn prune_libraryfolders_dir(dir: &Path) {
+    let steamapps = dir;
     if !steamapps.is_dir() {
         return;
     }
@@ -893,5 +927,27 @@ mod tests {
         assert_eq!(read_size_on_disk(&library, "367520"), 9_999);
         assert_eq!(read_size_on_disk(&library, "999999"), 0);
         assert_eq!(read_size_on_disk(&steam, "367520"), 0);
+    }
+
+    #[test]
+    fn mirrors_registration_into_config_vdf_when_present() {
+        let (steam, library) = sample_library_with_installed_app();
+        let config_dir = steam.join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::copy(
+            steam.join("steamapps").join("libraryfolders.vdf"),
+            config_dir.join("libraryfolders.vdf"),
+        )
+        .unwrap();
+
+        register_library_folder(steam.to_str().unwrap(), &library, "367520", 9_999)
+            .expect("registro deve espelhar no config");
+        for dir in ["steamapps", "config"] {
+            let vdf =
+                std::fs::read_to_string(steam.join(dir).join("libraryfolders.vdf")).unwrap();
+            let escaped_path = library.to_string_lossy().replace('\\', "\\\\");
+            assert!(vdf.contains(escaped_path.as_str()), "espelho em {dir}");
+            assert!(vdf.contains("\"367520\""));
+        }
     }
 }

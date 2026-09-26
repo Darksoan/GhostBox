@@ -175,7 +175,7 @@ type CloudSaveRow = {
   updated_at: string;
 };
 
-const MAX_CLOUD_SAVES_PER_GAME = 3;
+const MAX_CLOUD_SAVES_PER_GAME = 1;
 
 type UserProfileCloudRow = {
   steam_id: string | null;
@@ -2095,14 +2095,14 @@ async function handleCloudSavesList(request: Request, env: Env) {
   const query = appId
     ? env.SUBSCRIPTION_DB.prepare(
          `SELECT * FROM (
-           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC, created_at DESC, id DESC) AS save_rank
            FROM cloud_saves
            WHERE user_id = ? AND app_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 20`
       ).bind(userId, appId, MAX_CLOUD_SAVES_PER_GAME)
     : env.SUBSCRIPTION_DB.prepare(
          `SELECT * FROM (
-           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY pinned DESC, updated_at DESC) AS save_rank
+           SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id ORDER BY updated_at DESC, created_at DESC, id DESC) AS save_rank
            FROM cloud_saves
            WHERE user_id = ?
          ) WHERE save_rank <= ? ORDER BY updated_at DESC LIMIT 100`
@@ -2238,14 +2238,40 @@ async function pruneCloudSavesForGame(env: Env, userId: string, appId: string, p
   const rows = await env.SUBSCRIPTION_DB.prepare(
     `SELECT * FROM cloud_saves
      WHERE user_id = ? AND app_id = ?
-     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, pinned DESC, updated_at DESC
+     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, updated_at DESC, created_at DESC, id DESC
      LIMIT 100`
   ).bind(userId, appId, protectedSaveId).all<CloudSaveRow>();
   const stale = (rows.results || []).slice(MAX_CLOUD_SAVES_PER_GAME);
 
   for (const row of stale) {
-    await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
-    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
+    try {
+      await deleteCloudSaveObject(env, row.storage_path);
+      await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`).bind(row.id, userId).run();
+    } catch (error) {
+      console.error("Cloud save prune failed", { appId, saveId: row.id, error });
+    }
+  }
+}
+
+// Older accounts can still have multiple versions from the former retention policy.
+// Prune them off the request path; listing must remain read-only.
+export async function pruneLegacyCloudSaves(env: Env) {
+  const stale = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT id, storage_path, user_id, app_id FROM (
+       SELECT id, storage_path, user_id, app_id,
+              ROW_NUMBER() OVER (PARTITION BY user_id, app_id ORDER BY updated_at DESC, created_at DESC, id DESC) AS save_rank
+       FROM cloud_saves
+       WHERE user_id IS NOT NULL
+     ) WHERE save_rank > 1 LIMIT 20`
+  ).all<Pick<CloudSaveRow, "id" | "storage_path" | "user_id" | "app_id">>();
+  for (const row of stale.results || []) {
+    try {
+      await deleteCloudSaveObject(env, row.storage_path);
+      await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`)
+        .bind(row.id, row.user_id).run();
+    } catch (error) {
+      console.error("Cloud save retention cleanup failed", { saveId: row.id, error });
+    }
   }
 }
 
@@ -2302,6 +2328,26 @@ async function handleCloudSaveDelete(request: Request, env: Env, saveId: string)
     appId: row.app_id,
     remainingSaves: remaining?.count ?? 0,
   }, env);
+}
+
+async function handleCloudGameSavesDelete(request: Request, env: Env, appId: string) {
+  const auth = await requirePremiumSession(request, env);
+  if (auth.response) return auth.response;
+  if (!/^\d{1,12}$/.test(appId)) return jsonResponse({ error: "invalid_app_id" }, env, 400);
+  const userId = auth.session!.userId;
+  const rows = await env.SUBSCRIPTION_DB.prepare(
+    `SELECT id, storage_path FROM cloud_saves WHERE user_id = ? AND app_id = ?`
+  ).bind(userId, appId).all<{ id: string; storage_path: string }>();
+  const storagePaths = (rows.results || []).map((row) => row.storage_path);
+  if (storagePaths.length > 0) {
+    await deleteCloudSaveObjects(env, storagePaths);
+    // Delete only the snapshot whose objects were removed, never a concurrent upload.
+    await env.SUBSCRIPTION_DB.batch(rows.results.map((row) =>
+      env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`)
+        .bind(row.id, userId)
+    ));
+  }
+  return jsonResponse({ success: true, appId, deletedSaves: storagePaths.length }, env);
 }
 
 function clampCloudInt(value: unknown, min: number, max: number, fallback: number) {
@@ -3942,6 +3988,10 @@ async function route(request: Request, env: Env, context: ExecutionContext) {
   if (request.method === "POST" && url.pathname === "/cloud-saves") {
     return handleCloudSaveUpload(request, env);
   }
+  const cloudGameSavesMatch = url.pathname.match(/^\/cloud-saves\/game\/(\d{1,12})$/);
+  if (request.method === "DELETE" && cloudGameSavesMatch) {
+    return handleCloudGameSavesDelete(request, env, cloudGameSavesMatch[1]);
+  }
   const downloadMatch = url.pathname.match(/^\/cloud-saves\/([^/]+)\/download$/);
   if (request.method === "GET" && downloadMatch) {
     return handleCloudSaveDownload(request, env, downloadMatch[1]);
@@ -4020,6 +4070,9 @@ export default {
     }
   },
   async scheduled(_controller: ScheduledController, env: Env, _context: ExecutionContext) {
+    await pruneLegacyCloudSaves(env).catch((error) => {
+      console.error("Cloud save retention cleanup failed", error);
+    });
     await syncDiscordPremiumRoles(env);
     await pruneStaleRecords(env);
   },

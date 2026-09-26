@@ -1824,33 +1824,173 @@ pub(crate) fn parse_vdf_string_value(line: &str, key: &str) -> Option<String> {
 }
 
 pub(crate) fn read_steam_library_paths(steam_path: &str) -> Vec<String> {
+    // Mantém compatibilidade: raiz primeiro, depois secundárias na ordem do VDF.
+    let mut ordered = read_steam_library_paths_ordered(steam_path);
+    ordered.sort_by_key(|(index, _)| *index);
     let mut paths = vec![steam_path.to_string()];
-    let libraryfolders_path =
-        steamapps_path(std::path::Path::new(steam_path)).join("libraryfolders.vdf");
-    let Ok(contents) = std::fs::read_to_string(libraryfolders_path) else {
-        return paths;
-    };
-
-    // O próprio VDF lista a raiz da instalação como entrada "0" — a chave
-    // case-insensitive (e sem barra final) evita duplicar o C: na lista.
     let key_for = |value: &str| {
         value
             .to_lowercase()
             .trim_end_matches(['\\', '/'])
             .to_string()
     };
+    for (_, path) in ordered {
+        let key = key_for(&path);
+        let already_listed = paths.iter().any(|item| key_for(item) == key);
+        if !already_listed {
+            paths.push(path);
+        }
+    }
+    paths
+}
 
+/// `(indice do VDF, path)` na ordem declarada. Lê `config/libraryfolders.vdf`
+/// (autoritativo) primeiro e faz merge com `steamapps/libraryfolders.vdf`.
+pub(crate) fn read_steam_library_paths_ordered(steam_path: &str) -> Vec<(i64, String)> {
+    let steam_root = std::path::Path::new(steam_path);
+    let candidates = [
+        steam_root.join("config").join("libraryfolders.vdf"),
+        steamapps_path(steam_root).join("libraryfolders.vdf"),
+    ];
+    let key_for = |value: &str| {
+        value
+            .to_lowercase()
+            .trim_end_matches(['\\', '/'])
+            .to_string()
+    };
+    let mut merged: Vec<(i64, String)> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for candidate in candidates {
+        let Ok(contents) = std::fs::read_to_string(&candidate) else {
+            continue;
+        };
+        for (index, path) in parse_libraryfolders_indexed(&contents) {
+            // Só bibliotecas que existem de verdade — evita fallback para
+            // `C:\Program Files` fantasma ou secundária desplugada.
+            let Some(valid) = normalize_steam_root_path(&path) else {
+                continue;
+            };
+            let key = key_for(&valid);
+            if seen.iter().any(|item| *item == key) {
+                continue;
+            }
+            seen.push(key);
+            merged.push((index, valid));
+        }
+    }
+    // Garante a raiz mesmo quando nenhum VDF existe/parseia.
+    if merged.is_empty() {
+        return vec![(0, steam_path.to_string())];
+    }
+    merged.sort_by_key(|(index, _)| *index);
+    merged
+}
+
+fn parse_libraryfolders_indexed(contents: &str) -> Vec<(i64, String)> {
+    let mut out: Vec<(i64, String)> = Vec::new();
+    let mut pending_index: Option<i64> = None;
     for line in contents.lines() {
         if let Some(path) = parse_vdf_string_value(line, "path") {
-            let key = key_for(&path);
-            let already_listed = paths.iter().any(|item| key_for(item) == key);
-            if normalize_steam_root_path(&path).is_some() && !already_listed {
-                paths.push(path);
+            let index = pending_index.take().unwrap_or(i64::MAX);
+            out.push((index, path));
+            continue;
+        }
+        // Bloco de biblioteca começa com `"N"` sozinho na linha.
+        let trimmed = line.trim();
+        if trimmed.chars().filter(|c| *c == '"').count() == 2
+            && trimmed.starts_with('"')
+            && trimmed.ends_with('"')
+        {
+            if let Some(inner) = trimmed
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+            {
+                if let Ok(index) = inner.trim().parse::<i64>() {
+                    pending_index = Some(index);
+                }
             }
         }
     }
+    out.sort_by_key(|(index, _)| *index);
+    out
+}
 
-    paths
+/// `LastInstallFolderIndex` de `userdata/*/config/localconfig.vdf` — é o que a
+/// Steam atualiza quando o usuário estrela uma biblioteca como padrão em
+/// `Configurações > Armazenamento` ou instala nela. `0` = raiz, `N` = índice
+/// do `libraryfolders.vdf`. Usa o perfil mais recente quando há vários.
+pub(crate) fn read_last_install_folder_index(steam_path: &str) -> Option<i64> {
+    let userdata = std::path::Path::new(steam_path).join("userdata");
+    let Ok(entries) = std::fs::read_dir(&userdata) else {
+        return None;
+    };
+    let mut best: Option<(std::time::SystemTime, i64)> = None;
+    let mut fallback: Option<i64> = None;
+    for entry in entries.flatten() {
+        let path = entry.path().join("config").join("localconfig.vdf");
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let mut found: Option<i64> = None;
+        for line in contents.lines() {
+            if let Some(value) = parse_vdf_string_value(line, "LastInstallFolderIndex") {
+                if let Ok(index) = value.trim().parse::<i64>() {
+                    found = Some(index);
+                    break;
+                }
+            }
+        }
+        let Some(index) = found else {
+            continue;
+        };
+        if fallback.is_none() {
+            fallback = Some(index);
+        }
+        let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        if let Some(modified) = modified {
+            let is_better = match &best {
+                Some((time, _)) => modified > *time,
+                None => true,
+            };
+            if is_better {
+                best = Some((modified, index));
+            }
+        }
+    }
+    best.map(|(_, index)| index).or(fallback)
+}
+
+/// Biblioteca predefinida para jogos novos: a favorita da Steam, não a raiz.
+/// Prioridade: `LastInstallFolderIndex` válido e não-zero > primeira secundária
+/// válida (ex. `E:\SteamLibrary`) > raiz `0`. `C:\Program Files` só é usado
+/// quando não há nenhuma secundária válida — ele exige admin e era o fallback
+/// que gerava `Pasta de instalacao nao encontrada`.
+pub(crate) fn resolve_default_install_library(steam_path: &str) -> String {
+    let ordered = read_steam_library_paths_ordered(steam_path);
+    if let Some(wanted) = read_last_install_folder_index(steam_path) {
+        // `0` = raiz: trata como "sem preferência" para não prender no `C:`
+        // quando existe secundária. `C:` só volta no fallback final.
+        if wanted != 0 {
+            if let Some((_, path)) = ordered.iter().find(|(index, _)| *index == wanted) {
+                return path.clone();
+            }
+        }
+    }
+    let root_key = steam_path
+        .to_lowercase()
+        .trim_end_matches(['\\', '/'])
+        .to_string();
+    // Prefere secundária: a raiz `C:\Program Files (x86)\Steam` exige admin e
+    // quase nunca é a favorita do usuário.
+    if let Some((_, path)) = ordered.iter().find(|(_, path)| {
+        path.to_lowercase().trim_end_matches(['\\', '/']).to_string() != root_key
+    }) {
+        return path.clone();
+    }
+    ordered
+        .first()
+        .map(|(_, path)| path.clone())
+        .unwrap_or_else(|| steam_path.to_string())
 }
 
 fn parse_app_manifest(path: &std::path::Path) -> Option<serde_json::Value> {
@@ -2249,5 +2389,147 @@ mod appmanifest_scan_tests {
         assert_eq!(game["steamDownloadPending"], true);
         assert_ne!(game["progress"], 100);
         std::fs::remove_dir_all(root).ok();
+    }
+}
+
+#[cfg(test)]
+mod default_library_tests {
+    use super::{
+        parse_libraryfolders_indexed, read_last_install_folder_index,
+        resolve_default_install_library,
+    };
+
+    fn unique_root(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "ghostbox-default-lib-{}-{}-{}",
+            name,
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ))
+    }
+
+    fn escape(path: &std::path::Path) -> String {
+        path.to_string_lossy().replace('\\', "\\\\")
+    }
+
+    fn write_libraries(
+        steam_root: &std::path::Path,
+        secondary: &std::path::Path,
+        with_config_copy: bool,
+    ) {
+        // Secundária precisa existir com `steamapps/` para passar em
+        // `normalize_steam_root_path`.
+        std::fs::create_dir_all(steam_root.join("steamapps")).unwrap();
+        std::fs::create_dir_all(secondary.join("steamapps")).unwrap();
+        // Raiz também precisa de `steamapps/` para ser considerada válida.
+        let vdf = format!(
+            "\"libraryfolders\"\n{{\n\t\"0\"\n\t{{\n\t\t\"path\"\t\t\"{}\"\n\t}}\n\t\"1\"\n\t{{\n\t\t\"path\"\t\t\"{}\"\n\t}}\n}}\n",
+            escape(steam_root),
+            escape(secondary),
+        );
+        std::fs::write(steam_root.join("steamapps").join("libraryfolders.vdf"), &vdf).unwrap();
+        if with_config_copy {
+            std::fs::create_dir_all(steam_root.join("config")).unwrap();
+            std::fs::write(steam_root.join("config").join("libraryfolders.vdf"), &vdf).unwrap();
+        }
+    }
+
+    fn write_last_index(steam_root: &std::path::Path, index: &str) {
+        let dir = steam_root.join("userdata").join("1").join("config");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("localconfig.vdf"),
+            format!(
+                "\"UserLocalConfigStore\"\n{{\n\t\"Software\"\n\t{{\n\t\t\"Valve\"\n\t\t{{\n\t\t\t\"Steam\"\n\t\t{{\n\t\t\t\"LastInstallFolderIndex\"\t\t\"{index}\"\n\t\t}}\n\t\t}}\n\t}}\n}}\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn parses_indexed_paths_in_order() {
+        let parsed = parse_libraryfolders_indexed(
+            "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"C:\\\\Steam\"\n\t}\n\t\"1\"\n\t{\n\t\t\"path\"\t\t\"E:\\\\SteamLibrary\"\n\t}\n}\n",
+        );
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].0, 0);
+        assert_eq!(parsed[1].0, 1);
+        assert!(parsed[1].1.contains("SteamLibrary"));
+    }
+
+    #[test]
+    fn prefers_last_install_folder_index() {
+        let steam = unique_root("fav-index");
+        let secondary = steam.parent().unwrap().join(format!(
+            "ghostbox-secondary-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        write_libraries(&steam, &secondary, true);
+        write_last_index(&steam, "1");
+
+        assert_eq!(read_last_install_folder_index(&steam.to_string_lossy()), Some(1));
+        assert_eq!(
+            resolve_default_install_library(&steam.to_string_lossy()),
+            secondary.to_string_lossy().to_string()
+        );
+        std::fs::remove_dir_all(&steam).ok();
+        std::fs::remove_dir_all(&secondary).ok();
+    }
+
+    #[test]
+    fn prefers_secondary_when_no_localconfig() {
+        let steam = unique_root("fav-secondary");
+        let secondary = steam.parent().unwrap().join(format!(
+            "ghostbox-secondary-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        write_libraries(&steam, &secondary, false);
+
+        // Sem `LastInstallFolderIndex`, a favorita é a primeira secundária —
+        // nunca `C:\Program Files` com UAC.
+        assert_eq!(
+            resolve_default_install_library(&steam.to_string_lossy()),
+            secondary.to_string_lossy().to_string()
+        );
+        std::fs::remove_dir_all(&steam).ok();
+        std::fs::remove_dir_all(&secondary).ok();
+    }
+
+    #[test]
+    fn falls_back_to_root_when_only_root() {
+        let steam = unique_root("fav-root");
+        std::fs::create_dir_all(steam.join("steamapps")).unwrap();
+        let vdf = format!(
+            "\"libraryfolders\"\n{{\n\t\"0\"\n\t{{\n\t\t\"path\"\t\t\"{}\"\n\t}}\n}}\n",
+            escape(&steam),
+        );
+        std::fs::write(steam.join("steamapps").join("libraryfolders.vdf"), &vdf).unwrap();
+        assert_eq!(
+            resolve_default_install_library(&steam.to_string_lossy()),
+            steam.to_string_lossy().to_string()
+        );
+        std::fs::remove_dir_all(&steam).ok();
+    }
+
+    #[test]
+    fn zero_index_still_prefers_secondary() {
+        let steam = unique_root("fav-zero");
+        let secondary = steam.parent().unwrap().join(format!(
+            "ghostbox-secondary-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        write_libraries(&steam, &secondary, false);
+        write_last_index(&steam, "0");
+
+        // `0` = raiz: C: só quando não houver secundária válida.
+        assert_eq!(
+            resolve_default_install_library(&steam.to_string_lossy()),
+            secondary.to_string_lossy().to_string()
+        );
+        std::fs::remove_dir_all(&steam).ok();
+        std::fs::remove_dir_all(&secondary).ok();
     }
 }

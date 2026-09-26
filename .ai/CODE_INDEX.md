@@ -26,7 +26,9 @@ Chunk resume/validation state -> `src-tauri/src/chunk_index.rs`
 ## Steam Libraries
 
 `resolve_steam_path`, `steamapps_path` -> `src-tauri/src/lib.rs` (around 270-390)
-`read_steam_library_paths`, `steam_scan_library` -> `src-tauri/src/steam.rs` (around 1824-2050)
+`read_steam_library_paths`, `read_steam_library_paths_ordered`, `read_last_install_folder_index`, `resolve_default_install_library`, `steam_scan_library` -> `src-tauri/src/steam.rs` (around 1826-1980)
+Default install: `LastInstallFolderIndex` from `userdata/*/config/localconfig.vdf` > first secondary (ex. `E:\SteamLibrary`) > root `0`; `install_library_for_app` -> `src-tauri/src/cdndownload.rs` (around 1249)
+`register_library_folder` mirrors `steamapps/libraryfolders.vdf` + `config/libraryfolders.vdf` -> `src-tauri/src/steam_appmanifest.rs` (around 451-540)
 `AppInfo` / `resolve_install_dir` -> `src-tauri/src/steam_appinfo.rs`
 Public depot/build metadata -> `src-tauri/src/steam_pics.rs`
 Manifest package selection -> `src-tauri/src/manifest_sources.rs`
@@ -59,6 +61,10 @@ Premium profile sync -> `AppDataContext.pushCloudProfileSnapshot` / `restoreClou
 `AccountSection` -> `src/features/settings/AccountSection.tsx`; rendered by `SettingsPage` in `src/pages/SettingsPage.tsx` (general tab, around 360). Sign-out icon opens a confirmation dialog, then calls `AuthContext.logout` -> `ghostboxApi.signOutCloud`.
 Styles -> `src/features/settings/AccountSection.scss`; dialog reuses `collection-modal` styles from `src/app.scss`. Copy -> `src/i18n.ts` (`settings.general.account`).
 
+Settings option descriptions -> `SettingRow` in `src/pages/SettingsPage.tsx` (around 608-630) -> `.settings-option__copy span` in `src/app.scss` (around 5842; disabled override around 5985). Performance temp-files description -> `TempFilesSection` / `TempFilesSection.scss` in `src/features/settings/`. Both use `--text-tertiary`, also used by the titlebar search placeholder via `--text-placeholder` in `src/app.scss` (around 2177).
+Settings subtexts across tabs -> `.settings-page__header p` / `.steam-libraries__heading p` in `src/app.scss` (around 4770/4840); `SteamVisibilitySection`, `ConnectionsPanel`, `HiddenProfileGamesSection` in `src/features/settings/ConnectionsPanel.tsx` -> `.connection-card__steam-option-copy span`, `.hidden-profile-games__copy span`, `.connection-card__body p`, `.connection-card__connected`, `.connections-panel__header p`, `.hidden-profile-games-page__header p` in `ConnectionsPanel.scss`.
+Settings neutral control surfaces -> `.settings-page-dropdown .settings-dropdown__trigger` / `.settings-action` in `src/app.scss` (around 6044-6265) and `.temp-files-section__button` in `src/features/settings/TempFilesSection.scss` (around 33); rest `--settings-dropdown-surface`, hover/focus `--settings-dropdown-trigger-hover` from `src/styles/_semantic.scss`; trigger label/icon and menu option text remain `--text-secondary` on hover/focus.
+
 ## Profile Activity And Achievements
 
 `ProfileActivityCard` -> `src/pages/ProfilePage.tsx` (around 150-305); recent-game activity, progress, and the latest-achievement icons/tooltips.
@@ -79,12 +85,14 @@ Frontend API types -> `src/lib/ghostboxApi.types.ts`
 ## Premium Cloud Game Saves
 
 Manual actions -> `GameBackupOptionsModal` in `src/components/modals/GameBackupOptionsModal.tsx` (entitlement + backup/restore); `ghostboxApi.getSubscriptionStatus/backupGameToCloud/restoreCloudSave` -> `src/lib/ghostboxApi.tauri.ts`.
+Settings list actions -> `SubscriptionPlans` in `src/components/subscription/SubscriptionPlans.tsx` (backup summary/list, hover/focus actions and handlers around 285-675) -> `BackupConfirmModal` in `src/components/subscription/BackupConfirmModal.tsx` (restore/delete confirmation reuses `collection-modal`) -> `ghostboxApi.restoreCloudSave/deleteCloudGameSaves` in `src/lib/ghostboxApi.tauri.ts` -> `cloud_restore_save/cloud_delete_game_saves` in `src-tauri/src/cloud_save.rs`. Restore accepts `appId`+`title` for cloud-only games; delete removes all saves for the selected game. Action/date motion and modal styling -> `src/app.scss` (`.subscription-account__backup-*` around 5608-5740; `.cloud-backup-confirm-modal` around 15150).
 Auto-restore before play/re-add -> `AppDataContext.autoRestoreCloudBackup` / `handlePlayGame` in `src/context/AppDataContext.tsx` (around 1852-1950, 2380-2410).
 Automatic backup after game exit -> `window_lifecycle::setup_window_lifecycle` -> `playtime::start_steam_running_app_monitor` / `run_automatic_backup_after_close` in `src-tauri/src/playtime.rs` (around 320-396, 480-619).
 Native backup/restore -> `cloud_save::cloud_backup_game` / `cloud_restore_save` in `src-tauri/src/cloud_save.rs`; `subscription::has_premium_access` in `src-tauri/src/subscription.rs` gates before staging; `ludusavi::run_ludusavi` in `src-tauri/src/ludusavi.rs` reads/writes game saves.
 Progress export/import -> `export_game_profile_progress` / `import_game_profile_progress` in `src-tauri/src/lib.rs` (around 619-745); transfer staging under `app_cache_dir/cloud-save`, removed after each operation; `storage_audit::startup_temp_sweep` clears stale UUID staging after crashes.
 Cloud-only status metadata -> `backup::backup_get_settings` in `src-tauri/src/backup.rs` -> `normalize_backup_settings` / `save_backup_record` in `src-tauri/src/lib.rs` (around 59-160, 770); frontend `AppDataContext.backupSettings` -> `SubscriptionPlans` in `src/components/subscription/SubscriptionPlans.tsx`. No local backup root/details API.
 Server authorization -> `workers/subscriptions/src/index.ts` (`requirePremiumSession`, `handleCloudSavesList/Upload/Download/Delete` around 669, 2085-2300).
+Single-save retention -> `workers/subscriptions/src/index.ts` (`MAX_CLOUD_SAVES_PER_GAME=1`, `pruneCloudSavesForGame`, scheduled `pruneLegacyCloudSaves`, `handleCloudGameSavesDelete`; `/cloud-saves/game/:appId`). GET remains read-only; legacy cleanup keeps the newest save. Tests -> `workers/subscriptions/test/cloud-saves-d1.test.ts`.
 
 ## Windows Startup
 
@@ -114,7 +122,7 @@ Header has no update UI (removed manual button/hourly polling/splash).
 ## Design Tokens (Texto / Tipografia)
 
 Primitives -> `src/styles/_primitives.scss` (`--fs-*`, `--lh-*`, `--ls-*`, `--weight-*`, `--font-sans`)
-Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#b8b8b8`, titlebar placeholder `--text-placeholder`; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`; status `--caution` -> `--caution-500` `#ffbf00` in `_primitives.scss`)
+Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#8c8c8c`; titlebar `--text-placeholder` aliases tertiary; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`; status `--caution` -> `--caution-500` `#ffbf00` in `_primitives.scss`)
 Mixins -> `src/styles/_mixins.scss` (`type-label/meta/body/body-strong/title/section/page/hero/showcase`, `eyebrow`, `truncate`)
 Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n-*/--a-*` in components; use `--text-*` / `--type-*`)
 
@@ -135,7 +143,7 @@ Active-filter clear action -> `CataloguePage.clearAllFilters` in `src/pages/Cata
 Catalogue search: `useAppShellState` -> `src/hooks/useAppShellState.ts` (header suggestions/debounce) / `useCatalogueState` -> `src/hooks/useCatalogueState.ts` (chunking, filters, fallback) -> `useGamesQuery` in `src/queries/games.ts` -> `database_get_games` in `src-tauri/src/catalogue.rs` (around 2270) -> `searchCatalogue` in `workers/catalogue/src/catalogue.ts` (around 580; `searchIndexMatch` around 495, title/AppID ranking around 659). FTS -> `workers/catalogue/migrations/0004_search_index.sql`; backfill -> `workers/catalogue/src/search-index.ts`; response caches -> `src-tauri/src/catalogue_cache.rs`, `workers/catalogue/src/cache.ts`.
 Catalogue images: `toGame` in `workers/catalogue/src/catalogue.ts` (around 108; cover/source metadata) -> `gameCatalogueHeaderSources` / `gameCataloguePreviewScreenshotSourceGroups` in `src/utils/image.ts` (around 88-165) -> `CatalogueHeaderImage` in `src/components/ui/CatalogueList.tsx` (around 35-141) / `CatalogueHoverPreview` in `src/components/ui/CatalogueHoverPreview.tsx`; disk/source lookup and post-load cache -> `src/utils/imageCache.ts`. `CatalogueListItem` measures visible tag pills in `src/components/ui/CatalogueList.tsx` (around 183-286).
 Modal details: `GameModal` in `src/components/modals/GameModal.tsx` (around 965-1055) -> `loadGameStoreDetailsCached` / `loadGameAchievementDetailsCached` in `src/utils/gameCache.ts` -> `database_get_game_store_details` / `database_get_game_achievement_details` in `src-tauri/src/catalogue.rs` (around 2434-2595; both accept matching base game from modal to skip duplicate catalogue fetch). Achievement loading state is independent of store details.
-DRM badge: Steam `drm_notice` -> `drmNotice` (`GhostBoxGame.drmNotice` in `src/data.ts`; normalize in `workers/steam-details/src/pure.ts`, merge in `src-tauri/src/catalogue.rs`; missing field in old proxy triggers direct Steam fallback) -> `GameModal` (`hasDrm`, `Alert` from `reicon-react` in `.modal__showcase-media`) -> `.modal__drm-badge` in `src/app.scss` (top-right, `var(--caution)`). Empty notice clears cached DRM; no notice does not prove DRM-free.
+DRM badge: Steam `drm_notice` -> `drmNotice` (`GhostBoxGame.drmNotice` in `src/data.ts`; normalize in `workers/steam-details/src/pure.ts`, merge in `src-tauri/src/catalogue.rs`; missing field in old proxy triggers direct Steam fallback) -> `GameModal` (`hasDrm`, `Alert` from `reicon-react` in `.modal__showcase-media`, around 1580). Empty notice clears cached DRM; no notice does not prove DRM-free.
 Steam appdetails envelope -> `steamAppData` in `workers/steam-details/src/pure.ts` / `steam_app_data` in `src-tauri/src/catalogue.rs`: accept alternate response keys only when embedded `steam_appid` matches (Requiem/Wilds). v4 disk descriptions remain readable during DRM refresh; `loadGameStoreDetailsCached` only pins payloads with description + resolved DRM field.
 
 ## Catalogue D1 Diagnostics
@@ -150,8 +158,8 @@ Production observation 2026-09-26 (recheck before deployment): 513,740,800 bytes
 
 ## Subscription / Cloud Backups
 
-`SubscriptionPlans` -> `src/components/subscription/SubscriptionPlans.tsx` (cloud-save summaries around 280-306; active subscription, backup sorting and pagination around 339-535). Receives `cloudBackupGames` from `SettingsPage` (`src/pages/SettingsPage.tsx`, around 315-386); remote saves via `ghostboxApi.listCloudSaves`.
-Backup list styles -> `src/app.scss` (`.subscription-account__backup-list`, around 5613). Pagination reuses `PaginationControls` -> `src/components/ui/PaginationControls.tsx` (also used by `CataloguePage`).
+`SubscriptionPlans` -> `src/components/subscription/SubscriptionPlans.tsx` (cloud-save summaries around 285-327; active subscription, backup sorting/actions and pagination around 405-680). Receives `cloudBackupGames` from `SettingsPage` (`src/pages/SettingsPage.tsx`, around 315-386); remote saves via `ghostboxApi.listCloudSaves`.
+Backup list styles -> `src/app.scss` (`.subscription-account__backup-list` and `.subscription-account__backup-row-actions`, around 5608-5740). Pagination reuses `PaginationControls` -> `src/components/ui/PaginationControls.tsx` (also used by `CataloguePage`).
 
 ## Auth
 

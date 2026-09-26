@@ -1251,6 +1251,7 @@ pub fn run() {
             cloud_save::cloud_backup_game,
             cloud_save::cloud_restore_save,
             cloud_save::cloud_delete_save,
+            cloud_save::cloud_delete_game_saves,
             cloud_save::cloud_set_save_pinned,
             cloud_save::cloud_get_profile_avatar,
             cloud_save::cloud_put_profile_avatar,

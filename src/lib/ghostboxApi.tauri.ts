@@ -45,6 +45,7 @@ import type {
   CloudRestoreResult,
   CloudSave,
   CloudSaveDeletionResult,
+  CloudGameSavesDeletionResult,
   CloudSavePinnedResult,
   CloudSessionResult,
   LoginProvider,
@@ -1182,7 +1183,7 @@ export const ghostboxApi = {
   },
 
   restoreCloudSave(
-    game: GhostBoxGame,
+    game: Pick<GhostBoxGame, "appId" | "title">,
     saveId: string,
   ): Promise<CloudRestoreResult | null> {
     return invoke<CloudRestoreResult | null>("cloud_restore_save", {
@@ -1195,6 +1196,10 @@ export const ghostboxApi = {
     return invoke<CloudSaveDeletionResult | null>("cloud_delete_save", {
       saveId,
     });
+  },
+
+  deleteCloudGameSaves(appId: string): Promise<CloudGameSavesDeletionResult> {
+    return invoke<CloudGameSavesDeletionResult>("cloud_delete_game_saves", { appId });
   },
 
   setCloudSavePinned(
