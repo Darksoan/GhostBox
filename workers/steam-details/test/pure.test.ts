@@ -117,6 +117,33 @@ describe("Steam normalization", () => {
     );
   });
 
+  it("recovers descriptions and DRM from alternate keys using the embedded app ID", () => {
+    const data = {
+      steam_appid: 3764200,
+      about_the_game: "Resident Evil Requiem description",
+      drm_notice: "Denuvo Anti-tamper<br>5 activations",
+    };
+    const extracted = steamAppData({ "4460240": { success: true, data } }, "3764200");
+    expect(normalizeStoreDetails("3764200", extracted)).toMatchObject({
+      aboutTheGame: data.about_the_game,
+      drmNotice: data.drm_notice,
+    });
+    expect(steamAppData({ "3764200": { success: true, data: { steam_appid: 570 } } }, "3764200")).toBeNull();
+    expect(steamAppData({ "4460240": { success: true, data: { name: "Unrelated" } } }, "3764200")).toBeNull();
+    expect(steamAppData({ "4460240": { success: false, data } }, "3764200")).toBeNull();
+  });
+
+  it("marks DRM only when Steam supplies a non-empty notice", () => {
+    expect(normalizeStoreDetails("1", {
+      drm_notice: "  Incorporates 3rd-party DRM: Denuvo  ",
+    })?.drmNotice).toBe("Incorporates 3rd-party DRM: Denuvo");
+    expect(normalizeStoreDetails("2", {
+      drm_notice: "",
+      drmNotice: "  Requires a third-party launcher  ",
+    })?.drmNotice).toBe("Requires a third-party launcher");
+    expect(normalizeStoreDetails("3", { name: "No notice" })?.drmNotice).toBe("");
+  });
+
   it("normalizes Steam app types from type/appType/app_type aliases", () => {
     expect(normalizeAppType("Demo")).toBe("demo");
     expect(normalizeAppType("  GAME ")).toBe("game");

@@ -191,7 +191,9 @@ export function loadGameStoreDetailsCached(gameId: string, baseGame?: GhostBoxGa
   // Um primeiro fetch incompleto (proxy instável, Steam 429, catálogo sem
   // screenshots) ficava preso na sessão e o modal abria vazio para sempre,
   // mesmo com a busca de conquistas retornando "no-achievements".
-  if (cached && hasUsefulStoreDetails(cached)) {
+  if (cached && hasUsefulStoreDetails(cached) &&
+      Boolean(cached.aboutTheGame?.trim() || cached.shortDescription?.trim()) &&
+      typeof cached.drmNotice === "string") {
     return Promise.resolve(cached);
   }
   if (cached) {
@@ -207,7 +209,9 @@ export function loadGameStoreDetailsCached(gameId: string, baseGame?: GhostBoxGa
       // com fallback (sem screenshots/sobre/idiomas) não é fixado para a
       // próxima abertura tentar de novo via backend (que tem disco + proxy +
       // fallback direto para a Steam).
-      if (game && hasUsefulStoreDetails(game)) {
+      if (game && hasUsefulStoreDetails(game) &&
+          Boolean(game.aboutTheGame?.trim() || game.shortDescription?.trim()) &&
+          typeof game.drmNotice === "string") {
         gameStoreDetailsCache.set(cacheKey, game);
       } else {
         gameStoreDetailsCache.delete(cacheKey);

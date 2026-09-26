@@ -2296,12 +2296,20 @@ p {
     top: calc(100% + 4px);
     right: 0;
     z-index: 10000;
-    width: var(--header-search-width);
+    width: max-content;
+    min-width: var(--header-search-width);
+    max-width: min(420px, calc(100vw - 48px));
     max-height: 350px;
+    overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-width: none;
     border: 0;
     border-radius: var(--radius-md);
     background: var(--surface-popover);
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   &__search-dropdown-list {
@@ -2356,9 +2364,9 @@ p {
   &__search-empty {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-3);
-    padding: var(--space-6);
+    padding: var(--space-4) var(--space-5);
   }
 
   &__search-empty-icon {
@@ -2367,8 +2375,9 @@ p {
   }
 
   &__search-empty-content {
+    flex: 1 1 auto;
     min-width: 0;
-    text-align: center;
+    text-align: left;
   }
 
   &__search-empty-copy {
@@ -2377,7 +2386,8 @@ p {
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: break-word;
   }
 
   &__search-spinner-state {
@@ -11116,6 +11126,26 @@ html.no-backdrop-blur {
     overflow: hidden;
     background: var(--background-dark);
     animation: none;
+  }
+
+  &__drm-badge {
+    position: absolute;
+    top: var(--space-6);
+    right: var(--space-6);
+    z-index: var(--z-raised);
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    color: var(--caution);
+    filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--black) 60%, transparent));
+    pointer-events: auto;
+
+    svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+    }
   }
 
   &__gear-button {

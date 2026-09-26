@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import playstationIcon from "../../../Icons/playstation-original.svg";
 import xboxIcon from "../../../Icons/xbox-original.svg";
-import { Cup } from "reicon-react";
+import { Alert, Cup } from "reicon-react";
 import {
   memo,
   useCallback,
@@ -1373,6 +1373,16 @@ export function GameModal({
     setIsAboutExpanded(false);
   }, [displayGame?.id]);
 
+  const drmNotice = displayGame?.drmNotice?.trim() ?? "";
+  const drmNoticeText = drmNotice
+    .replace(/<br\s*\/?\s*>/gi, " · ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  const hasDrm = drmNoticeText.length > 0;
+
   const visibleTags = displayGame?.tags.slice(0, 8) ?? [];
   const visibleGenres = displayGame
     ? displayGame.genres.length
@@ -1569,6 +1579,20 @@ export function GameModal({
           >
             <section className="modal__showcase">
               <div className="modal__showcase-media">
+                {hasDrm ? (
+                  <span
+                    className="modal__drm-badge"
+                    role="img"
+                    aria-label={
+                      appearance.language === "en"
+                        ? `Third-party DRM: ${drmNoticeText}`
+                        : `DRM de terceiros: ${drmNoticeText}`
+                    }
+                    title={drmNoticeText}
+                  >
+                    <Alert size={18} aria-hidden="true" />
+                  </span>
+                ) : null}
                 {currentScreenshotItem ? (
                   <div
                     className={`modal__showcase-image-shell ${hasVisibleScreenshot ? "modal__showcase-image-shell--loaded" : ""}`}

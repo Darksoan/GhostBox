@@ -12,9 +12,10 @@ use tauri::{Emitter, Manager};
 
 const STEAM_STORE_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
-// v4: payload passa a incluir `appType` (Steam `data.type` normalizado) para
-// excluir demos. Bump invalida o disco antigo, que não tinha o campo.
-const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 4;
+// v5: payload passa a incluir `drmNotice` (Steam `data.drm_notice`),
+// exibido como selo de DRM no banner do modal. Bump invalida o disco
+// antigo, que não tinha o campo. (v4 trouxe `appType` para excluir demos.)
+const STEAM_STORE_DETAILS_CACHE_VERSION: u64 = 5;
 const STEAM_STORE_DETAILS_CACHE_MAX_AGE_DAYS: i64 = 30;
 const DEFAULT_STEAM_DETAILS_PROXY_URL: &str = "https://piratebox-steam-details.hella.workers.dev";
 const STEAM_DETAILS_PROXY_URL_ENV: &str = "GHOSTBOX_STEAM_DETAILS_PROXY_URL";
@@ -364,6 +365,11 @@ fn merge_steam_store_details(game: &mut Value, store_data: &Value) {
         );
     }
 
+    object.insert(
+        "drmNotice".to_string(),
+        Value::String(text(store_data.get("drm_notice"))),
+    );
+
     let genres: Vec<Value> = store_data
         .get("genres")
         .and_then(|value| value.as_array())
@@ -456,6 +462,7 @@ fn steam_store_details_from_store_data(store_data: &Value) -> Value {
         "controllerSupport": steam_controller_support(store_data)
             .unwrap_or_else(|| "none".to_string()),
         "supportedLanguages": text(store_data.get("supported_languages")),
+        "drmNotice": text(store_data.get("drm_notice")),
     });
     if !app_type.is_empty() {
         if let Some(object) = details.as_object_mut() {
@@ -630,6 +637,12 @@ fn merge_normalized_steam_details(game: &mut Value, details: &Value) {
         object.insert("appType".to_string(), Value::String(app_type));
     }
 
+    if details.get("drmNotice").is_some() || details.get("drm_notice").is_some() {
+        let drm_notice = text(details.get("drmNotice"))
+            .if_empty_then(|| text(details.get("drm_notice")));
+        object.insert("drmNotice".to_string(), Value::String(drm_notice));
+    }
+
     let genres = text_array(details.get("genres"), 6);
     if !genres.is_empty() {
         object.insert("genres".to_string(), Value::Array(genres));
@@ -683,9 +696,9 @@ fn read_cached_steam_store_details(
     let path = steam_store_details_cache_path(app, app_id, language)?;
     let contents = fs::read_to_string(path).ok()?;
     let cached = serde_json::from_str::<Value>(&contents).ok()?;
-    if cached.get("version").and_then(|value| value.as_u64())
-        != Some(STEAM_STORE_DETAILS_CACHE_VERSION)
-    {
+    // v4 descriptions remain useful while the missing DRM field is refreshed.
+    let version = cached.get("version").and_then(Value::as_u64);
+    if version != Some(4) && version != Some(STEAM_STORE_DETAILS_CACHE_VERSION) {
         return None;
     }
     cached.get("data").cloned()
@@ -802,6 +815,14 @@ fn merge_cached_steam_store_details(previous: Option<&Value>, next: &Value) -> V
     };
 
     for (key, value) in next {
+        // A ausência do aviso de DRM é um valor conhecido: não retenha um
+        // aviso antigo quando a Steam passar a devolver uma string vazia.
+        if key == "drmNotice" {
+            if let Some(notice) = value.as_str() {
+                merged.insert(key.clone(), Value::String(notice.trim().to_string()));
+            }
+            continue;
+        }
         let has_value = match value {
             Value::Null => false,
             Value::String(value) => !value.trim().is_empty(),
@@ -1163,15 +1184,33 @@ async fn fetch_steam_store_details(app_id: &str, language: &str) -> Option<Value
         .json::<Value>()
         .await
         .ok()?;
-    let app = response.get(app_id)?;
-    if !app
-        .get("success")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-    {
-        return None;
+    steam_app_data(&response, app_id).cloned()
+}
+
+fn steam_app_data<'a>(payload: &'a Value, app_id: &str) -> Option<&'a Value> {
+    let entries = payload.as_object()?;
+    let matching_data = |key: &str, entry: &'a Value| {
+        if entry.get("success").and_then(Value::as_bool) != Some(true) {
+            return None;
+        }
+        let data = entry.get("data").filter(|data| data.is_object())?;
+        match data.get("steam_appid") {
+            Some(value) if !value.is_null() => {
+                let embedded_id = value.as_u64().map(|id| id.to_string())
+                    .unwrap_or_else(|| text(Some(value)));
+                if embedded_id != app_id {
+                    return None;
+                }
+            }
+            _ if key != app_id => return None,
+            _ => {}
+        }
+        Some(data)
+    };
+    if let Some(data) = entries.get(app_id).and_then(|entry| matching_data(app_id, entry)) {
+        return Some(data);
     }
-    app.get("data").cloned()
+    entries.iter().find_map(|(key, entry)| matching_data(key, entry))
 }
 
 fn steam_details_have_about(details: &Value) -> bool {
@@ -1191,6 +1230,11 @@ fn steam_details_have_metric_fields(details: &Value) -> bool {
         .if_empty_then(|| text(details.get("supported_languages")))
         .is_empty();
     has_controller && has_languages
+}
+
+fn steam_details_have_drm_field(details: &Value) -> bool {
+    details.get("drmNotice").and_then(Value::as_str).is_some()
+        || details.get("drm_notice").and_then(Value::as_str).is_some()
 }
 
 fn steam_reviews_response_is_usable(value: &Value) -> bool {
@@ -2464,7 +2508,7 @@ pub async fn database_get_game_store_details(
         return Ok(None);
     }
 
-    let latest_cached_details = read_cached_steam_store_details(&app, &app_id, steam_language);
+    let mut latest_cached_details = read_cached_steam_store_details(&app, &app_id, steam_language);
     if let Some(cached_details) = latest_cached_details.as_ref() {
         if steam_app_type_of(cached_details) == "demo" {
             return Ok(None);
@@ -2475,9 +2519,10 @@ pub async fn database_get_game_store_details(
         }
         if cached_steam_store_details_is_fresh(&app, &app_id, steam_language)
             && steam_details_have_about(cached_details)
-            // Cache escrito pelo proxy pode não ter os campos novos (controle/
-            // idiomas); nesse caso seguimos para completar com a busca direta.
+            // Cache escrito por proxy antigo pode não ter os campos novos
+            // (controle/idiomas/DRM); complete com a busca direta.
             && steam_details_have_metric_fields(cached_details)
+            && steam_details_have_drm_field(cached_details)
         {
             return Ok(Some(game));
         }
@@ -2499,13 +2544,15 @@ pub async fn database_get_game_store_details(
         write_cached_steam_store_details(&app, &app_id, steam_language, &merged_details);
         if steam_details_have_about(&merged_details)
             && steam_details_have_metric_fields(&merged_details)
+            && steam_details_have_drm_field(&merged_details)
         {
             return Ok(Some(game));
         }
+        latest_cached_details = Some(merged_details);
     }
 
-    // The details proxy can be online while omitting the description fields. Only
-    // fall back to Steam's JSON endpoint when the data required by the UI is absent.
+    // O proxy pode estar online mas ainda não fornecer todos os campos do modal
+    // (inclusive o aviso de DRM). Complete com a Steam quando algum faltar.
     if let Some(store_data) = fetch_steam_store_details(&app_id, steam_language).await {
         if steam_app_type_of(&store_data) == "demo" {
             return Ok(None);
@@ -3034,8 +3081,10 @@ pub async fn cache_resolve_steam_library_assets_batch(
 mod tests {
     use super::{
         is_cached_icon_source, is_ico_icon_url, is_valid_ico_bytes,
-        merge_cached_steam_store_details, read_client_icon_from_vdf, steam_details_have_about,
-        steam_reviews_response_is_usable, steam_store_search_games, validate_steam_store_search,
+        merge_cached_steam_store_details, merge_normalized_steam_details,
+        merge_steam_store_details, read_client_icon_from_vdf, steam_details_have_about,
+        steam_app_data, steam_details_have_drm_field, steam_reviews_response_is_usable,
+        steam_store_details_from_store_data, steam_store_search_games, validate_steam_store_search,
     };
 
     #[test]
@@ -3061,6 +3110,63 @@ mod tests {
             merged["pcRequirements"]["recommended"],
             next["pcRequirements"]["recommended"]
         );
+    }
+
+    #[test]
+    fn alternate_store_key_preserves_about_and_drm_only_for_matching_app() {
+        let payload = serde_json::json!({"4460240": {"success": true, "data": {
+            "steam_appid": 3764200,
+            "about_the_game": "Resident Evil Requiem description",
+            "drm_notice": "Denuvo Anti-tamper<br>5 activations"
+        }}});
+        let data = steam_app_data(&payload, "3764200").unwrap();
+        let mut game = serde_json::json!({"appId": "3764200"});
+        merge_steam_store_details(&mut game, data);
+        assert_eq!(game["aboutTheGame"], data["about_the_game"]);
+        assert_eq!(game["drmNotice"], data["drm_notice"]);
+        assert!(steam_app_data(&payload, "4460240").is_none());
+        assert!(steam_app_data(&serde_json::json!({"2": {"success": true, "data": {}}}), "1").is_none());
+        assert!(steam_app_data(&serde_json::json!({"2": {"success": false, "data": {"steam_appid": 1}}}), "1").is_none());
+    }
+
+    #[test]
+    fn drm_notice_survives_proxy_and_direct_store_paths_and_can_be_cleared() {
+        let with_drm = serde_json::json!({
+            "drm_notice": "  Incorporates 3rd-party DRM: Denuvo  "
+        });
+        let mut direct_game = serde_json::json!({"appId": "1"});
+        merge_steam_store_details(&mut direct_game, &with_drm);
+        assert_eq!(direct_game["drmNotice"], "Incorporates 3rd-party DRM: Denuvo");
+
+        let normalized = steam_store_details_from_store_data(&with_drm);
+        let mut proxy_game = serde_json::json!({"appId": "1"});
+        merge_normalized_steam_details(&mut proxy_game, &normalized);
+        assert_eq!(proxy_game["drmNotice"], direct_game["drmNotice"]);
+
+        let cleared = merge_cached_steam_store_details(
+            Some(&normalized),
+            &serde_json::json!({"drmNotice": ""}),
+        );
+        assert!(steam_details_have_drm_field(&cleared));
+        assert_eq!(cleared["drmNotice"], "");
+        merge_normalized_steam_details(&mut proxy_game, &cleared);
+        assert_eq!(proxy_game["drmNotice"], "");
+
+        merge_steam_store_details(&mut direct_game, &serde_json::json!({}));
+        assert_eq!(direct_game["drmNotice"], "");
+    }
+
+    #[test]
+    fn old_proxy_without_drm_field_requires_direct_store_fallback() {
+        let old_proxy = serde_json::json!({
+            "aboutTheGame": "About",
+            "controllerSupport": "none",
+            "supportedLanguages": "English",
+        });
+        assert!(!steam_details_have_drm_field(&old_proxy));
+        let no_drm = steam_store_details_from_store_data(&serde_json::json!({}));
+        assert!(steam_details_have_drm_field(&no_drm));
+        assert_eq!(no_drm["drmNotice"], "");
     }
 
     #[test]

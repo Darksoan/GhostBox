@@ -31,6 +31,8 @@ export type GameDetails = {
   publishers: string[];
   controllerSupport: ControllerSupport;
   supportedLanguages: string;
+  /** Aviso de DRM de terceiros da Steam (`appdetails.data.drm_notice`). Vazio = sem aviso. */
+  drmNotice: string;
   /**
    * Tipo do app na Steam (`appdetails.data.type` normalizado: "game",
    * "demo", "dlc", ...). Ausente = upstream não informou.
@@ -213,11 +215,13 @@ export function normalizeStoreDetails(
   const requirements = first(value, ["pc_requirements", "pcRequirements"]);
   const requirementObject = isObject(requirements) ? requirements : {};
   const appType = normalizeAppType(first(value, ["type", "appType", "app_type"]));
+  const drmNotice = aliasedText(value, "drm_notice", "drmNotice");
 
   return {
     appId,
     createdAt,
     ...(appType ? { appType } : {}),
+    drmNotice,
     name: aliasedText(value, "name", "title"),
     headerImage: aliasedText(value, "header_image", "headerImage"),
     screenshots: normalizeScreenshots(value.screenshots),
@@ -241,7 +245,21 @@ export function normalizeStoreDetails(
 
 export function steamAppData(payload: unknown, appId: string): unknown | null {
   if (!isObject(payload)) return null;
-  const app = payload[appId];
-  if (!isObject(app) || app.success !== true || !isObject(app.data)) return null;
-  return app.data;
+  const entries: Array<[string, unknown]> = [
+    [appId, payload[appId]],
+    ...Object.entries(payload).filter(([key]) => key !== appId),
+  ];
+  for (const [key, app] of entries) {
+    if (!isObject(app) || app.success !== true || !isObject(app.data)) continue;
+    // Steam sometimes keys the response by a DLC/package instead of the
+    // requested app. The embedded ID must still match before accepting it.
+    const embeddedId = app.data.steam_appid;
+    if (embeddedId !== undefined && embeddedId !== null) {
+      if (String(embeddedId) !== appId) continue;
+    } else if (key !== appId) {
+      continue;
+    }
+    return app.data;
+  }
+  return null;
 }

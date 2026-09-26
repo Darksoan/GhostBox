@@ -124,6 +124,8 @@ export type GhostBoxGame = {
   controllerSupport?: ControllerSupportStatus;
   /** String HTML bruta de `supported_languages` da Steam appdetails. */
   supportedLanguages?: string;
+  /** Aviso de DRM de terceiros da Steam (`drm_notice`); ausente/vazio = sem aviso. */
+  drmNotice?: string;
   /**
    * Tipo do app na Steam (`appdetails.data.type` normalizado em minúsculas:
    * "game", "demo", "dlc", ...). Ausente = não classificado.

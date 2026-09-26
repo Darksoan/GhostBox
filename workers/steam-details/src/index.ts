@@ -8,10 +8,10 @@ import {
 
 type Env = Record<string, never>;
 
-// v4: respostas passam a incluir `appType` (Steam `data.type` normalizado),
-// necessário para excluir demos em todas as superfícies. Bump invalida o
-// edge cache antigo, que não tinha o campo.
-const CACHE_VERSION = "v4";
+// v5: respostas passam a incluir `drmNotice` (Steam `data.drm_notice`),
+// exibido como selo de DRM no banner do modal. Bump invalida o edge cache
+// antigo, que não tinha o campo. (v4 trouxe `appType` para excluir demos.)
+const CACHE_VERSION = "v6"; // Invalidate false 404s from alternate appdetails keys.
 const TYPES_BATCH_MAX_IDS = 50;
 const POSITIVE_CACHE_CONTROL =
   "public, max-age=28800, stale-while-revalidate=86400, stale-if-error=604800";

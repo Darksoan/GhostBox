@@ -114,14 +114,15 @@ Header has no update UI (removed manual button/hourly polling/splash).
 ## Design Tokens (Texto / Tipografia)
 
 Primitives -> `src/styles/_primitives.scss` (`--fs-*`, `--lh-*`, `--ls-*`, `--weight-*`, `--font-sans`)
-Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#b8b8b8`, titlebar placeholder `--text-placeholder`; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`)
+Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#b8b8b8`, titlebar placeholder `--text-placeholder`; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`; status `--caution` -> `--caution-500` `#ffbf00` in `_primitives.scss`)
 Mixins -> `src/styles/_mixins.scss` (`type-label/meta/body/body-strong/title/section/page/hero/showcase`, `eyebrow`, `truncate`)
 Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n-*/--a-*` in components; use `--text-*` / `--type-*`)
 
 ## Titlebar
 
-`Header` -> `src/components/layout/Header.tsx` (premium/subscription button around 407-456)
+`Header` -> `src/components/layout/Header.tsx` (premium/subscription button around 407-456; search suggestions dropdown around 458-525, fed by `useAppShellState`)
 Premium button appearance -> `src/app.scss` (`.header__premium-indicator`, around 2064; crown and label immediately after); resting label matches `.header__search input::placeholder` via `--text-placeholder`; hover/focus changes only the surface to `--surface-option-hover` (`#151515`).
+Search suggestions appearance/scroll -> `src/app.scss` (`.header__search-dropdown`, around 2294-2385).
 
 ## Catalogue UI
 
@@ -134,6 +135,8 @@ Active-filter clear action -> `CataloguePage.clearAllFilters` in `src/pages/Cata
 Catalogue search: `useAppShellState` -> `src/hooks/useAppShellState.ts` (header suggestions/debounce) / `useCatalogueState` -> `src/hooks/useCatalogueState.ts` (chunking, filters, fallback) -> `useGamesQuery` in `src/queries/games.ts` -> `database_get_games` in `src-tauri/src/catalogue.rs` (around 2270) -> `searchCatalogue` in `workers/catalogue/src/catalogue.ts` (around 580; `searchIndexMatch` around 495, title/AppID ranking around 659). FTS -> `workers/catalogue/migrations/0004_search_index.sql`; backfill -> `workers/catalogue/src/search-index.ts`; response caches -> `src-tauri/src/catalogue_cache.rs`, `workers/catalogue/src/cache.ts`.
 Catalogue images: `toGame` in `workers/catalogue/src/catalogue.ts` (around 108; cover/source metadata) -> `gameCatalogueHeaderSources` / `gameCataloguePreviewScreenshotSourceGroups` in `src/utils/image.ts` (around 88-165) -> `CatalogueHeaderImage` in `src/components/ui/CatalogueList.tsx` (around 35-141) / `CatalogueHoverPreview` in `src/components/ui/CatalogueHoverPreview.tsx`; disk/source lookup and post-load cache -> `src/utils/imageCache.ts`. `CatalogueListItem` measures visible tag pills in `src/components/ui/CatalogueList.tsx` (around 183-286).
 Modal details: `GameModal` in `src/components/modals/GameModal.tsx` (around 965-1055) -> `loadGameStoreDetailsCached` / `loadGameAchievementDetailsCached` in `src/utils/gameCache.ts` -> `database_get_game_store_details` / `database_get_game_achievement_details` in `src-tauri/src/catalogue.rs` (around 2434-2595; both accept matching base game from modal to skip duplicate catalogue fetch). Achievement loading state is independent of store details.
+DRM badge: Steam `drm_notice` -> `drmNotice` (`GhostBoxGame.drmNotice` in `src/data.ts`; normalize in `workers/steam-details/src/pure.ts`, merge in `src-tauri/src/catalogue.rs`; missing field in old proxy triggers direct Steam fallback) -> `GameModal` (`hasDrm`, `Alert` from `reicon-react` in `.modal__showcase-media`) -> `.modal__drm-badge` in `src/app.scss` (top-right, `var(--caution)`). Empty notice clears cached DRM; no notice does not prove DRM-free.
+Steam appdetails envelope -> `steamAppData` in `workers/steam-details/src/pure.ts` / `steam_app_data` in `src-tauri/src/catalogue.rs`: accept alternate response keys only when embedded `steam_appid` matches (Requiem/Wilds). v4 disk descriptions remain readable during DRM refresh; `loadGameStoreDetailsCached` only pins payloads with description + resolved DRM field.
 
 ## Subscription / Cloud Backups
 
