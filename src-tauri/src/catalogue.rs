@@ -1324,14 +1324,45 @@ async fn fetch_steam_game_reviews_direct(
         .ok()
 }
 
+/// Ícones de conquista migraram para `community_assets`, mas o schema ainda
+/// devolve o host legado `steamcommunity/public/images/apps/...`, que dá 404
+/// para jogos novos (ex. Aniimo 4126040). O arquivo (hash + extensão) é o
+/// mesmo nos dois endereços.
+fn normalize_achievement_image_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let Some(path_start) = trimmed.find("steamcommunity/public/images/apps/") else {
+        return trimmed.to_string();
+    };
+    let remainder = &trimmed[path_start + "steamcommunity/public/images/apps/".len()..];
+    let mut parts = remainder.splitn(2, '/');
+    let app_id = parts.next().unwrap_or_default();
+    let file = parts.next().unwrap_or_default().split(['?', '#']).next().unwrap_or_default();
+    if app_id.is_empty()
+        || !app_id.chars().all(|c| c.is_ascii_digit())
+        || file.len() < 24
+        || !file.chars().take_while(|c| *c != '.').all(|c| c.is_ascii_hexdigit())
+        || !(file.ends_with(".jpg")
+            || file.ends_with(".jpeg")
+            || file.ends_with(".png")
+            || file.ends_with(".ico"))
+    {
+        return trimmed.to_string();
+    }
+    format!("https://shared.fastly.steamstatic.com/community_assets/images/apps/{app_id}/{file}")
+}
+
 fn normalize_achievement(achievement: &Value) -> Option<Value> {
     let name = text(achievement.get("name"));
     let title = text(achievement.get("displayName"))
         .if_empty_then(|| text(achievement.get("title")))
         .if_empty_then(|| name.clone());
-    let icon = text(achievement.get("icon"));
-    let icon_gray =
-        text(achievement.get("icongray")).if_empty_then(|| text(achievement.get("iconGray")));
+    let icon = normalize_achievement_image_url(&text(achievement.get("icon")));
+    let icon_gray = normalize_achievement_image_url(
+        &text(achievement.get("icongray")).if_empty_then(|| text(achievement.get("iconGray"))),
+    );
     // Local schema fallback may omit icons; keep name/title-only entries.
     if name.is_empty() || title.is_empty() {
         return None;
@@ -2608,6 +2639,23 @@ pub async fn database_get_game_achievement_details(
     let (steam_path, _) = crate::resolve_steam_path(&app, None);
     let steam_path = steam_path.as_deref().unwrap_or_default();
 
+    // Payloads antigos em disco/DB guardam o host legado dos ícones; corrige
+    // em voo para não servir 404 até o próximo refetch do schema.
+    if let Some(list) = game
+        .get_mut("achievementList")
+        .and_then(|value| value.as_array_mut())
+    {
+        for achievement in list.iter_mut() {
+            let icon = normalize_achievement_image_url(&text(achievement.get("icon")));
+            let icon_gray =
+                normalize_achievement_image_url(&text(achievement.get("iconGray")));
+            if let Some(object) = achievement.as_object_mut() {
+                object.insert("icon".to_string(), Value::String(icon));
+                object.insert("iconGray".to_string(), Value::String(icon_gray));
+            }
+        }
+    }
+
     let achievement_list = game
         .get("achievementList")
         .and_then(|value| value.as_array())
@@ -3082,10 +3130,51 @@ mod tests {
     use super::{
         is_cached_icon_source, is_ico_icon_url, is_valid_ico_bytes,
         merge_cached_steam_store_details, merge_normalized_steam_details,
-        merge_steam_store_details, read_client_icon_from_vdf, steam_details_have_about,
+        merge_steam_store_details, normalize_achievement,
+        normalize_achievement_image_url, read_client_icon_from_vdf, steam_details_have_about,
         steam_app_data, steam_details_have_drm_field, steam_reviews_response_is_usable,
         steam_store_details_from_store_data, steam_store_search_games, validate_steam_store_search,
     };
+
+    #[test]
+    fn legacy_achievement_host_rewrites_to_community_assets() {
+        assert_eq!(
+            normalize_achievement_image_url(
+                "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg"
+            ),
+            "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg"
+        );
+        assert_eq!(
+            normalize_achievement_image_url(
+                "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/4126040/57549aa3549c240d4533b896b32cc9a7e0e8a202.jpg"
+            ),
+            "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/57549aa3549c240d4533b896b32cc9a7e0e8a202.jpg"
+        );
+        assert_eq!(normalize_achievement_image_url(""), "");
+        assert_eq!(
+            normalize_achievement_image_url("https://example.com/a.jpg"),
+            "https://example.com/a.jpg"
+        );
+    }
+
+    #[test]
+    fn normalize_achievement_rewrites_legacy_icon_hosts() {
+        let achievement = serde_json::json!({
+            "name": "NEW_ACHIEVEMENT_1",
+            "displayName": "First Step into a New World",
+            "icon": "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg",
+            "icongray": "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/4126040/f73bf6e5f6b7557553c8296736d738e874e77360.jpg"
+        });
+        let normalized = normalize_achievement(&achievement).unwrap();
+        assert_eq!(
+            normalized["icon"],
+            "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg"
+        );
+        assert_eq!(
+            normalized["iconGray"],
+            "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/f73bf6e5f6b7557553c8296736d738e874e77360.jpg"
+        );
+    }
 
     #[test]
     fn store_details_merge_preserves_existing_media_and_nested_requirements() {

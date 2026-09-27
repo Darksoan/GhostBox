@@ -18,6 +18,51 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+/**
+ * Ícones de conquista migraram para `community_assets`, mas payloads antigos
+ * (cache em disco, DB do catálogo, schema) ainda trazem o host legado
+ * `steamcommunity/public/images/apps/...`, que dá 404 para jogos novos
+ * (ex. Aniimo 4126040). O arquivo (hash + extensão) é o mesmo.
+ */
+export function normalizeAchievementImageSource(source: string | undefined): string {
+  const trimmed = (source ?? "").trim();
+  if (!trimmed) return "";
+  const match =
+    /^https?:\/\/[^/]+\/steamcommunity\/public\/images\/apps\/(\d+)\/([^?#]+)([?#].*)?$/i.exec(
+      trimmed,
+    );
+  if (!match) return trimmed;
+  const [, appId, file] = match;
+  if (!/^[a-f0-9]+\.(?:jpg|jpeg|png|ico)$/i.test(file)) return trimmed;
+  return `https://shared.fastly.steamstatic.com/community_assets/images/apps/${appId}/${file}`;
+}
+
+/**
+ * Ordem de tentativa de um ícone: variante normalizada primeiro (host atual),
+ * depois o URL original (jogos antigos ainda espelham nos dois). Usado para
+ * recuperar payloads já guardados sem esperar o próximo refetch.
+ */
+export function achievementIconFallbackSources(
+  achievement: Pick<SteamAchievement, "icon" | "iconGray">,
+  unlocked: boolean,
+): string[] {
+  const primary = unlocked
+    ? achievement.icon || achievement.iconGray
+    : achievement.iconGray || achievement.icon;
+  const secondary = unlocked
+    ? achievement.iconGray || achievement.icon
+    : achievement.icon || achievement.iconGray;
+  const normalizedPrimary = normalizeAchievementImageSource(primary);
+  const normalizedSecondary = normalizeAchievementImageSource(secondary);
+  const ordered = [
+    normalizedPrimary,
+    normalizedSecondary,
+    primary?.trim(),
+    secondary?.trim(),
+  ].filter((source): source is string => Boolean(source?.trim()));
+  return [...new Set(ordered)];
+}
+
 function calculateAchievementStats(achievementList: SteamAchievement[]) {
   const unlocked = achievementList.filter(isAchievementUnlocked).length;
   const total = achievementList.length;
@@ -36,8 +81,12 @@ function buildSteamAchievementList(
     name: achievement.name,
     title: achievement.title || achievement.name,
     description: achievement.description || "",
-    icon: achievement.icon || achievement.iconGray || "",
-    iconGray: achievement.iconGray || achievement.icon || "",
+    icon: normalizeAchievementImageSource(
+      achievement.icon || achievement.iconGray || ""
+    ),
+    iconGray: normalizeAchievementImageSource(
+      achievement.iconGray || achievement.icon || ""
+    ),
     unlocked: achievement.unlocked,
     unlockedAt: isoFromUnixSeconds(achievement.unlockedAt),
     globalPercent:
@@ -89,8 +138,10 @@ function mergeAchievementLists(
       ...current,
       title: current.title || achievement.title,
       description: current.description || achievement.description,
-      icon: current.icon || achievement.icon,
-      iconGray: current.iconGray || achievement.iconGray,
+      icon: normalizeAchievementImageSource(current.icon || achievement.icon),
+      iconGray: normalizeAchievementImageSource(
+        current.iconGray || achievement.iconGray
+      ),
       unlocked: current.unlocked === true || achievement.unlocked === true,
       unlockedAt: current.unlockedAt || achievement.unlockedAt,
       globalPercent: current.globalPercent ?? achievement.globalPercent,

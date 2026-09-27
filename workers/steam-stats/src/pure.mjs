@@ -31,6 +31,26 @@ export function sortWishlistItems(items) {
   });
 }
 
+/**
+ * Ícones de conquista migraram para `community_assets`, mas o schema da Steam
+ * ainda devolve o host legado `steamcommunity/public/images/apps/...`, que dá
+ * 404 para jogos novos (ex. Aniimo 4126040). Reescreve para o host atual; o
+ * arquivo (hash + extensão) é o mesmo nos dois endereços.
+ */
+export function normalizeCommunityImageUrl(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "";
+  const match =
+    /^https?:\/\/[^/]+\/steamcommunity\/public\/images\/apps\/(\d+)\/([^?#]+)([?#].*)?$/.exec(
+      trimmed
+    );
+  if (!match) return trimmed;
+  const appId = match[1];
+  const file = match[2];
+  if (!/^[a-f0-9]+\.(?:jpg|jpeg|png|ico)$/i.test(file)) return trimmed;
+  return `https://shared.fastly.steamstatic.com/community_assets/images/apps/${appId}/${file}`;
+}
+
 export function normalizeSchemaAchievements(game) {
   const achievements = game?.availableGameStats?.achievements ?? [];
   return achievements
@@ -47,8 +67,10 @@ export function normalizeSchemaAchievements(game) {
         name,
         title,
         description: (achievement.description || "").trim(),
-        icon: (achievement.icon || "").trim(),
-        iconGray: (achievement.icongray || achievement.iconGray || "").trim(),
+        icon: normalizeCommunityImageUrl(achievement.icon),
+        iconGray: normalizeCommunityImageUrl(
+          achievement.icongray || achievement.iconGray || ""
+        ),
       };
     })
     .filter((item) => item != null);

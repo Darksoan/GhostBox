@@ -43,8 +43,15 @@ import {
   parseSupportedLanguages,
   resolveControllerSupportStatus,
 } from "../../utils/gameMetrics";
-import { mergeAchievementDetailsIntoGame } from "../../utils/steamAchievementMerge";
-import { refreshSteamAssetManifest } from "../../utils/steamAssetManifest";
+import {
+  achievementIconFallbackSources,
+  mergeAchievementDetailsIntoGame,
+  normalizeAchievementImageSource,
+} from "../../utils/steamAchievementMerge";
+import {
+  getSteamAssetUrl,
+  refreshSteamAssetManifest,
+} from "../../utils/steamAssetManifest";
 import {
   imageSourceCache,
   preloadImageSources,
@@ -507,9 +514,16 @@ const AchievementIcon = memo(function AchievementIcon({
   // estado de bloqueio é comunicado por filtro CSS (dessaturação), não
   // trocando para o ícone cinza da Steam antes mesmo de tentar carregar —
   // isso é o que produzia os círculos pretos idênticos e ilegíveis.
-  const preferredSource = achievement.icon || achievement.iconGray;
-  const alternateSource = achievement.iconGray || achievement.icon;
-  const [source, setSource] = useState(preferredSource);
+  // A lista inclui a variante normalizada (`community_assets`, host atual)
+  // antes do URL original para recuperar payloads com o host legado, que dá
+  // 404 em jogos novos como o Aniimo.
+  const fallbackSources = useMemo(
+    () => achievementIconFallbackSources(achievement, true),
+    [achievement.icon, achievement.iconGray]
+  );
+  const preferredSource = fallbackSources[0] ?? "";
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const source = fallbackSources[sourceIndex] ?? "";
   const [imageFailed, setImageFailed] = useState(!preferredSource);
   const [tooltipPosition, setTooltipPosition] = useState<{
     left: number;
@@ -529,7 +543,7 @@ const AchievementIcon = memo(function AchievementIcon({
     (isUnlocked ? "" : `, ${lockedLabel}`);
 
   useEffect(() => {
-    setSource(preferredSource);
+    setSourceIndex(0);
     setImageFailed(!preferredSource);
   }, [preferredSource]);
 
@@ -607,9 +621,10 @@ const AchievementIcon = memo(function AchievementIcon({
           aria-hidden="true"
           decoding="async"
           loading="lazy"
+          referrerPolicy="no-referrer"
           onError={() => {
-            if (source !== alternateSource && alternateSource) {
-              setSource(alternateSource);
+            if (sourceIndex + 1 < fallbackSources.length) {
+              setSourceIndex((index) => index + 1);
             } else {
               setImageFailed(true);
             }
@@ -634,6 +649,8 @@ const AchievementIcon = memo(function AchievementIcon({
 function achievementImageSourceList(achievements: SteamAchievement[]) {
   return uniqueSources(
     achievements.flatMap((achievement) => [
+      normalizeAchievementImageSource(achievement.icon),
+      normalizeAchievementImageSource(achievement.iconGray),
       achievement.icon,
       achievement.iconGray,
     ])
@@ -1225,12 +1242,25 @@ export function GameModal({
     achievementImageSourcesKey,
   } = keyDerivatives;
 
+  const manifestHeroSources = useMemo(() => {
+    const appId = displayGame?.appId?.trim() ?? "";
+    if (!/^\d+$/.test(appId)) return [];
+    // Jogos migrados só existem no caminho com hash: sem isso o banner cai na
+    // primeira screenshot quando as URLs sem hash dão 404 (ex. Aniimo).
+    return uniqueSources([
+      getSteamAssetUrl(appId, "library_hero_2x.jpg"),
+      getSteamAssetUrl(appId, "library_hero.jpg"),
+    ]);
+  }, [displayGame?.appId, cachedScreenshotsKey]);
+
   const screenshotItems = useMemo(
     () =>
       showcaseSources.map((source, index) => {
         const isHeroItem =
           index === 0 && modalHeroSources.includes(source);
-        const heroCandidates = isHeroItem ? modalHeroSources : [];
+        const heroCandidates = isHeroItem
+          ? uniqueSources([...manifestHeroSources, ...modalHeroSources])
+          : [];
         const screenshotFallback =
           isHeroItem && heroScreenshotFallback ? [heroScreenshotFallback] : [];
         const sourceCandidates = isHeroItem
@@ -1267,6 +1297,7 @@ export function GameModal({
       modalHeroSourcesKey,
       heroScreenshotFallback,
       cachedScreenshotsKey,
+      manifestHeroSources,
       screenshotSourcesVersion,
     ]
   );

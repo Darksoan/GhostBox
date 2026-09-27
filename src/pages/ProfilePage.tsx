@@ -81,6 +81,7 @@ import {
   mergeAchievementDetailsIntoGame,
   mergeSteamAchievementsIntoGame,
   mergeSteamAchievementsIntoGames,
+  normalizeAchievementImageSource,
 } from "../utils/steamAchievementMerge";
 import { buildSteamOwnedGamesFromPlaytimes } from "../utils/steamLibraryMerge";
 import { applySteamAppTypes, filterOutSteamDemos } from "../utils/steamAppType";
@@ -492,9 +493,12 @@ function achievementShowcaseIcon(
   achievement: SteamAchievement,
   unlocked: boolean
 ) {
-  return unlocked
+  const primary = unlocked
     ? achievement.icon || achievement.iconGray
     : achievement.iconGray || achievement.icon;
+  // Recupera payloads com o host legado (`steamcommunity/...` dá 404 em jogos
+  // novos como o Aniimo); jogos antigos continuam nos dois endereços.
+  return normalizeAchievementImageSource(primary) || primary;
 }
 
 function achievementUnlockedTime(unlockedAt?: string) {

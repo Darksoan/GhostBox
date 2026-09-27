@@ -1,4 +1,5 @@
 import {
+  normalizeCommunityImageUrl,
   normalizeFeaturedCategories,
   normalizeSchemaAchievements,
   normalizeGlobalPercentages,
@@ -1105,8 +1106,10 @@ async function fetchAchievementEntry(
         name: id,
         title: schemaAchievement?.displayName || achievement.name || id,
         description: schemaAchievement?.description || "",
-        icon: schemaAchievement?.icon || "",
-        iconGray: schemaAchievement?.icongray || schemaAchievement?.icon || "",
+        icon: normalizeCommunityImageUrl(schemaAchievement?.icon || ""),
+        iconGray: normalizeCommunityImageUrl(
+          schemaAchievement?.icongray || schemaAchievement?.icon || ""
+        ),
         unlocked: achievement.achieved === 1,
         unlockedAt,
       };
@@ -1119,7 +1122,9 @@ async function fetchAchievementEntry(
           id: `${appId}-${id}`,
           title: schemaAchievement?.displayName || achievement.name || id,
           gameTitle,
-          icon: schemaAchievement?.icon || schemaAchievement?.icongray || "",
+          icon: normalizeCommunityImageUrl(
+            schemaAchievement?.icon || schemaAchievement?.icongray || ""
+          ),
           appId,
           unlockedAt: achievement.unlocktime || 0,
         };

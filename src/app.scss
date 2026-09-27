@@ -12200,12 +12200,14 @@ html.no-backdrop-blur {
         opacity var(--motion-base) ease;
     }
 
-    // Dessatura e escurece a arte real (não o ícone cinza da Steam, que já
-    // chega quase sem contraste e some contra o fundo escuro do slot quando
-    // filtrado de novo). Sem reduzir opacity: quem marca "bloqueada" aqui é
-    // a dessaturação e a superfície de fundo do slot, não a transparência.
+    // Dessatura e escurece levemente a arte real para marcar "bloqueada".
+    // Artes majoritariamente brancas sobre fundo preto (ex. Aniimo) somem
+    // quando muito escurecidas, então o brilho fica em 0.78: ainda distingue
+    // bloqueada/desbloqueada sem tornar o glifo irreconhecível. Sem reduzir
+    // opacity: quem marca "bloqueada" é a dessaturação e a superfície de
+    // fundo do slot, não a transparência.
     &--locked img {
-      filter: grayscale(1) brightness(0.55);
+      filter: grayscale(1) brightness(0.78);
     }
 
     &--unlocked {

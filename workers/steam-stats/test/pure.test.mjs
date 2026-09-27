@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  normalizeCommunityImageUrl,
   normalizeFeaturedCategories,
   normalizeSchemaAchievements,
   normalizeGlobalPercentages,
@@ -150,6 +151,47 @@ test("normalizeSchemaAchievements maps steam schema fields", () => {
       iconGray: "b.png",
     },
   ]);
+});
+
+test("normalizeCommunityImageUrl rewrites the legacy steamcommunity host", () => {
+  assert.equal(
+    normalizeCommunityImageUrl(
+      "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg"
+    ),
+    "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg"
+  );
+  assert.equal(
+    normalizeCommunityImageUrl(
+      "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/4126040/57549aa3549c240d4533b896b32cc9a7e0e8a202.jpg"
+    ),
+    "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/57549aa3549c240d4533b896b32cc9a7e0e8a202.jpg"
+  );
+  assert.equal(normalizeCommunityImageUrl("a.png"), "a.png");
+  assert.equal(normalizeCommunityImageUrl(""), "");
+});
+
+test("normalizeSchemaAchievements normalizes legacy achievement hosts", () => {
+  const result = normalizeSchemaAchievements({
+    availableGameStats: {
+      achievements: [
+        {
+          name: "NEW_ACHIEVEMENT_1",
+          displayName: "First Step into a New World",
+          icon: "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg",
+          icongray:
+            "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/4126040/f73bf6e5f6b7557553c8296736d738e874e77360.jpg",
+        },
+      ],
+    },
+  });
+  assert.equal(
+    result[0].icon,
+    "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/6fb538bf162c55ef259d472e3997029312fba58a.jpg"
+  );
+  assert.equal(
+    result[0].iconGray,
+    "https://shared.fastly.steamstatic.com/community_assets/images/apps/4126040/f73bf6e5f6b7557553c8296736d738e874e77360.jpg"
+  );
 });
 
 test("sortWishlistItems prioritizes ranked items then recency", () => {

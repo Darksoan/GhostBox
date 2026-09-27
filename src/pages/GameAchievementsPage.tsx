@@ -4,19 +4,13 @@ import { useSettings } from "../context/settings";
 import { AchievementsListLoadingState, EmptyState } from "../components/ui/LoadingStates";
 import { isAchievementUnlocked } from "../utils/achievementStats";
 import { loadGameAchievementDetailsCached } from "../utils/gameCache";
-import { mergeAchievementDetailsIntoGame } from "../utils/steamAchievementMerge";
+import {
+  achievementIconFallbackSources,
+  mergeAchievementDetailsIntoGame,
+} from "../utils/steamAchievementMerge";
 import { formatCompactPlaytime } from "../utils/time";
 import { useMetricsUnlocked } from "../context/MetricsVisibilityContext";
 import "./GameAchievementsPage.scss";
-
-function achievementIconSource(
-  achievement: SteamAchievement,
-  unlocked: boolean
-) {
-  return unlocked
-    ? achievement.icon || achievement.iconGray
-    : achievement.iconGray || achievement.icon;
-}
 
 function formatAchievementPercent(value: number, language: string = "pt-BR") {
   const locale = language === "en" ? "en-US" : "pt-BR";
@@ -51,8 +45,13 @@ function AchievementListItem({
   unlockedLabel: (date: string) => string;
 }) {
   const unlocked = isAchievementUnlocked(achievement);
-  const preferredSource = achievementIconSource(achievement, unlocked);
-  const [source, setSource] = useState(preferredSource);
+  const fallbackSources = useMemo(
+    () => achievementIconFallbackSources(achievement, unlocked),
+    [achievement.icon, achievement.iconGray, unlocked]
+  );
+  const preferredSource = fallbackSources[0] ?? "";
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const source = fallbackSources[sourceIndex] ?? "";
   const unlockedDate = formatUnlockedDate(achievement.unlockedAt, language);
   const globalPercent =
     typeof achievement.globalPercent === "number" &&
@@ -61,7 +60,7 @@ function AchievementListItem({
       : null;
 
   useEffect(() => {
-    setSource(preferredSource);
+    setSourceIndex(0);
   }, [preferredSource]);
 
   return (
@@ -79,9 +78,10 @@ function AchievementListItem({
           aria-hidden="true"
           decoding="async"
           loading="lazy"
+          referrerPolicy="no-referrer"
           onError={() => {
-            if (source !== achievement.iconGray) {
-              setSource(achievement.iconGray);
+            if (sourceIndex + 1 < fallbackSources.length) {
+              setSourceIndex((index) => index + 1);
             }
           }}
         />
