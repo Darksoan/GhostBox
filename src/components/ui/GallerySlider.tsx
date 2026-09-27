@@ -61,9 +61,11 @@ export function GallerySlider({
   // wrap (anima até o clone, depois salta sem transição para o slide real).
   const [trackIndex, setTrackIndex] = useState(1);
   const [transitionEnabled, setTransitionEnabled] = useState(true);
+  const [leavingVideoIndex, setLeavingVideoIndex] = useState<number | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const jumpTimeout = useRef<number | null>(null);
+  const leavingVideoTimeout = useRef<number | null>(null);
   const jumpPending = useRef(false);
 
   const mediaItems = useMemo(() => {
@@ -111,6 +113,27 @@ export function GallerySlider({
 
   useEffect(() => clearJump, [clearJump]);
 
+  const clearLeavingVideo = useCallback(() => {
+    if (leavingVideoTimeout.current !== null) {
+      window.clearTimeout(leavingVideoTimeout.current);
+      leavingVideoTimeout.current = null;
+    }
+    setLeavingVideoIndex(null);
+  }, []);
+
+  useEffect(() => clearLeavingVideo, [clearLeavingVideo]);
+
+  const retainLeavingVideoFrame = useCallback(() => {
+    clearLeavingVideo();
+    if (mediaItems[selectedIndex]?.type !== "video") return;
+
+    setLeavingVideoIndex(selectedIndex);
+    leavingVideoTimeout.current = window.setTimeout(() => {
+      setLeavingVideoIndex(null);
+      leavingVideoTimeout.current = null;
+    }, TRACK_TRANSITION_MS);
+  }, [clearLeavingVideo, mediaItems, selectedIndex]);
+
   // Reativa transição após salto instantâneo (troca de track sem animar).
   const reenableTransition = useCallback(() => {
     jumpTimeout.current = window.setTimeout(() => {
@@ -141,10 +164,11 @@ export function GallerySlider({
         snapToTrack(count, count - 1);
       }, TRACK_TRANSITION_MS);
     } else {
+      retainLeavingVideoFrame();
       setTrackIndex(selectedIndex);
       setSelectedIndex(selectedIndex - 1);
     }
-  }, [count, selectedIndex, snapToTrack]);
+  }, [count, retainLeavingVideoFrame, selectedIndex, snapToTrack]);
 
   const scrollNext = useCallback(() => {
     if (count <= 1 || jumpPending.current) return;
@@ -155,18 +179,21 @@ export function GallerySlider({
         snapToTrack(1, 0);
       }, TRACK_TRANSITION_MS);
     } else {
+      retainLeavingVideoFrame();
       setTrackIndex(selectedIndex + 2);
       setSelectedIndex(selectedIndex + 1);
     }
-  }, [count, selectedIndex, snapToTrack]);
+  }, [count, retainLeavingVideoFrame, selectedIndex, snapToTrack]);
 
   const scrollTo = useCallback(
     (index: number) => {
       if (count <= 1 || jumpPending.current || index === selectedIndex) return;
       if (index === selectedIndex + 1) {
+        retainLeavingVideoFrame();
         setTrackIndex(selectedIndex + 2);
         setSelectedIndex(index);
       } else if (index === selectedIndex - 1) {
+        retainLeavingVideoFrame();
         setTrackIndex(selectedIndex);
         setSelectedIndex(index);
       } else {
@@ -175,7 +202,7 @@ export function GallerySlider({
         snapToTrack(index + 1, index);
       }
     },
-    [count, selectedIndex, snapToTrack]
+    [count, retainLeavingVideoFrame, selectedIndex, snapToTrack]
   );
 
   const scrollToPreview = useCallback(
@@ -217,9 +244,9 @@ export function GallerySlider({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [scrollPrev, scrollNext]);
 
-  const renderMedia = (item: MediaItem, active: boolean, eager: boolean) => {
+  const renderMedia = (item: MediaItem, index: number, active: boolean, eager: boolean) => {
     if (item.type === "video") {
-      return active ? (
+      return active || index === leavingVideoIndex ? (
         <VideoPlayer
           videoSrc={item.videoSrc!}
           videoType={item.videoType}
@@ -274,7 +301,7 @@ export function GallerySlider({
               className="gallery-slider__slide"
               aria-hidden="true"
             >
-              {renderMedia(mediaItems[count - 1], false, true)}
+              {renderMedia(mediaItems[count - 1], count - 1, false, true)}
             </div>
           )}
           {mediaItems.map((item, index) => {
@@ -286,7 +313,7 @@ export function GallerySlider({
                 key={item.id}
                 className={`gallery-slider__slide ${isSelected ? "gallery-slider__slide--active" : ""}`}
               >
-                {renderMedia(item, isSelected, shouldRenderImage)}
+                {renderMedia(item, index, isSelected, shouldRenderImage)}
               </div>
             );
           })}
@@ -296,7 +323,7 @@ export function GallerySlider({
               className="gallery-slider__slide"
               aria-hidden="true"
             >
-              {renderMedia(mediaItems[0], false, true)}
+              {renderMedia(mediaItems[0], 0, false, true)}
             </div>
           )}
         </div>

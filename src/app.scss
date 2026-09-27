@@ -9350,7 +9350,8 @@ input[type="search"]::-ms-reveal {
   right: var(--space-8);
   bottom: var(--space-8);
   z-index: var(--z-toast);
-  width: min(420px, calc(100vw - 32px));
+  width: max-content;
+  max-width: calc(100vw - var(--space-8) - var(--space-8));
   overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--surface-toast);
@@ -9368,6 +9369,9 @@ input[type="search"]::-ms-reveal {
 
   &__body {
     min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
   }
 
   &__icon {
@@ -9419,10 +9423,11 @@ input[type="search"]::-ms-reveal {
     }
   }
 
-  strong,
-  span {
+  &__body > strong,
+  &__body > span {
     display: block;
-    @include mixins.truncate;
+    width: max-content;
+    white-space: nowrap;
   }
 
   strong {
@@ -9509,7 +9514,8 @@ input[type="search"]::-ms-reveal {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  width: min(420px, calc(100vw - var(--space-12)));
+  width: max-content;
+  max-width: calc(100vw - var(--space-8) - var(--space-8));
   pointer-events: none;
 }
 
@@ -9567,10 +9573,14 @@ input[type="search"]::-ms-reveal {
     justify-content: center;
     gap: var(--space-1);
     min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
   }
 
   &__title {
-    @include mixins.truncate;
+    width: max-content;
+    white-space: nowrap;
     color: var(--text-primary);
     font-size: var(--type-size-body);
     font-weight: var(--weight-regular);
@@ -9578,7 +9588,8 @@ input[type="search"]::-ms-reveal {
   }
 
   &__description {
-    @include mixins.truncate;
+    width: max-content;
+    white-space: nowrap;
     color: var(--text-secondary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
@@ -11933,7 +11944,7 @@ html.no-backdrop-blur {
   }
 
   &__chips {
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-compact);
@@ -12293,7 +12304,7 @@ html.no-backdrop-blur {
     span {
       position: relative;
       z-index: 1;
-      color: var(--text-secondary);
+      color: var(--text-tertiary);
       font-size: var(--type-size-caption);
       font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
@@ -12448,7 +12459,7 @@ html.no-backdrop-blur {
     // Key-value: label primary, value secondary (same recipe as settings copy)
     li,
     p {
-      color: var(--text-secondary);
+      color: var(--text-tertiary);
       font-size: var(--type-size-compact);
       font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
@@ -12578,11 +12589,11 @@ html.no-backdrop-blur {
     }
   }
 
-  /* Os botões com `.button` herdam clareamento no hover global; aqui só a
-     superfície muda, mantendo texto e ícones na cor de repouso. */
+  /* As ações mantêm texto e ícones na cor de repouso ao interagir. */
   &__play-button,
   &__add-button,
-  &__remove-button {
+  &__remove-button,
+  &__gear-button {
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
       color: var(--text-secondary);
@@ -13799,7 +13810,7 @@ html.no-animations {
 .modal__controller-support-description {
   margin: 0;
   max-width: 34ch;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: var(--type-size-compact);
   line-height: 1.45;
 }
@@ -13822,6 +13833,7 @@ html.no-animations {
 
 .modal__languages-row {
   display: grid;
+  color: var(--text-tertiary);
   grid-template-columns: minmax(0, 1fr) 64px 64px;
   align-items: center;
   gap: var(--space-2);
@@ -13838,7 +13850,7 @@ html.no-animations {
 
 .modal__languages-row--header {
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: var(--type-size-caption);
   font-weight: var(--weight-regular);
   text-transform: uppercase;
@@ -13865,6 +13877,10 @@ html.no-animations {
 
 .modal__chip {
   @include tag-chip;
+}
+
+.modal__chips .modal__chip {
+  color: var(--text-tertiary);
 }
 
 .modal__details-loading-section,
@@ -14116,6 +14132,10 @@ html.no-animations {
 .collection-modal__header p,
 .settings-option__copy span {
   font-weight: var(--weight-regular);
+}
+
+.modal__sidebar .modal__achievements-state {
+  color: var(--text-tertiary);
 }
 
 .modal__details p,

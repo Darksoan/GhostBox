@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GhostBoxGame } from "../src/data";
 import {
   buildKnownGameIndex,
+  expandJoinedGameSearchQuery,
   normalizeGameSearchText,
   searchKnownGames,
   shouldUseSteamSearchFallback,
@@ -26,6 +27,26 @@ describe("shared local game search", () => {
     expect(normalizeGameSearchText("  Tom Clancy’s: AÇÃO  ")).toBe(
       "tom clancys acao",
     );
+  });
+
+  it("recovers two or more word boundaries from Steam titles", () => {
+    expect(
+      expandJoinedGameSearchQuery("darksouls", [
+        "DARK SOULS™ III",
+        "DARK SOULS™: REMASTERED",
+      ]),
+    ).toBe("dark souls");
+    expect(
+      expandJoinedGameSearchQuery("thewitcher3", [
+        "The Witcher 3: Wild Hunt",
+      ]),
+    ).toBe("the witcher 3");
+  });
+
+  it("does not invent a split for a spaced or unrelated query", () => {
+    expect(expandJoinedGameSearchQuery("dark souls", ["Dark Souls III"])).toBeNull();
+    expect(expandJoinedGameSearchQuery("darksouls", ["Darkest Dungeon"])).toBeNull();
+    expect(expandJoinedGameSearchQuery("fragpunk", ["FragPunk"])).toBeNull();
   });
 
   it("finds Steam-owned and collection-only games", () => {

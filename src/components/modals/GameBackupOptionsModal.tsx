@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, EyeOff, FolderOpen, History, Loader2 } from "lucide-react";
-import { CloudUpload } from "reicon-react";
+import { CloudUpload, Eye, EyeOff, FolderOpen, History, Loader2 } from "lucide-react";
 import type { GhostBoxGame } from "../../data";
 import type { CloudSave } from "../../lib/ghostboxApi.types";
 import { useSettings } from "../../context/settings";

@@ -200,7 +200,11 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
           </span>
           <span
             className={`profile-page__activity-status${
-              !statusLabel ? " profile-page__activity-status--placeholder" : ""
+              !statusLabel
+                ? " profile-page__activity-status--placeholder"
+                : !game.sessionActive
+                  ? " profile-page__activity-status--last-played"
+                  : ""
             }`}
           >
             {statusLabel ?? t("profile.neverPlayed")}

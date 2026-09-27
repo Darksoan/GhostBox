@@ -25,6 +25,32 @@ export function canSearchSteamStore(value: string) {
   return isValidSteamAppId(trimmed) || normalizeGameSearchText(trimmed).length >= 3;
 }
 
+/** Finds the word boundaries of a joined query in Steam's displayed titles. */
+export function expandJoinedGameSearchQuery(
+  query: string,
+  titles: readonly string[],
+) {
+  const normalizedQuery = normalizeGameSearchText(query);
+  if (!normalizedQuery || normalizedQuery.includes(" ")) return null;
+
+  for (const title of titles) {
+    const words = normalizeGameSearchText(title.replace(/[™℠®©]/g, ""))
+      .split(" ")
+      .filter(Boolean);
+    for (let start = 0; start < words.length - 1; start += 1) {
+      let joined = words[start];
+      for (let end = start + 1; end < words.length; end += 1) {
+        joined += words[end];
+        if (joined === normalizedQuery) {
+          return words.slice(start, end + 1).join(" ");
+        }
+        if (!normalizedQuery.startsWith(joined)) break;
+      }
+    }
+  }
+  return null;
+}
+
 export function shouldUseSteamSearchFallback(options: {
   query: string;
   localResultCount: number;

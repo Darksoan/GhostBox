@@ -166,6 +166,7 @@ export function PageRouter({
     debouncedQuery,
     page === "catalogue",
     knownGames,
+    query,
   );
   const steamOwnedGames = useMemo(
     () =>

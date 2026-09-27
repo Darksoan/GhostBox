@@ -330,12 +330,22 @@
     background-color: var(--background);
     color: var(--text-secondary);
     user-select: none;
+    transition: transform var(--motion-base) var(--ease);
+
+    &:hover {
+      transform: translateY(-2px);
+    }
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       opacity: 1;
+      transition: transform var(--motion-slow) var(--ease);
+    }
+
+    &:hover img {
+      transform: scale(1.04);
     }
 
     .profile-page__avatar-skeleton {
@@ -472,11 +482,11 @@
   }
 
   &__steam-id--revealed {
-    animation: none;
+    animation: steamid-reveal var(--motion-slow) var(--ease) both;
   }
 
   &__steam-id--hidden {
-    animation: none;
+    animation: steamid-hide var(--motion-base) var(--ease) both;
   }
 
   &__steam-id-toggle {
@@ -507,7 +517,7 @@
   &__steam-id-copy {
     position: relative;
     overflow: hidden;
-    animation: none;
+    animation: steamid-copy-enter var(--motion-slow) var(--ease) both;
   }
 
   &__steam-id-copy-icon {
@@ -957,6 +967,10 @@
 
   &__activity-status {
     color: var(--text-secondary);
+  }
+
+  &__activity-status--last-played {
+    color: var(--text-tertiary);
   }
 
   &__activity-status--placeholder {
@@ -1613,6 +1627,22 @@
 
 @media (prefers-reduced-motion: reduce) {
 
+  .profile-page__avatar-frame,
+  .profile-page__avatar-frame img {
+    transition: none;
+  }
+
+  .profile-page__avatar-frame:hover,
+  .profile-page__avatar-frame:hover img {
+    transform: none;
+  }
+
+  .profile-page__steam-id--revealed,
+  .profile-page__steam-id--hidden,
+  .profile-page__steam-id-copy {
+    animation: none;
+  }
+
   .profile-page__hero-action,
   .profile-page__hero-action-label {
     transition: none;
@@ -1626,6 +1656,24 @@
   }
 
   .profile-page__activity-progress .profile-page__progress-track > span::after {
+    animation: none;
+  }
+}
+
+html.no-animations {
+  .profile-page__avatar-frame,
+  .profile-page__avatar-frame img {
+    transition: none;
+  }
+
+  .profile-page__avatar-frame:hover,
+  .profile-page__avatar-frame:hover img {
+    transform: none;
+  }
+
+  .profile-page__steam-id--revealed,
+  .profile-page__steam-id--hidden,
+  .profile-page__steam-id-copy {
     animation: none;
   }
 }

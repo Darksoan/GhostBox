@@ -11,13 +11,13 @@ import { hasSelectedCatalogueFilters } from "../utils/filters";
 import { setHasLoadedCatalogueGlobally } from "../utils/gameCache";
 import { catalogueRotationSeed } from "../utils/rotation";
 import { filterOutSteamDemos } from "../utils/steamAppType";
-import { useGamesQuery, useSteamStoreSearchQuery } from "../queries/games";
+import { useGamesQuery } from "../queries/games";
+import { useExpandedGameSearch } from "./useExpandedGameSearch";
 import { useSettings } from "../context/settings";
 import {
   mergeGameSearchResults,
   normalizeGameSearchText,
   searchKnownGames,
-  shouldUseSteamSearchFallback,
 } from "../utils/gameSearch";
 
 function normalizeCatalogueQuery(query: string) {
@@ -28,6 +28,7 @@ export function useCatalogueState(
   debouncedQuery: string,
   enabled: boolean,
   knownGames: readonly GhostBoxGame[] = [],
+  currentQuery = debouncedQuery,
 ) {
   const { appearance } = useSettings();
   const [cataloguePage, setCataloguePage] = useState(1);
@@ -41,6 +42,8 @@ export function useCatalogueState(
   const [lastCatalogueFacets, setLastCatalogueFacets] =
     useState<GameDatabaseResult["facets"]>();
   const normalizedQuery = normalizeCatalogueQuery(debouncedQuery);
+  const isCurrentQuery =
+    normalizeCatalogueQuery(currentQuery) === normalizedQuery;
   const previousNormalizedQueryRef = useRef(normalizedQuery);
   const isQueryResetPending = previousNormalizedQueryRef.current !== normalizedQuery;
   const effectiveCataloguePage = isQueryResetPending ? 1 : cataloguePage;
@@ -72,9 +75,19 @@ export function useCatalogueState(
     normalizedQuery,
   ]);
 
-  const catalogueQuery = useGamesQuery(catalogueRequestMeta.request, {
+  const {
+    catalogueQuery,
+    expandedCatalogueQuery,
+    steamSearchQuery,
+    shouldSearchSteam,
+    expandedData,
+    isExpansionPending,
+  } = useExpandedGameSearch(
+    catalogueRequestMeta.request,
     enabled,
-  });
+    20,
+    appearance.language,
+  );
 
   const hasActiveFilters = hasSelectedCatalogueFilters(catalogueFilters);
   const canUseSearchFallback =
@@ -86,48 +99,69 @@ export function useCatalogueState(
         : [],
     [canUseSearchFallback, knownGames, normalizedQuery],
   );
-  const d1SearchSettled =
+  const activeCatalogueData =
+    !isCurrentQuery
+      ? undefined
+      : expandedData ??
+        (!catalogueQuery.isPlaceholderData ? catalogueQuery.data : undefined);
+  const primaryIsEmpty =
     catalogueQuery.isError ||
     (catalogueQuery.isFetched &&
       !catalogueQuery.isFetching &&
-      !catalogueQuery.isPlaceholderData);
-  const d1SearchIsEmpty =
-    catalogueQuery.isError ||
-    (d1SearchSettled && (catalogueQuery.data?.games.length ?? 0) === 0);
-  const shouldSearchSteam =
+      !catalogueQuery.isPlaceholderData &&
+      (catalogueQuery.data?.games.length ?? 0) === 0);
+  const isFallbackMode =
     canUseSearchFallback &&
-    shouldUseSteamSearchFallback({
-      query: normalizedQuery,
-      localResultCount: localFallbackGames.length,
-      remoteResultCount: catalogueQuery.data?.games.length ?? 0,
-      remoteSettled: d1SearchSettled,
-      remoteFailed: catalogueQuery.isError,
-      hasActiveFilters,
-    });
-  const steamSearchQuery = useSteamStoreSearchQuery(
-    normalizedQuery,
-    20,
-    appearance.language,
-    { enabled: shouldSearchSteam },
-  );
-  const isFallbackMode = canUseSearchFallback && d1SearchIsEmpty;
+    isCurrentQuery &&
+    primaryIsEmpty &&
+    !isExpansionPending &&
+    !expandedData?.games.length;
   const fallbackGames = useMemo(
     () =>
       mergeGameSearchResults(
         [
           localFallbackGames,
-          shouldSearchSteam ? (steamSearchQuery.data ?? []) : [],
+          shouldSearchSteam && !isExpansionPending
+            ? (steamSearchQuery.data ?? [])
+            : [],
         ],
         20,
       ),
-    [localFallbackGames, shouldSearchSteam, steamSearchQuery.data],
+    [isExpansionPending, localFallbackGames, shouldSearchSteam, steamSearchQuery.data],
   );
   const resolvedCatalogueDatabase = useMemo<GameDatabaseResult>(() => {
     if (!isFallbackMode) {
-      const data = catalogueQuery.data ?? emptyGameDatabase;
-      const games = filterOutSteamDemos(data.games);
+      const data = activeCatalogueData ?? emptyGameDatabase;
+      // Once the complete catalogue result fits in this chunk, append only
+      // Steam games whose AppID is absent there. Catalogue records keep their
+      // screenshots and metadata even if Steam returned the same title.
+      const canAppendSteamOnly =
+        Boolean(expandedData) &&
+        canUseSearchFallback &&
+        catalogueRequestMeta.requestedChunkOffset === 0 &&
+        data.matched === data.games.length;
+      const catalogueIds = new Set(data.games.map((game) => game.appId ?? game.id));
+      const steamOnlyGames = canAppendSteamOnly
+        ? (steamSearchQuery.data ?? []).filter(
+            (game) => !catalogueIds.has(game.appId ?? game.id),
+          )
+        : [];
+      const appendSteamOnly =
+        steamOnlyGames.length > 0 &&
+        data.games.length + steamOnlyGames.length <= catalogueRequestMeta.requestedLimit;
+      const combinedGames = appendSteamOnly
+          ? mergeGameSearchResults(
+              [data.games, steamOnlyGames],
+              catalogueRequestMeta.requestedLimit,
+            )
+          : data.games;
+      const games = filterOutSteamDemos(combinedGames);
       if (games === data.games) return data;
-      return { ...data, games, matched: Math.min(data.matched, games.length) };
+      return {
+        ...data,
+        games,
+        matched: appendSteamOnly ? games.length : Math.min(data.matched, games.length),
+      };
     }
     const games = filterOutSteamDemos(fallbackGames);
     return {
@@ -138,10 +172,15 @@ export function useCatalogueState(
       source: localFallbackGames.length > 0 ? "local" : "steam-store",
     };
   }, [
-    catalogueQuery.data,
+    activeCatalogueData,
+    canUseSearchFallback,
+    catalogueRequestMeta.requestedChunkOffset,
+    catalogueRequestMeta.requestedLimit,
+    expandedData,
     fallbackGames,
     isFallbackMode,
     localFallbackGames.length,
+    steamSearchQuery.data,
   ]);
 
   const facetsQuery = useGamesQuery(
@@ -164,7 +203,8 @@ export function useCatalogueState(
   const displayedChunkOffsetRef = useRef(0);
   const displayedPageRef = useRef(1);
   const hasFreshCatalogueData =
-    Boolean(catalogueQuery.data) && !catalogueQuery.isPlaceholderData;
+    Boolean(activeCatalogueData) &&
+    (Boolean(expandedData) || !catalogueQuery.isPlaceholderData);
   if (hasFreshCatalogueData) {
     displayedChunkOffsetRef.current = catalogueRequestMeta.requestedChunkOffset;
     displayedPageRef.current = effectiveCataloguePage;
@@ -189,13 +229,17 @@ export function useCatalogueState(
     }
   }, [catalogueQuery.data?.facets, enabled, facetsQuery.data?.facets]);
 
-  const hasAnyCatalogueData = Boolean(catalogueQuery.data) || fallbackGames.length > 0;
-  const isSteamFallbackLoading = shouldSearchSteam && steamSearchQuery.isFetching;
-  const isCatalogueRefreshing = catalogueQuery.isFetching || isSteamFallbackLoading;
+  const hasAnyCatalogueData =
+    Boolean(activeCatalogueData) ||
+    (isFallbackMode && fallbackGames.length > 0);
+  const isCatalogueRefreshing =
+    !isCurrentQuery || catalogueQuery.isFetching || isExpansionPending;
   // Só cobre a lista com skeleton quando não há absolutamente nada para
   // mostrar. Refetch com dado anterior na tela vira indicador sutil.
   const shouldShowCatalogueLoading =
-    (!hasAnyCatalogueData && !catalogueQuery.isError) || isSteamFallbackLoading;
+    !isCurrentQuery ||
+    (!hasAnyCatalogueData && !catalogueQuery.isError) ||
+    isExpansionPending;
 
   const handleCatalogueFiltersChange = useCallback(
     (filters: CatalogueFilters) => {
@@ -215,8 +259,12 @@ export function useCatalogueState(
   }, []);
 
   const handleCatalogueRetry = useCallback(() => {
-    void Promise.all([catalogueQuery.refetch(), facetsQuery.refetch()]);
-  }, [catalogueQuery, facetsQuery]);
+    void Promise.all([
+      catalogueQuery.refetch(),
+      expandedCatalogueQuery.isError ? expandedCatalogueQuery.refetch() : Promise.resolve(),
+      facetsQuery.refetch(),
+    ]);
+  }, [catalogueQuery, expandedCatalogueQuery, facetsQuery]);
 
   return {
     catalogueDatabase: resolvedCatalogueDatabase,
@@ -227,11 +275,12 @@ export function useCatalogueState(
     shouldShowCatalogueLoading,
     isCatalogueRefreshing,
     hasCatalogueError:
+      isCurrentQuery &&
       catalogueQuery.isError &&
       fallbackGames.length === 0 &&
       (!shouldSearchSteam || steamSearchQuery.isError),
     hasCatalogueRefreshError:
-      catalogueQuery.isRefetchError && !isFallbackMode,
+      isCurrentQuery && catalogueQuery.isRefetchError && !isFallbackMode,
     hasCatalogueFacetsError: facetsQuery.isError && !facetsQuery.data && !lastCatalogueFacets,
     onCatalogueRetry: handleCatalogueRetry,
     shouldPulseCatalogueLoading:
