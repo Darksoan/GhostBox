@@ -262,10 +262,82 @@ fn find_app_blob(
     }
 }
 
-/// Remove o que o Windows nao aceita em nome de pasta e apara pontos/espacos
+/// Translitera um caractere latino acentuado/simbolo comum para ASCII.
+/// `None` = sem equivalente (o chamador decide: `_` ou descarte).
+fn transliterate_to_ascii(character: char) -> Option<&'static str> {
+    match character {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' | 'ǎ' => Some("a"),
+        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' | 'Ǎ' => Some("A"),
+        'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => Some("e"),
+        'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' => Some("E"),
+        'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' | 'ǐ' => Some("i"),
+        'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' | 'Ǐ' => Some("I"),
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' | 'ǒ' => Some("o"),
+        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ō' | 'Ŏ' | 'Ő' | 'Ǒ' => Some("O"),
+        'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => Some("u"),
+        'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' => Some("U"),
+        'ý' | 'ÿ' | 'ŷ' => Some("y"),
+        'Ý' | 'Ŷ' => Some("Y"),
+        'ñ' | 'ń' | 'ņ' | 'ň' => Some("n"),
+        'Ñ' | 'Ń' | 'Ņ' | 'Ň' => Some("N"),
+        'ç' | 'ć' | 'ĉ' | 'ċ' | 'č' => Some("c"),
+        'Ç' | 'Ć' | 'Ĉ' | 'Ċ' | 'Č' => Some("C"),
+        'ß' => Some("ss"),
+        'æ' => Some("ae"),
+        'Æ' => Some("AE"),
+        'œ' => Some("oe"),
+        'Œ' => Some("OE"),
+        'ð' => Some("d"),
+        'Ð' => Some("D"),
+        'þ' => Some("th"),
+        'Þ' => Some("TH"),
+        'ł' => Some("l"),
+        'Ł' => Some("L"),
+        'š' | 'ś' | 'ş' | 'ș' => Some("s"),
+        'Š' | 'Ś' | 'Ş' | 'Ș' => Some("S"),
+        'ž' | 'ź' | 'ż' => Some("z"),
+        'Ž' | 'Ź' | 'Ż' => Some("Z"),
+        'ğ' => Some("g"),
+        'Ğ' => Some("G"),
+        'ı' => Some("i"),
+        '™' | '®' | '©' => Some(""),
+        _ => None,
+    }
+}
+
+/// Nomes reservados do Windows (independentemente de extensão): criar pasta com
+/// um deles falha ou resolve para o dispositivo. Prefixa `_` nesses casos.
+fn is_windows_reserved_name(name: &str) -> bool {
+    let base = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+    matches!(
+        base.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4" | "COM5"
+            | "COM6" | "COM7" | "COM8" | "COM9" | "LPT1" | "LPT2" | "LPT3" | "LPT4"
+            | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9"
+    )
+}
+
+/// Remove o que o Windows não aceita em nome de pasta e apara pontos/espaços
 /// finais, que o explorer descarta silenciosamente e quebrariam o `installdir`.
+///
+/// Canônico e ASCII-seguro: títulos de catálogo com acento/`™`/símbolos (ex.
+/// `DARK SOULSõo REMASTER` gerado por mojibake UTF-8↔Latin-1) caem sempre no
+/// mesmo nome ASCII da pasta real do appinfo, em vez de criar uma segunda
+/// pasta que a Steam nunca reconhece e que quebra a retentativa.
 pub fn sanitize_install_dir(name: &str) -> String {
-    let cleaned: String = name
+    let mut ascii = String::with_capacity(name.len());
+    for character in name.chars() {
+        if character.is_ascii() {
+            ascii.push(character);
+        } else if let Some(mapped) = transliterate_to_ascii(character) {
+            ascii.push_str(mapped);
+        } else {
+            // Sem equivalente ASCII (CJK, emoji, mojibake residual): `_` é
+            // seguro e determinístico — nunca cria pasta que o ACF não aponte.
+            ascii.push('_');
+        }
+    }
+    let cleaned: String = ascii
         .chars()
         .map(|character| {
             if INVALID_PATH_CHARS.contains(&character) || (character as u32) < 0x20 {
@@ -275,11 +347,31 @@ pub fn sanitize_install_dir(name: &str) -> String {
             }
         })
         .collect();
-    cleaned
-        .trim()
-        .trim_end_matches(['.', ' '])
-        .trim()
-        .to_string()
+    // Colapsa espaços repetidos do transliterate (ex. `™` removido deixa vazio
+    // duplo) sem mudar nomes que já eram canônicos (`Portal 2` intacto).
+    let mut collapsed = String::with_capacity(cleaned.len());
+    let mut previous_was_space = false;
+    for character in cleaned.chars() {
+        if character == ' ' {
+            if previous_was_space {
+                continue;
+            }
+            previous_was_space = true;
+        } else {
+            previous_was_space = false;
+        }
+        collapsed.push(character);
+    }
+    let trimmed = collapsed.trim().trim_end_matches(['.', ' ']).trim();
+    // Limite defensivo: caminhos `steamapps\common\<dir>\<exe>` estouram
+    // `MAX_PATH` em títulos longos de catálogo; 64 chars bastam e continuam
+    // legíveis. Corta em limite de caractere, nunca no meio de UTF-8.
+    let limited: String = trimmed.chars().take(64).collect();
+    let limited = limited.trim_end_matches(['.', ' ']);
+    if is_windows_reserved_name(limited) {
+        return format!("_{limited}");
+    }
+    limited.to_string()
 }
 
 /// Carrega o blob KV de um app ja desembrulhado do no raiz `appinfo`.
@@ -527,6 +619,23 @@ mod tests {
         );
         assert_eq!(sanitize_install_dir("Game/Name"), "Game_Name");
         assert_eq!(sanitize_install_dir("trailing..."), "trailing");
+    }
+
+    #[test]
+    fn sanitize_is_ascii_deterministic_for_catalogue_titles() {
+        // Mojibake UTF-8↔Latin-1 (`õ`): cai no mesmo ASCII, sem segunda pasta.
+        assert_eq!(sanitize_install_dir("DARK SOULSõo_REMASTER"), "DARK SOULSoo_REMASTER");
+        assert_eq!(sanitize_install_dir("DARK SOULSÃO REMASTER"), "DARK SOULSAO REMASTER");
+        // Símbolos sem equivalente somem sem deixar espaço duplo.
+        assert_eq!(sanitize_install_dir("DARK SOULS™ REMASTER"), "DARK SOULS REMASTER");
+        assert_eq!(sanitize_install_dir("Rematch®"), "Rematch");
+        assert_eq!(sanitize_install_dir("São Paulo: Aventura"), "Sao Paulo_ Aventura");
+        // Reservados do Windows não podem virar pasta.
+        assert_eq!(sanitize_install_dir("CON"), "_CON");
+        assert_eq!(sanitize_install_dir("nul"), "_nul");
+        // Títulos longos de catálogo não estouram MAX_PATH.
+        assert_eq!(sanitize_install_dir(&"A".repeat(200)).len(), 64);
+        assert!(sanitize_install_dir("艾尔登法环").chars().all(|c| c == '_'));
     }
 
     /// `read_public_depots` le do disco, entao o teste precisa de uma arvore

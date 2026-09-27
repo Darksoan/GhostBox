@@ -199,8 +199,28 @@ function sanitizeDependencyMessage(value: unknown): string {
     .replace(/\bLuaTools\b/gi, "dependências");
 }
 
-function resolvePlaytimeAppId(game: GhostBoxGame) {
-  const appId = (game.appId || "").trim();
+/**
+ * Erros do pipeline adicionar/instalar chegam com detalhe técnico (caminhos
+ * `E:\...`, `Status`, nomes de depot). Na UI eles viram mensagem simples: só
+ * os 3 casos acionáveis passam (item bloqueado, Steam não encontrada, jogo já
+ * instalado em outra biblioteca); o resto cai no genérico do chamador. O
+ * detalhe continua no log/evento `download-progress` para diagnóstico.
+ */
+function simplifyAddGameError(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  const message = sanitizeDependencyMessage(value);
+  if (!message) return "";
+  if (
+    /não é um jogo/i.test(message) ||
+    /Steam não foi encontrad/i.test(message) ||
+    /ja esta instalado na biblioteca/i.test(message)
+  ) {
+    return message;
+  }
+  return "";
+}
+
+function resolvePlaytimeAppId(game: GhostBoxGame) {  const appId = (game.appId || "").trim();
   if (/^\d+$/.test(appId)) return appId;
   const fromId = game.id.replace(/^steam-/, "").trim();
   return /^\d+$/.test(fromId) ? fromId : appId;
@@ -1940,7 +1960,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return next;
         });
         const errorMessage =
-          sanitizeDependencyMessage(event.error) ||
+          simplifyAddGameError(event.error) ||
           "Não foi possível concluir a instalação do jogo.";
         showToast("Falha na instalação", errorMessage, "error");
         pushAppNotification({
@@ -2011,7 +2031,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : await addGameViaLuaTools(game);
         if (!result.success) {
           const errorMessage =
-            sanitizeDependencyMessage(result.error) ||
+            simplifyAddGameError(result.error) ||
             "Não foi possível adicionar o jogo à Biblioteca.";
           showToast("Falha ao adicionar", errorMessage, "error");
           pushAppNotification({
@@ -2097,10 +2117,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         const errorMessage =
           error instanceof Error
-            ? sanitizeDependencyMessage(error.message) ||
+            ? simplifyAddGameError(error.message) ||
               "Não foi possível adicionar o jogo à Biblioteca."
             : typeof error === "string"
-              ? sanitizeDependencyMessage(error) ||
+              ? simplifyAddGameError(error) ||
                 "Não foi possível adicionar o jogo à Biblioteca."
               : "Não foi possível adicionar o jogo à Biblioteca.";
         showToast(

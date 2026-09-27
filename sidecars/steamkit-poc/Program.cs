@@ -190,6 +190,9 @@ static async Task RunWorkerAsync()
                 MaxDownloadBytes = root.TryGetProperty("MaxDownloadBytes", out var maxDownloadBytes)
                     ? maxDownloadBytes.GetUInt64()
                     : 0,
+                MaxFileOvershootBytes = root.TryGetProperty("MaxFileOvershootBytes", out var maxFileOvershootBytes)
+                    ? maxFileOvershootBytes.GetUInt64()
+                    : 0,
             };
 
             var cancellation = new CancellationTokenSource();
@@ -285,6 +288,13 @@ public class Config
 
     public int ParallelChunks { get; set; } = MaxParallelChunks;
     /// Zero baixa o depot inteiro. Um valor positivo encerra de forma normal
-    /// após validar/baixar até esse total de bytes completos de chunks.
+    /// após o orçamento, mas sempre no limite de arquivo: o arquivo admitido
+    /// fecha inteiro mesmo que exceda o orçamento em alguns bytes. Arquivo
+    /// parcial em disco vira revalidação/falha na retomada, então parcial não
+    /// é opção — ou o arquivo entra inteiro ou não entra.
     public ulong MaxDownloadBytes { get; set; }
+    /// Teto extra (em bytes) que o arquivo admitido pode estourar além de
+    /// `MaxDownloadBytes` para fechar inteiro. Protege o bootstrap de um
+    /// arquivo gigante (GB) logo no início da fila. Zero = sem teto.
+    public ulong MaxFileOvershootBytes { get; set; }
 }

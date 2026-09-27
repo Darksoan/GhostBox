@@ -23,6 +23,11 @@ Steam bootstrap completion:
 Steam scan reads partial ACF as `status: queued` -> `parse_app_manifest` in `src-tauri/src/steam.rs`.
 Chunk resume/validation state -> `src-tauri/src/chunk_index.rs`
 
+Bootstrap is file-granular, never partial: `ProduceChunksAsync` in `sidecars/steamkit-poc/SteamKitPocRunner.cs` admits whole files (overshoot allowed, capped by `MaxFileOvershootBytes` from `STEAM_BOOTSTRAP_OVERSHOOT_BYTES` 64 MiB in `cdndownload.rs`); oversized files are skipped entirely, never left half-written.
+Install-dir reconciliation: `resolve_effective_install_dir` in `cdndownload.rs` (pending ACF vs canonical `resolve_install_dir`); on divergence keeps the folder with more bytes, removes the loser only if safe bootstrap orphan (`is_safe_bootstrap_orphan`: has `.ghostbox-chunks.json`, no `.exe`).
+Canonical folder names: `sanitize_install_dir`/`transliterate_to_ascii` in `steam_appinfo.rs` (ASCII-safe, deterministic; mojibake-proof).
+UI errors are simple: `simplifyAddGameError` in `src/context/AppDataContext.tsx` (only item-blocked / Steam-missing / already-installed pass through; rest use the generic fallback).
+
 ## Steam Libraries
 
 `resolve_steam_path`, `steamapps_path` -> `src-tauri/src/lib.rs` (around 270-390)
@@ -32,6 +37,15 @@ Default install: `LastInstallFolderIndex` from `userdata/*/config/localconfig.vd
 `AppInfo` / `resolve_install_dir` -> `src-tauri/src/steam_appinfo.rs`
 Public depot/build metadata -> `src-tauri/src/steam_pics.rs`
 Manifest package selection -> `src-tauri/src/manifest_sources.rs`
+
+## Executável personalizado e conquistas locais (estado atual)
+
+Menu da engrenagem `GameBackupOptionsModal` -> `src/components/modals/GameBackupOptionsModal.tsx` (around 18-44, 205-234); aberto por `GameModal` (around 1922). Sem seletor de executável atualmente; strings legadas em `src/i18n.ts` (`gameSettings`). O frontend já usa `@tauri-apps/plugin-dialog` em `ghostboxApi.selectSteamPath` (`src/lib/ghostboxApi.tauri.ts`, around 1342).
+`GameModal.ModalActions` (`src/components/modals/GameModal.tsx`, around 746-883) só exibe Jogar quando `isInstalled && isLocallyInstalled`; `ContentOverlay` (around 181-190) fornece as flags, `AppDataContext.playableGameAppIds` (around 1720) habilita Jogar nos cards/menus. Vínculo externo requer atualizar estes gates. `AppDataContext.queueGame` (around 2004-2032) envia jogo não-possuído para LuaTools; `ghostbox_library_register_steam_game` (`ghostbox_library.rs`, around 132-167) registra sem download.
+`list_executables_blocking` -> `src-tauri/src/ghostbox_library.rs` (around 169-374): scan/score privado, sem comando Tauri; `sanitize_ghostbox_library_game` (around 59-75) remove `customExePath`/`launchArguments`; `merge_library_games` / `build_scan_games_with_plugins` (around 484-633) mesclam jogos por AppID e preservam marcadores LuaTools, não overrides.
+Play: `AppDataContext.handlePlayGame` -> `ghostboxApi.launchGame` -> `game_launch` / `launch_game_from_value` in `src-tauri/src/lib.rs` (around 771-943). O ramo custom está inativo (`custom_exe = None`); se reativado sem revisão, exige `installPath` e chama `goldberg::prepare_game_for_offline_launch`, que substitui uma DLL. O ramo padrão usa `steam://rungameid/{appid}`.
+Monitor: `playtime::open_game_playtime_session` / `monitor_game_process` (`src-tauri/src/playtime.rs`, around 249-295, 747-782) -> `achievement_monitor::start_local_achievement_monitor` (`src-tauri/src/achievement_monitor.rs`) -> `steam_appcache::read_local_unlocked_achievement_titles` (`src-tauri/src/steam_appcache.rs`, around 535-561), lendo o cache local da Steam por AppID; também lê saves Goldberg. Notificação UI -> `AppDataContext` (around 1495-1545). `steam_get_account_stats` (`src-tauri/src/steam.rs`, around 1398-1529) usa jogos possuídos via Web API/proxy, diferentemente do cache local.
+Detecção de stplug-in: `read_plugin_added_steam_app_ids` em `src-tauri/src/ghostbox_library.rs` (around 392-439) lê `config/stplug-in/*.lua`; isso não confirma o estado do OpenSteamTool nem a escrita remota de conquistas.
 
 ## Home Steam Wishlist
 
@@ -93,6 +107,7 @@ Progress export/import -> `export_game_profile_progress` / `import_game_profile_
 Cloud-only status metadata -> `backup::backup_get_settings` in `src-tauri/src/backup.rs` -> `normalize_backup_settings` / `save_backup_record` in `src-tauri/src/lib.rs` (around 59-160, 770); frontend `AppDataContext.backupSettings` -> `SubscriptionPlans` in `src/components/subscription/SubscriptionPlans.tsx`. No local backup root/details API.
 Server authorization -> `workers/subscriptions/src/index.ts` (`requirePremiumSession`, `handleCloudSavesList/Upload/Download/Delete` around 669, 2085-2300).
 Single-save retention -> `workers/subscriptions/src/index.ts` (`MAX_CLOUD_SAVES_PER_GAME=1`, `pruneCloudSavesForGame`, scheduled `pruneLegacyCloudSaves`, `handleCloudGameSavesDelete`; `/cloud-saves/game/:appId`). GET remains read-only; legacy cleanup keeps the newest save. Tests -> `workers/subscriptions/test/cloud-saves-d1.test.ts`.
+Delete flow: `SubscriptionPlans.confirmBackupAction` -> `ghostboxApi.deleteCloudGameSaves(appId)` -> `cloud_delete_game_saves` in `src-tauri/src/cloud_save.rs` (DELETE `{base}/cloud-saves/game/{appId}`, errors via `format_cloud_api_error`) -> worker `handleCloudGameSavesDelete` (always 200, even with 0 rows; `deletedSaves: 0` shows an "already removed" info toast). No CI deploy for this worker — deploy is manual (`wrangler deploy` from `workers/subscriptions`). Incident 2026-09-27: prod ran a build without the bulk-delete route (added in `73ffa46`), so DELETE fell into the `{ error: "Not found" }` 404 fallback; unauthenticated probe distinguishes stale (404) from live (401 `unauthorized`).
 
 ## Windows Startup
 

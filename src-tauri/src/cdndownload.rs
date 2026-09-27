@@ -15,6 +15,11 @@ const POC_RELATIVE_PATH: &str = "../sidecars/steamkit-worker/steamkit-poc.exe";
 const MAX_PARALLEL_CHUNKS: u32 = 32;
 /// O GhostBox só faz o bootstrap. A Steam recebe o ACF parcial e baixa o resto.
 const STEAM_BOOTSTRAP_BYTES: u64 = 1024 * 1024;
+/// Quanto o arquivo admitido pode estourar o bootstrap para fechar inteiro.
+/// Arquivo parcial em disco vira revalidação/falha na retomada — ou entra
+/// inteiro ou não entra. O teto impede um arquivo gigante no início da fila
+/// de transformar o bootstrap de 1 MiB num download de GB.
+const STEAM_BOOTSTRAP_OVERSHOOT_BYTES: u64 = 64 * 1024 * 1024;
 
 static ACTIVE_DOWNLOAD_PROCESSES: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
 static CANCELLED_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -1256,6 +1261,102 @@ fn install_library_for_app(steam_path: &str, app_id: &str) -> PathBuf {
         })
 }
 
+/// Resolve o `installdir` efetivo e, quando o ACF pendente diverge do canônico,
+/// devolve a pasta menor para limpeza segura.
+///
+/// Tentativas com e sem `appinfo.vdf` em cache resolviam nomes diferentes (ex.
+/// título de catálogo com mojibake `DARK SOULSõo_REMASTER` vs `installdir` real
+/// `DARK SOULS REMASTER`), e cada uma criava sua pasta — a retentativa então
+/// falhava ou a Steam montava a pasta errada. Regra: **fica a que tem mais
+/// bytes**; a menor só é removida se for bootstrap parcial nosso (sem `.exe`,
+/// com o índice `.ghostbox-chunks.json`), nunca um jogo real da Steam.
+fn resolve_effective_install_dir(
+    library_root: &Path,
+    app_id: &str,
+    app_info: Option<&crate::steam_appinfo::AppInfo>,
+    fallback_title: &str,
+) -> (String, Option<PathBuf>) {
+    let canonical = crate::steam_appinfo::resolve_install_dir(app_info, fallback_title, app_id);
+    let pending = crate::steam_appmanifest::read_install_dir(library_root, app_id);
+    if pending.trim().is_empty() || pending == canonical {
+        return (canonical, None);
+    }
+    let pending_path = crate::steam_appmanifest::install_dir_path(library_root, &pending);
+    let canonical_path = crate::steam_appmanifest::install_dir_path(library_root, &canonical);
+    let pending_exists = pending_path.is_dir();
+    let canonical_exists = canonical_path.is_dir();
+    // Só existe uma (ou nenhuma): usa a existente, sem criar a segunda pasta.
+    if pending_exists && !canonical_exists {
+        return (pending, None);
+    }
+    if canonical_exists && !pending_exists {
+        return (canonical, None);
+    }
+    if !pending_exists && !canonical_exists {
+        // Nenhuma existe ainda: prefere o canônico (ASCII determinístico) para
+        // não perpetuar nome com mojibake do ACF pendente.
+        return (canonical, None);
+    }
+    // Ambas existem: fica a que tem mais bytes em disco.
+    let pending_size = crate::steam_appmanifest::installed_size_on_disk(library_root, &pending);
+    let canonical_size =
+        crate::steam_appmanifest::installed_size_on_disk(library_root, &canonical);
+    if pending_size >= canonical_size {
+        let orphan = if is_safe_bootstrap_orphan(&canonical_path) {
+            Some(canonical_path)
+        } else {
+            None
+        };
+        (pending, orphan)
+    } else {
+        let orphan = if is_safe_bootstrap_orphan(&pending_path) {
+            Some(pending_path)
+        } else {
+            None
+        };
+        (canonical, orphan)
+    }
+}
+
+/// Pasta só é órfã removível se for claramente bootstrap parcial nosso: tem o
+/// índice de chunks do worker e nenhum executável. Qualquer pasta com `.exe`
+/// pode ser jogo real — nunca apagar, só deixar de lado.
+fn is_safe_bootstrap_orphan(dir: &Path) -> bool {
+    dir.join(".ghostbox-chunks.json").is_file() && !orphan_dir_has_executable(dir)
+}
+
+fn orphan_dir_has_executable(dir: &Path) -> bool {
+    fn scan(directory: &Path, depth: u32) -> bool {
+        if depth > 3 {
+            return false;
+        }
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            return false;
+        };
+        let mut subdirectories = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                // Nosso stash de índices não conta como conteúdo real.
+                if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+                    if name == ".ghostbox" {
+                        continue;
+                    }
+                }
+                subdirectories.push(path);
+            } else if path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+            {
+                return true;
+            }
+        }
+        subdirectories.into_iter().any(|path| scan(&path, depth + 1))
+    }
+    scan(dir, 0)
+}
+
 /// Instala um jogo recém-adicionado diretamente em uma biblioteca já conhecida
 /// pela Steam. Um ACF pendente tem prioridade para respeitar o destino escolhido
 /// no cliente; sem ele, usamos a biblioteca favorita (`LastInstallFolderIndex`
@@ -1536,16 +1637,15 @@ pub async fn cdndownload_download_game(
     let library_root =
         normalize_library_root(&PathBuf::from(downloads_root.trim_end_matches(['\\', '/'])));
     let app_info = crate::steam_appinfo::read_app_info(&steam_path, &app_id);
-    let pending_install_dir = crate::steam_appmanifest::read_install_dir(&library_root, &app_id);
-    let install_dir = if pending_install_dir.trim().is_empty() {
-        crate::steam_appinfo::resolve_install_dir(
-            app_info.as_ref(),
-            game_title.as_deref().unwrap_or_default(),
-            &app_id,
-        )
-    } else {
-        pending_install_dir
-    };
+    // Quando o ACF pendente diverge do canônico (ex. mojibake de uma tentativa
+    // sem appinfo em cache), fica a pasta com mais bytes; a menor só volta
+    // como órfã quando for bootstrap parcial nosso — nunca jogo real.
+    let (install_dir, orphan_install_dir) = resolve_effective_install_dir(
+        &library_root,
+        &app_id,
+        app_info.as_ref(),
+        game_title.as_deref().unwrap_or_default(),
+    );
     let install_path = crate::steam_appmanifest::install_dir_path(&library_root, &install_dir);
     let install_path_text = install_path.to_string_lossy().into_owned();
 
@@ -1729,6 +1829,7 @@ pub async fn cdndownload_download_game(
             "OutputDir": depot_output,
             "ParallelChunks": parallel_chunks,
             "MaxDownloadBytes": remaining_bootstrap_bytes,
+            "MaxFileOvershootBytes": STEAM_BOOTSTRAP_OVERSHOOT_BYTES,
         });
         write_worker_command(&worker_stdin, &command)?;
 
@@ -1838,6 +1939,19 @@ pub async fn cdndownload_download_game(
             bootstrap_is_partial.then_some((bootstrap_downloaded_bytes, total_download_bytes)),
         )
     };
+
+    // A pasta perdedora da reconciliação sai de cena quando o ACF foi escrito
+    // para a vencedora — best-effort e só se for bootstrap parcial nosso (sem
+    // `.exe`), nunca um jogo real. Sem ACF válido, mantém tudo para retry.
+    let integration_ok = steam_integration
+        .get("Status")
+        .and_then(serde_json::Value::as_str)
+        == Some("ok");
+    if integration_ok {
+        if let Some(orphan) = orphan_install_dir {
+            let _ = std::fs::remove_dir_all(&orphan);
+        }
+    }
 
     Ok(serde_json::json!({
         "Type": "complete",
@@ -2003,9 +2117,30 @@ fn finalize_steam_integration(
 mod tests {
     use super::{
         cached_depot_size, ensure_inside_downloads_root, install_library_for_app,
-        migrate_nested_library, normalize_library_root, store_depot_size,
+        is_safe_bootstrap_orphan, migrate_nested_library, normalize_library_root,
+        resolve_effective_install_dir, store_depot_size,
     };
     use std::path::{Path, PathBuf};
+
+    fn write_pending_acf(library: &Path, app_id: &str, install_dir: &str) {
+        let steamapps = library.join("steamapps");
+        std::fs::create_dir_all(&steamapps).unwrap();
+        std::fs::write(
+            steamapps.join(format!("appmanifest_{app_id}.acf")),
+            format!("\"AppState\"\n{{\n\t\"appid\"\t\t\"{app_id}\"\n\t\"installdir\"\t\t\"{install_dir}\"\n}}\n"),
+        )
+        .unwrap();
+    }
+
+    fn make_game_dir(library: &Path, install_dir: &str, bytes: usize, with_exe: bool) -> PathBuf {
+        let dir = library.join("steamapps").join("common").join(install_dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("data.bin"), vec![0xABu8; bytes]).unwrap();
+        if with_exe {
+            std::fs::write(dir.join("game.exe"), b"fake").unwrap();
+        }
+        dir
+    }
 
     fn temp_root(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -2066,9 +2201,99 @@ mod tests {
         std::fs::remove_dir_all(root).ok();
     }
 
+    fn app_info_with_install_dir(install_dir: &str) -> crate::steam_appinfo::AppInfo {
+        crate::steam_appinfo::AppInfo {
+            install_dir: install_dir.to_string(),
+            build_id: "1".to_string(),
+            name: "Game".to_string(),
+        }
+    }
+
     #[test]
-    fn normalizes_a_root_inside_an_official_library() {
-        assert_eq!(
+    fn effective_install_dir_prefers_appinfo_when_no_pending_acf() {
+        let root = temp_root("eff-install-dir");
+        let library = root.join("Lib");
+        std::fs::create_dir_all(library.join("steamapps")).unwrap();
+        let info = app_info_with_install_dir("DARK SOULS REMASTER");
+        let (dir, orphan) =
+            resolve_effective_install_dir(&library, "570940", Some(&info), "DARK SOULSõo REMASTER");
+        assert_eq!(dir, "DARK SOULS REMASTER");
+        assert!(orphan.is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn effective_install_dir_reuses_existing_pending_folder() {
+        let root = temp_root("eff-install-pending");
+        let library = root.join("Lib");
+        make_game_dir(&library, "Old Folder", 16, false);
+        write_pending_acf(&library, "570940", "Old Folder");
+        let info = app_info_with_install_dir("New Folder");
+        let (dir, orphan) =
+            resolve_effective_install_dir(&library, "570940", Some(&info), "New Folder");
+        // Só a pendente existe: usa ela, sem criar segunda pasta.
+        assert_eq!(dir, "Old Folder");
+        assert!(orphan.is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn effective_install_dir_keeps_the_larger_folder() {
+        let root = temp_root("eff-install-larger");
+        let library = root.join("Lib");
+        // ACF pendente aponta para a pasta com mojibake (menor).
+        make_game_dir(&library, "DARK SOULSoo_REMASTER", 16, false);
+        std::fs::write(
+            library
+                .join("steamapps")
+                .join("common")
+                .join("DARK SOULSoo_REMASTER")
+                .join(".ghostbox-chunks.json"),
+            b"{}",
+        )
+        .unwrap();
+        write_pending_acf(&library, "570940", "DARK SOULSoo_REMASTER");
+        // Pasta canônica maior, com executável (jogo real).
+        make_game_dir(&library, "DARK SOULS REMASTER", 4096, true);
+        let info = app_info_with_install_dir("DARK SOULS REMASTER");
+        let (dir, orphan) =
+            resolve_effective_install_dir(&library, "570940", Some(&info), "Whatever");
+        assert_eq!(dir, "DARK SOULS REMASTER");
+        // A menor é bootstrap nosso: liberada para limpeza.
+        assert!(orphan.is_some());
+
+        // Cenário inverso: pendente maior vence.
+        let root2 = temp_root("eff-install-larger2");
+        let library2 = root2.join("Lib");
+        make_game_dir(&library2, "Pending Big", 4096, false);
+        write_pending_acf(&library2, "570940", "Pending Big");
+        make_game_dir(&library2, "Canonical Small", 16, false);
+        let info2 = app_info_with_install_dir("Canonical Small");
+        let (dir2, orphan2) =
+            resolve_effective_install_dir(&library2, "570940", Some(&info2), "Whatever");
+        assert_eq!(dir2, "Pending Big");
+        assert!(orphan2.is_none());
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(root2);
+    }
+
+    #[test]
+    fn bootstrap_orphan_never_covers_a_real_game() {
+        let root = temp_root("eff-orphan");
+        let real = make_game_dir(&root, "Real Game", 32, true);
+        std::fs::write(real.join(".ghostbox-chunks.json"), b"{}").unwrap();
+        // Mesmo com índice nosso, pasta com .exe não é removível.
+        assert!(!is_safe_bootstrap_orphan(&real));
+        let partial = make_game_dir(&root, "Partial", 32, false);
+        std::fs::write(partial.join(".ghostbox-chunks.json"), b"{}").unwrap();
+        assert!(is_safe_bootstrap_orphan(&partial));
+        let plain = make_game_dir(&root, "Plain", 32, false);
+        assert!(!is_safe_bootstrap_orphan(&plain));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn normalizes_a_root_inside_an_official_library() {        assert_eq!(
             normalize_library_root(Path::new("E:\\SteamLibrary\\steamapps\\common")),
             PathBuf::from("E:\\SteamLibrary")
         );

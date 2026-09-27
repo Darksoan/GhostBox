@@ -368,11 +368,21 @@ export function SubscriptionPlans({
         cloudSavesRequestIdRef.current += 1;
         setCloudSaves((current) => current.filter((save) => save.appId !== appId));
         refreshCloudSaves();
-        showToast(
-          copy("Backup excluído", "Backup deleted"),
-          copy(`Backup de "${title}" removido da nuvem.`, `Cloud backup for "${title}" deleted.`),
-          "success",
-        );
+        if (result.deletedSaves > 0) {
+          showToast(
+            copy("Backup excluído", "Backup deleted"),
+            copy(`Backup de "${title}" removido da nuvem.`, `Cloud backup for "${title}" deleted.`),
+            "success",
+          );
+        } else {
+          // O servidor não tinha mais nada para este jogo (ex.: exclusão
+          // concorrente ou linha legada) — não é um sucesso falso, só informa.
+          showToast(
+            copy("Backup já removido", "Backup already removed"),
+            copy(`Nenhum backup de "${title}" restava na nuvem. A lista foi atualizada.`, `No cloud backup for "${title}" remained. The list was refreshed.`),
+            "info",
+          );
+        }
       }
       setBackupConfirm(null);
       setBackupError(null);

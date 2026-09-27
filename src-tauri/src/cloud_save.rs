@@ -339,6 +339,9 @@ fn format_cloud_api_error(body: &str, status: u16) -> String {
             }
             "backup_too_large" => "Backup em nuvem excede o limite de 50 MB.".to_string(),
             "empty_backup" => "Nenhum save encontrado para backup em nuvem.".to_string(),
+            "not_found" | "Not found" => {
+                "Backup não encontrado na nuvem. Atualize a lista e tente novamente.".to_string()
+            }
             "storage_upload_failed" => "Falha ao enviar o backup para a nuvem.".to_string(),
             "invalid_profile_image_type" => "A imagem deve estar em JPEG, PNG ou WebP.".to_string(),
             "empty_profile_image" => "A imagem selecionada está vazia.".to_string(),

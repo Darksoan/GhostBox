@@ -970,42 +970,75 @@ public class SteamKitPocRunner
             async Task ProduceChunksAsync()
             {
                 var plannedBytes = (ulong)Math.Max(0, Interlocked.Read(ref downloadedBytes));
+                var admittedFiles = 0;
                 try
                 {
                     foreach (var state in fileStates)
                     {
                         if (state.PreparationFailed) continue;
 
+                        // Chunks que ainda faltam neste arquivo. Arquivos já
+                        // completos ficam fora da fila (o prepass já os contou).
+                        ulong missingBytes = 0;
+                        var missing = new List<int>(state.File.Chunks.Count);
                         for (var chunkIndex = 0; chunkIndex < state.File.Chunks.Count; chunkIndex++)
                         {
                             if (state.ValidChunks[chunkIndex]) continue;
+                            missing.Add(chunkIndex);
+                            missingBytes += state.File.Chunks[chunkIndex].UncompressedLength;
+                        }
+                        if (missing.Count == 0) continue;
 
-                            var chunkBytes = state.File.Chunks[chunkIndex].UncompressedLength;
-                            if (_config.MaxDownloadBytes > 0)
+                        if (_config.MaxDownloadBytes > 0)
+                        {
+                            // Orçamento esgotado: nenhum arquivo novo entra.
+                            if (plannedBytes >= _config.MaxDownloadBytes)
                             {
-                                if (plannedBytes >= _config.MaxDownloadBytes)
-                                {
-                                    Interlocked.Exchange(ref reachedDownloadLimit, 1);
-                                    channel.Writer.TryComplete();
-                                    return;
-                                }
-                                if (chunkBytes > _config.MaxDownloadBytes - plannedBytes)
-                                {
-                                    // Um chunk indivisivel pode exceder o orçamento inteiro.
-                                    // Pule-o e tente os menores em vez de baixar o arquivo todo.
-                                    Interlocked.Exchange(ref reachedDownloadLimit, 1);
-                                    continue;
-                                }
+                                Interlocked.Exchange(ref reachedDownloadLimit, 1);
+                                break;
                             }
+                            // O arquivo admitido fecha inteiro mesmo que estoure
+                            // o orçamento em alguns bytes — arquivo parcial em
+                            // disco vira revalidação/falha na retomada (Steam ou
+                            // GhostBox). O teto existe para um arquivo gigante
+                            // não transformar o bootstrap de 1 MiB num download
+                            // de GB: 0 = sem teto, fecha sempre.
+                            var overshootCap = _config.MaxFileOvershootBytes > 0
+                                ? _config.MaxDownloadBytes + _config.MaxFileOvershootBytes
+                                : ulong.MaxValue;
+                            if (plannedBytes + missingBytes > overshootCap)
+                            {
+                                // Pula este arquivo por inteiro (sem deixar
+                                // parcial) e tenta os próximos, que podem ser
+                                // menores e caber no teto.
+                                Interlocked.Exchange(ref reachedDownloadLimit, 1);
+                                continue;
+                            }
+                        }
 
+                        foreach (var chunkIndex in missing)
+                        {
                             await channel.Writer.WriteAsync(
                                 new ChunkWorkItem(state, chunkIndex),
                                 _cancellationToken);
-                            plannedBytes += chunkBytes;
+                            plannedBytes += state.File.Chunks[chunkIndex].UncompressedLength;
+                        }
+                        admittedFiles++;
+
+                        if (_config.MaxDownloadBytes > 0 && plannedBytes >= _config.MaxDownloadBytes)
+                        {
+                            // Orçamento atingido no limite de arquivo: os
+                            // arquivos admitidos fecham, o resto fica para a
+                            // Steam baixar.
+                            Interlocked.Exchange(ref reachedDownloadLimit, 1);
+                            break;
                         }
                     }
 
                     channel.Writer.TryComplete();
+                    telemetry.Log(
+                        $"budget plan admittedFiles={admittedFiles} plannedBytes={plannedBytes} " +
+                        $"budget={_config.MaxDownloadBytes} overshootCap={_config.MaxFileOvershootBytes}");
                 }
                 catch (Exception ex)
                 {

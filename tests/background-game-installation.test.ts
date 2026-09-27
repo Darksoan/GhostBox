@@ -26,9 +26,15 @@ describe("background game installation", () => {
     );
 
     expect(download).toContain("const STEAM_BOOTSTRAP_BYTES: u64 = 1024 * 1024");
+    expect(download).toContain("const STEAM_BOOTSTRAP_OVERSHOOT_BYTES: u64");
     expect(download).toContain('"MaxDownloadBytes": remaining_bootstrap_bytes');
+    expect(download).toContain('"MaxFileOvershootBytes": STEAM_BOOTSTRAP_OVERSHOOT_BYTES');
     expect(worker).toContain('Type = depotResult.ReachedDownloadLimit ? "partial-complete"');
-    expect(worker).toContain('chunkBytes > _config.MaxDownloadBytes - plannedBytes');
+    // Orçamento por arquivo: o admitido fecha inteiro (overshoot), parcial não
+    // é opção — a lógica antiga por chunk deixava arquivo incompleto em disco.
+    expect(worker).toContain("plannedBytes + missingBytes > overshootCap");
+    expect(worker).toContain("MaxFileOvershootBytes");
+    expect(worker).not.toContain('chunkBytes > _config.MaxDownloadBytes - plannedBytes');
     expect(worker).not.toContain('plannedBytes > 0 && chunkBytes >');
     expect(manifest).toContain('const STATE_FLAG_UPDATE_REQUIRED: &str = "2"');
     expect(manifest).toContain("write_partial_appmanifest");
