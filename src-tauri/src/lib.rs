@@ -159,72 +159,6 @@ fn current_timestamp_string() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-/// Resolve `.` e `..` sem tocar no disco.
-///
-/// `canonicalize` só funciona para caminhos que já existem, e um destino de
-/// escrita normalmente ainda não existe. Sem essa normalização, o `..` chega
-/// intacto em `starts_with`, que compara componente a componente e não o
-/// interpreta: `C:\downloads\..\..\evil` "começa com" `C:\downloads` e passaria
-/// numa checagem de contenção.
-fn normalize_path_lexically(path: &std::path::Path) -> std::path::PathBuf {
-    use std::path::Component;
-
-    let mut normalized = std::path::PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            // `pop` devolve false na raiz, e aí o caminho simplesmente não sobe
-            // mais — quem chama continua vendo algo fora do diretório esperado.
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            other => normalized.push(other.as_os_str()),
-        }
-    }
-    normalized
-}
-
-/// Compara contenção respeitando a sensibilidade a maiúsculas do sistema.
-///
-/// `Path::starts_with` compara componentes byte a byte. No Windows, onde o
-/// filesystem é case-insensitive, isso recusaria `c:\backups` contra
-/// `C:\Backups` — mesmo diretório, resposta errada.
-fn path_starts_with_or_equals(parent: &std::path::Path, child: &std::path::Path) -> bool {
-    #[cfg(windows)]
-    {
-        let lowercased = |path: &std::path::Path| {
-            std::path::PathBuf::from(path.to_string_lossy().to_lowercase())
-        };
-        let parent = lowercased(parent);
-        let child = lowercased(child);
-        child == parent || child.starts_with(parent)
-    }
-    #[cfg(not(windows))]
-    {
-        child == parent || child.starts_with(parent)
-    }
-}
-
-pub(crate) fn is_path_inside_or_equal(
-    parent_path: &std::path::Path,
-    child_path: &std::path::Path,
-) -> bool {
-    // Os dois lados precisam ser normalizados do mesmo jeito: no Windows,
-    // `canonicalize` devolve caminho estendido (`\\?\C:\...`), que nunca casaria
-    // com o outro lado ainda cru. A normalização lexical também não resolve
-    // symlinks — mas, como ela é aplicada aos dois lados, a comparação continua
-    // coerente contra a mesma raiz não resolvida.
-    let (parent, child) = match (parent_path.canonicalize(), child_path.canonicalize()) {
-        (Ok(parent), Ok(child)) => (parent, child),
-        _ => (
-            normalize_path_lexically(parent_path),
-            normalize_path_lexically(child_path),
-        ),
-    };
-
-    path_starts_with_or_equals(&parent, &child)
-}
-
 pub(crate) fn steam_asset_url(app_id: &str, file_name: &str) -> String {
     format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/{file_name}")
 }
@@ -786,86 +720,7 @@ pub(crate) fn launch_game_from_value(
     // Launch overrides and arguments are intentionally no longer honored.
     let launch_arguments = "";
 
-    // Override de executável: quando o usuário associou um .exe personalizado a
-    // este jogo, ignoramos `steam://rungameid` e abrimos o binário diretamente.
-    // O monitor de playtime continua funcionando porque marca o processo via
-    // `mark_process_fallback_started` + `monitor_game_process`.
-    let custom_exe: Option<String> = None;
-    if let Some(custom_exe_path) = custom_exe {
-        let exe_path = std::path::Path::new(&custom_exe_path);
-        if !exe_path.is_file() {
-            return Ok(serde_json::json!({
-                "success": false,
-                "appId": app_id,
-                "error": format!(
-                    "Executável personalizado não encontrado: {custom_exe_path}"
-                )
-            }));
-        }
-        let canonical_executable = exe_path
-            .canonicalize()
-            .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
-
-        // Containment: se o jogo tem `installPath`, o executável personalizado
-        // precisa estar dentro dele. Sem isso, um path arbitrário vindo
-        // do `ghostbox-library.json` poderia apontar para qualquer binário local.
-        let install_path_raw = text_value(game.get("installPath"));
-        if !install_path_raw.is_empty() {
-            let install_path = std::path::Path::new(install_path_raw.trim());
-            if !is_path_inside_or_equal(install_path, &canonical_executable) {
-                return Ok(serde_json::json!({
-                    "success": false,
-                    "appId": app_id,
-                    "error":
-                        "O executável personalizado está fora da pasta de instalação do jogo."
-                            .to_string()
-                }));
-            }
-        }
-
-        let working_dir = canonical_executable
-            .parent()
-            .ok_or_else(|| "Custom executable has no parent folder.".to_string())?;
-        // Emulador Goldberg/GSE: melhor esforço para suportar conquistas
-        // offline. Falha aqui NÃO pode impedir o lançamento do jogo.
-        if let Err(error) =
-            crate::goldberg::prepare_game_for_offline_launch(&canonical_executable, &app_id)
-        {
-            eprintln!("Goldberg setup skipped: {error}");
-        }
-        let mut launch_command = {
-            let mut command = std::process::Command::new(&canonical_executable);
-            command.current_dir(working_dir);
-            for (key, value) in crate::goldberg::process_env_vars(&app_id) {
-                command.env(key, value);
-            }
-            command
-        };
-        launch_command.args(parse_launch_arguments(launch_arguments));
-        match launch_command.spawn() {
-            Ok(_) => {
-                if playtime::mark_process_fallback_started(&app_id) {
-                    playtime::monitor_game_process(
-                        app.clone(),
-                        game.clone(),
-                        app_id.clone(),
-                        canonical_executable.clone(),
-                    );
-                }
-                let _ = playtime::record_game_launch_playtime(&app, &app_id);
-                Ok(serde_json::json!({
-                    "success": true,
-                    "appId": app_id,
-                    "launchMethod": "custom-exe"
-                }))
-            }
-            Err(error) => Ok(serde_json::json!({
-                "success": false,
-                "appId": app_id,
-                "error": format!("Could not launch custom executable: {error}")
-            })),
-        }
-    } else if !launch_arguments.is_empty() {
+    if !launch_arguments.is_empty() {
         let Some(steam_path) = resolve_steam_path(&app, None).0 else {
             return Ok(serde_json::json!({
                 "success": false,
@@ -1056,39 +911,14 @@ async fn game_create_shortcut(
         return Err("Unsupported shortcut location.".to_string());
     }
 
-    let custom_executable = String::new();
-    let raw_arguments = String::new();
-    let (target, arguments, working_directory) = if !custom_executable.is_empty() {
-        let executable = std::fs::canonicalize(&custom_executable)
-            .map_err(|error| format!("Could not resolve custom executable: {error}"))?;
-        let working_directory = executable
-            .parent()
-            .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        // Um override é explícito: o atalho deve abrir exatamente o .exe
-        // escolhido pelo usuário, mantendo diretório de trabalho e argumentos
-        // persistidos. O fluxo interno de Play continua sendo usado no app.
-        (
-            executable.to_string_lossy().to_string(),
-            raw_arguments,
-            working_directory,
-        )
-    } else {
-        // Sem override, o atalho continua delegando ao GhostBox para manter o
-        // mesmo fluxo Steam de Play, inclusive quando já há outra instância.
-        let target = std::env::current_exe()
-            .map_err(|error| format!("Could not resolve GhostBox executable: {error}"))?;
-        let working_directory = target
-            .parent()
-            .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_default();
-        (
-            target.to_string_lossy().to_string(),
-            format!("--ghostbox-launch {app_id}"),
-            working_directory,
-        )
-    };
+    let target = std::env::current_exe()
+        .map_err(|error| format!("Could not resolve GhostBox executable: {error}"))?;
+    let working_directory = target
+        .parent()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let target = target.to_string_lossy().to_string();
+    let arguments = format!("--ghostbox-launch {app_id}");
 
     // O alvo continua sendo o GhostBox (mesmo fluxo Steam de Play), mas o
     // `IconLocation` aponta para o `.ico` do jogo quando resolvido. Sem ele,
@@ -1301,74 +1131,6 @@ pub fn run() {
                 window_lifecycle::shutdown_app_services(app_handle);
             }
         });
-}
-
-#[cfg(test)]
-mod path_containment_tests {
-    use super::is_path_inside_or_equal;
-    use std::path::Path;
-
-    #[test]
-    fn accepts_paths_under_the_root() {
-        let root = Path::new("C:/downloads");
-        for child in [
-            "C:/downloads",
-            "C:/downloads/game",
-            "C:/downloads/game/data/file.bin",
-            // `.` e um `..` que volta para dentro continuam dentro.
-            "C:/downloads/./game",
-            "C:/downloads/game/../other",
-        ] {
-            assert!(
-                is_path_inside_or_equal(root, Path::new(child)),
-                "deveria aceitar {child}"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_traversal_out_of_the_root() {
-        let root = Path::new("C:/downloads");
-        for child in [
-            "C:/downloads/../evil",
-            "C:/downloads/../../evil",
-            "C:/downloads/game/../../evil",
-            "C:/other",
-            // Prefixo textual não é contenção: `downloads-evil` é outro diretório.
-            "C:/downloads-evil/game",
-        ] {
-            assert!(
-                !is_path_inside_or_equal(root, Path::new(child)),
-                "deveria recusar {child}"
-            );
-        }
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn ignores_casing_on_windows() {
-        // Raiz inexistente força o caminho lexical, que é onde a comparação
-        // byte a byte recusaria o mesmo diretório escrito com outra caixa.
-        assert!(is_path_inside_or_equal(
-            Path::new("C:/GhostBox-nao-existe/Backups"),
-            Path::new("c:/ghostbox-nao-existe/backups/480/save.bin")
-        ));
-    }
-
-    #[test]
-    fn rejects_traversal_even_when_the_target_does_not_exist_yet() {
-        // O caso que importa para escrita: `canonicalize` falha nos dois lados,
-        // então a normalização lexical é a única defesa.
-        let root = Path::new("C:/ghostbox-nao-existe/downloads");
-        assert!(!is_path_inside_or_equal(
-            root,
-            Path::new("C:/ghostbox-nao-existe/downloads/../../evil.exe")
-        ));
-        assert!(is_path_inside_or_equal(
-            root,
-            Path::new("C:/ghostbox-nao-existe/downloads/game/save.bin")
-        ));
-    }
 }
 
 #[cfg(test)]

@@ -1588,7 +1588,6 @@ export function GameModal({
                         ? `Third-party DRM: ${drmNoticeText}`
                         : `DRM de terceiros: ${drmNoticeText}`
                     }
-                    title={drmNoticeText}
                   >
                     <Alert size={18} aria-hidden="true" />
                   </span>
