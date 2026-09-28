@@ -105,6 +105,8 @@ export type GhostBoxGame = {
   hero: string;
   coverUrl: string;
   heroUrl: string;
+  /** Small capsule (231×87) exata vinda da loja (`tiny_image`); ausente = montar via CDN. */
+  smallCapsuleUrl?: string;
   coverFallbacks: string[];
   heroFallbacks: string[];
   logo: string;

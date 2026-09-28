@@ -13,7 +13,6 @@ import {
   EyeOff,
   Link2,
   Loader2,
-  Search,
 } from "lucide-react";
 import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
@@ -406,7 +405,13 @@ export function SteamVisibilitySection({
   );
 }
 
-export function HiddenProfileGamesSection() {
+export function HiddenProfileGamesSection({
+  searchQuery,
+  onClearSearchQuery,
+}: {
+  searchQuery: string;
+  onClearSearchQuery: () => void;
+}) {
   const { t } = useSettings();
   const {
     hiddenProfileGameIds,
@@ -416,9 +421,13 @@ export function HiddenProfileGamesSection() {
     profileHistoryGames,
     steamAccountStats,
   } = useAppData();
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedInitial, setSelectedInitial] = useState("");
   const [hoveredAlphabetIndex, setHoveredAlphabetIndex] = useState<number | null>(null);
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    setSelectedInitial("");
+    setHoveredAlphabetIndex(null);
+  }, [searchQuery]);
   // A ordem é uma fotografia do momento em que a subaba foi aberta. Alterar a
   // visibilidade atualiza o card imediatamente, mas só reagrupa na próxima entrada.
   const entryHiddenGameIdsRef = useRef(new Set(hiddenProfileGameIds));
@@ -480,9 +489,11 @@ export function HiddenProfileGamesSection() {
     () => new Set(allGames.map((game) => getHiddenProfileGameInitial(game.title))),
     [allGames],
   );
-  const activeInitial = hoveredAlphabetIndex === null
-    ? selectedInitial
-    : PROFILE_GAME_ALPHABET[hoveredAlphabetIndex];
+  const activeInitial = searchQuery.trim()
+    ? ""
+    : hoveredAlphabetIndex === null
+      ? selectedInitial
+      : PROFILE_GAME_ALPHABET[hoveredAlphabetIndex];
   const games = useMemo(
     () => filterAndSortHiddenProfileGames(
       allGames,
@@ -499,24 +510,6 @@ export function HiddenProfileGamesSection() {
           <h3 id={titleId}>{t("settings.library.hiddenProfileGames.label")}</h3>
           <p>{t("settings.library.hiddenProfileGames.description")}</p>
         </div>
-        <label className="hidden-profile-games-page__search">
-          <Search size={16} aria-hidden="true" />
-          <input
-            type="search"
-            value={searchQuery}
-            onFocus={() => {
-              setSelectedInitial("");
-              setHoveredAlphabetIndex(null);
-            }}
-            onChange={(event) => {
-              setSearchQuery(event.target.value);
-              setSelectedInitial("");
-              setHoveredAlphabetIndex(null);
-            }}
-            placeholder={t("settings.library.hiddenProfileGames.searchPlaceholder")}
-            aria-label={t("settings.library.hiddenProfileGames.searchPlaceholder")}
-          />
-        </label>
       </div>
 
       <div className="hidden-profile-games-page__browser">
@@ -562,12 +555,12 @@ export function HiddenProfileGamesSection() {
                 onMouseEnter={() => {
                   setHoveredAlphabetIndex(index);
                   setSelectedInitial(letter);
-                  setSearchQuery("");
+                  onClearSearchQuery();
                 }}
                 onFocus={() => {
                   setHoveredAlphabetIndex(index);
                   setSelectedInitial(letter);
-                  setSearchQuery("");
+                  onClearSearchQuery();
                 }}
               >
                 <span aria-hidden="true" />

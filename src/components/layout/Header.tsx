@@ -10,7 +10,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { memo, useState, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWindowMaximized } from "../../hooks/useWindowMaximized";
@@ -18,7 +18,13 @@ import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile } from "../../types";
 import { useSettings } from "../../context/settings";
 import { ghostboxApi } from "../../lib/ghostboxApi";
-import { preloadGameModalAssetsThrottled } from "../../utils/image";
+import { gameSmallCapsuleSources, preloadGameModalAssetsThrottled } from "../../utils/image";
+import {
+  cacheImageSourceAfterLoad,
+  forgetCachedImageSource,
+  markImageSourceLoaded,
+  withCachedImageSources,
+} from "../../utils/imageCache";
 import { SearchSuggestionsLoadingState } from "../ui/LoadingStates";
 import { FeedbackModal } from "../modals/FeedbackModal";
 
@@ -30,6 +36,71 @@ const HighlightedSearchText = memo(function HighlightedSearchText({
   text: string;
 }) {
   return <>{text}</>;
+});
+
+const SearchSuggestionThumbnail = memo(function SearchSuggestionThumbnail({
+  game,
+}: {
+  game: GhostBoxGame;
+}) {
+  const rawSources = useMemo(() => gameSmallCapsuleSources(game), [game]);
+  const sourceKey = rawSources.join("\n");
+  const sources = useMemo(
+    () =>
+      withCachedImageSources(rawSources, {
+        requestManifests: false,
+        preserveSourceOrder: true,
+        prioritizeCached: true,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sourceKey],
+  );
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setSourceIndex(0);
+    setIsLoaded(false);
+  }, [sourceKey]);
+
+  const source = sources[sourceIndex] ?? "";
+
+  useEffect(() => {
+    setIsLoaded(false);
+  }, [source]);
+
+  if (!source) {
+    return <span className="header__search-dropdown-thumbnail" aria-hidden="true" />;
+  }
+
+  return (
+    <img
+      className="header__search-dropdown-thumbnail"
+      src={source}
+      width={120}
+      height={45}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+      aria-hidden="true"
+      style={isLoaded ? undefined : { opacity: 0 }}
+      onLoad={() => {
+        setIsLoaded(true);
+        markImageSourceLoaded(source);
+        if (!/^https?:\/\//i.test(source)) return;
+        cacheImageSourceAfterLoad(source);
+      }}
+      onError={() => {
+        forgetCachedImageSource(source);
+        if (sourceIndex + 1 < sources.length) {
+          setSourceIndex(sourceIndex + 1);
+        } else {
+          setSourceIndex(sources.length);
+        }
+      }}
+    />
+  );
 });
 
 const SearchSuggestionItem = memo(function SearchSuggestionItem({
@@ -49,6 +120,7 @@ const SearchSuggestionItem = memo(function SearchSuggestionItem({
         onMouseEnter={() => preloadGameModalAssetsThrottled(game)}
         onClick={onSelect}
       >
+        <SearchSuggestionThumbnail game={game} />
         <span className="header__search-dropdown-item-title">
           <HighlightedSearchText text={game.title} />
         </span>
@@ -67,6 +139,7 @@ interface HeaderProps {
   hasNoSearchResults?: boolean;
   showAppIdPrompt?: boolean;
   allowSearchDropdown?: boolean;
+  searchInPage?: boolean;
   steamProfile?: SteamProfile | null;
   isPremium?: boolean;
   subscriptionPeriodEnd?: string | null;
@@ -115,6 +188,7 @@ export const Header = memo(function Header({
   hasNoSearchResults = false,
   showAppIdPrompt = false,
   allowSearchDropdown = false,
+  searchInPage = false,
   steamProfile = null,
   isPremium = false,
   subscriptionPeriodEnd = null,
@@ -143,6 +217,7 @@ export const Header = memo(function Header({
   // tell that its gesture is already over and skip arming the drag.
   const titlebarGestureRef = useRef(0);
   const showDropdown =
+    !searchInPage &&
     (page !== "catalogue" || allowSearchDropdown) &&
     focused &&
     Boolean(query.trim()) &&
@@ -509,7 +584,7 @@ export const Header = memo(function Header({
                 </>
               ) : isSearching ? (
                 <div className="header__search-dropdown-loading" role="status">
-                  <SearchSuggestionsLoadingState count={6} />
+                  <SearchSuggestionsLoadingState count={8} />
                 </div>
               ) : (
                 <div className="header__search-empty">

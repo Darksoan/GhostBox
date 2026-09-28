@@ -12,6 +12,7 @@ export function useExpandedGameSearch(
   enabled: boolean,
   steamLimit: number,
   language: AppearanceSettings["language"],
+  options: { steamSupplement?: boolean } = {},
 ) {
   const catalogueQuery = useGamesQuery(request, { enabled });
   const query = normalizeGameSearchText(request.query ?? "");
@@ -19,11 +20,17 @@ export function useExpandedGameSearch(
     !catalogueQuery.isFetching &&
     !catalogueQuery.isPlaceholderData &&
     (catalogueQuery.isFetched || catalogueQuery.isError);
+  // No header o modo supplement consulta a loja em paralelo mesmo quando o
+  // catálogo já tem resultados (ex: "hollow knight" retorna a base no D1 e
+  // Silksong/soundtrack/DLC na loja). No catálogo mantém o fallback clássico
+  // (só quando o primário falha ou volta vazio) para não poluir a grade.
   const shouldSearchSteam =
     enabled &&
     canSearchSteamStore(query) &&
     primarySettled &&
-    (catalogueQuery.isError || (catalogueQuery.data?.games.length ?? 0) === 0);
+    (options.steamSupplement ||
+      catalogueQuery.isError ||
+      (catalogueQuery.data?.games.length ?? 0) === 0);
   const steamSearchQuery = useSteamStoreSearchQuery(
     query,
     steamLimit,

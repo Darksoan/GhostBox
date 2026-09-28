@@ -2442,14 +2442,28 @@ fn steam_store_search_games(payload: &Value, limit: usize) -> Vec<Value> {
                 "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg"
             );
             let tiny_image = text(item.get("tiny_image"));
-            let mut fallbacks = vec![Value::String(header)];
-            if !tiny_image.is_empty() {
-                fallbacks.push(Value::String(tiny_image));
-            }
+            // `tiny_image` da storesearch é a small capsule exata
+            // (`capsule_231x87.jpg`, pode vir com `?t=`); o frontend usa como
+            // primeira opção do preview do dropdown antes das URLs previsíveis.
+            let small_capsule = if tiny_image.is_empty() {
+                format!(
+                    "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{app_id}/capsule_231x87.jpg"
+                )
+            } else {
+                tiny_image.clone()
+            };
+            let fallbacks = vec![
+                Value::String(header),
+                Value::String(small_capsule.clone()),
+            ];
             object.insert("title".to_string(), Value::String(title));
             object.insert("cover".to_string(), Value::String(portrait.clone()));
             object.insert("coverUrl".to_string(), Value::String(portrait));
             object.insert("coverFallbacks".to_string(), Value::Array(fallbacks));
+            object.insert(
+                "smallCapsuleUrl".to_string(),
+                Value::String(small_capsule),
+            );
             Some(game)
         })
         .take(limit)

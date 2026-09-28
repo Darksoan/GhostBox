@@ -209,6 +209,8 @@ interface SettingsPageProps {
   activeTabId: SettingsTabId;
   libraryView: "overview" | "hidden-games";
   onLibraryViewChange: (view: "overview" | "hidden-games") => void;
+  searchQuery: string;
+  onClearSearchQuery: () => void;
   games: GhostBoxGame[];
   steamProfile: SteamProfile | null;
   initialPage: StartupPage;
@@ -224,6 +226,8 @@ export function SettingsPage({
   activeTabId,
   libraryView,
   onLibraryViewChange,
+  searchQuery,
+  onClearSearchQuery,
   games,
   steamProfile,
   initialPage,
@@ -375,7 +379,7 @@ export function SettingsPage({
             </>
           )}
           {activeTab.id === "library" && libraryView === "hidden-games" && (
-            <HiddenProfileGamesSection />
+            <HiddenProfileGamesSection searchQuery={searchQuery} onClearSearchQuery={onClearSearchQuery} />
           )}
           {activeTab.id === "performance" && <TempFilesSection />}
           {activeTab.id === "connections" && <ConnectionsPanel />}

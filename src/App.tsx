@@ -190,13 +190,14 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   );
   const allowHeaderSearchDropdown =
     isGameModalVisible || isAchievementsViewVisible;
-  const shell = useAppShellState(page, {
-    localGames: knownGames,
-    allowHeaderSearchDropdown,
-  });
   const [settingsLibraryView, setSettingsLibraryView] = useState<
     "overview" | "hidden-games"
   >("overview");
+  const shell = useAppShellState(page, {
+    localGames: knownGames,
+    allowHeaderSearchDropdown,
+    settingsLibraryView,
+  });
   // Marca `html.is-resizing` durante o arrasto da janela: transições ficam
   // suspensas e quem mede layout espera o resize assentar.
   useViewportResizeTracking();
@@ -638,6 +639,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
             hasNoSearchResults={shell.hasNoHeaderSearchResults}
             showAppIdPrompt={shell.shouldShowHeaderAppIdPrompt}
             allowSearchDropdown={allowHeaderSearchDropdown}
+            searchInPage={shell.isHiddenProfileGamesSearch}
             steamProfile={appData.steamProfile}
             isPremium={isPremium}
             subscriptionPeriodEnd={subscriptionPeriodEnd}
@@ -668,6 +670,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               activeSettingsTabId={shell.activeSettingsTabId}
               settingsLibraryView={settingsLibraryView}
               onSettingsLibraryViewChange={setSettingsLibraryView}
+              onClearSearchQuery={shell.clearQuery}
               activeProfileCollectionId={shell.activeProfileCollectionId}
               setActiveProfileCollectionId={shell.setActiveProfileCollectionId}
               activeLibraryCollectionId={shell.activeLibraryCollectionId}

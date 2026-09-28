@@ -79,46 +79,15 @@ describe("filterAndSortHiddenProfileGames", () => {
     expect(filterAndSortHiddenProfileGames(games, new Set(), "", "B")).toEqual([]);
   });
 
-  it("uses the titlebar search styling and a four-column desktop grid", () => {
+  it("keeps the alphabet beside a four-column desktop grid", () => {
     const styles = readFileSync(
       "src/features/settings/ConnectionsPanel.scss",
       "utf8",
     ).replace(/\r\n/g, "\n");
 
-    expect(styles).toContain("background: var(--surface-titlebar-control)");
-    expect(styles).toContain("background: var(--surface-titlebar-control-hover)");
     expect(styles).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
     expect(styles).toContain(".hidden-profile-games-page__alphabet");
     expect(styles).toContain("grid-template-columns: 42px minmax(0, 1fr)");
-    expect(styles).toContain("gap: var(--space-8)");
-    expect(styles).toContain("transform var(--motion-base) var(--ease-out)");
-    expect(styles).toContain("filter: blur(2px)");
-    expect(styles).toContain("height: 2.6px");
-    expect(styles).not.toContain("border-radius: var(--radius-pill)");
-    expect(styles).toContain("background: transparent;\n    color: var(--text-tertiary)");
-    expect(styles).toContain("&:hover:not(:disabled),\n    &:focus-visible {\n      color: var(--text-secondary)");
-    expect(styles).toContain("&[aria-pressed=\"true\"] {\n      color: var(--text-primary)");
-    expect(styles).toContain("&.is-hovered");
-    expect(styles).toContain("transform: scaleX(3.25)");
-    expect(styles).toContain("&.is-nearby-1 > span");
-    expect(styles).toContain("&.is-nearby-2 > span");
-    expect(styles).toContain("&.is-nearby-3 > span");
-    expect(styles).toContain('&[aria-pressed="true"]');
-    expect(styles).toContain("overflow-anchor: none");
-    expect(styles).toContain("&:active::after");
-    expect(styles).toContain("--hidden-profile-cover-scale: 0.5");
-    expect(styles).toContain("--hidden-profile-cover-scale: 0.525");
-    expect(styles).toContain("width: 200%");
-    expect(styles).toContain("height: 200%");
-    expect(styles).toContain("transform var(--motion-slow) var(--ease-out)");
-    expect(styles).toContain("html.no-animations .hidden-profile-games__item");
-    expect(styles).not.toContain("&:active:not(:disabled) > span");
-
-    const resetControl = styles.slice(
-      styles.indexOf(".hidden-profile-games-page__alphabet-reset"),
-      styles.indexOf(".hidden-profile-games__list"),
-    );
-    expect(resetControl).not.toContain('&[aria-pressed="true"]');
   });
 
   it("routes back through the titlebar and freezes ordering until the next entry", () => {

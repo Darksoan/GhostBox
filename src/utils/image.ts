@@ -179,6 +179,59 @@ function isHeaderCapsuleImageSource(source: string) {
   );
 }
 
+export function isSmallCapsuleImageSource(source: string) {
+  const normalizedSource = source.trim().toLowerCase();
+  if (!normalizedSource) return false;
+
+  let pathname = normalizedSource.split(/[?#]/)[0];
+
+  try {
+    pathname = new URL(normalizedSource).pathname.toLowerCase();
+  } catch {
+    // Non-URL sources still get checked by filename below.
+  }
+
+  return /(^|\/)capsule_231x87(_2x)?\.jpg$/.test(pathname.replace(/\\/g, "/"));
+}
+
+/**
+ * Small capsule (231×87) para previews compactos como o dropdown de busca do
+ * header. Mesmos CDNs dos outros capsules (`header`, `capsule_616x353`):
+ * só troca o filename, sem hash.
+ */
+export function smallCapsuleSourcesForAppId(appId: string): string[] {
+  const normalizedAppId = appId.trim();
+  if (!/^\d{1,10}$/.test(normalizedAppId)) return [];
+  return [
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+    `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+    `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+    `https://shared.steamstatic.com/store_item_assets/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+    `https://steamcdn-a.akamaihd.net/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+    `https://cdn.akamai.steamstatic.com/steam/apps/${normalizedAppId}/capsule_231x87.jpg`,
+  ];
+}
+
+export function gameSmallCapsuleSources(game: GhostBoxGame) {
+  const appId = getGameAppId(game);
+  // `tiny_image` da storesearch já é a small capsule exata (pode vir com
+  // query `?t=`); ela tem prioridade sobre as URLs previsíveis.
+  const customSmallCapsules = [
+    game.smallCapsuleUrl,
+    game.coverUrl,
+    ...(game.coverFallbacks ?? []),
+  ].filter(
+    (source): source is string =>
+      Boolean(source) && isSmallCapsuleImageSource(source as string),
+  );
+
+  return uniqueSources([
+    ...customSmallCapsules,
+    ...smallCapsuleSourcesForAppId(appId),
+  ]);
+}
+
 export function gameHeaderOnlySources(game: GhostBoxGame) {
   const appId = getGameAppId(game);
   const rawScreenshotFallback = withoutHeaderImageSources(game.screenshots ?? [])[0];

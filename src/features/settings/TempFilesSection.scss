@@ -51,6 +51,7 @@
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
     background: var(--settings-dropdown-trigger-hover);
+    color: var(--text-primary);
   }
 
   &:disabled {

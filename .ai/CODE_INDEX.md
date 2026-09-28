@@ -63,6 +63,10 @@ Sidebar collection tree -> `src/components/layout/Sidebar.tsx`; resolves IDs acr
 Sidebar navigation (main/settings/profile tabs and collections) -> `Sidebar.tsx` (around 279-577); option/collection/game hover and selected colors -> `src/app.scss` (`.sidebar__menu-item`, `.sidebar__collection-game-button`, around 1237-1482).
 Premium cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemote` in `src/context/AppDataContext.tsx` (around 997-1157) -> `resolveCloudCollectionGames` / `rehydrateUserCollectionGames` in `src/lib/collectionGames.ts` -> `Sidebar.sidebarCollections` in `src/components/layout/Sidebar.tsx` (around 134-193); unresolvable game IDs stay visible as placeholders and receive a store-details retry. Free accounts load collections from `src/utils/storage.ts` (`readStoredUserCollections`) on this device; cloud snapshot GET/PUT in `workers/subscriptions/src/index.ts` still requires Premium.
 
+## Library UI
+
+`LibraryPage` -> `src/pages/LibraryPage.tsx` (sort/source dropdown triggers around 361-448) -> shared `.settings-dropdown` styles in `src/app.scss` (`.library-toolbar`, around 9701-9787); trigger, chevron and option text use `--text-primary` on hover/focus/open. Cover format controls -> `.library-toolbar__format` (around 9850).
+
 ## Profile Editing
 
 `EditProfileTab` -> `src/components/profile/EditProfileTab.tsx`; avatar upload/crop and premium banner editing, saved through `AppDataContext.handleUpdateProfile`.
@@ -77,7 +81,8 @@ Styles -> `src/features/settings/AccountSection.scss`; dialog reuses `collection
 
 Settings option descriptions -> `SettingRow` in `src/pages/SettingsPage.tsx` (around 608-630) -> `.settings-option__copy span` in `src/app.scss` (around 5842; disabled override around 5985). Performance temp-files description -> `TempFilesSection` / `TempFilesSection.scss` in `src/features/settings/`. Both use `--text-tertiary`, also used by the titlebar search placeholder via `--text-placeholder` in `src/app.scss` (around 2177).
 Settings subtexts across tabs -> `.settings-page__header p` / `.steam-libraries__heading p` in `src/app.scss` (around 4770/4840); `SteamVisibilitySection`, `ConnectionsPanel`, `HiddenProfileGamesSection` in `src/features/settings/ConnectionsPanel.tsx` -> `.connection-card__steam-option-copy span`, `.hidden-profile-games__copy span`, `.connection-card__body p`, `.connection-card__connected`, `.connections-panel__header p`, `.hidden-profile-games-page__header p` in `ConnectionsPanel.scss`.
-Settings neutral control surfaces -> `.settings-page-dropdown .settings-dropdown__trigger` / `.settings-action` in `src/app.scss` (around 6044-6265) and `.temp-files-section__button` in `src/features/settings/TempFilesSection.scss` (around 33); rest `--settings-dropdown-surface`, hover/focus `--settings-dropdown-trigger-hover` from `src/styles/_semantic.scss`; trigger label/icon and menu option text remain `--text-secondary` on hover/focus.
+Hidden profile games search/filters -> `App` (`src/App.tsx`: `settingsLibraryView`, titlebar query) -> `useAppShellState` (`src/hooks/useAppShellState.ts`: `isHiddenProfileGamesSearch` disables global suggestions) / `Header` (`searchInPage`) -> `PageRouter` -> `SettingsPage` -> `HiddenProfileGamesSection` (`src/features/settings/ConnectionsPanel.tsx`, around 409-610). Titlebar query filters local titles through `filterAndSortHiddenProfileGames` (`src/utils/hiddenProfileGames.ts`); hovering/focusing a letter clears the titlebar query. `activeInitial` drives A–Z reset `aria-pressed`; reset colors -> `.hidden-profile-games-page__alphabet-reset` in `ConnectionsPanel.scss` (around 470-505).
+Settings neutral control surfaces -> `.settings-page-dropdown .settings-dropdown__trigger` / `.settings-action` in `src/app.scss` (around 6044-6265) and `.temp-files-section__button` in `src/features/settings/TempFilesSection.scss` (around 33); rest `--settings-dropdown-surface`, hover/focus `--settings-dropdown-trigger-hover` from `src/styles/_semantic.scss`; trigger, icon and menu option text use `--text-primary` on hover/focus, while disabled and danger variants remain separate.
 
 ## Profile Activity And Achievements
 
@@ -145,12 +150,14 @@ Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n
 
 `Header` -> `src/components/layout/Header.tsx` (premium/subscription button around 407-456; search suggestions dropdown around 458-525, fed by `useAppShellState`)
 Premium button appearance -> `src/app.scss` (`.header__premium-indicator`, around 2064; crown and label immediately after); resting label matches `.header__search input::placeholder` via `--text-placeholder`; hover/focus changes only the surface to `--surface-option-hover` (`#151515`).
-Search suggestions appearance/scroll -> `src/app.scss` (`.header__search-dropdown`, around 2294-2385).
+Search suggestions appearance/scroll -> `src/app.scss` (`.header__search-dropdown`, around 2294-2385; `.header__search-dropdown-thumbnail` 120px small capsule).
+Search suggestion thumbnails -> `SearchSuggestionThumbnail` in `Header.tsx` -> `gameSmallCapsuleSources` / `smallCapsuleSourcesForAppId` / `isSmallCapsuleImageSource` in `src/utils/image.ts` (capsule_231x87 CDNs: shared.{akamai,fastly,cloudflare,steamstatic}.steamstatic.com/store_item_assets + cdn.cloudflare/steamcdn-a/cdn.akamai `steam/apps/{id}`); store `tiny_image` exposed as `GhostBoxGame.smallCapsuleUrl` (`src/data.ts`) via `steam_store_search_games` in `src-tauri/src/catalogue.rs` (around 2422).
+Header suggestion merging (catalogue + Steam store supplement, limit 8, thumb+title, no prices) -> `useExpandedGameSearch` (`src/hooks/useExpandedGameSearch.ts`, `steamSupplement` option) + `useAppShellState` (`src/hooks/useAppShellState.ts`). Catalogue-only fallback stays in `useCatalogueState`.
 
 ## Catalogue UI
 
 `CataloguePage`, `CatalogueFilterSection`, `CatalogueYearRange` -> `src/pages/CataloguePage.tsx` (filter triggers/panels around 98-383; sort/view triggers around 827-976)
-Catalogue toolbar, filters, cards and pagination styles -> `src/app.scss` (around 6486-7980); controls use `--surface-secondary` (`#101010`) at rest and `--control-hover` (`#151515`) on interaction, with tertiary -> secondary -> primary text hierarchy.
+Catalogue toolbar, filters, cards and pagination styles -> `src/app.scss` (around 6486-7980); controls use `--surface-secondary` (`#101010`) at rest and `--control-hover` (`#151515`) on interaction. Trigger/button hover text is always `--text-primary`: filter pills (`.catalogue-filter-section__header`, around 7117-7201), sort/view triggers + their options (`.catalogue-page__sort/__view .settings-dropdown__trigger`, around 6906-6924), filter options (`.catalogue-filter-option`, around 7493), clear-filters (6790) and pagination (8118/14046).
 Filter checkbox markup -> `CatalogueFilterSection` in `src/pages/CataloguePage.tsx` (around 350); `.catalogue-filter-option` in `src/app.scss` (around 7297, white selected check).
 `CatalogueList`, `CatalogueListItem`, `CatalogueGridCard` -> `src/components/ui/CatalogueList.tsx`
 Active-filter clear action -> `CataloguePage.clearAllFilters` in `src/pages/CataloguePage.tsx`; floating bottom-right viewport control `.catalogue-page__clear-filters` in `src/app.scss` (around 6595).

@@ -2298,8 +2298,8 @@ p {
     z-index: 10000;
     width: max-content;
     min-width: var(--header-search-width);
-    max-width: min(420px, calc(100vw - 48px));
-    max-height: 350px;
+    max-width: min(460px, calc(100vw - 48px));
+    max-height: 430px;
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: none;
@@ -2322,6 +2322,7 @@ p {
     display: flex;
     width: 100%;
     align-items: center;
+    gap: var(--space-4);
     min-height: var(--header-control);
     padding: var(--space-2) var(--space-5);
     border: 0;
@@ -2348,6 +2349,17 @@ p {
       line-height: var(--type-line-body);
     }
 
+  }
+
+  &__search-dropdown-thumbnail {
+    width: 120px;
+    min-width: 120px;
+    aspect-ratio: 231 / 87;
+    height: auto;
+    flex: 0 0 auto;
+    border-radius: var(--radius-sm);
+    background: var(--surface-secondary);
+    object-fit: cover;
   }
 
   &__search-dropdown-loading {
@@ -6188,6 +6200,7 @@ html.no-animations {
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
     background: var(--settings-dropdown-trigger-hover);
+    color: var(--text-primary);
   }
 
   &:disabled {
@@ -6364,10 +6377,10 @@ html.no-animations {
   .settings-dropdown__trigger:focus-visible,
   &.settings-dropdown--open .settings-dropdown__trigger {
     background: var(--settings-dropdown-trigger-hover);
-    color: var(--text-secondary);
+    color: var(--text-primary);
 
     svg {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -6390,7 +6403,7 @@ html.no-animations {
   .settings-dropdown__option:hover,
   .settings-dropdown__option:focus-visible {
     background: var(--dropdown-option-hover);
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 }
 
@@ -6842,7 +6855,7 @@ html.no-animations {
       &:hover,
       &:focus-visible,
       &--active {
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
 
       span {
@@ -6898,20 +6911,20 @@ html.no-animations {
       &:hover,
       &:focus-visible,
       &--active {
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
     }
   }
 
-  /* Topo do catálogo: texto/chevron fixos em secondary — hover, foco e
-     aberto trocam só a superfície, nunca clareiam para primary. */
+  /* Topo do catálogo: hover, foco e aberto clareiam texto e chevron para
+     primary; em repouso voltam a terciário. */
   &__sort .settings-dropdown__trigger:hover,
   &__sort .settings-dropdown__trigger:focus-visible,
   &__sort.settings-dropdown--open .settings-dropdown__trigger,
   &__view .settings-dropdown__trigger:hover,
   &__view .settings-dropdown__trigger:focus-visible,
   &__view.settings-dropdown--open .settings-dropdown__trigger {
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
   &__sort .settings-dropdown__trigger:hover svg,
@@ -6920,7 +6933,7 @@ html.no-animations {
   &__view .settings-dropdown__trigger:hover svg,
   &__view .settings-dropdown__trigger:focus-visible svg,
   &__view.settings-dropdown--open .settings-dropdown__trigger svg {
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
   /* Massa do gatilho de ordenação enquanto a página carrega: mesma geometria de
@@ -7168,17 +7181,17 @@ html.no-animations {
       white-space: nowrap;
     }
 
-    /* Texto e chevron sobem de terciário para secundário ao interagir. */
+    /* Texto e chevron sobem de terciário para primary ao interagir. */
     &:hover strong,
     &:focus-visible strong,
     &[aria-expanded="true"] strong {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
 
     &:hover .catalogue-filter-section__chevron,
     &:focus-visible .catalogue-filter-section__chevron,
     &[aria-expanded="true"] .catalogue-filter-section__chevron {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -7193,10 +7206,10 @@ html.no-animations {
 
     /* Chevron aponta para baixo em repouso e vira para cima ao abrir — meia
        volta, não o quarto de volta do acordeão que a barra lateral usava.
-       Cor fixa em secondary: abrir não clareia. */
+       Cor acompanha o texto do gatilho: primary quando aberto. */
     &--open {
       transform: rotate(180deg);
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -7492,7 +7505,7 @@ html.no-animations {
 
   &:hover {
     background: var(--control-hover);
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
   input:checked + &__box {
@@ -9748,19 +9761,19 @@ input[type="search"]::-ms-reveal {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      color: var(--text-secondary);
+      color: var(--text-primary);
 
       svg {
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
     }
   }
 
   .settings-dropdown--open .settings-dropdown__trigger {
-    color: var(--text-secondary);
+    color: var(--text-primary);
 
     svg {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -9778,11 +9791,11 @@ input[type="search"]::-ms-reveal {
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
 
-    &:hover,
-    &:focus-visible,
-    &--active {
-      color: var(--text-secondary);
-    }
+      &:hover,
+      &:focus-visible,
+      &--active {
+        color: var(--text-primary);
+      }
   }
 
   &__row {

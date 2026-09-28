@@ -267,6 +267,11 @@
     flex: 0 0 auto;
     color: var(--text-secondary);
   }
+
+  &:hover > svg,
+  &:focus-visible > svg {
+    color: var(--text-primary);
+  }
 }
 
 .hidden-profile-games__copy {
@@ -286,6 +291,11 @@
     font-size: var(--type-size-caption);
     line-height: 1.4;
   }
+}
+
+.hidden-profile-games-link:hover .hidden-profile-games__copy strong,
+.hidden-profile-games-link:focus-visible .hidden-profile-games__copy strong {
+  color: var(--text-primary);
 }
 
 .hidden-profile-games-page {
@@ -322,69 +332,6 @@
       color: var(--text-tertiary);
       font-size: var(--type-size-caption);
       line-height: 1.4;
-    }
-  }
-
-  &__search {
-    display: inline-flex;
-    width: 200px;
-    height: 36px;
-    min-height: 36px;
-    max-height: 36px;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0 var(--space-6);
-    border: 0;
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    background: var(--surface-titlebar-control);
-    color: var(--text-secondary);
-    cursor: text;
-    transition:
-      width var(--motion-base) var(--ease),
-      padding var(--motion-base) var(--ease),
-      background-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &:hover {
-      background: var(--surface-titlebar-control-hover);
-    }
-
-    &:focus-within {
-      width: 240px;
-      background: var(--surface-titlebar-control-hover);
-      color: var(--text-primary);
-    }
-
-    > svg {
-      display: block;
-      width: 16px;
-      min-width: 16px;
-      height: 16px;
-      flex: 0 0 16px;
-    }
-
-    input {
-      width: 100%;
-      min-width: 0;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      border: 0;
-      outline: 0;
-      background: transparent;
-      color: var(--text-primary);
-      font-size: var(--type-size-compact);
-      font-weight: var(--weight-regular);
-      line-height: 1;
-
-      &::placeholder {
-        color: var(--text-muted);
-        font-weight: var(--weight-regular);
-      }
     }
   }
 }
@@ -456,7 +403,7 @@
 
     &:hover:not(:disabled),
     &:focus-visible {
-      color: var(--text-secondary);
+      color: var(--text-primary);
       opacity: 1;
     }
 
@@ -467,7 +414,7 @@
 
     &.is-hovered,
     &:focus-visible {
-      color: var(--text-secondary);
+      color: var(--text-primary);
 
       > span {
         opacity: 1;
@@ -539,9 +486,14 @@
     flex-shrink: 0;
   }
 
-  &:hover,
-  &:focus-visible {
+  &:hover:not([aria-pressed="true"]),
+  &:focus-visible:not([aria-pressed="true"]) {
     color: var(--text-secondary);
+    opacity: 1;
+  }
+
+  &[aria-pressed="true"] {
+    color: var(--text-primary);
     opacity: 1;
   }
 
@@ -672,14 +624,6 @@ html.no-animations .hidden-profile-games__item {
   .hidden-profile-games-page__header {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .hidden-profile-games-page__search {
-    width: 100%;
-
-    &:focus-within {
-      width: 100%;
-    }
   }
 }
 

@@ -111,6 +111,7 @@ interface PageRouterProps {
   activeSettingsTabId: string;
   settingsLibraryView: "overview" | "hidden-games";
   onSettingsLibraryViewChange: (view: "overview" | "hidden-games") => void;
+  onClearSearchQuery: () => void;
   activeProfileCollectionId?: string;
   setActiveProfileCollectionId: (id: string | undefined) => void;
   activeLibraryCollectionId: string | null;
@@ -133,6 +134,7 @@ export function PageRouter({
   activeSettingsTabId,
   settingsLibraryView,
   onSettingsLibraryViewChange,
+  onClearSearchQuery,
   activeProfileCollectionId,
   setActiveProfileCollectionId,
   activeLibraryCollectionId,
@@ -380,6 +382,8 @@ export function PageRouter({
           activeTabId={activeSettingsTabId as never}
           libraryView={settingsLibraryView}
           onLibraryViewChange={onSettingsLibraryViewChange}
+          searchQuery={query}
+          onClearSearchQuery={onClearSearchQuery}
           games={appData.addedLibraryGames}
           steamProfile={appData.steamProfile}
           initialPage={appData.initialPage}

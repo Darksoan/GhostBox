@@ -139,6 +139,7 @@
   &:hover,
   &:focus-visible {
     background: var(--surface-option-hover);
+    color: var(--text-primary);
   }
 }
 

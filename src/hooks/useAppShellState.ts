@@ -22,7 +22,7 @@ export function mergeHeaderSearchSuggestions(
   localGames: GhostBoxGame[],
   remoteGames: GhostBoxGame[],
   query: string,
-  limit = 6,
+  limit = 8,
 ) {
   return mergeGameSearchResults(
     [searchKnownGames(localGames, query, limit), remoteGames],
@@ -35,6 +35,7 @@ export function useAppShellState(
   options: {
     localGames?: GhostBoxGame[];
     allowHeaderSearchDropdown?: boolean;
+    settingsLibraryView?: "overview" | "hidden-games";
   } = {},
 ) {
   const { appearance } = useSettings();
@@ -63,9 +64,16 @@ export function useAppShellState(
   const isCurrentDebouncedQuery = trimmedQuery === trimmedDebouncedQuery;
   // No catálogo a busca do header filtra a página e o dropdown fica
   // desligado. Com um overlay (ex: GameModal) aberto sobre o catálogo, a
-  // busca precisa voltar a sugerir e exibir o dropdown.
+  // busca precisa voltar a sugerir e exibir o dropdown. Na subaba de jogos
+  // ocultos de Ajustes, a mesma query filtra só a lista local.
+  const isHiddenProfileGamesSearch =
+    page === "settings" &&
+    activeSettingsTabId === "library" &&
+    options.settingsLibraryView === "hidden-games" &&
+    !options.allowHeaderSearchDropdown;
   const allowHeaderSearch =
-    page !== "catalogue" || Boolean(options.allowHeaderSearchDropdown);
+    !isHiddenProfileGamesSearch &&
+    (page !== "catalogue" || Boolean(options.allowHeaderSearchDropdown));
 
   const {
     catalogueQuery: headerSearchQuery,
@@ -74,12 +82,13 @@ export function useAppShellState(
     expandedData,
     isExpansionPending,
   } = useExpandedGameSearch(
-    { query: debouncedQuery, limit: 6, offset: 0 },
+    { query: debouncedQuery, limit: 8, offset: 0 },
     Boolean(debouncedQuery.trim()) &&
       allowHeaderSearch &&
       isCurrentDebouncedQuery,
-    6,
+    8,
     appearance.language,
+    { steamSupplement: true },
   );
 
   const isCatalogueSearchPending =
@@ -96,7 +105,7 @@ export function useAppShellState(
     ) {
       return [];
     }
-    return (expandedData?.games ?? headerSearchQuery.data?.games ?? []).slice(0, 6);
+    return (expandedData?.games ?? headerSearchQuery.data?.games ?? []).slice(0, 8);
   }, [
     expandedData?.games,
     headerSearchQuery.data?.games,
@@ -111,21 +120,30 @@ export function useAppShellState(
   // no modal mas ausente do /catalogue/search).
   const localHeaderSearchSuggestions = useMemo(() => {
     if (!allowHeaderSearch || !trimmedQuery) return [];
-    return searchKnownGames(options.localGames ?? [], trimmedQuery, 6);
+    return searchKnownGames(options.localGames ?? [], trimmedQuery, 8);
   }, [allowHeaderSearch, options.localGames, trimmedQuery]);
 
   const mergedBaseSuggestions = useMemo(() => {
     // Local já vem filtrado pela query imediata (sem debounce) para resposta
-    // instantânea; remoto vem do debounce. Dedupe por appId/id, local primeiro.
+    // instantânea; remoto vem do debounce. Steam complementa em paralelo
+    // mesmo quando o catálogo já tem resultados (família/DLC/soundtrack).
+    // Dedupe por appId/id, local primeiro.
+    const catalogueIds = new Set(
+      baseHeaderSearchSuggestions.map((game) => game.appId ?? game.id),
+    );
+    const steamOnlyGames =
+      shouldSearchSteam && isCurrentDebouncedQuery && !isExpansionPending
+        ? (steamSearchQuery.data ?? []).filter(
+            (game) => !catalogueIds.has(game.appId ?? game.id),
+          )
+        : [];
     return mergeGameSearchResults(
       [
         localHeaderSearchSuggestions,
         baseHeaderSearchSuggestions,
-        shouldSearchSteam && isCurrentDebouncedQuery && !isExpansionPending
-          ? (steamSearchQuery.data ?? [])
-          : [],
+        steamOnlyGames,
       ],
-      6,
+      8,
     );
   }, [
     baseHeaderSearchSuggestions,
@@ -163,12 +181,12 @@ export function useAppShellState(
     !isSearchLoading &&
     headerSearchQuery.isFetched &&
     steamSearchSettled &&
-    mergedBaseSuggestions.length < 6;
+    mergedBaseSuggestions.length < 8;
   const appIdCandidate =
     shouldShowHeaderAppIdPrompt && steamAppIdPattern.test(trimmedQuery)
       ? trimmedQuery
       : null;
-  const headerSearchSuggestions = mergedBaseSuggestions;
+  const headerSearchSuggestions = allowHeaderSearch ? mergedBaseSuggestions : [];
 
   const handleQueryChange = useCallback((nextQuery: string) => {
     setQuery(nextQuery);
@@ -203,6 +221,7 @@ export function useAppShellState(
     shouldShowHeaderAppIdPrompt,
     appIdCandidate,
     isSearchLoading,
+    isHiddenProfileGamesSearch,
     isMainPage,
   };
 }
