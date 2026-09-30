@@ -2091,7 +2091,7 @@ async function handleCloudSavesList(request: Request, env: Env) {
 
   // Listing is read-only. It must never prune: a GET that deletes backups
   // means simply opening the backup modal destroys the user's history.
-  // Retention is enforced on upload and on pin changes only.
+  // Retention is enforced on upload and by scheduled cleanup.
   const query = appId
     ? env.SUBSCRIPTION_DB.prepare(
          `SELECT * FROM (
@@ -2137,53 +2137,64 @@ async function handleCloudSaveUpload(request: Request, env: Env) {
   if (bytes.byteLength === 0) return jsonResponse({ error: "empty_backup" }, env, 400);
   if (bytes.byteLength > 50 * 1024 * 1024) return jsonResponse({ error: "backup_too_large" }, env, 413);
 
-  const id = crypto.randomUUID();
-  const now = nowIso();
-  const storage = requireSupabase(env);
-  const storagePath = `${userId}/${appId}/${id}.zip`;
-  const upload = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}/${storagePath}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${storage.key}`,
-      apikey: storage.key,
-      "content-type": "application/zip",
-      "x-upsert": "false",
-    },
-    body: bytes,
+  return withCloudGameWriteLock(env, userId, appId, async () => {
+    const id = crypto.randomUUID();
+    const storage = requireSupabase(env);
+    const storagePath = `${userId}/${appId}/${id}.zip`;
+    const upload = await fetch(`${storage.url}/storage/v1/object/${encodeURIComponent(storage.bucket)}/${storagePath}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${storage.key}`,
+        apikey: storage.key,
+        "content-type": "application/zip",
+        "x-upsert": "false",
+      },
+      body: bytes,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!upload.ok) {
+      const detail = await upload.text().catch(() => "");
+      console.error("Cloud save storage upload failed", { appId, status: upload.status, detail });
+      return jsonResponse({ error: "storage_upload_failed", detail }, env, 502);
+    }
+
+    try {
+      // ISO timestamps can tie for back-to-back uploads. Keep the new row
+      // strictly newer so GET and scheduled retention agree with upload pruning.
+      const previous = await env.SUBSCRIPTION_DB.prepare(
+        `SELECT updated_at FROM cloud_saves WHERE user_id = ? AND app_id = ? ORDER BY updated_at DESC LIMIT 1`
+      ).bind(userId, appId).first<{ updated_at: string }>();
+      const previousTime = Date.parse(previous?.updated_at || "");
+      const now = new Date(Math.max(Date.now(), Number.isFinite(previousTime) ? previousTime + 1 : 0)).toISOString();
+      await env.SUBSCRIPTION_DB.prepare(
+        `INSERT INTO cloud_saves (
+           id, steam_id, user_id, app_id, game_title, storage_path, size_bytes, sha256, manifest_json, device_name, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(id, steamId, userId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
+
+      // Retention is best-effort: the backup is already stored, so a prune
+      // failure must not turn a successful upload into a 500 for the user.
+      await pruneCloudSavesForGame(env, userId, appId, id).catch((error) => {
+        console.error("Cloud save prune failed after upload", { appId, error: error instanceof Error ? error.message : String(error) });
+      });
+      return jsonResponse({ save: publicCloudSave({
+        id, steam_id: steamId, user_id: userId, app_id: appId, game_title: gameTitle,
+        storage_path: storagePath, size_bytes: bytes.byteLength, sha256,
+        manifest_json: manifest ? JSON.stringify(manifest) : null, device_name: deviceName,
+        pinned: 0, created_at: now, updated_at: now,
+      }) }, env, 201);
+    } catch (error) {
+      // Only an unrecorded object is an orphan. If retention itself failed,
+      // the new save must stay intact and the scheduler can retry the prune.
+      const recorded = await env.SUBSCRIPTION_DB.prepare(
+        `SELECT id FROM cloud_saves WHERE id = ? AND user_id = ?`
+      ).bind(id, userId).first();
+      if (!recorded) {
+        await deleteCloudSaveObject(env, storagePath).catch((cleanupError) => console.error("Cloud save orphan cleanup failed", cleanupError));
+      }
+      throw error;
+    }
   });
-  if (!upload.ok) {
-    const detail = await upload.text().catch(() => "");
-    console.error("Cloud save storage upload failed", { appId, status: upload.status, detail });
-    return jsonResponse({ error: "storage_upload_failed", detail }, env, 502);
-  }
-
-  await env.SUBSCRIPTION_DB.prepare(
-    `INSERT INTO cloud_saves (
-       id, steam_id, user_id, app_id, game_title, storage_path, size_bytes, sha256, manifest_json, device_name, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(id, steamId, userId, appId, gameTitle, storagePath, bytes.byteLength, sha256, manifest ? JSON.stringify(manifest) : null, deviceName, now, now).run();
-
-  // Retention is best-effort: the backup is already stored, so a prune failure
-  // must not turn a successful upload into a 500 for the user.
-  await pruneCloudSavesForGame(env, userId, appId, id).catch((error) => {
-    console.error("Cloud save prune failed after upload", { appId, error: error instanceof Error ? error.message : String(error) });
-  });
-
-  return jsonResponse({ save: publicCloudSave({
-    id,
-    steam_id: steamId,
-    user_id: userId,
-    app_id: appId,
-    game_title: gameTitle,
-    storage_path: storagePath,
-    size_bytes: bytes.byteLength,
-    sha256,
-    manifest_json: manifest ? JSON.stringify(manifest) : null,
-    device_name: deviceName,
-    pinned: 0,
-    created_at: now,
-    updated_at: now,
-  }) }, env, 201);
 }
 
 async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: string) {
@@ -2201,19 +2212,43 @@ async function handleCloudSavePinnedUpdate(request: Request, env: Env, saveId: s
   ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
   if (!row) return jsonResponse({ error: "not_found" }, env, 404);
 
-  await env.SUBSCRIPTION_DB.prepare(
-    `UPDATE cloud_saves SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`
-  ).bind(pinned ? 1 : 0, nowIso(), normalizedSaveId, userId).run();
+  return withCloudGameWriteLock(env, userId, row.app_id, async () => {
+    // Pin is legacy metadata, not a new backup: do not promote an old save.
+    await env.SUBSCRIPTION_DB.prepare(
+      `UPDATE cloud_saves SET pinned = ? WHERE id = ? AND user_id = ?`
+    ).bind(pinned ? 1 : 0, normalizedSaveId, userId).run();
 
-  await pruneCloudSavesForGame(env, userId, row.app_id, normalizedSaveId).catch((error) => {
-    console.error("Cloud save prune failed after pin change", { appId: row.app_id, error: error instanceof Error ? error.message : String(error) });
+    const updated = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
+    ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
+
+    return updated
+      ? jsonResponse({ save: publicCloudSave(updated) }, env)
+      : jsonResponse({ error: "not_found" }, env, 404);
   });
+}
 
-  const updated = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
-  ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
-
-  return jsonResponse({ save: publicCloudSave(updated || { ...row, pinned: pinned ? 1 : 0 }) }, env);
+// D1 cannot transact with Supabase storage. Serialize operations on a game so
+// retention/deletion never uses an obsolete list after another writer finishes.
+// The lease also recovers from a Worker terminated before its finally block.
+async function withCloudGameWriteLock<T>(env: Env, userId: string, appId: string, action: () => Promise<T>): Promise<T | Response> {
+  const token = crypto.randomUUID();
+  const now = nowIso();
+  const expires = new Date(Date.now() + 5 * 60_000).toISOString();
+  const acquired = await env.SUBSCRIPTION_DB.prepare(
+    `INSERT INTO cloud_save_write_locks (user_id, app_id, token, expires_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, app_id) DO UPDATE SET token = excluded.token, expires_at = excluded.expires_at
+     WHERE cloud_save_write_locks.expires_at < ? RETURNING token`
+  ).bind(userId, appId, token, expires, now).first<{ token: string }>();
+  if (!acquired) return jsonResponse({ error: "cloud_save_busy" }, env, 409);
+  try {
+    return await action();
+  } finally {
+    await env.SUBSCRIPTION_DB.prepare(
+      `DELETE FROM cloud_save_write_locks WHERE user_id = ? AND app_id = ? AND token = ?`
+    ).bind(userId, appId, token).run();
+  }
 }
 
 async function deleteCloudSaveObject(env: Env, storagePath: string) {
@@ -2230,26 +2265,26 @@ async function deleteCloudSaveObjects(env: Env, storagePaths: string[]) {
       "content-type": "application/json",
     },
     body: JSON.stringify({ prefixes: storagePaths }),
+    signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw new Error(`Supabase storage delete failed (${response.status})`);
 }
 
-async function pruneCloudSavesForGame(env: Env, userId: string, appId: string, protectedSaveId: string) {
+async function pruneCloudSavesForGame(env: Env, userId: string, appId: string, newSaveId: string | null = null) {
   const rows = await env.SUBSCRIPTION_DB.prepare(
     `SELECT * FROM cloud_saves
      WHERE user_id = ? AND app_id = ?
      ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, updated_at DESC, created_at DESC, id DESC
-     LIMIT 100`
-  ).bind(userId, appId, protectedSaveId).all<CloudSaveRow>();
+     LIMIT 20`
+  ).bind(userId, appId, newSaveId).all<CloudSaveRow>();
   const stale = (rows.results || []).slice(MAX_CLOUD_SAVES_PER_GAME);
 
-  for (const row of stale) {
-    try {
-      await deleteCloudSaveObject(env, row.storage_path);
-      await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`).bind(row.id, userId).run();
-    } catch (error) {
-      console.error("Cloud save prune failed", { appId, saveId: row.id, error });
-    }
+  if (stale.length > 0) {
+    await deleteCloudSaveObjects(env, stale.map((row) => row.storage_path));
+    await env.SUBSCRIPTION_DB.batch(stale.map((row) =>
+      env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`)
+        .bind(row.id, userId)
+    ));
   }
 }
 
@@ -2257,20 +2292,21 @@ async function pruneCloudSavesForGame(env: Env, userId: string, appId: string, p
 // Prune them off the request path; listing must remain read-only.
 export async function pruneLegacyCloudSaves(env: Env) {
   const stale = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT id, storage_path, user_id, app_id FROM (
-       SELECT id, storage_path, user_id, app_id,
+    `SELECT DISTINCT user_id, app_id FROM (
+       SELECT user_id, app_id,
               ROW_NUMBER() OVER (PARTITION BY user_id, app_id ORDER BY updated_at DESC, created_at DESC, id DESC) AS save_rank
        FROM cloud_saves
        WHERE user_id IS NOT NULL
      ) WHERE save_rank > 1 LIMIT 20`
-  ).all<Pick<CloudSaveRow, "id" | "storage_path" | "user_id" | "app_id">>();
+  ).all<Pick<CloudSaveRow, "user_id" | "app_id">>();
   for (const row of stale.results || []) {
+    if (!row.user_id) continue;
+    const userId = row.user_id;
     try {
-      await deleteCloudSaveObject(env, row.storage_path);
-      await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`)
-        .bind(row.id, row.user_id).run();
+      await withCloudGameWriteLock(env, userId, row.app_id, () =>
+        pruneCloudSavesForGame(env, userId, row.app_id));
     } catch (error) {
-      console.error("Cloud save retention cleanup failed", { saveId: row.id, error });
+      console.error("Cloud save retention cleanup failed", { appId: row.app_id, error });
     }
   }
 }
@@ -2315,19 +2351,25 @@ async function handleCloudSaveDelete(request: Request, env: Env, saveId: string)
   ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
   if (!row) return jsonResponse({ error: "not_found" }, env, 404);
 
-  await deleteCloudSaveObject(env, row.storage_path).catch(() => undefined);
-  await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ?`).bind(row.id).run();
+  return withCloudGameWriteLock(env, userId, row.app_id, async () => {
+    const current = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT * FROM cloud_saves WHERE id = ? AND user_id = ? LIMIT 1`
+    ).bind(normalizedSaveId, userId).first<CloudSaveRow>();
+    if (!current) return jsonResponse({ error: "not_found" }, env, 404);
+    await deleteCloudSaveObject(env, current.storage_path);
+    await env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`).bind(current.id, userId).run();
 
-  const remaining = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT COUNT(*) AS count FROM cloud_saves WHERE user_id = ? AND app_id = ?`
-  ).bind(userId, row.app_id).first<{ count: number }>();
+    const remaining = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT COUNT(*) AS count FROM cloud_saves WHERE user_id = ? AND app_id = ?`
+    ).bind(userId, row.app_id).first<{ count: number }>();
 
-  return jsonResponse({
-    success: true,
-    saveId: row.id,
-    appId: row.app_id,
-    remainingSaves: remaining?.count ?? 0,
-  }, env);
+    return jsonResponse({
+      success: true,
+      saveId: current.id,
+      appId: current.app_id,
+      remainingSaves: remaining?.count ?? 0,
+    }, env);
+  });
 }
 
 async function handleCloudGameSavesDelete(request: Request, env: Env, appId: string) {
@@ -2335,19 +2377,20 @@ async function handleCloudGameSavesDelete(request: Request, env: Env, appId: str
   if (auth.response) return auth.response;
   if (!/^\d{1,12}$/.test(appId)) return jsonResponse({ error: "invalid_app_id" }, env, 400);
   const userId = auth.session!.userId;
-  const rows = await env.SUBSCRIPTION_DB.prepare(
-    `SELECT id, storage_path FROM cloud_saves WHERE user_id = ? AND app_id = ?`
-  ).bind(userId, appId).all<{ id: string; storage_path: string }>();
-  const storagePaths = (rows.results || []).map((row) => row.storage_path);
-  if (storagePaths.length > 0) {
-    await deleteCloudSaveObjects(env, storagePaths);
-    // Delete only the snapshot whose objects were removed, never a concurrent upload.
-    await env.SUBSCRIPTION_DB.batch(rows.results.map((row) =>
-      env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`)
-        .bind(row.id, userId)
-    ));
-  }
-  return jsonResponse({ success: true, appId, deletedSaves: storagePaths.length }, env);
+  return withCloudGameWriteLock(env, userId, appId, async () => {
+    const rows = await env.SUBSCRIPTION_DB.prepare(
+      `SELECT id, storage_path FROM cloud_saves WHERE user_id = ? AND app_id = ?`
+    ).bind(userId, appId).all<{ id: string; storage_path: string }>();
+    const storagePaths = (rows.results || []).map((row) => row.storage_path);
+    if (storagePaths.length > 0) {
+      await deleteCloudSaveObjects(env, storagePaths);
+      await env.SUBSCRIPTION_DB.batch(rows.results.map((row) =>
+        env.SUBSCRIPTION_DB.prepare(`DELETE FROM cloud_saves WHERE id = ? AND user_id = ?`)
+          .bind(row.id, userId)
+      ));
+    }
+    return jsonResponse({ success: true, appId, deletedSaves: storagePaths.length }, env);
+  });
 }
 
 function clampCloudInt(value: unknown, min: number, max: number, fallback: number) {

@@ -3,6 +3,7 @@ import { Trophy } from "reicon-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
 import { useAppData } from "../../context/AppDataContext";
+import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
 import { useSubscriptionCheckout } from "../../hooks/useSubscriptionCheckout";
 import { ghostboxApi } from "../../lib/ghostboxApi";
@@ -184,11 +185,17 @@ export function SubscriptionPlans({
   const { appearance, t } = useSettings();
   const { portalFlow, openBillingPortal } = useSubscriptionCheckout();
   const appData = useAppData();
+  const { account } = useAuth();
+  const userId = account?.userId ?? null;
+  const activeUserIdRef = useRef(userId);
+  activeUserIdRef.current = userId;
   const { showToast } = useOverlay();
   const steamProfile = steamProfileProp ?? appData.steamProfile;
-  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatusResult | null>(null);
+  const [subscriptionState, setSubscriptionState] = useState<{ userId: string; status: SubscriptionStatusResult } | null>(null);
+  const subscriptionStatus = subscriptionState?.userId === userId ? subscriptionState.status : null;
   const [subscriptionLoading, setSubscriptionLoading] = useState(surface === "settings");
-  const [cloudSaves, setCloudSaves] = useState<CloudSave[]>([]);
+  const [cloudSaveState, setCloudSaveState] = useState<{ userId: string; saves: CloudSave[] } | null>(null);
+  const cloudSaves = cloudSaveState?.userId === userId ? cloudSaveState.saves : [];
   const [backupPage, setBackupPage] = useState(1);
   const backupListRef = useRef<HTMLUListElement>(null);
   const backupHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -208,10 +215,13 @@ export function SubscriptionPlans({
   const copy = (pt: string, en: string) => language === "en" ? en : pt;
 
   function refreshCloudSaves() {
+    if (!userId) return;
     const requestId = ++cloudSavesRequestIdRef.current;
     void ghostboxApi.listCloudSaves()
       .then((saves) => {
-        if (requestId === cloudSavesRequestIdRef.current) setCloudSaves(saves);
+        if (requestId === cloudSavesRequestIdRef.current && activeUserIdRef.current === userId) {
+          setCloudSaveState({ userId, saves });
+        }
       })
       .catch((error) => {
         console.warn("Could not list cloud saves", error);
@@ -219,40 +229,53 @@ export function SubscriptionPlans({
   }
 
   function refreshSubscriptionStatus() {
+    if (!userId) return;
     const requestId = ++subscriptionRequestIdRef.current;
     setSubscriptionLoading(true);
     void ghostboxApi.getSubscriptionStatus()
       .then((status) => {
-        if (requestId !== subscriptionRequestIdRef.current) return;
+        if (requestId !== subscriptionRequestIdRef.current || activeUserIdRef.current !== userId) return;
         // A failed poll (this runs every 10s) must not blank the panel — doing
         // so showed the plan picker to someone who is already subscribed.
         if (!status) return;
 
-        setSubscriptionStatus(status);
+        setSubscriptionState({ userId, status });
         // Keeps the shared cache warm — `useDiscordLink` reads from it — without
         // holding a second copy of the link state in this component.
         if (status.discordLink) ghostboxApi.cacheDiscordLinkStatus(status.discordLink);
         if (status.subscription.isPremium) refreshCloudSaves();
-        else setCloudSaves([]);
+        else {
+          cloudSavesRequestIdRef.current += 1;
+          setCloudSaveState({ userId, saves: [] });
+        }
       })
       .finally(() => {
-        if (requestId === subscriptionRequestIdRef.current) setSubscriptionLoading(false);
+        if (requestId === subscriptionRequestIdRef.current && activeUserIdRef.current === userId) setSubscriptionLoading(false);
       });
   }
 
   useEffect(() => {
-    setSubscriptionStatus(null);
+    setSubscriptionState(null);
+    setCloudSaveState(null);
+    setResolvedCloudGameTitles(new Map());
+    setBackupConfirm(null);
+    setBackupError(null);
+    setBackupBusy(false);
+    cloudSavesRequestIdRef.current += 1;
+    subscriptionRequestIdRef.current += 1;
 
     refreshSubscriptionStatus();
 
-    if (surface !== "settings") return;
-
-    const intervalId = window.setInterval(refreshSubscriptionStatus, 10000);
+    const intervalId = surface === "settings"
+      ? window.setInterval(refreshSubscriptionStatus, 10000)
+      : null;
 
     return () => {
-      window.clearInterval(intervalId);
+      if (intervalId !== null) window.clearInterval(intervalId);
+      cloudSavesRequestIdRef.current += 1;
+      subscriptionRequestIdRef.current += 1;
     };
-  }, [surface]);
+  }, [surface, userId]);
 
   useEffect(() => {
     const appIds = Array.from(new Set(cloudSaves
@@ -341,11 +364,13 @@ export function SubscriptionPlans({
   const confirmBackupAction = async () => {
     if (!backupConfirm || backupBusy) return;
     const { action, appId, saveId, title } = backupConfirm;
+    const actionUserId = userId;
     setBackupBusy(true);
     setBackupError(null);
     try {
       if (action === "restore") {
         const saves = await ghostboxApi.listCloudSaves(appId).catch(() => null);
+        if (activeUserIdRef.current !== actionUserId) return;
         const newest = (saves ?? []).reduce<CloudSave | null>((latest, save) => {
           if (!latest) return save;
           return Date.parse(save.updatedAt || save.createdAt || "") > Date.parse(latest.updatedAt || latest.createdAt || "")
@@ -355,6 +380,7 @@ export function SubscriptionPlans({
         const targetSaveId = newest?.id ?? saveId;
         const game = appData.addedLibraryGames.find((candidate) => candidate.appId === appId) ?? { appId, title };
         const result = await ghostboxApi.restoreCloudSave(game, targetSaveId);
+        if (activeUserIdRef.current !== actionUserId) return;
         if (!result?.success) throw new Error(copy("Não foi possível restaurar o backup.", "Could not restore the backup."));
         showToast(
           copy("Backup restaurado", "Backup restored"),
@@ -363,10 +389,13 @@ export function SubscriptionPlans({
         );
       } else {
         const result = await ghostboxApi.deleteCloudGameSaves(appId);
+        if (activeUserIdRef.current !== actionUserId) return;
         if (!result?.success) throw new Error(copy("Não foi possível excluir o backup.", "Could not delete the backup."));
         // Invalidate polls started before deletion, or an older response could resurrect the row.
         cloudSavesRequestIdRef.current += 1;
-        setCloudSaves((current) => current.filter((save) => save.appId !== appId));
+        setCloudSaveState((current) => current?.userId === actionUserId
+          ? { ...current, saves: current.saves.filter((save) => save.appId !== appId) }
+          : current);
         refreshCloudSaves();
         if (result.deletedSaves > 0) {
           showToast(
@@ -391,6 +420,7 @@ export function SubscriptionPlans({
         else backupHeadingRef.current?.focus();
       });
     } catch (error) {
+      if (activeUserIdRef.current !== actionUserId) return;
       const message = error instanceof Error
         ? error.message
         : typeof error === "string"
@@ -403,7 +433,7 @@ export function SubscriptionPlans({
         "error",
       );
     } finally {
-      setBackupBusy(false);
+      if (activeUserIdRef.current === actionUserId) setBackupBusy(false);
     }
   };
 

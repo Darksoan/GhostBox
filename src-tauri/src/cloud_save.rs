@@ -134,6 +134,21 @@ pub(crate) fn session_token(app: &tauri::AppHandle) -> Result<String, String> {
         .ok_or_else(|| "Faça login antes de usar backup em nuvem.".to_string())
 }
 
+fn session_user_id(app: &tauri::AppHandle) -> Option<String> {
+    load_cloud_session(app)?
+        .get("account")?
+        .get("userId")?
+        .as_str()
+        .map(str::to_string)
+}
+
+fn is_same_cloud_account(app: &tauri::AppHandle, token: &str, user_id: Option<&str>) -> bool {
+    match (user_id, session_user_id(app)) {
+        (Some(original), Some(current)) => original == current,
+        _ => session_token(app).is_ok_and(|current| current == token),
+    }
+}
+
 fn zip_directory(source: &std::path::Path, destination: &std::path::Path) -> Result<(), String> {
     let file = std::fs::File::create(destination).map_err(|error| error.to_string())?;
     let mut zip = zip::ZipWriter::new(file);
@@ -216,6 +231,7 @@ pub async fn cloud_backup_game(
         return Err("Backup em nuvem requer GhostBox Premium.".to_string());
     }
     let token = session_token(&app)?;
+    let user_id = session_user_id(&app);
     let app_id = extract_app_id(&game);
     let title = resolved_game_title(&app, &game, &app_id);
     if app_id.is_empty() {
@@ -262,6 +278,9 @@ pub async fn cloud_backup_game(
         if bytes.is_empty() {
             return Err("Nenhum save encontrado para backup em nuvem.".to_string());
         }
+        if !is_same_cloud_account(&app, &token, user_id.as_deref()) {
+            return Err("A conta mudou durante o backup. Tente novamente.".to_string());
+        }
         let backup_size_bytes = bytes.len() as u64;
         let device_name = std::env::var("COMPUTERNAME")
             .or_else(|_| std::env::var("HOSTNAME"))
@@ -271,7 +290,7 @@ pub async fn cloud_backup_game(
             .build()
             .map_err(|error| error.to_string())?
             .post(format!("{}/cloud-saves", cloud_api_url()))
-            .bearer_auth(token)
+            .bearer_auth(&token)
             .header("content-type", "application/zip")
             .header("x-ghostbox-app-id", &app_id)
             .header("x-ghostbox-game-title", &title)
@@ -316,7 +335,9 @@ pub async fn cloud_backup_game(
                 object.insert("warning".to_string(), serde_json::json!(warning));
             }
         }
-        let _ = crate::save_cloud_backup_success_record(&app, &app_id, &title, backup_size_bytes);
+        if is_same_cloud_account(&app, &token, user_id.as_deref()) {
+            let _ = crate::save_cloud_backup_success_record(&app, &app_id, &title, backup_size_bytes);
+        }
         Ok(parsed)
     }
     .await;
@@ -343,6 +364,9 @@ fn format_cloud_api_error(body: &str, status: u16) -> String {
                 "Backup não encontrado na nuvem. Atualize a lista e tente novamente.".to_string()
             }
             "storage_upload_failed" => "Falha ao enviar o backup para a nuvem.".to_string(),
+            "cloud_save_busy" => {
+                "Outro backup deste jogo está em andamento. Aguarde e tente novamente.".to_string()
+            }
             "invalid_profile_image_type" => "A imagem deve estar em JPEG, PNG ou WebP.".to_string(),
             "empty_profile_image" => "A imagem selecionada está vazia.".to_string(),
             "profile_image_too_large" => {
@@ -403,6 +427,7 @@ pub async fn cloud_restore_save(
         return Err("Restauração em nuvem requer GhostBox Premium.".to_string());
     }
     let token = session_token(&app)?;
+    let user_id = session_user_id(&app);
     let app_id = extract_app_id(&game);
     let title = resolved_game_title(&app, &game, &app_id);
     let temp_root = cloud_temp_dir(&app)?.join(uuid::Uuid::new_v4().to_string());
@@ -419,7 +444,7 @@ pub async fn cloud_restore_save(
                 cloud_api_url(),
                 save_id.trim()
             ))
-            .bearer_auth(token)
+            .bearer_auth(&token)
             .send()
             .await
             .map_err(|error| error.to_string())?;
@@ -458,6 +483,9 @@ pub async fn cloud_restore_save(
         })
         .await
         .map_err(|error| error.to_string())??;
+        if !is_same_cloud_account(&app, &token, user_id.as_deref()) {
+            return Err("A conta mudou durante a restauração. Tente novamente.".to_string());
+        }
         let restore_path = restore_dir.to_string_lossy().to_string();
         // Restore saves when present; always restore profile progress (achievements + playtime).
         let ludusavi_error = match resolve_ludusavi_game_name(&app, &app_id, &title) {
@@ -529,7 +557,7 @@ pub async fn cloud_delete_game_saves(
 ) -> Result<serde_json::Value, String> {
     let token = session_token(&app)?;
     let app_id = app_id.trim();
-    if app_id.is_empty() || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
+    if app_id.is_empty() || app_id.len() > 12 || !app_id.chars().all(|ch| ch.is_ascii_digit()) {
         return Err("Jogo inválido para excluir o backup em nuvem.".to_string());
     }
 
