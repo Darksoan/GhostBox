@@ -373,8 +373,8 @@ function HomeCategoryCard({
       aria-label={game.title}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
         event.preventDefault();
+        if (!onGameContextMenu) return;
         onGameContextMenu(game, event.clientX, event.clientY);
       }}
     >
@@ -519,8 +519,8 @@ function HomeTopRatedCard({
         aria-label={game.title}
         onClick={handleClick}
         onContextMenu={(event) => {
-          if (!onGameContextMenu) return;
           event.preventDefault();
+          if (!onGameContextMenu) return;
           onGameContextMenu(game, event.clientX, event.clientY);
         }}
       />
@@ -1004,8 +1004,8 @@ function HomeCalendarGameCardComponent({
       }${failed ? " home-calendar-card--fallback" : ""}`}
       onClick={() => onOpenGame(game)}
       onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
         event.preventDefault();
+        if (!onGameContextMenu) return;
         onGameContextMenu(game, event.clientX, event.clientY);
       }}
     >
@@ -1348,8 +1348,8 @@ function HomeRecommendedHero({
           aria-label={t("home.bannerGoToGame", { title: game.title })}
           onClick={() => onOpenGame(game)}
           onContextMenu={(event) => {
-            if (!onGameContextMenu) return;
             event.preventDefault();
+            if (!onGameContextMenu) return;
             onGameContextMenu(game, event.clientX, event.clientY);
           }}
         >
@@ -1590,8 +1590,8 @@ function HomeWishlistCardComponent({
 
   const handleClick = () => onOpenGame(game);
   const handleContextMenu = (event: React.MouseEvent) => {
-    if (!onGameContextMenu) return;
     event.preventDefault();
+    if (!onGameContextMenu) return;
     onGameContextMenu(game, event.clientX, event.clientY);
   };
 

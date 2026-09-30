@@ -18,7 +18,6 @@ import {
   HiddenProfileGamesSection,
   SteamVisibilitySection,
 } from "../features/settings/ConnectionsPanel";
-import { AccountSection } from "../features/settings/AccountSection";
 import {
   handleListboxKeyDown,
   handleListboxTriggerKeyDown,
@@ -361,7 +360,6 @@ export function SettingsPage({
               </div>
             </div>
           )}
-          {activeTab.id === "general" && <AccountSection />}
           {options.length > 0 && !showingHiddenGames && (
             <div className="settings-options">
               {options.map((option, index) => (

@@ -15,6 +15,17 @@ import { TrayMenu } from "./components/tray/TrayMenu";
 
 const isTrayMenu = new URLSearchParams(window.location.search).get("tray") === "1";
 
+// O app usa menu de contexto próprio (`ContextMenu`). Sem este bloqueio o
+// WebView abre o menu nativo do navegador em qualquer clique direito fora
+// dos cards (fundo, textos, header, inputs), por cima/abaixo do menu do app.
+window.addEventListener(
+  "contextmenu",
+  (event) => {
+    event.preventDefault();
+  },
+  { capture: true },
+);
+
 function renderApp() {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>

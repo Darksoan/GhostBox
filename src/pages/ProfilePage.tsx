@@ -10,12 +10,14 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
   ChevronDown,
   Copy,
   Eye,
   EyeOff,
+  LogOut,
 } from "lucide-react";
 import { Cup, CupStar } from "reicon-react";
 import type { GhostBoxGame, SteamAchievement } from "../data";
@@ -37,6 +39,7 @@ import { useGameIconUrl } from "../hooks/useGameIconUrl";
 import steamIcon from "../../Icons/steam-colored.svg";
 import avatarPlaceholder from "../../Icons/userplaceholder.jpg";
 import { EditProfileTab } from "../components/profile/EditProfileTab";
+import { ModalCloseIcon } from "../components/ui/ModalCloseIcon";
 import "./ProfilePage.scss";
 import {
   useCachedImageSources,
@@ -525,7 +528,7 @@ export function ProfilePage({
 }: ProfilePageProps) {
   const { appearance, t } = useSettings();
   const isMaximized = useWindowMaximized();
-  const { account, linkedSteamId } = useAuth();
+  const { account, linkedSteamId, logout } = useAuth();
   const { showSteamGames, cloudSaveAppIds, hiddenProfileGameIds, refreshGameAchievements } = useAppData();
   const steamConnected = isSteamConnected(steamProfile);
   const shouldShowSteamContent = steamConnected && showSteamGames;
@@ -562,6 +565,9 @@ export function ProfilePage({
   const [isSteamIdVisible, setIsSteamIdVisible] = useState(false);
   const [isSteamIdCopied, setIsSteamIdCopied] = useState(false);
   const steamIdCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
+  const signOutTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const signOutCancelRef = useRef<HTMLButtonElement | null>(null);
   const [discordLink, setDiscordLink] = useState<DiscordLinkStatus | null>(() =>
     ghostboxApi.getCachedDiscordLinkStatus(),
   );
@@ -589,6 +595,39 @@ export function ProfilePage({
   const scrollContentToTop = useCallback(() => {
     scrollElementRef?.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [scrollElementRef]);
+
+  const closeSignOutConfirm = useCallback(() => {
+    setIsSignOutConfirmOpen(false);
+    signOutTriggerRef.current?.focus();
+  }, []);
+
+  const handleSignOutDialogKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closeSignOutConfirm();
+      }
+      if (event.key !== "Tab") return;
+      const buttons = Array.from(
+        event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
+      );
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    },
+    [closeSignOutConfirm],
+  );
+
+  useEffect(() => {
+    if (!isSignOutConfirmOpen) return;
+    signOutCancelRef.current?.focus();
+  }, [isSignOutConfirmOpen]);
 
   useEffect(() => {
     if (previousActiveCollectionIdRef.current === activeCollectionId) return;
@@ -1953,6 +1992,17 @@ export function ProfilePage({
                     </span>
                   </span>
                 )}
+                {account && (
+                  <button
+                    ref={signOutTriggerRef}
+                    type="button"
+                    className="profile-page__signout"
+                    onClick={() => setIsSignOutConfirmOpen(true)}
+                    aria-label={t("settings.general.account.signOut")}
+                  >
+                    <LogOut size={16} strokeWidth={2.25} aria-hidden="true" />
+                  </button>
+                )}
               </div>
               <div className="profile-page__steam-id-row">
                 {steamConnected && steamProfile ? (
@@ -2368,6 +2418,46 @@ export function ProfilePage({
         </main>
 
       </div>
+
+      {isSignOutConfirmOpen && typeof document !== "undefined" && createPortal(
+        <div className="backdrop backdrop--confirm" onClick={closeSignOutConfirm}>
+          <div
+            className="collection-modal profile-page__signout-confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="profile-sign-out-title"
+            aria-describedby="profile-sign-out-description"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={handleSignOutDialogKeyDown}
+          >
+            <header className="collection-modal__header">
+              <div>
+                <h3 id="profile-sign-out-title">{t("settings.general.account.signOutConfirmTitle")}</h3>
+                <p id="profile-sign-out-description">{t("settings.general.account.signOutDescription")}</p>
+              </div>
+              <button
+                type="button"
+                className="collection-modal__close"
+                onClick={closeSignOutConfirm}
+                aria-label={t("settings.general.account.signOutClose")}
+              >
+                <ModalCloseIcon />
+              </button>
+            </header>
+            <div className="collection-modal__content">
+              <div className="collection-modal__actions">
+                <button ref={signOutCancelRef} type="button" className="button button--outline" onClick={closeSignOutConfirm}>
+                  {t("settings.general.account.signOutCancel")}
+                </button>
+                <button type="button" className="button button--danger" onClick={() => void logout()}>
+                  {t("settings.general.account.signOut")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </section>
   );
 }

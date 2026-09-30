@@ -80,7 +80,7 @@ describe("Typography tokens", () => {
     const tokens = collectTokens();
 
     expect(resolveToken("--settings-dropdown-surface", tokens)).toBe("#151515");
-    expect(resolveToken("--settings-dropdown-surface-hover", tokens)).toBe("#202020");
+    expect(resolveToken("--settings-dropdown-surface-hover", tokens)).toBe("#151515");
     expect(resolveToken("--settings-dropdown-menu", tokens)).toBe("#151515");
     expect(resolveToken("--dropdown-option-hover", tokens)).toBe("#1a1a1a");
   });

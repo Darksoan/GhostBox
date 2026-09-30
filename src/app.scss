@@ -1260,9 +1260,10 @@ p {
       content: none;
     }
 
-    // Hover changes only the surface; selected items brighten the text.
-    &:hover:not(.sidebar__menu-item--active) {
+    &:hover:not(.sidebar__menu-item--active),
+    &:focus-within:not(.sidebar__menu-item--active) {
       background: var(--sidebar-option-hover);
+      color: var(--text-primary);
     }
 
     // Active uses the shared interactive surface token.
@@ -1285,8 +1286,10 @@ p {
         color: inherit;
       }
 
-      &:hover:not(.sidebar__menu-item--active) {
+      &:hover:not(.sidebar__menu-item--active),
+      &:focus-within:not(.sidebar__menu-item--active) {
         background: var(--sidebar-selector);
+        color: var(--text-primary);
       }
 
       &.sidebar__menu-item--active {
@@ -1299,7 +1302,7 @@ p {
       }
     }
 
-    &.sidebar__collection-item--expanded {
+    &.sidebar__collection-item--expanded:not(.sidebar__menu-item--active) {
       color: var(--text-secondary);
     }
 
@@ -1475,6 +1478,7 @@ p {
     &:hover,
     &:focus-visible {
       background: var(--sidebar-option-selected);
+      color: var(--text-primary);
     }
   }
 
@@ -2701,7 +2705,7 @@ button > svg {
     padding: var(--space-3) var(--space-5);
     border: 0;
     border-radius: var(--radius-sm);
-    background: transparent;
+    background: var(--surface-option);
     color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
@@ -2710,13 +2714,14 @@ button > svg {
       background var(--motion-base) ease,
       color var(--motion-base) ease;
 
-    &:hover {
-      background: var(--surface-hover);
+    &:hover,
+    &:focus-visible {
+      background: var(--sidebar-option-hover);
       color: var(--text-primary);
     }
 
     &--active {
-      background: var(--surface-active);
+      background: var(--sidebar-option-active);
       color: var(--text-primary);
     }
   }
@@ -6190,7 +6195,7 @@ html.no-animations {
   padding: 0 var(--space-8);
   border: 0;
   border-radius: var(--radius-xs);
-  background: var(--settings-dropdown-surface);
+  background: var(--surface-option);
   color: var(--text-secondary);
   cursor: pointer;
   font-size: var(--type-size-compact);

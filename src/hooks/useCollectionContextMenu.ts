@@ -3,14 +3,20 @@ import type { GhostBoxGame } from "../data";
 import type { UserCollection } from "../types";
 import {
   Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
   Folder,
   Heart,
   HeartOff,
   Play,
   TextSearch,
   Trash,
+  Trophy,
 } from "lucide-react";
 import { ContextMenuItem } from "../components/ui/ContextMenu";
+import { useSettings } from "../context/settings";
+import { hasAvailableAchievements } from "../utils/achievementStats";
 
 export interface UseCollectionContextMenuOptions {
   game: GhostBoxGame | null;
@@ -25,6 +31,12 @@ export interface UseCollectionContextMenuOptions {
   onOpenGame?: (game: GhostBoxGame) => void;
   onAddGame?: (game: GhostBoxGame) => void;
   onPlayGame?: (game: GhostBoxGame) => void;
+  onOpenAchievements?: (game: GhostBoxGame) => void;
+  onToggleHidden?: (game: GhostBoxGame) => void;
+  onOpenInSteam?: (game: GhostBoxGame) => void;
+  isProfileHidden?: boolean;
+  /** AppIds possuídos fora da biblioteca/favoritos (histórico, owned Steam). */
+  hideableGameAppIds?: Set<string>;
   onRemoveGame?: (game: GhostBoxGame) => void;
   onToggleFavorite?: (game: GhostBoxGame) => void;
   onAddGameToCollection?: (game: GhostBoxGame, collectionId: string) => void;
@@ -48,6 +60,11 @@ export function useCollectionContextMenu({
   onOpenGame,
   onAddGame,
   onPlayGame,
+  onOpenAchievements,
+  onToggleHidden,
+  onOpenInSteam,
+  isProfileHidden = false,
+  hideableGameAppIds,
   onRemoveGame,
   onToggleFavorite,
   onAddGameToCollection,
@@ -57,6 +74,10 @@ export function useCollectionContextMenu({
   onlyCollectionActions = false,
   excludeCollectionId,
 }: UseCollectionContextMenuOptions): ContextMenuItem[] {
+  const { appearance } = useSettings();
+  const isEnglish = appearance.language === "en";
+  const copy = (pt: string, en: string) => (isEnglish ? en : pt);
+
   return useMemo(() => {
     if (!game) return [];
 
@@ -98,6 +119,14 @@ export function useCollectionContextMenu({
         label: "Play",
         icon: Play,
         onClick: () => onPlayGame(game),
+      });
+    }
+
+    if (!onlyCollectionActions && onOpenAchievements && hasAvailableAchievements(game)) {
+      items.push({
+        label: copy("Ver conquistas", "View achievements"),
+        icon: Trophy,
+        onClick: () => onOpenAchievements(game),
       });
     }
 
@@ -172,6 +201,30 @@ export function useCollectionContextMenu({
       });
     }
 
+    // Só jogo possuído pode sumir do perfil: biblioteca, favoritos,
+    // histórico ou owned Steam. Catálogo não possuído não recebe o item.
+    const canHideFromProfile = Boolean(
+      game.appId &&
+        (isInLibrary || isFavorite || hasGameKey(hideableGameAppIds)),
+    );
+    if (!onlyCollectionActions && onToggleHidden && canHideFromProfile) {
+      items.push({
+        label: isProfileHidden
+          ? copy("Mostrar no perfil", "Show on profile")
+          : copy("Ocultar no perfil", "Hide from profile"),
+        icon: isProfileHidden ? Eye : EyeOff,
+        onClick: () => onToggleHidden(game),
+      });
+    }
+
+    if (!onlyCollectionActions && onOpenInSteam && game.appId) {
+      items.push({
+        label: copy("Ver na loja", "View in store"),
+        icon: ExternalLink,
+        onClick: () => onOpenInSteam(game),
+      });
+    }
+
     return items;
   }, [
     game,
@@ -187,11 +240,17 @@ export function useCollectionContextMenu({
     directFavoriteAction,
     onlyCollectionActions,
     excludeCollectionId,
+    isProfileHidden,
+    hideableGameAppIds,
+    copy,
     onOpenGame,
     onAddGame,
     onPlayGame,
+    onOpenAchievements,
     onRemoveGame,
     onToggleFavorite,
+    onToggleHidden,
+    onOpenInSteam,
     onAddGameToCollection,
     onRemoveGameFromCollection,
   ]);

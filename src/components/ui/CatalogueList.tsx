@@ -293,8 +293,8 @@ export const CatalogueListItem = memo(function CatalogueListItem({
       data-catalogue-game-id={game.id}
       aria-busy={isAdding || isRemoving}
       onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
         event.preventDefault();
+        if (!onGameContextMenu) return;
         onGameContextMenu(game, event.clientX, event.clientY);
       }}
     >
@@ -417,8 +417,8 @@ const CatalogueGridCard = memo(function CatalogueGridCard({
       data-catalogue-game-id={game.id}
       aria-busy={isAdding || isRemoving}
       onContextMenu={(event) => {
-        if (!onGameContextMenu) return;
         event.preventDefault();
+        if (!onGameContextMenu) return;
         onGameContextMenu(game, event.clientX, event.clientY);
       }}
     >

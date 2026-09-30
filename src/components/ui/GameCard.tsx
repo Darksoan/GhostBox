@@ -136,8 +136,8 @@ export const GameCard = memo(function GameCard({
       : `Jogar ${game.title}`;
 
   const handleContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
     if (onContextMenu) {
-      event.preventDefault();
       onContextMenu(game, event.clientX, event.clientY);
     }
   };

@@ -437,6 +437,59 @@
     display: block;
   }
 
+  /* Sair da conta: ícone terciário em repouso, primário no hover/foco. Fica à
+     direita do círculo de nível, sobre a capa — por isso o fundo é transparente
+     e o hover só troca a cor, sem bloco de superfície. */
+  &__signout {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: color var(--motion-fast) var(--ease);
+
+    svg {
+      display: block;
+    }
+
+    &:hover,
+    &:focus-visible {
+      background: transparent;
+      color: var(--text-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring-color);
+      outline-offset: 2px;
+    }
+  }
+
+  &__signout-confirm .collection-modal__header > div {
+    gap: var(--space-4);
+  }
+
+  .collection-modal.profile-page__signout-confirm .collection-modal__actions .button.button--danger {
+    background: var(--surface-option);
+    color: var(--text-primary);
+
+    &:focus-visible:not(:disabled) {
+      background: var(--surface-option-hover);
+      color: var(--text-primary);
+    }
+
+    &:hover:not(:disabled) {
+      background: var(--danger);
+      color: var(--text-primary);
+    }
+  }
+
   &__steam-id-row {
     display: flex;
     align-items: center;
@@ -1916,7 +1969,8 @@ html.no-backdrop-blur .profile-page {
     width: 100%;
   }
 
-  &__edit-panel {
+  &__edit-panel,
+  &__edit-section--crop {
     min-height: calc(
       100dvh - var(--app-header-height) - var(--space-8) - var(--page-bottom-space)
     );
@@ -2124,7 +2178,7 @@ html.no-backdrop-blur .profile-page {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -2134,7 +2188,7 @@ html.no-backdrop-blur .profile-page {
 
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
   }
 
@@ -2300,15 +2354,16 @@ html.no-backdrop-blur .profile-page {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
+    gap: var(--space-6);
+    margin-top: auto;
+    padding-top: var(--space-4);
 
     .button {
       color: var(--text-tertiary);
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
     }
   }
