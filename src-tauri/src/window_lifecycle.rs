@@ -12,8 +12,8 @@ const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_WINDOW_LABEL: &str = "tray-menu";
 const WINDOW_HIDDEN_TO_TRAY_EVENT: &str = "window-hidden-to-tray";
 const TRAY_NAVIGATE_EVENT: &str = "tray-navigate";
-const TRAY_MENU_WIDTH: f64 = 248.0;
-const TRAY_MENU_HEIGHT: f64 = 360.0;
+const TRAY_MENU_WIDTH: f64 = 300.0;
+const TRAY_MENU_HEIGHT: f64 = 520.0;
 const APP_USER_MODEL_ID: &str = "com.ghostbox.app";
 const WINDOW_BACKGROUND: tauri::window::Color = tauri::window::Color(11, 11, 11, 255);
 

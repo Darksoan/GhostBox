@@ -894,7 +894,7 @@ fn validate_oauth_provider(provider: &str) -> Result<&str, String> {
 }
 
 /// Runs the browser hand-off and returns the single-use ticket the Worker
-/// bounced back.
+/// bounced back, with the socket kept open until the session is persisted.
 ///
 /// Providers only redirect to the one URI registered for the app, so the
 /// browser lands on the Worker, not here. The Worker redirects a ticket to the
@@ -910,7 +910,7 @@ async fn run_oauth_browser_flow(
     app: &tauri::AppHandle,
     provider: &str,
     purpose: &str,
-) -> Result<String, String> {
+) -> Result<(String, std::net::TcpStream), String> {
     use tauri_plugin_opener::OpenerExt;
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
@@ -961,13 +961,7 @@ async fn run_oauth_browser_flow(
         return Err("A autorização foi recusada.".to_string());
     }
 
-    crate::oauth_loopback::write_http_response(
-        &mut stream,
-        "200 OK",
-        &crate::oauth_loopback::callback_page_html(true, "Autorizado. Volte ao GhostBox."),
-    );
-
-    Ok(ticket)
+    Ok((ticket, stream))
 }
 
 /// Signs in through an OAuth provider. The Worker creates the provider-only
@@ -978,17 +972,35 @@ pub async fn cloud_oauth_login(
     provider: String,
 ) -> Result<serde_json::Value, String> {
     let provider = validate_oauth_provider(&provider)?;
-    let ticket = run_oauth_browser_flow(&app, provider, "login").await?;
+    let (ticket, mut stream) = run_oauth_browser_flow(&app, provider, "login").await?;
 
-    let result = auth_json_request(
-        auth_client(20)?
-            .post(format!("{}/auth/oauth/exchange", cloud_api_url()))
-            .json(&serde_json::json!({ "ticket": ticket })),
-    )
-    .await?;
+    let result = async {
+        let result = auth_json_request(
+            auth_client(20)?
+                .post(format!("{}/auth/oauth/exchange", cloud_api_url()))
+                .json(&serde_json::json!({ "ticket": ticket })),
+        )
+        .await?;
 
-    save_cloud_session(&app, &result)?;
-    Ok(result)
+        save_cloud_session(&app, &result)?;
+        Ok(result)
+    }
+    .await;
+
+    match result {
+        Ok(session) => {
+            crate::oauth_loopback::complete_browser_login(&app, &mut stream);
+            Ok(session)
+        }
+        Err(error) => {
+            crate::oauth_loopback::write_http_response(
+                &mut stream,
+                "400 Bad Request",
+                &crate::oauth_loopback::callback_page_html(false, "Não conectado."),
+            );
+            Err(error)
+        }
+    }
 }
 
 /// Retired with email/password: there is no password to recover. The

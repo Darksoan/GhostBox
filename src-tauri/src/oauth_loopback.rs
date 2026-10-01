@@ -71,6 +71,21 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0A0A
     )
 }
 
+/// Complete only after the session has been validated and saved. A 204 cannot
+/// execute JavaScript, so return an empty document that requests tab closure.
+/// External-browser tabs may not be script-closable; focus the launcher either way.
+pub(crate) fn complete_browser_login(
+    app: &tauri::AppHandle,
+    stream: &mut std::net::TcpStream,
+) {
+    write_http_response(
+        stream,
+        "200 OK",
+        r#"<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>GhostBox</title><meta name="referrer" content="no-referrer"><style>:root{color-scheme:dark}body{margin:0;background:#0a0a0a}</style></head><body><script>window.close();</script></body></html>"#,
+    );
+    crate::window_lifecycle::show_main_window(app);
+}
+
 pub(crate) fn write_http_response(stream: &mut std::net::TcpStream, status: &str, body: &str) {
     use std::io::Write;
 

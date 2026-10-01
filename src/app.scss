@@ -8,7 +8,7 @@
   height: 100vh;
   margin: 0;
   background: var(--surface-tray);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   overflow: hidden;
 }
@@ -46,11 +46,13 @@
   flex: 1;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .tray-menu__item {
   width: 100%;
-  min-height: 25px;
+  min-height: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -58,7 +60,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--surface-tray-item);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: var(--type-size-caption);
@@ -78,6 +80,7 @@
 .tray-menu__item:focus-visible {
   outline: none;
   background: var(--surface-tray-item-focus);
+  color: var(--text-primary);
   box-shadow: var(--focus-ring-tray);
 }
 
@@ -110,7 +113,7 @@
   align-items: center;
   justify-content: center;
   background: var(--surface-active);
-  color: var(--text-secondary);
+  color: inherit;
   font-weight: var(--weight-regular);
 }
 
@@ -120,7 +123,7 @@
 }
 
 .tray-menu__game {
-  min-height: 29px;
+  min-height: 32px;
   padding-top: var(--space-3);
   padding-bottom: var(--space-3);
 }
@@ -590,6 +593,22 @@ select,
 .profile-page,
 .notifications-page,
 .sidebar,
+:root {
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-resize {
+  transition:
+    width var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize { transition: none !important; }
+}
+
 .header {
   text-rendering: optimizeLegibility;
   font-synthesis: none;
@@ -1796,6 +1815,7 @@ p {
   --header-icon: 20px;
   --header-gap: var(--space-4);
   --header-search-width: 280px;
+  --header-search-compact-width: 180px;
 
   position: relative;
   z-index: var(--z-drawer);
@@ -2135,7 +2155,7 @@ p {
 
   &__search {
     display: inline-flex;
-    width: var(--header-search-width);
+    width: var(--header-search-compact-width);
     height: var(--header-control);
     min-height: var(--header-control);
     max-height: var(--header-control);
@@ -2152,9 +2172,6 @@ p {
     line-height: 1;
     overflow: hidden;
     cursor: text;
-    transition:
-      padding var(--motion-base) var(--ease),
-      opacity var(--motion-fast) var(--ease);
 
     > svg {
       display: block;
@@ -2184,6 +2201,10 @@ p {
         font-weight: var(--weight-regular);
       }
     }
+  }
+
+  &__search-shell:focus-within &__search {
+    width: var(--header-search-width);
   }
 
   &__window-controls-update {
@@ -3111,7 +3132,7 @@ button > svg {
 }
 
 .home-banner__developer {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: var(--type-size-compact);
   line-height: var(--lh-300);
 }
@@ -3120,7 +3141,7 @@ button > svg {
   display: -webkit-box;
   overflow: hidden;
   max-width: min(92ch, 100%);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: var(--type-size-compact);
   line-height: var(--lh-300);
   opacity: 0.92;
@@ -6482,7 +6503,7 @@ html.no-animations {
   z-index: 9999;
   min-width: 180px;
   padding: var(--space-2);
-  background: var(--sidebar-option-hover);
+  background: var(--surface-option);
   border: 0;
   border-radius: var(--radius-md);
   animation: none;
@@ -6540,7 +6561,7 @@ html.no-animations {
     padding: var(--space-2);
     border: 0;
     border-radius: var(--radius-md);
-    background: var(--sidebar-option-hover);
+    background: var(--surface-option);
     overflow: hidden;
     list-style: none;
     pointer-events: none;
@@ -6571,7 +6592,7 @@ html.no-animations {
     padding: var(--space-4) var(--space-5);
     border: 0;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: var(--type-size-compact);
     font-family: var(--font-sans);
@@ -6589,8 +6610,9 @@ html.no-animations {
       transition: color var(--motion-fast) ease;
     }
 
-    &:hover {
-      background: var(--sidebar-option-active);
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-option-hover);
       color: var(--text-primary);
 
       svg {
@@ -6599,7 +6621,7 @@ html.no-animations {
     }
 
     &--danger {
-      color: var(--text-primary);
+      color: var(--text-secondary);
 
       svg {
         opacity: 0.8;
@@ -6607,7 +6629,7 @@ html.no-animations {
 
       &:hover:not(:disabled),
       &:focus-visible:not(:disabled) {
-        background: var(--danger);
+        background: var(--surface-option-hover);
         color: var(--text-primary);
 
         svg {
@@ -8705,36 +8727,6 @@ input[type="search"]::-ms-reveal {
 .backdrop--confirm > .confirm-modal,
 .confirm-modal {
   background: var(--surface-modal);
-
-  .confirm-modal__actions .button {
-    border: 0;
-    background: var(--surface-option);
-    color: var(--text-tertiary);
-
-    &:hover:not(:disabled),
-    &:focus-visible:not(:disabled) {
-      background: var(--surface-option-hover);
-      color: var(--text-secondary);
-    }
-  }
-
-  .confirm-modal__actions .confirm-modal__confirm,
-  .confirm-modal__actions .button--danger,
-  .confirm-modal__actions .game-settings-modal__confirm-danger {
-    background: var(--surface-option);
-    color: var(--text-primary);
-  }
-
-  .confirm-modal__actions .confirm-modal__confirm:hover:not(:disabled),
-  .confirm-modal__actions .confirm-modal__confirm:focus-visible:not(:disabled),
-  .confirm-modal__actions .button--danger:hover:not(:disabled),
-  .confirm-modal__actions .button--danger:focus-visible:not(:disabled),
-  .confirm-modal__actions .game-settings-modal__confirm-danger:hover:not(:disabled),
-  .confirm-modal__actions .game-settings-modal__confirm-danger:focus-visible:not(:disabled) {
-    background: var(--danger);
-    color: var(--text-primary);
-  }
-
 }
 
 @keyframes download-cover-in {
@@ -9369,6 +9361,7 @@ input[type="search"]::-ms-reveal {
   bottom: var(--space-8);
   z-index: var(--z-toast);
   width: max-content;
+  min-width: min(320px, calc(100vw - var(--space-8) - var(--space-8)));
   max-width: calc(100vw - var(--space-8) - var(--space-8));
   overflow: hidden;
   border-radius: var(--radius-sm);
@@ -9533,6 +9526,7 @@ input[type="search"]::-ms-reveal {
   flex-direction: column;
   gap: var(--space-4);
   width: max-content;
+  min-width: min(320px, calc(100vw - var(--space-8) - var(--space-8)));
   max-width: calc(100vw - var(--space-8) - var(--space-8));
   pointer-events: none;
 }
@@ -15117,35 +15111,33 @@ button {
   color: var(--text-primary);
 }
 
-/* Confirmações neutras seguem a mesma progressão dos triggers do catálogo:
-   repouso discreto e um único degrau de ênfase no hover/foco. Ações destrutivas
-   ficam fora deste seletor e preservam o tratamento vermelho abaixo. */
-.confirm-modal__actions
-  .button:not(.button--danger):not(.confirm-modal__confirm):not(.game-settings-modal__confirm-danger) {
-  background: var(--surface-option);
-  color: var(--text-tertiary);
-
-  &:hover:not(:disabled),
-  &:focus-visible:not(:disabled) {
-    background: var(--surface-option-hover);
-    color: var(--text-secondary);
-  }
-}
-
 /* ── Confirmation modals ──────────────────────────────────────────── */
 /* Separe o texto das ações e dê mais altura aos diálogos de confirmação. */
+.backdrop--confirm > .collection-modal .collection-modal__header p,
+.collection-create-modal .collection-modal__header p,
+.backdrop--confirm > .collection-modal .collection-modal__content > p:not([role="alert"]),
+.confirm-modal .confirm-modal__header p,
+.confirm-modal .confirm-modal__content p:not([role="alert"]) {
+  color: var(--text-tertiary);
+}
+
 .backdrop--confirm > .collection-modal {
   .collection-modal__header {
-    padding-bottom: var(--space-12);
+    padding-bottom: var(--space-16);
   }
 
   .collection-modal__content {
+    gap: var(--space-12);
     padding-bottom: var(--space-10);
   }
 }
 
 .confirm-modal__actions {
-  padding-top: var(--space-8);
+  padding-top: var(--space-12);
+}
+
+.collection-create-modal .collection-modal__content {
+  gap: var(--space-12);
 }
 
 /* ── Uninstall confirm modal ──────────────────────────────────────── */
@@ -15159,39 +15151,6 @@ button {
   width: fit-content;
   min-width: min(560px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
-}
-
-.uninstall-confirm-modal .collection-modal__actions .button:not(.button--danger) {
-  background: var(--surface-option);
-  color: var(--text-tertiary);
-
-  &:hover:not(:disabled),
-  &:focus-visible:not(:disabled) {
-    background: var(--surface-option-hover);
-    color: var(--text-secondary);
-  }
-}
-
-.uninstall-confirm-modal .collection-modal__actions .button--danger {
-  background: var(--surface-option);
-  color: var(--text-primary);
-
-  &:hover:not(:disabled),
-  &:focus-visible:not(:disabled) {
-    background: var(--danger);
-    color: var(--text-primary);
-  }
-}
-
-.uninstall-confirm-modal .collection-modal__actions .button.uninstall-confirm-modal__remove {
-  background: var(--surface-option);
-  color: var(--text-tertiary);
-
-  &:hover:not(:disabled),
-  &:focus-visible:not(:disabled) {
-    background: var(--danger);
-    color: var(--text-primary);
-  }
 }
 
 .cloud-backup-confirm-modal {
@@ -15217,21 +15176,28 @@ button {
     cursor: wait;
   }
 
-  .collection-modal__actions .button:not(.button--danger) {
-    background: var(--surface-option);
-    color: var(--text-tertiary);
+}
 
-    &:hover:not(:disabled),
-    &:focus-visible:not(:disabled) {
-      background: var(--surface-option-hover);
-      color: var(--text-secondary);
-    }
+/* Um único padrão para ações, inclusive destrutivas e criação de coleção. */
+.backdrop--confirm > .collection-modal .collection-modal__actions .button.button,
+.backdrop--confirm > .confirm-modal .confirm-modal__actions .button.button,
+.confirm-modal .confirm-modal__actions .button.button,
+.collection-create-modal .collection-modal__actions .button.button {
+  background: var(--surface-option);
+  color: var(--text-primary);
+  border: 0;
+  font-weight: var(--weight-regular);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    background: var(--surface-option-active);
+    color: var(--text-primary);
   }
 
-  .collection-modal__actions .button.cloud-backup-confirm-modal__delete:hover:not(:disabled),
-  .collection-modal__actions .button.cloud-backup-confirm-modal__delete:focus-visible:not(:disabled) {
-    background: var(--danger);
+  &:disabled {
+    background: var(--surface-option);
     color: var(--text-primary);
+    opacity: var(--control-disabled-opacity);
   }
 }
 

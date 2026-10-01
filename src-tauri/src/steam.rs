@@ -1045,11 +1045,7 @@ pub async fn cloud_steam_login(app: tauri::AppHandle) -> Result<serde_json::Valu
                 );
                 return Err(error);
             }
-            write_http_response(
-                &mut callback.stream,
-                "200 OK",
-                &steam_login_page_html(true, "Signed in. Back to GhostBox."),
-            );
+            crate::oauth_loopback::complete_browser_login(&app, &mut callback.stream);
             // The worker login is already complete; a local cache write must
             // not turn that successful account session into a reported failure.
             let _ = save_steam_profile(&app, profile);

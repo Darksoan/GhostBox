@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import type { GameInstallationFinishedEvent, GhostBoxGame } from "../data";
+import type { GhostBoxGame } from "../data";
 import {
   addGameViaLuaTools,
   registerSteamLibraryGame,
@@ -486,9 +486,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     readStoredAutoRestoredCloudSaves(),
   );
   const autoRestoreInFlightAppIdsRef = useRef<Set<string>>(new Set());
-  const backgroundInstallationOutcomesRef = useRef(
-    new Map<string, GameInstallationFinishedEvent>(),
-  );
   const skipCloudProfileUploadCountRef = useRef(0);
   const cloudProfileLocalUpdatedAtRef = useRef<string | null>(
     readStoredCloudProfileUpdatedAt(),
@@ -1943,64 +1940,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [appearance.language, hasPremiumCloudProfileAccess],
   );
 
-  useEffect(() => {
-    return ghostboxApi.onGameInstallationFinished((event) => {
-      backgroundInstallationOutcomesRef.current.set(event.appId, event);
-
-      if (!event.success) {
-        setScannedLibraryGames((current) =>
-          current.filter((game) => game.appId !== event.appId),
-        );
-        setAddedLibraryGames((current) =>
-          current.filter((game) => game.appId !== event.appId),
-        );
-        setAddedLibraryGameAppIds((current) => {
-          const next = new Set(current);
-          next.delete(event.appId);
-          return next;
-        });
-        const errorMessage =
-          simplifyAddGameError(event.error) ||
-          "Não foi possível concluir a instalação do jogo.";
-        showToast("Falha na instalação", errorMessage, "error");
-        pushAppNotification({
-          id: `library:install:error:${event.appId}:${Date.now()}`,
-          type: "library",
-          severity: "error",
-          title:
-            appearance.language === "en"
-              ? "Installation failed"
-              : "Falha na instalação",
-          message:
-            appearance.language === "en"
-              ? `${event.title} could not be installed. ${errorMessage}`
-              : `${event.title} não pôde ser instalado. ${errorMessage}`,
-          createdAt: Date.now(),
-          game: { appId: event.appId, title: event.title },
-        });
-        return;
-      }
-
-      const libraryGame = mergeGamePlaytime(event.libraryGame);
-      setScannedLibraryGames((current) =>
-        upsertLibraryGameByAppId(current, libraryGame),
-      );
-      setAddedLibraryGames((current) =>
-        upsertLibraryGameByAppId(current, libraryGame),
-      );
-      setAddedLibraryGameAppIds((current) =>
-        new Set(current).add(libraryGame.appId),
-      );
-      removedLibraryGameIdsRef.current.delete(libraryGame.appId);
-      writeStoredRemovedLibraryGameIds(removedLibraryGameIdsRef.current);
-      if (event.steamDownloadPending) {
-        return;
-      }
-
-      void autoRestoreCloudBackup(libraryGame);
-    });
-  }, [appearance.language, autoRestoreCloudBackup, mergeGamePlaytime, showToast]);
-
   const queueGame = useCallback(
     async (game: GhostBoxGame) => {
       // Demos nunca entram em downloads/fila: fonte de verdade é o tipo, sem
@@ -2014,7 +1953,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      backgroundInstallationOutcomesRef.current.delete(game.appId);
       setAddingGameId(game.id);
       try {
         const steamPlaytimeEntry = gamePlaytimesRef.current[game.appId] as
@@ -2057,18 +1995,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ensureLuaToolsDependencies();
         }
 
-        const backgroundOutcome = result.installationStarted
-          ? backgroundInstallationOutcomesRef.current.get(game.appId)
-          : undefined;
-        if (backgroundOutcome) {
-          backgroundInstallationOutcomesRef.current.delete(game.appId);
-        }
-        if (backgroundOutcome && !backgroundOutcome.success) {
-          return;
-        }
-
         const libraryGame = mergeGamePlaytime({
-          ...(backgroundOutcome?.libraryGame ?? result.libraryGame),
+          ...result.libraryGame,
           // Registered Steam games must not look like auto-listed owned stubs.
           librarySource: isSteamOwnedGame
             ? "registered"
@@ -2111,9 +2039,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           },
         });
 
-        if (!result.installationStarted) {
-          void autoRestoreCloudBackup(libraryGame);
-        }
+        void autoRestoreCloudBackup(libraryGame);
       } catch (error) {
         const errorMessage =
           error instanceof Error

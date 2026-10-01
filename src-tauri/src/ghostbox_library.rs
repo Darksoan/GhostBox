@@ -71,6 +71,8 @@ fn sanitize_ghostbox_library_game(value: &Value) -> Option<Value> {
     if let Some(object) = game.as_object_mut() {
         object.remove("customExePath");
         object.remove("launchArguments");
+        // Adding games no longer starts a background depot installation.
+        object.remove("installationPending");
     }
     Some(game)
 }

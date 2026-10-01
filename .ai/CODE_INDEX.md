@@ -4,26 +4,23 @@
 
 `queueGame` -> `src/context/AppDataContext.tsx` (around 1973)
 `ghostboxApi.addGameViaLuaTools` -> `src/lib/ghostboxApi.tauri.ts`
-`luatools_add_game` -> `src-tauri/src/luatools.rs` (around 321); returns after package setup and spawns depot installation
+`luatools_add_game` -> `src-tauri/src/luatools.rs` (around 321); installs Lua/manifest package and registers game only; no background depot download or appmanifest/bootstrap creation
 `install_lua_tools_package` -> `src-tauri/src/luatools.rs` (around 137)
-`install_added_game`, `cdndownload_download_game` -> `src-tauri/src/cdndownload.rs` (around 1250-1980); bootstrap limitado por `STEAM_BOOTSTRAP_BYTES` (1 MiB)
 `upsert_ghostbox_library_game` -> `src-tauri/src/ghostbox_library.rs`
 
 Relationships:
-`GameModal` -> `ContentOverlay` -> `AppDataContext.queueGame` -> `luatools_add_game` -> background `install_added_game` -> `sidecars/steamkit-poc/Program.cs` (`downloadDepot`/`MaxDownloadBytes`) -> `SteamKitPocRunner.DownloadDepotFilesAsync` (chunk budget, `partial-complete`) -> `write_partial_appmanifest` -> Steam conclui o download
+`GameModal` -> `ContentOverlay` -> `AppDataContext.queueGame` -> `luatools_add_game` -> `install_lua_tools_package` -> `upsert_ghostbox_library_game`; returned status `discover`, progress 0. Installation/download is initiated in Steam by the user.
 `GameModal` / `ModalActions` -> `src/components/modals/GameModal.tsx` (around 706-885: Jogar/Adicionar/Remover/Favoritos/Ajustes); action hover/selected styles -> `src/app.scss` (`.modal__play-button` through `.modal__gear-button`, around 12300-12485).
 
-Background completion:
-Rust emits `game-installation-finished` -> `ghostboxApi.onGameInstallationFinished` -> `AppDataContext` updates/removes the game silently on success and notifies only on failure. The immediate `queueGame` result emits the single “Jogo adicionado” success toast.
-Pending marker -> `GhostBoxGame.installationPending`; immediate result -> `AddGameResult.installationStarted` in `src/data.ts`.
+Add completion: immediate `queueGame` result emits the single “Jogo adicionado” toast; no installation-finished event/listener. `sanitize_ghostbox_library_game` drops the obsolete persisted `installationPending` marker.
 
-Steam bootstrap completion:
+Standalone CDN downloader (not called by add-game):
 `finalize_steam_integration` -> `src-tauri/src/cdndownload.rs` (around 1880)
 `write_partial_appmanifest` (`StateFlags=2`) / `write_appmanifest` (`StateFlags=4`), `register_library_folder` -> `src-tauri/src/steam_appmanifest.rs`
 Steam scan reads partial ACF as `status: queued` -> `parse_app_manifest` in `src-tauri/src/steam.rs`.
 Chunk resume/validation state -> `src-tauri/src/chunk_index.rs`
 
-Bootstrap is file-granular, never partial: `ProduceChunksAsync` in `sidecars/steamkit-poc/SteamKitPocRunner.cs` admits whole files (overshoot allowed, capped by `MaxFileOvershootBytes` from `STEAM_BOOTSTRAP_OVERSHOOT_BYTES` 64 MiB in `cdndownload.rs`); oversized files are skipped entirely, never left half-written.
+`cdndownload_download_game` in `src-tauri/src/cdndownload.rs` retains its standalone worker protocol; file budget -> `ProduceChunksAsync` in `sidecars/steamkit-poc/SteamKitPocRunner.cs`. Not part of library addition.
 Install-dir reconciliation: `resolve_effective_install_dir` in `cdndownload.rs` (pending ACF vs canonical `resolve_install_dir`); on divergence keeps the folder with more bytes, removes the loser only if safe bootstrap orphan (`is_safe_bootstrap_orphan`: has `.ghostbox-chunks.json`, no `.exe`).
 Canonical folder names: `sanitize_install_dir`/`transliterate_to_ascii` in `steam_appinfo.rs` (ASCII-safe, deterministic; mojibake-proof).
 UI errors are simple: `simplifyAddGameError` in `src/context/AppDataContext.tsx` (only item-blocked / Steam-missing / already-installed pass through; rest use the generic fallback).
@@ -70,13 +67,14 @@ Premium cloud collection restore -> `AppDataContext.restoreCloudProfileFromRemot
 ## Profile Editing
 
 `EditProfileTab` -> `src/components/profile/EditProfileTab.tsx`; avatar upload/crop and premium banner editing, saved through `AppDataContext.handleUpdateProfile`.
-Styles -> `src/pages/ProfilePage.scss` (`profile-page__edit-*`, around 1880).
+Styles -> `src/pages/ProfilePage.scss` (`profile-page__edit-*`, around 2080 onward): 120px avatar beside `profile.identityTitle` (Perfil/Profile) and name input (480px cap); no avatar-format or banner-position subtext. Full-height panel with save footer bottom-right (tertiary resting text, primary hover/focus); input focus ring. Avatar upload opens crop mode; no separate recrop badge. Banner actions -> `__edit-banner-overlay` (top-right flex row, 12px inset, 8px gap, 120ms opacity reveal on cover hover/keyboard focus; visible on no-hover devices), `__edit-banner-icon--change` / `--remove` (32px circles, camera left of trash; hidden icons cannot intercept pointers; no hover zoom/dimming; trash hover/focus uses `--danger`). Crop mode keeps full-height actions. Reduced-motion rule covers edit controls.
+Banner framing -> `getBannerPanRange` / `panBannerPosition` / `zoomBannerPosition` in `src/utils/profileBanner.ts` -> `EditProfileTab.handleBannerPointerDown/Move/Wheel`: object-fit/zoom overflow determines pixel-to-percent drag, 1.15 sensitivity, clamped edges; wheel zoom anchors the image point under the cursor by adjusting position and scale together. Preview and `ProfilePage.bannerImageStyle` share `objectPosition` + matching `transformOrigin` so zoom permits both-axis panning and saved framing matches. Tests -> `tests/profile-banner-pan.test.ts`.
 Free avatar sync -> `AppDataContext.handleUpdateProfile` / `restoreCloudProfileFromRemote` in `src/context/AppDataContext.tsx` (around 997-1060, 2674): `ghostboxApi.uploadProfileImage` -> `saveCloudAvatar` / `getCloudAvatar` in `src/lib/ghostboxApi.tauri.ts` -> `cloud_upload_profile_image` / `cloud_put_profile_avatar` / `cloud_get_profile_avatar` in `src-tauri/src/cloud_save.rs` (around 557-690) -> `workers/subscriptions/src/index.ts` (`handleCloudProfileImageUpload` around 560; `handleCloudAvatarGet/Put` around 2528-2564). Free restore uses `applyCloudAvatarToLocal` in `src/lib/cloudProfile.ts`; server GET/PUT avatar require a session, update only `user_profile_cloud.avatar_url`.
 Premium profile sync -> `AppDataContext.pushCloudProfileSnapshot` / `restoreCloudProfileFromRemote` -> `cloud_get/put_profile_snapshot` -> worker `handleCloudProfileGet/Put` (around 2566-2650; `requirePremiumSession`); includes banner, favorites and collections. Banner image upload/delete stays Premium.
 
 ## Profile Sign Out
 
-Sign-out lives in the profile header -> `ProfilePage` in `src/pages/ProfilePage.tsx` (`profile-page__display-name-row`, after `profile-page__level`); icon button `profile-page__signout` (tertiary, primary on hover/focus) opens a `collection-modal profile-page__signout-confirm` dialog, then calls `AuthContext.logout` -> `ghostboxApi.signOutCloud`. Styles -> `src/pages/ProfilePage.scss` (`profile-page__signout`, `profile-page__signout-confirm`); copy -> `src/i18n.ts` (`settings.general.account.signOut*`). No account block in Settings.
+Sign-out lives in the profile header -> `ProfilePage` in `src/pages/ProfilePage.tsx` (`profile-page__display-name-row`, after `profile-page__level`); icon button `profile-page__signout` (tertiary, primary on hover/focus) opens a `collection-modal profile-page__signout-confirm` dialog, then calls `AuthContext.logout` -> `ghostboxApi.signOutCloud`. Styles -> `src/pages/ProfilePage.scss` (`profile-page__signout`, `profile-page__signout-confirm`); portal action buttons use an `@at-root` selector, `--surface-option` (#101010) at rest / `--surface-option-active` (#1a1a1a) on hover/focus and constant `--text-primary`. Copy -> `src/i18n.ts` (`settings.general.account.signOut*`). No account block in Settings.
 
 Settings option descriptions -> `SettingRow` in `src/pages/SettingsPage.tsx` (around 608-630) -> `.settings-option__copy span` in `src/app.scss` (around 5842; disabled override around 5985). Performance temp-files description -> `TempFilesSection` / `TempFilesSection.scss` in `src/features/settings/`. Both use `--text-tertiary`, also used by the titlebar search placeholder via `--text-placeholder` in `src/app.scss` (around 2177).
 Settings subtexts across tabs -> `.settings-page__header p` / `.steam-libraries__heading p` in `src/app.scss` (around 4770/4840); `SteamVisibilitySection`, `ConnectionsPanel`, `HiddenProfileGamesSection` in `src/features/settings/ConnectionsPanel.tsx` -> `.connection-card__steam-option-copy span`, `.hidden-profile-games__copy span`, `.connection-card__body p`, `.connection-card__connected`, `.connections-panel__header p`, `.hidden-profile-games-page__header p` in `ConnectionsPanel.scss`.
@@ -85,8 +83,10 @@ Settings neutral controls -> `.settings-page-dropdown .settings-dropdown__trigge
 
 ## Profile Activity And Achievements
 
+Quick info (Jogos, Conquistas, Tempo total) -> `ProfilePage.tsx` (`profile-page__activity-metrics`, around 2095-2111); styles -> `ProfilePage.scss` (`&__activity-metric`, around 758-785): labels use `--text-tertiary`, numeric values use `--text-primary`.
 `ProfileActivityCard` -> `src/pages/ProfilePage.tsx` (around 150-305); recent-game activity, progress, and the latest-achievement icons/tooltips.
-Achievement tab game cards -> `ProfilePage.tsx` (around 2145-2285); styles in `ProfilePage.scss` (`profile-page__achievement-*`, around 1274-1564).
+Overview layout -> `src/pages/ProfilePage.scss` (`profile-page__background-overlay`, `__collection-content`, `__activity-card`, `__activity-main`, `__activity-side`): shared horizontal inset; desktop three-column/two-row grid aligns title/hours and progress/last-session, compact layout at 720px stacks metadata. Progress reserves `8ch` for counts; games without achievements use `profile.noAchievements` instead of an empty bar. Loading counterpart -> `ProfileActivityListSkeleton` in `src/components/ui/LoadingStates.tsx`.
+Achievement tab game cards -> `ProfilePage.tsx` (`isAchievementsActive`, around 2190-2330); styles in `ProfilePage.scss` (`profile-page__achievement-*`): full-width game groups, shared 12px inner inset, fixed trophy/bar/7ch count grid, 36px expansion control; two achievement columns become one at 720px. `__achievement-game-progress` scopes inherited trophy/count/fill colors and keyboard focus; reduced-motion rule covers achievement controls and progress.
 Activity achievement icons/tooltips -> `ProfilePage.scss` (`profile-page__activity-icon`, around 1068); bitmap edges are cropped to remove embedded decorative borders, and card overflow remains visible so tooltips are not clipped.
 
 ## Linked Steam Profile Level
@@ -113,8 +113,11 @@ Server authorization -> `workers/subscriptions/src/index.ts` (`requirePremiumSes
 Single-save retention -> `workers/subscriptions/src/index.ts` (`MAX_CLOUD_SAVES_PER_GAME=1`, `pruneCloudSavesForGame`, scheduled `pruneLegacyCloudSaves`, `handleCloudGameSavesDelete`; `/cloud-saves/game/:appId`). GET remains read-only; legacy cleanup keeps the newest save. `withCloudGameWriteLock` serializes uploads, pin changes, single/bulk deletes and cron cleanup by `user_id` + `app_id` via D1 migration `workers/subscriptions/migrations/0024_cloud_save_write_locks.sql` (apply before deploying Worker). Tests -> `workers/subscriptions/test/cloud-saves-d1.test.ts`.
 Delete flow: `SubscriptionPlans.confirmBackupAction` -> `ghostboxApi.deleteCloudGameSaves(appId)` -> `cloud_delete_game_saves` in `src-tauri/src/cloud_save.rs` (DELETE `{base}/cloud-saves/game/{appId}`, errors via `format_cloud_api_error`) -> worker `handleCloudGameSavesDelete` (200 even with 0 rows; 409 `cloud_save_busy` on concurrent writes; `deletedSaves: 0` shows an "already removed" info toast). No CI deploy for this worker — deploy is manual (`wrangler deploy` from `workers/subscriptions`). Incident 2026-09-27: prod ran a build without the bulk-delete route (added in `73ffa46`), so DELETE fell into the `{ error: "Not found" }` 404 fallback; unauthenticated probe distinguishes stale (404) from live (401 `unauthorized`).
 Account scope: `SubscriptionPlans` keys subscription status/cloud saves and invalidates in-flight polls on `AuthContext.account.userId`; `cloud_backup_game`/`cloud_restore_save` in `src-tauri/src/cloud_save.rs` compare account before recording a backup or applying a restore after asynchronous transfer.
+Deployment verified 2026-09-30: D1 migration `0024_cloud_save_write_locks.sql` applied remotely; Worker version `f3e69ecb-c137-4ec1-a40d-38fb89866470`; unauthenticated bulk-delete probe returns 401 `unauthorized`.
 
 ## Windows Startup
+
+Tray menu -> `TrayMenu` / `TrayGameItem` in `src/components/tray/TrayMenu.tsx`; styles `.tray-menu*` in `src/app.scss` (top of file); `--surface-tray` (`#101010`) and item hover/focus (`#151515`) in `src/styles/_semantic.scss`, secondary resting text/icons -> primary hover/focus. Native window -> `TRAY_MENU_WIDTH/HEIGHT` (300×520), `build_tray_menu_window` / `tray_menu_position` in `src-tauri/src/window_lifecycle.rs`; flex library list scrolls independently with non-shrinking 32px game rows. Data/actions -> `ghostboxApi` tray methods -> `tray_get_library_games` / `tray_launch_game` / `tray_navigate` in `window_lifecycle.rs`.
 
 `StartupSettings` -> `src/types/index.ts`; settings UI -> `src/pages/SettingsPage.tsx`
 `app_get_startup_settings`, `app_set_startup_settings`, `apply_autostart_settings` -> `src-tauri/src/settings.rs` (around 238-303)
@@ -144,6 +147,7 @@ Header has no update UI (removed manual button/hourly polling/splash).
 Primitives -> `src/styles/_primitives.scss` (`--fs-*`, `--lh-*`, `--ls-*`, `--weight-*`, `--font-sans`)
 Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#8c8c8c`; titlebar `--text-placeholder` aliases tertiary; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`; status `--caution` -> `--caution-500` `#ffbf00` in `_primitives.scss`)
 Mixins -> `src/styles/_mixins.scss` (`type-label/meta/body/body-strong/title/section/page/hero/showcase`, `eyebrow`, `truncate`)
+Font weight -> `src/styles/_semantic.scss`: Inter Variable uses 500 throughout; `--weight-semibold` aliases `--weight-regular` for existing component/mixin references.
 Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n-*/--a-*` in components; use `--text-*` / `--type-*`)
 
 ## Titlebar
@@ -151,6 +155,7 @@ Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n
 `Header` -> `src/components/layout/Header.tsx` (premium/subscription button around 407-456; search suggestions dropdown around 458-525, fed by `useAppShellState`)
 Premium button appearance -> `src/app.scss` (`.header__premium-indicator`, around 2064; crown and label immediately after); resting label matches `.header__search input::placeholder` via `--text-placeholder`; hover/focus changes only the surface to `--surface-option-hover` (`#151515`).
 Search suggestions appearance/scroll -> `src/app.scss` (`.header__search-dropdown`, around 2294-2385; `.header__search-dropdown-thumbnail` 120px small capsule).
+Search compact/focused width -> `src/app.scss` (`.header`: `--header-search-compact-width` 180px, `--header-search-width` 280px/300px maximized; `&__search-shell:focus-within &__search`); `Header.tsx` uses `t-resize` for width transition, with reduced-motion support.
 Search suggestion thumbnails -> `SearchSuggestionThumbnail` in `Header.tsx` -> `gameSmallCapsuleSources` / `smallCapsuleSourcesForAppId` / `isSmallCapsuleImageSource` in `src/utils/image.ts` (capsule_231x87 CDNs: shared.{akamai,fastly,cloudflare,steamstatic}.steamstatic.com/store_item_assets + cdn.cloudflare/steamcdn-a/cdn.akamai `steam/apps/{id}`); store `tiny_image` exposed as `GhostBoxGame.smallCapsuleUrl` (`src/data.ts`) via `steam_store_search_games` in `src-tauri/src/catalogue.rs` (around 2422).
 Header suggestion merging (catalogue + Steam store supplement, limit 8, thumb+title, no prices) -> `useExpandedGameSearch` (`src/hooks/useExpandedGameSearch.ts`, `steamSupplement` option) + `useAppShellState` (`src/hooks/useAppShellState.ts`). Catalogue-only fallback stays in `useCatalogueState`.
 
@@ -185,12 +190,19 @@ Production observation 2026-09-26 (recheck before deployment): 513,740,800 bytes
 `SubscriptionPlans` -> `src/components/subscription/SubscriptionPlans.tsx` (cloud-save summaries around 285-327; active subscription, backup sorting/actions and pagination around 405-680). Receives `cloudBackupGames` from `SettingsPage` (`src/pages/SettingsPage.tsx`, around 315-386); remote saves via `ghostboxApi.listCloudSaves`.
 Backup list styles -> `src/app.scss` (`.subscription-account__backup-list` and `.subscription-account__backup-row-actions`, around 5608-5740). Pagination reuses `PaginationControls` -> `src/components/ui/PaginationControls.tsx` (also used by `CataloguePage`).
 
+## Toasts
+
+`Toast` -> `src/components/ui/Toast.tsx`; success/error/info variants and optional backup-game capsule. `AchievementToast` / `AchievementToastStack` -> `src/components/ui/AchievementToast.tsx`; rendered by `src/App.tsx`, regular toast state/actions in `src/context/OverlayContext.tsx`. Styles -> `src/app.scss` (`.toast`, `.achievement-toast-stack`, `.achievement-toast`, around 9388-9686); content-sized width with shared 320px minimum capped to viewport minus horizontal insets.
+
 ## Auth
 
 `AuthScreen` -> `src/features/auth/AuthScreen.tsx`; terms checkbox `.auth-form__consent-toggle` in `src/features/auth/AuthScreen.scss` shares the uninstall-modal checkbox language (18px, `--radius-sm`, `--surface-secondary` rest / white checked, stroke-draw motion).
+Browser login -> `AuthScreen.handleProviderClick` -> `AuthContext.loginWithProvider` -> `ghostboxApi.loginWithProvider` -> `cloud_steam_login` (`src-tauri/src/steam.rs`) / `cloud_oauth_login` + `run_oauth_browser_flow` (`src-tauri/src/cloud_save.rs`). Callback receiver/HTTP response -> `src-tauri/src/oauth_loopback.rs`; both logins validate and persist the session before `complete_browser_login` returns an empty HTML document requesting `window.close()` (browser may block external-tab closure) and calls `window_lifecycle::show_main_window` (show, unminimize, focus). No success confirmation. Auth modal closes after login resolves.
 
 ## Confirmation Modals
 
+Shared context menu -> `ContextMenu` in `src/components/ui/ContextMenu.tsx`; `.context-menu` in `src/app.scss` (around 6480-6645): menu/submenu backgrounds use `--surface-option` (`#101010`), item hover/focus uses `--surface-option-hover` (`#151515`), resting text/icons use `--text-secondary` and hover/focus uses `--text-primary`.
+
 `useGameContextMenu` -> `src/hooks/useGameContextMenu.ts` (Steam installation check) -> `useCollectionContextMenu` in `src/hooks/useCollectionContextMenu.ts` (single remove entry) -> `AppDataContext.requestRemoveGame` -> `UninstallConfirmModal` in `src/components/modals/UninstallConfirmModal.tsx` (checkbox after installed-game check, styled by `.uninstall-confirm-modal__option` in `src/app.scss`) -> `AppDataContext` (`removeQueuedGame` or `uninstallGame` + Steam wait).
 Game context menu items (all in `useCollectionContextMenu`, handlers wired internally in `useGameContextMenu`, no per-page wiring): Ver conquistas (`Trophy`, `OverlayContext.openAchievements`, only if `hasAvailableAchievements`) after Jogar; Ocultar/Mostrar no perfil (`EyeOff`/`Eye`, `AppDataContext.setProfileGameHidden` + toast, same copy as `GameBackupOptionsModal`) before Remover da biblioteca; shown only for owned games (library/playable/favorite/history/Steam-owned via `hideableGameAppIds` from `useGameContextMenu`, mirroring the `HiddenProfileGamesSection` universe in `ConnectionsPanel.tsx`) — catalogue games the user does not own get no item; Abrir na Steam last (`ExternalLink`, `ghostboxApi.openExternalUrl` opening `https://store.steampowered.com/app/{id}` in the browser — `steampowered.com` is on the backend allowlist in `window_lifecycle.rs`, numeric-id only). Hidden/Steam require `game.appId`. Native browser menu is blocked globally in `src/main.tsx` (`contextmenu` capture listener); card handlers always `preventDefault` first. New labels use inline PT/EN `copy()` via `useSettings` (old labels still hardcoded).
-Canonical confirmation action styles -> `src/app.scss` (`.confirm-modal` around 8540/10870; `.collection-modal` around 10287; shared confirmation spacing and `.uninstall-confirm-modal` around 14940). Neutral buttons use tertiary text on `--surface-option`, then secondary text on `--surface-option-hover`; danger selectors and the collection primary action remain separate. Account sign-out button hover -> `src/features/settings/AccountSection.scss` (`.account-section__confirm`).
+Canonical confirmation styles -> `src/app.scss` (near `/* Confirmation modals */`): `.backdrop--confirm > .collection-modal` has 48px header bottom padding / 32px content gap; `.confirm-modal__actions` has 32px top padding; `.collection-create-modal .collection-modal__content` has 32px gap. Confirmation + collection-create subtexts use `--text-tertiary` (alert paragraphs excluded). All confirmation + collection-create actions (including destructive) use `--surface-option` (#101010) -> `--surface-option-active` (#1a1a1a) on hover/focus, constant `--text-primary` and regular weight; disabled uses `--control-disabled-opacity`. `CollectionModal` -> `src/components/modals/CollectionModal.tsx`. Account sign-out styles -> `src/pages/ProfilePage.scss`.

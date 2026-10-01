@@ -286,26 +286,8 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
         </div>
       ) : (
         <div className="profile-page__activity-achievements">
-          <span className="profile-page__activity-progress">
-            <span className="profile-page__activity-progress-label">
-              <Cup
-                className="profile-page__activity-cup-icon"
-                size={18}
-                weight="Filled"
-                strokeWidth={2.0}
-                color="var(--text-tertiary, var(--text-secondary))"
-                aria-hidden="true"
-              />
-            </span>
-            <span className="profile-page__activity-progress-count">
-              0 {t("profile.of")} 0
-            </span>
-            <span
-              className="profile-page__progress-track profile-page__progress-track--compact"
-              aria-hidden="true"
-            >
-              <span style={{ width: "0%" }} />
-            </span>
+          <span className="profile-page__activity-no-achievements">
+            {t("profile.noAchievements")}
           </span>
         </div>
       )}
@@ -367,8 +349,8 @@ function normalizeBannerPosition(
   position?: SteamProfile["bannerPosition"]
 ): BannerPosition {
   return {
-    x: Math.min(100, Math.max(0, Math.round(position?.x ?? 50))),
-    y: Math.min(100, Math.max(0, Math.round(position?.y ?? 50))),
+    x: Math.min(100, Math.max(0, position?.x ?? 50)),
+    y: Math.min(100, Math.max(0, position?.y ?? 50)),
     scale: Math.min(3, Math.max(1, Number((position?.scale ?? 1).toFixed(2)))),
   };
 }
@@ -1904,6 +1886,7 @@ export function ProfilePage({
     ? undefined
     : ({
         objectPosition: `${bannerPosition.x}% ${bannerPosition.y}%`,
+        transformOrigin: `${bannerPosition.x}% ${bannerPosition.y}%`,
         "--profile-banner-scale": `${bannerPosition.scale}`,
       } as CSSProperties);
 

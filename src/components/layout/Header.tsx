@@ -534,7 +534,7 @@ export const Header = memo(function Header({
           onBlur={handleBlur}
         >
           <label
-            className={`header__search ${isSearching ? "header__search--loading" : ""}`}
+            className={`header__search t-resize ${isSearching ? "header__search--loading" : ""}`}
           >
             <Search size={16} />
             <input

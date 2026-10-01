@@ -314,6 +314,9 @@ fn library_game_from_luatools_add(
     // Depois do merge com o input: a provenência é do GhostBox, não do
     // catálogo que originou o pedido.
     library_game["librarySource"] = serde_json::json!("ghostbox");
+    if let Some(object) = library_game.as_object_mut() {
+        object.remove("installationPending");
+    }
 
     library_game
 }
@@ -370,9 +373,9 @@ pub async fn luatools_add_game(
     match install_lua_tools_package(&app_id, &zip_bytes, &steam_path) {
         Ok((installed_path, manifest_count, manifest_files)) => {
             library_game["luaToolsManifests"] = serde_json::json!(manifest_files);
-            library_game["status"] = serde_json::json!("syncing");
+            library_game["status"] = serde_json::json!("discover");
             library_game["progress"] = serde_json::json!(0);
-            library_game["installationPending"] = serde_json::json!(true);
+            library_game["steamDownloadPending"] = serde_json::json!(false);
             let _ = save_steam_path(&app, &steam_path);
 
             if let Err(error) =
@@ -385,136 +388,17 @@ pub async fn luatools_add_game(
                 }));
             }
 
-            let background_app = app.clone();
-            let background_app_id = app_id.clone();
-            let background_title = title.clone();
-            let background_steam_path = steam_path.clone();
-            let background_installed_path = installed_path.clone();
-            let mut background_library_game = library_game.clone();
-            tauri::async_runtime::spawn(async move {
-                use tauri::Emitter;
-
-                match crate::cdndownload::install_added_game(
-                    background_app.clone(),
-                    background_app_id.clone(),
-                    background_title.clone(),
-                    background_steam_path,
-                )
-                .await
-                {
-                    Ok(installation) => {
-                        let steam_download_pending = installation
-                            .get("SteamIntegration")
-                            .and_then(|value| value.get("Partial"))
-                            .and_then(|value| value.as_bool())
-                            .unwrap_or(false);
-                        let bootstrap_bytes = installation
-                            .get("SteamIntegration")
-                            .and_then(|value| value.get("BootstrapBytes"))
-                            .and_then(|value| value.as_u64())
-                            .unwrap_or(0);
-                        let total_bytes = installation
-                            .get("SteamIntegration")
-                            .and_then(|value| value.get("TotalBytes"))
-                            .and_then(|value| value.as_u64())
-                            .unwrap_or(0);
-                        background_library_game["status"] =
-                            serde_json::json!(if steam_download_pending {
-                                "queued"
-                            } else {
-                                "installed"
-                            });
-                        background_library_game["progress"] =
-                            serde_json::json!(if steam_download_pending && total_bytes > 0 {
-                                bootstrap_bytes.saturating_mul(100) / total_bytes
-                            } else {
-                                100
-                            });
-                        background_library_game["installationPending"] = serde_json::json!(false);
-                        background_library_game["steamDownloadPending"] =
-                            serde_json::json!(steam_download_pending);
-                        if let Some(output_dir) = installation
-                            .get("OutputDir")
-                            .and_then(|value| value.as_str())
-                        {
-                            background_library_game["installPath"] = serde_json::json!(output_dir);
-                        }
-                        if let Some(install_dir) = installation
-                            .get("InstallDir")
-                            .and_then(|value| value.as_str())
-                        {
-                            background_library_game["installDir"] = serde_json::json!(install_dir);
-                        }
-                        if let Some(library_root) = installation
-                            .get("LibraryRoot")
-                            .and_then(|value| value.as_str())
-                        {
-                            background_library_game["libraryPath"] =
-                                serde_json::json!(library_root);
-                        }
-                        if let Some(size) = installation
-                            .get("SteamIntegration")
-                            .and_then(|value| value.get("SizeOnDisk"))
-                            .and_then(|value| value.as_u64())
-                        {
-                            background_library_game["sizeBytes"] = serde_json::json!(size);
-                        }
-                        let requires_steam_restart = installation
-                            .get("SteamIntegration")
-                            .and_then(|value| value.get("RequiresSteamRestart"))
-                            .and_then(|value| value.as_bool())
-                            .unwrap_or(false);
-                        let _ = ghostbox_library::upsert_ghostbox_library_game(
-                            &background_app,
-                            background_library_game.clone(),
-                        );
-                        let _ = background_app.emit(
-                            "game-installation-finished",
-                            serde_json::json!({
-                                "success": true,
-                                "appId": background_app_id,
-                                "requiresSteamRestart": requires_steam_restart,
-                                "steamDownloadPending": steam_download_pending,
-                                "libraryGame": background_library_game,
-                            }),
-                        );
-                    }
-                    Err(error) => {
-                        // Sem o ACF final, deixar o plugin ativo faz a Steam voltar
-                        // ao fluxo quebrado de download agendado. O conteúdo parcial
-                        // permanece no destino e será reaproveitado na nova tentativa.
-                        let _ = std::fs::remove_file(&background_installed_path);
-                        let _ = ghostbox_library::remove_ghostbox_library_game(
-                            &background_app,
-                            &background_app_id,
-                        );
-                        let _ = background_app.emit(
-                            "game-installation-finished",
-                            serde_json::json!({
-                                "success": false,
-                                "appId": background_app_id,
-                                "title": background_title,
-                                "error": error,
-                            }),
-                        );
-                    }
-                }
-            });
-
             Ok(serde_json::json!({
                 "success": true,
                 "api": api_name,
                 "installedPath": installed_path,
                 "manifestCount": manifest_count,
-                // Quantos depots do pacote batem com o branch `public`. Zero com
-                // PICS disponivel significa pacote de build antiga — a UI usa
-                // isso para avisar antes de o download comecar.
+                // Quantos depots do pacote batem com o branch `public`.
                 "publicMatches": manifest_score,
                 "publicBuildId": public
                     .as_ref()
                     .map(|app| app.build_id.clone())
                     .unwrap_or_default(),
-                "installationStarted": true,
                 "libraryGame": library_game
             }))
         }
