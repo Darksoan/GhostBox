@@ -59,11 +59,12 @@ function shelfEaseOutCubic(progress: number): number {
   return 1 - Math.pow(1 - progress, 3);
 }
 
-function shelfPrefersReducedMotion(): boolean {
+/** Movimento só sai de cena pelo toggle interno (`html.no-animations`):
+ * efeitos do SO desligados não congelam o carrossel. */
+function shelfMotionDisabled(): boolean {
   return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("no-animations")
   );
 }
 
@@ -198,7 +199,7 @@ export function Shelf<T>({
       return;
     }
 
-    if (shelfPrefersReducedMotion()) {
+    if (shelfMotionDisabled()) {
       carousel.scrollLeft = target;
       syncEdgeStates();
       return;

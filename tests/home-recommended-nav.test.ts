@@ -38,6 +38,7 @@ describe("Home recommended grid chevrons", () => {
 
   it("scrolls the rail smoothly and keeps the chevrons clear of the cards", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const shelf = readFileSync("src/components/ui/Shelf.tsx", "utf8");
     const selectors: string[] = [];
     const mediaQueries: string[] = [];
     const declarations = new Map<string, Map<string, string>>();
@@ -55,11 +56,10 @@ describe("Home recommended grid chevrons", () => {
     expect(selectors).toContain(".home-recommended__arrow");
     expect(selectors).toContain(".home-recommended__arrow--prev");
     expect(selectors).toContain(".home-recommended__arrow--next");
-    expect(mediaQueries).toContain("(prefers-reduced-motion: reduce)");
 
     // A animação de rolamento é do JS (`Shelf`, rAF com duração/easing fixos),
     // igual ao rail de explorar. Lê a regra de topo, não o mapa acumulado: o
-    // override de movimento reduzido usa o mesmo seletor e sobrescreveria o
+    // override do toggle interno usa outro seletor e não sobrescreveria o
     // valor aqui.
     const carouselRule = stylesheet.nodes.find(
       (node) =>
@@ -68,16 +68,19 @@ describe("Home recommended grid chevrons", () => {
     expect(carouselRule?.toString()).toContain("scroll-behavior: auto");
     expect(carouselRule?.toString()).toContain("scroll-snap-type: x proximity");
 
-    // O voo programático também respeita a preferência via `matchMedia` no JS;
-    // o CSS mantém `auto` no bloco de movimento reduzido como trava extra.
-    const reducedMotion = stylesheet.nodes.find(
+    // O voo programático ignora efeitos do SO desligados: o `Shelf` só congela
+    // pelo toggle interno (`html.no-animations`), nunca por `matchMedia` do
+    // sistema. O CSS trava `auto` no bloco do toggle como trava extra.
+    expect(shelf).toContain("no-animations");
+    expect(shelf).not.toContain("prefers-reduced-motion");
+    const animationsOff = stylesheet.nodes.find(
       (node) =>
-        node.type === "atrule" &&
-        node.name === "media" &&
-        node.params === "(prefers-reduced-motion: reduce)" &&
+        node.type === "rule" &&
+        typeof node.selector === "string" &&
+        node.selector.includes("html.no-animations") &&
         node.toString().includes(".home-recommended__carousel")
     );
-    expect(reducedMotion?.toString()).toContain("scroll-behavior: auto");
+    expect(animationsOff?.toString()).toContain("scroll-behavior: auto");
 
     // Deslocamento negativo: a seta cai no inset de 36px da seção, fora da
     // grade, em vez de sobrepor o primeiro/último card.

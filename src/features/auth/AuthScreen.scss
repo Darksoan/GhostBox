@@ -48,15 +48,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
   line-height: 1.25;
-}
-
-.auth-form__title-icon {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  flex-shrink: 0;
 }
 
 .auth-form__error {
@@ -103,7 +95,7 @@
   font-weight: var(--weight-semibold);
   cursor: pointer;
   touch-action: manipulation;
-  transition-property: background-color, opacity, transform;
+  transition-property: background-color, opacity;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 
@@ -125,7 +117,7 @@
   }
 
   &:active:not(:disabled) {
-    transform: scale(0.96);
+    background: var(--surface-modal-control-hover);
   }
 }
 
@@ -142,15 +134,10 @@
 }
 
 .auth-form__provider-icon {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
-}
-
-.auth-form__provider[data-provider="steam"] .auth-form__provider-icon {
+  display: block;
   width: 28px;
   height: 28px;
-  transform: translateX(1px);
+  object-fit: contain;
 }
 
 .auth-form__legal {
@@ -192,11 +179,15 @@
   justify-content: center;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface-secondary);
+  background: var(--surface-modal-control);
   color: transparent;
   transition:
     background var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out);
+}
+
+.auth-form__consent:hover input:not(:checked) + .auth-form__consent-toggle {
+  background: var(--surface-modal-control-hover);
 }
 
 .auth-form__consent-toggle svg {
@@ -231,13 +222,6 @@
 .auth-form__consent input:focus-visible + .auth-form__consent-toggle {
   outline: 2px solid var(--focus-ring-color);
   outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .auth-form__consent-toggle,
-  .auth-form__consent-toggle svg path {
-    transition: none;
-  }
 }
 
 html.no-animations .auth-form__consent-toggle,

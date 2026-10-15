@@ -55,14 +55,16 @@ describe("useFlipLayout — motion design e reorganização de capas", () => {
     expect(source).toContain("willChange");
   });
 
-  it("respeita prefers-reduced-motion e desativação de animações", () => {
+  it("ignora o SO e obedece só à desativação interna de animações", () => {
     const source = readFileSync("src/hooks/useFlipLayout.ts", "utf8");
     const motion = readFileSync("src/utils/motion.ts", "utf8");
 
     // A checagem mora no util compartilhado (também usado pelo preview do
-    // catálogo); o hook só decide se o FLIP roda.
+    // catálogo); o hook só decide se o FLIP roda. Efeitos do Windows
+    // desligados NÃO congelam o app: só o toggle interno (`no-animations`).
     expect(source).toContain("isMotionDisabled()");
-    expect(motion).toContain("prefers-reduced-motion: reduce");
     expect(motion).toContain("no-animations");
+    expect(motion).not.toContain("matchMedia");
+    expect(motion).not.toContain("prefers-reduced-motion: reduce");
   });
 });

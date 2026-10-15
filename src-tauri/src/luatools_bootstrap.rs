@@ -44,6 +44,12 @@ struct TrustedReleaseHash {
     sha256: &'static str,
 }
 
+fn trusted_release_for_repo(repo: &str) -> Option<&'static TrustedReleaseHash> {
+    TRUSTED_RELEASE_HASHES
+        .iter()
+        .find(|entry| entry.repo.eq_ignore_ascii_case(repo))
+}
+
 fn trusted_expected_hash(repo: &str, tag: &str, asset_name: &str) -> Result<&'static str, String> {
     TRUSTED_RELEASE_HASHES.iter().find_map(|entry| {
         (entry.repo.eq_ignore_ascii_case(repo)
@@ -192,8 +198,8 @@ fn validate_github_asset(asset: &GithubAsset, repo: &str, max_bytes: usize) -> R
     Ok(())
 }
 
-async fn fetch_latest_release(repo: &str) -> Result<GithubRelease, String> {
-    let url = format!("https://api.github.com/repos/{repo}/releases/latest");
+async fn fetch_tagged_release(repo: &str, tag: &str) -> Result<GithubRelease, String> {
+    let url = format!("https://api.github.com/repos/{repo}/releases/tags/{tag}");
     reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
@@ -250,31 +256,40 @@ async fn download_asset(
     Ok(AssetDownload { asset, bytes })
 }
 
-fn select_luatools_asset(release: &GithubRelease) -> Option<GithubAsset> {
+fn select_trusted_asset(release: &GithubRelease, trusted_asset_name: &str) -> Option<GithubAsset> {
     release
         .assets
         .iter()
-        .find(|asset| asset.name.starts_with("LuaTools-") && asset.name.ends_with("-full.nupkg"))
+        .find(|asset| asset.name.eq_ignore_ascii_case(trusted_asset_name))
         .cloned()
-        .or_else(|| {
-            release
-                .assets
-                .iter()
-                .find(|asset| asset.name.eq_ignore_ascii_case("LuaTools-win-Portable.zip"))
-                .cloned()
-        })
+}
+
+fn select_luatools_asset(release: &GithubRelease) -> Option<GithubAsset> {
+    let trusted = trusted_release_for_repo(LUATOOLS_REPO)?;
+    select_trusted_asset(release, trusted.asset_name).or_else(|| {
+        release
+            .assets
+            .iter()
+            .find(|asset| {
+                asset.name.starts_with("LuaTools-") && asset.name.ends_with("-full.nupkg")
+            })
+            .cloned()
+    })
 }
 
 fn select_opensteamtool_asset(release: &GithubRelease) -> Option<GithubAsset> {
-    release
-        .assets
-        .iter()
-        .find(|asset| {
-            asset.name.starts_with("OpenSteamTool-")
-                && asset.name.ends_with("-Release.zip")
-                && !asset.name.contains("Debug")
-        })
-        .cloned()
+    let trusted = trusted_release_for_repo(OPENSTEAMTOOL_REPO)?;
+    select_trusted_asset(release, trusted.asset_name).or_else(|| {
+        release
+            .assets
+            .iter()
+            .find(|asset| {
+                asset.name.starts_with("OpenSteamTool-")
+                    && asset.name.ends_with("-Release.zip")
+                    && !asset.name.contains("Debug")
+            })
+            .cloned()
+    })
 }
 
 fn zip_file_name(name: &str) -> Option<String> {
@@ -727,9 +742,24 @@ async fn run_bootstrap(app: AppHandle) -> Value {
 
     let result = async {
         if !before.lua_tools_installed {
-            let release = fetch_latest_release(LUATOOLS_REPO).await?;
+            let trusted = trusted_release_for_repo(LUATOOLS_REPO).ok_or_else(|| {
+                "Versão auditada do LuaTools não configurada no GhostBox.".to_string()
+            })?;
+            let release = fetch_tagged_release(LUATOOLS_REPO, trusted.tag).await?;
+            if release.tag_name != trusted.tag {
+                return Err(format!(
+                    "A tag {} não corresponde à versão auditada {} de {}. Instalação recusada.",
+                    release.tag_name, trusted.tag, LUATOOLS_REPO
+                ));
+            }
             let asset = select_luatools_asset(&release)
                 .ok_or_else(|| "Release do LuaTools não contém pacote instalável.".to_string())?;
+            if !asset.name.eq_ignore_ascii_case(trusted.asset_name) {
+                return Err(format!(
+                    "O asset {} não corresponde ao pacote auditado {} ({}). Instalação recusada.",
+                    asset.name, trusted.tag, trusted.asset_name
+                ));
+            }
             let download = download_asset(
                 asset,
                 LUATOOLS_REPO,
@@ -743,10 +773,25 @@ async fn run_bootstrap(app: AppHandle) -> Value {
 
         let after_luatools = dependency_status(&app);
         if !after_luatools.better_steam_tools_installed {
-            let release = fetch_latest_release(OPENSTEAMTOOL_REPO).await?;
+            let trusted = trusted_release_for_repo(OPENSTEAMTOOL_REPO).ok_or_else(|| {
+                "Versão auditada do BetterSteamTools não configurada no GhostBox.".to_string()
+            })?;
+            let release = fetch_tagged_release(OPENSTEAMTOOL_REPO, trusted.tag).await?;
+            if release.tag_name != trusted.tag {
+                return Err(format!(
+                    "A tag {} não corresponde à versão auditada {} de {}. Instalação recusada.",
+                    release.tag_name, trusted.tag, OPENSTEAMTOOL_REPO
+                ));
+            }
             let asset = select_opensteamtool_asset(&release).ok_or_else(|| {
                 "Release do BetterSteamTools não contém pacote Release.".to_string()
             })?;
+            if !asset.name.eq_ignore_ascii_case(trusted.asset_name) {
+                return Err(format!(
+                    "O asset {} não corresponde ao pacote auditado {} ({}). Instalação recusada.",
+                    asset.name, trusted.tag, trusted.asset_name
+                ));
+            }
             let download = download_asset(
                 asset,
                 OPENSTEAMTOOL_REPO,
@@ -840,8 +885,10 @@ pub fn luatools_dependencies_ensure(app: AppHandle) -> Value {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_opensteamtool_lua_path, opensteamtool_config_has_lua_path, trusted_expected_hash,
-        validate_opensteamtool_targets, BootstrapState, LUATOOLS_REPO, OPENSTEAMTOOL_FILES,
+        ensure_opensteamtool_lua_path, opensteamtool_config_has_lua_path,
+        select_luatools_asset, select_opensteamtool_asset, select_trusted_asset,
+        trusted_expected_hash, trusted_release_for_repo, validate_opensteamtool_targets,
+        BootstrapState, GithubAsset, GithubRelease, LUATOOLS_REPO, OPENSTEAMTOOL_FILES,
         OPENSTEAMTOOL_REPO,
     };
     use std::collections::HashMap;
@@ -907,5 +954,54 @@ mod tests {
             "OpenSteamTool-1.4.9-Release.zip",
         )
         .is_err());
+    }
+
+    fn test_asset(name: &str) -> GithubAsset {
+        GithubAsset {
+            name: name.to_string(),
+            browser_download_url: format!(
+                "https://github.com/test/test/releases/download/tag/{name}"
+            ),
+            size: 1024,
+            digest: Some("sha256:abc".to_string()),
+        }
+    }
+
+    #[test]
+    fn pinned_releases_resolve_the_audited_asset() {
+        let luatools = trusted_release_for_repo(LUATOOLS_REPO).unwrap();
+        assert_eq!(luatools.tag, "v1.3.1");
+        let opensteamtool = trusted_release_for_repo(OPENSTEAMTOOL_REPO).unwrap();
+        assert_eq!(opensteamtool.tag, "1.4.8");
+
+        let release = GithubRelease {
+            tag_name: luatools.tag.to_string(),
+            assets: vec![
+                test_asset("LuaTools-1.3.2-full.nupkg"),
+                test_asset(luatools.asset_name),
+            ],
+        };
+        assert_eq!(
+            select_luatools_asset(&release).unwrap().name,
+            luatools.asset_name
+        );
+        assert_eq!(
+            select_trusted_asset(&release, "LuaTools-1.3.1-full.nupkg")
+                .unwrap()
+                .name,
+            "LuaTools-1.3.1-full.nupkg"
+        );
+
+        let release = GithubRelease {
+            tag_name: opensteamtool.tag.to_string(),
+            assets: vec![
+                test_asset("OpenSteamTool-1.4.9-Release.zip"),
+                test_asset(opensteamtool.asset_name),
+            ],
+        };
+        assert_eq!(
+            select_opensteamtool_asset(&release).unwrap().name,
+            opensteamtool.asset_name
+        );
     }
 }

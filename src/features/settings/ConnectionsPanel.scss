@@ -610,6 +610,22 @@ html.no-animations .hidden-profile-games__item {
   }
 }
 
+html.no-animations {
+  .hidden-profile-games-page__alphabet button,
+  .hidden-profile-games-page__alphabet button > strong,
+  .hidden-profile-games-page__alphabet button > span,
+  .hidden-profile-games__item,
+  .hidden-profile-games__item > img,
+  .hidden-profile-games__item::after,
+  .hidden-profile-games__item > svg {
+    transition: none;
+  }
+
+  .hidden-profile-games__item > img {
+    will-change: auto;
+  }
+}
+
 @media (max-width: 1050px) {
   .hidden-profile-games__list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -641,26 +657,6 @@ html.no-animations .hidden-profile-games__item {
 
   .hidden-profile-games__list {
     grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hidden-profile-games__item {
-    --hidden-profile-cover-scale: 0.5;
-  }
-
-  .hidden-profile-games-page__alphabet button,
-  .hidden-profile-games-page__alphabet button > strong,
-  .hidden-profile-games-page__alphabet button > span,
-  .hidden-profile-games__item,
-  .hidden-profile-games__item > img,
-  .hidden-profile-games__item::after,
-  .hidden-profile-games__item > svg {
-    transition: none;
-  }
-
-  .hidden-profile-games__item > img {
-    will-change: auto;
   }
 }
 

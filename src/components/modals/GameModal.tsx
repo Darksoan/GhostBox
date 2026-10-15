@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import playstationIcon from "../../../Icons/playstation-original.svg";
 import xboxIcon from "../../../Icons/xbox-original.svg";
-import { Alert, Cup } from "reicon-react";
+import { Cup } from "reicon-react";
+import { GameDrmNotice } from "./GameDrmNotice";
 import {
   memo,
   useCallback,
@@ -67,7 +68,6 @@ import {
 } from "../../utils/image";
 import { lazy, Suspense } from "react";
 import { useSettings } from "../../context/settings";
-import { useMetricsUnlocked } from "../../context/MetricsVisibilityContext";
 import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 
 const LazyGallerySlider = lazy(() =>
@@ -940,7 +940,6 @@ export function GameModal({
   onViewAchievements,
 }: GameModalProps) {
   const { appearance, t } = useSettings();
-  const areMetricsUnlocked = useMetricsUnlocked();
   const [activeScreenshot, setActiveScreenshot] = useState(0);
   const [detailGame, setDetailGame] = useState<GhostBoxGame | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -1128,7 +1127,10 @@ export function GameModal({
       ? screenshots.filter((source) => source !== heroScreenshotFallback)
       : screenshots;
     const showcaseSources = displayGame
-      ? uniqueSources([modalHeroSources[0], ...showcaseScreenshots])
+      ? uniqueSources([
+          modalHeroSources[0] || heroScreenshotFallback || displayGame.coverUrl || displayGame.cover,
+          ...showcaseScreenshots,
+        ])
       : showcaseScreenshots;
     const preloadShowcaseSources = uniqueSources([
       ...showcaseSources,
@@ -1264,7 +1266,7 @@ export function GameModal({
         const screenshotFallback =
           isHeroItem && heroScreenshotFallback ? [heroScreenshotFallback] : [];
         const sourceCandidates = isHeroItem
-          ? [...heroCandidates, ...screenshotFallback]
+           ? uniqueSources([...heroCandidates, ...screenshotFallback, displayGame?.coverUrl, displayGame?.cover, ...(displayGame?.coverFallbacks ?? [])])
           : [source];
         const candidates = uniqueSources(
           sourceCandidates.flatMap((candidate) => [
@@ -1298,6 +1300,7 @@ export function GameModal({
       heroScreenshotFallback,
       cachedScreenshotsKey,
       manifestHeroSources,
+      displayGame,
       screenshotSourcesVersion,
     ]
   );
@@ -1611,17 +1614,7 @@ export function GameModal({
             <section className="modal__showcase">
               <div className="modal__showcase-media">
                 {hasDrm ? (
-                  <span
-                    className="modal__drm-badge"
-                    role="img"
-                    aria-label={
-                      appearance.language === "en"
-                        ? `Third-party DRM: ${drmNoticeText}`
-                        : `DRM de terceiros: ${drmNoticeText}`
-                    }
-                  >
-                    <Alert size={18} aria-hidden="true" />
-                  </span>
+                  <GameDrmNotice notice={drmNoticeText} language={appearance.language} />
                 ) : null}
                 {currentScreenshotItem ? (
                   <div
@@ -1824,33 +1817,22 @@ export function GameModal({
                         >
                           <div className="modal__sidebar-section-panel modal__achievements-panel">
                           {achievements.length > 0 ? (
-                            <div className="modal__achievements-locked-wrapper">
-                              <ul
-                                className={`modal__achievements-grid ${!areMetricsUnlocked ? "modal__achievements-grid--locked" : ""}`}
-                                aria-hidden={!areMetricsUnlocked}
+                               <ul
+                                 className="modal__achievements-grid"
                               >
                                 {visibleAchievements.map((achievement) => (
                                   <AchievementIcon
                                     achievement={achievement}
                                     key={achievement.name}
-                                    interactive={areMetricsUnlocked}
+                                     interactive
                                     onSelect={
-                                      areMetricsUnlocked && onViewAchievements
+                                       onViewAchievements
                                         ? handleViewAchievements
                                         : undefined
                                     }
                                   />
                                 ))}
                               </ul>
-                              {!areMetricsUnlocked && (
-                                <div
-                                  className="modal__achievements-locked-overlay"
-                                  role="status"
-                                >
-                                  <span>{t("metrics.lockedAchievements")}</span>
-                                </div>
-                              )}
-                            </div>
                           ) : (
                             <p className="modal__achievements-state">
                               {achievementLoadState === "rate-limited"
@@ -1867,7 +1849,7 @@ export function GameModal({
                             </p>
                           )}
 
-                          {areMetricsUnlocked && hasMoreAchievements && onViewAchievements && (
+                           {hasMoreAchievements && onViewAchievements && (
                             <button
                               type="button"
                               className="modal__achievements-toggle"

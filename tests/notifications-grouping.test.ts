@@ -68,15 +68,14 @@ describe("Notification feed grouping", () => {
     ]);
   });
 
-  it("animates the group panel by row template, with a reduced-motion escape", () => {
+  it("animates the group panel by row template, with a no-animations escape", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     let panelRules = "";
-    let reducedMotionRules = "";
+    let animationsOffRules = "";
 
     stylesheet.walkRules((rule) => {
       if (rule.selector.includes(".app-notification-group__panel")) {
-        const inMediaQuery = rule.parent?.type === "atrule";
-        if (inMediaQuery) reducedMotionRules += rule.toString();
+        if (rule.selector.includes("html.no-animations")) animationsOffRules += rule.toString();
         else panelRules += rule.toString();
       }
     });
@@ -85,7 +84,9 @@ describe("Notification feed grouping", () => {
     // a abertura só funcionaria medindo o painel no JS.
     expect(panelRules).toContain("grid-template-rows: 0fr");
     expect(panelRules).toContain("grid-template-rows: 1fr");
-    expect(reducedMotionRules).toContain("transition: none");
+    // O escape é o toggle interno (`html.no-animations`), não o SO: efeitos do
+    // Windows desligados não congelam o painel.
+    expect(animationsOffRules).toContain("transition: none");
   });
 
   it("waits for notification art to load before mounting its fade-in layer", () => {

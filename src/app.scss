@@ -397,7 +397,7 @@ body {
   background: var(--background-dark);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  /* Peso mínimo de leitura (500): corpo em fundo escuro com hastes firmes.
+  /* Peso de leitura (400): corpo em fundo escuro com hastes firmes.
      `-webkit-font-smoothing` removido: propriedade macOS, sem efeito no
      Windows/WebView2 — mascarava onde a nitidez real era decidida. */
   font-weight: var(--weight-regular);
@@ -598,15 +598,14 @@ select,
   --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+// Transição de tamanho (ex.: pesquisa do header 180px → 280px no foco).
+// Roda independente do SO: quem desliga efeitos no Windows continua vendo a
+// expansão suave. O opt-out é o toggle interno (`html.no-animations`).
 .t-resize {
   transition:
     width var(--resize-dur) var(--resize-ease),
     height var(--resize-dur) var(--resize-ease);
   will-change: width, height;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .t-resize { transition: none !important; }
 }
 
 .header {
@@ -1295,7 +1294,10 @@ p {
       background: var(--sidebar-option-active);
     }
 
-    /* Collection rows stay quiet until hover or selection. */
+    /* Collection rows stay quiet until hover or selection.
+       O foco de mouse (clique no chevron) não pode prender o fundo aceso:
+       usa :has(:focus-visible) em vez de :focus-within, então só o teclado
+       acende a linha; o clique volta ao transparente ao tirar o cursor. */
     &.sidebar__collection-item {
       color: var(--text-secondary);
       font-weight: var(--weight-regular);
@@ -1306,7 +1308,7 @@ p {
       }
 
       &:hover:not(.sidebar__menu-item--active),
-      &:focus-within:not(.sidebar__menu-item--active) {
+      &:has(:focus-visible):not(.sidebar__menu-item--active) {
         background: var(--sidebar-selector);
         color: var(--text-primary);
       }
@@ -1363,14 +1365,18 @@ p {
     svg {
       display: block;
       flex-shrink: 0;
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
       color: inherit;
     }
 
     &--back {
       transform-origin: left center;
     }
+  }
+
+  &__navigation-icon {
+    shape-rendering: geometricPrecision;
   }
 
   &__menu-item-label {
@@ -1442,8 +1448,8 @@ p {
   }
 
   &__game-icon {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     object-fit: contain;
     border-radius: 0;
@@ -1483,8 +1489,8 @@ p {
     }
 
     .sidebar__game-icon {
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       object-fit: contain;
       border-radius: var(--radius-xs);
 
@@ -1503,7 +1509,7 @@ p {
 
   &__collection-empty {
     padding: var(--space-3) var(--space-4);
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     font-size: var(--type-size-caption);
     font-weight: var(--weight-regular);
 
@@ -1529,14 +1535,6 @@ p {
   &__collection-game-button,
   &__collection-game-button * {
     cursor: pointer;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar__section-toggle,
-  .sidebar__collection-search,
-  .sidebar__collection-search-button {
-    transition: none;
   }
 }
 
@@ -2172,6 +2170,15 @@ p {
     line-height: 1;
     overflow: hidden;
     cursor: text;
+    transition:
+      background-color var(--motion-fast) var(--ease),
+      width var(--resize-dur) var(--resize-ease),
+      height var(--resize-dur) var(--resize-ease);
+
+    &:hover,
+    &:focus-within {
+      background: var(--surface-titlebar-control-hover);
+    }
 
     > svg {
       display: block;
@@ -2193,7 +2200,7 @@ p {
       color: var(--text-primary);
       font-weight: var(--weight-regular);
       font-size: var(--type-size-compact);
-      line-height: var(--type-line-compact);
+      line-height: 1;
 
       &::placeholder {
         color: var(--text-placeholder);
@@ -2203,6 +2210,8 @@ p {
     }
   }
 
+  // Expansão no foco via `width` + `.t-resize` (sempre animada, mesmo com
+  // efeitos do SO desligados; o opt-out é `html.no-animations`).
   &__search-shell:focus-within &__search {
     width: var(--header-search-width);
   }
@@ -2980,9 +2989,8 @@ button > svg {
   }
 }
 
-/* `scroll-behavior: smooth` ignora a preferência do sistema por conta própria;
-   sem isto o clique na seta anima mesmo com movimento reduzido. */
-@media (prefers-reduced-motion: reduce) {
+/* O voo do carrossel é do JS (`Shelf`, rAF); o toggle interno congela o resto. */
+html.no-animations {
   .home-recommended__arrow {
     transition: none;
   }
@@ -3351,7 +3359,7 @@ button > svg {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+html.no-animations {
   .home-banner__art,
   .home-banner__art--active {
     transform: none;
@@ -3842,7 +3850,7 @@ button > svg {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+html.no-animations {
   .home-top-rated__carousel {
     scroll-behavior: auto;
   }
@@ -3987,7 +3995,7 @@ button > svg {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+html.no-animations {
   .home-category-card__hover-title,
   .home-category-card__hover-title-text {
     transition: opacity var(--motion-fast) var(--ease);
@@ -5005,19 +5013,6 @@ button > svg {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .steam-libraries__row,
-  .steam-libraries__row > svg,
-  .steam-libraries__check,
-  .steam-libraries__check--visible {
-    transition: none;
-  }
-
-  .steam-libraries__row:active {
-    transform: none;
-  }
-}
-
 html.no-animations {
   .steam-libraries__row,
   .steam-libraries__row > svg,
@@ -5928,19 +5923,6 @@ html.no-animations {
   .subscription-account__backup-meta {
     width: 100%;
     justify-items: start;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .subscription-account__backup-date,
-  .subscription-account__backup-row-actions {
-    transition: none;
-  }
-
-  .subscription-account__backup-list li:is(:hover, :focus-within) .subscription-account__backup-date,
-  .subscription-account__backup-row-actions {
-    filter: none;
-    transform: none;
   }
 }
 
@@ -8712,7 +8694,7 @@ input[type="search"]::-ms-reveal {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+html.no-animations {
   .app-notification__chevron,
   .app-notification-group__panel,
   .app-notification-group--open .app-notification-group__panel {
@@ -9380,9 +9362,7 @@ input[type="search"]::-ms-reveal {
 
   &__body {
     min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
+    overflow: hidden;
   }
 
   &__icon {
@@ -9437,8 +9417,8 @@ input[type="search"]::-ms-reveal {
   &__body > strong,
   &__body > span {
     display: block;
-    width: max-content;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   strong {
@@ -10092,7 +10072,13 @@ border: 0;
     transition: none;
   }
 
-  // Barra de controles do player de vídeo: aparece/some com prefers-reduced-motion
+  // Expansão da pesquisa do header vira salto instantâneo com o toggle.
+  .t-resize {
+    transition: none;
+    will-change: auto;
+  }
+
+  // Barra de controles do player de vídeo: aparece/some com o toggle
   // sem o fade, direto no estado final — spec pede "sem transição", não "sem
   // controles".
   .video-player__controls {
@@ -11284,23 +11270,69 @@ html.no-backdrop-blur {
     animation: none;
   }
 
-  &__drm-badge {
+  &__drm-notice {
     position: absolute;
     top: var(--space-6);
     right: var(--space-6);
     z-index: var(--z-raised);
-    display: grid;
-    width: 32px;
-    height: 32px;
-    place-items: center;
-    color: var(--caution);
-    filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--black) 60%, transparent));
+    max-width: calc(100% - var(--space-12));
+    padding-bottom: var(--space-3);
     pointer-events: auto;
+  }
+
+  &__drm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: 32px;
+    padding: var(--space-3) var(--space-5);
+    border: 1px solid currentColor;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--caution);
+    font-size: var(--type-size-caption);
+    font-weight: var(--weight-regular);
+    line-height: var(--type-line-caption);
+    cursor: help;
+
+    &:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: var(--space-1);
+    }
 
     svg {
       display: block;
+      flex: 0 0 18px;
       width: 18px;
       height: 18px;
+    }
+  }
+
+  &__drm-tooltip {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    display: grid;
+    gap: var(--space-3);
+    width: min(320px, calc(100vw - var(--space-12)));
+    max-height: 240px;
+    overflow-y: auto;
+    padding: var(--space-6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-modal);
+    color: var(--text-secondary);
+    font-size: var(--type-size-caption);
+    line-height: var(--type-line-caption);
+    overflow-wrap: anywhere;
+
+    &[hidden] {
+      display: none;
+    }
+
+    strong {
+      color: var(--text-primary);
+      font-weight: var(--weight-semibold);
     }
   }
 
@@ -12821,18 +12853,6 @@ html.no-backdrop-blur {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    @include no-animations-styles;
-  }
-
-  .game-settings-modal__nav-button,
-  .game-settings-modal__action-button {
-    transform: none;
-    transition: none;
-  }
-}
-
 @keyframes game-settings-modal-in {
   from {
     opacity: 0;
@@ -13670,22 +13690,6 @@ html.no-backdrop-blur {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .game-settings-modal,
-  .game-settings-modal__section-view {
-    animation: none;
-  }
-
-  .game-settings-modal__card,
-  .game-settings-modal__nav-button,
-  .game-settings-modal__action-button,
-  .game-settings-modal__choice,
-  .game-settings-modal__candidate {
-    transition: none;
-    transform: none;
-  }
-}
-
 html.no-animations {
   .game-settings-modal,
   .game-settings-modal__section-view {
@@ -14409,10 +14413,6 @@ button {
     will-change: transform;
 
     &--instant {
-      transition: none;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
       transition: none;
     }
   }
@@ -15281,13 +15281,6 @@ button {
   input:focus-visible + &-box {
     outline: 2px solid var(--text-primary);
     outline-offset: 2px;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    &-box,
-    &-box svg path {
-      transition: none;
-    }
   }
 }
 

@@ -29,17 +29,22 @@ describe("miniaturas da busca global", () => {
     expect(shell).not.toMatch(/limit: 6/);
   });
 
-  it("mantém a largura expandida por padrão, sem expansão ao foco", () => {
+  it("expande suavemente no foco, independente dos efeitos do SO", () => {
     const css = compile("src/app.scss").css;
     const component = readFileSync("src/components/layout/Header.tsx", "utf8");
 
+    // Compacta em repouso, expandida no foco, com transição de `width`.
     expect(css).toMatch(/\.header \{[\s\S]*?--header-search-width: 280px;/);
-    expect(css).toMatch(/\.header__search \{[^}]*width: var\(--header-search-width\);/);
-    expect(css).not.toContain("header__search--focused");
-    expect(css).not.toContain("--header-search-rest-width");
-    expect(css).toMatch(/\.header__search-dropdown \{[\s\S]*?width: var\(--header-search-width\);/);
+    expect(css).toMatch(/\.header \{[\s\S]*?--header-search-compact-width: 180px;/);
+    expect(css).toMatch(/\.header__search \{[^}]*width: var\(--header-search-compact-width\);/);
+    expect(css).toContain(".header__search-shell:focus-within .header__search");
+    expect(css).toMatch(/\.t-resize \{[^}]*transition:[^}]*width var\(--resize-dur\)/);
+    expect(component).toContain("header__search t-resize");
+    // Sem gate do SO: efeitos do Windows desligados não teleportam a caixa.
+    // O único `transition: none` do `.t-resize` vive sob `html.no-animations`.
+    expect(css).not.toContain(".t-resize { transition: none");
+    expect(css).toContain("html.no-animations .t-resize");
     expect(css).toContain("--header-search-width: 300px;");
     expect(css).toContain(".header__search-dropdown-thumbnail");
-    expect(component).not.toContain("header__search--focused");
   });
 });

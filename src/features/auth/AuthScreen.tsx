@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/settings";
-import ghostLogo from "../../../Icons/ghost-solid.png";
 import discordIcon from "../../../Icons/discord.svg";
 import steamIcon from "../../../Icons/steam-glyph.svg";
 import { ghostboxApi } from "../../lib/ghostboxApi";
@@ -31,7 +30,6 @@ function AuthTitle({ text }: { text: string }) {
 
   return (
     <h1 id="auth-dialog-title" className="auth-form__title">
-      <img className="auth-form__title-icon" src={ghostLogo} alt="" width="28" height="28" />
       <span className="auth-form__title-copy">
         <span className="auth-form__title-prefix">{prefix}</span>
         {brandStart >= 0 && <span translate="no">{brand}</span>}
@@ -148,8 +146,8 @@ export function AuthScreen() {
                     className="auth-form__provider-icon"
                     src={provider.icon}
                     alt=""
-                    width="30"
-                    height="30"
+                    width="28"
+                    height="28"
                   />
                 </span>
                 <span aria-live="polite">

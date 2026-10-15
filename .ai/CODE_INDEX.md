@@ -147,7 +147,7 @@ Header has no update UI (removed manual button/hourly polling/splash).
 Primitives -> `src/styles/_primitives.scss` (`--fs-*`, `--lh-*`, `--ls-*`, `--weight-*`, `--font-sans`)
 Semantic -> `src/styles/_semantic.scss` (81-175: `--text-*`; hierarchy primary `#f2f2f2`, secondary `#c8c8c8`, tertiary `#8c8c8c`; titlebar `--text-placeholder` aliases tertiary; `--type-size-*`, `--type-line-*`, fluid `--type-size-fluid-*`; status `--caution` -> `--caution-500` `#ffbf00` in `_primitives.scss`)
 Mixins -> `src/styles/_mixins.scss` (`type-label/meta/body/body-strong/title/section/page/hero/showcase`, `eyebrow`, `truncate`)
-Font weight -> `src/styles/_semantic.scss`: Inter Variable uses 500 throughout; `--weight-semibold` aliases `--weight-regular` for existing component/mixin references.
+Font weight -> `src/styles/_semantic.scss`: Inter Variable uses 450 throughout; `--weight-semibold` aliases `--weight-regular` for existing component/mixin references.
 Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n-*/--a-*` in components; use `--text-*` / `--type-*`)
 
 ## Titlebar
@@ -155,7 +155,7 @@ Guard -> `scripts/check-tokens.mjs` (blocks raw hex, `font-size:px`, direct `--n
 `Header` -> `src/components/layout/Header.tsx` (premium/subscription button around 407-456; search suggestions dropdown around 458-525, fed by `useAppShellState`)
 Premium button appearance -> `src/app.scss` (`.header__premium-indicator`, around 2064; crown and label immediately after); resting label matches `.header__search input::placeholder` via `--text-placeholder`; hover/focus changes only the surface to `--surface-option-hover` (`#151515`).
 Search suggestions appearance/scroll -> `src/app.scss` (`.header__search-dropdown`, around 2294-2385; `.header__search-dropdown-thumbnail` 120px small capsule).
-Search compact/focused width -> `src/app.scss` (`.header`: `--header-search-compact-width` 180px, `--header-search-width` 280px/300px maximized; `&__search-shell:focus-within &__search`); `Header.tsx` uses `t-resize` for width transition, with reduced-motion support.
+Search compact/focused width -> `src/app.scss` (`.header`: `--header-search-compact-width` 180px, `--header-search-width` 280px/300px maximized; `&__search-shell:focus-within &__search`); `Header.tsx` uses `t-resize` for width transition. Motion é independente do SO (sem `prefers-reduced-motion`): o opt-out é o toggle interno (`html.no-animations`).
 Search suggestion thumbnails -> `SearchSuggestionThumbnail` in `Header.tsx` -> `gameSmallCapsuleSources` / `smallCapsuleSourcesForAppId` / `isSmallCapsuleImageSource` in `src/utils/image.ts` (capsule_231x87 CDNs: shared.{akamai,fastly,cloudflare,steamstatic}.steamstatic.com/store_item_assets + cdn.cloudflare/steamcdn-a/cdn.akamai `steam/apps/{id}`); store `tiny_image` exposed as `GhostBoxGame.smallCapsuleUrl` (`src/data.ts`) via `steam_store_search_games` in `src-tauri/src/catalogue.rs` (around 2422).
 Header suggestion merging (catalogue + Steam store supplement, limit 8, thumb+title, no prices) -> `useExpandedGameSearch` (`src/hooks/useExpandedGameSearch.ts`, `steamSupplement` option) + `useAppShellState` (`src/hooks/useAppShellState.ts`). Catalogue-only fallback stays in `useCatalogueState`.
 

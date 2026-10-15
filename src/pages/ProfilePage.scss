@@ -1034,6 +1034,10 @@
     grid-row: 2;
     align-self: start;
     padding-top: var(--space-3);
+    // Mesma altura dos ícones de conquista (28px, ver `__activity-icon`):
+    // centraliza o "jogado pela última vez" com a fileira da esquerda.
+    // Sem flex aqui para preservar o `nowrap` + `ellipsis` herdados acima.
+    line-height: 28px;
     color: var(--text-secondary);
   }
 
@@ -1723,8 +1727,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-
+html.no-animations {
   .profile-page__avatar-frame,
   .profile-page__avatar-frame img {
     transition: none;
@@ -1769,24 +1772,6 @@
   }
 
   .profile-page__activity-progress .profile-page__progress-track > span::after {
-    animation: none;
-  }
-}
-
-html.no-animations {
-  .profile-page__avatar-frame,
-  .profile-page__avatar-frame img {
-    transition: none;
-  }
-
-  .profile-page__avatar-frame:hover,
-  .profile-page__avatar-frame:hover img {
-    transform: none;
-  }
-
-  .profile-page__steam-id--revealed,
-  .profile-page__steam-id--hidden,
-  .profile-page__steam-id-copy {
     animation: none;
   }
 }
@@ -1992,6 +1977,10 @@ html.no-backdrop-blur .profile-page {
       align-self: auto;
       padding: 0;
       text-align: left;
+    }
+
+    &__activity-status {
+      line-height: var(--type-line-caption);
     }
 
     &__activity-card--skeleton .profile-page__activity-main {
@@ -2472,7 +2461,7 @@ html.no-backdrop-blur .profile-page {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+html.no-animations {
   .profile-page__edit-avatar-btn img,
   .profile-page__edit-avatar-change-icon,
   .profile-page__edit-input,

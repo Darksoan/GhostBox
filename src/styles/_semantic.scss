@@ -171,8 +171,8 @@
   --type-size-fluid-hero: clamp(28px, 4vw, 40px);
   --type-size-fluid-showcase: clamp(30px, 5vw, 48px);
 
-  // Inter Variable: peso medium único para toda a interface.
-  --weight-regular: 500;
+  // Inter Variable: peso regular único para toda a interface.
+  --weight-regular: 400;
   --weight-semibold: var(--weight-regular);
   --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
   --focus-ring-color: var(--n-10);

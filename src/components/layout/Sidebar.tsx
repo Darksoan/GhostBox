@@ -33,6 +33,7 @@ import {
   writeSidebarExpandedCollections,
 } from "../../utils/storage";
 import { primaryNavigation, secondaryNavigation } from "./navigationItems";
+import { SidebarNavigationIcon } from "./SidebarNavigationIcon";
 import { useWindowMaximized } from "../../hooks/useWindowMaximized";
 import avatarPlaceholder from "../../../Icons/userplaceholder.jpg";
 
@@ -298,7 +299,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onNavigate(id)}
                   >
-                    <Icon size={19} strokeWidth={2} />
+                    <SidebarNavigationIcon icon={Icon} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -313,7 +314,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onNavigate(id)}
                   >
-                    <Icon size={19} strokeWidth={2} />
+                    <SidebarNavigationIcon icon={Icon} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
                   </button>
                 </li>
@@ -335,7 +336,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onSettingsTabChange(id)}
                   >
-                    <Icon size={19} strokeWidth={2} />
+                    <SidebarNavigationIcon icon={Icon} />
                     <span className="sidebar__menu-item-label">{t(settingsTabLabelKeys[id])}</span>
                   </button>
                 </li>
@@ -360,7 +361,7 @@ export const Sidebar = memo(function Sidebar({
                     className="sidebar__menu-item-button"
                     onClick={() => onProfileTabChange(id)}
                   >
-                    <Icon size={19} strokeWidth={2} />
+                    <SidebarNavigationIcon icon={Icon} />
                     <span className="sidebar__menu-item-label">{t(profileTabLabelKeys[id])}</span>
                   </button>
                 </li>
@@ -383,8 +384,8 @@ export const Sidebar = memo(function Sidebar({
                   aria-hidden={isCollectionSearchOpen}
                 >
                   <ChevronRight
-                    size={14}
-                    strokeWidth={2.15}
+                    size={16}
+                    strokeWidth={2}
                     className={`sidebar__section-toggle-chevron${!isCollectionsCollapsed ? " sidebar__section-toggle-chevron--expanded" : ""}`}
                   />
                   <small className="sidebar__section-title">{t("sidebar.collections")}</small>
@@ -504,8 +505,8 @@ export const Sidebar = memo(function Sidebar({
                           aria-label={isExpanded ? "Recolher" : "Expandir"}
                         >
                           <ChevronRight
-                            size={14}
-                            strokeWidth={2.15}
+                            size={16}
+                            strokeWidth={2}
                             className={`sidebar__collection-chevron${isExpanded ? " sidebar__collection-chevron--expanded" : ""}`}
                           />
                         </button>

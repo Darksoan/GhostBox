@@ -9,7 +9,6 @@ import {
   mergeAchievementDetailsIntoGame,
 } from "../utils/steamAchievementMerge";
 import { formatCompactPlaytime } from "../utils/time";
-import { useMetricsUnlocked } from "../context/MetricsVisibilityContext";
 import "./GameAchievementsPage.scss";
 
 function formatAchievementPercent(value: number, language: string = "pt-BR") {
@@ -123,7 +122,6 @@ export function GameAchievementsPage({
   onDetailsLoaded,
 }: GameAchievementsPageProps) {
   const { appearance, t } = useSettings();
-  const areMetricsUnlocked = useMetricsUnlocked();
   const [detailGame, setDetailGame] = useState<GhostBoxGame>(game);
   const [isLoading, setIsLoading] = useState(true);
   const highlightScrolledRef = useRef(false);
@@ -212,20 +210,6 @@ export function GameAchievementsPage({
 
   const unlockedLabel = (date: string) =>
     t("profile.achievementUnlockedOn", { date });
-
-  if (!areMetricsUnlocked) {
-    return (
-      <section
-        className="game-achievements-page"
-        aria-label={t("achievements.pageAria", { title: detailGame.title })}
-      >
-        <EmptyState
-          className="game-achievements-page__locked-state"
-          title={t("metrics.lockedAchievements")}
-        />
-      </section>
-    );
-  }
 
   return (
     <section

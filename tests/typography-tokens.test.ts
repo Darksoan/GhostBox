@@ -148,16 +148,16 @@ describe("Typography tokens", () => {
     }
   });
 
-  it("keeps font weights at 500 or 600", () => {
+  it("keeps font weights at 400", () => {
     const tokens = collectTokens();
 
-    expect(resolveToken("--weight-regular", tokens)).toBe("500");
-    expect(resolveToken("--weight-semibold", tokens)).toBe("600");
+    expect(resolveToken("--weight-regular", tokens)).toBe("400");
+    expect(resolveToken("--weight-semibold", tokens)).toBe("400");
 
     for (const file of UI_STYLES) {
       const source = readFileSync(file, "utf8");
-      expect(source, `${file} font weight below 500`).not.toMatch(
-        /font-weight\s*:\s*(?:[1-4]\d{2}|normal|lighter)\b/,
+      expect(source, `${file} font weight below 400`).not.toMatch(
+        /font-weight\s*:\s*(?:[1-3]\d{2}|normal|lighter)\b/,
       );
 
       for (const match of source.matchAll(/var\((--weight-[^)]+)\)/g)) {
