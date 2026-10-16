@@ -1241,26 +1241,45 @@ function HomeBannerArt({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [game.appId, game.id, game.heroUrl, game.hero]
   );
-  const cachedSources = useCachedImageSources(fallbackSources);
+  const cachedSources = useCachedImageSources(fallbackSources, {
+    waitForManifest: true,
+  });
   // `preferOrder` faz o walk respeitar o ranking da lista (library_hero
   // primeiro). Sem ele, o atalho de sessão pinta qualquer source já decodificada
   // — um screenshot carregado por outro card vencia o hero e a capa do banner
   // trocava de arte depois que a fonte de maior prioridade terminava.
   const { source, loaded } = useLoadableImageCover(cachedSources, {
     preferOrder: true,
+    decodeBeforeCommit: true,
   });
+  // O manifesto/cache pode revalidar depois. Uma arte já revelada não deve
+  // trocar de URL (nem de resolução) enquanto este slide estiver montado.
+  const displayedSource = useRef("");
+  if (loaded && source && !displayedSource.current) {
+    displayedSource.current = source;
+  }
 
   return (
     <span
       className={`home-banner__art${active ? " home-banner__art--active" : ""}${
-        loaded ? " home-banner__art--loaded" : ""
+        displayedSource.current ? " home-banner__art--loaded" : ""
       }`}
       // Nada pintado até carregar: exibir a primeira URL crua enquanto o
       // `Image()` resolve mostrava a arte parcial/cortada e depois trocava de
       // resolução de repente quando a fonte preferida terminava.
-      style={layeredImageStyle(loaded && source ? [source] : [], "")}
       aria-hidden="true"
-    />
+    >
+      {displayedSource.current ? (
+        <img
+          className="home-banner__image"
+          src={displayedSource.current}
+          alt=""
+          decoding="async"
+          referrerPolicy="no-referrer"
+          draggable={false}
+        />
+      ) : null}
+    </span>
   );
 }
 

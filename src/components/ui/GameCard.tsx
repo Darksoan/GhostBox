@@ -192,7 +192,7 @@ export const GameCard = memo(function GameCard({
             aria-label={`${achievementUnlocked} de ${achievementTotal} conquistas desbloqueadas, ${achievementProgress}%`}
           >
             <span className="game-card__summary-metric">
-              <Cup size={16} weight="Filled" strokeWidth={2.0} />
+              <Cup size={18} weight="Filled" strokeWidth={2.0} />
               <span>
                 {achievementUnlocked} / {achievementTotal}
               </span>

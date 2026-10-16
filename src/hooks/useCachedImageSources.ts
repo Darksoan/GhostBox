@@ -18,7 +18,7 @@ import {
   isHeroImageSource,
   isLandscapeImageSource,
 } from "../utils/image";
-import { subscribeSteamAssetManifest } from "../utils/steamAssetManifest";
+import { isSteamAssetManifestPending, subscribeSteamAssetManifest } from "../utils/steamAssetManifest";
 
 export interface LoadableImageState {
   source: string;
@@ -46,25 +46,32 @@ export function useCachedImageSources(
     preserveSourceOrder = false,
     cacheSteamHeaders = false,
     prioritizeCached = false,
+    waitForManifest = false,
   }: {
     resolveUncached?: boolean;
     preserveSourceOrder?: boolean;
     cacheSteamHeaders?: boolean;
     prioritizeCached?: boolean;
+    /** Resolve Steam's hashed assets before painting a lower-quality fallback. */
+    waitForManifest?: boolean;
   } = {}
 ) {
   const currentKey = sources.join("\n");
   const sourceKeyRef = useRef<string>(currentKey);
 
-  const [cachedSources, setCachedSources] = useState(() =>
-    withCachedImageSources(sources, { preserveSourceOrder, prioritizeCached })
-  );
-
-  const updateCachedSources = () => {
+  const resolveSources = () => {
     const nextSources = withCachedImageSources(sources, {
       preserveSourceOrder,
       prioritizeCached,
     });
+    return waitForManifest && steamAppIdsFromSources(sources).some(isSteamAssetManifestPending)
+      ? []
+      : nextSources;
+  };
+  const [cachedSources, setCachedSources] = useState(resolveSources);
+
+  const updateCachedSources = () => {
+    const nextSources = resolveSources();
     setCachedSources((currentSources) =>
       currentSources.join("\n") === nextSources.join("\n")
         ? currentSources
@@ -131,6 +138,7 @@ export function useCachedImageSources(
     preserveSourceOrder,
     cacheSteamHeaders,
     prioritizeCached,
+    waitForManifest,
   ]);
 
   return cachedSources;
@@ -148,6 +156,8 @@ type LoadableImageOptions = {
    * over the high-density art at the top.
    */
   preferOrder?: boolean;
+  /** Keep the placeholder until the selected image is decoded. */
+  decodeBeforeCommit?: boolean;
   /** Paint the first working source immediately, then try preferred upgrades. */
   progressive?: boolean;
   /**
@@ -170,6 +180,7 @@ export function useLoadableImageState(
   const failTimeoutMs = options.failTimeoutMs ?? 0;
   const preferOrder = options.preferOrder === true;
   const progressive = options.progressive === true;
+  const decodeBeforeCommit = options.decodeBeforeCommit === true;
   const retryToken = options.retryToken ?? 0;
 
   const [state, setState] = useState<LoadableImageState>(() => {
@@ -311,7 +322,10 @@ export function useLoadableImageState(
           fallbackImage.decoding = "async";
           fallbackImage.fetchPriority = progressive && index === 0 ? "high" : "low";
           fallbackImage.referrerPolicy = "no-referrer";
-          fallbackImage.onload = () => {
+          fallbackImage.onload = async () => {
+            if (decodeBeforeCommit && typeof fallbackImage.decode === "function") {
+              try { await fallbackImage.decode(); } catch { tryNextSource(); return; }
+            }
             commit(resolvedSource, index);
             if (progressive && index === 0 && !finished) loadSource(index + 1);
           };
@@ -368,7 +382,10 @@ export function useLoadableImageState(
       image.decoding = "async";
       image.fetchPriority = progressive && index === 0 ? "high" : "low";
       image.referrerPolicy = "no-referrer";
-      image.onload = () => {
+      image.onload = async () => {
+        if (decodeBeforeCommit && typeof image.decode === "function") {
+          try { await image.decode(); } catch { tryResolvedFallback(); return; }
+        }
         commit(source, index);
         if (progressive && index === 0 && !finished) loadSource(index + 1);
       };
@@ -384,7 +401,7 @@ export function useLoadableImageState(
         clearTimeout(failTimer);
       }
     };
-  }, [sourceKey, failTimeoutMs, preferOrder, progressive, retryToken]);
+  }, [sourceKey, failTimeoutMs, preferOrder, progressive, decodeBeforeCommit, retryToken]);
 
   return state;
 }

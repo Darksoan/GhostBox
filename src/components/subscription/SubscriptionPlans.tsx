@@ -552,7 +552,7 @@ export function SubscriptionPlans({
         </div>
 
         <div className="subscription-account__details-grid">
-          <article className="subscription-account__panel">
+          <article className={`subscription-account__panel${!payment ? " subscription-account__panel--empty-payment" : ""}`}>
             <h4>{isLifetime ? copy("Acesso Premium", "Premium access") : copy("Pagamentos", "Payments")}</h4>
             {payment ? (
               <ul className="subscription-account__payment-list">
@@ -647,7 +647,7 @@ export function SubscriptionPlans({
                             setBackupConfirm({ action: "restore", appId: game.appId, saveId: game.saveId, title: game.title });
                           }}
                         >
-                          <RotateCcw size={17} aria-hidden="true" />
+                          <RotateCcw size={18} aria-hidden="true" />
                         </button>
                         <button
                           type="button"
@@ -658,7 +658,7 @@ export function SubscriptionPlans({
                             setBackupConfirm({ action: "delete", appId: game.appId, saveId: game.saveId, title: game.title });
                           }}
                         >
-                          <Trash2 size={17} aria-hidden="true" />
+                          <Trash2 size={18} aria-hidden="true" />
                         </button>
                       </div>
                     </div>

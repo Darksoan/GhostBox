@@ -640,6 +640,23 @@ async fn fetch_package(
     url: &str,
     app_id: &str,
 ) -> Result<Vec<u8>, String> {
+    for attempt in 0..3 {
+        match fetch_package_once(client, source, url, app_id).await {
+            Err(error) if error.1 && attempt < 2 => {
+                tokio::time::sleep(Duration::from_millis(500 * (attempt + 1))).await;
+            }
+            result => return result.map_err(|error| error.0),
+        }
+    }
+    unreachable!()
+}
+
+async fn fetch_package_once(
+    client: &reqwest::Client,
+    source: &ManifestSource,
+    url: &str,
+    app_id: &str,
+) -> Result<Vec<u8>, (String, bool)> {
     let response = client
         .get(url)
         .header(reqwest::header::USER_AGENT, USER_AGENT)
@@ -651,18 +668,18 @@ async fn fetch_package(
             } else {
                 format!("{}: {}", source.name, describe_request_error(&error))
             }
-        })?;
+        }).map_err(|message| (message, true))?;
 
     let status = response.status().as_u16();
     if status == source.unavailable_code {
-        return Err(format!("{}: jogo indisponivel", source.name));
+        return Err((format!("{}: pacote não encontrado nesta fonte", source.name), false));
     }
     if status != source.success_code {
-        return Err(if matches!(status, 522 | 523 | 524) {
-            format!("{}: servico indisponivel (HTTP {status})", source.name)
+        return Err((if status >= 500 {
+            format!("{}: falha temporária do serviço (HTTP {status}); tente novamente mais tarde", source.name)
         } else {
             format!("{}: HTTP {status}", source.name)
-        });
+        }, status >= 500));
     }
 
     let bytes = response.bytes().await.map_err(|error| {
@@ -671,20 +688,21 @@ async fn fetch_package(
         } else {
             format!("{}: falha ao receber o pacote ({error})", source.name)
         }
-    })?;
+    }).map_err(|message| (message, true))?;
 
     if bytes.len() > MAX_PACKAGE_BYTES {
-        return Err(format!("{}: pacote excede 64 MB", source.name));
+        return Err((format!("{}: pacote excede 64 MB", source.name), false));
     }
 
     match source.format {
         PackageFormat::Zip => {
             if bytes.len() < 4 || &bytes[..2] != b"PK" {
-                return Err(format!("{}: resposta nao e zip", source.name));
+                return Err((format!("{}: resposta nao e zip", source.name), false));
             }
             Ok(bytes.to_vec())
         }
-        PackageFormat::RawLua => wrap_raw_lua_in_zip(source.name, app_id, &bytes),
+        PackageFormat::RawLua => wrap_raw_lua_in_zip(source.name, app_id, &bytes)
+            .map_err(|message| (message, false)),
     }
 }
 

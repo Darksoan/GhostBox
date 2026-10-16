@@ -274,18 +274,9 @@
   border: 1px solid var(--border-subtle);
 }
 
-svg:not([stroke-width]):not([data-preserve-stroke]) {
-  stroke-width: 2px;
-}
-
-svg[stroke-width="1.5"]:not([data-preserve-stroke]) {
-  stroke-width: 2px;
-}
-
-svg[stroke-width="1.7"],
-svg[stroke-width="1.75"],
-svg[stroke-width="1.8"] {
-  stroke-width: 2px;
+// Peso compartilhado dos ícones, inclusive os que declaram stroke no SVG.
+svg:not([data-preserve-stroke]) {
+  stroke-width: 1.8;
 }
 
 .game-card__cover,
@@ -1097,11 +1088,16 @@ p {
     }
 
     &:hover {
-      color: var(--text-primary);
+      color: var(--text-secondary);
+    }
+
+    &,
+    &:hover {
+      color: var(--text-tertiary);
     }
 
     &[aria-expanded="true"] {
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
   }
 
@@ -1169,7 +1165,7 @@ p {
       line-height: 1;
 
       &::placeholder {
-        color: var(--text-secondary);
+        color: var(--text-tertiary);
         font-weight: var(--weight-regular);
       }
     }
@@ -1278,10 +1274,10 @@ p {
       content: none;
     }
 
-    &:hover:not(.sidebar__menu-item--active),
-    &:focus-within:not(.sidebar__menu-item--active) {
+    &:hover:not(.sidebar__menu-item--active):not(.sidebar__collection-item),
+    &:focus-within:not(.sidebar__menu-item--active):not(.sidebar__collection-item) {
       background: var(--sidebar-option-hover);
-      color: var(--text-primary);
+      color: var(--text-secondary);
     }
 
     // Active uses the shared interactive surface token.
@@ -1294,10 +1290,7 @@ p {
       background: var(--sidebar-option-active);
     }
 
-    /* Collection rows stay quiet until hover or selection.
-       O foco de mouse (clique no chevron) não pode prender o fundo aceso:
-       usa :has(:focus-visible) em vez de :focus-within, então só o teclado
-       acende a linha; o clique volta ao transparente ao tirar o cursor. */
+    /* Coleções clareiam somente no hover, nunca por foco ou seleção. */
     &.sidebar__collection-item {
       color: var(--text-secondary);
       font-weight: var(--weight-regular);
@@ -1307,19 +1300,19 @@ p {
         color: inherit;
       }
 
-      &:hover:not(.sidebar__menu-item--active),
-      &:has(:focus-visible):not(.sidebar__menu-item--active) {
-        background: var(--sidebar-selector);
-        color: var(--text-primary);
-      }
-
       &.sidebar__menu-item--active {
         color: var(--text-primary);
-        background: var(--sidebar-option-active);
+        background: transparent;
+      }
+
+      &:hover:not(.sidebar__menu-item--active) {
+        background: var(--sidebar-selector);
+        color: var(--text-secondary);
       }
 
       &.sidebar__menu-item--active:hover {
-        background: var(--sidebar-option-active);
+        background: var(--sidebar-selector);
+        color: var(--text-primary);
       }
     }
 
@@ -1813,7 +1806,7 @@ p {
   --header-icon: 20px;
   --header-gap: var(--space-4);
   --header-search-width: 280px;
-  --header-search-compact-width: 180px;
+  --header-search-compact-width: 200px;
 
   position: relative;
   z-index: var(--z-drawer);
@@ -2112,6 +2105,7 @@ p {
     &:hover,
     &:focus-visible {
       background: var(--surface-option-hover);
+      color: var(--text-primary);
 
       .header__tooltip {
         opacity: 1;
@@ -2175,10 +2169,6 @@ p {
       width var(--resize-dur) var(--resize-ease),
       height var(--resize-dur) var(--resize-ease);
 
-    &:hover,
-    &:focus-within {
-      background: var(--surface-titlebar-control-hover);
-    }
 
     > svg {
       display: block;
@@ -3043,17 +3033,13 @@ html.no-animations {
 
 /* Chapado como todo skeleton do app: sem pulse, sem shimmer. */
 .home-banner__frame--skeleton {
-  background: var(--skeleton-fill);
+  background: var(--c-1);
 }
 
-/* Enquanto a arte ainda resolve, o banner é um skeleton. O scrim serve apenas
-   para legibilidade sobre a imagem real e criaria um degradê no placeholder. */
-.home-banner__frame:has(.home-banner__art):not(:has(.home-banner__art--loaded)) {
-  background: var(--skeleton-fill);
-}
-
-.home-banner__frame:has(.home-banner__art):not(:has(.home-banner__art--loaded)) .home-banner__scrim {
-  display: none;
+/* Só o slide ativo conta: um vizinho pré-carregado não clareia o placeholder.
+   Mantém o scrim sobre o fundo escuro até a arte preferida estar pronta. */
+.home-banner__frame:has(.home-banner__art--active:not(.home-banner__art--loaded)) {
+  background: var(--c-1);
 }
 
 .home-banner__surface {
@@ -3069,25 +3055,41 @@ html.no-animations {
   text-align: left;
 }
 
-/* Camada primária: as fatias vizinhas ficam empilhadas e a troca é um
-   cross-fade. A entrada é mais longa que a saída (o que chega importa mais) e
-   ainda assenta de 1.06 para 1 — o "settle" que separa a arte do corte seco. */
+/* A camada cuida só do cross-fade; o zoom usa uma textura de alta densidade
+   abaixo, sem recalcular layout/pintura a cada frame. */
 .home-banner__art {
   position: absolute;
   inset: 0;
   opacity: 0;
-  transform: scale(1.06);
-  transition:
-    opacity 0.26s var(--ease),
-    transform 0.26s var(--ease);
+  transition: opacity 0.26s var(--ease);
 }
 
 .home-banner__art--active {
   opacity: 1;
-  transform: scale(1);
-  transition:
-    opacity var(--motion-emphasis) var(--ease),
-    transform 0.9s var(--ease-out);
+  transition: opacity var(--motion-emphasis) var(--ease);
+}
+
+.home-banner__image {
+  position: absolute;
+  display: block;
+  /* Rasteriza a 2x e anima apenas redução (0.53 → 0.5). Assim o compositor
+     não amplia uma textura do tamanho do frame durante o zoom de 106% → 100%. */
+  width: 200%;
+  height: 200%;
+  max-width: none;
+  left: -50%;
+  top: -50%;
+  object-fit: cover;
+  image-rendering: auto;
+  transform-origin: center;
+  transform: scale(0.53);
+  will-change: transform;
+  transition: transform 0.26s var(--ease);
+}
+
+.home-banner__art--active .home-banner__image {
+  transform: scale(0.5);
+  transition: transform 0.9s var(--ease-out);
 }
 
 .home-banner__scrim {
@@ -3362,8 +3364,17 @@ html.no-animations {
 html.no-animations {
   .home-banner__art,
   .home-banner__art--active {
-    transform: none;
     transition: opacity var(--motion-base) var(--ease);
+  }
+
+  .home-banner__art .home-banner__image {
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    transform: none;
+    will-change: auto;
+    transition: none;
   }
 
   .home-banner__info {
@@ -5537,6 +5548,10 @@ html.no-animations {
 
     &--wide {
       gap: var(--space-5);
+    }
+
+    &--empty-payment > .subscription-account__empty {
+      margin-block: auto;
     }
 
     h4 {
@@ -9258,7 +9273,7 @@ html.no-animations {
   &:hover &__achievement-badges,
   &:focus-within &__achievement-badges {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 
   &__backdrop {
@@ -10497,12 +10512,12 @@ html.no-backdrop-blur {
       transition: background var(--motion-fast) var(--ease);
 
       &:hover {
-        background: var(--surface-option-hover);
+        background: var(--surface-option);
       }
 
       &:focus,
       &:focus-visible {
-        background: var(--surface-option-hover);
+        background: var(--surface-option);
         border: 0;
         outline: none;
       }
@@ -10778,7 +10793,7 @@ html.no-backdrop-blur {
   &__section-title-icon {
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
-    stroke-width: 2px;
+    stroke-width: 1.8;
   }
 
   &__section-title-action {
@@ -12569,8 +12584,8 @@ html.no-backdrop-blur {
   &__remove-button {
     min-width: 0;
     width: fit-content;
-    min-height: 32px;
-    height: 32px;
+    min-height: 36px;
+    height: 36px;
     gap: clamp(var(--space-3), 0.35vw + 4px, var(--space-4));
     padding: 0 clamp(var(--space-6), 0.6vw + 6px, var(--space-8));
     align-items: center;
@@ -12591,8 +12606,8 @@ html.no-backdrop-blur {
   &__favorite-button {
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     padding: 0;
     cursor: pointer;
   }
@@ -12600,8 +12615,8 @@ html.no-backdrop-blur {
   &__gear-button {
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     padding: 0;
   }
 
@@ -12676,6 +12691,9 @@ html.no-backdrop-blur {
   &__add-button {
     display: inline-flex;
     align-items: center;
+    min-height: 36px;
+    height: 36px;
+    padding-inline: clamp(var(--space-7), 0.6vw + 8px, var(--space-9));
   }
 
   /* Botões da capa: sem translucidez no clique (`opacity` do `.button:active`). */
@@ -12691,9 +12709,9 @@ html.no-backdrop-blur {
      favorito/engrenagem para alinhar na linha de ação. */
   &__remove-button--icon-only {
     display: grid;
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
     padding: 0;
     place-items: center;
     gap: 0;
@@ -15098,20 +15116,36 @@ button {
   border-color: var(--border);
 }
 
-/* Mesma regra do `game-settings-modal__action-button`: em modal o botão é ação
-   direta, então o rótulo fica em `--text-primary` já no repouso. O hover
-   continua sinalizado pela superfície. O modal de coleção fica de fora: o par
-   de botões usa texto `--text-secondary` (#A3A3A3) no repouso, com hierarquia
-   dada pelo degrau da rampa (#101010 → #151515). */
-.steam-path-modal__actions .button:not(.button--primary),
-.confirm-modal__actions .button:not(.button--primary),
-.feedback-modal__actions .button:not(.button--primary),
-.edit-profile-modal .button:not(.button--primary),
-.modal:not(.modal--details) .button:not(.button--primary) {
-  color: var(--text-primary);
+/* Ações dos modais: texto secundário no repouso e primário no hover. */
+.collection-modal .collection-modal__actions .button,
+.steam-path-modal__actions .button,
+.confirm-modal__actions .button,
+.feedback-modal__actions .button,
+.edit-profile-modal .button,
+.modal:not(.modal--details) .button,
+.game-settings-modal .game-settings-modal__action-button {
+  color: var(--text-secondary);
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    color: var(--text-primary);
+  }
 }
 
 /* ── Confirmation modals ──────────────────────────────────────────── */
+.backdrop--confirm > .collection-modal .collection-modal__header p,
+.backdrop--confirm > .collection-modal .collection-modal__content > p:not([role="alert"]),
+.collection-create-modal .collection-modal__header p {
+  font-size: var(--type-size-body-emphasis);
+  line-height: var(--type-line-body-emphasis);
+}
+
+.confirm-modal .confirm-modal__header p,
+.confirm-modal .confirm-modal__content p:not([role="alert"]) {
+  font-size: var(--type-size-body);
+  line-height: var(--type-line-body);
+}
+
 /* Separe o texto das ações e dê mais altura aos diálogos de confirmação. */
 .backdrop--confirm > .collection-modal .collection-modal__header p,
 .collection-create-modal .collection-modal__header p,
@@ -15121,9 +15155,14 @@ button {
   color: var(--text-tertiary);
 }
 
-.backdrop--confirm > .collection-modal {
+.backdrop--confirm > .collection-modal,
+.collection-create-modal {
   .collection-modal__header {
-    padding-bottom: var(--space-16);
+    padding-bottom: var(--space-12);
+  }
+
+  .collection-modal__header > div {
+    gap: calc(var(--space-12) - 2px);
   }
 
   .collection-modal__content {
@@ -15132,8 +15171,12 @@ button {
   }
 }
 
+.confirm-modal__content {
+  padding-block: var(--space-12);
+}
+
 .confirm-modal__actions {
-  padding-top: var(--space-12);
+  padding-top: 0;
 }
 
 .collection-create-modal .collection-modal__content {
@@ -15143,10 +15186,6 @@ button {
 /* ── Uninstall confirm modal ──────────────────────────────────────── */
 /* Usa a caixa canônica `.collection-modal`; só o botão destrutivo tem
    idioma próprio (vermelho translúcido), como nos confirm internos. */
-.uninstall-confirm-modal .collection-modal__header > div {
-  gap: var(--space-4);
-}
-
 .uninstall-confirm-modal {
   width: fit-content;
   min-width: min(560px, calc(100vw - 48px));
@@ -15157,10 +15196,6 @@ button {
   width: fit-content;
   min-width: min(560px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
-
-  .collection-modal__header > div {
-    gap: var(--space-4);
-  }
 
   .cloud-backup-confirm-modal__error {
     margin: 0;
@@ -15184,7 +15219,7 @@ button {
 .confirm-modal .confirm-modal__actions .button.button,
 .collection-create-modal .collection-modal__actions .button.button {
   background: var(--surface-option);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   border: 0;
   font-weight: var(--weight-regular);
 
@@ -15196,7 +15231,7 @@ button {
 
   &:disabled {
     background: var(--surface-option);
-    color: var(--text-primary);
+    color: var(--text-secondary);
     opacity: var(--control-disabled-opacity);
   }
 }

@@ -788,7 +788,7 @@ export function CataloguePage({
     game: contextMenu?.game ?? null,
     onOpenGame,
     includeFavorites: contextMenu?.mode !== "collection",
-    directFavoriteAction: contextMenu?.mode !== "collection",
+    directFavoriteAction: false,
     onlyCollectionActions: contextMenu?.mode === "collection",
   });
   const emptyStateTitle = hasSearchQuery

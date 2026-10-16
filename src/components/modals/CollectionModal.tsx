@@ -68,8 +68,8 @@ export function CollectionModal({
 
             <div className="collection-modal__content">
               <label className="collection-modal__field">
-                <span>{appearance.language === "en" ? "Collection name" : "Nome da coleção"}</span>
                 <input
+                  aria-label={appearance.language === "en" ? "Collection name" : "Nome da coleção"}
                   value={name}
                   onChange={handleChange}
                   placeholder={appearance.language === "en" ? "Enter collection name" : "Insira o nome da coleção"}

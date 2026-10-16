@@ -307,6 +307,10 @@ export const Header = memo(function Header({
       return;
     }
 
+    // O drag cancela o foco padrão do clique; fecha a busca explicitamente.
+    searchInputRef.current?.blur();
+    setFocused(false);
+
     // Keep grab offset exact: sync screen coords + window origin (no startDragging jump).
     event.preventDefault();
 

@@ -15,6 +15,22 @@ import { TrayMenu } from "./components/tray/TrayMenu";
 
 const isTrayMenu = new URLSearchParams(window.location.search).get("tray") === "1";
 
+// Alt isolado não deve ativar os realces nativos de menu/foco do WebView.
+// Não interfere em AltGr nem nas demais teclas dos atalhos com Alt.
+function preventStandaloneAltDefault(event: KeyboardEvent) {
+  if (
+    event.key === "Alt" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey
+  ) {
+    event.preventDefault();
+  }
+}
+
+window.addEventListener("keydown", preventStandaloneAltDefault, { capture: true });
+window.addEventListener("keyup", preventStandaloneAltDefault, { capture: true });
+
 // O app usa menu de contexto próprio (`ContextMenu`). Sem este bloqueio o
 // WebView abre o menu nativo do navegador em qualquer clique direito fora
 // dos cards (fundo, textos, header, inputs), por cima/abaixo do menu do app.

@@ -199,17 +199,9 @@ function sanitizeDependencyMessage(value: unknown): string {
     .replace(/\bLuaTools\b/gi, "dependências");
 }
 
-/**
- * Erros do pipeline adicionar/instalar chegam com detalhe técnico (caminhos
- * `E:\...`, `Status`, nomes de depot). Na UI eles viram mensagem simples: só
- * os 3 casos acionáveis passam (item bloqueado, Steam não encontrada, jogo já
- * instalado em outra biblioteca); o resto cai no genérico do chamador. O
- * detalhe continua no log/evento `download-progress` para diagnóstico.
- */
+/** Exibe apenas erros acionáveis; detalhes técnicos usam o aviso padrão. */
 function simplifyAddGameError(value: unknown): string {
-  if (typeof value !== "string" || !value) return "";
-  const message = sanitizeDependencyMessage(value);
-  if (!message) return "";
+  const message = sanitizeDependencyMessage(value).trim();
   if (
     /não é um jogo/i.test(message) ||
     /Steam não foi encontrad/i.test(message) ||

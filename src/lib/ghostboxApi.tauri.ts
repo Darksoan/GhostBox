@@ -826,13 +826,9 @@ export const ghostboxApi = {
   },
 
   addGameViaLuaTools(game: GhostBoxGame): Promise<AddGameResult> {
-    return invokeOr<AddGameResult>(
+    return invoke<AddGameResult>(
       "luatools_add_game",
       { game },
-      {
-        success: false,
-        error: "Não foi possível adicionar o jogo à Biblioteca.",
-      },
     );
   },
 

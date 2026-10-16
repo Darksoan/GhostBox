@@ -156,12 +156,14 @@ export function useCollectionContextMenu({
             ? [
                 {
                   label: "Favoritos",
+                  icon: Heart,
                   onClick: () => onToggleFavorite?.(game),
                 },
               ]
             : []),
           ...addableCollections.map((c) => ({
             label: c.name,
+            icon: Folder,
             onClick: () => onAddGameToCollection?.(game, c.id),
           })),
         ],
@@ -178,6 +180,7 @@ export function useCollectionContextMenu({
             ? [
                 {
                   label: "Favoritos",
+                  icon: HeartOff,
                   danger: true,
                   onClick: () => onToggleFavorite?.(game),
                 },
@@ -185,6 +188,7 @@ export function useCollectionContextMenu({
             : []),
           ...removableCollections.map((c) => ({
             label: c.name,
+            icon: Folder,
             danger: true,
             onClick: () => onRemoveGameFromCollection?.(game, c.id),
           })),
