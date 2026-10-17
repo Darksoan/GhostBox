@@ -1,6 +1,4 @@
 import {
-  ChevronLeft,
-  ChevronRight,
   Copy,
   Crown,
   Info,
@@ -10,6 +8,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
 import { memo, useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -429,7 +428,7 @@ export const Header = memo(function Header({
             disabled={!canGoBack}
             aria-label={t("header.back")}
           >
-            <ChevronLeft size={17} strokeWidth={2.0} aria-hidden="true" />
+            <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -438,7 +437,7 @@ export const Header = memo(function Header({
             disabled={!canGoForward}
             aria-label={t("header.forward")}
           >
-            <ChevronRight size={17} strokeWidth={2.0} aria-hidden="true" />
+            <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -452,7 +451,7 @@ export const Header = memo(function Header({
         >
           <MessageSquareShare
             className="header__feedback-icon"
-            size={18}
+            size={24}
             strokeWidth={2}
             aria-hidden="true"
           />
@@ -469,8 +468,8 @@ export const Header = memo(function Header({
           <svg
             role="img"
             viewBox="0 -28.5 256 256"
-            width={18}
-            height={18}
+            width={24}
+            height={24}
             fill="currentColor"
             aria-hidden="true"
           >
@@ -497,7 +496,7 @@ export const Header = memo(function Header({
           }
           onClick={onClickPremium}
         >
-          <Crown className="header__premium-crown" size={18} aria-hidden="true" />
+          <Crown className="header__premium-crown" size={24} aria-hidden="true" />
           <span className="header__premium-label">
             {isPremium
               ? appearance.language === "en"
@@ -540,7 +539,7 @@ export const Header = memo(function Header({
           <label
             className={`header__search t-resize ${isSearching ? "header__search--loading" : ""}`}
           >
-            <Search size={16} />
+            <Search size={20} />
             <input
               ref={searchInputRef}
               value={query}
@@ -577,7 +576,7 @@ export const Header = memo(function Header({
                   </ul>
                   {showAppIdPrompt ? (
                     <div className="header__search-empty header__search-empty--after-results">
-                      <Info className="header__search-empty-icon" size={18} aria-hidden="true" />
+                      <Info className="header__search-empty-icon" size={20} aria-hidden="true" />
                       <div className="header__search-empty-content">
                         <p className="header__search-empty-copy">
                           {t("header.searchNoResultsAppIdHint")}
@@ -592,7 +591,7 @@ export const Header = memo(function Header({
                 </div>
               ) : (
                 <div className="header__search-empty">
-                  <Info className="header__search-empty-icon" size={18} aria-hidden="true" />
+                  <Info className="header__search-empty-icon" size={20} aria-hidden="true" />
                   <div className="header__search-empty-content">
                     <p className="header__search-empty-copy">
                       {t("header.searchNoResultsAppIdHint")}
@@ -612,7 +611,7 @@ export const Header = memo(function Header({
           aria-label={appearance.language === "en" ? "Minimize" : "Minimizar"}
           onClick={handleMinimize}
         >
-          <Minus size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+          <Minus size={20} strokeWidth={2} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -629,9 +628,9 @@ export const Header = memo(function Header({
           onClick={handleToggleMaximize}
         >
           {isMaximized ? (
-            <Copy size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+            <Copy size={20} strokeWidth={2} aria-hidden="true" />
           ) : (
-            <Maximize2 size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+            <Maximize2 size={20} strokeWidth={2} aria-hidden="true" />
           )}
         </button>
         <button
@@ -640,7 +639,7 @@ export const Header = memo(function Header({
           aria-label={appearance.language === "en" ? "Close" : "Fechar"}
           onClick={handleClose}
         >
-          <X size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+          <X size={20} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
 

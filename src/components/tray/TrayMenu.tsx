@@ -33,7 +33,7 @@ function TrayGameItem({ game, installed, launching, disabled, onSelect }: TrayGa
         <span className="tray-menu__game-icon tray-menu__game-icon--skeleton" aria-hidden="true" />
       ) : (
         <span className="tray-menu__game-icon tray-menu__game-icon--fallback" aria-hidden="true">
-          {installed ? <Play size={11} strokeWidth={2.25} /> : <Download size={11} strokeWidth={2.25} />}
+          {installed ? <Play size={20} strokeWidth={2} /> : <Download size={20} strokeWidth={2} />}
         </span>
       )}
       <span className="tray-menu__item-label">{game.title}</span>
@@ -154,7 +154,7 @@ export function TrayMenu() {
         {games.length > 0 && <div className="tray-menu__separator" />}
 
         <button type="button" className="tray-menu__item" onClick={() => void ghostboxApi.showMainWindowFromTray()}>
-          <ExternalLink size={14} strokeWidth={2.15} />
+          <ExternalLink size={20} strokeWidth={2} />
           <span className="tray-menu__item-label">{isEnglish ? "Open" : "Abrir"}</span>
         </button>
 
@@ -165,7 +165,7 @@ export function TrayMenu() {
             className="tray-menu__item"
             onClick={() => void ghostboxApi.navigateFromTray(page)}
           >
-            <Icon size={14} strokeWidth={2.15} />
+            <Icon size={20} strokeWidth={2} weight="Outline" />
             <span className="tray-menu__item-label">{label}</span>
           </button>
         ))}
@@ -173,7 +173,7 @@ export function TrayMenu() {
         <div className="tray-menu__separator" />
 
         <button type="button" className="tray-menu__item" onClick={() => void ghostboxApi.quitFromTray()}>
-          <Power size={14} strokeWidth={2.15} />
+          <Power size={20} strokeWidth={2} />
           <span className="tray-menu__item-label">{isEnglish ? "Close" : "Fechar"}</span>
         </button>
       </nav>

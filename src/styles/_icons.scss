@@ -1,0 +1,48 @@
+// Uma única métrica para os ícones de interface, inclusive nas páginas lazy
+// e na janela da bandeja. Não seleciona logos, imagens nem os SVGs personalizados
+// dos checkboxes. A prioridade evita que os tamanhos locais legados (ou da
+// janela maximizada) voltem a redimensionar o desenho.
+svg.ui-icon--22 {
+  --ui-icon-size: 22px;
+}
+
+svg.header__feedback-icon {
+  --ui-icon-size: 24px;
+}
+
+svg.header__premium-crown {
+  --ui-icon-size: 24px;
+}
+
+.header__discord-button svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+svg:is(.lucide, .reicon) {
+  width: var(--ui-icon-size) !important;
+  height: var(--ui-icon-size) !important;
+  flex: 0 0 var(--ui-icon-size) !important;
+  shape-rendering: auto !important;
+}
+
+// Reicon usa paths preenchidos até no peso Outline: acrescentar stroke
+// deformaria esses desenhos. No Lucide, o viewBox 24 reduzido para 20px
+// alteraria a espessura do traço; o vector-effect nas formas mantém a
+// espessura do token em pixels reais sem redesenhar paths.
+svg.lucide {
+  stroke-width: var(--ui-icon-stroke-width) !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+svg.lucide :is(path, rect, circle, ellipse, line, polyline, polygon) {
+  vector-effect: non-scaling-stroke;
+}
+
+// Em 20px, as paredes/porta/base de House caem em meios pixels (2,5/7,5/…).
+// Mantém o ajuste óptico de meio pixel desses detalhes na grade.
+// `translate` não muda o espaço do ícone nem substitui rotações/animações.
+svg.lucide-house {
+  translate: 0.5px 0.5px;
+}

@@ -2,6 +2,7 @@
 @use "./styles/semantic";
 @use "./styles/mixins";
 @use "./styles/premium-modal";
+@use "./styles/icons";
 
 .tray-menu-shell {
   width: 100vw;
@@ -110,6 +111,8 @@
 
 .tray-menu__game-icon--fallback {
   display: flex;
+  width: var(--ui-icon-size);
+  height: var(--ui-icon-size);
   align-items: center;
   justify-content: center;
   background: var(--surface-active);
@@ -272,11 +275,6 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 1px solid var(--border-subtle);
-}
-
-// Peso compartilhado dos ícones, inclusive os que declaram stroke no SVG.
-svg:not([data-preserve-stroke]) {
-  stroke-width: 1.8;
 }
 
 .game-card__cover,
@@ -1243,9 +1241,8 @@ p {
   }
 
   &__add-icon {
-    @include mixins.plus-icon;
-    width: 14px;
-    height: 14px;
+    width: var(--ui-icon-size);
+    height: var(--ui-icon-size);
   }
 
   /* Menu — notification-card style options */
@@ -1369,7 +1366,7 @@ p {
   }
 
   &__navigation-icon {
-    shape-rendering: geometricPrecision;
+    shape-rendering: auto;
   }
 
   &__menu-item-label {
@@ -9077,13 +9074,8 @@ html.no-animations {
       display: block;
       position: relative;
       left: 1px;
-      width: 32px;
-      height: 32px;
-      shape-rendering: geometricPrecision;
-      transform: scale(0.75);
-      transform-origin: center;
-      will-change: transform;
-      transition: transform var(--motion-slow) var(--ease-out);
+      width: var(--ui-icon-size);
+      height: var(--ui-icon-size);
     }
 
     &:hover:not(:disabled)::before {
@@ -9093,10 +9085,6 @@ html.no-animations {
         var(--game-card-progress-track)
       );
       transform: scale(1);
-    }
-
-    &:hover:not(:disabled) svg {
-      transform: scale(0.875);
     }
 
     &:focus-visible {
@@ -10045,7 +10033,7 @@ border: 0;
   .game-card__play-button svg,
   .game-card__play-button:hover svg {
     transition: none;
-    transform: scale(0.75);
+    transform: none;
     will-change: auto;
   }
 
@@ -10793,7 +10781,7 @@ html.no-backdrop-blur {
   &__section-title-icon {
     color: var(--text-secondary);
     font-weight: var(--weight-semibold);
-    stroke-width: 1.8;
+    stroke-width: var(--ui-icon-stroke-width);
   }
 
   &__section-title-action {
@@ -11766,7 +11754,7 @@ html.no-backdrop-blur {
     }
 
     &:hover svg {
-      transform: scale(1.2);
+      transform: none;
     }
 
     &--prev {

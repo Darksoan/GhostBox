@@ -8,12 +8,12 @@ import {
 import {
   ArrowDownAZ,
   Check,
-  ChevronRight,
   Copy,
   EyeOff,
   Link2,
   Loader2,
 } from "lucide-react";
+import { AngleRight2 as AngleRight } from "reicon-react";
 import { useAppData } from "../../context/AppDataContext";
 import { useSettings } from "../../context/settings";
 import {
@@ -399,7 +399,7 @@ export function SteamVisibilitySection({
           <strong>{t("settings.library.hiddenProfileGames.label")}</strong>
           <span>{t("settings.library.hiddenProfileGames.description")}</span>
         </span>
-        <ChevronRight size={16} aria-hidden="true" />
+        <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
       </button>
     </div>
   );

@@ -93,13 +93,16 @@ describe("Home loading pipeline", () => {
   });
 
   it("starts the personal calendar pool before the wishlist answers", () => {
-    // A wishlist só alimenta exclusões do planejamento e o pool tem folga
-    // grande; serializar as duas viagens de rede atrasava a seção inteira.
+    // Pass the pending exclusions to the loader, not an already-awaited
+    // wishlist: its first catalogue pages must still start in parallel.
     expect(homePage).toContain("wishlistPromise");
-    expect(
-      /loadHomePersonalCalendarPool\(\s*new Set\(libraryGameAppIds\)\s*\)/.test(
-        homePage
-      )
-    ).toBe(true);
+    expect(homePage).toContain("excludedGameIds: wishlistPromise");
+    expect(homePage).toContain("const pool = await loadPersonalCalendarPool({");
+    expect(homePage).not.toContain("await wishlistPromise");
+  });
+
+  it("keeps sparse personal calendar assignments attached to their dates", () => {
+    expect(homePage).toContain("dayGameIds={personalCalendarDayGameIds}");
+    expect(homePage).toContain("dayGameIds[dayKeys[dayIndex]]");
   });
 });

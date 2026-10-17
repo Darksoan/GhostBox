@@ -19,6 +19,25 @@ describe("Window resize and maximize support", () => {
     expect(source).not.toContain("set_maximizable(false)");
   });
 
+  it("restores 100% native page zoom to the Windows launcher without forcing monitor DPI", () => {
+    const source = readFileSync("src-tauri/src/window_lifecycle.rs", "utf8");
+    const setup = source.slice(source.indexOf("pub(crate) fn setup_window_lifecycle"));
+    const mainWindow = setup.indexOf("app.get_webview_window(MAIN_WINDOW_LABEL)");
+    const zoom = setup.indexOf("window.set_zoom(MAIN_WINDOW_ZOOM_FACTOR)?;");
+    const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
+    const window = config.app.windows.find((entry: { label: string }) => entry.label === "main");
+
+    expect(source).toMatch(/#\[cfg\(windows\)\]\s*const MAIN_WINDOW_ZOOM_FACTOR: f64 = 1\.0;/);
+    expect(mainWindow).toBeGreaterThan(-1);
+    expect(zoom).toBeGreaterThan(mainWindow);
+    expect(zoom).toBeLessThan(setup.indexOf("window.set_background_color"));
+    expect(setup).toMatch(/#\[cfg\(windows\)\]\s*window\.set_zoom\(MAIN_WINDOW_ZOOM_FACTOR\)\?;/);
+    expect(source.match(/\.set_zoom\(/g)).toHaveLength(1);
+    expect(source).not.toContain("--force-device-scale-factor");
+    expect(window.additionalBrowserArgs).not.toContain("--force-device-scale-factor");
+    expect(window.visible).toBe(false);
+  });
+
   it("grants the window APIs the header maximize controls call", () => {
     const capabilities = JSON.parse(
       readFileSync("src-tauri/capabilities/default.json", "utf8")

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
 import { useMemo } from "react";
 import { useSettings } from "../../context/settings";
 
@@ -46,7 +46,7 @@ export function PaginationControls({ page, totalPages, onPageChange, ariaLabel }
         className="pagination-controls__arrow"
         aria-label={t("catalogue.pagination.previous")}
       >
-        <ChevronLeft size={16} aria-hidden="true" />
+        <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
       </button>
 
       <div className="pagination-controls__numbers">
@@ -81,7 +81,7 @@ export function PaginationControls({ page, totalPages, onPageChange, ariaLabel }
         className="pagination-controls__arrow"
         aria-label={t("catalogue.pagination.next")}
       >
-        <ChevronRight size={16} aria-hidden="true" />
+        <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
       </button>
     </nav>
   );

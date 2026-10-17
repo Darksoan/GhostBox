@@ -116,15 +116,12 @@ export function PremiumOffer({ ctaRef, checkout }: PremiumOfferProps) {
                   }
                 >
                   <span className="premium-modal__benefit-icon" aria-hidden="true">
-                    <Icon size={22} strokeWidth={2} />
+                    <Icon size={20} strokeWidth={2} />
                   </span>
                   <strong>{title}</strong>
-                  {/* 16px sobre viewBox de 24 escala 0.667, então `strokeWidth`
-                      3 é o que cai em 2px cheios de traço. Valores quebrados
-                      (2.2 → 1.47px) caem entre pixels e borram a seta. */}
                   <ChevronDown
-                    size={16}
-                    strokeWidth={3}
+                    size={20}
+                    strokeWidth={2}
                     className="premium-modal__benefit-chevron"
                     aria-hidden="true"
                   />
@@ -164,7 +161,7 @@ export function PremiumOffer({ ctaRef, checkout }: PremiumOfferProps) {
                 onClick={() => setSelectedPlanId(planId)}
               >
                 <span className="premium-modal__plan-mark" aria-hidden="true">
-                  <Check size={12} strokeWidth={3} />
+                  <Check size={20} strokeWidth={2} />
                 </span>
                 <span className="premium-modal__plan-name">
                   {t(`subscription.plans.${planId}.title`)}
@@ -201,7 +198,7 @@ export function PremiumOffer({ ctaRef, checkout }: PremiumOfferProps) {
         </button>
 
         <p className="premium-modal__note">
-          <ShieldCheck size={18} strokeWidth={2} aria-hidden="true" />
+          <ShieldCheck size={20} strokeWidth={2} aria-hidden="true" />
           <span>
             {copy("Pagamento via ", "Payment via ")}
             <img className="premium-modal__stripe" src={stripeLogo} alt="Stripe" />

@@ -1,11 +1,27 @@
 import type { GhostBoxGame } from "../data";
 import type { StoredPersonalCalendar } from "./storage";
 import { isSteamTitlePlaceholder } from "./steamTitles";
-import { gameTraitAppId, getGameTraitSet } from "./gameTraits";
+import { gameTraitAppId, getGameTraitSet, normalizeGameTraitKey } from "./gameTraits";
 import { filterOutSteamDemos } from "./steamAppType";
+import { rotationHash } from "./homeRotation";
 
-const personalCalendarAlgorithmVersion = "daily-v4";
+const personalCalendarAlgorithmVersion = "daily-v5";
 const personalCalendarHistoryMonths = 3;
+
+// These describe availability/business model, not a distinct style of game.
+const genericCalendarTraits = new Set([
+  "singleplayer", "single-player", "multiplayer", "co-op", "online co-op",
+  "local co-op", "indie", "casual", "early access", "free to play",
+  "free-to-play", "controller support", "full controller support",
+]);
+
+type CalendarCandidate = {
+  game: GhostBoxGame;
+  key: string;
+  traits: Map<string, number>;
+  qualityScore: number;
+  exposureGroup: "popular" | "discovery" | null;
+};
 
 const personalCalendarWeekdayLabels = {
   pt: ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."],
@@ -45,6 +61,35 @@ function monthKeyForDate(date: Date) {
 
 export function personalCalendarDayKey(date: Date) {
   return `${monthKeyForDate(date)}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function getPersonalCalendarDayKeys(cycleStart: Date, days: number) {
+  const start = atLocalStartOfDay(cycleStart);
+  return Array.from({ length: days }, (_, index) =>
+    personalCalendarDayKey(addDays(start, index))
+  );
+}
+
+export function personalCalendarRotationSeed(date: Date) {
+  return Number(personalCalendarDayKey(atLocalStartOfDay(date)).replace(/-/g, ""));
+}
+
+function oldestPersonalCalendarMonth(cycleStart: Date) {
+  const historyStart = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), 1);
+  historyStart.setMonth(historyStart.getMonth() - (personalCalendarHistoryMonths - 1));
+  return monthKeyForDate(historyStart);
+}
+
+export function getPersonalCalendarRecentGameIds(
+  calendar: StoredPersonalCalendar | null,
+  cycleStart: Date
+) {
+  const oldestMonthKey = oldestPersonalCalendarMonth(cycleStart);
+  return new Set(
+    Object.entries(calendar?.monthGameIds ?? {})
+      .filter(([monthKey]) => monthKey >= oldestMonthKey)
+      .flatMap(([, ids]) => ids)
+  );
 }
 
 export function personalCalendarGameKey(game: GhostBoxGame) {
@@ -108,39 +153,70 @@ export function isStoredPersonalCalendarFresh(
   );
 }
 
-function shufflePersonalCalendarGames(games: GhostBoxGame[]) {
-  const shuffled = [...games];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const nextIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[nextIndex]] = [shuffled[nextIndex], shuffled[index]];
-  }
-
-  return shuffled;
+function getCalendarGameQuality(game: GhostBoxGame) {
+  const rawQuality = game.steamPositiveRatio ?? (game.rating > 1 ? game.rating / 100 : game.rating);
+  return Number.isFinite(rawQuality) ? Math.min(1, Math.max(0, rawQuality)) : 0;
 }
 
-function getPersonalCalendarOverlapScore(
-  game: GhostBoxGame,
-  selectedGames: GhostBoxGame[]
-) {
-  const traits = getGameTraitSet(game);
-  if (!traits.size) return 0;
-
-  return selectedGames.reduce((score, selectedGame) => {
-    const selectedTraits = getGameTraitSet(selectedGame);
-    let overlap = 0;
-    traits.forEach((trait) => {
-      if (selectedTraits.has(trait)) overlap += 1;
-    });
-    return score + overlap;
-  }, 0);
-}
-
-function getCalendarGameQualityScore(game: GhostBoxGame) {
-  const popularity = Math.log10(
-    (game.recommendations ?? game.steamReviewCount ?? game.popularityScore ?? 0) + 1
+function calendarCandidate(game: GhostBoxGame): CalendarCandidate {
+  const genres = new Set(game.genres.map(normalizeGameTraitKey));
+  const traits = new Map(
+    [...getGameTraitSet(game)]
+      .filter((trait) => !genericCalendarTraits.has(trait))
+      .map((trait) => [trait, genres.has(trait) ? 1.5 : 1] as const)
   );
-  const quality = game.steamPositiveRatio ?? game.rating ?? 0;
-  return quality * 10 + popularity;
+  const reviews = Math.max(0, game.recommendations ?? 0, game.steamReviewCount ?? 0);
+  const popularity = Math.min(Math.log10(reviews + 1) / 6, 1);
+  const quality = getCalendarGameQuality(game);
+  return {
+    game,
+    key: personalCalendarGameKey(game),
+    traits,
+    // Review volume must not bury well-rated, lesser-known discoveries.
+    qualityScore: quality * 3 + popularity * 0.4,
+    exposureGroup: quality >= 0.7 && reviews > 0
+      ? reviews >= 10000 ? "popular" : "discovery"
+      : null,
+  };
+}
+
+function calendarSimilarity(candidate: CalendarCandidate, selected: CalendarCandidate) {
+  // Unknown metadata must not earn a perfect diversity score. It remains a
+  // fallback, not an endless supply of apparently unrelated games.
+  if (!candidate.traits.size) return 1;
+  if (!selected.traits.size) return 0.5;
+
+  let intersection = 0;
+  let union = 0;
+  const keys = new Set([...candidate.traits.keys(), ...selected.traits.keys()]);
+  keys.forEach((key) => {
+    const left = candidate.traits.get(key) ?? 0;
+    const right = selected.traits.get(key) ?? 0;
+    intersection += Math.min(left, right);
+    union += Math.max(left, right);
+  });
+  return intersection / union;
+}
+
+function getCalendarCandidateScore(
+  candidate: CalendarCandidate,
+  selected: CalendarCandidate[],
+  dayGames: CalendarCandidate[],
+  seed: number,
+  dayKey: string,
+  balanceExposure: boolean
+) {
+  const overlap = selected.reduce((score, game) => score + calendarSimilarity(candidate, game), 0);
+  const dayOverlap = dayGames.reduce((score, game) => score + calendarSimilarity(candidate, game), 0);
+  const rotation = rotationHash(seed, `personal-calendar:${dayKey}:${dayGames.length}:${candidate.key}`) / 0x100000000;
+  // Balance visibility only when both groups have well-rated candidates;
+  // never fill a discovery quota with poorly reviewed or unclassified games.
+  const exposureOverlap = balanceExposure && candidate.exposureGroup
+    ? selected.filter((game) => game.exposureGroup === candidate.exposureGroup).length * 0.3
+      + dayGames.filter((game) => game.exposureGroup === candidate.exposureGroup).length * 0.5
+    : 0;
+  return candidate.qualityScore + rotation * 1.5 - overlap * 2 - dayOverlap * 2
+    - exposureOverlap - (candidate.traits.size ? 0 : 2);
 }
 
 /**
@@ -160,30 +236,39 @@ export function planPersonalCalendar(
   }: PlanPersonalCalendarOptions
 ) {
   const start = atLocalStartOfDay(cycleStart);
-  const pool = getUniquePersonalCalendarPool(games);
-  const gameByKey = new Map(pool.map((game) => [personalCalendarGameKey(game), game]));
-  const candidates = shufflePersonalCalendarGames(
-    pool.filter((game) => !excludedGameIds.has(personalCalendarGameKey(game)))
-  );
+  const seed = personalCalendarRotationSeed(start);
+  const candidates = getUniquePersonalCalendarPool(games)
+    .filter((game) => !excludedGameIds.has(personalCalendarGameKey(game)))
+    .map(calendarCandidate);
+  const gameByKey = new Map(candidates.map((candidate) => [candidate.key, candidate]));
+  const balanceExposure = candidates.some((candidate) => candidate.exposureGroup === "popular")
+    && candidates.some((candidate) => candidate.exposureGroup === "discovery");
 
-  const dayKeys = Array.from({ length: days }, (_, index) =>
-    personalCalendarDayKey(addDays(start, index))
-  );
+  const dayKeys = getPersonalCalendarDayKeys(start, days);
   const dayDates = Array.from({ length: days }, (_, index) => addDays(start, index));
   const usedKeys = new Set<string>();
-  const dayGames = new Map<string, GhostBoxGame[]>();
+  const dayGames = new Map<string, CalendarCandidate[]>();
+  const recentUsedIds = getPersonalCalendarRecentGameIds(storedCalendar, start);
+  const lastShownMonth = new Map<string, string>();
+  Object.entries(storedCalendar?.monthGameIds ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([month, ids]) => {
+      ids.forEach((id) => lastShownMonth.set(id, month));
+    });
 
   // Pass 1 — keep every still-valid game a day already owns.
   dayKeys.forEach((dayKey) => {
     const storedIds = storedCalendar?.dayGameIds[dayKey] ?? [];
-    const retained = storedIds.flatMap((gameId) => {
-      if (usedKeys.has(gameId) || excludedGameIds.has(gameId)) return [];
+    const retained: CalendarCandidate[] = [];
+    for (const gameId of storedIds) {
+      if (retained.length >= gamesPerDay) break;
+      if (usedKeys.has(gameId)) continue;
       const game = gameByKey.get(gameId);
-      if (!game) return [];
+      if (!game) continue;
       usedKeys.add(gameId);
-      return [game];
-    });
-    dayGames.set(dayKey, retained.slice(0, gamesPerDay));
+      retained.push(game);
+    }
+    dayGames.set(dayKey, retained);
   });
 
   // Pass 2 — fill only the empty slots left over.
@@ -191,43 +276,37 @@ export function planPersonalCalendar(
 
   dayKeys.forEach((dayKey, dayIndex) => {
     const monthKey = monthKeyForDate(dayDates[dayIndex]);
-    const recentUsedIds = new Set(
-      Object.values(storedCalendar?.monthGameIds ?? {}).flat()
-    );
     const monthUsedIds = new Set(storedCalendar?.monthGameIds[monthKey] ?? []);
     const dayList = dayGames.get(dayKey) ?? [];
 
     while (dayList.length < gamesPerDay) {
       const picked = selectedGames();
-      const rank = (historyIds: Set<string>) => candidates
-          .flatMap((game, index) => {
-            const key = personalCalendarGameKey(game);
-            if (usedKeys.has(key) || historyIds.has(key)) return [];
+      const rank = (historyIds: Set<string>, recycling = false) => candidates
+          .flatMap((candidate) => {
+            if (usedKeys.has(candidate.key) || historyIds.has(candidate.key)) return [];
 
             return [{
-              game,
-              index,
-              overlapScore: getPersonalCalendarOverlapScore(game, picked),
-              qualityScore: getCalendarGameQualityScore(game),
+              candidate,
+              lastShown: recycling ? lastShownMonth.get(candidate.key) ?? "" : "",
+              score: getCalendarCandidateScore(candidate, picked, dayList, seed, dayKey, balanceExposure),
             }];
           })
           .sort(
             (left, right) =>
-              left.overlapScore - right.overlapScore ||
-              right.qualityScore - left.qualityScore ||
-              left.index - right.index
+              left.lastShown.localeCompare(right.lastShown) ||
+              right.score - left.score ||
+              left.candidate.key.localeCompare(right.candidate.key)
           );
       // Prefer the full rolling history; if the pool is exhausted, recycle only
       // games from older months and still never repeat inside the current month.
       let ranked = rank(recentUsedIds);
-      if (!ranked.length) ranked = rank(monthUsedIds);
+      if (!ranked.length) ranked = rank(monthUsedIds, true);
 
       const next = ranked[0];
       if (!next) break;
 
-      usedKeys.add(personalCalendarGameKey(next.game));
-      dayList.push(next.game);
-      candidates.splice(next.index, 1);
+      usedKeys.add(next.candidate.key);
+      dayList.push(next.candidate);
     }
 
     dayGames.set(dayKey, dayList);
@@ -235,10 +314,10 @@ export function planPersonalCalendar(
 
   const dayGameIds: Record<string, string[]> = {};
   dayKeys.forEach((dayKey) => {
-    dayGameIds[dayKey] = (dayGames.get(dayKey) ?? []).map(personalCalendarGameKey);
+    dayGameIds[dayKey] = (dayGames.get(dayKey) ?? []).map((candidate) => candidate.key);
   });
 
-  return { games: selectedGames(), dayGameIds };
+  return { games: selectedGames().map((candidate) => candidate.game), dayGameIds };
 }
 
 export function createPersonalCalendar({
@@ -248,9 +327,7 @@ export function createPersonalCalendar({
   days,
 }: CreatePersonalCalendarOptions): StoredPersonalCalendar {
   const cycleStartDate = atLocalStartOfDay(cycleStart);
-  const dayKeys = Array.from({ length: days }, (_, index) =>
-    personalCalendarDayKey(addDays(cycleStartDate, index))
-  );
+  const dayKeys = getPersonalCalendarDayKeys(cycleStartDate, days);
   const windowMonthKeys = new Set(
     Array.from({ length: days }, (_, index) =>
       monthKeyForDate(addDays(cycleStartDate, index))
@@ -264,9 +341,7 @@ export function createPersonalCalendar({
     if (ids.length) prunedDayGameIds[dayKey] = [...ids];
   });
 
-  const historyStart = new Date(cycleStartDate.getFullYear(), cycleStartDate.getMonth(), 1);
-  historyStart.setMonth(historyStart.getMonth() - (personalCalendarHistoryMonths - 1));
-  const oldestMonthKey = monthKeyForDate(historyStart);
+  const oldestMonthKey = oldestPersonalCalendarMonth(cycleStartDate);
   const sortedWindowMonthKeys = [...windowMonthKeys].sort();
   const newestMonthKey =
     sortedWindowMonthKeys[sortedWindowMonthKeys.length - 1] ??

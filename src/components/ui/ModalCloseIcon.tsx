@@ -3,10 +3,8 @@ import { X } from "lucide-react";
 export function ModalCloseIcon() {
   return (
     <X
-      size={15}
-      strokeWidth={2.4}
-      strokeLinecap="square"
-      absoluteStrokeWidth
+      size={20}
+      strokeWidth={2}
       aria-hidden="true"
     />
   );

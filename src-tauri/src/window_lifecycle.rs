@@ -16,6 +16,8 @@ const TRAY_MENU_WIDTH: f64 = 300.0;
 const TRAY_MENU_HEIGHT: f64 = 520.0;
 const APP_USER_MODEL_ID: &str = "com.ghostbox.app";
 const WINDOW_BACKGROUND: tauri::window::Color = tauri::window::Color(11, 11, 11, 255);
+#[cfg(windows)]
+const MAIN_WINDOW_ZOOM_FACTOR: f64 = 1.0;
 
 static IS_QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SHUTDOWN_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -536,6 +538,11 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     start_game_playtime_snapshot_emitter(handle.clone());
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        // Restaura o zoom da página em 100% antes de exibir a janela,
+        // sem alterar o DPI do monitor nem a escala do menu da bandeja.
+        #[cfg(windows)]
+        window.set_zoom(MAIN_WINDOW_ZOOM_FACTOR)?;
+
         let _ = window.set_background_color(Some(WINDOW_BACKGROUND));
 
         if let Some(icon) = ghostbox_window_icon(&handle) {

@@ -7,14 +7,14 @@ interface SidebarNavigationIconProps {
   icon: ElementType<any>;
 }
 
-// Traço de 1.8 compartilhado com os demais ícones do app.
+// Métricas compartilhadas com os demais ícones da interface: 20px / traço 2.
 // `weight="Outline"` mantém os ícones reicon (Grid/Cup) no traço vazado,
 // em vez do sólido Filled padrão do patch.
 export function SidebarNavigationIcon({ icon: Icon }: SidebarNavigationIconProps) {
   return (
     <Icon
       size={20}
-      strokeWidth={1.8}
+      strokeWidth={2}
       weight="Outline"
       className="sidebar__navigation-icon"
       aria-hidden="true"

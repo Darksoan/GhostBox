@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { Play } from "lucide-react";
+import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
 import type { SteamMovie } from "../../data";
 import { useSettings } from "../../context/settings";
 import { VideoPlayer } from "./VideoPlayer";
@@ -341,7 +342,7 @@ export function GallerySlider({
               }
               tabIndex={0}
             >
-              <ChevronLeft size={20} />
+              <AngleLeft size={22} className="ui-icon--22" weight="Outline" />
             </button>
             <button
               onClick={scrollNext}
@@ -352,7 +353,7 @@ export function GallerySlider({
               }
               tabIndex={0}
             >
-              <ChevronRight size={20} />
+              <AngleRight size={22} className="ui-icon--22" weight="Outline" />
             </button>
           </>
         )}

@@ -1,4 +1,5 @@
-import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
+import { Flame } from "lucide-react";
+import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
 import {
   memo,
   useCallback,
@@ -13,7 +14,7 @@ import {
 import type { GhostBoxGame } from "../data";
 import type { SteamGameReview } from "../lib/ghostboxApi.types";
 import type { CatalogueFilterKey, SteamProfile, SteamWishlistItem } from "../types";
-import { loadGames, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
+import { loadGames, loadGameDetails, loadGameReviews, loadGameStoreDetails, loadSteamRecommendedTagsForUser, loadSteamSimilarAppIds, loadSteamWishlist } from "../data";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { useWindowMaximized } from "../hooks/useWindowMaximized";
 import {
@@ -45,11 +46,12 @@ import {
   createPersonalCalendar,
   getPersonalCalendarCycleStart,
   getPersonalCalendarDates,
-  getUniquePersonalCalendarPool,
+  getPersonalCalendarDayKeys,
   isStoredPersonalCalendarFresh,
   personalCalendarGameKey,
   planPersonalCalendar,
 } from "../utils/personalCalendar";
+import { loadPersonalCalendarPool } from "../utils/personalCalendarPool";
 import {
   gameHeaderOnlySources,
   gameHeroCapsuleSources,
@@ -121,8 +123,6 @@ const homePersonalCalendarDays = 4;
 const homePersonalCalendarGamesPerDay = 2;
 const homePersonalCalendarGameCount =
   homePersonalCalendarDays * homePersonalCalendarGamesPerDay;
-const homePersonalCalendarPageSize = 120;
-const homePersonalCalendarPoolTarget = homePersonalCalendarGameCount * 15;
 const homePersonalCalendarEnrichmentLimit = 6;
 const homeCalendarCoverLoadMargin = "360px 720px";
 const homePersonalCalendarNarrowDays = 3;
@@ -247,51 +247,6 @@ async function loadWishlistDisplayGame(appId: string, index = 0, title?: string)
 
 function homeWishlistCoverSources(game: GhostBoxGame) {
   return gameHeaderOnlySources(game);
-}
-
-async function loadHomePersonalCalendarPool(excludedGameIds = new Set<string>()) {
-  const games: GhostBoxGame[] = [];
-  const sorts: Array<NonNullable<Parameters<typeof loadGames>[0]>["sort"]> = [
-    "popular",
-    "recentlyAdded",
-  ];
-  const offsets = new Map<typeof sorts[number], number>(
-    sorts.map((sort) => [sort, 0])
-  );
-  const totals = new Map<typeof sorts[number], number | undefined>();
-
-  while (
-    getUniquePersonalCalendarPool(games).filter(
-      (game) => !excludedGameIds.has(personalCalendarGameKey(game))
-    ).length < homePersonalCalendarPoolTarget
-  ) {
-    let loadedAnyPage = false;
-
-    for (const sort of sorts) {
-      const offset = offsets.get(sort) ?? 0;
-      const expectedTotal = totals.get(sort);
-      if (expectedTotal !== undefined && offset >= expectedTotal) continue;
-
-      const result = await loadGames({
-        query: "",
-        limit: homePersonalCalendarPageSize,
-        offset,
-        sort,
-      });
-      games.push(...result.games);
-      totals.set(sort, result.matched || result.total || games.length);
-      offsets.set(sort, offset + homePersonalCalendarPageSize);
-      loadedAnyPage = true;
-
-      if (result.games.length < homePersonalCalendarPageSize) {
-        totals.set(sort, offset + result.games.length);
-      }
-    }
-
-    if (!loadedAnyPage) break;
-  }
-
-  return getUniquePersonalCalendarPool(games);
 }
 
 function HomeCategoryCard({
@@ -1050,6 +1005,7 @@ function useWideHomeLayout(isMaximized: boolean) {
 function HomePersonalCalendar({
   title,
   games,
+  dayGameIds,
   cycleStart,
   language,
   loading,
@@ -1059,6 +1015,7 @@ function HomePersonalCalendar({
 }: {
   title: string;
   games: GhostBoxGame[];
+  dayGameIds: Record<string, string[]>;
   cycleStart: string;
   language: "pt" | "en";
   loading: boolean;
@@ -1070,6 +1027,8 @@ function HomePersonalCalendar({
   const gamesPerDay = homePersonalCalendarGamesPerDay;
   const isVisible = games.length > 0 || loading;
   const visibleDays = useCalendarVisibleDays(isMaximized);
+  const dayKeys = getPersonalCalendarDayKeys(new Date(cycleStart), homePersonalCalendarDays);
+  const gameByKey = new Map(games.map((game) => [personalCalendarGameKey(game), game]));
   const weekdays = getPersonalCalendarDates(
     language,
     cycleStart,
@@ -1088,10 +1047,8 @@ function HomePersonalCalendar({
             style={{ "--home-calendar-columns": visibleDays } as CSSProperties}
           >
             {weekdays.map((date, dayIndex) => {
-              const dayGames = games.slice(
-                dayIndex * gamesPerDay,
-                dayIndex * gamesPerDay + gamesPerDay
-              );
+              // Sparse days must not shift the next day's picks into this date.
+              const dayGames = (dayGameIds[dayKeys[dayIndex]] ?? []).map((id) => gameByKey.get(id));
 
               return (
                 <section className="home-calendar-day" key={date} aria-label={date}>
@@ -1402,7 +1359,7 @@ function HomeRecommendedHero({
               aria-label={t("home.recommendedPreviousGame")}
               onClick={() => go(-1)}
             >
-              <ChevronLeft size={30} strokeWidth={2} aria-hidden="true" />
+              <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -1410,7 +1367,7 @@ function HomeRecommendedHero({
               aria-label={t("home.recommendedNextGame")}
               onClick={() => go(1)}
             >
-              <ChevronRight size={30} strokeWidth={2} aria-hidden="true" />
+              <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
             </button>
             <span className="home-banner__dots" aria-hidden="true">
               {games.map((dotGame, dotIndex) => (
@@ -1735,6 +1692,7 @@ export function HomePage({
     getPersonalCalendarCycleStart().toISOString()
   );
   const [personalCalendarGames, setPersonalCalendarGames] = useState<GhostBoxGame[]>([]);
+  const [personalCalendarDayGameIds, setPersonalCalendarDayGameIds] = useState<Record<string, string[]>>({});
   const [isLoadingPersonalCalendar, setIsLoadingPersonalCalendar] = useState(false);
   const [wishlistRecommendations, setWishlistRecommendations] = useState<GhostBoxGame[]>([]);
   const [isLoadingWishlistRecommendations, setIsLoadingWishlistRecommendations] = useState(Boolean(steamProfile?.steamId));
@@ -1765,6 +1723,7 @@ export function HomePage({
   useEffect(() => {
     let cancelled = false;
     let refreshTimeout: number | undefined;
+    let inFlight: Promise<void> | null = null;
 
     function schedulePersonalCalendarRefresh(calendar: StoredPersonalCalendar | null) {
       if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
@@ -1772,7 +1731,7 @@ export function HomePage({
 
       const delay = Date.parse(calendar.expiresAt) - Date.now() + 500;
       refreshTimeout = window.setTimeout(
-        () => void loadPersonalCalendar(),
+        () => void runPersonalCalendar(),
         Math.max(1000, delay)
       );
     }
@@ -1783,35 +1742,39 @@ export function HomePage({
       try {
         const currentStoredCalendar = readStoredPersonalCalendar();
 
-        // Pool e wishlist em paralelo: a wishlist só alimenta as exclusões do
-        // planejamento, e o pool tem folga grande (120 candidatos para escolher
-        // 8) para absorver os jogos que acabarem excluídos. Serializar as duas
-        // viagens de rede atrasava a seção inteira sem ganho de precisão.
-        const wishlistPromise = steamProfile?.steamId
-          ? loadSteamWishlist(steamProfile.steamId).catch(() => [])
-          : null;
-
-        const pool = await loadHomePersonalCalendarPool(
-          new Set(libraryGameAppIds)
-        );
-        if (cancelled) return;
-
         const excludedGameIds = new Set(libraryGameAppIds);
-        const wishlistItems = wishlistPromise ? await wishlistPromise : [];
-        if (cancelled) return;
-        wishlistItems.forEach((item) => {
-          const appId = item.appId.trim();
-          if (appId) excludedGameIds.add(appId);
-        });
         const recentWishlist = readStoredSteamWishlistCycle();
         if (recentWishlist && recentWishlist.steamId === steamProfile?.steamId) {
-          recentWishlist.history.flat().forEach((appId) => excludedGameIds.add(appId));
+          [...recentWishlist.gameIds, ...recentWishlist.history.flat()]
+            .forEach((appId) => excludedGameIds.add(appId));
         }
+
+        // Start the catalogue and wishlist together. The pool counts eligible
+        // games only after the final exclusions arrive, topping up if needed.
+        const wishlistPromise = (steamProfile?.steamId
+          ? loadSteamWishlist(steamProfile.steamId).catch(() => [])
+          : Promise.resolve([])).then((items) => {
+            items.forEach((item) => {
+              const appId = item.appId.trim();
+              if (appId) excludedGameIds.add(appId);
+            });
+            return excludedGameIds;
+          });
+        const cycleStart = getPersonalCalendarCycleStart();
+        const pool = await loadPersonalCalendarPool({
+          days: homePersonalCalendarDays,
+          gamesPerDay: homePersonalCalendarGamesPerDay,
+          cycleStart,
+          storedCalendar: currentStoredCalendar,
+          excludedGameIds: wishlistPromise,
+          loadPage: loadGames,
+          loadGame: loadGameDetails,
+        });
+        if (cancelled) return;
 
         // Each date keeps the games it was already assigned; only empty or
         // no-longer-available slots are re-picked, so a day is never swapped
         // before it is reached.
-        const cycleStart = getPersonalCalendarCycleStart();
         const { games: selectedGames, dayGameIds } = planPersonalCalendar(pool, {
           days: homePersonalCalendarDays,
           gamesPerDay: homePersonalCalendarGamesPerDay,
@@ -1822,6 +1785,7 @@ export function HomePage({
 
         if (!selectedGames.length) {
           setPersonalCalendarGames([]);
+          setPersonalCalendarDayGameIds({});
           schedulePersonalCalendarRefresh(null);
           return;
         }
@@ -1835,19 +1799,29 @@ export function HomePage({
         writeStoredPersonalCalendar(nextCalendar);
         setPersonalCalendarCycleStart(nextCalendar.cycleStart);
         setPersonalCalendarGames(selectedGames);
+        setPersonalCalendarDayGameIds(dayGameIds);
         schedulePersonalCalendarRefresh(nextCalendar);
       } finally {
         if (!cancelled) setIsLoadingPersonalCalendar(false);
       }
     }
 
-    void loadPersonalCalendar();
+    function runPersonalCalendar() {
+      if (!inFlight) {
+        inFlight = loadPersonalCalendar().finally(() => {
+          inFlight = null;
+        });
+      }
+      return inFlight;
+    }
+
+    void runPersonalCalendar();
 
     function handleVisibilityChange() {
       if (document.visibilityState !== "visible") return;
       const calendar = readStoredPersonalCalendar();
       if (!isStoredPersonalCalendarFresh(calendar, homePersonalCalendarGameCount)) {
-        void loadPersonalCalendar();
+        void runPersonalCalendar();
       }
     }
 
@@ -2166,6 +2140,7 @@ export function HomePage({
       <HomePersonalCalendar
         title={t("home.personalCalendar")}
         games={enrichedPersonalCalendarGames}
+        dayGameIds={personalCalendarDayGameIds}
         cycleStart={personalCalendarCycleStart}
         language={appearance.language}
         loading={isLoadingPersonalCalendar}

@@ -71,7 +71,7 @@ export function AchievementToast({ toast, onClose }: AchievementToastProps) {
           onClick={handleClose}
           aria-label={appearance.language === "en" ? "Close notification" : "Fechar aviso"}
         >
-          <X size={18} strokeWidth={1.75} absoluteStrokeWidth aria-hidden="true" />
+          <X size={20} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
       <div key={toast.id} className="achievement-toast__progress" />
