@@ -19,7 +19,7 @@ export function SidebarNavigationIcon({ icon: Icon }: SidebarNavigationIconProps
   return (
     <Icon
       size={24}
-      strokeWidth={1.25}
+      strokeWidth={1.5}
       weight="Outline"
       className="sidebar__navigation-icon"
       aria-hidden="true"

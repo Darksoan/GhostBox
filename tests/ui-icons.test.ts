@@ -12,6 +12,10 @@ import { SidebarNavigationIcon } from "../src/components/layout/SidebarNavigatio
 /** Lucide e Reicon desenham numa grade de 24 unidades. */
 const ICON_VIEWBOX = 24;
 const REDUCED_DRAWING = ":is(svg.lucide, svg.reicon, .header__discord-button svg) > :is(path, rect, circle, ellipse, line, polyline, polygon, g)";
+const SIDEBAR_CHEVRONS = "svg.sidebar__section-toggle-chevron,\nsvg.sidebar__collection-chevron";
+const ARROWS = ".header__nav-btn svg.lucide,\n:is(.home-banner__arrow, .home-top-rated__arrow, .home-explore__arrow, .home-recommended__arrow) svg.lucide";
+const CHEVRON_PATHS = "svg:is(.sidebar__section-toggle-chevron, .sidebar__collection-chevron) path";
+const ARROW_PATHS = ".header__nav-btn svg.lucide path,\n:is(.home-banner__arrow, .home-top-rated__arrow, .home-explore__arrow, .home-recommended__arrow) svg.lucide path";
 
 describe("shared interface icon metrics", () => {
   const css = compile("src/app.scss").css;
@@ -32,12 +36,12 @@ describe("shared interface icon metrics", () => {
     return values;
   }
 
-  it("renders icons at the native 24px size", () => {
+  it("renders shared icons at 20px without an extra internal scale", () => {
     const tokens = declarations(":root");
     const size = Number.parseFloat(tokens["--ui-icon-size"]?.value ?? "");
 
-    expect(size / ICON_VIEWBOX).toBe(1);
-    expect(tokens["--ui-icon-size"]?.value).toBe("24px");
+    expect(size / ICON_VIEWBOX).toBe(20 / 24);
+    expect(tokens["--ui-icon-size"]?.value).toBe("20px");
   });
 
   it("uses a thin stroke that keeps the light band symmetric", () => {
@@ -46,9 +50,9 @@ describe("shared interface icon metrics", () => {
     expect(stroke).toBe(1.5);
   });
 
-  it("scales the Lucide stroke naturally with the internal drawing", () => {
+  it("preserves the Lucide stroke when rendering at 20px", () => {
     const shapes = "svg.lucide :is(path, rect, circle, ellipse, line, polyline, polygon)";
-    expect(declarations(shapes)["vector-effect"]?.value).toBe("none");
+    expect(declarations(shapes)["vector-effect"]?.value).toBe("non-scaling-stroke");
     expect(declarations("svg.lucide")["vector-effect"]).toBeUndefined();
     const selectorsWith = (prop: string) => {
       const found: string[] = [];
@@ -57,6 +61,8 @@ describe("shared interface icon metrics", () => {
     };
     expect(selectorsWith("vector-effect")).toEqual([
       shapes,
+      CHEVRON_PATHS,
+      ARROW_PATHS,
     ]);
     expect(selectorsWith("translate")).toEqual([]);
     expect(css).not.toContain("svg.lucide-house");
@@ -84,10 +90,9 @@ describe("shared interface icon metrics", () => {
     expect(declarations("svg:is(.lucide, .reicon)")["shape-rendering"]).toBeUndefined();
   });
 
-  it("centers every interface drawing at 20px inside its unchanged 24px box", () => {
-    expect(declarations(REDUCED_DRAWING)["transform-box"]?.value).toBe("view-box");
-    expect(declarations(REDUCED_DRAWING)["transform-origin"]?.value).toBe("50% 50%");
-    expect(declarations(REDUCED_DRAWING).transform?.value).toBe("scale(0.8333333333)");
+  it("keeps every interface drawing at native scale", () => {
+    expect(declarations(REDUCED_DRAWING).transform).toBeUndefined();
+    expect(iconStyles).not.toContain("scale(0.8333333333)");
   });
 
   it("keeps chevrons and sidebar navigation at the global size", () => {
@@ -116,14 +121,16 @@ describe("shared interface icon metrics", () => {
     expect(icons.flex).toEqual({ value: "0 0 var(--ui-icon-size)", important: true });
   });
 
-  it("has no local size exceptions and shares titlebar metrics in both window states", () => {
+  it("preserves explicit chevron and arrow sizes and shares titlebar metrics in both window states", () => {
     const overrides: string[] = [];
     stylesheet.walkDecls("--ui-icon-size", (decl) => {
       if (decl.parent.type === "rule" && decl.parent.selector !== ":root") {
         overrides.push(decl.parent.selector);
       }
     });
-    expect(overrides).toEqual([]);
+    expect(overrides).toEqual([SIDEBAR_CHEVRONS, ARROWS]);
+    expect(declarations(SIDEBAR_CHEVRONS)["--ui-icon-size"]?.value).toBe("22px");
+    expect(declarations(ARROWS)["--ui-icon-size"]?.value).toBe("22px");
     const headerSizes: string[] = [];
     stylesheet.walkDecls("--header-icon", (decl) => { headerSizes.push(decl.value); });
     expect(headerSizes.length).toBeGreaterThan(0);
@@ -143,7 +150,7 @@ describe("shared interface icon metrics", () => {
     const markup = renderToStaticMarkup(createElement(SidebarNavigationIcon, { icon }));
     expect(markup).toContain('width="24"');
     expect(markup).toContain('height="24"');
-    expect(markup).toContain('stroke-width="1.25"');
+    expect(markup).toContain('stroke-width="1.5"');
     expect(markup).toContain('stroke-linecap="round"');
     expect(markup).toContain('stroke-linejoin="round"');
     expect(markup).toMatch(/class="lucide /);
@@ -185,9 +192,12 @@ describe("shared interface icon metrics", () => {
     expect(selectors).toEqual([
       ".header__discord-button svg",
       "svg:is(.lucide, .reicon)",
+      SIDEBAR_CHEVRONS,
       "svg.lucide",
       "svg.lucide :is(path, rect, circle, ellipse, line, polyline, polygon)",
-      REDUCED_DRAWING,
+      CHEVRON_PATHS,
+      ARROWS,
+      ARROW_PATHS,
     ]);
     expect(css).not.toContain("svg:not([data-preserve-stroke])");
   });
@@ -198,9 +208,7 @@ describe("shared interface icon metrics", () => {
     postcss.parse(compile("src/styles/_icons.scss").css).walkDecls("transform", (decl) => {
       if (decl.parent.type === "rule") transforms.push(decl.parent.selector);
     });
-    expect(transforms).toEqual([
-      REDUCED_DRAWING,
-    ]);
+    expect(transforms).toEqual([]);
     stylesheet.walkRules((rule) => {
       if (!rule.selector.split(",").some((selector) => selector.trim() === ".game-card__play-button svg")) return;
       rule.walkDecls("transform", (declaration) => {

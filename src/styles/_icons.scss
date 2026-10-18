@@ -3,7 +3,7 @@
 // dos checkboxes. A prioridade evita que os tamanhos locais legados (ou da
 // janela maximizada) voltem a redimensionar o desenho.
 //
-// Caixa de 24px; somente o desenho interno é reduzido para 20px.
+// Caixa de 20px, sem redução interna adicional; traço preservado em pixels.
 .header__discord-button svg {
   width: var(--ui-icon-size) !important;
   height: var(--ui-icon-size) !important;
@@ -30,15 +30,7 @@ svg.lucide {
 
 // O traço acompanha a redução, como no Home aprovado visualmente.
 svg.lucide :is(path, rect, circle, ellipse, line, polyline, polygon) {
-  vector-effect: none;
-}
-
-// Transformar só os filhos diretos evita redução dupla em grupos aninhados.
-// A origem no centro do viewBox também atende o logo Discord (grade 256).
-:is(svg.lucide, svg.reicon, .header__discord-button svg) > :is(path, rect, circle, ellipse, line, polyline, polygon, g) {
-  transform-box: view-box;
-  transform-origin: 50% 50%;
-  transform: scale(0.8333333333);
+  vector-effect: non-scaling-stroke;
 }
 
 // Mantém a espessura real do traço, independente da escala interna do desenho.

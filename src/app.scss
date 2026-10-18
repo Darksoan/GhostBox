@@ -1308,8 +1308,8 @@ p {
     svg {
       display: block;
       flex-shrink: 0;
-      width: 24px;
-      height: 24px;
+      width: var(--ui-icon-size);
+      height: var(--ui-icon-size);
       color: inherit;
     }
 
@@ -1892,7 +1892,8 @@ p {
     flex: 0 0 auto;
     @include mixins.ghost-button;
     font-weight: var(--weight-semibold);
-    opacity: 0.7;
+    color: var(--text-primary);
+    opacity: 1;
     line-height: 0;
     transition:
       color var(--motion-base) var(--ease),
@@ -5459,7 +5460,7 @@ html.no-animations {
       @include mixins.truncate;
       margin: 0;
       color: var(--text-tertiary);
-      font-size: var(--type-size-body-emphasis);
+      font-size: var(--subscription-account-subtext-size);
       font-weight: var(--weight-regular);
       line-height: var(--type-line-body-emphasis);
       font-variant-numeric: tabular-nums;
@@ -5674,6 +5675,7 @@ html.no-animations {
 
   &__backup-date {
     min-width: 0;
+    font-size: var(--backup-date-size);
     text-align: right;
     opacity: 1;
     filter: blur(0);
@@ -5682,10 +5684,15 @@ html.no-animations {
       opacity var(--motion-fast) var(--ease),
       filter var(--motion-fast) var(--ease),
       transform var(--motion-fast) var(--ease);
+
+    span {
+      font-size: var(--backup-date-size);
+    }
   }
 
   &__backup-row-actions {
     display: flex;
+    --ui-icon-size: 22px;
     align-items: center;
     gap: var(--space-2);
     opacity: 0;
@@ -5710,11 +5717,14 @@ html.no-animations {
       background: var(--surface-option-hover);
       color: var(--text-secondary);
       cursor: pointer;
-      transition: background-color var(--motion-fast) var(--ease);
+      transition:
+        background-color var(--motion-fast) var(--ease),
+        color var(--motion-fast) var(--ease);
 
-      &:hover,
-      &:focus-visible {
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
         background: var(--surface-option-active);
+        color: var(--text-primary);
       }
 
       &:focus-visible {
@@ -5776,12 +5786,14 @@ html.no-animations {
 
     .subscription-account__achievement-count {
       display: inline-flex;
+      --ui-icon-size: 18px;
       align-items: center;
       gap: var(--space-2);
       color: var(--text-tertiary);
-      font-size: var(--type-size-compact);
+      font-size: var(--subscription-account-subtext-size);
 
       svg {
+        color: var(--text-primary);
         flex: 0 0 auto;
       }
 
@@ -5833,7 +5845,7 @@ html.no-animations {
     p {
       margin: 0;
       color: var(--text-tertiary);
-      font-size: var(--type-size-caption);
+      font-size: var(--subscription-account-subtext-size);
       font-weight: var(--weight-regular);
       line-height: var(--type-line-caption);
     }
@@ -11831,7 +11843,7 @@ html.no-backdrop-blur {
     }
 
     .modal__requirements-content strong {
-      font-size: var(--type-size-compact);
+      font-size: var(--subscription-account-subtext-size);
     }
 
     @media (max-width: 1024px) {
@@ -11974,8 +11986,9 @@ html.no-backdrop-blur {
       line-height: var(--type-line-compact);
     }
 
-    svg {
-      flex: 0 0 auto;
+      svg {
+        --ui-icon-size: 18px;
+        flex: 0 0 auto;
       color: var(--text-primary);
     }
   }

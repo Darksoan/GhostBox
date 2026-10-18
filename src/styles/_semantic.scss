@@ -80,7 +80,7 @@
 
   // --- Texto e ícones ---
   // Tamanho compacto; o traço Lucide mantém a espessura via vector-effect.
-  --ui-icon-size: 24px;
+  --ui-icon-size: 20px;
   --ui-icon-stroke-width: 1.5;
   --text-primary: var(--n-12);
   --text-secondary: var(--n-9);
@@ -173,6 +173,8 @@
   --game-sidebar-subtext-size: 14px;
   --game-about-text-size: 15px;
   --toast-subtitle-size: 14px;
+  --backup-date-size: 14px;
+  --subscription-account-subtext-size: 14px;
   --type-size-pill: var(--fs-050);
   --type-size-micro: var(--fs-100);
   --type-size-caption: var(--fs-200);

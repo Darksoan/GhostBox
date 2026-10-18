@@ -1,4 +1,5 @@
-import { CreditCard, ExternalLink, RotateCcw, Settings2, Trash2 } from "lucide-react";
+import { CreditCard, ExternalLink, Settings2, Trash2 } from "lucide-react";
+import { RotateCcwClock } from "../ui/RotateCcwClock";
 import { Trophy } from "reicon-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCachedImageSources, useLoadableImageCover } from "../../hooks/useCachedImageSources";
@@ -600,7 +601,7 @@ export function SubscriptionPlans({
                             ? copy("conquista salva no backup", "achievement saved in backup")
                             : copy("conquistas salvas no backup", "achievements saved in backup")}`}
                         >
-                          <Trophy size={15} weight="Filled" color="var(--text-tertiary, var(--text-secondary))" aria-hidden="true" />
+                          <Trophy size={18} weight="Filled" color="var(--text-primary)" aria-hidden="true" />
                           <span aria-hidden="true">{game.achievementCount}</span>
                         </span>
                       ) : null}
@@ -647,7 +648,7 @@ export function SubscriptionPlans({
                             setBackupConfirm({ action: "restore", appId: game.appId, saveId: game.saveId, title: game.title });
                           }}
                         >
-                          <RotateCcw size={18} aria-hidden="true" />
+                          <RotateCcwClock size={22} aria-hidden="true" />
                         </button>
                         <button
                           type="button"
@@ -658,7 +659,7 @@ export function SubscriptionPlans({
                             setBackupConfirm({ action: "delete", appId: game.appId, saveId: game.saveId, title: game.title });
                           }}
                         >
-                          <Trash2 size={18} aria-hidden="true" />
+                          <Trash2 size={22} aria-hidden="true" />
                         </button>
                       </div>
                     </div>

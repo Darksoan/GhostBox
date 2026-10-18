@@ -27,17 +27,17 @@ describe("sidebar navigation icons", () => {
     expect(markup).toContain('aria-hidden="true"');
   });
 
-  it.each(settingsNavigationTabs)("uses the shared 1.25 stroke for the $id settings icon", ({ icon }) => {
+  it.each(settingsNavigationTabs)("uses the shared 1.5 stroke for the $id settings icon", ({ icon }) => {
     const markup = renderToStaticMarkup(createElement(SidebarNavigationIcon, { icon }));
 
-    expect(markup).toContain('stroke-width="1.25"');
+    expect(markup).toContain('stroke-width="1.5"');
   });
 
   it("renders reicon navigation icons in Outline to match the Heart weight", () => {
     const source = readFileSync("src/components/layout/SidebarNavigationIcon.tsx", "utf8");
 
     expect(source).toContain('weight="Outline"');
-    expect(source).toContain("strokeWidth={1.25}");
+    expect(source).toContain("strokeWidth={1.5}");
   });
 
   it("shares the icon renderer across primary, secondary, settings and profile navigation", () => {

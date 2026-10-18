@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { CloudUpload, Eye, EyeOff, FolderOpen, History, Loader2 } from "lucide-react";
+import { CloudUpload, Eye, EyeOff, FolderOpen, Loader2 } from "lucide-react";
+import { RotateCcwClock } from "../ui/RotateCcwClock";
 import type { GhostBoxGame } from "../../data";
 import type { CloudSave } from "../../lib/ghostboxApi.types";
 import { useSettings } from "../../context/settings";
@@ -220,7 +221,7 @@ export function GameBackupOptionsModal({
             {copy("Fazer backup", "Back up now")}
           </button>
           <button type="button" role="menuitem" onClick={() => void handleRestore()} disabled={busy}>
-            {restoreBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <History size={17} aria-hidden="true" />}
+            {restoreBusy ? <Loader2 className="game-actions-menu__spinner" size={17} aria-hidden="true" /> : <RotateCcwClock size={17} aria-hidden="true" />}
             {copy("Restaurar backup", "Restore backup")}
           </button>
         </>
