@@ -10,6 +10,7 @@ import {
 import { translate } from "../i18n";
 import { ghostboxApi } from "../lib/ghostboxApi";
 import { setImagePreloadConcurrency } from "../utils/imageCache";
+import { normalizeToastDuration, type ToastDurationSeconds } from "../utils/toastDuration";
 
 export interface AppearanceSettings {
   theme: "dark" | "light";
@@ -27,6 +28,7 @@ export interface AppearanceSettings {
 }
 
 export type NotificationSettings = {
+  toastDurationSeconds: ToastDurationSeconds;
   inAppToastsEnabled: boolean;
   inAppSuccessToastsEnabled: boolean;
   inAppErrorToastsEnabled: boolean;
@@ -62,6 +64,7 @@ const defaultAppearance: AppearanceSettings = {
 };
 
 const defaultNotifications: NotificationSettings = {
+  toastDurationSeconds: 6,
   inAppToastsEnabled: true,
   inAppSuccessToastsEnabled: true,
   inAppErrorToastsEnabled: true,
@@ -114,6 +117,7 @@ function normalizeNotifications(value: unknown): NotificationSettings {
   const notifications = value as Partial<NotificationSettings>;
 
   return {
+    toastDurationSeconds: normalizeToastDuration(notifications.toastDurationSeconds),
     inAppToastsEnabled: notifications.inAppToastsEnabled !== false,
     inAppSuccessToastsEnabled: notifications.inAppSuccessToastsEnabled !== false,
     inAppErrorToastsEnabled: notifications.inAppErrorToastsEnabled !== false,

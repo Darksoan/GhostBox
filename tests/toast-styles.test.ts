@@ -147,7 +147,7 @@ describe("common toast lifecycle", () => {
 
   it("lets the provider remove the rendered toast after its cooldown", () => {
     expect(overlaySource).toMatch(
-      /window\.setTimeout\(\(\) => setToast\(null\), 6000\)/,
+      /window\.setTimeout\(\(\) => setToast\(null\), notifications\.toastDurationSeconds \* 1000\)/,
     );
     expect(toastSource).toContain("if (!toast) return null");
     expect(toastSource).not.toContain("setDisplayed");
@@ -163,7 +163,7 @@ describe("achievement toast lifecycle", () => {
 
   it("dismisses immediately when its cooldown ends", () => {
     expect(achievementSource).toMatch(
-      /window\.setTimeout\(\s*handleClose,\s*ACHIEVEMENT_TOAST_DURATION_MS,?\s*\)/,
+      /window\.setTimeout\(\s*handleClose,\s*notifications\.toastDurationSeconds \* 1000,?\s*\)/,
     );
     expect(achievementSource).toContain("onClose(toast.id)");
     expect(achievementSource).not.toContain("ACHIEVEMENT_TOAST_EXIT_MS");

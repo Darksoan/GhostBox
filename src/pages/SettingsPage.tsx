@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
+import { normalizeToastDuration, toastDurationOptions } from "../utils/toastDuration";
 import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
 import { SubscriptionPlans } from "../components/subscription/SubscriptionPlans";
 import {
@@ -521,6 +522,17 @@ function buildTabOptions(
         control: "toggle" as const,
         checked: notifications.inAppToastsEnabled,
         onToggle: (next: boolean) => updateNotifications({ inAppToastsEnabled: next }),
+      },
+      {
+        label: t("settings.notifications.toastDuration.label"),
+        description: t("settings.notifications.toastDuration.description"),
+        control: "select" as const,
+        value: String(notifications.toastDurationSeconds),
+        choices: toastDurationOptions.map((seconds) => ({
+          label: t("settings.notifications.toastDuration.seconds", { seconds }),
+          value: String(seconds),
+        })),
+        onChange: (value: string) => updateNotifications({ toastDurationSeconds: normalizeToastDuration(Number(value)) }),
       },
       {
         label: t("settings.notifications.inAppSuccessToasts.label"),

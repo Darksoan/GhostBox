@@ -51,7 +51,7 @@
   --profile-dropdown-surface-hover: var(--c-3);
   --profile-dropdown-menu: var(--c-3);
   --profile-dropdown-option-hover: var(--c-4);
-  --sidebar-option-hover: var(--c-4);
+  --sidebar-option-hover: var(--c-3);
   --sidebar-option-selected: var(--c-4);
   --sidebar-selector: var(--sidebar-option-hover);
   --sidebar-option-active: var(--sidebar-option-selected);
@@ -83,7 +83,7 @@
   --ui-icon-size: 24px;
   --ui-icon-stroke-width: 1.5;
   --text-primary: var(--n-12);
-  --text-secondary: var(--n-11);
+  --text-secondary: var(--n-9);
   --text-tertiary: var(--n-7);
   --text-placeholder: var(--text-tertiary);
   --icon-default: var(--n-11);
@@ -108,6 +108,19 @@
   --danger-hover: var(--red-hover);
   --toast-error-icon: #cc2727;
   --steam-level-ring: var(--red-600);
+  // Paleta oficial: Steam Community shared_global.css (friendPlayerLevel).
+  --steam-level-ring-0: #9b9b9b;
+  --steam-level-ring-10: #c02942;
+  --steam-level-ring-20: #d95b43;
+  --steam-level-ring-30: #fecc23;
+  --steam-level-ring-40: #467a3c;
+  --steam-level-ring-50: #4e8ddb;
+  --steam-level-ring-60: #7652c9;
+  --steam-level-ring-70: #c252c9;
+  --steam-level-ring-80: #542437;
+  --steam-level-ring-90: #997c52;
+  // profilev2.css usa branco no número exibido no perfil Steam.
+  --steam-level-text: var(--white);
   --danger-soft: color-mix(in srgb, var(--red) 12%, transparent);
   --success: var(--green-500);
   --success-soft: rgba(53, 208, 127, 0.12);
@@ -141,6 +154,25 @@
   --content-max-width: 1200px;
 
   // --- Escala tipográfica semântica ---
+  // Exceção ao piso de 16px: título "Coleções" da sidebar.
+  --sidebar-collections-title-size: 14px;
+  // Exceção ao piso de 16px: títulos das seções da Home.
+  --home-section-title-size: 14px;
+  // Exceção ao piso de 16px: nota e contagem de avaliações em Bem avaliados.
+  --home-top-rated-review-size: 14px;
+  // Exceção ao piso de 16px: subtexto (desenvolvedora + descrição) do banner da Home.
+  --home-banner-subtitle-size: 14px;
+  // Exceção ao piso de 16px: horas no momento da review nos cards da wishlist.
+  --home-wishlist-review-playtime-size: 14px;
+  // Exceção ao piso de 16px: badge de level Steam na sidebar.
+  --sidebar-level-size: 14px;
+  --sidebar-level-badge-size: 26px;
+  // Exceção local ao piso de 16px: textos e pills do catálogo.
+  --catalogue-text-size: 14px;
+  --catalogue-game-title-size: 16px;
+  --game-sidebar-subtext-size: 14px;
+  --game-about-text-size: 15px;
+  --toast-subtitle-size: 14px;
   --type-size-pill: var(--fs-050);
   --type-size-micro: var(--fs-100);
   --type-size-caption: var(--fs-200);
@@ -164,10 +196,10 @@
   --type-line-showcase: var(--lh-1000);
 
   // Tamanhos fluidos mantêm o mesmo piso da rampa fixa.
-  --type-size-fluid-caption: clamp(14.5px, 1.1vw, 17px);
-  --type-size-fluid-meta: clamp(14.5px, 1.1vw, 17px);
-  --type-size-fluid-body: clamp(14.5px, 1.15vw, 18px);
-  --type-size-fluid-title: clamp(14.5px, 1.35vw, 20px);
+  --type-size-fluid-caption: clamp(16px, 1.1vw, 17px);
+  --type-size-fluid-meta: clamp(16px, 1.1vw, 17px);
+  --type-size-fluid-body: clamp(16px, 1.15vw, 18px);
+  --type-size-fluid-title: clamp(16px, 1.35vw, 20px);
   --type-size-fluid-section: clamp(18px, 2.4vw, 22px);
   --type-size-fluid-page: clamp(22px, 2.6vw, 30px);
   --type-size-fluid-display: clamp(18px, 2.2vw, 34px);

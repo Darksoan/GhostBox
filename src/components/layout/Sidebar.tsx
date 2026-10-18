@@ -26,10 +26,9 @@ import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { resolveSidebarIdentity } from "../../lib/sidebarIdentity";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
+import { getSteamLevelColorTier } from "../../utils/steamLevel";
 import {
-  readSidebarCollectionsCollapsed,
   readSidebarExpandedCollections,
-  writeSidebarCollectionsCollapsed,
   writeSidebarExpandedCollections,
 } from "../../utils/storage";
 import { primaryNavigation, secondaryNavigation } from "./navigationItems";
@@ -94,15 +93,10 @@ export const Sidebar = memo(function Sidebar({
   const isModePage = isSettingsPage || isProfilePage;
   const activeProfileTabId = activeCollectionId ?? defaultProfileTabId;
   const isMaximized = useWindowMaximized();
-  const [isCollectionsCollapsed, setIsCollectionsCollapsed] = useState(() => readSidebarCollectionsCollapsed());
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<Set<string>>(() => readSidebarExpandedCollections());
   const [isCollectionSearchOpen, setIsCollectionSearchOpen] = useState(false);
   const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
   const collectionSearchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    writeSidebarCollectionsCollapsed(isCollectionsCollapsed);
-  }, [isCollectionsCollapsed]);
 
   useEffect(() => {
     writeSidebarExpandedCollections(expandedCollectionIds);
@@ -261,7 +255,6 @@ export const Sidebar = memo(function Sidebar({
 
   const openCollectionSearch = useCallback(() => {
     setIsCollectionSearchOpen(true);
-    setIsCollectionsCollapsed(false);
   }, []);
 
   const closeCollectionSearch = useCallback(() => {
@@ -374,22 +367,12 @@ export const Sidebar = memo(function Sidebar({
           <section className="sidebar__collapsible-section sidebar__mode-panel sidebar__mode-panel--back sidebar__mode-panel--delayed">
             <div className={`sidebar__section-header${isCollectionSearchOpen ? " sidebar__section-header--searching" : ""}`}>
               <div className="sidebar__section-header-main">
-                <button
-                  type="button"
-                  className="sidebar__section-toggle"
-                  aria-expanded={!isCollectionsCollapsed}
-                  onClick={() => setIsCollectionsCollapsed((c) => !c)}
-                  aria-label={isCollectionsCollapsed ? "Expandir coleções" : "Minimizar coleções"}
-                  tabIndex={isCollectionSearchOpen ? -1 : 0}
+                <h2
+                  className="sidebar__section-title"
                   aria-hidden={isCollectionSearchOpen}
                 >
-                  <ChevronRight
-                    size={16}
-                    strokeWidth={2}
-                    className={`sidebar__section-toggle-chevron${!isCollectionsCollapsed ? " sidebar__section-toggle-chevron--expanded" : ""}`}
-                  />
-                  <small className="sidebar__section-title">{t("sidebar.collections")}</small>
-                </button>
+                  {t("sidebar.collections")}
+                </h2>
                 <label
                   className={`sidebar__collection-search${isCollectionSearchOpen ? " sidebar__collection-search--open" : ""}`}
                   aria-hidden={!isCollectionSearchOpen}
@@ -433,7 +416,6 @@ export const Sidebar = memo(function Sidebar({
                 )}
               </div>
             </div>
-            {!isCollectionsCollapsed && (
               <ul className="sidebar__menu" >
                 {hasCollectionSearchQuery ? (
                   matchingCollectionGames.map((game) => (
@@ -573,7 +555,6 @@ export const Sidebar = memo(function Sidebar({
                   </li>
                 )}
               </ul>
-            )}
           </section>
         )}
 
@@ -789,6 +770,7 @@ const SidebarProfile = memo(function SidebarProfile({
               {connectedSteamId ? (
                 <span
                   className="sidebar-profile__level"
+                  data-steam-level-tier={getSteamLevelColorTier(steamLevel)}
                   aria-label={levelLabel}
                 >
                   <span className="sidebar-profile__level-value">

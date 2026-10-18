@@ -3,15 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "../../context/settings";
 import type { AchievementToastState } from "../../context/OverlayContext";
 
-const ACHIEVEMENT_TOAST_DURATION_MS = 6000;
-
 interface AchievementToastProps {
   toast: AchievementToastState;
   onClose: (id: number) => void;
 }
 
 export function AchievementToast({ toast, onClose }: AchievementToastProps) {
-  const { appearance } = useSettings();
+  const { appearance, notifications } = useSettings();
   const [iconFailed, setIconFailed] = useState(false);
   const closedRef = useRef(false);
   const autoDismissTimerRef = useRef<number | null>(null);
@@ -29,7 +27,7 @@ export function AchievementToast({ toast, onClose }: AchievementToastProps) {
   useEffect(() => {
     autoDismissTimerRef.current = window.setTimeout(
       handleClose,
-      ACHIEVEMENT_TOAST_DURATION_MS,
+      notifications.toastDurationSeconds * 1000,
     );
 
     return () => {
@@ -38,7 +36,7 @@ export function AchievementToast({ toast, onClose }: AchievementToastProps) {
         autoDismissTimerRef.current = null;
       }
     };
-  }, [handleClose]);
+  }, [handleClose, notifications.toastDurationSeconds]);
 
   const showIcon = Boolean(toast.iconUrl) && !iconFailed;
 
@@ -74,7 +72,7 @@ export function AchievementToast({ toast, onClose }: AchievementToastProps) {
           <X size={24} strokeWidth={1.25} aria-hidden="true" />
         </button>
       </div>
-      <div key={toast.id} className="achievement-toast__progress" />
+      <div key={`${toast.id}-${notifications.toastDurationSeconds}`} className="achievement-toast__progress" style={{ animationDuration: `${notifications.toastDurationSeconds}s` }} />
     </div>
   );
 }

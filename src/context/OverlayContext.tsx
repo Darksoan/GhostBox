@@ -135,9 +135,9 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 6000);
+    const timeout = window.setTimeout(() => setToast(null), notifications.toastDurationSeconds * 1000);
     return () => window.clearTimeout(timeout);
-  }, [toast]);
+  }, [toast, notifications.toastDurationSeconds]);
 
   const dismissAchievementToast = useCallback((id: number) => {
     setAchievementToasts((prev) => prev.filter((item) => item.id !== id));

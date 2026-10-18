@@ -612,6 +612,11 @@ const translations: Record<Language, TranslationTree> = {
           description:
             "Permite avisos positivos, como backup concluído e ajustes salvos.",
         },
+        toastDuration: {
+          label: "Tempo de exibição dos toasts",
+          description: "Define por quanto tempo os avisos e conquistas ficam visíveis no app.",
+          seconds: "{seconds} segundos",
+        },
         inAppErrorToasts: {
           label: "Toasts de erro",
           description: "Permite avisos de falha, validação ou atenção.",
@@ -1203,6 +1208,11 @@ const translations: Record<Language, TranslationTree> = {
         inAppErrorToasts: {
           label: "Error toasts",
           description: "Allows failure, validation, or attention alerts.",
+        },
+        toastDuration: {
+          label: "Toast display duration",
+          description: "Sets how long alerts and achievements stay visible in the app.",
+          seconds: "{seconds} seconds",
         },
       },
     },

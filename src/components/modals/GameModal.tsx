@@ -1856,7 +1856,6 @@ export function GameModal({
                               onClick={handleViewAchievements}
                             >
                               {t("achievements.viewMore")}
-                              <ChevronDown size={16} />
                             </button>
                           )}
                           </div>

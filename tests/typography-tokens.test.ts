@@ -89,7 +89,8 @@ describe("Typography tokens", () => {
     const tokens = collectTokens();
 
     expect(tokens.get("--text-primary")).toBe("var(--n-12)");
-    expect(tokens.get("--text-secondary")).toBe("var(--n-11)");
+    expect(tokens.get("--text-secondary")).toBe("var(--n-9)");
+    expect(resolveToken("--text-secondary", tokens)).toBe("#a3a3a3");
     expect(tokens.get("--text-tertiary")).toBe("var(--n-8)");
     expect(tokens.get("--text-placeholder")).toBe("var(--text-tertiary)");
     expect(tokens.get("--text-strong")).toBe("var(--text-primary)");
@@ -99,7 +100,7 @@ describe("Typography tokens", () => {
     expect(tokens.get("--n-9")).toBe("#a3a3a3");
     expect(tokens.get("--n-10")).toBe("#b8b8b8");
     expect(tokens.get("--n-11")).toBe("#c8c8c8");
-    expect(tokens.get("--n-12")).toBe("#f2f2f2");
+    expect(tokens.get("--n-12")).toBe("#e9e9e9");
   });
 
   it("maps every semantic size to the canonical ramp", () => {
@@ -127,25 +128,83 @@ describe("Typography tokens", () => {
       if (match) ramp[match[1]] = value;
     }
 
-    expect(ramp["100"]).toBe("14.5px");
+    expect(ramp["100"]).toBe("16px");
     expect(ramp["800"]).toBe("34px");
     expect(ramp["900"]).toBe("40px");
     expect(ramp["1000"]).toBe("48px");
   });
 
-  it("keeps 14.5px as the floor of every text size in the app", () => {
+  it("keeps 16px as the floor of shared text sizes in the app", () => {
     const tokens = collectTokens();
 
     for (const [token, value] of tokens) {
       if (/^--fs-\d+$/.test(token)) {
-        expect(parseFloat(value), `${token} = ${value}`).toBeGreaterThanOrEqual(14.5);
+        expect(parseFloat(value), `${token} = ${value}`).toBeGreaterThanOrEqual(16);
         continue;
       }
       if (!/^--type-size-fluid-/.test(token)) continue;
       const minimum = value.match(/^clamp\(\s*([0-9.]+)px/)?.[1];
       expect(minimum, `${token} = ${value}`).toBeDefined();
-      expect(parseFloat(minimum ?? "0"), `${token} = ${value}`).toBeGreaterThanOrEqual(14.5);
+      expect(parseFloat(minimum ?? "0"), `${token} = ${value}`).toBeGreaterThanOrEqual(16);
     }
+  });
+
+  it("keeps the sidebar collections title at 14px as a dedicated exception", () => {
+    const tokens = collectTokens();
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    let fontSize: string | undefined;
+    stylesheet.walkRules(".sidebar__section-title", (rule) => {
+      rule.walkDecls("font-size", (declaration) => {
+        fontSize = declaration.value;
+      });
+    });
+
+    expect(fontSize).toBe("var(--sidebar-collections-title-size)");
+    expect(resolveToken("--sidebar-collections-title-size", tokens)).toBe("14px");
+  });
+
+  it("keeps Home section titles at 14px as a dedicated exception", () => {
+    const tokens = collectTokens();
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    let fontSize: string | undefined;
+    stylesheet.walkRules(".home-page .section-header__title", (rule) => {
+      rule.walkDecls("font-size", (declaration) => {
+        fontSize = declaration.value;
+      });
+    });
+
+    expect(fontSize).toBe("var(--home-section-title-size)");
+    expect(resolveToken("--home-section-title-size", tokens)).toBe("14px");
+  });
+
+  it("keeps Top rated review text at 14px as a dedicated exception", () => {
+    const tokens = collectTokens();
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    for (const selector of [".home-top-rated-card__developer", ".home-top-rated-card__rating"]) {
+      let fontSize: string | undefined;
+      stylesheet.walkRules(selector, (rule) => {
+        rule.walkDecls("font-size", (declaration) => {
+          fontSize = declaration.value;
+        });
+      });
+      expect(fontSize, selector).toBe("var(--home-top-rated-review-size)");
+    }
+    expect(resolveToken("--home-top-rated-review-size", tokens)).toBe("14px");
+  });
+
+  it("keeps the banner subtitle at 14px as a dedicated exception", () => {
+    const tokens = collectTokens();
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    for (const selector of [".home-banner__developer", ".home-banner__description"]) {
+      let fontSize: string | undefined;
+      stylesheet.walkRules(selector, (rule) => {
+        rule.walkDecls("font-size", (declaration) => {
+          fontSize = declaration.value;
+        });
+      });
+      expect(fontSize, selector).toBe("var(--home-banner-subtitle-size)");
+    }
+    expect(resolveToken("--home-banner-subtitle-size", tokens)).toBe("14px");
   });
 
   it("keeps font weights at 450", () => {
@@ -237,7 +296,7 @@ describe("Typography tokens", () => {
     }
   });
 
-  it("gives compact metrics enough room for the 14.5px minimum", () => {
+  it("gives compact metrics enough room for the 16px minimum", () => {
     const source = readFileSync("src/app.scss", "utf8");
 
     expect(source).toContain("min-width: var(--space-9);");
@@ -246,18 +305,23 @@ describe("Typography tokens", () => {
     expect(source).toContain("text-overflow: ellipsis;");
   });
 
-  it("keeps Home secondary copy above micro text size", () => {
-    const source = readFileSync("src/app.scss", "utf8");
-    const authorBlockStart = source.indexOf(
-      "\n.home-wishlist-card__player-review-author {",
+  it("keeps wishlist review playtime at 14px without shrinking the author", () => {
+    const tokens = collectTokens();
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const sizes = new Map<string, string>();
+    stylesheet.walkRules((rule) => {
+      rule.walkDecls("font-size", (declaration) => {
+        sizes.set(rule.selector, declaration.value);
+      });
+    });
+
+    expect(sizes.get(".home-wishlist-card__player-review-author small")).toBe(
+      "var(--home-wishlist-review-playtime-size)",
     );
-    const authorBlockEnd = source.indexOf(
-      ".home-wishlist-card__player-review-author-skeleton",
-      authorBlockStart,
+    expect(resolveToken("--home-wishlist-review-playtime-size", tokens)).toBe("14px");
+    expect(sizes.get(".home-wishlist-card__player-review-author strong")).toBe(
+      "var(--type-size-caption)",
     );
-    const authorBlock = source.slice(authorBlockStart, authorBlockEnd);
-    expect(authorBlock).toContain("font-size: var(--type-size-caption);");
-    expect(authorBlock).toContain("line-height: var(--type-line-caption);");
-    expect(authorBlock).not.toContain("var(--type-size-micro)");
+    expect(resolveToken("--type-size-caption", tokens)).toBe("16px");
   });
 });

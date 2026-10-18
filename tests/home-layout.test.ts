@@ -47,9 +47,8 @@ describe("Home layout", () => {
     expect(customProperties.get("--surface-sidebar")).toBe("var(--c-1)");
     expect(customProperties.get("--surface-titlebar")).toBe("var(--surface-canvas)");
     expect(customProperties.get("--c-1")).toBe("#101010");
-    // Abas repousam em #101010 e sobem para #1a1a1a no hover/foco, com o texto
-    // subindo para primary — o hover compartilha o degrau da seleção.
-    expect(customProperties.get("--sidebar-option-hover")).toBe("var(--c-4)");
+    // Hover/foco usa #151515; a seleção permanece em #1a1a1a.
+    expect(customProperties.get("--sidebar-option-hover")).toBe("var(--c-3)");
     expect(customProperties.get("--c-3")).toBe("#151515");
     expect(customProperties.get("--sidebar-option-selected")).toBe("var(--c-4)");
     expect(customProperties.get("--c-4")).toBe("#1a1a1a");

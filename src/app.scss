@@ -631,7 +631,6 @@ input,
   line-height: 1;
 }
 
-.sidebar__section-toggle h3,
 .sidebar__collection-toggle-button {
   display: inline-flex;
   align-items: center;
@@ -1060,43 +1059,15 @@ p {
   /* Section label: COLLECTIONS (canonical uppercase) */
   &__section-title {
     @include mixins.eyebrow;
+    grid-area: 1 / 1;
+    margin: 0;
+    font-size: var(--sidebar-collections-title-size);
     font-weight: var(--weight-regular);
     line-height: 1;
-    transition: color var(--motion-fast) var(--ease);
-  }
-
-  &__section-toggle {
-    display: inline-flex;
-    grid-area: 1 / 1;
-    align-items: center;
-    gap: var(--space-3);
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    font-weight: var(--weight-regular);
-    cursor: pointer;
     transition:
       color var(--motion-fast) var(--ease),
       opacity var(--motion-base) var(--ease),
       transform var(--motion-base) var(--ease);
-
-    .sidebar__section-title {
-      color: inherit;
-    }
-
-    &:hover {
-      color: var(--text-secondary);
-    }
-
-    &,
-    &:hover {
-      color: var(--text-tertiary);
-    }
-
-    &[aria-expanded="true"] {
-      color: var(--text-secondary);
-    }
   }
 
   &__collection-search {
@@ -1194,34 +1165,13 @@ p {
   }
 
   &__section-header--searching {
-    .sidebar__section-toggle {
+    .sidebar__section-title {
       opacity: 0;
       pointer-events: none;
       transform: translateX(-6px) scaleX(0.96);
     }
   }
 
-  &__section-toggle h3 {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-4);
-    margin: 0;
-    color: inherit;
-    cursor: pointer;
-  }
-
-  &__section-toggle-chevron {
-    flex-shrink: 0;
-    color: inherit;
-    transform: rotate(0deg);
-    transition:
-      transform var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
-
-    &--expanded {
-      transform: rotate(90deg);
-    }
-  }
 
   &__add-button {
     display: inline-grid;
@@ -1262,7 +1212,7 @@ p {
     border: 0;
     border-radius: var(--radius-lg);
     background: transparent;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     text-wrap: nowrap;
     transition:
       background var(--motion-fast) var(--ease),
@@ -1275,7 +1225,7 @@ p {
     &:hover:not(.sidebar__menu-item--active):not(.sidebar__collection-item),
     &:focus-within:not(.sidebar__menu-item--active):not(.sidebar__collection-item) {
       background: var(--sidebar-option-hover);
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
 
     // Active uses the shared interactive surface token.
@@ -1290,7 +1240,7 @@ p {
 
     /* Coleções clareiam somente no hover, nunca por foco ou seleção. */
     &.sidebar__collection-item {
-      color: var(--text-secondary);
+      color: var(--text-primary);
       font-weight: var(--weight-regular);
 
       .sidebar__collection-icon,
@@ -1305,7 +1255,7 @@ p {
 
       &:hover:not(.sidebar__menu-item--active) {
         background: var(--sidebar-selector);
-        color: var(--text-secondary);
+        color: var(--text-primary);
       }
 
       &.sidebar__menu-item--active:hover {
@@ -1315,7 +1265,7 @@ p {
     }
 
     &.sidebar__collection-item--expanded:not(.sidebar__menu-item--active) {
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
 
     strong {
@@ -1358,13 +1308,20 @@ p {
     svg {
       display: block;
       flex-shrink: 0;
-      width: var(--ui-icon-size);
-      height: var(--ui-icon-size);
+      width: 24px;
+      height: 24px;
       color: inherit;
     }
 
     &--back {
       transform-origin: left center;
+
+      /* O chevron de "Voltar" é o único SVG da linha que não é ícone de
+         navegação: fica nos 19px do próprio desenho, não nos 24px da grade. */
+      svg {
+        width: 19px;
+        height: 19px;
+      }
     }
   }
 
@@ -1495,7 +1452,7 @@ p {
 
     &:hover,
     &:focus-visible {
-      background: var(--sidebar-option-selected);
+      background: var(--sidebar-option-hover);
       color: var(--text-primary);
     }
   }
@@ -1520,7 +1477,6 @@ p {
 
   &__add-button,
   &__collection-toggle-button,
-  &__section-toggle,
   &__menu-item,
   &__menu-item *,
   &__menu-item-button,
@@ -1679,21 +1635,23 @@ p {
 
   /* Steam level badge — single box, CSS grid centers the digit reliably */
   &__level {
+    --steam-level-ring: var(--steam-level-ring-0);
+
     display: grid;
     place-items: center;
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    min-height: 24px;
+    width: var(--sidebar-level-badge-size);
+    height: var(--sidebar-level-badge-size);
+    min-width: var(--sidebar-level-badge-size);
+    min-height: var(--sidebar-level-badge-size);
     margin: 0;
     padding: 0;
     border: 2px solid var(--steam-level-ring);
     border-radius: var(--radius-circle);
     background: transparent;
     box-sizing: border-box;
-    color: var(--text-primary);
-    font-size: var(--type-size-micro);
+    color: var(--steam-level-text);
+    font-size: var(--sidebar-level-size);
     font-weight: var(--weight-regular);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
@@ -1704,6 +1662,12 @@ p {
     white-space: nowrap;
     /* Kill inherited sidebar span quirks that shift baseline */
     font-family: var(--font-sans);
+
+    @for $tier from 0 through 9 {
+      &[data-steam-level-tier="#{$tier * 10}"] {
+        --steam-level-ring: var(--steam-level-ring-#{$tier * 10});
+      }
+    }
   }
 
   /* Sem correção manual: com `line-height: 1` a caixa de linha tem 1em e a
@@ -1938,8 +1902,8 @@ p {
     svg {
       display: block;
       flex-shrink: 0;
-      width: var(--ui-icon-size);
-      height: var(--ui-icon-size);
+      width: 19px;
+      height: 19px;
       margin: 0;
       shape-rendering: geometricPrecision;
     }
@@ -2839,14 +2803,14 @@ button > svg {
   aspect-ratio: 460 / 202;
 }
 
-/* Títulos de seção só na Home, dois degraus abaixo do padrão global (section →
-   compact) e com cor mais fraca — essas seções (Top rated, Recommended) são
+/* Títulos de seção só na Home, em 14px e com cor mais fraca — essas seções
+   (Top rated, Recommended) são
    navegação de rolagem, não âncora de página como em outras abas. Sem
    subtítulo: a Home não anuncia mais o conteúdo do rail, o rail já mostra.
    Peso regular para leitura mais leve no uppercase reduzido. */
 .home-page .section-header__title {
   color: var(--text-secondary);
-  font-size: var(--type-size-compact);
+  font-size: var(--home-section-title-size);
   line-height: var(--type-line-compact);
   letter-spacing: var(--ls-100);
   font-weight: var(--weight-regular);
@@ -3142,7 +3106,7 @@ html.no-animations {
 
 .home-banner__developer {
   color: var(--text-tertiary);
-  font-size: var(--type-size-compact);
+  font-size: var(--home-banner-subtitle-size);
   line-height: var(--lh-300);
 }
 
@@ -3151,7 +3115,7 @@ html.no-animations {
   overflow: hidden;
   max-width: min(92ch, 100%);
   color: var(--text-tertiary);
-  font-size: var(--type-size-compact);
+  font-size: var(--home-banner-subtitle-size);
   line-height: var(--lh-300);
   opacity: 0.92;
   -webkit-box-orient: vertical;
@@ -3786,7 +3750,7 @@ html.no-animations {
   min-width: 0;
   height: var(--type-line-compact);
   color: var(--text-tertiary);
-  font-size: var(--type-size-compact);
+  font-size: var(--home-top-rated-review-size);
   line-height: var(--type-line-compact);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3806,7 +3770,7 @@ html.no-animations {
   gap: var(--space-2);
   flex: 0 0 auto;
   color: var(--text-secondary);
-  font-size: var(--type-size-compact);
+  font-size: var(--home-top-rated-review-size);
   font-weight: var(--weight-semibold);
   line-height: 1;
   white-space: nowrap;
@@ -4656,7 +4620,7 @@ html.no-animations {
 
   small {
     color: var(--text-tertiary);
-    font-size: var(--type-size-caption);
+    font-size: var(--home-wishlist-review-playtime-size);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
   }
@@ -6250,11 +6214,11 @@ html.no-animations {
      curta e o ícone invadia o texto em 4-6px quando o rótulo preenchia a linha. */
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+  justify-content: space-between;
+  gap: var(--space-6);
   width: 100%;
   min-height: 36px;
-  padding: 0 var(--space-5);
+  padding: 0 calc(var(--space-5) + var(--ui-icon-size) + var(--space-3));
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--surface-option);
@@ -6275,9 +6239,9 @@ html.no-animations {
     color var(--motion-fast) var(--ease);
 
   span {
-    /* Sem `flex: 1`: o par rótulo + chevron fica centralizado na pílula, e o
-       `truncate` (que traz `min-width: 0`) deixa o rótulo encolher com elipse. */
-    flex: 0 1 auto;
+    /* O texto ocupa a sobra e empurra o chevron para a borda direita. */
+    flex: 1 1 auto;
+    text-align: center;
     @include mixins.truncate;
   }
 
@@ -6298,6 +6262,8 @@ html.no-animations {
 
   svg {
     flex-shrink: 0;
+    position: absolute;
+    right: var(--space-5);
     color: var(--text-secondary);
     font-weight: var(--weight-regular);
     transition:
@@ -6697,6 +6663,13 @@ html.no-animations {
 }
 
 .catalogue-page {
+  --type-size-micro: var(--catalogue-text-size);
+  --type-size-caption: var(--catalogue-text-size);
+  --type-size-compact: var(--catalogue-text-size);
+  --type-size-body: var(--catalogue-text-size);
+  --type-size-body-emphasis: var(--catalogue-text-size);
+  --type-size-pill: var(--catalogue-text-size);
+  --pill-height: 24px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -6866,7 +6839,7 @@ html.no-animations {
            centra o par rótulo + chevron. */
         flex: 1;
         align-items: center;
-        text-align: left;
+        text-align: center;
       }
     }
 
@@ -6914,7 +6887,7 @@ html.no-animations {
         display: flex;
         flex: 1;
         align-items: center;
-        text-align: left;
+        text-align: center;
       }
 
       svg {
@@ -7153,7 +7126,7 @@ html.no-animations {
   &__header {
     display: flex;
     width: 100%;
-    min-height: 34px;
+    min-height: 32px;
     align-items: center;
     gap: var(--space-4);
     padding: 0 var(--space-5);
@@ -7662,7 +7635,7 @@ html.no-animations {
   &__title {
     overflow: hidden;
     color: var(--text-primary);
-    font-size: var(--type-size-body);
+    font-size: var(--catalogue-game-title-size);
     font-weight: var(--weight-semibold);
     line-height: var(--type-line-body);
     text-overflow: ellipsis;
@@ -7672,7 +7645,7 @@ html.no-animations {
   &__developer {
     overflow: hidden;
     color: var(--text-tertiary);
-    font-size: var(--type-size-caption);
+    font-size: var(--catalogue-text-size);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-caption);
     text-overflow: ellipsis;
@@ -7866,7 +7839,7 @@ input[type="search"]::-ms-reveal {
     display: block;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: var(--type-size-body);
+    font-size: var(--catalogue-game-title-size);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -7913,9 +7886,8 @@ input[type="search"]::-ms-reveal {
   background: var(--pill-bg-hover);
 }
 
-// Maximizado: até 5 pills (fallback CSS, JS já capa) + tipografia
-// sutilmente maior para preencher card mais largo (content-cap 100%)
-// Título 14→15px, pill 26→28px, gap 6→8px — preenche sem virar tapete
+// Maximizado: até 5 pills (fallback CSS, JS já capa), mantendo
+// a tipografia e a altura compactas da versão em janela.
 .sidebar--maximized ~ .container .catalogue-card__genres > .catalogue-card__genre-chip:nth-of-type(n+6),
 .app-main:has(.sidebar--maximized) .catalogue-card__genres > .catalogue-card__genre-chip:nth-of-type(n+6) {
   display: none;
@@ -7923,7 +7895,7 @@ input[type="search"]::-ms-reveal {
 
 .sidebar--maximized ~ .container .catalogue-card__list-content strong,
 .app-main:has(.sidebar--maximized) .catalogue-card__list-content strong {
-  font-size: var(--type-size-body-emphasis);
+  font-size: var(--catalogue-game-title-size);
   line-height: var(--type-line-body-emphasis);
 }
 
@@ -7934,15 +7906,15 @@ input[type="search"]::-ms-reveal {
 
 .sidebar--maximized ~ .container .catalogue-card__genre-chip,
 .app-main:has(.sidebar--maximized) .catalogue-card__genre-chip {
-  min-height: 28px;
-  padding: var(--space-2) var(--space-6);
+  min-height: var(--pill-height);
+  padding: var(--space-2) var(--space-5);
   font-size: var(--type-size-micro);
 }
 
 .sidebar--maximized ~ .container .catalogue-card__genres,
 .app-main:has(.sidebar--maximized) .catalogue-card__genres {
   gap: var(--space-4);
-  height: 28px;
+  height: var(--pill-height);
 }
 
 .sidebar--maximized ~ .container .catalogue-card__list-content,
@@ -8079,7 +8051,7 @@ input[type="search"]::-ms-reveal {
   flex: 1 1 auto;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: var(--type-size-body-emphasis);
+  font-size: var(--catalogue-game-title-size);
   font-weight: var(--weight-semibold);
   line-height: var(--type-line-body-emphasis);
   text-overflow: ellipsis;
@@ -9434,9 +9406,9 @@ html.no-animations {
     color: var(--text-primary);
   }
 
-  span {
+  &__subtitle {
     color: var(--text-secondary);
-    font-size: var(--type-size-caption);
+    font-size: var(--toast-subtitle-size);
     font-weight: var(--weight-regular);
   }
 
@@ -10075,7 +10047,7 @@ border: 0;
     animation: none;
   }
 
-  .sidebar__section-toggle,
+  .sidebar__section-title,
   .sidebar__collection-search,
   .sidebar__collection-search-button {
     transition: none;
@@ -11850,6 +11822,18 @@ html.no-backdrop-blur {
     top: 0;
     contain: layout paint;
 
+    .modal__requirements-content li,
+    .modal__requirements-content p,
+    .modal__controller-support-description,
+    .modal__achievements-state,
+    .modal__languages-row {
+      font-size: var(--game-sidebar-subtext-size);
+    }
+
+    .modal__requirements-content strong {
+      font-size: var(--type-size-compact);
+    }
+
     @media (max-width: 1024px) {
       grid-column: auto;
       grid-row: auto;
@@ -12057,19 +12041,19 @@ html.no-backdrop-blur {
     width: 100%;
     min-width: 0;
     overflow-x: auto;
-    color: var(--text-secondary);
-    font-size: var(--type-size-compact);
+    color: var(--text-tertiary);
+    font-size: var(--game-about-text-size);
     font-weight: var(--weight-regular);
     line-height: var(--type-line-compact);
 
-    // Force Steam HTML body to the same subtext recipe (no inherited blues/grays)
+    // Mesma hierarquia da sidebar: texto terciário, destaques primary.
     p,
     div,
     span,
     li,
     td,
     th {
-      color: var(--text-secondary);
+      color: var(--text-tertiary);
       font-weight: var(--weight-regular);
       max-width: 100%;
     }
@@ -12263,6 +12247,11 @@ html.no-backdrop-blur {
       filter: grayscale(1) brightness(0.78);
     }
 
+    &--locked:hover img,
+    &--locked:focus-visible img {
+      filter: grayscale(0) brightness(1);
+    }
+
     &--unlocked {
       background: var(--surface-active);
     }
@@ -12376,8 +12365,10 @@ html.no-backdrop-blur {
   }
 
   &__achievements-toggle {
-    display: inline-flex;
+    display: flex;
     width: fit-content;
+    align-self: center;
+    margin-inline: auto;
     align-items: center;
     gap: var(--space-3);
     padding: 0;
@@ -12385,7 +12376,7 @@ html.no-backdrop-blur {
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: var(--type-size-compact);
+    font-size: var(--game-sidebar-subtext-size);
     font-weight: var(--weight-regular);
     transition: color var(--motion-base) var(--ease);
 
@@ -12492,7 +12483,7 @@ html.no-backdrop-blur {
     &--active,
     &--active:hover {
       background: var(--surface-option-selected);
-      color: var(--text-secondary);
+      color: var(--text-primary);
     }
 
     &--placeholder {
@@ -12644,14 +12635,21 @@ html.no-backdrop-blur {
     }
   }
 
-  /* As ações mantêm texto e ícones na cor de repouso ao interagir. */
+  /* Jogar e remover mantêm a cor de repouso ao interagir. */
   &__play-button,
-  &__add-button,
-  &__remove-button,
-  &__gear-button {
+  &__remove-button {
     &:hover:not(:disabled),
     &:focus-visible:not(:disabled) {
       color: var(--text-secondary);
+    }
+  }
+
+  &__add-button,
+  &__favorite-button,
+  &__gear-button {
+    &:hover:not(:disabled),
+    &:focus-visible:not(:disabled) {
+      color: var(--text-primary);
     }
   }
 
