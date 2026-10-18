@@ -1,5 +1,4 @@
-import { Flame } from "lucide-react";
-import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
+import { ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -497,7 +496,7 @@ function HomeTopRatedCard({
               <Flame
                 size={16}
                 fill="currentColor"
-                strokeWidth={1.5}
+                strokeWidth={2}
                 aria-hidden="true"
               />
               <span>{ratingText}</span>
@@ -1359,7 +1358,7 @@ function HomeRecommendedHero({
               aria-label={t("home.recommendedPreviousGame")}
               onClick={() => go(-1)}
             >
-              <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+              <ChevronLeft size={22} strokeWidth={2} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -1367,7 +1366,7 @@ function HomeRecommendedHero({
               aria-label={t("home.recommendedNextGame")}
               onClick={() => go(1)}
             >
-              <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+              <ChevronRight size={22} strokeWidth={2} aria-hidden="true" />
             </button>
             <span className="home-banner__dots" aria-hidden="true">
               {games.map((dotGame, dotIndex) => (

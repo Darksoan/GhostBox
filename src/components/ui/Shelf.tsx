@@ -1,4 +1,4 @@
-import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -258,7 +258,7 @@ export function Shelf<T>({
             onClick={() => scroll(-1)}
             style={{ visibility: isAtStart ? "hidden" : "visible" }}
           >
-            <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+            <ChevronLeft size={22} strokeWidth={2} aria-hidden="true" />
           </button>
         )}
         <div className={`${blockName}__carousel`} ref={carouselRef} onScroll={handleScroll}>
@@ -276,7 +276,7 @@ export function Shelf<T>({
             onClick={() => scroll(1)}
             style={{ visibility: isAtEnd ? "hidden" : "visible" }}
           >
-            <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+            <ChevronRight size={22} strokeWidth={2} aria-hidden="true" />
           </button>
         )}
       </div>

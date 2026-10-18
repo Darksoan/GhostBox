@@ -312,7 +312,7 @@ export function CatalogueHoverPreview({
             <Flame
               size={16}
               fill="currentColor"
-              strokeWidth={1.5}
+              strokeWidth={2}
               aria-hidden="true"
             />
             <span>{ratingText}</span>

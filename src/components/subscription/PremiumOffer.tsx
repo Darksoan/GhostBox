@@ -116,7 +116,7 @@ export function PremiumOffer({ ctaRef, checkout }: PremiumOfferProps) {
                   }
                 >
                   <span className="premium-modal__benefit-icon" aria-hidden="true">
-                    <Icon size={20} strokeWidth={2} />
+                    <Icon size={24} strokeWidth={1.25} />
                   </span>
                   <strong>{title}</strong>
                   <ChevronDown

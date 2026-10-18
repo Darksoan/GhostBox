@@ -1,4 +1,6 @@
 import {
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Crown,
   Info,
@@ -8,7 +10,6 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
 import { memo, useEffect, useMemo, useState, useCallback, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -428,7 +429,7 @@ export const Header = memo(function Header({
             disabled={!canGoBack}
             aria-label={t("header.back")}
           >
-            <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+            <ChevronLeft size={24} strokeWidth={2} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -437,7 +438,7 @@ export const Header = memo(function Header({
             disabled={!canGoForward}
             aria-label={t("header.forward")}
           >
-            <AngleRight size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+            <ChevronRight size={24} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -639,7 +640,7 @@ export const Header = memo(function Header({
           aria-label={appearance.language === "en" ? "Close" : "Fechar"}
           onClick={handleClose}
         >
-          <X size={20} strokeWidth={2} aria-hidden="true" />
+          <X size={24} strokeWidth={1.25} aria-hidden="true" />
         </button>
       </div>
 

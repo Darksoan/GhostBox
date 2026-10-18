@@ -64,7 +64,7 @@ export function Toast({ toast, onClose }: ToastProps) {
           {toast.message && <span>{toast.message}</span>}
         </div>
         <button type="button" className="toast__close" onClick={onClose} aria-label={appearance.language === "en" ? "Close notification" : "Fechar aviso"}>
-          <X size={20} strokeWidth={2} aria-hidden="true" />
+          <X size={24} strokeWidth={1.25} aria-hidden="true" />
         </button>
       </div>
       <div key={toast.id} className="toast__progress" />

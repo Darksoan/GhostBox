@@ -692,13 +692,13 @@ export function SubscriptionPlans({
             disabled={Boolean(portalFlow)}
             onClick={() => void openBillingPortal("manage")}
           >
-            <Settings2 size={15} strokeWidth={2.15} aria-hidden="true" />
+            <Settings2 size={15} strokeWidth={2} aria-hidden="true" />
             <span>
               {portalFlow === "manage"
                 ? copy("Abrindo…", "Opening…")
                 : copy("Gerenciar assinatura", "Manage subscription")}
             </span>
-            <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
+            <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -706,13 +706,13 @@ export function SubscriptionPlans({
             disabled={Boolean(portalFlow)}
             onClick={() => void openBillingPortal("payment_method_update")}
           >
-            <CreditCard size={15} strokeWidth={2.15} aria-hidden="true" />
+            <CreditCard size={15} strokeWidth={2} aria-hidden="true" />
             <span>
               {portalFlow === "payment_method_update"
                 ? copy("Abrindo…", "Opening…")
                 : copy("Alterar método de pagamento", "Change payment method")}
             </span>
-            <ExternalLink size={14} strokeWidth={2.15} aria-hidden="true" />
+            <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />
           </button>
         </div> : null}
         {backupConfirm && (

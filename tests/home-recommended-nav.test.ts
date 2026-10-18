@@ -1,9 +1,62 @@
 import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { compile } from "sass-embedded";
 import postcss from "postcss";
 import { describe, expect, it } from "vitest";
+import { Shelf } from "../src/components/ui/Shelf";
 
 describe("Home recommended grid chevrons", () => {
+  it("uses the brighter icon token for every Home rail arrow", () => {
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    for (const block of ["home-recommended", "home-explore", "home-top-rated"]) {
+      const arrow = stylesheet.nodes.find(
+        (node) => node.type === "rule" && node.selector === `.${block}__arrow`
+      );
+      expect(arrow?.toString()).toContain("color: var(--icon-default)");
+      for (const state of [":hover", ":focus-visible"]) {
+        const interaction = stylesheet.nodes.find(
+          (node) => node.type === "rule" && node.selectors.includes(`.${block}__arrow${state}`)
+        );
+        expect(interaction?.toString()).toContain("color: var(--text-primary)");
+      }
+    }
+  });
+
+  it("renders the same 22px Lucide chevrons as titlebar navigation", () => {
+    const markup = renderToStaticMarkup(createElement(Shelf<number>, {
+      title: "Test",
+      items: [1, 2],
+      getKey: String,
+      renderItem: String,
+      minItemsForControls: 1,
+      prevLabel: "Previous",
+      nextLabel: "Next",
+      blockName: "home-recommended",
+    }));
+    expect(markup).toContain("lucide-chevron-left");
+    expect(markup).toContain("lucide-chevron-right");
+    expect(markup).not.toContain("reicon");
+
+    const home = readFileSync("src/pages/HomePage.tsx", "utf8");
+    expect(home).toContain("<ChevronLeft size={22}");
+    expect(home).toContain("<ChevronRight size={22}");
+    expect(home).not.toContain("reicon-react");
+
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    const selector = ":is(.home-banner__arrow, .home-top-rated__arrow, .home-explore__arrow, .home-recommended__arrow) svg.lucide";
+    const metrics = stylesheet.nodes.find(
+      (node) => node.type === "rule" && node.selectors.includes(selector)
+    );
+    expect(metrics?.toString()).toContain(".header__nav-btn svg.lucide");
+    expect(metrics?.toString()).toContain("--ui-icon-size: 22px");
+    expect(metrics?.toString()).toContain("--ui-icon-stroke-width: 2");
+    const stroke = stylesheet.nodes.find(
+      (node) => node.type === "rule" && node.selectors.includes(`${selector} path`)
+    );
+    expect(stroke?.toString()).toContain("vector-effect: non-scaling-stroke");
+  });
+
   it("keeps chevron labels localized", () => {
     const source = readFileSync("src/i18n.ts", "utf8");
 

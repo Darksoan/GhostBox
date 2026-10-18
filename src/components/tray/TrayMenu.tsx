@@ -165,7 +165,7 @@ export function TrayMenu() {
             className="tray-menu__item"
             onClick={() => void ghostboxApi.navigateFromTray(page)}
           >
-            <Icon size={20} strokeWidth={2} weight="Outline" />
+            <Icon size={24} strokeWidth={1.25} weight="Outline" />
             <span className="tray-menu__item-label">{label}</span>
           </button>
         ))}

@@ -284,13 +284,7 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
             </div>
           ) : null}
         </div>
-      ) : (
-        <div className="profile-page__activity-achievements">
-          <span className="profile-page__activity-no-achievements">
-            {t("profile.noAchievements")}
-          </span>
-        </div>
-      )}
+      ) : null}
     </article>
   );
 });
@@ -1983,7 +1977,7 @@ export function ProfilePage({
                     onClick={() => setIsSignOutConfirmOpen(true)}
                     aria-label={t("settings.general.account.signOut")}
                   >
-                    <LogOut size={16} strokeWidth={2.25} aria-hidden="true" />
+                    <LogOut size={16} strokeWidth={2} aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -2326,7 +2320,7 @@ export function ProfilePage({
                                   : `Ver mais conquistas de ${game.title}`
                             }
                           >
-                            <ChevronDown size={18} strokeWidth={2.15} aria-hidden="true" />
+                            <ChevronDown size={18} strokeWidth={2} aria-hidden="true" />
                           </button>
                         ) : null}
                       </section>

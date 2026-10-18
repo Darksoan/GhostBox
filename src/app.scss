@@ -1241,8 +1241,9 @@ p {
   }
 
   &__add-icon {
-    width: var(--ui-icon-size);
-    height: var(--ui-icon-size);
+    @include mixins.plus-icon;
+    width: 14px;
+    height: 14px;
   }
 
   /* Menu — notification-card style options */
@@ -1341,7 +1342,9 @@ p {
     width: 100%;
     min-width: 0;
     min-height: 36px;
-    padding: var(--space-4) var(--space-4);
+    /* 6px verticais + 24px do ícone = 36px: a altura da linha acompanha o
+       tamanho do ícone sem estourar o alvo. */
+    padding: 6px var(--space-4);
     overflow: hidden;
     border: 0;
     background: transparent;
@@ -1355,8 +1358,8 @@ p {
     svg {
       display: block;
       flex-shrink: 0;
-      width: 20px;
-      height: 20px;
+      width: var(--ui-icon-size);
+      height: var(--ui-icon-size);
       color: inherit;
     }
 
@@ -1366,7 +1369,7 @@ p {
   }
 
   &__navigation-icon {
-    shape-rendering: auto;
+    shape-rendering: geometricPrecision;
   }
 
   &__menu-item-label {
@@ -1800,7 +1803,7 @@ p {
      --app-header-height, que o catálogo também consome) */
   --header-height: var(--app-header-height);
   --header-control: 36px;
-  --header-icon: 20px;
+  --header-icon: var(--ui-icon-size);
   --header-gap: var(--space-4);
   --header-search-width: 280px;
   --header-search-compact-width: 200px;
@@ -1935,10 +1938,9 @@ p {
     svg {
       display: block;
       flex-shrink: 0;
-      width: 17px;
-      height: 17px;
-      /* Optical center — Lucide chevron is slightly left-heavy */
-      margin-inline-end: -1px;
+      width: var(--ui-icon-size);
+      height: var(--ui-icon-size);
+      margin: 0;
       shape-rendering: geometricPrecision;
     }
 
@@ -2456,7 +2458,7 @@ p {
 .app-main:has(.sidebar--maximized) .header {
   --header-height: 56px;
   --header-control: 40px;
-  --header-icon: 22px;
+  --header-icon: var(--ui-icon-size);
   --header-gap: var(--space-5);
   --header-search-width: 300px;
   padding: 0 var(--space-8) 0 var(--space-12);
@@ -2950,7 +2952,7 @@ button > svg {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--icon-default);
   cursor: pointer;
   line-height: 1;
   transform: translateY(-50%);
@@ -3420,7 +3422,7 @@ html.no-animations {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--icon-default);
   font-weight: var(--weight-semibold);
   cursor: pointer;
   line-height: 1;
@@ -3832,7 +3834,7 @@ html.no-animations {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--icon-default);
   cursor: pointer;
   line-height: 1;
   transform: translateY(-50%);
@@ -6241,9 +6243,15 @@ html.no-animations {
 }
 
 .settings-dropdown__trigger {
+  /* Rótulo e chevron no mesmo fluxo: o `gap` é o respiro entre ícone e texto e
+     acompanha a caixa do ícone (`--ui-icon-size`). Antes o chevron era absoluto
+     e o rótulo reservava uma calha fixa de 16px, dimensionada para o ícone de
+     14/16px — com o desenho de 20px dentro da caixa de 24px, essa calha ficou
+     curta e o ícone invadia o texto em 4-6px quando o rótulo preenchia a linha. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-3);
   width: 100%;
   min-height: 36px;
   padding: 0 var(--space-5);
@@ -6254,17 +6262,23 @@ html.no-animations {
   cursor: pointer;
   font-size: var(--type-size-compact);
   font-weight: var(--weight-regular);
+  /* Interlinha do degrau compacto (20px), nunca `1`: o rótulo é truncado
+     (`overflow: hidden`), e uma caixa de linha de 14,5px para fonte de 14,5px
+     corta as hastes descendentes (g, j, p, q, y). Ver a razão mínima de 1,25 em
+     `_primitives.scss`. */
+  line-height: var(--type-line-compact);
+  /* Ancora para as variantes que ainda posicionam o chevron por conta própria
+     (`.library-toolbar`); o menu é posicionado pelo `.settings-dropdown` wrapper. */
   position: relative;
   transition:
     background-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 
   span {
-    flex: 1;
+    /* Sem `flex: 1`: o par rótulo + chevron fica centralizado na pílula, e o
+       `truncate` (que traz `min-width: 0`) deixa o rótulo encolher com elipse. */
+    flex: 0 1 auto;
     @include mixins.truncate;
-    text-align: center;
-    padding-right: var(--space-8);
-    padding-left: var(--space-8);
   }
 
   /* Rótulo e chevron sobem para `--text-primary` no hover/foco/aberto: o
@@ -6283,8 +6297,6 @@ html.no-animations {
   }
 
   svg {
-    position: absolute;
-    right: var(--space-5);
     flex-shrink: 0;
     color: var(--text-secondary);
     font-weight: var(--weight-regular);
@@ -6350,6 +6362,9 @@ html.no-animations {
   @include mixins.ghost-button;
   color: var(--text-secondary);
   font-size: var(--type-size-compact);
+  /* Mesma interlinha do gatilho: a opção também é uma linha única e o menu
+     recorta (`overflow: hidden auto`). */
+  line-height: var(--type-line-compact);
   font-weight: var(--weight-regular);
   text-align: center;
   transition:
@@ -6836,25 +6851,21 @@ html.no-animations {
     min-width: 210px;
 
     .settings-dropdown__trigger {
-      gap: var(--space-3);
       min-height: 36px;
-      align-items: center;
-      padding: 0 var(--space-5);
       border-radius: var(--radius-md);
       color: var(--text-tertiary);
-      line-height: 1;
 
       svg {
-        position: static;
         color: var(--text-tertiary);
       }
 
       span {
         display: flex;
-        min-width: 0;
+        /* O gatilho é largo (min-width), então o rótulo ocupa a linha toda e o
+           chevron encosta na borda direita — diferente do dropdown base, que
+           centra o par rótulo + chevron. */
+        flex: 1;
         align-items: center;
-        padding-right: 0;
-        padding-left: 0;
         text-align: left;
       }
     }
@@ -6888,34 +6899,25 @@ html.no-animations {
   }
 
   /* Visualização (lista/grade) usa a mesma geometria da ordenação, mas sem
-     largura mínima: o gatilho fecha na largura do maior rótulo do menu. Sem o
-     override de padding, o gatilho cai no padding-left do dropdown base das
-     Settings e fica um vão vazio à esquerda do rótulo. O chevron vai para o
-     fluxo do flex com `gap`: com o gatilho estreito, o `right` absoluto do
-     dropdown base encostaria o ícone no rótulo. */
+     largura mínima: o gatilho fecha na largura do maior rótulo do menu. O
+     chevron e o `gap` vêm do dropdown base — aqui só o rótulo é encostado à
+     esquerda, para o gatilho estreito não deixar um vão no meio. */
   &__view {
     min-width: 0;
 
     .settings-dropdown__trigger {
-      gap: var(--space-3);
       min-height: 36px;
-      align-items: center;
-      padding: 0 var(--space-5);
       border-radius: var(--radius-md);
       color: var(--text-tertiary);
-      line-height: 1;
 
       span {
         display: flex;
-        min-width: 0;
+        flex: 1;
         align-items: center;
-        padding-right: 0;
-        padding-left: 0;
         text-align: left;
       }
 
       svg {
-        position: static;
         color: var(--text-tertiary);
       }
     }
@@ -7160,7 +7162,6 @@ html.no-animations {
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    line-height: 1;
     text-align: left;
     white-space: nowrap;
     transition: color var(--motion-fast) var(--ease);
@@ -7178,7 +7179,9 @@ html.no-animations {
       font-size: var(--type-size-compact);
       font-weight: var(--weight-regular);
       color: var(--text-tertiary);
-      line-height: 1;
+      /* O rótulo é truncado, então precisa da interlinha do degrau compacto:
+         `1` cortaria os descendentes na borda inferior da caixa. */
+      line-height: var(--type-line-compact);
       transition: color var(--motion-fast) var(--ease);
     }
 
@@ -7198,7 +7201,10 @@ html.no-animations {
       font-size: var(--type-size-compact);
       font-weight: var(--weight-regular);
       font-variant-numeric: tabular-nums;
-      line-height: 1;
+      /* Mesma interlinha do rótulo. A pastilha é `inline-grid` de 20px com
+         `place-items: center`, então centralizar a caixa de linha de 20px dá a
+         mesma linha de base da caixa de 14,5px — sem recorte e sem salto. */
+      line-height: var(--type-line-compact);
       white-space: nowrap;
     }
 
@@ -9725,9 +9731,9 @@ html.no-animations {
     span {
       flex: 1;
       min-width: 0;
-      // Folga simétrica: o chevron absoluto ocupa 24px à direita (16px de
-      // ícone + 8px da borda); com 24px de padding o texto respira 12px dele
-      // e segue visualmente centrado, com o mesmo respiro do trigger de filtro.
+      // Folga simétrica: o chevron absoluto ocupa a caixa do ícone (24px) à
+      // direita, mais os 8px da borda; com 24px de padding o texto não encosta
+      // nele e segue visualmente centrado no gatilho.
       padding-right: var(--space-10);
       padding-left: var(--space-10);
       text-align: center;
@@ -12671,9 +12677,16 @@ html.no-backdrop-blur {
     display: inline-flex;
     align-items: center;
     line-height: var(--type-line-compact);
-    transform: none;
+    /* Centralização óptica das maiúsculas com os ícones da linha de ações. */
+    transform: translateY(1px);
     text-transform: uppercase;
     letter-spacing: var(--ls-100);
+    /* O `letter-spacing` também soma um espaço DEPOIS do último caractere, então a
+       caixa do rótulo mede ~0,06em a mais que a tinta. O gatilho centraliza a
+       CAIXA (`justify-content: center`), não a tinta — sem isto o texto sai meio
+       espaço (0,03em) para a esquerda do centro da pílula. Cancelando o espaço
+       final, a caixa volta a medir exatamente a tinta. */
+    margin-right: calc(-1 * var(--ls-100));
   }
 
   &__add-button {
@@ -12708,7 +12721,6 @@ html.no-backdrop-blur {
   &__add-button &__action-label {
     font-weight: var(--weight-regular);
     line-height: var(--type-line-compact);
-    transform: none;
   }
 
   /* Mesmo "+" da sidebar de coleções (`sidebar__add-icon`, via

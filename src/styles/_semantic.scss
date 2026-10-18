@@ -79,13 +79,14 @@
   --border-hover: var(--border-interactive);
 
   // --- Texto e ícones ---
-  --ui-icon-size: 20px;
+  // Tamanho compacto; o traço Lucide mantém a espessura via vector-effect.
+  --ui-icon-size: 24px;
   --ui-icon-stroke-width: 1.5;
   --text-primary: var(--n-12);
   --text-secondary: var(--n-11);
-  --text-tertiary: var(--n-8);
+  --text-tertiary: var(--n-7);
   --text-placeholder: var(--text-tertiary);
-  --icon-default: var(--n-10);
+  --icon-default: var(--n-11);
   --text-strong: var(--text-primary);
   --color-text: var(--text-primary);
   --text-muted: var(--text-secondary);
@@ -173,8 +174,8 @@
   --type-size-fluid-hero: clamp(28px, 4vw, 40px);
   --type-size-fluid-showcase: clamp(30px, 5vw, 48px);
 
-  // Inter Variable: peso regular único para toda a interface.
-  --weight-regular: 400;
+  // Inter Variable: peso médio único para toda a interface.
+  --weight-regular: 450;
   --weight-semibold: var(--weight-regular);
   --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
   --focus-ring-color: var(--n-10);

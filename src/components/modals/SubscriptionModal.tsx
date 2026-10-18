@@ -116,7 +116,7 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
           checkout={isPremium ? (
           <aside className="premium-modal__checkout premium-modal__checkout--active">
             <span className="premium-modal__active-badge">
-              <Check size={14} strokeWidth={2.4} aria-hidden="true" />
+              <Check size={14} strokeWidth={2} aria-hidden="true" />
               {isLifetime
                 ? copy("Acesso vitalício", "Lifetime access")
                 : copy("Assinatura ativa", "Subscription active")}
@@ -155,7 +155,7 @@ export function SubscriptionModal({ open, onClose }: SubscriptionModalProps) {
               {portalFlow === "manage"
                 ? copy("Abrindo…", "Opening…")
                 : copy("Gerenciar assinatura", "Manage subscription")}
-              <ExternalLink size={15} strokeWidth={2.2} aria-hidden="true" />
+              <ExternalLink size={15} strokeWidth={2} aria-hidden="true" />
             </button> : null}
 
             {canManageBilling ? <button

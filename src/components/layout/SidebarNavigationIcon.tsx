@@ -7,14 +7,19 @@ interface SidebarNavigationIconProps {
   icon: ElementType<any>;
 }
 
-// Métricas compartilhadas com os demais ícones da interface: 20px / traço 2.
-// `weight="Outline"` mantém os ícones reicon (Grid/Cup) no traço vazado,
-// em vez do sólido Filled padrão do patch.
+// 24px é 1:1 com a grade 24 do Lucide/Reicon, então a escala é 1 e cada
+// coordenada inteira cai num pixel inteiro — não há posição subpixel para
+// compensar, por isso nenhum `translate` aqui.
+// O `strokeWidth` abaixo é o valor que o CSS aplica de qualquer forma (regra
+// de autor vence atributo de apresentação); ele fica explícito para o markup
+// não divergir do pintado. Os ícones Reicon que chegam aqui (Grid, Cup) são
+// preenchidos e ignoram o `strokeWidth` — é de propósito.
+// `weight="Outline"` mantém o desenho Reicon vazado, em vez do sólido Filled.
 export function SidebarNavigationIcon({ icon: Icon }: SidebarNavigationIconProps) {
   return (
     <Icon
-      size={20}
-      strokeWidth={2}
+      size={24}
+      strokeWidth={1.25}
       weight="Outline"
       className="sidebar__navigation-icon"
       aria-hidden="true"

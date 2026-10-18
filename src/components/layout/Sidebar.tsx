@@ -1,12 +1,11 @@
 import {
+  ChevronRight,
   Folder,
   Heart,
   Pencil,
-  Plus,
   Search,
   Trash,
 } from "lucide-react";
-import { AngleLeft2 as AngleLeft, AngleRight2 as AngleRight } from "reicon-react";
 import { memo, useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from "react";
 import type { GhostBoxGame } from "../../data";
 import type { Page, SteamProfile, UserCollection } from "../../types";
@@ -384,10 +383,10 @@ export const Sidebar = memo(function Sidebar({
                   tabIndex={isCollectionSearchOpen ? -1 : 0}
                   aria-hidden={isCollectionSearchOpen}
                 >
-                  <AngleRight
+                  <ChevronRight
                     size={16}
-                    weight="Outline"
-                    className={`ui-icon--22 sidebar__section-toggle-chevron${!isCollectionsCollapsed ? " sidebar__section-toggle-chevron--expanded" : ""}`}
+                    strokeWidth={2}
+                    className={`sidebar__section-toggle-chevron${!isCollectionsCollapsed ? " sidebar__section-toggle-chevron--expanded" : ""}`}
                   />
                   <small className="sidebar__section-title">{t("sidebar.collections")}</small>
                 </button>
@@ -429,7 +428,7 @@ export const Sidebar = memo(function Sidebar({
                     onClick={onCreateCollection}
                     aria-label={t("profile.createCollection")}
                   >
-                    <Plus size={20} className="sidebar__add-icon" aria-hidden="true" />
+                    <span className="sidebar__add-icon" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -505,10 +504,10 @@ export const Sidebar = memo(function Sidebar({
                           aria-expanded={isExpanded}
                           aria-label={isExpanded ? "Recolher" : "Expandir"}
                         >
-                          <AngleRight
+                          <ChevronRight
                             size={16}
-                            weight="Outline"
-                            className={`ui-icon--22 sidebar__collection-chevron${isExpanded ? " sidebar__collection-chevron--expanded" : ""}`}
+                            strokeWidth={2}
+                            className={`sidebar__collection-chevron${isExpanded ? " sidebar__collection-chevron--expanded" : ""}`}
                           />
                         </button>
                         <button
@@ -632,7 +631,9 @@ export const Sidebar = memo(function Sidebar({
                   className="sidebar__menu-item-button sidebar__menu-item-button--back"
                   onClick={() => onBack()}
                 >
-                  <AngleLeft size={22} className="ui-icon--22" weight="Outline" aria-hidden="true" />
+                  <svg viewBox="0 0 20 20" width="19" height="19" aria-hidden="true">
+                    <path d="M13 4L7 10l6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                   <span className="sidebar__menu-item-label">{t("header.back")}</span>
                 </button>
               </li>
