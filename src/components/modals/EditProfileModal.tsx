@@ -531,22 +531,22 @@ export function EditProfileModal({
                   </label>
                 </>
               )}
-
-              <div className="collection-modal__actions">
-                <button type="button" className="button button--outline" onClick={isAvatarCropMode ? handleAvatarCropCancel : onClose}>
-                  {appearance.language === "en" ? "Cancel" : "Cancelar"}
-                </button>
-                <button
-                  type={isAvatarCropMode ? "button" : "submit"}
-                  className="button button--outline"
-                  disabled={isProcessingAvatar || (!isAvatarCropMode && !displayName.trim())}
-                  aria-busy={isProcessingAvatar}
-                  onClick={isAvatarCropMode ? handleAvatarCropSave : undefined}
-                >
-                  {isProcessingAvatar ? t("profile.processingAvatar") : appearance.language === "en" ? "Save" : "Salvar"}
-                </button>
-              </div>
             </div>
+
+            <footer className="collection-modal__actions">
+              <button type="button" className="button button--outline" onClick={isAvatarCropMode ? handleAvatarCropCancel : onClose}>
+                {appearance.language === "en" ? "Cancel" : "Cancelar"}
+              </button>
+              <button
+                type={isAvatarCropMode ? "button" : "submit"}
+                className="button button--outline"
+                disabled={isProcessingAvatar || (!isAvatarCropMode && !displayName.trim())}
+                aria-busy={isProcessingAvatar}
+                onClick={isAvatarCropMode ? handleAvatarCropSave : undefined}
+              >
+                {isProcessingAvatar ? t("profile.processingAvatar") : appearance.language === "en" ? "Save" : "Salvar"}
+              </button>
+            </footer>
       </form>
     </div>,
     document.body

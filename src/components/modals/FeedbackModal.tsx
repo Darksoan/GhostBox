@@ -80,12 +80,13 @@ export function FeedbackModal({ open, steamProfile, onClose }: FeedbackModalProp
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-modal-title"
+        aria-describedby="feedback-modal-description"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="collection-modal__header">
           <div>
             <h3 id="feedback-modal-title">{t("feedback.title")}</h3>
-            <p>{t("feedback.subtitle")}</p>
+            <p id="feedback-modal-description">{t("feedback.subtitle")}</p>
           </div>
 
           <button
@@ -100,23 +101,23 @@ export function FeedbackModal({ open, steamProfile, onClose }: FeedbackModalProp
         </header>
 
         <div className="collection-modal__content">
-          <label className="feedback-modal__field" htmlFor="feedback-message">
-            <span>{t("feedback.messageLabel")}</span>
-          </label>
-          <div className="feedback-modal__input-shell">
-            <textarea
-              id="feedback-message"
-              value={message}
-              maxLength={maxFeedbackLength}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder={t("feedback.placeholder")}
-              disabled={isSending}
-              autoFocus
-            />
+          <div className="feedback-modal__field">
+            <label htmlFor="feedback-message">{t("feedback.messageLabel")}</label>
+            <div className="feedback-modal__input-shell">
+              <textarea
+                id="feedback-message"
+                value={message}
+                maxLength={maxFeedbackLength}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder={t("feedback.placeholder")}
+                disabled={isSending}
+                autoFocus
+              />
+            </div>
           </div>
         </div>
 
-        <footer className="feedback-modal__actions">
+        <footer className="collection-modal__actions feedback-modal__actions">
           <button
             type="button"
             className="button button--outline"

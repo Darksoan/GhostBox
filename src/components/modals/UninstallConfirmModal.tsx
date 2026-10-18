@@ -55,6 +55,7 @@ export function UninstallConfirmModal({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="uninstall-confirm-title"
+        aria-describedby="uninstall-confirm-description"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="collection-modal__header">
@@ -68,7 +69,7 @@ export function UninstallConfirmModal({
                   ? "Remove from library"
                   : "Remover da biblioteca"}
             </h3>
-            <p>
+            <p id="uninstall-confirm-description">
               {waitingForSteam
                 ? lang === "en"
                   ? `Finish uninstalling "${gameTitle}" in Steam. It will then be removed from your library.`
@@ -89,8 +90,8 @@ export function UninstallConfirmModal({
           </button>
         </header>
 
-        <div className="collection-modal__content">
-          {canUninstall && (
+        {canUninstall && (
+          <div className="collection-modal__content">
             <label className="uninstall-confirm-modal__option">
               <input
                 type="checkbox"
@@ -104,34 +105,34 @@ export function UninstallConfirmModal({
               </span>
               <span>{lang === "en" ? "Remove and uninstall" : "Remover e desinstalar"}</span>
             </label>
-          )}
+          </div>
+        )}
 
-          <div className="collection-modal__actions">
+        <footer className="collection-modal__actions">
+          <button
+            type="button"
+            className="button button--outline"
+            onClick={onCancel}
+          >
+            {waitingForSteam
+              ? lang === "en"
+                ? "Stop waiting"
+                : "Parar de aguardar"
+              : lang === "en"
+                ? "Cancel"
+                : "Cancelar"}
+          </button>
+
+          {!waitingForSteam && (
             <button
               type="button"
-              className="button button--outline"
-              onClick={onCancel}
+              className="button button--outline uninstall-confirm-modal__remove"
+              onClick={() => onConfirm(uninstall)}
             >
-              {waitingForSteam
-                ? lang === "en"
-                  ? "Stop waiting"
-                  : "Parar de aguardar"
-                : lang === "en"
-                  ? "Cancel"
-                  : "Cancelar"}
+              {lang === "en" ? "Remove" : "Remover"}
             </button>
-
-            {!waitingForSteam && (
-              <button
-                type="button"
-                className="button button--outline uninstall-confirm-modal__remove"
-                onClick={() => onConfirm(uninstall)}
-              >
-                {lang === "en" ? "Remove" : "Remover"}
-              </button>
-            )}
-          </div>
-        </div>
+          )}
+        </footer>
       </div>
     </div>,
     document.body,

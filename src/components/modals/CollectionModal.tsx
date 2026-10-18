@@ -52,40 +52,41 @@ export function CollectionModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="collection-modal-title"
+        aria-describedby="collection-modal-description"
         onClick={(event) => event.stopPropagation()}
         onSubmit={handleSubmit}
       >
-            <header className="collection-modal__header">
-              <div>
-                <h3 id="collection-modal-title">{appearance.language === "en" ? "Create collection" : "Criar coleção"}</h3>
-                <p>{appearance.language === "en" ? "Create a new collection to organize your games" : "Crie uma nova coleção para organizar seus jogos"}</p>
-              </div>
+        <header className="collection-modal__header">
+          <div>
+            <h3 id="collection-modal-title">{appearance.language === "en" ? "Create collection" : "Criar coleção"}</h3>
+            <p id="collection-modal-description">{appearance.language === "en" ? "Create a new collection to organize your games" : "Crie uma nova coleção para organizar seus jogos"}</p>
+          </div>
 
-              <button type="button" className="collection-modal__close" onClick={onClose} aria-label={appearance.language === "en" ? "Close" : "Fechar"}>
-                <ModalCloseIcon />
-              </button>
-            </header>
+          <button type="button" className="collection-modal__close" onClick={onClose} aria-label={appearance.language === "en" ? "Close" : "Fechar"}>
+            <ModalCloseIcon />
+          </button>
+        </header>
 
-            <div className="collection-modal__content">
-              <label className="collection-modal__field">
-                <input
-                  aria-label={appearance.language === "en" ? "Collection name" : "Nome da coleção"}
-                  value={name}
-                  onChange={handleChange}
-                  placeholder={appearance.language === "en" ? "Enter collection name" : "Insira o nome da coleção"}
-                  autoFocus
-                />
-              </label>
+        <div className="collection-modal__content">
+          <label className="collection-modal__field">
+            <input
+              aria-label={appearance.language === "en" ? "Collection name" : "Nome da coleção"}
+              value={name}
+              onChange={handleChange}
+              placeholder={appearance.language === "en" ? "Enter collection name" : "Insira o nome da coleção"}
+              autoFocus
+            />
+          </label>
+        </div>
 
-              <div className="collection-modal__actions">
-                <button type="button" className="button button--outline" onClick={onClose}>
-                  {appearance.language === "en" ? "Cancel" : "Cancelar"}
-                </button>
-                <button type="submit" className="button button--primary" disabled={!name.trim()}>
-                  {appearance.language === "en" ? "Create" : "Criar"}
-                </button>
-              </div>
-            </div>
+        <footer className="collection-modal__actions">
+          <button type="button" className="button button--outline" onClick={onClose}>
+            {appearance.language === "en" ? "Cancel" : "Cancelar"}
+          </button>
+          <button type="submit" className="button button--primary" disabled={!name.trim()}>
+            {appearance.language === "en" ? "Create" : "Criar"}
+          </button>
+        </footer>
       </form>
     </div>,
     document.body

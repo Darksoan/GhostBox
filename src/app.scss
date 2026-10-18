@@ -6219,18 +6219,16 @@ html.no-animations {
 }
 
 .settings-dropdown__trigger {
-  /* Rótulo e chevron no mesmo fluxo: o `gap` é o respiro entre ícone e texto e
-     acompanha a caixa do ícone (`--ui-icon-size`). Antes o chevron era absoluto
-     e o rótulo reservava uma calha fixa de 16px, dimensionada para o ícone de
-     14/16px — com o desenho de 20px dentro da caixa de 24px, essa calha ficou
-     curta e o ícone invadia o texto em 4-6px quando o rótulo preenchia a linha. */
-  display: inline-flex;
+  /* Colunas laterais iguais mantêm o texto no centro real do trigger.
+     A seta ocupa apenas a coluna direita, sem deslocar o rótulo. */
+  display: inline-grid;
+  grid-template-columns: var(--ui-icon-size) minmax(0, 1fr) var(--ui-icon-size);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-6);
+  gap: var(--space-4);
   width: 100%;
+  min-width: 0;
   min-height: 36px;
-  padding: 0 calc(var(--space-5) + var(--ui-icon-size) + var(--space-3));
+  padding: 0 var(--space-6);
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--surface-option);
@@ -6243,16 +6241,14 @@ html.no-animations {
      corta as hastes descendentes (g, j, p, q, y). Ver a razão mínima de 1,25 em
      `_primitives.scss`. */
   line-height: var(--type-line-compact);
-  /* Ancora para as variantes que ainda posicionam o chevron por conta própria
-     (`.library-toolbar`); o menu é posicionado pelo `.settings-dropdown` wrapper. */
   position: relative;
   transition:
     background-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 
   span {
-    /* O texto ocupa a sobra e empurra o chevron para a borda direita. */
-    flex: 1 1 auto;
+    grid-column: 2;
+    grid-row: 1;
     text-align: center;
     @include mixins.truncate;
   }
@@ -6273,9 +6269,11 @@ html.no-animations {
   }
 
   svg {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
     flex-shrink: 0;
-    position: absolute;
-    right: var(--space-5);
+    position: static;
     color: var(--text-secondary);
     font-weight: var(--weight-regular);
     transition:
@@ -6378,7 +6376,6 @@ html.no-animations {
 .settings-page-dropdown {
   .settings-dropdown__trigger {
     min-height: 32px;
-    padding: 0 var(--space-6);
     border-radius: var(--radius-lg);
     background: var(--settings-dropdown-surface);
     font-size: var(--type-size-compact);
@@ -6843,16 +6840,6 @@ html.no-animations {
       svg {
         color: var(--text-tertiary);
       }
-
-      span {
-        display: flex;
-        /* O gatilho é largo (min-width), então o rótulo ocupa a linha toda e o
-           chevron encosta na borda direita — diferente do dropdown base, que
-           centra o par rótulo + chevron. */
-        flex: 1;
-        align-items: center;
-        text-align: center;
-      }
     }
 
     .settings-dropdown__menu {
@@ -6883,24 +6870,16 @@ html.no-animations {
     }
   }
 
-  /* Visualização (lista/grade) usa a mesma geometria da ordenação, mas sem
-     largura mínima: o gatilho fecha na largura do maior rótulo do menu. O
-     chevron e o `gap` vêm do dropdown base — aqui só o rótulo é encostado à
-     esquerda, para o gatilho estreito não deixar um vão no meio. */
+  /* Visualização usa a geometria compartilhada sem a largura mínima da
+     ordenação: texto, espaço da seta e padding definem a largura natural. */
   &__view {
+    width: auto;
     min-width: 0;
 
     .settings-dropdown__trigger {
       min-height: 36px;
       border-radius: var(--radius-md);
       color: var(--text-tertiary);
-
-      span {
-        display: flex;
-        flex: 1;
-        align-items: center;
-        text-align: center;
-      }
 
       svg {
         color: var(--text-tertiary);
@@ -7141,7 +7120,7 @@ html.no-animations {
     min-height: 32px;
     align-items: center;
     gap: var(--space-4);
-    padding: 0 var(--space-5);
+    padding: 0 var(--space-6);
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -9705,29 +9684,12 @@ html.no-animations {
     width: 100%;
     min-width: 0;
     min-height: 32px;
-    padding: 0 var(--space-6);
     border-radius: var(--radius-lg);
     color: var(--text-tertiary);
     font-size: var(--type-size-compact);
     font-weight: var(--weight-regular);
-    justify-content: center;
-
-    span {
-      flex: 1;
-      min-width: 0;
-      // Folga simétrica: o chevron absoluto ocupa a caixa do ícone (24px) à
-      // direita, mais os 8px da borda; com 24px de padding o texto não encosta
-      // nele e segue visualmente centrado no gatilho.
-      padding-right: var(--space-10);
-      padding-left: var(--space-10);
-      text-align: center;
-      @include mixins.truncate;
-    }
 
     svg {
-      position: absolute;
-      right: var(--space-4);
-      flex-shrink: 0;
       color: var(--text-tertiary);
     }
 
@@ -10249,10 +10211,20 @@ html.no-backdrop-blur {
   }
 }
 
+/* Diálogos simples têm largura fixa; a mensagem só altera a altura.
+   Editores maiores mantêm seus tamanhos específicos abaixo. */
+.collection-modal,
+.steam-path-modal,
+.confirm-modal {
+  width: min(480px, calc(100vw - (var(--space-10) * 2)));
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .collection-modal,
 .steam-path-modal {
   display: flex;
-  width: min(640px, calc(100vw - 48px));
   max-height: min(720px, calc(100vh - 48px));
   flex-direction: column;
   overflow: hidden;
@@ -10262,28 +10234,32 @@ html.no-backdrop-blur {
   color: var(--text-primary);
   font-family: var(--font-sans);
 
+  /* Hierarquia: título/descrição 8px, cabeçalho/campos 20px e ações 24px.
+     Só o corpo rola; cabeçalho e rodapé permanecem estáveis. */
   &__header {
     display: flex;
-    align-items: center;
+    flex-shrink: 0;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: var(--space-8);
-    padding: var(--space-9) var(--space-9) var(--space-6);
+    gap: var(--space-6);
+    padding: var(--space-10) var(--space-10) 0;
 
     > div {
       display: flex;
       min-width: 0;
       flex-direction: column;
       justify-content: center;
-      gap: var(--space-3);
+      gap: var(--space-4);
     }
 
     h3 {
       margin: 0;
       color: var(--text-primary);
       font-family: var(--font-sans);
-      font-size: var(--type-size-body);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-body);
+      font-size: var(--type-size-body-emphasis);
+      font-weight: var(--weight-semibold);
+      line-height: var(--type-line-body-emphasis);
+      letter-spacing: var(--ls-500);
     }
 
     p {
@@ -10302,18 +10278,21 @@ html.no-backdrop-blur {
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      width: 44px;
-      height: 44px;
-      margin: -var(--space-3);
+      width: 28px;
+      height: 28px;
+      margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0;
       padding: 0;
       border: 0;
+      border-radius: var(--radius-sm);
       background: transparent;
       line-height: 0;
       color: var(--text-secondary);
       font-weight: var(--weight-semibold);
       cursor: pointer;
       pointer-events: auto;
-      transition: color var(--motion-fast) ease;
+      transition:
+        background var(--motion-fast) var(--ease),
+        color var(--motion-fast) ease;
 
       svg {
         display: block;
@@ -10322,6 +10301,7 @@ html.no-backdrop-blur {
       }
 
       &:hover {
+        background: var(--surface-modal-control);
         color: var(--text-primary);
       }
     }
@@ -10330,15 +10310,16 @@ html.no-backdrop-blur {
   &__content {
     display: flex;
     flex-direction: column;
-    gap: var(--space-9);
+    gap: var(--space-8);
     min-height: 0;
-    padding: var(--space-4) var(--space-9) var(--space-10);
+    margin-top: var(--space-9);
+    padding: 0 var(--space-10);
     overflow-y: auto;
   }
 
   &__field {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
 
     span {
       color: var(--text-primary);
@@ -10372,8 +10353,11 @@ html.no-backdrop-blur {
 
   &__actions {
     display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: var(--space-4);
+    padding: var(--space-10);
 
     button {
       min-width: 104px;
@@ -10382,21 +10366,7 @@ html.no-backdrop-blur {
 }
 
 .steam-path-modal {
-  gap: var(--space-8);
-
-  > p,
-  &__checked,
-  &__field {
-    margin-inline: 18px;
-  }
-
-  > p {
-    margin-block: 0;
-    color: var(--text-secondary);
-    font-weight: var(--weight-regular);
-    font-size: var(--type-size-body);
-    line-height: var(--type-line-body);
-
+  &__header p {
     strong {
       color: var(--text-primary);
     }
@@ -10419,57 +10389,12 @@ html.no-backdrop-blur {
       white-space: nowrap;
     }
   }
-
-  &__actions {
-    padding: 0 var(--space-9) var(--space-10);
-  }
 }
 
-/* Refino do modal de criar coleção. Um campo só não justifica os 640px da
-   caixa compartilhada com o modal da Steam — a largura passa a acompanhar o
-   conteúdo. Sem borda e sem ornamento: a hierarquia vem de tamanho, cor e do
-   degrau da rampa, o mesmo idioma que `.edit-profile-modal` já usa. */
+/* Superfície compartilhada dos diálogos: sem borda e sem ornamento.
+   A hierarquia vem de tamanho, cor e do degrau da rampa. */
 .collection-modal {
-  width: min(400px, calc(100vw - 48px));
   box-shadow: var(--shadow-3);
-
-  &__header {
-    align-items: flex-start;
-    gap: var(--space-6);
-    padding: var(--space-9) var(--space-9) var(--space-7);
-
-    > div {
-      gap: var(--space-2);
-    }
-
-    h3 {
-      font-size: var(--type-size-body-emphasis);
-      font-weight: var(--weight-semibold);
-      line-height: var(--type-line-body-emphasis);
-      letter-spacing: var(--ls-500);
-    }
-
-    .collection-modal__close {
-      width: 28px;
-      height: 28px;
-      /* O `margin: -var(...)` do bloco compartilhado não é CSS válido, então o
-         botão nunca alinhou com a borda óptica do título. */
-      margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0;
-      border-radius: var(--radius-sm);
-      transition:
-        background var(--motion-fast) var(--ease),
-        color var(--motion-fast) ease;
-
-      &:hover {
-        background: var(--surface-modal-control);
-      }
-    }
-  }
-
-  &__content {
-    gap: var(--space-9);
-    padding: 0 var(--space-9) var(--space-9);
-  }
 
   &__field {
     gap: var(--space-4);
@@ -10505,8 +10430,6 @@ html.no-backdrop-blur {
   /* Cancelar segue a hierarquia de ações neutras: terciário em repouso e
      secundário quando recebe intenção. O botão Criar mantém sua própria regra. */
   &__actions {
-    gap: var(--space-3);
-
     .button {
       min-width: 96px;
       border: 0;
@@ -10544,19 +10467,8 @@ html.no-backdrop-blur {
   }
 }
 
-/* O texto auxiliar define a largura útil deste diálogo. Ele deve aparecer
-   completo em uma linha; não truncar conteúdo para caber numa caixa estreita. */
+/* A criação de coleção usa a mesma largura e quebra de texto dos diálogos. */
 .collection-create-modal {
-  width: min(480px, calc(100vw - 48px));
-
-  .collection-modal__header > div {
-    min-width: 0;
-  }
-
-  .collection-modal__header p {
-    white-space: nowrap;
-  }
-
   .collection-modal__field input {
     font-size: var(--type-size-body-emphasis);
     font-weight: var(--weight-regular);
@@ -10599,13 +10511,11 @@ html.no-backdrop-blur {
 }
 
 .feedback-modal {
-  width: min(480px, calc(100vw - 48px));
-
   &__field {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
 
-    span {
+    label {
       color: var(--text-primary);
       font-size: var(--type-size-body);
       font-weight: var(--weight-regular);
@@ -10644,17 +10554,6 @@ html.no-backdrop-blur {
       &:disabled {
         opacity: 0.7;
       }
-    }
-  }
-
-  &__actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-4);
-    padding: 0 var(--space-9) var(--space-10);
-
-    button {
-      min-width: 104px;
     }
   }
 }
@@ -11013,9 +10912,6 @@ html.no-backdrop-blur {
 
 .confirm-modal {
   display: flex;
-  width: fit-content;
-  min-width: min(560px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
   max-height: min(360px, calc(100vh - 48px));
   flex-direction: column;
   overflow: hidden;
@@ -11027,20 +10923,20 @@ html.no-backdrop-blur {
 
   &__header {
     display: flex;
-    align-items: center;
+    flex-shrink: 0;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: var(--space-8);
-    min-height: 48px;
-    padding: 0 var(--space-8);
+    gap: var(--space-6);
+    padding: var(--space-10) var(--space-10) 0;
 
     h3 {
       margin: 0;
       min-width: 0;
       color: var(--text-primary);
       font-family: var(--font-sans);
-      font-size: var(--type-size-body);
-      font-weight: var(--weight-regular);
-      line-height: var(--type-line-body);
+      font-size: var(--type-size-body-emphasis);
+      font-weight: var(--weight-semibold);
+      line-height: var(--type-line-body-emphasis);
     }
   }
 
@@ -11048,9 +10944,10 @@ html.no-backdrop-blur {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    margin: -4px -6px -4px auto;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 auto;
     padding: 0;
     border: 0;
     background: transparent;
@@ -11071,8 +10968,10 @@ html.no-backdrop-blur {
 
   &__content {
     display: grid;
-    gap: 0;
-    padding: var(--space-4) var(--space-8) var(--space-9);
+    gap: var(--space-4);
+    min-height: 0;
+    padding: var(--space-4) var(--space-10) 0;
+    overflow-y: auto;
 
     p {
       margin: 0;
@@ -11085,9 +10984,11 @@ html.no-backdrop-blur {
 
   &__actions {
     display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: var(--space-4);
-    padding: 0 var(--space-8) var(--space-8);
+    padding: var(--space-10);
   }
 
   &__confirm {
@@ -15157,7 +15058,7 @@ button {
   line-height: var(--type-line-body);
 }
 
-/* Separe o texto das ações e dê mais altura aos diálogos de confirmação. */
+/* A descrição pertence ao cabeçalho; campos e ações têm seu próprio respiro. */
 .backdrop--confirm > .collection-modal .collection-modal__header p,
 .collection-create-modal .collection-modal__header p,
 .backdrop--confirm > .collection-modal .collection-modal__content > p:not([role="alert"]),
@@ -15166,48 +15067,8 @@ button {
   color: var(--text-tertiary);
 }
 
-.backdrop--confirm > .collection-modal,
-.collection-create-modal {
-  .collection-modal__header {
-    padding-bottom: var(--space-12);
-  }
-
-  .collection-modal__header > div {
-    gap: calc(var(--space-12) - 2px);
-  }
-
-  .collection-modal__content {
-    gap: var(--space-12);
-    padding-bottom: var(--space-10);
-  }
-}
-
-.confirm-modal__content {
-  padding-block: var(--space-12);
-}
-
-.confirm-modal__actions {
-  padding-top: 0;
-}
-
-.collection-create-modal .collection-modal__content {
-  gap: var(--space-12);
-}
-
-/* ── Uninstall confirm modal ──────────────────────────────────────── */
-/* Usa a caixa canônica `.collection-modal`; só o botão destrutivo tem
-   idioma próprio (vermelho translúcido), como nos confirm internos. */
-.uninstall-confirm-modal {
-  width: fit-content;
-  min-width: min(560px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
-}
-
+/* As confirmações de backup herdam o tamanho canônico de `.collection-modal`. */
 .cloud-backup-confirm-modal {
-  width: fit-content;
-  min-width: min(560px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
-
   .cloud-backup-confirm-modal__error {
     margin: 0;
     padding: var(--space-5);
@@ -15333,10 +15194,4 @@ button {
 html.no-animations .uninstall-confirm-modal__option-box,
 html.no-animations .uninstall-confirm-modal__option-box svg path {
   transition: none;
-}
-
-@media (max-width: 527px) {
-  .collection-create-modal .collection-modal__header p {
-    white-space: normal;
-  }
 }

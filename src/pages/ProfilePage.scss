@@ -430,20 +430,24 @@
     display: block;
   }
 
-  /* Sair da conta: ícone terciário em repouso, primário no hover/foco. Fica à
-     direita do círculo de nível, sobre a capa — por isso o fundo é transparente
-     e o hover só troca a cor, sem bloco de superfície. */
+  /* Mesma superfície translúcida e altura das caixas Steam/Discord. */
   &__signout {
+    position: absolute;
+    top: var(--space-8);
+    right: var(--space-12);
+    z-index: 2;
     display: inline-grid;
     place-items: center;
     flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 34px;
     margin: 0;
     padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
-    background: transparent;
+    background: var(--overlay-medium);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     color: var(--text-tertiary);
     cursor: pointer;
     transition: color var(--motion-fast) var(--ease);
@@ -454,7 +458,7 @@
 
     &:hover,
     &:focus-visible {
-      background: transparent;
+      background: var(--overlay-medium);
       color: var(--text-primary);
     }
 
@@ -750,7 +754,7 @@
     gap: var(--space-2);
     min-width: 0;
     color: var(--text-tertiary);
-    font-size: var(--type-size-compact);
+    font-size: var(--profile-secondary-text-size);
     line-height: var(--line-height-tight, 1.25);
     white-space: nowrap;
 
@@ -775,6 +779,7 @@
 
   &__activity-sort {
     flex: 0 0 auto;
+    width: max-content;
     min-width: 0;
     margin-left: var(--space-6);
 
@@ -782,8 +787,19 @@
       min-height: 32px;
       padding: 0 var(--space-6);
       border-radius: var(--radius-lg);
-      font-size: var(--type-size-compact);
+      font-size: var(--profile-secondary-text-size);
       font-weight: var(--weight-regular);
+      gap: var(--space-4);
+
+      span {
+        min-width: 0;
+        text-align: center;
+      }
+
+      svg {
+        position: static;
+        flex: 0 0 auto;
+      }
     }
 
     .settings-dropdown__menu {
@@ -1034,10 +1050,9 @@
     grid-row: 2;
     align-self: start;
     padding-top: var(--space-3);
-    // Mesma altura dos ícones de conquista (28px, ver `__activity-icon`):
-    // centraliza o "jogado pela última vez" com a fileira da esquerda.
-    // Sem flex aqui para preservar o `nowrap` + `ellipsis` herdados acima.
-    line-height: 28px;
+    font-size: var(--profile-secondary-text-size);
+    // Mesma caixa de linha do contador, com o mesmo inset superior.
+    line-height: var(--type-line-caption);
     color: var(--text-secondary);
   }
 
@@ -1077,6 +1092,7 @@
     display: grid;
     grid-template-columns: 18px 8ch minmax(0, 1fr);
     align-items: center;
+    min-height: var(--type-line-caption);
     gap: var(--space-4) var(--space-5);
     min-width: 0;
     flex: 1 1 auto;

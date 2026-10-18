@@ -115,8 +115,6 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
   achievementTotal,
   achievementUnlocked,
   achievementProgress,
-  latestAchievements,
-  overflowCount,
   statusLabel,
   t,
   onOpenGame,
@@ -127,8 +125,6 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
   achievementTotal: number;
   achievementUnlocked: number;
   achievementProgress: number;
-  latestAchievements: ProfileAchievementHighlight[];
-  overflowCount: number;
   statusLabel: string | null;
   t: (key: string) => string;
   onOpenGame: (game: GhostBoxGame) => void;
@@ -250,39 +246,6 @@ const ProfileActivityCard = memo(function ProfileActivityCard({
               <span style={{ width: `${achievementProgress}%` }} />
             </span>
           </span>
-          {latestAchievements.length > 0 ? (
-            <div className="profile-page__activity-icons">
-              {latestAchievements.map((achievement) => (
-                <span
-                  key={achievement.key}
-                  className="profile-page__activity-icon"
-                  role="img"
-                  tabIndex={0}
-                  aria-label={achievement.title}
-                >
-                  <img
-                    src={achievement.icon}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <span className="profile-page__activity-tooltip" role="tooltip">
-                    <strong>{achievement.title}</strong>
-                    {typeof achievement.globalPercent === "number" ? (
-                      <small>
-                        {achievement.globalPercent.toFixed(1)}% {t("achievements.globalPercent")}
-                      </small>
-                    ) : null}
-                  </span>
-                </span>
-              ))}
-              {overflowCount > 0 ? (
-                <span className="profile-page__activity-icon-more">
-                  +{overflowCount}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       ) : null}
     </article>
@@ -381,19 +344,6 @@ type ProfileCollection = {
   count: number;
 };
 
-type ProfileAchievementHighlight = {
-  key: string;
-  game?: GhostBoxGame;
-  achievementId: string;
-  title: string;
-  description: string;
-  icon: string;
-  unlocked: boolean;
-  gameTitle: string;
-  globalPercent?: number;
-  unlockedAt?: string;
-};
-
 type ProfileActivityViewModel = {
   game: GhostBoxGame;
   displayGame: GhostBoxGame;
@@ -401,8 +351,6 @@ type ProfileActivityViewModel = {
   achievementTotal: number;
   achievementUnlocked: number;
   achievementProgress: number;
-  latestAchievements: ProfileAchievementHighlight[];
-  overflowCount: number;
   statusLabel: string | null;
 };
 
@@ -459,13 +407,6 @@ function withResolvedProfileGameTitle(
   const resolvedTitle = resolvedTitlesByAppId.get(game.appId)?.trim();
   if (!resolvedTitle || resolvedTitle === game.title) return game;
   return { ...game, title: resolvedTitle };
-}
-
-function achievementShowcaseKey(
-  game: GhostBoxGame,
-  achievement: SteamAchievement
-) {
-  return `${game.id}-${achievement.name || achievement.title}`;
 }
 
 function achievementShowcaseIcon(
@@ -1589,42 +1530,6 @@ export function ProfilePage({
           achievementTotal > 0
             ? (achievementUnlocked / achievementTotal) * 100
             : 0;
-        const latestAchievements = (game.achievementList ?? [])
-          .filter(isAchievementUnlocked)
-          .slice()
-          .sort((left, right) => {
-            const unlockTimeDelta =
-              achievementUnlockedTime(right.unlockedAt) -
-              achievementUnlockedTime(left.unlockedAt);
-            if (unlockTimeDelta !== 0) return unlockTimeDelta;
-            return (
-              (right.globalPercent ?? 100) -
-              (left.globalPercent ?? 100)
-            );
-          })
-          .flatMap<ProfileAchievementHighlight>((achievement) => {
-            const icon = achievementShowcaseIcon(achievement, true);
-            if (!icon) return [];
-            return [
-              {
-                key: achievementShowcaseKey(game, achievement),
-                game: displayGame,
-                achievementId: achievement.name || achievement.title,
-                title: achievement.title,
-                description: achievement.description,
-                icon,
-                unlocked: true,
-                gameTitle: displayGame.title,
-                globalPercent: achievement.globalPercent,
-                unlockedAt: achievement.unlockedAt,
-              },
-            ];
-          })
-          .slice(0, 5);
-        const overflowCount = Math.max(
-          0,
-          achievementUnlocked - latestAchievements.length,
-        );
         const statusLabel = game.sessionActive
           ? t("profile.currentlyInGame")
           : Number.isFinite(parseLastPlayed(game.lastTimePlayed))
@@ -1645,8 +1550,6 @@ export function ProfilePage({
           achievementTotal,
           achievementUnlocked,
           achievementProgress,
-          latestAchievements,
-          overflowCount,
           statusLabel,
         };
       }),
@@ -1936,6 +1839,17 @@ export function ProfilePage({
           </div>
         )}
         <div className="profile-page__background-overlay">
+          {account && (
+            <button
+              ref={signOutTriggerRef}
+              type="button"
+              className="profile-page__signout"
+              onClick={() => setIsSignOutConfirmOpen(true)}
+              aria-label={t("settings.general.account.signOut")}
+            >
+              <LogOut size={16} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          )}
           <div className="profile-page__identity">
             <div
               className="profile-page__avatar-frame"
@@ -1968,17 +1882,6 @@ export function ProfilePage({
                       {steamLevel ?? ""}
                     </span>
                   </span>
-                )}
-                {account && (
-                  <button
-                    ref={signOutTriggerRef}
-                    type="button"
-                    className="profile-page__signout"
-                    onClick={() => setIsSignOutConfirmOpen(true)}
-                    aria-label={t("settings.general.account.signOut")}
-                  >
-                    <LogOut size={16} strokeWidth={2} aria-hidden="true" />
-                  </button>
                 )}
               </div>
               <div className="profile-page__steam-id-row">
@@ -2153,8 +2056,6 @@ export function ProfilePage({
                               achievementTotal={viewModel.achievementTotal}
                               achievementUnlocked={viewModel.achievementUnlocked}
                               achievementProgress={viewModel.achievementProgress}
-                              latestAchievements={viewModel.latestAchievements}
-                              overflowCount={viewModel.overflowCount}
                               statusLabel={viewModel.statusLabel}
                               t={t}
                               onOpenGame={onOpenGame}
@@ -2421,16 +2322,14 @@ export function ProfilePage({
                 <ModalCloseIcon />
               </button>
             </header>
-            <div className="collection-modal__content">
-              <div className="collection-modal__actions">
-                <button ref={signOutCancelRef} type="button" className="button button--outline" onClick={closeSignOutConfirm}>
-                  {t("settings.general.account.signOutCancel")}
-                </button>
-                <button type="button" className="button button--danger" onClick={() => void logout()}>
-                  {t("settings.general.account.signOut")}
-                </button>
-              </div>
-            </div>
+            <footer className="collection-modal__actions">
+              <button ref={signOutCancelRef} type="button" className="button button--outline" onClick={closeSignOutConfirm}>
+                {t("settings.general.account.signOutCancel")}
+              </button>
+              <button type="button" className="button button--danger" onClick={() => void logout()}>
+                {t("settings.general.account.signOut")}
+              </button>
+            </footer>
           </div>
         </div>,
         document.body,

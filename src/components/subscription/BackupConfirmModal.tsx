@@ -83,24 +83,26 @@ export function BackupConfirmModal({ action, gameTitle, busy, error, onCancel, o
             <ModalCloseIcon />
           </button>
         </header>
-        <div className="collection-modal__content">
-          {error && <p className="cloud-backup-confirm-modal__error" role="alert">{error}</p>}
-          <div className="collection-modal__actions">
-            <button ref={cancelRef} type="button" className="button button--outline" onClick={onCancel} disabled={busy}>
-              {copy("Cancelar", "Cancel")}
-            </button>
-            <button
-              type="button"
-              className={`button button--outline${restoring ? "" : " cloud-backup-confirm-modal__delete"}`}
-              onClick={onConfirm}
-              disabled={busy}
-            >
-              {busy
-                ? copy(restoring ? "Restaurando…" : "Excluindo…", restoring ? "Restoring…" : "Deleting…")
-                : copy(restoring ? "Restaurar" : "Excluir", restoring ? "Restore" : "Delete")}
-            </button>
+        {error && (
+          <div className="collection-modal__content">
+            <p className="cloud-backup-confirm-modal__error" role="alert">{error}</p>
           </div>
-        </div>
+        )}
+        <footer className="collection-modal__actions">
+          <button ref={cancelRef} type="button" className="button button--outline" onClick={onCancel} disabled={busy}>
+            {copy("Cancelar", "Cancel")}
+          </button>
+          <button
+            type="button"
+            className={`button button--outline${restoring ? "" : " cloud-backup-confirm-modal__delete"}`}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy
+              ? copy(restoring ? "Restaurando…" : "Excluindo…", restoring ? "Restoring…" : "Deleting…")
+              : copy(restoring ? "Restaurar" : "Excluir", restoring ? "Restore" : "Delete")}
+          </button>
+        </footer>
       </div>
     </div>,
     document.body,
