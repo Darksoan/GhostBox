@@ -13,7 +13,7 @@ Aplicativo desktop (Tauri + React) para gerenciar sua biblioteca Steam pessoal: 
 
 ## Setup
 
-Pré-requisitos: Node 22+, Rust (toolchain estável) e as dependências do [Tauri v2](https://v2.tauri.app/start/prerequisites/) para Windows.
+Pré-requisitos: Node 22+, Rust (toolchain estável), .NET SDK 8 para o worker de downloads e as dependências do [Tauri v2](https://v2.tauri.app/start/prerequisites/) para Windows.
 
 ```bash
 npm install
@@ -21,6 +21,18 @@ npm run tauri:dev
 ```
 
 O app não exige uma chave da Steam Web API no desktop: ele usa os proxies dos Workers primeiro e cai para os endpoints públicos do Steam Store quando o proxy retorna dado incompleto.
+
+### Downloads pelo launcher
+
+- Adicione o jogo à biblioteca e use **Baixar** na página dele. A ação **Adicionar** continua sem iniciar downloads automaticamente.
+- Escolha uma pasta; a instalação usa `<pasta>\steamapps\common\<installdir>`. A aba **Downloads** permite acompanhar progresso, pausar, retomar, reordenar a fila e consultar o histórico.
+- Em **Ajustes → Downloads**, selecione um disco/biblioteca Steam com indicação de espaço livre ou escolha uma pasta personalizada. Discos sem biblioteca usam `GhostBoxLibrary`; a escolha é compartilhada com o painel e só afeta novos downloads.
+- Ao reabrir o launcher, tarefas interrompidas voltam **pausadas**. A retomada valida e reaproveita os chunks em disco.
+- O download nativo baixa todos os depots selecionados, sem o limite do bootstrap. Ainda depende dos manifests/chaves disponíveis na instalação Steam configurada e do acesso autorizado ao conteúdo.
+- A integração final grava o appmanifest Steam. Caso o registro da biblioteca falhe, os arquivos são preservados e o painel oferece repetir o registro; pode ser necessário fechar/reiniciar a Steam.
+- Remover o registro do painel não apaga o jogo. Apagar arquivos exige confirmação separada e não remove saves externos à instalação.
+
+O worker é compilado por `npm run sidecar:build` (também executado nos builds/dev Tauri).
 
 ### Variáveis de ambiente (opcional)
 

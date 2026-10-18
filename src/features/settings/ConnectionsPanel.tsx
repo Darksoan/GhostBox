@@ -177,11 +177,6 @@ export function ConnectionsPanel() {
 
   return (
     <div className="connections-panel">
-      <header className="connections-panel__header">
-        <h2>{t("settings.connections.title")}</h2>
-        <p>{t("settings.connections.description")}</p>
-      </header>
-
       <div className="connections-panel__list">
         {lastConnectionBlocked && (
           <p className="connection-card__warning" role="alert">

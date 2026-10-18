@@ -1,0 +1,101 @@
+.download-library-settings {
+  min-width: 0;
+  padding: var(--space-7) var(--space-9);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+
+  &__heading {
+    display: grid;
+    gap: var(--space-3);
+    margin-bottom: var(--space-6);
+
+    h3 { margin: 0; color: var(--text-primary); font-size: var(--type-size-body); line-height: var(--type-line-body); font-weight: var(--weight-regular); }
+    p { margin: 0; color: var(--text-tertiary); font-size: var(--type-size-compact); line-height: var(--type-line-compact); }
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: var(--space-5);
+    min-width: 0;
+  }
+
+  &__option {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    cursor: pointer;
+
+    input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    &:has(input:disabled) { cursor: default; }
+    &:hover input:not(:checked):not(:disabled) + .download-library-settings__option-body { background: var(--surface-option-active); color: var(--text-primary); }
+    input:checked + .download-library-settings__option-body { background: var(--surface-option-active); color: var(--text-primary); }
+    input:checked + .download-library-settings__option-body .download-library-settings__check { opacity: 1; animation: download-library-check-appear var(--motion-fast) var(--ease-out) both; }
+    input:checked + .download-library-settings__option-body .download-library-settings__check path { stroke-dashoffset: 0; animation: download-library-check-draw var(--motion-slow) var(--ease-out) var(--motion-fast) both; }
+    input:focus-visible + .download-library-settings__option-body { outline: 2px solid var(--focus-ring-color); outline-offset: 2px; }
+    input:disabled + .download-library-settings__option-body { opacity: var(--control-disabled-opacity); }
+  }
+
+  &__option-body {
+    display: grid;
+    grid-template-columns: var(--ui-icon-size) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-6);
+    width: 100%;
+    min-height: 64px;
+    min-width: 0;
+    padding: var(--space-7) var(--space-8);
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+    transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+  }
+
+  &__name {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+
+    strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-size-body); line-height: var(--type-line-body); font-weight: var(--weight-regular); }
+    > span { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--type-size-caption); line-height: var(--type-line-caption); }
+  }
+
+  &__capacity { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-4); font-size: var(--downloads-storage-meta-size); line-height: var(--type-line-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  &__check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    color: var(--text-primary);
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-out);
+    svg { display: block; width: 12px; height: 12px; overflow: visible; }
+    path { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; stroke-dashoffset: 16; transition: stroke-dashoffset var(--motion-fast) var(--ease-out); }
+  }
+  &__warning { color: var(--caution); }
+  &__message { margin: 0; color: var(--text-secondary); font-size: var(--type-size-caption); line-height: var(--type-line-caption); }
+  &__error { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-6); color: var(--text-secondary); }
+  &__error p { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+}
+
+html.no-animations .download-library-settings__option-body { transition: none; }
+@media (prefers-reduced-motion: reduce) { .download-library-settings__option-body { transition: none; } }
+html.no-animations {
+  .download-library-settings__check, .download-library-settings__check path { animation: none !important; transition: none !important; }
+}
+
+// Keyframes também desenham o check quando a biblioteca já vem selecionada
+// na primeira renderização, sem depender de um estado anterior pintado.
+@keyframes download-library-check-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes download-library-check-draw {
+  from { stroke-dashoffset: 16; }
+  to { stroke-dashoffset: 0; }
+}

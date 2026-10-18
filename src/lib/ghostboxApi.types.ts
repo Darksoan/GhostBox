@@ -200,6 +200,17 @@ export type LudusaviBackupPreviewGame = {
   title: string;
 };
 
+export type DownloadDestination = {
+  path: string;
+  drive: string;
+  label: string;
+  kind: "fixed" | "removable" | "network" | "unknown";
+  isLibrary: boolean;
+  freeBytes: number;
+  totalBytes: number;
+  available: boolean;
+};
+
 export type LuaToolsDependenciesStatus = {
   steamFound: boolean;
   steamPath: string;

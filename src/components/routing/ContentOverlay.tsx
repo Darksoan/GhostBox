@@ -8,6 +8,7 @@ import type { Page, SteamAccountStats } from "../../types";
 import { getGameAppId } from "../../utils/image";
 import { mergeSteamAchievementsIntoGame } from "../../utils/steamAchievementMerge";
 import { isLocallyInstalledGame } from "../../utils/librarySourceFilter";
+import { enqueueDownload } from "../../lib/downloadManager";
 import {
   getLoadedGameModalModule,
   loadGameModalModule,
@@ -77,9 +78,10 @@ const LazyGameAchievementsPage = lazy(() =>
 
 interface ContentOverlayProps {
   page: Page;
+  onNavigateToDownloads: () => void;
 }
 
-export function ContentOverlay({ page }: ContentOverlayProps) {
+export function ContentOverlay({ page, onNavigateToDownloads }: ContentOverlayProps) {
   const appData = useAppData();
   const { appearance } = useSettings();
   const {
@@ -88,6 +90,7 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
     isGameModalExitPending,
     closeGame,
     openAchievements,
+    showToast,
   } = useOverlay();
 
   const animationsOff = appearance.reduceAllAnimations;
@@ -199,6 +202,15 @@ export function ContentOverlay({ page }: ContentOverlayProps) {
             isFavorite={isFavorite}
             onClose={closeGame}
             onQueueGame={appData.queueGame}
+            onDownloadGame={async (game) => {
+              try {
+                if (!await enqueueDownload(game)) return;
+                closeGame();
+                onNavigateToDownloads();
+              } catch (error) {
+                showToast("Downloads", String(error), "error");
+              }
+            }}
             onRemoveGame={appData.requestRemoveGame}
             onToggleFavorite={appData.toggleFavoriteGame}
             onPlayGame={appData.handlePlayGame}

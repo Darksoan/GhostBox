@@ -584,6 +584,8 @@ public class SteamKitPocRunner
             DownloadedChunks = depotResult.DownloadedChunks,
             ChunkTotal = totalChunks,
             DownloadedBytes = depotResult.DownloadedBytes,
+            BytesWritten = depotResult.DownloadedBytes,
+            WriteSpeedBytesPerSecond = 0,
             BytesTotal = totalBytes,
             FailedFiles = depotResult.FailedFiles,
             FailedChunks = depotResult.FailedChunks,
@@ -691,6 +693,9 @@ public class SteamKitPocRunner
         long downloadedChunks = 0;
         long downloadedBytes = 0;
         long networkDownloadedBytes = 0;
+        long writtenBytes = 0;
+        long lastWrittenBytes = 0;
+        double lastWriteSampleSeconds = 0;
         int downloadedFiles = 0;
         int failedFiles = 0;
         int failedChunks = 0;
@@ -1189,12 +1194,14 @@ public class SteamKitPocRunner
                         downloadedChunks++;
                         downloadedBytes += chunk.UncompressedLength;
                         networkDownloadedBytes += chunk.UncompressedLength;
+                        writtenBytes += written;
 
                         var elapsedMs = stopwatch.ElapsedMilliseconds;
                         if (elapsedMs - lastProgressEmitAtMs >= 1000)
                         {
                             lastProgressEmitAtMs = elapsedMs;
                             var networkElapsedSec = networkStopwatch?.Elapsed.TotalSeconds ?? 0;
+                            var writeElapsedSec = networkElapsedSec - lastWriteSampleSeconds;
                             progressUpdate = new ProgressEvent
                             {
                                 Type = "progress",
@@ -1205,12 +1212,20 @@ public class SteamKitPocRunner
                                 ChunkTotal = totalChunks,
                                 BytesDownloaded = (ulong)Interlocked.Read(ref downloadedBytes),
                                 BytesTotal = totalBytes,
+                                // Bytes já validados na retomada também estão em
+                                // disco; só o delta de escritas NOVAS mede a taxa.
+                                BytesWritten = (ulong)Interlocked.Read(ref downloadedBytes),
+                                WriteSpeedBytesPerSecond = writeElapsedSec > 0
+                                    ? (ulong)((writtenBytes - lastWrittenBytes) / writeElapsedSec)
+                                    : 0,
                                 SpeedBytesPerSecond = networkElapsedSec > 0
                                     ? (ulong)(networkDownloadedBytes / networkElapsedSec)
                                     : 0,
                                 FailedFiles = Volatile.Read(ref failedFiles),
                                 FailedChunks = Volatile.Read(ref failedChunks)
                             };
+                            lastWrittenBytes = writtenBytes;
+                            lastWriteSampleSeconds = networkElapsedSec;
                         }
                     }
 
@@ -1745,6 +1760,8 @@ public class ProgressEvent
     public ulong BytesDownloaded { get; set; }
     public ulong BytesTotal { get; set; }
     public ulong SpeedBytesPerSecond { get; set; }
+    public ulong? BytesWritten { get; set; }
+    public ulong? WriteSpeedBytesPerSecond { get; set; }
     public int FileCount { get; set; }
     public ulong ChunkCount { get; set; }
     public ulong TotalBytes { get; set; }

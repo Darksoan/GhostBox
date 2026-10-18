@@ -28,3 +28,8 @@ export function formatStorageSize(bytes: number): string {
 export function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`;
 }
+
+export function formatGigabytes(bytes: number, locale = "pt-BR"): string {
+  const value = Number.isFinite(bytes) ? Math.max(0, bytes) / 1024 ** 3 : 0;
+  return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} GB`;
+}

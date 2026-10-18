@@ -1840,6 +1840,23 @@ pub(crate) fn read_steam_library_paths(steam_path: &str) -> Vec<String> {
     paths
 }
 
+/// Seleção de destino: somente caminhos declarados no VDF, sem inventar a
+/// raiz da Steam como fallback. A cópia de config é autoritativa quando existe.
+pub(crate) fn read_registered_steam_library_paths(steam_path: &str) -> Vec<String> {
+    let root = std::path::Path::new(steam_path);
+    for candidate in [root.join("config/libraryfolders.vdf"), steamapps_path(root).join("libraryfolders.vdf")] {
+        let Ok(contents) = std::fs::read_to_string(candidate) else { continue; };
+        let mut paths: Vec<String> = Vec::new();
+        for (_, path) in parse_libraryfolders_indexed(&contents) {
+            let Some(valid) = normalize_steam_root_path(&path) else { continue; };
+            let key = |value: &str| value.replace('/', "\\").trim_end_matches('\\').to_lowercase();
+            if !paths.iter().any(|existing| key(existing) == key(&valid)) { paths.push(valid); }
+        }
+        return paths;
+    }
+    Vec::new()
+}
+
 /// `(indice do VDF, path)` na ordem declarada. Lê `config/libraryfolders.vdf`
 /// (autoritativo) primeiro e faz merge com `steamapps/libraryfolders.vdf`.
 pub(crate) fn read_steam_library_paths_ordered(steam_path: &str) -> Vec<(i64, String)> {
@@ -2451,6 +2468,41 @@ mod default_library_tests {
         assert_eq!(parsed[0].0, 0);
         assert_eq!(parsed[1].0, 1);
         assert!(parsed[1].1.contains("SteamLibrary"));
+    }
+
+    #[test]
+    fn registered_libraries_do_not_invent_a_steam_root_without_a_vdf() {
+        let steam = unique_root("registered-no-vdf");
+        std::fs::create_dir_all(steam.join("steamapps")).unwrap();
+        assert!(super::read_registered_steam_library_paths(&steam.to_string_lossy()).is_empty());
+        // Outros fluxos continuam com o fallback legado; só a seleção é estrita.
+        assert!(!super::read_steam_library_paths(&steam.to_string_lossy()).is_empty());
+        std::fs::remove_dir_all(steam).unwrap();
+    }
+
+    #[test]
+    fn registered_libraries_use_the_authoritative_vdf_without_adding_unlisted_paths() {
+        let steam = unique_root("registered-authoritative");
+        let secondary = steam.join("Secondary");
+        write_libraries(&steam, &secondary, false);
+        std::fs::create_dir_all(steam.join("config")).unwrap();
+        let vdf = format!("\"libraryfolders\"\n{{\n\t\"1\"\n\t{{\n\t\t\"path\"\t\t\"{}\"\n\t}}\n}}\n", escape(&secondary));
+        std::fs::write(steam.join("config/libraryfolders.vdf"), vdf).unwrap();
+        let paths = super::read_registered_steam_library_paths(&steam.to_string_lossy());
+        assert_eq!(paths, vec![secondary.to_string_lossy().to_string()]);
+        std::fs::remove_dir_all(steam).unwrap();
+    }
+
+    #[test]
+    fn registered_libraries_support_the_steamapps_vdf_and_empty_config_does_not_fall_back() {
+        let steam = unique_root("registered-steamapps");
+        let secondary = steam.join("Secondary");
+        write_libraries(&steam, &secondary, false);
+        assert_eq!(super::read_registered_steam_library_paths(&steam.to_string_lossy()).len(), 2);
+        std::fs::create_dir_all(steam.join("config")).unwrap();
+        std::fs::write(steam.join("config/libraryfolders.vdf"), "\"libraryfolders\"\n{\n}\n").unwrap();
+        assert!(super::read_registered_steam_library_paths(&steam.to_string_lossy()).is_empty());
+        std::fs::remove_dir_all(steam).unwrap();
     }
 
     #[test]

@@ -16,6 +16,7 @@ import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
 import { useOverlay, type AchievementsViewState } from "./context/OverlayContext";
 import { useSettings } from "./context/settings";
 import { ghostboxApi } from "./lib/ghostboxApi";
+import { startDownloadManager } from "./lib/downloadManager";
 import { onAppNavigateToSettingsTab, resolveProfileAccess } from "./lib/appNavigation";
 import {
   getTrayHiddenNotificationCopy,
@@ -129,6 +130,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   } = useAppNavigation();
 
   useAuthSessionToast();
+  useEffect(() => startDownloadManager(), []);
 
   // The profile belongs to the signed-in account: signing out from inside it
   // falls back to home, and its history entries go too so Back cannot return
@@ -681,6 +683,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
               steamPathModalLoading={steamPathModalLoading}
               setSteamPathModalLoading={setSteamPathModalLoading}
               onNavigateToCatalogue={() => handleNavigate("catalogue")}
+              onNavigateToDownloads={() => handleNavigate("downloads")}
               steamProfile={appData.steamProfile}
               isPremium={isPremium}
             />

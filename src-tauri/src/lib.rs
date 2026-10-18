@@ -25,6 +25,7 @@ mod backup;
 mod catalogue;
 mod catalogue_cache;
 mod cdndownload;
+mod download_storage;
 mod chunk_index;
 mod cloud_save;
 mod ghostbox_library;
@@ -1100,6 +1101,12 @@ pub fn run() {
             steam::steam_scan_library,
             steam::steam_is_game_installed,
             steam::steam_restart,
+            cdndownload::cdndownload_default_dir,
+            download_storage::downloads_list_destinations,
+            cdndownload::cdndownload_download_game,
+            cdndownload::cdndownload_cancel_game,
+            cdndownload::cdndownload_delete_output_dir,
+            cdndownload::cdndownload_register_library,
             game_launch,
             playtime::game_get_playtimes,
             ghostbox_library::ghostbox_library_register_steam_game,

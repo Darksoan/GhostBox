@@ -25,6 +25,43 @@ static ACTIVE_DOWNLOAD_PROCESSES: OnceLock<Mutex<HashMap<String, u32>>> = OnceLo
 static CANCELLED_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static DOWNLOAD_WORKER: OnceLock<Mutex<Option<DownloadWorker>>> = OnceLock::new();
 static DEPOT_SIZE_CACHE: OnceLock<Mutex<HashMap<PathBuf, DepotSizeCacheEntry>>> = OnceLock::new();
+// O protocolo do worker tem um único stdout: dois consumidores misturariam
+// respostas de depots diferentes. Mantém a exclusão também durante o preparo.
+static DOWNLOAD_GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+struct ActiveDownloadGuard(String);
+
+// Se o IPC falhar no meio de um comando, não reutilize um worker que ainda
+// pode estar emitindo a resposta anterior no stdout compartilhado.
+struct WorkerCommandGuard(bool);
+
+impl Drop for WorkerCommandGuard {
+    fn drop(&mut self) {
+        if self.0 {
+            shutdown_download_worker();
+        }
+    }
+}
+
+impl Drop for ActiveDownloadGuard {
+    fn drop(&mut self) {
+        clear_active_download_process(&self.0);
+        let _ = take_download_cancelled(&self.0);
+    }
+}
+
+fn download_byte_budget(full_download: bool, downloaded: u64) -> Option<u64> {
+    if full_download {
+        None // Zero no protocolo significa sem limite, não download concluído.
+    } else {
+        Some(STEAM_BOOTSTRAP_BYTES.saturating_sub(downloaded))
+    }
+}
+
+fn depot_failed(result: &serde_json::Value) -> bool {
+    result.get("Type").and_then(|value| value.as_str()) == Some("error")
+        || result.get("FailedFiles").and_then(|value| value.as_u64()).unwrap_or(0) > 0
+}
 
 #[derive(Clone)]
 struct DepotSizeCacheEntry {
@@ -423,10 +460,8 @@ fn resolve_depots(
     let mut depots: Vec<ResolvedDepot> = candidates
         .into_iter()
         .filter(|depot_id| {
-            let oslist = public
-                .and_then(|app| app.depot(*depot_id))
-                .and_then(|depot| depot.oslist.as_deref());
-            crate::steam_pics::depot_runs_on_windows(oslist)
+            public.and_then(|app| app.depot(*depot_id))
+                .is_none_or(crate::steam_pics::depot_matches_download_config)
         })
         .filter_map(|depot_id| {
             pick_depot_manifest(steam_path, depot_id, pinned.get(&depot_id).copied(), public)
@@ -900,13 +935,11 @@ fn delete_output_dir_blocking(
     let app_id = app_id.trim();
     let downloads_root = downloads_root.trim();
     let output_dir = output_dir.trim();
-    if app_id.is_empty() || downloads_root.is_empty() {
+    if app_id.parse::<u32>().ok().filter(|id| *id > 0).is_none() || downloads_root.is_empty() {
         return Err("Download removal requires an app ID and a downloads root.".to_string());
     }
 
-    // O progresso offline (conquistas do emulador Goldberg/GSE) morre junto
-    // com o jogo em qualquer caminho de remocao abaixo — best-effort.
-    crate::goldberg::remove_game_saves(app_id);
+    // Remover uma instalação não autoriza apagar saves/conquistas do usuário.
 
     let root_path = Path::new(downloads_root);
     if output_dir.is_empty() {
@@ -943,6 +976,16 @@ fn delete_output_dir_blocking(
         .canonicalize()
         .map_err(|error| error.to_string())?;
     ensure_inside_downloads_root(&canonical_root, &canonical_output)?;
+
+    // Contenção sozinha permitiria apagar `steamapps` ou `common` inteiros a
+    // partir de uma tarefa antiga/corrompida. Só aceitamos UMA instalação.
+    let common = canonical_root.join("steamapps").join("common").canonicalize().ok();
+    let legacy = canonical_root.join(app_id).canonicalize().ok();
+    let is_installation = common.as_deref().is_some_and(|path| canonical_output.parent() == Some(path))
+        || legacy.as_deref() == Some(canonical_output.as_path());
+    if !is_installation {
+        return Err("Download removal requires a single game installation directory.".to_string());
+    }
 
     std::fs::remove_dir_all(&canonical_output).map_err(|error| error.to_string())?;
     // Sem os arquivos, o ACF apontaria para uma instalacao inexistente e o Steam
@@ -1365,8 +1408,20 @@ pub async fn cdndownload_download_game(
     game_title: Option<String>,
     steam_path: Option<String>,
     allow_stale: Option<bool>,
+    full_download: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    let _download_gate = DOWNLOAD_GATE
+        .try_lock()
+        .map_err(|_| "Outro download ainda está em execução. Aguarde o encerramento.".to_string())?;
+    if app_id.parse::<u32>().ok().filter(|id| *id > 0).is_none() {
+        return Err("AppID inválido.".to_string());
+    }
+    if !Path::new(downloads_root.trim()).is_absolute() {
+        return Err("Escolha uma pasta de downloads absoluta.".to_string());
+    }
     let _ = take_download_cancelled(&app_id);
+    let _active_guard = ActiveDownloadGuard(app_id.clone());
+    let full_download = full_download.unwrap_or(false);
     let parallel_chunks = MAX_PARALLEL_CHUNKS;
     let steam_path = match steam_path {
         Some(path) => path,
@@ -1441,21 +1496,32 @@ pub async fn cdndownload_download_game(
             Ok((fetched, errors)) => {
                 fetch_errors = errors;
                 let mut installed: Vec<String> = Vec::new();
-                for (depot_id, manifest) in &fetched {
-                    let path = depot_manifest_path(&steam_path, *depot_id, manifest.manifest_id);
+                let mut installed_manifests = std::collections::BTreeMap::new();
+                for (depot_id, manifest) in fetched {
+                    // Uma alternativa antiga do pacote não substitui um manifest
+                    // já disponível em disco. A versão pública sempre tem prioridade.
+                    if resolved_depots.iter().any(|depot| {
+                        depot.depot_id == depot_id
+                            && depot.public_gid != Some(manifest.manifest_id)
+                            && depot_manifest_path(&steam_path, depot_id, depot.manifest_id).is_file()
+                    }) {
+                        continue;
+                    }
+                    let path = depot_manifest_path(&steam_path, depot_id, manifest.manifest_id);
                     if let Some(parent) = path.parent() {
                         let _ = std::fs::create_dir_all(parent);
                     }
                     match std::fs::write(&path, &manifest.bytes) {
                         Ok(()) => {
-                            installed.push(format!("{depot_id}_{}.manifest", manifest.manifest_id))
+                            installed.push(format!("{depot_id}_{}.manifest", manifest.manifest_id));
+                            installed_manifests.insert(depot_id, manifest);
                         }
                         Err(error) => {
                             fetch_errors.push(format!("depot {depot_id}: {error}"));
                         }
                     }
                 }
-                apply_fetched_manifests(&mut resolved_depots, &fetched);
+                apply_fetched_manifests(&mut resolved_depots, &installed_manifests);
                 app.emit(
                     "download-progress",
                     serde_json::json!({
@@ -1644,6 +1710,7 @@ pub async fn cdndownload_download_game(
             continue;
         }
 
+        let mut worker_command = WorkerCommandGuard(true);
         write_worker_command(
             &worker_stdin,
             &serde_json::json!({
@@ -1674,8 +1741,12 @@ pub async fn cdndownload_download_game(
                 }));
             };
             match value.get("Type").and_then(|event_type| event_type.as_str()) {
-                Some("depot-inspected") => break value,
+                Some("depot-inspected") => {
+                    worker_command.0 = false;
+                    break value;
+                }
                 Some("error") | Some("cancelled") => {
+                    worker_command.0 = false;
                     clear_active_download_process(&app_id);
                     return Ok(value);
                 }
@@ -1715,10 +1786,11 @@ pub async fn cdndownload_download_game(
     // dentro do arquivo diz, e os pares vieram de `resolve_depots`.
     crate::chunk_index::adopt_orphan(&library_root, &install_path, &app_id, &depots);
 
-    for ((depot_id, manifest_id), depot_size) in depots.iter().zip(depot_sizes.iter()) {
-        let remaining_bootstrap_bytes =
-            STEAM_BOOTSTRAP_BYTES.saturating_sub(bootstrap_downloaded_bytes);
-        if remaining_bootstrap_bytes == 0 {
+    for (depot_index, ((depot_id, manifest_id), depot_size)) in
+        depots.iter().zip(depot_sizes.iter()).enumerate()
+    {
+        let byte_budget = download_byte_budget(full_download, bootstrap_downloaded_bytes);
+        if byte_budget == Some(0) {
             bootstrap_is_partial = true;
             break;
         }
@@ -1751,6 +1823,8 @@ pub async fn cdndownload_download_game(
                 "DepotId": depot_id,
                 "ManifestId": manifest_id,
                 "OutputDir": depot_output,
+                "DepotIndex": depot_index + 1,
+                "DepotTotal": depots.len(),
             }),
         )
         .ok();
@@ -1763,9 +1837,10 @@ pub async fn cdndownload_download_game(
             "SteamPath": steam_path,
             "OutputDir": depot_output,
             "ParallelChunks": parallel_chunks,
-            "MaxDownloadBytes": remaining_bootstrap_bytes,
+            "MaxDownloadBytes": byte_budget.unwrap_or(0),
             "MaxFileOvershootBytes": STEAM_BOOTSTRAP_OVERSHOOT_BYTES,
         });
+        let mut worker_command = WorkerCommandGuard(true);
         write_worker_command(&worker_stdin, &command)?;
 
         let depot_result = loop {
@@ -1794,6 +1869,16 @@ pub async fn cdndownload_download_game(
                 .unwrap_or("")
                 .to_string();
 
+            value["AppId"] = serde_json::json!(app_id);
+            value["DepotIndex"] = serde_json::json!(depot_index + 1);
+            value["DepotTotal"] = serde_json::json!(depots.len());
+            // O DTO do worker serializa TotalBytes=0 em status/cancelamento.
+            // A partir do plano, todos os eventos carregam o total do JOGO.
+            value["TotalBytes"] = serde_json::json!(total_download_bytes);
+            if let Some(written) = value.get("BytesWritten").and_then(|bytes| bytes.as_u64()) {
+                value["BytesWritten"] = serde_json::json!(bootstrap_downloaded_bytes.saturating_add(written));
+            }
+
             if event_type == "progress" {
                 let current_depot_bytes = value
                     .get("BytesDownloaded")
@@ -1813,6 +1898,7 @@ pub async fn cdndownload_download_game(
                 event_type.as_str(),
                 "complete" | "partial-complete" | "error" | "cancelled"
             ) {
+                worker_command.0 = false;
                 break value;
             }
         };
@@ -1831,6 +1917,10 @@ pub async fn cdndownload_download_game(
             .get("Type")
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default();
+        if event_type == "cancelled" {
+            return Ok(serde_json::json!({ "Type": "cancelled", "AppId": app_id, "TotalBytes": total_download_bytes }));
+        }
+        let failed = depot_failed(&depot_result);
         bootstrap_downloaded_bytes = bootstrap_downloaded_bytes.saturating_add(
             depot_result
                 .get("DownloadedBytes")
@@ -1839,7 +1929,7 @@ pub async fn cdndownload_download_game(
         );
         bootstrap_is_partial |= event_type == "partial-complete";
         all_results.push(depot_result);
-        if bootstrap_is_partial {
+        if bootstrap_is_partial || failed {
             break;
         }
     }
@@ -1850,7 +1940,7 @@ pub async fn cdndownload_download_game(
     // faria o Steam anunciar "fully installed" sobre arquivos faltando.
     let any_depot_failed = all_results
         .iter()
-        .any(|result| result.get("Type").and_then(|value| value.as_str()) == Some("error"));
+        .any(depot_failed);
 
     bootstrap_is_partial |= all_results.len() < depots.len();
 
@@ -1889,13 +1979,16 @@ pub async fn cdndownload_download_game(
     }
 
     Ok(serde_json::json!({
-        "Type": "complete",
+        "Type": if any_depot_failed { "error" } else { "complete" },
+        "Message": if any_depot_failed { "Um ou mais arquivos falharam. Tente retomar o download." } else { "" },
         "Depots": all_results,
         "DepotCount": all_results.len(),
         "InstallDir": install_dir,
         "OutputDir": install_path_text,
         "BootstrapBytes": bootstrap_downloaded_bytes,
         "Partial": bootstrap_is_partial,
+        "TotalBytes": total_download_bytes,
+        "BytesWritten": if !any_depot_failed && !bootstrap_is_partial { Some(total_download_bytes) } else { None },
         "SteamIntegration": steam_integration,
     }))
 }
@@ -2050,6 +2143,36 @@ fn finalize_steam_integration(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_download_has_no_bootstrap_limit() {
+        assert_eq!(super::download_byte_budget(true, 0), None);
+        assert_eq!(super::download_byte_budget(true, 100 * 1024 * 1024), None);
+        assert_eq!(super::download_byte_budget(false, 0), Some(super::STEAM_BOOTSTRAP_BYTES));
+        assert_eq!(super::download_byte_budget(false, super::STEAM_BOOTSTRAP_BYTES), Some(0));
+    }
+
+    #[test]
+    fn failed_files_prevent_installation_completion() {
+        assert!(super::depot_failed(&serde_json::json!({ "Type": "error" })));
+        assert!(super::depot_failed(&serde_json::json!({ "Type": "complete", "FailedFiles": 1 })));
+        assert!(!super::depot_failed(&serde_json::json!({ "Type": "complete", "FailedFiles": 0 })));
+    }
+
+    #[test]
+    fn deletion_refuses_library_containers_and_only_removes_one_installation() {
+        let root = temp_root("single-install-removal");
+        let install = make_game_dir(&root, "Target", 8, true);
+        let neighbor = make_game_dir(&root, "Keep", 8, true);
+        let root_text = root.to_string_lossy().into_owned();
+        assert!(super::delete_output_dir_blocking("10", &root_text, &root.join("steamapps").to_string_lossy()).is_err());
+        assert!(super::delete_output_dir_blocking("10", &root_text, &root.join("steamapps/common").to_string_lossy()).is_err());
+        assert!(install.exists());
+        assert!(super::delete_output_dir_blocking("10", &root_text, &install.to_string_lossy()).unwrap());
+        assert!(!install.exists());
+        assert!(neighbor.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     use super::{
         cached_depot_size, ensure_inside_downloads_root, install_library_for_app,
         is_safe_bootstrap_orphan, migrate_nested_library, normalize_library_root,
@@ -2463,6 +2586,8 @@ mod tests {
             manifest_gid: branch_manifests.get("public").copied().unwrap_or_default(),
             size: 0,
             oslist: oslist.map(str::to_string),
+            language: None,
+            low_violence: false,
             branch_manifests,
         }
     }
@@ -2555,6 +2680,66 @@ mod tests {
 
         let ids: Vec<u32> = depots.iter().map(|depot| depot.depot_id).collect();
         assert_eq!(ids, vec![367521, 367524]);
+    }
+
+    #[test]
+    fn left4dead2_plan_does_not_require_optional_language_or_low_violence_manifests() {
+        let lua = (551..=559).map(|id| format!("setManifestid({id},\"1\")\n")).collect::<String>();
+        let root = fake_steam("550", &lua, &[]);
+        let mut depots = vec![
+            depot(551, None, &[("public", 1)]),
+            depot(552, None, &[("public", 1)]),
+            depot(553, Some("macos"), &[("public", 1)]),
+            depot(554, Some("linux"), &[("public", 1)]),
+        ];
+        let mut censored = depot(555, None, &[("public", 1)]);
+        censored.low_violence = true;
+        depots.push(censored);
+        for (id, language) in [(556, "french"), (557, "german"), (558, "spanish"), (559, "russian")] {
+            let mut localized = depot(id, None, &[("public", 1)]);
+            localized.language = Some(language.to_string());
+            depots.push(localized);
+        }
+        let app = public_app(depots);
+        let resolved = resolve_depots(&root.to_string_lossy(), "550", Some(&app));
+        let _ = std::fs::remove_dir_all(root);
+        assert_eq!(resolved.iter().map(|depot| depot.depot_id).collect::<Vec<_>>(), vec![551, 552]);
+    }
+
+    #[test]
+    fn an_available_package_fallback_remains_stale_until_explicitly_accepted() {
+        let mut depots = vec![super::ResolvedDepot {
+            depot_id: 367521, manifest_id: 1, public_gid: Some(PUBLIC_GID), tier: DepotTier::LuaPinned,
+        }];
+        let fetched = BTreeMap::from([(367521, crate::manifest_sources::FetchedManifest {
+            manifest_id: OLD_GID, bytes: vec![1],
+        })]);
+        apply_fetched_manifests(&mut depots, &fetched);
+        assert_eq!(depots[0].manifest_id, OLD_GID);
+        assert!(!depots[0].is_current());
+    }
+
+    #[test]
+    #[ignore = "depende das fontes reais; não instala nem baixa arquivos do jogo"]
+    fn real_left4dead2_manifests_resolve_without_a_local_depotcache() {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        runtime.block_on(async {
+            let app = crate::steam_pics::fetch_steamcmd_app("550").await.expect("PICS indisponível");
+            let lua = (551..=559).map(|id| format!("setManifestid({id},\"1\")\n")).collect::<String>();
+            let root = fake_steam("550", &lua, &[]);
+            let mut depots = resolve_depots(&root.to_string_lossy(), "550", Some(&app));
+            let targets = manifest_fetch_targets(&root.to_string_lossy(), &depots);
+            let _ = std::fs::remove_dir_all(root);
+            assert_eq!(targets.iter().map(|(id, _)| *id).collect::<Vec<_>>(), vec![551, 552]);
+            let (fetched, errors) = crate::manifest_sources::fetch_manifest_files("550", &targets, Some(&app)).await.unwrap();
+            for (id, _) in &targets {
+                assert!(fetched.get(id).is_some_and(|manifest| !manifest.bytes.is_empty()), "Depot {id} ausente: {errors:?}");
+            }
+            apply_fetched_manifests(&mut depots, &fetched);
+            for depot in depots {
+                println!("Depot {}: manifest {}, versão pública: {}", depot.depot_id, depot.manifest_id, depot.is_current());
+            }
+        });
     }
 
     #[test]

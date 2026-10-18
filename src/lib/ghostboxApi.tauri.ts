@@ -1,6 +1,8 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { DownloadDestination } from "./ghostboxApi.types";
 import { clearStoredAccountData } from "../utils/storage";
 import type {
   AddGameResult,
@@ -861,6 +863,52 @@ export const ghostboxApi = {
         error: "Não foi possível remover o jogo da Biblioteca.",
       },
     );
+  },
+
+  downloadDepotGame(
+    appId: string,
+    downloadsRoot: string,
+    gameTitle: string,
+    allowStale = true,
+  ): Promise<Record<string, unknown>> {
+    // Não ocultar falhas do invoke: a fila precisa distinguir erro de conclusão.
+    return invoke("cdndownload_download_game", {
+      appId, downloadsRoot, gameTitle, allowStale, fullDownload: true,
+    });
+  },
+
+  cancelDepotGame(appId: string): Promise<boolean> {
+    return invoke("cdndownload_cancel_game", { appId });
+  },
+
+  getDefaultDownloadsDir(): Promise<string> {
+    return invoke("cdndownload_default_dir");
+  },
+
+  listDownloadDestinations(steamPath?: string, selectedPath?: string): Promise<DownloadDestination[]> {
+    return invoke("downloads_list_destinations", { steamPath, selectedPath });
+  },
+
+  async selectDownloadsDir(): Promise<string | null> {
+    const path = await open({ directory: true, multiple: false, title: "Downloads" });
+    return typeof path === "string" ? path : null;
+  },
+
+  revealDownloadFolder(outputDir: string): Promise<void> {
+    return revealItemInDir(outputDir);
+  },
+
+  deleteDownloadOutputDir(appId: string, downloadsRoot: string, outputDir: string): Promise<boolean> {
+    return invoke("cdndownload_delete_output_dir", { appId, downloadsRoot, outputDir });
+  },
+
+  registerDownloadLibrary(appId: string, downloadsRoot: string): Promise<Record<string, unknown>> {
+    return invoke("cdndownload_register_library", { appId, downloadsRoot });
+  },
+
+  async onDownloadProgress(callback: (payload: Record<string, unknown>) => void): Promise<() => void> {
+    // O manager aguarda o listener ANTES de iniciar a fila: não perde depot-plan.
+    return listen<Record<string, unknown>>("download-progress", (event) => callback(event.payload));
   },
 
   /**

@@ -1,6 +1,6 @@
 import type { GhostBoxGame } from "../data";
 
-export type Page = "home" | "catalogue" | "library" | "favorites" | "settings" | "profile" | "notifications";
+export type Page = "home" | "catalogue" | "library" | "favorites" | "settings" | "profile" | "notifications" | "downloads";
 
 export type StartupPage = Extract<Page, "home" | "catalogue" | "profile">;
 

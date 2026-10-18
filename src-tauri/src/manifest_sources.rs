@@ -488,6 +488,7 @@ pub async fn fetch_manifest_files_from(
         .collect();
 
     let mut found: BTreeMap<u32, FetchedManifest> = BTreeMap::new();
+    let mut fallback: BTreeMap<u32, FetchedManifest> = BTreeMap::new();
     let mut errors: Vec<String> = Vec::new();
 
     for source in sources {
@@ -526,9 +527,38 @@ pub async fn fetch_manifest_files_from(
         }
 
         harvest_manifests_from_zip(&zip, &wanted_names, &mut found, &mut errors, source.name);
+        // A fonte pode conter uma build anterior à pública. Guarde apenas os
+        // manifests declarados pelo próprio Lua do pacote, sem interromper a
+        // busca da versão atual nas outras fontes. O chamador mantém a recusa
+        // stale-manifest até o usuário optar explicitamente pela versão antiga.
+        let fallback_names = fallback_manifest_names(app_id, &zip, wanted, public);
+        harvest_manifests_from_zip(&zip, &fallback_names, &mut fallback, &mut errors, source.name);
     }
 
+    for (depot_id, manifest) in fallback {
+        found.entry(depot_id).or_insert(manifest);
+    }
     Ok((found, errors))
+}
+
+fn fallback_manifest_names(
+    app_id: &str,
+    zip: &[u8],
+    wanted: &[(u32, u64)],
+    public: Option<&PublicApp>,
+) -> std::collections::HashMap<String, (u32, u64)> {
+    let pins = lua_from_zip(app_id, zip)
+        .map(|lua| parse_set_manifest_ids(&lua))
+        .unwrap_or_default();
+    wanted.iter().filter_map(|(depot_id, wanted_gid)| {
+        // Sem referência pública não podemos classificar uma alternativa como
+        // antiga; nesse caso continue exigindo exatamente o manifest solicitado.
+        public?.public_gid(*depot_id)?;
+        let manifest_id = *pins.get(depot_id)?;
+        (manifest_id != *wanted_gid).then(|| (
+            format!("{depot_id}_{manifest_id}.manifest"), (*depot_id, manifest_id),
+        ))
+    }).collect()
 }
 
 /// Quantos pins do `.lua` dentro do pacote batem com o gid publico do PICS.
@@ -728,6 +758,8 @@ mod tests {
                     manifest_gid: PUBLIC_GID,
                     size: 5231995691,
                     oslist: Some("windows".into()),
+                    language: None,
+                    low_violence: false,
                     branch_manifests: BTreeMap::from([("public".to_string(), PUBLIC_GID)]),
                 },
                 PublicDepot {
@@ -735,6 +767,8 @@ mod tests {
                     manifest_gid: 6809616861563627670,
                     size: 5284750173,
                     oslist: Some("macos".into()),
+                    language: None,
+                    low_violence: false,
                     branch_manifests: BTreeMap::from([("public".to_string(), 6809616861563627670)]),
                 },
             ],
@@ -929,6 +963,37 @@ mod tests {
 
         assert_eq!(package_score(&current, APP_ID, Some(&app)), 1);
         assert_eq!(package_score(&stale, APP_ID, Some(&app)), 0);
+    }
+
+    #[test]
+    fn unavailable_public_manifest_can_use_the_version_declared_in_the_package() {
+        let app = public_app();
+        let zip = zip_with_lua_and_manifests(
+            &format!("setManifestid(367521,\"{OLD_GID}\")"),
+            &[
+                (&format!("367521_{OLD_GID}.manifest"), b"available build"),
+                ("367521_111.manifest", b"unrelated build"),
+                ("9_9.manifest", b"other depot"),
+            ],
+        );
+        let names = fallback_manifest_names(APP_ID, &zip, &[(367521, PUBLIC_GID)], Some(&app));
+        let mut found = BTreeMap::new();
+        let mut errors = Vec::new();
+        harvest_manifests_from_zip(&zip, &names, &mut found, &mut errors, "Sushi");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[&367521].manifest_id, OLD_GID);
+        assert_eq!(found[&367521].bytes, b"available build");
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn fallback_requires_public_reference_and_a_pin_for_the_requested_depot() {
+        let app = public_app();
+        assert!(fallback_manifest_names(APP_ID, &stale_zip(), &[(367521, PUBLIC_GID)], None).is_empty());
+        assert!(fallback_manifest_names(APP_ID, &stale_zip(), &[(999, PUBLIC_GID)], Some(&app)).is_empty());
+        assert!(fallback_manifest_names(APP_ID, &current_zip(), &[(367521, PUBLIC_GID)], Some(&app)).is_empty());
+        let unpinned = zip_with_lua_and_manifests("addappid(367521)", &[("367521_111.manifest", b"unlisted")]);
+        assert!(fallback_manifest_names(APP_ID, &unpinned, &[(367521, PUBLIC_GID)], Some(&app)).is_empty());
     }
 
     #[test]

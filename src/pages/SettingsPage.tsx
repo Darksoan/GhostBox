@@ -1,15 +1,15 @@
 import {
   Check,
-  ChevronDown,
   Bell,
   Crown,
+  Download,
   FolderCog,
   Gauge,
   Link2,
   SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useId, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useSettings, type AppearanceSettings } from "../context/settings";
 import { normalizeToastDuration, toastDurationOptions } from "../utils/toastDuration";
 import { SubscriptionBackdrop } from "../components/subscription/SubscriptionBackdrop";
@@ -19,11 +19,9 @@ import {
   HiddenProfileGamesSection,
   SteamVisibilitySection,
 } from "../features/settings/ConnectionsPanel";
-import {
-  handleListboxKeyDown,
-  handleListboxTriggerKeyDown,
-} from "../utils/listboxNavigation";
+import { SettingsDropdown } from "../components/ui/SettingsDropdown";
 import { TempFilesSection } from "../features/settings/TempFilesSection";
+import { DownloadSettingsSection } from "../features/settings/DownloadSettingsSection";
 import type { GhostBoxGame } from "../data";
 import type { BackupSettings, StartupPage, StartupSettings, SteamProfile } from "../types";
 import {
@@ -194,6 +192,11 @@ export const settingsTabs: SettingsTab[] = [
     options: [],
   },
   {
+    id: "downloads",
+    icon: Download,
+    options: [],
+  },
+  {
     id: "subscription",
     icon: Crown,
     options: [],
@@ -345,15 +348,11 @@ export function SettingsPage({
       {activeTab.id === "subscription" && <SubscriptionBackdrop />}
       <article
         className={`settings-panel${
-          activeTab.id === "subscription" || activeTab.id === "connections"
-            ? " settings-panel--bare"
-            : ""
+          activeTab.id === "subscription" ? " settings-panel--bare" : ""
         }`}
       >
         <div className="settings-panel__body">
-          {activeTab.id !== "subscription" &&
-            activeTab.id !== "connections" &&
-            !showingHiddenGames && (
+          {activeTab.id !== "subscription" && !showingHiddenGames && (
             <div className="settings-page__header">
               <div>
                 <h3>{t(settingsTabLabelKeys[activeTab.id])}</h3>
@@ -381,6 +380,7 @@ export function SettingsPage({
             <HiddenProfileGamesSection searchQuery={searchQuery} onClearSearchQuery={onClearSearchQuery} />
           )}
           {activeTab.id === "performance" && <TempFilesSection />}
+          {activeTab.id === "downloads" && <DownloadSettingsSection steamPath={steamPath} />}
           {activeTab.id === "connections" && <ConnectionsPanel />}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans
@@ -754,87 +754,6 @@ function SettingRow({ option, enterDelay }: { option: SettingOption; enterDelay?
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function SettingsDropdown({
-  option,
-}: {
-  option: SettingOption & {
-    choices: Array<{ label: string; value: string }>;
-    onChange: (value: string) => void;
-  };
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
-
-  const activeChoice = option.choices.find((choice) => choice.value === option.value) ?? option.choices[0];
-
-  const handleSelect = (value: string) => {
-    option.onChange(value);
-    setOpen(false);
-  };
-
-  return (
-    <div className={`settings-dropdown settings-page-dropdown ${open ? "settings-dropdown--open" : ""}`} ref={rootRef}>
-      <button
-        type="button"
-        className="settings-dropdown__trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => handleListboxTriggerKeyDown(event, setOpen)}
-      >
-        <span>{activeChoice.label}</span>
-        <ChevronDown size={14} />
-      </button>
-
-      {open && (
-        <div
-          className="settings-dropdown__menu"
-          role="listbox"
-          aria-label={option.label}
-          onKeyDown={(event) => handleListboxKeyDown(event, setOpen)}
-        >
-          {option.choices
-            .filter((choice) => choice.value !== option.value)
-            .map((choice) => (
-            <button
-              key={choice.value}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className={`settings-dropdown__option ${choice.value === option.value ? "settings-dropdown__option--active" : ""}`}
-              onClick={() => handleSelect(choice.value)}
-            >
-              <span>{choice.label}</span>
-            </button>
-            ))}
-        </div>
-      )}
     </div>
   );
 }

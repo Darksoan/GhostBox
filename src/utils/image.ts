@@ -433,13 +433,11 @@ export function withoutHeroImageSources(sources: string[]) {
   return uniqueSources(sources).filter((source) => !isHeroImageSource(source));
 }
 
-export function gameHeroSources(game: GhostBoxGame) {
-  const appId = getGameAppId(game);
-  const screenshotSources = new Set(game.screenshots ?? []);
+export function steamLibraryHeroSources(appId: string) {
   // Alta densidade primeiro (`library_hero_2x` = 3840×1240, `library_hero` =
   // 1920×620): o banner percorre a lista em ordem e fixa na primeira que
   // carrega, então 1x na frente travava a arte na resolução baixa para sempre.
-  const steamHeroSources = [
+  return [
     `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
     `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero_2x.jpg`,
@@ -449,6 +447,12 @@ export function gameHeroSources(game: GhostBoxGame) {
     `https://shared.steamstatic.com/store_item_assets/steam/apps/${appId}/library_hero.jpg`,
     `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg`,
   ];
+}
+
+export function gameHeroSources(game: GhostBoxGame) {
+  const appId = getGameAppId(game);
+  const screenshotSources = new Set(game.screenshots ?? []);
+  const steamHeroSources = steamLibraryHeroSources(appId);
   const customHeroSources = [
     game.heroUrl,
     game.hero,

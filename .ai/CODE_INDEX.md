@@ -14,13 +14,16 @@ Relationships:
 
 Add completion: immediate `queueGame` result emits the single “Jogo adicionado” toast; no installation-finished event/listener. `sanitize_ghostbox_library_game` drops the obsolete persisted `installationPending` marker.
 
-Standalone CDN downloader (not called by add-game):
+Native downloads (explicit action; not called by add-game):
+`GameModal.onDownloadGame` -> `ContentOverlay` -> `enqueueDownload` in `src/lib/downloadManager.ts`; `DownloadsPage` + `DownloadDetailsModal` subscribe through `useDownloadTasks`. Queue/history use `ghostbox:download-tasks:v1`; interrupted tasks hydrate paused. The manager waits for the progress listener before starting, runs one task at a time and waits for cancellation before resume/delete.
+`ghostboxApi.downloadDepotGame` invokes `cdndownload_download_game` with `fullDownload: true` (unlimited worker budget). The optional default `false` preserves the separate bootstrap budget; neither is invoked by library addition. Download commands are registered in `src-tauri/src/lib.rs`.
+Destination settings: `SettingsPage` tab `downloads` -> `DownloadSettingsSection` -> `downloads_list_destinations` in `src-tauri/src/download_storage.rs` (Steam libraries + fixed/removable/mapped-network disks + custom path, Win32 capacity/label, no directory creation). `useDownloadsDirectory` shares `ghostbox:downloads-dir:v1` changes between settings and the downloads panel; existing tasks retain their own roots.
 `finalize_steam_integration` -> `src-tauri/src/cdndownload.rs` (around 1880)
 `write_partial_appmanifest` (`StateFlags=2`) / `write_appmanifest` (`StateFlags=4`), `register_library_folder` -> `src-tauri/src/steam_appmanifest.rs`
 Steam scan reads partial ACF as `status: queued` -> `parse_app_manifest` in `src-tauri/src/steam.rs`.
 Chunk resume/validation state -> `src-tauri/src/chunk_index.rs`
 
-`cdndownload_download_game` in `src-tauri/src/cdndownload.rs` retains its standalone worker protocol; file budget -> `ProduceChunksAsync` in `sidecars/steamkit-poc/SteamKitPocRunner.cs`. Not part of library addition.
+`cdndownload_download_game` in `src-tauri/src/cdndownload.rs` retains its worker protocol; file budget -> `ProduceChunksAsync` in `sidecars/steamkit-poc/SteamKitPocRunner.cs`. Zero budget means unlimited. Per-depot completion is not game completion; failed files prevent the final installed ACF. The manager emits `ghostbox:download-installation-changed` to refresh the library after completion/removal/registration repair.
 Install-dir reconciliation: `resolve_effective_install_dir` in `cdndownload.rs` (pending ACF vs canonical `resolve_install_dir`); on divergence keeps the folder with more bytes, removes the loser only if safe bootstrap orphan (`is_safe_bootstrap_orphan`: has `.ghostbox-chunks.json`, no `.exe`).
 Canonical folder names: `sanitize_install_dir`/`transliterate_to_ascii` in `steam_appinfo.rs` (ASCII-safe, deterministic; mojibake-proof).
 UI errors are simple: `simplifyAddGameError` in `src/context/AppDataContext.tsx` (only item-blocked / Steam-missing / already-installed pass through; rest use the generic fallback).

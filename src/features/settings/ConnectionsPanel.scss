@@ -2,26 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 4px;
-}
-
-.connections-panel__header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-
-  h2 {
-    margin: 0;
-    font-size: var(--type-size-body-emphasis);
-    font-weight: var(--weight-semibold);
-    color: var(--text-strong);
-  }
-
-  p {
-    margin: 0;
-    font-size: var(--type-size-compact);
-    color: var(--text-tertiary);
-  }
 }
 
 .connections-panel__list {

@@ -736,6 +736,7 @@ interface ModalActionsProps {
   onPlay: (game: GhostBoxGame) => void;
   onRemove: (game: GhostBoxGame) => void;
   onQueue: (game: GhostBoxGame) => void;
+  onDownload?: (game: GhostBoxGame) => void;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onOpenBackupOptions: () => void;
 }
@@ -756,6 +757,7 @@ const ModalActions = memo(function ModalActions({
   onPlay,
   onRemove,
   onQueue,
+  onDownload,
   onToggleFavorite,
   onOpenBackupOptions,
 }: ModalActionsProps) {
@@ -804,6 +806,18 @@ const ModalActions = memo(function ModalActions({
         </div>
       ) : isAdded ? (
         <>
+          {!isLocallyInstalled && onDownload && (
+            <button
+              type="button"
+              className="button button--primary modal__add-button modal__download-button"
+              onClick={() => onDownload(game)}
+              disabled={isRemoving}
+            >
+              <span className="button__label modal__action-label">
+                {language === "en" ? "Download" : "Baixar"}
+              </span>
+            </button>
+          )}
           <button
             type="button"
             className="button button--primary modal__remove-button modal__remove-button--icon-only"
@@ -914,6 +928,7 @@ interface GameModalProps {
   isFavorite: boolean;
   onClose: () => void;
   onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
+  onDownloadGame?: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
   onToggleFavorite: (game: GhostBoxGame) => void;
   onPlayGame: (game: GhostBoxGame) => void | Promise<void>;
@@ -933,6 +948,7 @@ export function GameModal({
   isFavorite,
   onClose,
   onQueueGame,
+  onDownloadGame,
   onRemoveGame,
   onToggleFavorite,
   onPlayGame,
@@ -1708,6 +1724,7 @@ export function GameModal({
                   onPlay={onPlayGame}
                   onRemove={onRemoveGame}
                   onQueue={onQueueGame}
+                  onDownload={onDownloadGame}
                   onToggleFavorite={onToggleFavorite}
                   onOpenBackupOptions={handleOpenBackupOptions}
                 />

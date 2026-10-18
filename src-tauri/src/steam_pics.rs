@@ -89,6 +89,8 @@ pub struct PublicDepot {
     /// `config.oslist` do PICS. `None` = depot compartilhado, serve em qualquer
     /// SO; e por isso que ausencia nunca pode ser tratada como "nao e windows".
     pub oslist: Option<String>,
+    pub language: Option<String>,
+    pub low_violence: bool,
     /// branch -> gid. Guardado inteiro porque `build_id_for_manifest` precisa
     /// achar o branch de um manifest que pode nao ser o publico.
     pub branch_manifests: BTreeMap<String, u64>,
@@ -134,6 +136,16 @@ pub fn depot_runs_on_windows(oslist: Option<&str>) -> bool {
                     .any(|entry| entry.eq_ignore_ascii_case("windows"))
         }
     }
+}
+
+/// O ACF gerado pelo downloader instala a edição padrão em inglês. Pacotes
+/// de outros idiomas e low-violence são alternativas, não dependências dela.
+pub fn depot_matches_download_config(depot: &PublicDepot) -> bool {
+    depot_runs_on_windows(depot.oslist.as_deref())
+        && !depot.low_violence
+        && depot.language.as_deref().is_none_or(|language| {
+            language.trim().is_empty() || language.trim().eq_ignore_ascii_case("english")
+        })
 }
 
 /// `buildid` do branch em que `manifest_gid` foi publicado para `depot_id`.
@@ -372,6 +384,12 @@ pub fn parse_depots_json(depots: &serde_json::Value, source: PicsSource) -> Opti
             .and_then(|config| config.get("oslist"))
             .and_then(|value| json_text(Some(value)))
             .filter(|list| !list.trim().is_empty());
+        let language = depot.get("config")
+            .and_then(|config| config.get("language"))
+            .and_then(|value| json_text(Some(value)));
+        let low_violence = depot.get("config")
+            .and_then(|config| config.get("lowviolence"))
+            .is_some_and(|value| value.as_bool() == Some(true) || json_u64(Some(value)) == 1);
 
         let mut branch_manifests = BTreeMap::new();
         if let Some(manifests) = depot.get("manifests").and_then(|value| value.as_object()) {
@@ -398,6 +416,8 @@ pub fn parse_depots_json(depots: &serde_json::Value, source: PicsSource) -> Opti
             manifest_gid,
             size,
             oslist,
+            language,
+            low_violence,
             branch_manifests,
         });
     }
@@ -478,6 +498,24 @@ mod tests {
         assert!(app.depot(367521).is_some());
         // `baselanguages` e `branches` moram no mesmo objeto e nao sao depots.
         assert!(app.depots.iter().all(|depot| depot.depot_id != 0));
+    }
+
+    #[test]
+    fn download_config_excludes_alternative_languages_and_censored_depots() {
+        let mut payload = sample_payload();
+        for (config, expected) in [
+            (serde_json::json!({}), true),
+            (serde_json::json!({"oslist":"windows", "language":"english"}), true),
+            (serde_json::json!({"language":"french"}), false),
+            (serde_json::json!({"lowviolence":"1"}), false),
+            (serde_json::json!({"lowviolence":true}), false),
+            (serde_json::json!({"lowviolence":"0"}), true),
+            (serde_json::json!({"oslist":"linux", "language":"english"}), false),
+        ] {
+            payload["data"]["367520"]["depots"]["367521"]["config"] = config;
+            let app = parse_steamcmd_payload(&payload, "367520").unwrap();
+            assert_eq!(depot_matches_download_config(app.depot(367521).unwrap()), expected);
+        }
     }
 
     #[test]

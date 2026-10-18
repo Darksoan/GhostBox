@@ -2794,6 +2794,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [applySteamLibraryScanResult, markInitialLoadStepComplete]);
 
   useEffect(() => {
+    let disposed = false;
+    const refresh = () => {
+      void ghostboxApi.scanSteamLibrary().then((result) => {
+        if (!disposed && result?.status === "ok") applySteamLibraryScanResult(result);
+      }).catch((error) => console.warn("[GhostBox] Download library refresh failed", error));
+    };
+    window.addEventListener("ghostbox:download-installation-changed", refresh);
+    return () => {
+      disposed = true;
+      window.removeEventListener("ghostbox:download-installation-changed", refresh);
+    };
+  }, [applySteamLibraryScanResult]);
+
+  useEffect(() => {
     let cancelled = false;
     const steamId = steamProfile?.steamId ?? null;
     const PLAYTIME_BOOT_TIMEOUT_MS = 12_000;

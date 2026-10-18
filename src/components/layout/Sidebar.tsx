@@ -24,6 +24,7 @@ import { useCachedImageSources, useLoadableImageSource } from "../../hooks/useCa
 import { preloadGameModalAssetsThrottled, preloadProfileImages } from "../../utils/image";
 import { searchCollectionGames } from "../../utils/collectionSearch";
 import { ghostboxApi } from "../../lib/ghostboxApi";
+import { useActiveDownloadCount } from "../../hooks/useDownloadTasks";
 import { resolveSidebarIdentity } from "../../lib/sidebarIdentity";
 import { isSteamTitlePlaceholder } from "../../utils/steamTitles";
 import { getSteamLevelColorTier } from "../../utils/steamLevel";
@@ -230,6 +231,8 @@ export const Sidebar = memo(function Sidebar({
     preloadGameIconUrls(visibleSidebarIconGames);
   }, [visibleSidebarIconGames]);
 
+  const activeDownloadCount = useActiveDownloadCount();
+
   const toggleCollectionExpanded = useCallback((collectionId: string) => {
     setExpandedCollectionIds((current) => {
       const next = new Set(current);
@@ -294,6 +297,9 @@ export const Sidebar = memo(function Sidebar({
                   >
                     <SidebarNavigationIcon icon={Icon} />
                     <span className="sidebar__menu-item-label">{t(labelKey)}</span>
+                    {id === "downloads" && activeDownloadCount > 0 && (
+                      <strong>{activeDownloadCount > 99 ? "99+" : activeDownloadCount}</strong>
+                    )}
                   </button>
                 </li>
               ))}
