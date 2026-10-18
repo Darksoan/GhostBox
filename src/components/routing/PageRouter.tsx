@@ -407,6 +407,7 @@ export function PageRouter({
               openAtLogin: false,
               startMinimized: false,
               minimizeToTray: false,
+              openSteamOnGameLaunch: true,
               gameDatabaseUpdateIntervalHours: 24,
             }
           }

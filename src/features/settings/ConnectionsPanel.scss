@@ -50,7 +50,7 @@
 
   p {
     margin: 0;
-    font-size: var(--type-size-caption);
+    font-size: var(--settings-option-description-size);
     color: var(--text-tertiary);
     line-height: 1.4;
   }
@@ -60,7 +60,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--type-size-caption);
+  font-size: var(--settings-option-description-size);
   font-weight: var(--weight-regular);
   color: var(--text-tertiary);
 }
@@ -268,7 +268,7 @@
 
   span {
     color: var(--text-tertiary);
-    font-size: var(--type-size-caption);
+    font-size: var(--settings-option-description-size);
     line-height: 1.4;
   }
 }
@@ -674,7 +674,7 @@ html.no-animations {
 
   span {
     margin: 0;
-    font-size: var(--type-size-caption);
+    font-size: var(--settings-option-description-size);
     color: var(--text-tertiary);
     line-height: 1.4;
   }

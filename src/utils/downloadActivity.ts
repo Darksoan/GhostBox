@@ -1,4 +1,4 @@
-export const DOWNLOAD_HISTORY_SECONDS = 60;
+export const DOWNLOAD_HISTORY_SECONDS = 15;
 export type DownloadSpeedSample = { time: number; speed: number };
 
 export function appendDownloadSpeedSample(samples: DownloadSpeedSample[], time: number, speed: number) {

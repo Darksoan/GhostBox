@@ -1944,6 +1944,19 @@ pub async fn cdndownload_download_game(
 
     bootstrap_is_partial |= all_results.len() < depots.len();
 
+    if !any_depot_failed && !bootstrap_is_partial {
+        // Persistencia nativa: atalhos e bandeja nao leem o historico do WebView.
+        if let Err(error) = crate::local_launch::register_download(
+            &app,
+            &app_id,
+            game_title.as_deref().unwrap_or_default(),
+            &install_dir,
+            &install_path,
+        ) {
+            eprintln!("Could not register downloaded game: {error}");
+        }
+    }
+
     let steam_integration = if any_depot_failed {
         serde_json::json!({
             "Status": "skipped",

@@ -185,7 +185,7 @@ describe("Downloads and selected storage", () => {
   });
 
   it("uses a two-column layout with compact rows and canonical page spacing", () => {
-    expect(declarations(".downloads-page__layout")).toMatchObject({ display: "grid", "grid-template-columns": "minmax(0, 1fr) minmax(260px, 32%)" });
+    expect(declarations(".downloads-page__layout")).toMatchObject({ display: "grid", "grid-template-columns": "minmax(0, 1fr) minmax(360px, 32%)" });
     expect(declarations(".downloads-hero")).toMatchObject({ "grid-template-columns": "minmax(0, 1fr)", border: "0", "box-shadow": "none" });
     expect(declarations(".downloads-hero")).not.toHaveProperty("border-bottom");
     expect(declarations(".downloads-page.content-section--full")).toMatchObject({ "flex-shrink": "0", "min-height": "100%", height: "auto", padding: "var(--space-8) var(--space-10) var(--page-bottom-space)" });
@@ -205,18 +205,22 @@ describe("Downloads and selected storage", () => {
     expect(declarations(".downloads-activity__metric")).toMatchObject({ color: "var(--text-primary)" });
   });
 
-  it("uses Reicon Play to start, Pause to pause or resume, and Xmark to remove", () => {
+  it("uses Reicon Play to start or resume, Pause only to pause, and Xmark to remove", () => {
     state.tasks = [task("10", "paused", { bytesDownloaded: 0 })];
     expect(render()).toContain('class="reicon downloads-hero__play-icon"');
     expect(render()).toContain('aria-label="Baixar"');
     state.tasks = [task("10", "downloading")];
     expect(render()).toContain('class="reicon downloads-hero__pause-icon"');
     state.tasks = [task("10", "paused")];
-    expect(render()).toContain('class="reicon downloads-hero__pause-icon"');
+    expect(render()).toContain('class="reicon downloads-hero__play-icon"');
+    expect(render()).not.toContain('class="reicon downloads-hero__pause-icon"');
     expect(render()).toContain('aria-label="Retomar"');
     expect(render()).toContain('class="reicon downloads-hero__remove-icon"');
     expect(render()).not.toContain("lucide-pause");
     expect(render()).not.toContain("lucide-play");
+    state.tasks = [task("10", "error")];
+    expect(render()).toContain('class="reicon downloads-hero__play-icon"');
+    expect(render()).toContain('aria-label="Tentar novamente"');
   });
 
   it("hides the downloaded label only during download, uses 14px metrics and primary progress fills", () => {
@@ -251,12 +255,34 @@ describe("Downloads and selected storage", () => {
       write: [{ time: 1000, speed: 2048 }, { time: 2000, speed: 4096 }] };
     const markup = render();
     expect(markup.match(/class="downloads-activity__chart-line"/g)).toHaveLength(1);
-    expect(markup).toContain("Velocidade de download nos últimos 60 segundos");
+    expect(markup).toContain("Velocidade de download nos últimos 15 segundos");
     expect(markup).toContain("1.00 KB/s");
     expect(markup).not.toContain("Velocidade de escrita em disco");
     expect(markup).not.toContain("Escrever");
     expect(markup).not.toContain("Gravados");
     expect(markup).toContain("1.00 KB / 4.00 KB");
+  });
+
+  it("shows current speed, peak and average without a download action label in the speed panel", () => {
+    state.tasks = [task("10", "downloading")];
+    state.activity = { taskId: "10", queuedAt: state.tasks[0].queuedAt, title: "Game 10",
+      download: [{ time: 1000, speed: 1024 }, { time: 2000, speed: 3072 }], write: [] };
+    const panel = render().split('class="downloads-panel downloads-activity"')[1].split("</section>")[0];
+    expect(panel).toContain("1.00 KB/s");
+    expect(panel).toContain("Pico: 3.00 KB/s");
+    expect(panel).toContain("Média: 2.00 KB/s");
+    expect(panel).not.toContain("Baixar");
+    expect(panel).not.toContain("lucide-arrow-down-to-line");
+  });
+
+  it("extends the graph behind the metrics with a soft fade and readable foreground text", () => {
+    expect(declarations(".downloads-activity__metric")).toMatchObject({ position: "relative", isolation: "isolate", "grid-template-columns": "minmax(0, 1fr)" });
+    const chart = declarations(".downloads-activity__chart");
+    expect(chart).toMatchObject({ position: "absolute", inset: "0", width: "100%", height: "100%", "pointer-events": "none", "z-index": "0" });
+    expect(chart["mask-image"]).toContain("linear-gradient(to right, transparent");
+    for (const selector of [".downloads-activity__value", ".downloads-activity__summary"]) {
+      expect(declarations(selector)).toMatchObject({ position: "relative", "z-index": "1" });
+    }
   });
 
   it("keeps the download curve visible while paused and reports zero current speed", () => {
@@ -286,14 +312,16 @@ describe("Downloads and selected storage", () => {
   });
 
   it("shows only the storage destination selected in settings, not the active download's drive", () => {
-    const selected: DownloadDestination = { path: "E:\\Games", drive: "E:", label: "Selected disk", kind: "fixed", isLibrary: true, available: true, freeBytes: 1024, totalBytes: 4096 };
+    const selected: DownloadDestination = { path: "E:\\Games", drive: "E:", label: "Selected disk", kind: "fixed", isLibrary: true, available: true, freeBytes: 192.31 * 1024 ** 3, totalBytes: 476.94 * 1024 ** 3 };
     state.destinations = [{ ...selected, path: "F:\\Other", drive: "F:", label: "Other disk" }, selected];
     state.tasks = [task("10", "downloading", { downloadsRoot: "F:\\Other" })];
     const markup = render();
-    expect(markup).toContain("Selected disk");
+    expect(markup).toContain("Selected disk (E:)");
     expect(markup).not.toContain("Selected disk · E:");
-    expect(markup).toContain("E:\\Games");
-    expect(markup).toContain("1.00 KB livres de 4.00 KB");
+    expect(markup).not.toContain('class="downloads-storage__path"');
+    expect(markup).toContain("192,31 GB livres de 476,94 GB");
+    expect(declarations(".downloads-storage__identity")).toMatchObject({ "justify-content": "space-between", "align-items": "baseline" });
+    expect(declarations(".downloads-storage__meter > span")).toMatchObject({ background: "var(--text-primary)" });
     expect(markup.match(/role="meter"/g)).toHaveLength(1);
     expect(markup).not.toContain("Other disk");
     expect(markup).not.toContain("F:\\Other");

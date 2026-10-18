@@ -2110,7 +2110,7 @@ fn parse_app_manifest(path: &std::path::Path) -> Option<serde_json::Value> {
     }))
 }
 
-fn scan_installed_steam_games(library_paths: &[String]) -> Vec<serde_json::Value> {
+pub(crate) fn scan_installed_steam_games(library_paths: &[String]) -> Vec<serde_json::Value> {
     let mut games = Vec::new();
     let mut seen = std::collections::HashSet::new();
 

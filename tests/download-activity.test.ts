@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appendDownloadSpeedSample, downloadSpeedChart } from "../src/utils/downloadActivity";
+import { DOWNLOAD_HISTORY_SECONDS, appendDownloadSpeedSample, downloadSpeedChart } from "../src/utils/downloadActivity";
 
 afterEach(() => vi.useRealTimers());
 
 describe("Download activity metrics", () => {
-  it("keeps a bounded minute of real samples, including zero speed", () => {
+  it("keeps a bounded 15-second window of real samples, including zero speed", () => {
     let samples: Array<{ time: number; speed: number }> = [];
     for (let second = 0; second < 120; second++) samples = appendDownloadSpeedSample(samples, second * 1000, second);
-    expect(samples).toHaveLength(60);
-    expect(samples[0].time).toBe(60_000);
+    expect(DOWNLOAD_HISTORY_SECONDS).toBe(15);
+    expect(samples).toHaveLength(15);
+    expect(samples[0].time).toBe(105_000);
     expect(appendDownloadSpeedSample(samples, 120_000, 0).at(-1)?.speed).toBe(0);
     expect(appendDownloadSpeedSample(samples, 300_000, 1)).toEqual([{ time: 300_000, speed: 1 }]);
   });
@@ -20,8 +21,8 @@ describe("Download activity metrics", () => {
     expect(downloadSpeedChart([{ time: 0, speed: Number.POSITIVE_INFINITY }]).line).toBe("");
   });
 
-  it("uses real timestamps on a fixed minute axis and computes peak and average", () => {
-    const chart = downloadSpeedChart([{ time: 0, speed: 100 }, { time: 30_000, speed: 200 }, { time: 60_000, speed: 0 }]);
+  it("uses real timestamps on a faster 15-second axis and computes peak and average", () => {
+    const chart = downloadSpeedChart([{ time: 0, speed: 100 }, { time: 7_500, speed: 200 }, { time: 15_000, speed: 0 }]);
     expect(chart.peak).toBe(200);
     expect(chart.average).toBe(100);
     expect(chart.line).toMatch(/^M0\.00,/);

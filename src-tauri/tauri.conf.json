@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "GhostBox",
-        "width": 1280,
+        "width": 1440,
         "height": 720,
-        "minWidth": 1024,
-        "minHeight": 600,
+        "minWidth": 1440,
+        "minHeight": 720,
         "resizable": true,
         "maximizable": true,
         "decorations": false,

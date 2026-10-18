@@ -4869,7 +4869,7 @@ html.no-animations {
     p {
       margin: 0;
       color: var(--text-tertiary);
-      font-size: var(--type-size-caption);
+      font-size: var(--settings-option-description-size);
       font-weight: var(--weight-regular);
     }
   }
@@ -5984,7 +5984,7 @@ html.no-animations {
     span {
       max-width: 62ch;
       color: var(--text-tertiary);
-      font-size: var(--type-size-compact);
+      font-size: var(--settings-option-description-size);
       font-weight: var(--weight-regular);
       line-height: var(--type-line-compact);
     }
@@ -6743,13 +6743,11 @@ html.no-animations {
     }
   }
 
-  /* Uma linha só: filtros à esquerda, ordenação à direita. `flex-wrap` é a
-     válvula de escape quando não cabe — a barra de filtros não pode rolar
-     (recortaria os painéis dos dropdowns, ver `.catalogue-filterbar`). */
+  /* Uma linha so no tamanho minimo nativo, sem recortar dropdowns. */
   &__toolbar {
     display: flex;
     min-width: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-4) var(--space-6);
@@ -7044,13 +7042,13 @@ html.no-animations {
    Sem `overflow` em nenhum eixo, de propósito: os painéis dos dropdowns são
    filhos absolutos e, pela spec, declarar `overflow-x` faz o `overflow-y`
    computar como `auto` mesmo escrito `visible` — a barra virava um scroller e
-   recortava o painel inteiro, que abria e não aparecia. Se as pílulas não
-   couberem, a linha quebra (ver `flex-wrap` na toolbar). */
+    recortava o painel inteiro, que abria e não aparecia. A janela nativa tem
+    largura minima para acomodar filtros e seletores sem quebra de linha. */
 .catalogue-filterbar {
   display: flex;
-  min-width: 0;
+  min-width: max-content;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-4);
 

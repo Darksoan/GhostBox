@@ -11,7 +11,7 @@
     margin-bottom: var(--space-6);
 
     h3 { margin: 0; color: var(--text-primary); font-size: var(--type-size-body); line-height: var(--type-line-body); font-weight: var(--weight-regular); }
-    p { margin: 0; color: var(--text-tertiary); font-size: var(--type-size-compact); line-height: var(--type-line-compact); }
+    p { margin: 0; color: var(--text-tertiary); font-size: var(--settings-option-description-size); line-height: var(--type-line-compact); }
   }
 
   &__grid {
@@ -59,7 +59,7 @@
     min-width: 0;
 
     strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-size-body); line-height: var(--type-line-body); font-weight: var(--weight-regular); }
-    > span { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--type-size-caption); line-height: var(--type-line-caption); }
+    > span { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--settings-option-description-size); line-height: var(--type-line-compact); }
   }
 
   &__capacity { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-4); font-size: var(--downloads-storage-meta-size); line-height: var(--type-line-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }

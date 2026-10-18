@@ -23,9 +23,9 @@
     color: var(--text-strong);
   }
 
-  p {
+    p {
     margin: 0;
-    font-size: var(--type-size-caption);
+      font-size: var(--settings-option-description-size);
     color: var(--text-tertiary);
   }
 }

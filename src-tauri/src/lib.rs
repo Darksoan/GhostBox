@@ -31,6 +31,7 @@ mod cloud_save;
 mod ghostbox_library;
 mod goldberg;
 mod image_cache;
+mod local_launch;
 mod luatools;
 mod luatools_bootstrap;
 mod ludusavi;
@@ -716,6 +717,21 @@ pub(crate) fn launch_game_from_value(
             "appId": "",
             "error": "AppId inválido."
         }));
+    }
+
+    // A preferencia e lida no backend para biblioteca, bandeja e atalhos.
+    if local_launch::direct_launch_enabled(&load_startup_settings(&app)) {
+        if let Some(local_game) = local_launch::resolve_ghostbox_game(&app, &game, &app_id) {
+            return Ok(match local_launch::launch(&app, local_game, &app_id) {
+                Ok(executable) => serde_json::json!({
+                    "success": true, "appId": app_id,
+                    "launchMethod": "direct", "executablePath": executable,
+                }),
+                Err(error) => serde_json::json!({
+                    "success": false, "appId": app_id, "error": error,
+                }),
+            });
+        }
     }
 
     // Launch overrides and arguments are intentionally no longer honored.

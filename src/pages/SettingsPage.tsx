@@ -380,7 +380,18 @@ export function SettingsPage({
             <HiddenProfileGamesSection searchQuery={searchQuery} onClearSearchQuery={onClearSearchQuery} />
           )}
           {activeTab.id === "performance" && <TempFilesSection />}
-          {activeTab.id === "downloads" && <DownloadSettingsSection steamPath={steamPath} />}
+          {activeTab.id === "downloads" && <>
+            <div className="settings-options">
+              <SettingRow option={{
+                label: t("downloads.openSteamOnGameLaunch"),
+                description: t("downloads.openSteamOnGameLaunchDescription"),
+                control: "toggle",
+                checked: startupSettings.openSteamOnGameLaunch !== false,
+                onToggle: (next) => onStartupSettingsChange({ openSteamOnGameLaunch: next }),
+              }} />
+            </div>
+            <DownloadSettingsSection steamPath={steamPath} />
+          </>}
           {activeTab.id === "connections" && <ConnectionsPanel />}
           {activeTab.id === "subscription" && (
             <SubscriptionPlans

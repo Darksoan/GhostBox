@@ -11,6 +11,7 @@ pub(crate) fn default_startup_settings() -> serde_json::Value {
         "openAtLogin": false,
         "startMinimized": false,
         "minimizeToTray": false,
+        "openSteamOnGameLaunch": true,
         "gameDatabaseUpdateIntervalHours": 24
     })
 }

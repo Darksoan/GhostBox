@@ -47,6 +47,8 @@ use crate::util::EmptyVecExt;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+mod binary;
+
 const USER_AGENT: &str = "discord(dot)gg/luatools";
 const MAX_PACKAGE_BYTES: usize = 64 * 1024 * 1024;
 const CONNECT_TIMEOUT_SECS: u64 = 5;
@@ -431,7 +433,7 @@ pub async fn best_package(app_id: &str, public: Option<&PublicApp>) -> Result<Ca
     best_package_from(app_id, DEFAULT_SOURCES, public).await
 }
 
-/// Um `.manifest` obtido de uma fonte de pacote.
+/// Um `.manifest` obtido de pacote ou de um arquivo direto.
 pub struct FetchedManifest {
     pub manifest_id: u64,
     pub bytes: Vec<u8>,
@@ -462,7 +464,117 @@ pub async fn fetch_manifest_files(
     wanted: &[(u32, u64)],
     public: Option<&PublicApp>,
 ) -> Result<(BTreeMap<u32, FetchedManifest>, Vec<String>), String> {
-    fetch_manifest_files_from(app_id, wanted, DEFAULT_SOURCES, public).await
+    let (mut found, mut errors) =
+        fetch_manifest_files_from(app_id, wanted, DEFAULT_SOURCES, public).await?;
+    // Consulte arquivos individuais antes de aceitar alternativas antigas dos zips.
+    // A URL usa exatamente o GID solicitado, nunca o pin antigo do Lua do mirror.
+    let missing: Vec<_> = wanted
+        .iter()
+        .copied()
+        .filter(|(depot, gid)| found.get(depot).is_none_or(|file| file.manifest_id != *gid))
+        .collect();
+    if !missing.is_empty() {
+        fetch_direct_manifests(app_id, &missing, &mut found, &mut errors).await?;
+    }
+    Ok((found, errors))
+}
+
+const DIRECT_MANIFEST_ROOT: &str = "https://raw.githubusercontent.com/steamtoolsapp/ManifestHub";
+
+fn direct_manifest_url(app_id: &str, depot_id: u32, manifest_id: u64) -> Result<String, String> {
+    if app_id.is_empty()
+        || !app_id.bytes().all(|byte| byte.is_ascii_digit())
+        || depot_id == 0
+        || manifest_id == 0
+    {
+        return Err("ManifestHub: identificadores invalidos".to_string());
+    }
+    Ok(format!(
+        "{DIRECT_MANIFEST_ROOT}/{app_id}/{depot_id}_{manifest_id}.manifest"
+    ))
+}
+
+async fn fetch_direct_manifest(
+    client: &reqwest::Client,
+    url: &str,
+    depot_id: u32,
+    manifest_id: u64,
+) -> Result<FetchedManifest, String> {
+    let mut response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| describe_request_error(&error))?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    if response
+        .content_length()
+        .is_some_and(|size| size > MAX_MANIFEST_ENTRY_BYTES as u64)
+    {
+        return Err("manifest excede o limite de tamanho".to_string());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| describe_request_error(&error))?
+    {
+        if chunk.len() > MAX_MANIFEST_ENTRY_BYTES.saturating_sub(bytes.len()) {
+            return Err("manifest excede o limite de tamanho".to_string());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    binary::validate(&bytes, depot_id, manifest_id)
+        .map_err(|error| format!("manifest invalido: {error}"))?;
+    Ok(FetchedManifest { manifest_id, bytes })
+}
+
+async fn fetch_direct_manifests(
+    app_id: &str,
+    wanted: &[(u32, u64)],
+    found: &mut BTreeMap<u32, FetchedManifest>,
+    errors: &mut Vec<String>,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("GhostBox Manifest Fetcher")
+        .https_only(true)
+        .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|error| error.to_string())?;
+    // Limite de quatro requisicoes simultaneas, inclusive para jogos com muitos DLCs.
+    let mut tasks = tokio::task::JoinSet::new();
+    let mut pending = wanted.iter().copied();
+    loop {
+        while tasks.len() < 4 {
+            let Some((depot_id, manifest_id)) = pending.next() else {
+                break;
+            };
+            let url = direct_manifest_url(app_id, depot_id, manifest_id)?;
+            let client = client.clone();
+            tasks.spawn(async move {
+                (
+                    depot_id,
+                    manifest_id,
+                    fetch_direct_manifest(&client, &url, depot_id, manifest_id).await,
+                )
+            });
+        }
+        let Some(result) = tasks.join_next().await else {
+            break;
+        };
+        match result {
+            Ok((depot_id, _, Ok(manifest))) => {
+                found.insert(depot_id, manifest);
+            }
+            Ok((depot_id, gid, Err(error))) => errors.push(format!(
+                "ManifestHub direto: depot {depot_id}, manifest {gid}: {error}"
+            )),
+            Err(error) => errors.push(format!("ManifestHub direto: {error}")),
+        }
+    }
+    Ok(())
 }
 
 pub async fn fetch_manifest_files_from(
@@ -532,7 +644,13 @@ pub async fn fetch_manifest_files_from(
         // busca da versão atual nas outras fontes. O chamador mantém a recusa
         // stale-manifest até o usuário optar explicitamente pela versão antiga.
         let fallback_names = fallback_manifest_names(app_id, &zip, wanted, public);
-        harvest_manifests_from_zip(&zip, &fallback_names, &mut fallback, &mut errors, source.name);
+        harvest_manifests_from_zip(
+            &zip,
+            &fallback_names,
+            &mut fallback,
+            &mut errors,
+            source.name,
+        );
     }
 
     for (depot_id, manifest) in fallback {
@@ -550,15 +668,21 @@ fn fallback_manifest_names(
     let pins = lua_from_zip(app_id, zip)
         .map(|lua| parse_set_manifest_ids(&lua))
         .unwrap_or_default();
-    wanted.iter().filter_map(|(depot_id, wanted_gid)| {
-        // Sem referência pública não podemos classificar uma alternativa como
-        // antiga; nesse caso continue exigindo exatamente o manifest solicitado.
-        public?.public_gid(*depot_id)?;
-        let manifest_id = *pins.get(depot_id)?;
-        (manifest_id != *wanted_gid).then(|| (
-            format!("{depot_id}_{manifest_id}.manifest"), (*depot_id, manifest_id),
-        ))
-    }).collect()
+    wanted
+        .iter()
+        .filter_map(|(depot_id, wanted_gid)| {
+            // Sem referência pública não podemos classificar uma alternativa como
+            // antiga; nesse caso continue exigindo exatamente o manifest solicitado.
+            public?.public_gid(*depot_id)?;
+            let manifest_id = *pins.get(depot_id)?;
+            (manifest_id != *wanted_gid).then(|| {
+                (
+                    format!("{depot_id}_{manifest_id}.manifest"),
+                    (*depot_id, manifest_id),
+                )
+            })
+        })
+        .collect()
 }
 
 /// Quantos pins do `.lua` dentro do pacote batem com o gid publico do PICS.
@@ -698,27 +822,41 @@ async fn fetch_package_once(
             } else {
                 format!("{}: {}", source.name, describe_request_error(&error))
             }
-        }).map_err(|message| (message, true))?;
+        })
+        .map_err(|message| (message, true))?;
 
     let status = response.status().as_u16();
     if status == source.unavailable_code {
-        return Err((format!("{}: pacote não encontrado nesta fonte", source.name), false));
+        return Err((
+            format!("{}: pacote não encontrado nesta fonte", source.name),
+            false,
+        ));
     }
     if status != source.success_code {
-        return Err((if status >= 500 {
-            format!("{}: falha temporária do serviço (HTTP {status}); tente novamente mais tarde", source.name)
-        } else {
-            format!("{}: HTTP {status}", source.name)
-        }, status >= 500));
+        return Err((
+            if status >= 500 {
+                format!(
+                    "{}: falha temporária do serviço (HTTP {status}); tente novamente mais tarde",
+                    source.name
+                )
+            } else {
+                format!("{}: HTTP {status}", source.name)
+            },
+            status >= 500,
+        ));
     }
 
-    let bytes = response.bytes().await.map_err(|error| {
-        if error.is_timeout() {
-            format!("{}: tempo limite excedido durante o download", source.name)
-        } else {
-            format!("{}: falha ao receber o pacote ({error})", source.name)
-        }
-    }).map_err(|message| (message, true))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| {
+            if error.is_timeout() {
+                format!("{}: tempo limite excedido durante o download", source.name)
+            } else {
+                format!("{}: falha ao receber o pacote ({error})", source.name)
+            }
+        })
+        .map_err(|message| (message, true))?;
 
     if bytes.len() > MAX_PACKAGE_BYTES {
         return Err((format!("{}: pacote excede 64 MB", source.name), false));
@@ -731,8 +869,9 @@ async fn fetch_package_once(
             }
             Ok(bytes.to_vec())
         }
-        PackageFormat::RawLua => wrap_raw_lua_in_zip(source.name, app_id, &bytes)
-            .map_err(|message| (message, false)),
+        PackageFormat::RawLua => {
+            wrap_raw_lua_in_zip(source.name, app_id, &bytes).map_err(|message| (message, false))
+        }
     }
 }
 
@@ -989,11 +1128,26 @@ mod tests {
     #[test]
     fn fallback_requires_public_reference_and_a_pin_for_the_requested_depot() {
         let app = public_app();
-        assert!(fallback_manifest_names(APP_ID, &stale_zip(), &[(367521, PUBLIC_GID)], None).is_empty());
-        assert!(fallback_manifest_names(APP_ID, &stale_zip(), &[(999, PUBLIC_GID)], Some(&app)).is_empty());
-        assert!(fallback_manifest_names(APP_ID, &current_zip(), &[(367521, PUBLIC_GID)], Some(&app)).is_empty());
-        let unpinned = zip_with_lua_and_manifests("addappid(367521)", &[("367521_111.manifest", b"unlisted")]);
-        assert!(fallback_manifest_names(APP_ID, &unpinned, &[(367521, PUBLIC_GID)], Some(&app)).is_empty());
+        assert!(
+            fallback_manifest_names(APP_ID, &stale_zip(), &[(367521, PUBLIC_GID)], None).is_empty()
+        );
+        assert!(
+            fallback_manifest_names(APP_ID, &stale_zip(), &[(999, PUBLIC_GID)], Some(&app))
+                .is_empty()
+        );
+        assert!(fallback_manifest_names(
+            APP_ID,
+            &current_zip(),
+            &[(367521, PUBLIC_GID)],
+            Some(&app)
+        )
+        .is_empty());
+        let unpinned =
+            zip_with_lua_and_manifests("addappid(367521)", &[("367521_111.manifest", b"unlisted")]);
+        assert!(
+            fallback_manifest_names(APP_ID, &unpinned, &[(367521, PUBLIC_GID)], Some(&app))
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1122,6 +1276,92 @@ mod tests {
         assert!(validate_source_url(&plain, "http://198.51.100.7/1"));
         assert!(!validate_source_url(&plain, "ftp://example.test/1.zip"));
         assert!(!validate_source_url(&plain, "nao e uma url"));
+    }
+
+    #[test]
+    fn direct_manifest_urls_require_numeric_ids_and_the_exact_gid() {
+        assert_eq!(
+            direct_manifest_url("601150", 940500, 7413960716303235231).unwrap(),
+            "https://raw.githubusercontent.com/steamtoolsapp/ManifestHub/601150/940500_7413960716303235231.manifest"
+        );
+        for app_id in ["", "../main", "601150/other", "601150?x"] {
+            assert!(direct_manifest_url(app_id, 940500, 123).is_err());
+        }
+        assert!(direct_manifest_url("601150", 0, 123).is_err());
+        assert!(direct_manifest_url("601150", 940500, 0).is_err());
+    }
+
+    #[test]
+    #[ignore = "depende de rede"]
+    fn real_direct_manifests_match_the_requested_depots() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let wanted = [(940500, 7413960716303235231), (941952, 7836766670222491839)];
+            let mut found = BTreeMap::new();
+            let mut errors = Vec::new();
+            fetch_direct_manifests("601150", &wanted, &mut found, &mut errors)
+                .await
+                .unwrap();
+            assert!(errors.is_empty(), "{errors:?}");
+            for (depot, gid) in wanted {
+                assert_eq!(found.get(&depot).unwrap().manifest_id, gid);
+            }
+        });
+    }
+
+    #[test]
+    fn direct_manifest_transport_rejects_errors_and_invalid_bodies() {
+        use std::io::{Read, Write};
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        // Mesmo HTTP 200 nao torna HTML, um arquivo truncado ou um ID errado valido.
+        let mut valid = Vec::new();
+        for (magic, section) in [
+            (0x71F617D0u32, &[][..]),
+            (0x1F4812BE, &[8, 42, 16, 123][..]),
+            (0x1B81B817, &[][..]),
+        ] {
+            valid.extend(magic.to_le_bytes());
+            valid.extend((section.len() as u32).to_le_bytes());
+            valid.extend(section);
+        }
+        valid.extend(0x32C415ABu32.to_le_bytes());
+        for (status, body, gid, declared_size, expected) in [
+            ("200 OK", valid.as_slice(), 123, valid.len(), true),
+            ("200 OK", valid.as_slice(), 124, valid.len(), false),
+            ("200 OK", &b"<html>error</html>"[..], 123, 18, false),
+            ("200 OK", &valid[..10], 123, 10, false),
+            ("404 Not Found", &b""[..], 123, 0, false),
+            ("200 OK", &b""[..], 123, MAX_MANIFEST_ENTRY_BYTES + 1, false),
+        ] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}/manifest", listener.local_addr().unwrap());
+            let body = body.to_vec();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = [0; 4096];
+                stream.read(&mut request).unwrap();
+                let header = format!("HTTP/1.1 {status}\r\nContent-Length: {declared_size}\r\nConnection: close\r\n\r\n");
+                let _ = stream.write_all(header.as_bytes());
+                let _ = stream.write_all(&body);
+            });
+            let result = runtime.block_on(fetch_direct_manifest(&client, &url, 42, gid));
+            assert_eq!(result.is_ok(), expected, "status={status}, gid={gid}");
+            server.join().unwrap();
+        }
     }
 
     /// Smoke test contra as fontes reais. `#[ignore]` porque depende de rede e

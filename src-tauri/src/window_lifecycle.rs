@@ -538,6 +538,28 @@ pub(crate) fn setup_window_lifecycle(app: &mut tauri::App) -> tauri::Result<()> 
     start_game_playtime_snapshot_emitter(handle.clone());
 
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        // O plugin de estado pode restaurar dimensoes de uma versao anterior.
+        // Use os mesmos limites logicos do config, respeitando o DPI do monitor.
+        if let Some(config) = handle
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|config| config.label == MAIN_WINDOW_LABEL)
+        {
+            if let (Some(min_width), Some(min_height)) = (config.min_width, config.min_height) {
+                window.set_min_size(Some(tauri::LogicalSize::new(min_width, min_height)))?;
+                if !window.is_maximized()? && !window.is_fullscreen()? {
+                    let size = window.inner_size()?.to_logical::<f64>(window.scale_factor()?);
+                    if size.width < min_width || size.height < min_height {
+                        window.set_size(tauri::LogicalSize::new(
+                            size.width.max(min_width),
+                            size.height.max(min_height),
+                        ))?;
+                    }
+                }
+            }
+        }
         // Restaura o zoom da página em 100% antes de exibir a janela,
         // sem alterar o DPI do monitor nem a escala do menu da bandeja.
         #[cfg(windows)]

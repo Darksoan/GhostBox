@@ -8,6 +8,7 @@ export type StartupSettings = {
   openAtLogin: boolean;
   startMinimized: boolean;
   minimizeToTray: boolean;
+  openSteamOnGameLaunch: boolean;
   gameDatabaseUpdateIntervalHours: number;
 };
 

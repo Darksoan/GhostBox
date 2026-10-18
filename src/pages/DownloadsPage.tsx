@@ -106,7 +106,7 @@ function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove 
                   ? prioritizeDownloadTask(task.id) : canPause ? pauseDownloadTask(task.id) : resumeDownloadTask(task.id))}
                 disabled={busyAction !== null} aria-busy={busyAction === "toggle"}
                 aria-label={t(startsDownload ? "downloads.read" : canPause ? "downloads.pause" : task.status === "error" ? "downloads.retry" : "downloads.resume")}>
-                {startsDownload
+                {startsDownload || canResume
                   ? <Play size={18} className="downloads-hero__play-icon" data-active="true" aria-hidden="true" />
                   : <Pause size={18} className="downloads-hero__pause-icon" data-active="true" aria-hidden="true" />}
               </button>
@@ -182,7 +182,7 @@ export function DownloadsPage({ isActive = true }: { isActive?: boolean }) {
           </> : <EmptyState className="downloads-page__empty" title={t("downloads.empty")} />}
         </div>
         <aside className="downloads-page__sidebar" aria-label={t("downloads.activity")}>
-          <DownloadActivityPanel task={activityTask} activity={activity} />
+          <DownloadActivityPanel task={activityTask} activity={activity} hasPendingDownloads={pendingCount > 0} />
           <DownloadStoragePanel isActive={isActive} />
         </aside>
       </div>

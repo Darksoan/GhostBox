@@ -67,7 +67,7 @@ fn sanitize_ghostbox_library_game(value: &Value) -> Option<Value> {
         return None;
     }
     let mut game = value.clone();
-    // Legacy launch overrides are discarded: all launches now go through Steam.
+    // Overrides legados nao sao usados, nem no lancamento direto opcional.
     if let Some(object) = game.as_object_mut() {
         object.remove("customExePath");
         object.remove("launchArguments");
@@ -622,7 +622,11 @@ pub fn build_scan_games_with_plugins(
             object.insert("librarySource".to_string(), source);
             // Preserva os marcadores para o frontend/removal mesmo quando o
             // stub instalado do scan vence o merge.
-            for key in ["luaToolsManifests", "luaToolsManifestFiles"] {
+            for key in [
+                "luaToolsManifests",
+                "luaToolsManifestFiles",
+                "downloadedByGhostBox",
+            ] {
                 if object.get(key).is_none() {
                     if let Some(value) = registry_game.get(key).cloned() {
                         object.insert(key.to_string(), value);
@@ -638,6 +642,23 @@ pub fn build_scan_games_with_plugins(
 #[cfg(test)]
 mod tests {
     use super::{build_scan_games_with_plugins, list_executables_blocking};
+
+    #[test]
+    fn completed_download_marker_survives_the_installed_scan() {
+        let installed = vec![serde_json::json!({
+            "appId": "620", "id": "steam-620", "title": "Portal 2",
+            "status": "installed", "installPath": "E:\\Steam\\steamapps\\common\\Portal 2",
+        })];
+        let registry = vec![serde_json::json!({
+            "appId": "620", "id": "steam-620", "title": "Portal 2",
+            "librarySource": "ghostbox", "downloadedByGhostBox": true,
+        })];
+        let (_, games) = build_scan_games_with_plugins(installed, &[], registry);
+        assert_eq!(games[0]["downloadedByGhostBox"], true);
+        assert_eq!(games[0]["librarySource"], "ghostbox");
+        assert_eq!(games[0]["status"], "installed");
+        assert_eq!(games[0]["installPath"], "E:\\Steam\\steamapps\\common\\Portal 2");
+    }
 
     #[test]
     fn ghostbox_provenance_survives_an_installed_scan_stub() {

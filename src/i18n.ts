@@ -9,8 +9,11 @@ const translations: Record<Language, TranslationTree> = {
     downloads: {
       activity: "Atividade dos downloads", transferSpeed: "Velocidade de download", transfer: "Download",
       prioritize: "Priorizar download",
+      noQueuedDownloads: "Nenhum download na fila.",
       noSelectedStorage: "Selecione um destino nos ajustes de downloads.",
       destinationTitle: "Destino dos downloads", chooseLibrary: "Escolher biblioteca Steam", refreshLibraries: "Atualizar bibliotecas",
+      openSteamOnGameLaunch: "Abrir Steam ao iniciar jogo baixado pelo GhostBox",
+      openSteamOnGameLaunchDescription: "Com a Steam aberta, jogos compatíveis podem registrar conquistas na sua conta, dependendo da licença e da integração. Desativado, o GhostBox tenta iniciar o executável diretamente; jogos que exigem a Steam podem não abrir ou iniciá-la por conta própria.",
       libraryDestinationHint: "A biblioteca selecionada será o destino dos novos downloads.", freeSpaceOnly: "{free} livres",
       registeredLibrariesHint: "Somente bibliotecas registradas no libraryfolders.vdf da Steam podem ser selecionadas.",
       noRegisteredLibraries: "Nenhuma biblioteca Steam registrada foi encontrada. Adicione uma biblioteca nas configurações de armazenamento da Steam e atualize a lista.",
@@ -669,8 +672,11 @@ const translations: Record<Language, TranslationTree> = {
     downloads: {
       activity: "Download activity", transferSpeed: "Download speed", transfer: "Download",
       prioritize: "Prioritize download",
+      noQueuedDownloads: "No downloads in the queue.",
       noSelectedStorage: "Select a destination in download settings.",
       destinationTitle: "Download destination", chooseLibrary: "Choose a Steam library", refreshLibraries: "Refresh libraries",
+      openSteamOnGameLaunch: "Open Steam when launching a game downloaded by GhostBox",
+      openSteamOnGameLaunchDescription: "With Steam open, compatible games may record achievements on your account, depending on the license and integration. When disabled, GhostBox tries to launch the executable directly; games that require Steam may not launch or may open Steam themselves.",
       libraryDestinationHint: "The selected library is the destination for new downloads.", freeSpaceOnly: "{free} free",
       registeredLibrariesHint: "Only libraries registered in Steam's libraryfolders.vdf can be selected.",
       noRegisteredLibraries: "No registered Steam libraries found. Add a library in Steam's storage settings and refresh the list.",

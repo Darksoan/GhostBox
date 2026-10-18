@@ -4,6 +4,19 @@ import postcss from "postcss";
 import { describe, expect, it } from "vitest";
 
 describe("Catalogue filter search layout", () => {
+  it("keeps filters and selectors on one row without clipping dropdown panels", () => {
+    const stylesheet = postcss.parse(compile("src/app.scss").css);
+    for (const selector of [".catalogue-page__toolbar", ".catalogue-filterbar"]) {
+      const values: Record<string, string> = {};
+      stylesheet.walkRules((rule) => {
+        if (!rule.selectors.includes(selector) || rule.parent.type !== "root") return;
+        rule.walkDecls((declaration) => { values[declaration.prop] = declaration.value; });
+      });
+      expect(values["flex-wrap"]).toBe("nowrap");
+      expect(values).not.toHaveProperty("overflow", "hidden");
+      expect(values).not.toHaveProperty("overflow-x", "auto");
+    }
+  });
   it("keeps catalogue triggers tertiary at rest and secondary on interaction", () => {
     const stylesheet = postcss.parse(compile("src/app.scss").css);
     let baseColor: string | undefined;

@@ -4,10 +4,10 @@ import { useSettings } from "../../context/settings";
 import { useDownloadsDirectory } from "../../hooks/useDownloadsDirectory";
 import { ghostboxApi } from "../../lib/ghostboxApi";
 import { selectedDownloadDestination, downloadStorageUsedPercent } from "../../utils/downloadStorage";
-import { formatBytes } from "../../utils/formatBytes";
+import { formatGigabytes } from "../../utils/formatBytes";
 
 export function DownloadStoragePanel({ isActive }: { isActive: boolean }) {
-  const { t } = useSettings();
+  const { t, appearance } = useSettings();
   const directory = useDownloadsDirectory();
   const { data = [], isPending, isFetching, isError, refetch } = useQuery({
     queryKey: ["selected-download-storage", directory],
@@ -19,6 +19,7 @@ export function DownloadStoragePanel({ isActive }: { isActive: boolean }) {
   });
   const selected = selectedDownloadDestination(directory, data);
   const used = selected ? downloadStorageUsedPercent(selected) : null;
+  const locale = appearance.language === "en" ? "en-US" : "pt-BR";
 
   return (
     <section className="downloads-panel downloads-storage" aria-label={t("downloads.storage")}>
@@ -33,10 +34,11 @@ export function DownloadStoragePanel({ isActive }: { isActive: boolean }) {
           : isError ? <p role="alert">{t("downloads.diskError")}</p>
           : !selected ? <p>{t("downloads.unavailable")}</p>
           : <>
-            <strong>{selected.label || t(`downloads.${selected.kind === "network" ? "networkDisk" : selected.kind === "removable" ? "removableDisk" : "fixedDisk"}`)}</strong>
-            <p className="downloads-storage__path">{directory}</p>
-            <p>{!selected.available ? t("downloads.unavailable") : used === null ? "—"
-              : t("downloads.availableSpace", { free: formatBytes(selected.freeBytes), total: formatBytes(selected.totalBytes) })}</p>
+            <div className="downloads-storage__identity">
+              <strong>{selected.label || t(`downloads.${selected.kind === "network" ? "networkDisk" : selected.kind === "removable" ? "removableDisk" : "fixedDisk"}`)}{selected.drive && ` (${selected.drive})`}</strong>
+              <p className="downloads-storage__capacity">{!selected.available ? t("downloads.unavailable") : used === null ? "—"
+                : t("downloads.availableSpace", { free: formatGigabytes(selected.freeBytes, locale), total: formatGigabytes(selected.totalBytes, locale) })}</p>
+            </div>
             {used !== null && <div className="downloads-storage__meter" role="meter" aria-label={t("downloads.usedSpace")}
               aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used)}>
               <span style={{ width: `${used}%` }} />

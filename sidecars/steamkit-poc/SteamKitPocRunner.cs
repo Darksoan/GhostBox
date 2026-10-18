@@ -1332,7 +1332,10 @@ public class SteamKitPocRunner
     {
         var validChunks = new bool[chunks.Count];
         if (!File.Exists(filePath))
+        {
+            ResetValidationIndexFile(validationIndex, validationIndexLock, filePath);
             return validChunks;
+        }
 
         var validationStartedAt = DownloadTelemetry.Now();
         long validationBytesRead = 0;
@@ -1341,7 +1344,26 @@ public class SteamKitPocRunner
 
         var fileInfo = new FileInfo(filePath);
         var cachedFile = GetCachedFileIndex(validationIndex, validationIndexLock, filePath, fileInfo, expectedFileLength);
-        var needsDiskValidation = cachedFile == null;
+        if (cachedFile != null)
+        {
+            // O indice so vale para o mesmo manifest, tamanho e mtime. Chunks
+            // ausentes nele ainda precisam de download, nao de leitura do disco:
+            // num arquivo sparse pre-alocado, isso varria GB de zeros na retomada.
+            for (var chunkIndex = 0; chunkIndex < chunks.Count; chunkIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!TryGetCachedChunk(cachedFile, chunkIndex, chunks[chunkIndex])) continue;
+                validChunks[chunkIndex] = true;
+                validationChunksFromCache++;
+            }
+            _telemetry?.AddValidation(
+                DownloadTelemetry.Since(validationStartedAt), 0, 0, validationChunksFromCache);
+            return validChunks;
+        }
+
+        // Arquivo alterado: descarte os registros antigos ANTES de revalidar.
+        // Caso a validacao seja pausada, salve apenas chunks realmente conferidos.
+        ResetValidationIndexFile(validationIndex, validationIndexLock, filePath);
         await using var fileStream = new FileStream(
             filePath,
             FileMode.Open,
@@ -1355,13 +1377,6 @@ public class SteamKitPocRunner
         {
             cancellationToken.ThrowIfCancellationRequested();
             var chunk = chunks[chunkIndex];
-            if (!needsDiskValidation && TryGetCachedChunk(cachedFile!, chunkIndex, chunk))
-            {
-                validChunks[chunkIndex] = true;
-                validationChunksFromCache++;
-                continue;
-            }
-
             var chunkEnd = (long)(chunk.Offset + chunk.UncompressedLength);
             if (chunkEnd > existingLength) continue;
 
@@ -1411,6 +1426,18 @@ public class SteamKitPocRunner
             validationChunksFromCache);
 
         return validChunks;
+    }
+
+    private static void ResetValidationIndexFile(
+        ChunkValidationIndex? validationIndex, object validationIndexLock, string filePath)
+    {
+        if (validationIndex == null) return;
+        lock (validationIndexLock)
+        {
+            // Mesmo um arquivo sem chunks baixados precisa de entrada: depois
+            // da pre-alocacao, o Save registra tamanho/mtime sem hashear os buracos.
+            validationIndex.Files[filePath] = new FileValidationIndex();
+        }
     }
 
     private static ChunkValidationIndex? LoadValidationIndex(string path, ulong manifestId)
@@ -1467,7 +1494,7 @@ public class SteamKitPocRunner
             return false;
 
         var cachedChunk = fileIndex.Chunks[chunkIndex];
-        return cachedChunk.Offset == chunk.Offset &&
+        return cachedChunk != null && cachedChunk.Offset == chunk.Offset &&
             cachedChunk.UncompressedLength == chunk.UncompressedLength &&
             cachedChunk.Checksum == chunk.Checksum;
     }

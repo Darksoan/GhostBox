@@ -8,8 +8,9 @@ describe("Window resize and maximize support", () => {
 
     expect(window?.resizable).toBe(true);
     expect(window?.maximizable).toBe(true);
-    expect(window?.minWidth).toBe(1024);
-    expect(window?.minHeight).toBe(600);
+    expect(window?.minWidth).toBe(1440);
+    expect(window?.width).toBeGreaterThanOrEqual(window.minWidth);
+    expect(window?.minHeight).toBe(720);
     expect(window?.decorations).toBe(false);
   });
 
@@ -17,6 +18,17 @@ describe("Window resize and maximize support", () => {
     const source = readFileSync("src-tauri/src/window_lifecycle.rs", "utf8");
     expect(source).not.toContain("set_resizable(false)");
     expect(source).not.toContain("set_maximizable(false)");
+  });
+
+  it("clamps previously saved small windows using the configured logical minimum", () => {
+    const source = readFileSync("src-tauri/src/window_lifecycle.rs", "utf8");
+    const setup = source.slice(source.indexOf("pub(crate) fn setup_window_lifecycle"));
+    expect(setup).toContain("(config.min_width, config.min_height)");
+    expect(setup).toContain("window.set_min_size(Some(tauri::LogicalSize::new(min_width, min_height)))?");
+    expect(setup).toContain("to_logical::<f64>(window.scale_factor()?)");
+    expect(setup).toContain("size.width.max(min_width)");
+    expect(setup).toContain("size.height.max(min_height)");
+    expect(setup).toContain("!window.is_maximized()? && !window.is_fullscreen()?");
   });
 
   it("restores 100% native page zoom to the Windows launcher without forcing monitor DPI", () => {
