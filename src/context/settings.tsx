@@ -25,6 +25,8 @@ export interface AppearanceSettings {
   imagePreloadConcurrency: 2 | 4 | 6;
   coverQuality: 50 | 80 | 100;
   disablePageKeepAlive: boolean;
+  /** Interface alternativa em tela cheia, navegável por controle/teclado. */
+  consoleMode: boolean;
 }
 
 export type NotificationSettings = {
@@ -61,6 +63,7 @@ const defaultAppearance: AppearanceSettings = {
   imagePreloadConcurrency: 4,
   coverQuality: 100,
   disablePageKeepAlive: false,
+  consoleMode: false,
 };
 
 const defaultNotifications: NotificationSettings = {
@@ -106,6 +109,7 @@ function normalizeAppearance(value: unknown): AppearanceSettings {
       ? appearance.coverQuality
       : 100,
     disablePageKeepAlive: appearance.disablePageKeepAlive === true,
+    consoleMode: appearance.consoleMode === true,
   };
 }
 

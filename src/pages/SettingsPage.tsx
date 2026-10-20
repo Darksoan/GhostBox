@@ -469,6 +469,13 @@ function buildTabOptions(
         checked: Boolean(currentValues.minimizeToTray),
         onToggle: (next: boolean) => onChangeValue("general", "minimizeToTray", next),
       },
+      {
+        label: t("settings.general.consoleMode.label"),
+        description: t("settings.general.consoleMode.description"),
+        control: "toggle" as const,
+        checked: appearance.consoleMode,
+        onToggle: (next: boolean) => updateAppearance({ consoleMode: next }),
+      },
     ];
   }
 

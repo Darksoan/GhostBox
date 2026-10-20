@@ -31,6 +31,7 @@ import { buildKnownGameIndex } from "./utils/gameSearch";
 import { applySteamAppTypes } from "./utils/steamAppType";
 import { useSteamAppTypes } from "./hooks/useSteamAppTypes";
 import { useSilentBootUpdate } from "./hooks/useSilentBootUpdate";
+import { ConsoleShell } from "./features/console/ConsoleShell";
 import ghostIconSource from "../Icons/ghost-solid.png";
 import "./app.scss";
 
@@ -205,7 +206,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   // Marca `html.is-resizing` durante o arrasto da janela: transições ficam
   // suspensas e quem mede layout espera o resize assentar.
   useViewportResizeTracking();
-  const { appearance, notifications } = useSettings();
+  const { appearance, notifications, updateAppearance } = useSettings();
   const queryClient = useQueryClient();
   const [steamPathModalLoading, setSteamPathModalLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
@@ -594,6 +595,26 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
       : page === "favorites"
         ? shell.activeFavoritesCollectionId
         : shell.activeProfileCollectionId;
+
+  if (appearance.consoleMode) {
+    return (
+      <div className="ghostbox-shell">
+        <ConsoleShell
+          onOpenFullSettings={() => {
+            updateAppearance({ consoleMode: false });
+            handleNavigate("settings");
+            shell.setActiveSettingsTabId("general");
+          }}
+        />
+        <Toast toast={toast} onClose={dismissToast} />
+        <AchievementToastStack
+          toasts={achievementToasts}
+          onDismiss={dismissAchievementToast}
+          offsetBottom={toast ? 84 : 0}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="ghostbox-shell">

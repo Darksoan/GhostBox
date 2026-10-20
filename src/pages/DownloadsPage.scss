@@ -55,6 +55,9 @@
   --hero-track-bg: color-mix(in srgb, var(--text-primary) 16%, transparent);
   --hero-fill: var(--text-primary);
   --hero-dot: var(--text-secondary);
+  // Anel do pulso da bolinha de status: nasce colado ao ponto e se dissolve a 4px.
+  --hero-dot-ring-from: 0 0 0 0 color-mix(in srgb, var(--hero-dot) 55%, transparent);
+  --hero-dot-ring-to: 0 0 0 4px transparent;
   --hero-glass: color-mix(in srgb, var(--surface-canvas) 55%, transparent);
   --hero-glass-hover: color-mix(in srgb, var(--surface-canvas) 35%, var(--surface-raised));
   position: relative;
@@ -347,8 +350,8 @@
 }
 
 @keyframes downloads-hero-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--hero-dot) 55%, transparent); }
-  50% { opacity: 0.3; box-shadow: 0 0 0 4px transparent; }
+  0%, 100% { opacity: 1; box-shadow: var(--hero-dot-ring-from); }
+  50% { opacity: 0.3; box-shadow: var(--hero-dot-ring-to); }
 }
 
 @keyframes downloads-hero-shimmer {

@@ -927,7 +927,7 @@ interface GameModalProps {
   isSessionActive?: boolean;
   isFavorite: boolean;
   onClose: () => void;
-  onQueueGame: (game: GhostBoxGame) => void | Promise<void>;
+  onQueueGame: (game: GhostBoxGame) => void | Promise<void | boolean>;
   onDownloadGame?: (game: GhostBoxGame) => void | Promise<void>;
   onRemoveGame: (game: GhostBoxGame) => void | Promise<void>;
   onToggleFavorite: (game: GhostBoxGame) => void;

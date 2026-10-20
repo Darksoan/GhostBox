@@ -345,7 +345,7 @@ interface AppDataContextValue {
    */
   refreshGameAchievements: (game: GhostBoxGame) => void;
   toggleFavoriteGame: (game: GhostBoxGame) => void;
-  queueGame: (game: GhostBoxGame) => Promise<void>;
+  queueGame: (game: GhostBoxGame) => Promise<boolean>;
   removeQueuedGame: (game: GhostBoxGame) => Promise<boolean>;
   /** Shows confirmation modal; offers Steam uninstall when installation is confirmed. */
   requestRemoveGame: (game: GhostBoxGame) => void;
@@ -1936,13 +1936,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (game: GhostBoxGame) => {
       // Demos nunca entram em downloads/fila: fonte de verdade é o tipo, sem
       // regex de título e sem apagar nada persistido.
-      if (isBlockedSteamDemo(game)) return;
+      if (isBlockedSteamDemo(game)) return false;
       if (
         addingGameId ||
         removingGameId ||
         availableLibraryGameAppIds.has(game.appId)
       ) {
-        return;
+        return false;
       }
 
       setAddingGameId(game.id);
@@ -1980,9 +1980,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               headerUrl: game.heroUrl,
             },
           });
-          return;
+          return false;
         }
-        if (isHiddenLibraryGame(result.libraryGame)) return;
+        if (isHiddenLibraryGame(result.libraryGame)) return false;
         if (!isSteamOwnedGame) {
           ensureLuaToolsDependencies();
         }
@@ -2032,6 +2032,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         });
 
         void autoRestoreCloudBackup(libraryGame);
+        return true;
       } catch (error) {
         const errorMessage =
           error instanceof Error
@@ -2062,6 +2063,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             headerUrl: game.heroUrl,
           },
         });
+        return false;
       } finally {
         setAddingGameId(null);
       }
