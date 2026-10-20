@@ -10,6 +10,7 @@ import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellState } from "./hooks/useAppShellState";
 import { useViewportResizeTracking } from "./hooks/useViewportResize";
 import { useAuthSessionToast } from "./hooks/useAuthSessionToast";
+import { useDownloadCompletionToast } from "./hooks/useDownloadCompletionToast";
 import { useAppData } from "./context/AppDataContext";
 import { useAuth } from "./context/AuthContext";
 import { MetricsVisibilityProvider } from "./context/MetricsVisibilityContext";
@@ -130,6 +131,7 @@ function AppContent({ appData }: { appData: ReturnType<typeof useAppData> }) {
   } = useAppNavigation();
 
   useAuthSessionToast();
+  useDownloadCompletionToast();
   useEffect(() => startDownloadManager(), []);
 
   // The profile belongs to the signed-in account: signing out from inside it

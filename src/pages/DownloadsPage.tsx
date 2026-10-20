@@ -1,13 +1,14 @@
-import { ArrowDownToLine, ArrowUp, FolderOpen, LoaderCircle } from "lucide-react";
+import { ArrowUp, FolderOpen, Gamepad2, LoaderCircle } from "lucide-react";
 import { Pause, Play, Xmark } from "reicon-react";
 import { useMemo, useRef, useState } from "react";
 import { useSettings } from "../context/settings";
 import { useOverlay } from "../context/OverlayContext";
 import { useDownloadTasks } from "../hooks/useDownloadTasks";
 import { useDownloadSpeedHistory } from "../hooks/useDownloadSpeedHistory";
+import { useGameIconUrlByAppId } from "../hooks/useGameIconUrl";
 import { useCachedImageSources, useLoadableImageCover } from "../hooks/useCachedImageSources";
 import { EmptyState } from "../components/ui/LoadingStates";
-import { DownloadDetailsModal } from "../components/modals/DownloadDetailsModal";
+import { DownloadRemoveModal } from "../components/modals/DownloadRemoveModal";
 import { DownloadActivityPanel } from "../features/downloads/DownloadActivityPanel";
 import { DownloadStoragePanel } from "../features/downloads/DownloadStoragePanel";
 import { ghostboxApi } from "../lib/ghostboxApi";
@@ -15,7 +16,8 @@ import {
   pauseDownloadTask, resumeDownloadTask, prioritizeDownloadTask,
   type DownloadTask,
 } from "../lib/downloadManager";
-import { formatBytes, formatGigabytes } from "../utils/formatBytes";
+import { formatBytes, formatGigabytes, formatSpeed } from "../utils/formatBytes";
+import { downloadEtaSeconds, formatDownloadEta, smoothDownloadSpeed } from "../utils/downloadEta";
 import { layeredImageStyle, steamLibraryHeroSources } from "../utils/image";
 import "./DownloadsPage.scss";
 
@@ -24,15 +26,46 @@ export function downloadPercent(task: DownloadTask) {
     ? Math.min(100, Math.max(0, task.bytesDownloaded / task.bytesTotal * 100)) : 0;
 }
 
-function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove }: {
+type DownloadStat = { key: string; label: string; value: string };
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+// Métricas por estado, na ordem em que launchers costumam apresentá-las:
+// progresso → ritmo → previsão. Estados parados não exibem velocidade antiga.
+function downloadStats(task: DownloadTask, t: Translate, locale: string, smoothedSpeed: number): DownloadStat[] {
+  if (task.status === "downloading") return [
+    { key: "progress", label: t("downloads.progress"), value: `${formatBytes(task.bytesDownloaded)} / ${task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "—"}` },
+    { key: "speed", label: t("downloads.speed"), value: formatSpeed(task.speedBytesPerSecond) },
+    { key: "eta", label: t("downloads.eta"), value: formatDownloadEta(downloadEtaSeconds(task, smoothedSpeed), t) },
+  ];
+  if (task.status === "paused" || task.status === "error") {
+    const downloaded = formatGigabytes(task.bytesDownloaded, locale);
+    return [
+      { key: "downloaded", label: t("downloads.downloaded"), value: task.bytesTotal > 0 ? `${downloaded} / ${formatGigabytes(task.bytesTotal, locale)}` : downloaded },
+      ...(task.bytesTotal > 0
+        ? [{ key: "remaining", label: t("downloads.remaining"), value: formatGigabytes(Math.max(0, task.bytesTotal - task.bytesDownloaded), locale) }]
+        : []),
+    ];
+  }
+  if (task.status === "completed") {
+    const size = task.bytesTotal > 0 ? task.bytesTotal : task.bytesDownloaded;
+    return [{ key: "downloaded", label: t("downloads.downloaded"), value: `${formatBytes(task.bytesDownloaded || size)} / ${formatBytes(size)}` }];
+  }
+  return [{ key: "size", label: t("downloads.size"), value: task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "—" }];
+}
+
+function DownloadCard({ task, featured, queuePosition, canPrioritize, onRemove }: {
   task: DownloadTask;
+  featured: boolean;
   queuePosition: number | null;
   canPrioritize: boolean;
-  onDetails: () => void;
   onRemove: () => void;
 }) {
   const { appearance, t } = useSettings();
   const { showToast } = useOverlay();
+  const locale = appearance.language === "en" ? "en-US" : "pt-BR";
+  const { url: iconUrl } = useGameIconUrlByAppId(task.appId);
+  const [failedIconUrl, setFailedIconUrl] = useState<string | null>(null);
   const heroSources = useMemo(() => steamLibraryHeroSources(task.appId), [task.appId]);
   const sources = useCachedImageSources(heroSources);
   const { source, loaded } = useLoadableImageCover(sources, { decodeBeforeCommit: true });
@@ -40,12 +73,17 @@ function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove 
   const inFlight = useRef(false);
   const percent = Math.round(downloadPercent(task));
   const active = task.status === "downloading";
+  const speedAverage = useRef({ key: "", value: 0 });
+  const speedKey = `${task.id}:${task.startedAt ?? 0}`;
+  if (speedAverage.current.key !== speedKey || !active) speedAverage.current = { key: speedKey, value: 0 };
+  if (active) speedAverage.current.value = smoothDownloadSpeed(speedAverage.current.value, task.speedBytesPerSecond);
   const completed = task.status === "completed";
   const canPause = active || task.status === "queued";
   const canResume = task.status === "paused" || task.status === "error";
   const startsDownload = !active && !task.startedAt && task.bytesDownloaded <= 0;
   const showsProgress = canPause || task.status === "paused";
-  const statusLabel = task.status === "queued"
+  const iconSize = featured ? 20 : 18;
+  const statusLabel = active && task.bytesTotal <= 0 ? t("downloads.preparing") : task.status === "queued"
     ? t("downloads.queuePosition", { position: queuePosition ?? 1 })
     : t(`downloads.${task.status === "paused" ? "pausedState" : task.status}`);
 
@@ -63,17 +101,22 @@ function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove 
   };
 
   return (
-    <section className={`downloads-hero downloads-hero--${task.status}`} aria-label={task.title} data-download-id={task.id}>
+    <section className={`downloads-hero downloads-hero--${task.status}${featured ? " downloads-hero--featured" : ""}`} aria-label={task.title} data-download-id={task.id}>
       <span className={`downloads-hero__art${source && loaded ? " downloads-hero__art--loaded" : ""}`}
         style={layeredImageStyle(source && loaded ? [source] : [], "")} aria-hidden="true" />
       <span className="downloads-hero__scrim" aria-hidden="true" />
       <div className="downloads-hero__content">
         <div className="downloads-hero__top">
-          <button type="button" className="downloads-hero__title-button" onClick={onDetails} aria-label={`${t("downloads.details")}: ${task.title}`}>
+          <div className="downloads-hero__heading">
+            <span className="downloads-hero__game-icon" aria-hidden="true">
+              {iconUrl && failedIconUrl !== iconUrl
+                ? <img src={iconUrl} alt="" onError={() => setFailedIconUrl(iconUrl)} />
+                : <Gamepad2 size={iconSize} />}
+            </span>
             <strong className="downloads-hero__title">{task.title}</strong>
-          </button>
+          </div>
           <div className="downloads-hero__middle">
-            <span className="downloads-hero__status-text">{active && task.bytesTotal <= 0 ? t("downloads.preparing") : statusLabel}</span>
+            <span className="downloads-hero__status-text"><span className="downloads-hero__status-dot" aria-hidden="true" />{statusLabel}</span>
           </div>
         </div>
         <div className="downloads-hero__controls" aria-hidden={showsProgress ? undefined : true}>
@@ -85,21 +128,29 @@ function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove 
           </>}
         </div>
         <div className="downloads-hero__footer">
-          <div className="downloads-hero__transfer-metrics">
-            <span><ArrowDownToLine aria-hidden="true" />{task.status === "paused"
-              ? <span>{t(task.bytesTotal > 0 ? "downloads.downloadedOf" : "downloads.downloadedAmount", {
-                  downloaded: formatGigabytes(task.bytesDownloaded, appearance.language === "en" ? "en-US" : "pt-BR"),
-                  total: formatGigabytes(task.bytesTotal, appearance.language === "en" ? "en-US" : "pt-BR"),
-                })}</span>
-              : <>{!active && t("downloads.downloaded")}<span>{formatBytes(task.bytesDownloaded)} / {task.bytesTotal > 0 ? formatBytes(task.bytesTotal) : "—"}</span></>}
-            </span>
-          </div>
+          <dl className="downloads-hero__stats">
+            {downloadStats(task, t, locale, speedAverage.current.value).map((stat) => (
+              <div className="downloads-hero__stat" key={stat.key} data-stat={stat.key}>
+                <dt>{stat.label}</dt>
+                <dd>{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
           <div className="downloads-hero__actions">
             {canPrioritize && <button type="button" className="downloads-hero__action"
               onClick={() => void runAction("prioritize", () => prioritizeDownloadTask(task.id))}
               disabled={busyAction !== null} aria-busy={busyAction === "prioritize"} aria-label={t("downloads.prioritize")}>
-              <ArrowUp size={18} aria-hidden="true" />
+              <ArrowUp size={iconSize} aria-hidden="true" />
             </button>}
+            <button type="button" className="downloads-hero__action"
+              onClick={() => void runAction("folder", () => ghostboxApi.revealDownloadFolder(task.outputDir))}
+              disabled={!task.outputDir || busyAction !== null} aria-busy={busyAction === "folder"} aria-label={t("downloads.openFolder")}>
+              <FolderOpen size={iconSize} aria-hidden="true" />
+            </button>
+            <button type="button" className="downloads-hero__action downloads-hero__action--danger"
+              onClick={onRemove} disabled={busyAction !== null} aria-label={t("downloads.remove")}>
+              <Xmark size={iconSize} className="downloads-hero__remove-icon" aria-hidden="true" />
+            </button>
             {(canPause || canResume) && (
               <button type="button" className="downloads-hero__action downloads-hero__toggle"
                 onClick={() => void runAction("toggle", () => startsDownload && task.status === "queued"
@@ -107,8 +158,8 @@ function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove 
                 disabled={busyAction !== null} aria-busy={busyAction === "toggle"}
                 aria-label={t(startsDownload ? "downloads.read" : canPause ? "downloads.pause" : task.status === "error" ? "downloads.retry" : "downloads.resume")}>
                 {startsDownload || canResume
-                  ? <Play size={18} className="downloads-hero__play-icon" data-active="true" aria-hidden="true" />
-                  : <Pause size={18} className="downloads-hero__pause-icon" data-active="true" aria-hidden="true" />}
+                  ? <Play size={iconSize} className="downloads-hero__play-icon" data-active="true" aria-hidden="true" />
+                  : <Pause size={iconSize} className="downloads-hero__pause-icon" data-active="true" aria-hidden="true" />}
               </button>
             )}
             {completed && (
@@ -120,19 +171,10 @@ function DownloadCard({ task, queuePosition, canPrioritize, onDetails, onRemove 
                 disabled={busyAction !== null || task.steamIntegration?.status !== "ok"}
                 aria-label={t("downloads.play")} aria-busy={busyAction === "launch"}>
                 {busyAction === "launch"
-                  ? <LoaderCircle size={18} className="downloads-hero__launch-spinner" aria-hidden="true" />
-                  : <Play size={18} className="downloads-hero__play-icon" aria-hidden="true" />}
+                  ? <LoaderCircle size={iconSize} className="downloads-hero__launch-spinner" aria-hidden="true" />
+                  : <Play size={iconSize} className="downloads-hero__play-icon" aria-hidden="true" />}
               </button>
             )}
-            <button type="button" className="downloads-hero__action"
-              onClick={() => void runAction("folder", () => ghostboxApi.revealDownloadFolder(task.outputDir))}
-              disabled={!task.outputDir || busyAction !== null} aria-busy={busyAction === "folder"} aria-label={t("downloads.openFolder")}>
-              <FolderOpen size={18} aria-hidden="true" />
-            </button>
-            <button type="button" className="downloads-hero__action downloads-hero__action--danger"
-              onClick={onRemove} disabled={busyAction !== null} aria-label={t("downloads.remove")}>
-              <Xmark size={18} className="downloads-hero__remove-icon" aria-hidden="true" />
-            </button>
           </div>
         </div>
         {task.errorMessage && task.status === "error" && <p className="downloads-hero__error">{task.errorMessage}</p>}
@@ -145,7 +187,7 @@ export function DownloadsPage({ isActive = true }: { isActive?: boolean }) {
   const { t } = useSettings();
   const tasks = useDownloadTasks();
   const activity = useDownloadSpeedHistory();
-  const [selection, setSelection] = useState<{ id: string; removing: boolean } | null>(null);
+  const [selection, setSelection] = useState<{ id: string } | null>(null);
   const selected = tasks.find((task) => task.id === selection?.id);
   const queuedTasks = tasks.filter((task) => task.status === "queued");
   const pausedTasks = tasks.filter((task) => task.status === "paused");
@@ -160,11 +202,10 @@ export function DownloadsPage({ isActive = true }: { isActive?: boolean }) {
     { key: "history", tasks: tasks.filter((task) => task.status === "completed" || task.status === "error").sort((a, b) => (b.finishedAt ?? b.queuedAt) - (a.finishedAt ?? a.queuedAt)) },
   ];
   const renderCard = (task: DownloadTask) => (
-    <DownloadCard task={task} key={task.id}
+    <DownloadCard task={task} key={task.id} featured={task.id === heroTask?.id}
       queuePosition={task.status === "queued" ? queuedTasks.findIndex((entry) => entry.id === task.id) + 1 : null}
       canPrioritize={pendingCount > 1 && task.id !== heroTask?.id && (task.status === "queued" || task.status === "paused")}
-      onDetails={() => setSelection({ id: task.id, removing: false })}
-      onRemove={() => setSelection({ id: task.id, removing: true })}
+      onRemove={() => setSelection({ id: task.id })}
     />
   );
 
@@ -186,7 +227,7 @@ export function DownloadsPage({ isActive = true }: { isActive?: boolean }) {
           <DownloadStoragePanel isActive={isActive} />
         </aside>
       </div>
-      {selected && <DownloadDetailsModal key={`${selected.id}-${selection?.removing}`} task={selected} initialRemoving={selection?.removing} onClose={() => setSelection(null)} />}
+      {selected && <DownloadRemoveModal key={selected.id} task={selected} onClose={() => setSelection(null)} />}
     </section>
   );
 }

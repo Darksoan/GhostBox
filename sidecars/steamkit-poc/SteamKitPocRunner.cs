@@ -491,6 +491,23 @@ public class SteamKitPocRunner
         using (var fs = File.OpenRead(manifestPath))
             manifest = DepotManifest.Deserialize(fs);
 
+        try
+        {
+            PrepareManifestForDownload(manifest, _depotKey, _config.OutputDir!);
+        }
+        catch (InvalidDataException ex)
+        {
+            EmitProgress(new ProgressEvent
+            {
+                Type = "error",
+                Status = "invalid-manifest-filenames",
+                Message = ex.Message,
+                AppId = _config.AppId,
+                DepotId = depotId,
+            });
+            return;
+        }
+
         var totalFiles = manifest.Files?.Count ?? 0;
         var totalChunks = 0UL;
         var totalBytes = 0UL;
@@ -787,7 +804,7 @@ public class SteamKitPocRunner
                     continue;
                 }
 
-                var fileFinalPath = Path.Combine(_config.OutputDir!, file.FileName);
+                var fileFinalPath = ResolveManifestFilePath(_config.OutputDir!, file.FileName);
                 try
                 {
                     var fileDir = Path.GetDirectoryName(fileFinalPath);
@@ -1320,6 +1337,64 @@ public class SteamKitPocRunner
             Volatile.Read(ref failedChunks),
             true,
             Volatile.Read(ref reachedDownloadLimit) != 0);
+    }
+
+    private static void PrepareManifestForDownload(DepotManifest manifest, byte[] depotKey, string outputDir)
+    {
+        // Manifests do depotcache podem ter nomes AES/base64. Esses nomes nao
+        // sao caminhos e nao podem chegar a Path.Combine/FileStream sem decrypt.
+        if (manifest.FilenamesEncrypted)
+        {
+            bool decrypted;
+            try
+            {
+                decrypted = manifest.DecryptFilenames(depotKey);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException("Nao foi possivel descriptografar os nomes do manifest. Verifique a chave do depot e atualize os dados do jogo.", ex);
+            }
+            if (!decrypted || manifest.FilenamesEncrypted)
+                throw new InvalidDataException("Nao foi possivel descriptografar os nomes do manifest. Verifique a chave do depot e atualize os dados do jogo.");
+        }
+
+        // Valide todo o plano ANTES de criar qualquer pasta ou alterar arquivos.
+        foreach (var file in manifest.Files ?? [])
+        {
+            if (file.Chunks?.Count > 0)
+                ResolveManifestFilePath(outputDir, file.FileName);
+        }
+    }
+
+    private static string ResolveManifestFilePath(string outputDir, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.StartsWith('/') || fileName.StartsWith('\\'))
+            throw new InvalidDataException("O manifest contem um caminho de arquivo invalido.");
+        var parts = fileName.Replace('\\', '/').Split('/');
+        foreach (var part in parts)
+        {
+            if (part.Length == 0 || part is "." or ".." || part.Length > 255
+                || part.EndsWith('.') || part.EndsWith(' ')
+                || part.Any(character => character < 32 || "<>:\"|?*".Contains(character)))
+                throw new InvalidDataException("O manifest contem um nome de arquivo invalido para Windows.");
+            var stem = part.Split('.')[0].ToUpperInvariant();
+            if (stem is "CON" or "PRN" or "AUX" or "NUL"
+                || (stem.Length == 4 && (stem.StartsWith("COM") || stem.StartsWith("LPT")) && stem[3] is >= '1' and <= '9'))
+                throw new InvalidDataException("O manifest contem um nome de dispositivo reservado do Windows.");
+        }
+        try
+        {
+            var root = Path.GetFullPath(outputDir);
+            var path = Path.GetFullPath(Path.Combine(root, Path.Combine(parts)));
+            var prefix = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("O manifest aponta para fora da pasta de instalacao.");
+            return path;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new InvalidDataException("O manifest contem um caminho de arquivo invalido.", ex);
+        }
     }
 
     private async Task<bool[]> ValidateExistingChunksAsync(

@@ -11,13 +11,14 @@ import { DownloadsPage, downloadPercent } from "../src/pages/DownloadsPage";
 import { steamLibraryHeroSources } from "../src/utils/image";
 
 const state = vi.hoisted(() => ({ tasks: [] as DownloadTask[], activity: { taskId: null, queuedAt: 0, title: "", download: [], write: [] } as DownloadActivity,
-  directory: "E:\\Games", destinations: [] as DownloadDestination[], storageError: false }));
+  directory: "E:\\Games", destinations: [] as DownloadDestination[], storageError: false, iconUrl: null as string | null }));
 
 vi.mock("../src/context/settings", () => ({
   useSettings: () => ({ appearance: { language: "pt" }, t: (key: string, params?: Record<string, string | number>) => translate("pt", key, params) }),
 }));
 vi.mock("../src/context/OverlayContext", () => ({ useOverlay: () => ({ showToast: vi.fn() }) }));
 vi.mock("../src/hooks/useDownloadTasks", () => ({ useDownloadTasks: () => state.tasks }));
+vi.mock("../src/hooks/useGameIconUrl", () => ({ useGameIconUrlByAppId: () => ({ url: state.iconUrl, loading: false }) }));
 vi.mock("../src/hooks/useDownloadSpeedHistory", () => ({ useDownloadSpeedHistory: () => state.activity }));
 vi.mock("../src/hooks/useDownloadsDirectory", () => ({ useDownloadsDirectory: () => state.directory }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: state.destinations, isPending: false, isFetching: false, isError: state.storageError, refetch: vi.fn() }) }));
@@ -28,7 +29,7 @@ vi.mock("../src/hooks/useCachedImageSources", () => ({
 vi.mock("../src/lib/downloadManager", () => ({
   pauseDownloadTask: vi.fn(), resumeDownloadTask: vi.fn(), prioritizeDownloadTask: vi.fn(), writeStoredDownloadsDir: vi.fn(),
 }));
-vi.mock("../src/components/modals/DownloadDetailsModal", () => ({ DownloadDetailsModal: () => null }));
+vi.mock("../src/components/modals/DownloadRemoveModal", () => ({ DownloadRemoveModal: () => null }));
 
 const task = (id: string, status: DownloadTask["status"], extra: Partial<DownloadTask> = {}): DownloadTask => ({
   id, appId: id, title: `Game ${id}`, headerSources: [], downloadsRoot: "E:\\Games", outputDir: "E:\\Games\\Game",
@@ -48,10 +49,25 @@ function declarations(selector: string, condition?: string) {
 }
 beforeEach(() => {
   state.tasks = []; state.activity = { taskId: null, queuedAt: 0, title: "", download: [], write: [] };
-  state.directory = "E:\\Games"; state.destinations = []; state.storageError = false;
+  state.directory = "E:\\Games"; state.destinations = []; state.storageError = false; state.iconUrl = null;
 });
 
 describe("Downloads and selected storage", () => {
+  it("places the game's cached ico to the left of its name without shrinking or distorting it", () => {
+    state.tasks = [task("10", "completed")];
+    state.iconUrl = "https://example.com/game.ico";
+    const markup = render();
+    expect(markup).toContain('<span class="downloads-hero__game-icon" aria-hidden="true"><img src="https://example.com/game.ico" alt=""/></span><strong');
+    expect(declarations(".downloads-hero__heading")).toMatchObject({ display: "flex", "align-items": "center" });
+    expect(declarations(".downloads-hero__game-icon")).toMatchObject({ width: "var(--hero-icon)", height: "var(--hero-icon)", flex: "0 0 var(--hero-icon)" });
+    expect(declarations(".downloads-hero__game-icon img")).toMatchObject({ "object-fit": "contain" });
+  });
+
+  it("reserves the icon slot with a fallback when no game icon is available", () => {
+    state.tasks = [task("10", "downloading")];
+    expect(render()).toContain('class="downloads-hero__game-icon"');
+    expect(render()).toContain("lucide-gamepad-2");
+  });
   it("keeps transfer information and controls in compact download rows", () => {
     state.tasks = [task("10", "downloading")];
     const markup = render();
@@ -61,7 +77,7 @@ describe("Downloads and selected storage", () => {
     expect(markup).toContain("1.00 KB/s");
     expect(markup).toContain('aria-valuenow="25"');
     expect(markup).toContain("transform:scaleX(0.25)");
-    for (const label of ["Pausar", "Remover", "Detalhes: Game 10"]) expect(markup).toContain(`aria-label="${label}"`);
+    for (const label of ["Pausar", "Remover"]) expect(markup).toContain(`aria-label="${label}"`);
   });
 
   it("places the active card first, then queue, paused cards and history without duplicates", () => {
@@ -105,29 +121,29 @@ describe("Downloads and selected storage", () => {
 
   it("shows the downloaded amount and complete game size in localized gigabytes when paused", () => {
     state.tasks = [task("10", "paused", { bytesDownloaded: 4.2 * 1024 ** 3, bytesTotal: 13.3 * 1024 ** 3 })];
-    expect(render()).toContain("4,20 GB baixados de 13,30 GB");
+    expect(render()).toContain("4,20 GB / 13,30 GB");
     state.tasks = [task("10", "paused", { bytesDownloaded: 4.2 * 1024 ** 3, bytesTotal: 0 })];
-    expect(render()).toContain("4,20 GB baixados");
+    expect(render()).toContain("<dd>4,20 GB</dd>");
     expect(render()).not.toContain("baixados de 0,00 GB");
   });
 
   it("keeps status next to the title and puts the percentage beside the progress bar", () => {
     state.tasks = [task("10", "paused")];
     const markup = render();
-    expect(markup).toMatch(/downloads-hero__top[\s\S]*?Game 10<\/strong><\/button><div class="downloads-hero__middle"><span class="downloads-hero__status-text">Pausado<\/span><\/div><\/div><div class="downloads-hero__controls"/);
+    expect(markup).toMatch(/downloads-hero__top[\s\S]*?Game 10<\/strong><\/div><div class="downloads-hero__middle"><span class="downloads-hero__status-text"><span class="downloads-hero__status-dot" aria-hidden="true"><\/span>Pausado<\/span><\/div><\/div><div class="downloads-hero__controls"/);
     const progressRow = markup.split('class="downloads-hero__controls"')[1].split('class="downloads-hero__footer"')[0];
     expect(progressRow).toContain('class="downloads-hero__percent">25%</span>');
     expect(progressRow).not.toContain("downloads-hero__actions");
     expect(declarations(".downloads-hero__top")).toMatchObject({ display: "flex", "align-items": "center", "justify-content": "space-between" });
-    expect(declarations(".downloads-hero__middle")).toMatchObject({ "font-size": "var(--downloads-status-size)", "flex-shrink": "0", "align-items": "center" });
+    expect(declarations(".downloads-hero__middle")).toMatchObject({ "font-size": "var(--type-size-caption)", "flex-shrink": "0", "align-items": "center" });
   });
 
   it("places actions in the footer to the right of the GB information", () => {
     state.tasks = [task("10", "paused")];
     const markup = render();
     const footer = markup.split('class="downloads-hero__footer"')[1];
-    expect(footer.indexOf("downloads-hero__transfer-metrics")).toBeLessThan(footer.indexOf("downloads-hero__actions"));
-    expect(declarations(".downloads-hero__footer")).toMatchObject({ display: "flex", "align-items": "center", "justify-content": "space-between" });
+    expect(footer.indexOf("downloads-hero__stats")).toBeLessThan(footer.indexOf("downloads-hero__actions"));
+    expect(declarations(".downloads-hero__footer")).toMatchObject({ display: "flex", "align-items": "flex-end", "justify-content": "space-between" });
     expect(declarations(".downloads-hero__actions")).toMatchObject({ "margin-left": "auto" });
   });
 
@@ -200,7 +216,7 @@ describe("Downloads and selected storage", () => {
 
   it("keeps controls visible and uses existing tokens for the download graph", () => {
     expect(declarations(".downloads-hero__actions")).not.toHaveProperty("visibility", "hidden");
-    expect(declarations(".downloads-hero__action")).toMatchObject({ width: "32px", height: "32px" });
+    expect(declarations(".downloads-hero__action")).toMatchObject({ width: "var(--hero-action)", height: "var(--hero-action)" });
     expect(declarations(".downloads-activity__chart-line")).toMatchObject({ stroke: "currentColor", fill: "none" });
     expect(declarations(".downloads-activity__metric")).toMatchObject({ color: "var(--text-primary)" });
   });
@@ -223,15 +239,14 @@ describe("Downloads and selected storage", () => {
     expect(render()).toContain('aria-label="Tentar novamente"');
   });
 
-  it("hides the downloaded label only during download, uses 14px metrics and primary progress fills", () => {
+  it("labels progress while downloading, shows the downloaded label once stopped or finished, and uses the progress fill token", () => {
     state.tasks = [task("10", "downloading")];
     expect(render()).not.toContain("Baixado");
-    expect(render()).toContain("lucide-arrow-down-to-line");
-    expect(render()).toContain("1.00 KB / 4.00 KB");
+    expect(render()).toContain("<dt>Progresso</dt><dd>1.00 KB / 4.00 KB</dd>");
     state.tasks = [task("10", "completed")];
-    expect(render()).toContain("Baixado");
-    expect(declarations(".downloads-hero__transfer-metrics")).toMatchObject({ "font-size": "var(--downloads-transfer-size)" });
-    expect(declarations(".downloads-hero__progress-track > span")).toMatchObject({ background: "var(--text-primary)" });
+    expect(render()).toContain("<dt>Baixado</dt>");
+    expect(declarations(".downloads-hero__stat dd")).toMatchObject({ "font-size": "var(--downloads-transfer-size)" });
+    expect(declarations(".downloads-hero__progress-track > span")).toMatchObject({ background: "var(--hero-fill)" });
     expect(declarations(".downloads-storage__meter > span")).toMatchObject({ background: "var(--text-primary)" });
   });
 
@@ -242,25 +257,33 @@ describe("Downloads and selected storage", () => {
     expect(markup).toContain("lucide-folder-open");
     expect(markup.indexOf('aria-label="Abrir pasta"')).toBeLessThan(markup.indexOf('aria-label="Remover"'));
     expect(markup).not.toContain("lucide-ellipsis");
-    expect(declarations(".downloads-hero__action")).toMatchObject({ background: "var(--surface-hover)" });
-    expect(declarations(".downloads-hero__action:hover:not(:disabled)")).toMatchObject({ background: "var(--surface-active)" });
+    expect(declarations(".downloads-hero__action")).toMatchObject({ background: "var(--hero-glass)" });
+    expect(declarations(".downloads-hero__action:hover:not(:disabled)")).toMatchObject({ background: "var(--hero-glass-hover)" });
     state.tasks = [task("10", "queued", { outputDir: "" })];
     expect(render().match(/<button[^>]*aria-label="Abrir pasta"[^>]*>/)?.[0]).toContain("disabled");
   });
 
-  it("renders only download samples and downloaded bytes, even when disk-write telemetry exists", () => {
+  it("shows disk write speed as a second metric when write telemetry exists", () => {
     state.tasks = [task("10", "downloading", { bytesWritten: 2048, writeSpeedBytesPerSecond: 2048 })];
     state.activity = { taskId: "10", queuedAt: state.tasks[0].queuedAt, title: "Game 10",
       download: [{ time: 1000, speed: 1024 }, { time: 2000, speed: 2048 }],
       write: [{ time: 1000, speed: 2048 }, { time: 2000, speed: 4096 }] };
-    const markup = render();
-    expect(markup.match(/class="downloads-activity__chart-line"/g)).toHaveLength(1);
-    expect(markup).toContain("Velocidade de download nos últimos 15 segundos");
-    expect(markup).toContain("1.00 KB/s");
-    expect(markup).not.toContain("Velocidade de escrita em disco");
-    expect(markup).not.toContain("Escrever");
-    expect(markup).not.toContain("Gravados");
-    expect(markup).toContain("1.00 KB / 4.00 KB");
+    const panel = render().split('class="downloads-panel downloads-activity"')[1].split("</section>")[0];
+    expect(panel.match(/class="downloads-activity__chart-line"/g)).toHaveLength(2);
+    expect(panel).toContain("Velocidade de download nos últimos 15 segundos");
+    expect(panel).toContain("Velocidade de escrita em disco nos últimos 15 segundos");
+    expect(panel).toContain("<strong>Escrita em disco</strong>");
+    expect(panel).toContain("2.00 KB/s");
+    expect(panel).toContain("Pico: 4.00 KB/s");
+  });
+
+  it("omits the disk write metric when the worker reports no write telemetry", () => {
+    state.tasks = [task("10", "downloading")];
+    state.activity = { taskId: "10", queuedAt: state.tasks[0].queuedAt, title: "Game 10",
+      download: [{ time: 1000, speed: 1024 }], write: [] };
+    const panel = render().split('class="downloads-panel downloads-activity"')[1].split("</section>")[0];
+    expect(panel).not.toContain("Escrita em disco");
+    expect(panel.match(/class="downloads-activity__chart-line"/g)).toHaveLength(1);
   });
 
   it("shows current speed, peak and average without a download action label in the speed panel", () => {
@@ -285,14 +308,13 @@ describe("Downloads and selected storage", () => {
     }
   });
 
-  it("keeps the download curve visible while paused and reports zero current speed", () => {
+  it("keeps the curves visible while paused and reports zero current speed for both metrics", () => {
     state.tasks = [task("10", "paused", { writeSpeedBytesPerSecond: 4096 })];
     state.activity = { taskId: "10", queuedAt: state.tasks[0].queuedAt, title: "Game 10",
       download: [{ time: 1000, speed: 1024 }], write: [{ time: 1000, speed: 4096 }] };
     const markup = render();
-    expect(markup.match(/class="downloads-activity__chart-line"/g)).toHaveLength(1);
-    expect(markup.match(/class="downloads-activity__value">0 B\/s/g)).toHaveLength(1);
-    expect(markup).not.toContain("4.00 KB/s");
+    expect(markup.match(/class="downloads-activity__chart-line"/g)).toHaveLength(2);
+    expect(markup.match(/class="downloads-activity__value">0 B\/s/g)).toHaveLength(2);
   });
 
   it("uses library hero art as a background with controls and text above a token-based scrim", () => {
@@ -320,11 +342,46 @@ describe("Downloads and selected storage", () => {
     expect(markup).not.toContain("Selected disk · E:");
     expect(markup).not.toContain('class="downloads-storage__path"');
     expect(markup).toContain("192,31 GB livres de 476,94 GB");
+    expect(markup).not.toContain('aria-label="Atualizar discos"');
+    expect(markup).not.toContain("downloads-storage__refresh");
     expect(declarations(".downloads-storage__identity")).toMatchObject({ "justify-content": "space-between", "align-items": "baseline" });
     expect(declarations(".downloads-storage__meter > span")).toMatchObject({ background: "var(--text-primary)" });
     expect(markup.match(/role="meter"/g)).toHaveLength(1);
     expect(markup).not.toContain("Other disk");
     expect(markup).not.toContain("F:\\Other");
+  });
+
+  it("uses a square-cornered download card without a rounded clipping mask", () => {
+    expect(declarations(".downloads-hero")).toMatchObject({
+      overflow: "hidden", "border-radius": "0", "min-height": "136px",
+      border: "0", "box-shadow": "none",
+    });
+    expect(declarations(".downloads-hero")).not.toHaveProperty("clip-path");
+    for (const selector of [".downloads-hero__art", ".downloads-hero__scrim"]) {
+      expect(declarations(selector)).toMatchObject({ "border-radius": "inherit" });
+    }
+  });
+
+  it("uses 16px card text and places the title and footer near the card edges", () => {
+    expect(declarations(".downloads-hero")).toMatchObject({
+      "font-size": "var(--type-size-body-emphasis)",
+      "--downloads-status-size": "var(--type-size-body-emphasis)",
+      "--downloads-transfer-size": "var(--type-size-body-emphasis)",
+      "align-items": "stretch",
+    });
+    expect(declarations(".downloads-hero__content")).toMatchObject({
+      padding: "var(--hero-pad)", "align-content": "stretch",
+      "grid-template-rows": "auto minmax(0, 1fr) auto auto",
+    });
+    expect(declarations(".downloads-hero__error")).toMatchObject({ "font-size": "var(--downloads-status-size)", "grid-row": "2" });
+  });
+
+  it("keeps metric labels quieter than their values and keeps the scrim over the background art", () => {
+    state.tasks = [task("10", "completed")];
+    expect(render()).toContain("<dt>Baixado</dt>");
+    expect(declarations(".downloads-hero__stat dt")).toMatchObject({ color: "var(--text-secondary)" });
+    expect(declarations(".downloads-hero__stat dd")).toMatchObject({ color: "var(--text-primary)" });
+    expect(declarations(".downloads-hero__scrim")).toMatchObject({ opacity: "0.9" });
   });
 
   it("does not fall back to another disk when the selected destination is unavailable", () => {
@@ -339,6 +396,16 @@ describe("Downloads and selected storage", () => {
   it("reports storage query failures without showing unrelated volumes", () => {
     state.storageError = true;
     expect(render()).toContain("Não foi possível consultar os discos.");
-    expect(render()).toContain('aria-label="Atualizar discos"');
+    expect(render()).not.toContain('aria-label="Atualizar discos"');
+  });
+});
+
+describe("Download card title", () => {
+  it("is plain text, not an interactive control", () => {
+    state.tasks = [task("10", "downloading")];
+    const markup = render();
+    expect(markup).toContain('<div class="downloads-hero__heading">');
+    expect(markup).not.toContain("Detalhes");
+    expect(markup).not.toMatch(/<button[^>]*downloads-hero__heading/);
   });
 });

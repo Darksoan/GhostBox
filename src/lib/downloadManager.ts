@@ -36,6 +36,8 @@ const directoryKey = "ghostbox:downloads-dir:v1";
 export const downloadTasksChangedEvent = "ghostbox:download-tasks-changed";
 export const downloadsDirectoryChangedEvent = "ghostbox:downloads-directory-changed";
 export const downloadInstallationChangedEvent = "ghostbox:download-installation-changed";
+export const downloadCompletedEvent = "ghostbox:download-completed";
+export type DownloadCompletion = Pick<DownloadTask, "id" | "appId" | "title" | "headerSources">;
 let tasks: DownloadTask[] | undefined;
 let current: { id: string; promise: Promise<void>; pauseRequested: boolean } | undefined;
 let prioritizing = false;
@@ -149,6 +151,10 @@ export async function enqueueDownload(game: GhostBoxGame): Promise<boolean> {
   }];
   update(appId, {});
   pump();
+  // Criacao em paralelo: procurar o .ico nao pode atrasar o download.
+  void ghostboxApi.createGameShortcut(game, "desktop").catch((error) => {
+    console.warn("Nao foi possivel criar o atalho do download:", error);
+  });
   return true;
 }
 
@@ -234,6 +240,9 @@ async function run(task: DownloadTask) {
         steamIntegration: integration(result.SteamIntegration),
       });
       window.dispatchEvent(new Event(downloadInstallationChangedEvent));
+      window.dispatchEvent(new CustomEvent<DownloadCompletion>(downloadCompletedEvent, {
+        detail: { id: task.id, appId: task.appId, title: task.title, headerSources: task.headerSources },
+      }));
     }
   } catch (error) {
     update(task.id, {

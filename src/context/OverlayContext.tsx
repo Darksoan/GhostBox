@@ -30,6 +30,7 @@ type ToastState = {
   message: string;
   variant?: ToastVariant;
   imageSources?: string[];
+  layout?: "game";
 } | null;
 
 export type AchievementToastState = {
@@ -62,7 +63,7 @@ interface OverlayContextValue {
     title: string,
     message: string,
     variant?: ToastVariant,
-    options?: { imageSources?: string[] },
+    options?: { imageSources?: string[]; layout?: "game" },
   ) => void;
   dismissToast: () => void;
   showAchievementToast: (payload: Omit<AchievementToastState, "id">) => void;
@@ -106,7 +107,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
       title: string,
       message: string,
       variant?: ToastVariant,
-      options?: { imageSources?: string[] },
+      options?: { imageSources?: string[]; layout?: "game" },
     ) => {
       const nextVariant = getToastVariant(title, variant);
       if (!notifications.inAppToastsEnabled) return;
@@ -122,6 +123,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
         message,
         variant: nextVariant,
         imageSources: options?.imageSources,
+        layout: options?.layout,
       });
     },
     [

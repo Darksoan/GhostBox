@@ -16,6 +16,7 @@ interface ToastProps {
     message: string;
     variant?: ToastVariant;
     imageSources?: string[];
+    layout?: "game";
   } | null;
   onClose: () => void;
 }
@@ -42,7 +43,8 @@ export function Toast({ toast, onClose }: ToastProps) {
       : "toast--success";
 
   return (
-    <div className={`toast ${variantClass}`}>
+    <div className={`toast ${variantClass}${toast.layout === "game" ? " toast--game" : ""}`}
+      role={toast.layout === "game" ? "status" : undefined}>
       <div className="toast__content">
         {hasCapsule ? (
           <div className="toast__media">

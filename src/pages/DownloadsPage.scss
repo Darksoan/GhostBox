@@ -30,76 +30,147 @@
   &__sidebar { position: sticky; top: var(--space-8); display: grid; gap: var(--space-8); min-width: 0; }
 }
 
+// Card de download — métricas calculadas sobre a grade de 8px (--space-4).
+//
+//                     compacto   destaque
+//   padding              16px       24px
+//   altura mínima       136px      240px   (destaque ≈ proporção 3:1 do library_hero)
+//   ícone do jogo        24px       32px
+//   título               16px       20px
+//   barra de progresso    4px        6px
+//   botões de ação       32px       40px   (ícone 18px / 20px)
+//
+// Ritmo vertical: cabeçalho → respiro flexível → progresso → rodapé (métricas + ações).
+// A arte entra pela direita; o scrim escurece a coluna de texto à esquerda e a base.
 .downloads-hero {
+  --downloads-status-size: var(--type-size-body-emphasis);
+  --downloads-transfer-size: var(--type-size-body-emphasis);
+  --hero-pad: var(--space-8);
+  --hero-gap: var(--space-6);
+  --hero-icon: 24px;
+  --hero-title-size: var(--type-size-body-emphasis);
+  --hero-title-line: var(--type-line-body-emphasis);
+  --hero-track: 4px;
+  --hero-action: 32px;
+  --hero-track-bg: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --hero-fill: var(--text-primary);
+  --hero-dot: var(--text-secondary);
+  --hero-glass: color-mix(in srgb, var(--surface-canvas) 55%, transparent);
+  --hero-glass-hover: color-mix(in srgb, var(--surface-canvas) 35%, var(--surface-raised));
   position: relative;
   isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-6);
+  align-items: stretch;
   min-width: 0;
+  min-height: 136px;
   padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: var(--radius-lg);
+  border-radius: 0;
   background: var(--surface-panel);
   box-shadow: none;
+  font-size: var(--type-size-body-emphasis);
+
+  &--featured {
+    --hero-pad: var(--space-10);
+    --hero-gap: var(--space-8);
+    --hero-icon: 32px;
+    --hero-title-size: var(--type-size-section);
+    --hero-title-line: var(--type-line-section);
+    --hero-track: 6px;
+    --hero-action: 40px;
+    min-height: 240px;
+  }
+
+  &--downloading { --hero-dot: var(--caution); }
+  &--completed { --hero-dot: var(--success); }
+  &--error { --hero-dot: var(--red); }
 
   &__art {
     position: absolute;
     inset: 0;
+    border-radius: inherit;
     display: block;
-    background-position: center;
+    background-position: center right;
     background-size: cover;
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--motion-base) var(--ease);
+    transform: scale(1);
+    transition: opacity var(--motion-base) var(--ease), transform var(--motion-emphasis) var(--ease-out);
   }
 
   &__art--loaded { opacity: 1; }
+  &:hover &__art--loaded { transform: scale(1.02); }
+
   &__scrim {
     position: absolute;
     inset: 0;
+    border-radius: inherit;
     pointer-events: none;
-    background: linear-gradient(90deg, var(--overlay-strong), var(--overlay-medium)),
-      linear-gradient(0deg, var(--surface-panel), transparent);
+    opacity: 0.9;
+    background:
+      linear-gradient(90deg, var(--overlay-strong) 0%, var(--overlay-strong) 35%, var(--overlay-subtle) 100%),
+      linear-gradient(0deg, var(--surface-panel) 0%, transparent 60%);
   }
 
   &__content {
     position: relative;
     z-index: 1;
     display: grid;
-    align-content: center;
-    gap: var(--space-4);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    align-content: stretch;
+    gap: var(--hero-gap);
     min-width: 0;
-    padding: var(--space-9) var(--space-10);
+    padding: var(--hero-pad);
   }
 
-  &__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); min-width: 0; }
-  &__title-button {
-    display: block;
+  // Linha 1: identidade do jogo + chip de estado.
+  &__top {
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    min-width: 0;
+  }
+
+  &__heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
     flex: 1;
     min-width: 0;
     max-width: 100%;
     padding: 0;
     border: 0;
     background: transparent;
+    color: var(--text-primary);
     font: inherit;
     text-align: left;
-    cursor: pointer;
-    &:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: 2px; }
   }
 
   &__title {
     display: block;
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     color: var(--text-primary);
-    font-size: var(--type-size-body-emphasis);
+    font-size: var(--hero-title-size);
     font-weight: var(--weight-regular);
-    line-height: var(--type-line-body-emphasis);
+    line-height: var(--hero-title-line);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__game-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 var(--hero-icon);
+    width: var(--hero-icon);
+    height: var(--hero-icon);
+    color: var(--text-secondary);
+    img { display: block; width: 100%; height: 100%; object-fit: contain; }
   }
 
   &__middle {
@@ -107,30 +178,53 @@
     flex-shrink: 0;
     align-items: center;
     gap: var(--space-4);
-    color: var(--text-secondary);
-    font-size: var(--downloads-status-size);
+    color: var(--text-primary);
+    font-size: var(--type-size-caption);
     line-height: var(--type-line-caption);
     font-variant-numeric: tabular-nums;
   }
 
-  &__controls {
-    display: flex;
+  &__status-text {
+    display: inline-flex;
     align-items: center;
-    min-height: var(--type-line-caption);
-    gap: var(--space-8);
-    min-width: 0;
+    gap: var(--space-4);
+    height: var(--pill-height);
+    padding: 0 var(--space-5);
+    border-radius: var(--radius-pill);
+    background: var(--hero-glass);
+    box-shadow: var(--glass-ring);
+    white-space: nowrap;
   }
 
-  &__percent { flex-shrink: 0; color: var(--text-secondary); font-size: var(--downloads-status-size); line-height: var(--type-line-caption); font-variant-numeric: tabular-nums; }
-  &__footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4) var(--space-8); min-width: 0; }
+  &__status-dot {
+    flex: 0 0 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-circle);
+    background: var(--hero-dot);
+  }
+
+  &--downloading &__status-dot { animation: downloads-hero-pulse 1.4s var(--ease) infinite; }
+
+  // Linha 3: barra + percentual. A altura é reservada mesmo sem barra,
+  // para cards concluídos e pausados terem a mesma métrica vertical.
+  &__controls {
+    grid-row: 3;
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-width: 0;
+    min-height: var(--type-line-caption);
+  }
 
   &__progress-track {
+    position: relative;
     display: block;
     flex: 1 1 64px;
-    height: 6px;
+    height: var(--hero-track);
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: var(--surface-option-selected);
+    background: var(--hero-track-bg);
   }
 
   &__progress-track > span {
@@ -138,49 +232,133 @@
     width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: var(--text-primary);
+    background: var(--hero-fill);
     transform-origin: 0 50%;
-    transition: transform var(--motion-slow) var(--ease-out);
+    transition: transform var(--motion-slow) var(--ease-out), background var(--motion-base) var(--ease);
   }
 
+  // Brilho mínimo que corre pela barra enquanto há transferência ativa.
+  &--downloading &__progress-track > span {
+    background-image: linear-gradient(90deg, var(--hero-fill) 0%, color-mix(in srgb, var(--hero-fill) 55%, transparent) 50%, var(--hero-fill) 100%);
+    background-size: 200% 100%;
+    animation: downloads-hero-shimmer 2.4s linear infinite;
+  }
+
+  // Total ainda desconhecido: faixa indeterminada em vez de barra vazia.
   &__progress-track--pending > span { visibility: hidden; }
-  &__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; }
+  &__progress-track--pending::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 32%;
+    border-radius: inherit;
+    background: var(--hero-fill);
+    opacity: 0.6;
+    animation: downloads-hero-indeterminate 1.4s var(--ease) infinite;
+  }
+
+  &__percent {
+    flex-shrink: 0;
+    min-width: 4ch;
+    color: var(--text-primary);
+    font-size: var(--hero-title-size);
+    line-height: var(--type-line-caption);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  // Linha 4: métricas à esquerda, ações à direita.
+  &__footer {
+    grid-row: 4;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-6) var(--space-8);
+    min-width: 0;
+  }
+
+  &__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-12);
+    min-width: 0;
+    margin: 0;
+  }
+
+  &__stat {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 0;
+
+    dt {
+      color: var(--text-secondary);
+      font-size: var(--downloads-status-size);
+      line-height: var(--type-line-caption);
+      white-space: nowrap;
+    }
+
+    dd {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: var(--downloads-transfer-size);
+      line-height: var(--type-line-body-emphasis);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+  }
+
+  &__actions { display: flex; align-items: center; gap: var(--space-4); margin-left: auto; }
 
   &__action {
     display: inline-grid;
     place-items: center;
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: var(--hero-action);
+    height: var(--hero-action);
     padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
-    background: var(--surface-hover);
-    color: var(--text-secondary);
+    background: var(--hero-glass);
+    box-shadow: var(--glass-ring);
+    color: var(--text-primary);
     cursor: pointer;
-    transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+    transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
 
-    &:hover:not(:disabled), &:focus-visible:not(:disabled) { background: var(--surface-active); color: var(--text-primary); }
+    &:hover:not(:disabled), &:focus-visible:not(:disabled) { background: var(--hero-glass-hover); box-shadow: var(--glass-ring-strong); }
     &:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: 2px; }
     &:disabled { opacity: var(--control-disabled-opacity); cursor: default; }
   }
 
+  &__action--danger:hover:not(:disabled), &__action--danger:focus-visible:not(:disabled) { color: var(--red); }
+
   &__toggle svg { grid-area: 1 / 1; opacity: 0; &[data-active="true"] { opacity: 1; } }
   &__launch-spinner { animation: spin 0.8s linear infinite; }
 
-  &__transfer-metrics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-5) var(--space-8);
-    color: var(--text-primary);
-    font-size: var(--downloads-transfer-size);
+  &__error {
+    grid-row: 2;
+    align-self: center;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: color-mix(in srgb, var(--red) 80%, var(--text-primary));
+    font-size: var(--downloads-status-size);
     line-height: var(--type-line-caption);
-
-    > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
-    > span > span { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
   }
+}
 
-  &__error { margin: 0; overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--type-size-caption); line-height: var(--type-line-caption); }
+@keyframes downloads-hero-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--hero-dot) 55%, transparent); }
+  50% { opacity: 0.3; box-shadow: 0 0 0 4px transparent; }
+}
+
+@keyframes downloads-hero-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes downloads-hero-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
 }
 
 .downloads-panel {
@@ -251,22 +429,6 @@
   &__body &__capacity { margin-left: auto; text-align: right; color: var(--text-secondary); font-size: var(--downloads-status-size); }
   &__meter { height: 4px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-option-active); }
   &__meter > span { display: block; height: 100%; border-radius: inherit; background: var(--text-primary); }
-  &__refresh {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    &:hover:not(:disabled) { background: var(--surface-option-hover); color: var(--text-primary); }
-    &:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: -2px; }
-    &:disabled { opacity: var(--control-disabled-opacity); cursor: default; }
-  }
 }
 
 .download-details-modal {
@@ -289,14 +451,18 @@
 @container downloads (max-width: 540px) {
   .downloads-page__sidebar { grid-template-columns: minmax(0, 1fr); }
   .downloads-hero { grid-template-columns: minmax(0, 1fr); }
-  .downloads-hero__content { padding: var(--space-8); }
+  .downloads-hero--featured { --hero-pad: var(--space-8); --hero-title-size: var(--type-size-body-emphasis); --hero-title-line: var(--type-line-body-emphasis); }
   .downloads-hero__controls { gap: var(--space-4); }
+  .downloads-hero__stats { column-gap: var(--space-8); }
 }
 
 html.no-animations {
   .downloads-hero__art, .downloads-hero__progress-track > span { transition: none; }
+  .downloads-hero__status-dot, .downloads-hero__progress-track--pending::after, .downloads-hero--downloading .downloads-hero__progress-track > span { animation: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .downloads-hero__art, .downloads-hero__progress-track > span { transition: none; }
+  .downloads-hero__status-dot, .downloads-hero__progress-track--pending::after, .downloads-hero--downloading .downloads-hero__progress-track > span { animation: none; }
+  .downloads-hero:hover .downloads-hero__art--loaded { transform: none; }
 }

@@ -2307,6 +2307,11 @@ pub(crate) async fn game_ico_for_shortcut(app: &tauri::AppHandle, app_id: &str) 
             return Some(path);
         }
     }
+    // No primeiro clique em Baixar, a Steam pode ainda nao ter visto o app.
+    // Reutiliza o PICS em cache da resolucao do download e busca o clienticon.
+    if let Some(url) = crate::steam_pics::fetch_steamcmd_client_icon(&app_id).await {
+        return download_ico_to_cache(app, &app_id, &url).await;
+    }
     None
 }
 

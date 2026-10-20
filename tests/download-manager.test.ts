@@ -4,6 +4,7 @@ import type { GhostBoxGame } from "../src/data";
 const api = vi.hoisted(() => ({
   downloadDepotGame: vi.fn(), cancelDepotGame: vi.fn(), selectDownloadsDir: vi.fn(),
   onDownloadProgress: vi.fn(), deleteDownloadOutputDir: vi.fn(), registerDownloadLibrary: vi.fn(),
+  createGameShortcut: vi.fn(),
 }));
 vi.mock("../src/lib/ghostboxApi", () => ({ ghostboxApi: api }));
 
@@ -38,6 +39,7 @@ beforeEach(async () => {
   api.cancelDepotGame.mockResolvedValue(true);
   api.selectDownloadsDir.mockResolvedValue("E:\\Games");
   api.deleteDownloadOutputDir.mockResolvedValue(true);
+  api.createGameShortcut.mockResolvedValue({ success: true });
   manager = await import("../src/lib/downloadManager");
 });
 
@@ -50,6 +52,67 @@ afterEach(() => {
 async function start() { stop = manager.startDownloadManager(); await flush(); }
 
 describe("native download queue", () => {
+  it("creates one desktop shortcut per newly queued game without waiting for its ico", async () => {
+    const shortcut = deferred<{ success: boolean }>();
+    const active = deferred<Record<string, unknown>>();
+    api.createGameShortcut.mockReturnValue(shortcut.promise);
+    api.downloadDepotGame.mockReturnValueOnce(active.promise);
+    await start();
+    expect(await manager.enqueueDownload(game())).toBe(true);
+    expect(api.downloadDepotGame).toHaveBeenCalledTimes(1);
+    expect(api.createGameShortcut).toHaveBeenCalledWith(game(), "desktop");
+    await manager.enqueueDownload(game());
+    expect(api.createGameShortcut).toHaveBeenCalledTimes(1);
+    await manager.enqueueDownload(game("20"));
+    expect(api.createGameShortcut).toHaveBeenCalledTimes(2);
+    shortcut.resolve({ success: true });
+    active.resolve(complete);
+    await flush();
+  });
+
+  it("does not fail the download when Windows cannot create its shortcut", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      api.createGameShortcut.mockRejectedValueOnce(new Error("Desktop is unavailable"));
+      await start();
+      expect(await manager.enqueueDownload(game())).toBe(true);
+      await flush();
+      expect(manager.readDownloadTasks()[0].status).toBe("completed");
+      expect(warn).toHaveBeenCalled();
+    } finally { warn.mockRestore(); }
+  });
+
+  it("announces completion once with the game title and art, never for individual depots", async () => {
+    const active = deferred<Record<string, unknown>>();
+    api.downloadDepotGame.mockReturnValueOnce(active.promise);
+    const completed = vi.fn();
+    window.addEventListener(manager.downloadCompletedEvent, completed);
+    await start();
+    await manager.enqueueDownload(game());
+    event({ AppId: "10", Type: "complete", DepotId: 1 });
+    expect(completed).not.toHaveBeenCalled();
+    active.resolve(complete);
+    await flush();
+    expect(completed).toHaveBeenCalledTimes(1);
+    const payload = completed.mock.calls[0][0].detail;
+    expect(payload).toMatchObject({ id: "10", appId: "10", title: "Game 10" });
+    expect(payload.headerSources).toEqual(manager.readDownloadTasks()[0].headerSources);
+  });
+
+  it.each([
+    { Type: "cancelled" }, { Type: "error" }, { Type: "complete", Partial: true },
+    { Type: "complete", Depots: [{ Type: "error" }] },
+    { Type: "complete", Depots: [{ Type: "complete", FailedFiles: 1 }] },
+  ])("does not announce success for cancelled or incomplete downloads: %j", async (result) => {
+    api.downloadDepotGame.mockResolvedValueOnce(result);
+    const completed = vi.fn();
+    window.addEventListener(manager.downloadCompletedEvent, completed);
+    await start();
+    await manager.enqueueDownload(game());
+    await flush();
+    expect(completed).not.toHaveBeenCalled();
+  });
+
   it("shares destination changes with settings without moving existing tasks", async () => {
     const active = deferred<Record<string, unknown>>();
     api.downloadDepotGame.mockReturnValueOnce(active.promise);
@@ -80,6 +143,7 @@ describe("native download queue", () => {
     api.selectDownloadsDir.mockResolvedValue(null);
     expect(await manager.enqueueDownload(game())).toBe(false);
     expect(manager.readDownloadTasks()).toEqual([]);
+    expect(api.createGameShortcut).not.toHaveBeenCalled();
   });
 
   it("subscribes before starting a persisted queue", async () => {

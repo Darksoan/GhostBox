@@ -1,6 +1,6 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DownloadDetailsModal } from "../src/components/modals/DownloadDetailsModal";
+import { DownloadRemoveModal } from "../src/components/modals/DownloadRemoveModal";
 import type { DownloadTask } from "../src/lib/downloadManager";
 import { deleteDownloadTask } from "../src/lib/downloadManager";
 
@@ -41,7 +41,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Download deletion confirmation", () => {
   it("closes on Cancel without switching to the download information modal", () => {
     const onClose = vi.fn();
-    const tree = elements(DownloadDetailsModal({ task, onClose, initialRemoving: true }));
+    const tree = elements(DownloadRemoveModal({ task, onClose }));
     const cancel = tree.find((element) => element.type === "button" && element.props.children === "downloads.cancel")!;
     expect(tree.some((element) => element.type === "dl")).toBe(false);
     (cancel.props.onClick as () => void)();
@@ -51,7 +51,7 @@ describe("Download deletion confirmation", () => {
 
   it.each(["downloading", "paused", "queued", "error"] as const)("automatically requests partial file cleanup for %s downloads without a checkbox", async (status) => {
     const onClose = vi.fn();
-    const tree = elements(DownloadDetailsModal({ task: { ...task, status }, onClose, initialRemoving: true }));
+    const tree = elements(DownloadRemoveModal({ task: { ...task, status }, onClose }));
     expect(tree.some((element) => element.type === "input")).toBe(false);
     const confirm = tree.find((element) => element.type === "button" && element.props.children === "downloads.confirmCancel")!;
     (confirm.props.onClick as () => void)();
@@ -61,7 +61,7 @@ describe("Download deletion confirmation", () => {
 
   it("removes only the completed download record and leaves uninstall choices to the library", async () => {
     const onClose = vi.fn();
-    const tree = elements(DownloadDetailsModal({ task: { ...task, status: "completed" }, onClose, initialRemoving: true }));
+    const tree = elements(DownloadRemoveModal({ task: { ...task, status: "completed" }, onClose }));
     expect(tree.some((element) => element.type === "input")).toBe(false);
     const confirm = tree.find((element) => element.type === "button" && element.props.children === "downloads.confirmRemove")!;
     (confirm.props.onClick as () => void)();

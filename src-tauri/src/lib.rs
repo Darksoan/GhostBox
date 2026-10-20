@@ -910,7 +910,31 @@ pub(crate) fn parse_launch_arguments(input: &str) -> Vec<String> {
 }
 
 fn shortcut_powershell_script() -> &'static str {
-    r#"$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [Text.Encoding]::UTF8; $shell = New-Object -ComObject WScript.Shell; $location = $env:GHOSTBOX_SHORTCUT_LOCATION; $base = if ($location -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }; $name = $env:GHOSTBOX_SHORTCUT_NAME -replace '[<>:\"/\\|?*]', '_'; $path = Join-Path $base ($name + '.lnk'); $shortcut = $shell.CreateShortcut($path); $shortcut.TargetPath = $env:GHOSTBOX_SHORTCUT_TARGET; $shortcut.Arguments = $env:GHOSTBOX_SHORTCUT_ARGUMENTS; $shortcut.WorkingDirectory = $env:GHOSTBOX_SHORTCUT_WORKING_DIRECTORY; $icon = $env:GHOSTBOX_SHORTCUT_ICON; if (-not [string]::IsNullOrWhiteSpace($icon)) { $shortcut.IconLocation = $icon }; $shortcut.Save(); if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Shortcut was not created.' }; Write-Output $path"#
+    r#"$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$shell = New-Object -ComObject WScript.Shell
+$location = $env:GHOSTBOX_SHORTCUT_LOCATION
+$base = if ($location -eq 'desktop') { [Environment]::GetFolderPath('Desktop') } else { $shell.SpecialFolders.Item('Programs') }
+$name = ($env:GHOSTBOX_SHORTCUT_NAME -replace '[<>:\"/\\|?*]', '_').TrimEnd([char[]]' .')
+if ([string]::IsNullOrWhiteSpace($name)) { $name = 'GhostBox Game' }
+$path = Join-Path $base ($name + '.lnk')
+$suffix = 0
+while (Test-Path -LiteralPath $path) {
+    $existing = $shell.CreateShortcut($path)
+    if ($existing.TargetPath -eq $env:GHOSTBOX_SHORTCUT_TARGET -and $existing.Arguments -eq $env:GHOSTBOX_SHORTCUT_ARGUMENTS) { break }
+    $suffix++
+    if ($suffix -gt 1000) { throw 'No free shortcut name was found.' }
+    $path = Join-Path $base ($name + ' (GhostBox ' + $suffix + ').lnk')
+}
+$shortcut = $shell.CreateShortcut($path)
+$shortcut.TargetPath = $env:GHOSTBOX_SHORTCUT_TARGET
+$shortcut.Arguments = $env:GHOSTBOX_SHORTCUT_ARGUMENTS
+$shortcut.WorkingDirectory = $env:GHOSTBOX_SHORTCUT_WORKING_DIRECTORY
+$icon = $env:GHOSTBOX_SHORTCUT_ICON
+if (-not [string]::IsNullOrWhiteSpace($icon)) { $shortcut.IconLocation = $icon }
+$shortcut.Save()
+if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Shortcut was not created.' }
+Write-Output $path"#
 }
 
 #[tauri::command]
@@ -937,7 +961,7 @@ async fn game_create_shortcut(
     let target = target.to_string_lossy().to_string();
     let arguments = format!("--ghostbox-launch {app_id}");
 
-    // O alvo continua sendo o GhostBox (mesmo fluxo Steam de Play), mas o
+    // O alvo continua sendo o GhostBox (respeita a preferencia de abrir Steam), mas o
     // `IconLocation` aponta para o `.ico` do jogo quando resolvido. Sem ele,
     // o Windows herda o ícone do launcher.
     let icon_path = catalogue::game_ico_for_shortcut(&app, &app_id)
@@ -949,7 +973,7 @@ async fn game_create_shortcut(
     // do comando e perdem os limites originais (especialmente paths com
     // espaços). Variáveis de ambiente preservam cada valor sem interpolação.
     let script = shortcut_powershell_script();
-    let output = std::process::Command::new("powershell")
+    let output = crate::util::silent_command("powershell")
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -1265,6 +1289,54 @@ mod tests {
             script.contains("GHOSTBOX_SHORTCUT_ICON"),
             "ícone do jogo precisa chegar via variável de ambiente"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn desktop_shortcut_reuses_its_link_and_preserves_an_unrelated_one() {
+        let root = std::env::temp_dir().join("opencode")
+            .join(format!("ghostbox-shortcut-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let icon = root.join("game.ico");
+        std::fs::write(&icon, [0u8, 0, 1, 0, 1, 0]).unwrap();
+        // So altera a pasta de destino no teste: nunca toca a Area de Trabalho.
+        let script = super::shortcut_powershell_script().replace(
+            "[Environment]::GetFolderPath('Desktop')", "$env:GHOSTBOX_TEST_DESKTOP",
+        );
+        let create = |target: &std::path::Path| {
+            let output = crate::util::silent_command("powershell")
+                .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                .env("GHOSTBOX_TEST_DESKTOP", &root)
+                .env("GHOSTBOX_SHORTCUT_LOCATION", "desktop")
+                .env("GHOSTBOX_SHORTCUT_NAME", "Tomb Raider ' Test")
+                .env("GHOSTBOX_SHORTCUT_TARGET", target)
+                .env("GHOSTBOX_SHORTCUT_ARGUMENTS", "--ghostbox-launch 203160")
+                .env("GHOSTBOX_SHORTCUT_WORKING_DIRECTORY", &root)
+                .env("GHOSTBOX_SHORTCUT_ICON", &icon)
+                .output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            std::path::PathBuf::from(String::from_utf8_lossy(&output.stdout).trim())
+        };
+        let original = create(&root.join("other-launcher.exe"));
+        let original_bytes = std::fs::read(&original).unwrap();
+        let created = create(&root.join("ghostbox.exe"));
+        assert_ne!(created, original);
+        assert_eq!(std::fs::read(&original).unwrap(), original_bytes);
+        assert_eq!(create(&root.join("ghostbox.exe")), created);
+
+        let output = crate::util::silent_command("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command",
+                "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:GHOSTBOX_TEST_LINK); @{ arguments = $s.Arguments; icon = $s.IconLocation } | ConvertTo-Json -Compress"])
+            .env("GHOSTBOX_TEST_LINK", &created)
+            .output().unwrap();
+        assert!(output.status.success());
+        let info: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(info["arguments"], "--ghostbox-launch 203160");
+        assert!(info["icon"].as_str().unwrap().to_ascii_lowercase()
+            .starts_with(&icon.to_string_lossy().to_ascii_lowercase()));
+        assert_eq!(std::fs::read_dir(&root).unwrap().filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "lnk")).count(), 2);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

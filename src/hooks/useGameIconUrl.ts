@@ -290,7 +290,10 @@ readStoredCache();
 ghostboxApi.onGameIconUrlsResolved(storeResolvedIcons);
 
 export function useGameIconUrl(game: GhostBoxGame) {
-  const appId = getGameAppId(game);
+  return useGameIconUrlByAppId(getGameAppId(game));
+}
+
+export function useGameIconUrlByAppId(appId: string) {
   const hasNumericAppId = /^\d+$/.test(appId);
   const [url, setUrl] = useState<string | null>(() => cache.get(appId) ?? null);
   const [loading, setLoading] = useState(

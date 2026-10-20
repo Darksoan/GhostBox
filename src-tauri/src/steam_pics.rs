@@ -280,6 +280,27 @@ pub async fn fetch_steamcmd_assets(app_id: &str) -> Option<PublicAppAssets> {
     parse_steamcmd_assets(&payload, app_id.trim())
 }
 
+/// `clienticon`, nao `icon`: somente o primeiro hash publica um .ico real.
+pub(crate) async fn fetch_steamcmd_client_icon(app_id: &str) -> Option<String> {
+    let payload = fetch_steamcmd_payload(app_id).await?;
+    parse_steamcmd_client_icon(&payload, app_id)
+}
+
+fn parse_steamcmd_client_icon(payload: &serde_json::Value, app_id: &str) -> Option<String> {
+    if app_id.is_empty() || !app_id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if payload.get("status").and_then(|status| status.as_str())
+        .is_some_and(|status| !status.eq_ignore_ascii_case("success")) {
+        return None;
+    }
+    let hash = payload.get("data")?.get(app_id)?.get("common")?.get("clienticon")?.as_str()?.trim();
+    if hash.len() != 40 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{app_id}/{hash}.ico"))
+}
+
 pub async fn fetch_steamcmd_app(app_id: &str) -> Option<PublicApp> {
     let payload = fetch_steamcmd_payload(app_id).await?;
     parse_steamcmd_payload(&payload, app_id.trim())
@@ -442,6 +463,25 @@ pub fn parse_depots_json(depots: &serde_json::Value, source: PicsSource) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shortcut_icon_uses_only_a_valid_clienticon_hash() {
+        let hash = "0123456789abcdef0123456789abcdef01234567";
+        let mut payload = serde_json::json!({"status": "success", "data": {"203160": {"common": {"clienticon": hash}}}});
+        assert_eq!(parse_steamcmd_client_icon(&payload, "203160").unwrap(),
+            format!("https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/203160/{hash}.ico"));
+        assert!(parse_steamcmd_client_icon(&payload, "../203160").is_none());
+        assert!(parse_steamcmd_client_icon(&payload, "999").is_none());
+        for invalid in ["", "../icon", "https://example.com/icon.ico", "0123"] {
+            payload["data"]["203160"]["common"]["clienticon"] = serde_json::json!(invalid);
+            assert!(parse_steamcmd_client_icon(&payload, "203160").is_none());
+        }
+        payload["data"]["203160"]["common"] = serde_json::json!({"icon": hash});
+        assert!(parse_steamcmd_client_icon(&payload, "203160").is_none());
+        payload["data"]["203160"]["common"]["clienticon"] = serde_json::json!(hash);
+        payload["status"] = serde_json::json!("error");
+        assert!(parse_steamcmd_client_icon(&payload, "203160").is_none());
+    }
 
     fn sample_payload() -> serde_json::Value {
         serde_json::json!({

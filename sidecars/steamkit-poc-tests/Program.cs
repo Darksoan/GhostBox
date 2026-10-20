@@ -1,9 +1,11 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text;
+using System.Security.Cryptography;
 using SteamKit2;
 using SteamKitPoc;
 
-// Testa o caminho real de validacao, sem login Steam, CDN ou pacotes de teste.
+// Testa retomada e nomes criptografados de manifests, sem login Steam ou CDN.
 // dotnet run --project sidecars/steamkit-poc-tests
 var directory = Path.Combine(Path.GetTempPath(), "opencode", $"ghostbox-resume-{Guid.NewGuid():N}");
 Directory.CreateDirectory(directory);
@@ -96,7 +98,55 @@ try
     {
         Check("cached validation observes cancellation", true);
     }
-    Console.WriteLine($"{passed} resume tests passed.");
+    var prepareManifest = type.GetMethod("PrepareManifestForDownload", BindingFlags.NonPublic | BindingFlags.Static)!;
+    var resolvePath = type.GetMethod("ResolveManifestFilePath", BindingFlags.NonPublic | BindingFlags.Static)!;
+    var key = Enumerable.Range(0, 32).Select(value => (byte)value).ToArray();
+    var iv = Enumerable.Range(32, 16).Select(value => (byte)value).ToArray();
+    const string plainName = "data/game.pak";
+    using var aes = Aes.Create();
+    aes.Key = key;
+    var encryptedIv = aes.EncryptEcb(iv, PaddingMode.None);
+    var encryptedName = aes.EncryptCbc(Encoding.UTF8.GetBytes(plainName + "\0"), iv, PaddingMode.PKCS7);
+    var cipherText = Convert.ToBase64String(encryptedIv.Concat(encryptedName).ToArray());
+
+    DepotManifest Manifest(string name, bool encrypted = false) => new()
+    {
+        FilenamesEncrypted = encrypted,
+        Files = [new DepotManifest.FileData { FileName = name, Chunks = [chunks[0]] }],
+    };
+
+    var encryptedManifest = Manifest(cipherText, encrypted: true);
+    prepareManifest.Invoke(null, [encryptedManifest, key, directory]);
+    Check("encrypted manifest names are decrypted before planning files",
+        !encryptedManifest.FilenamesEncrypted && encryptedManifest.Files![0].FileName.Replace('\\', '/') == plainName);
+    Check("manifest preparation does not create output files", !Directory.Exists(Path.Combine(directory, "data")));
+    Check("decrypted paths stay inside the installation directory",
+        (string)resolvePath.Invoke(null, [directory, encryptedManifest.Files![0].FileName])! == Path.Combine(directory, "data", "game.pak"));
+
+    var clearManifest = Manifest(plainName);
+    prepareManifest.Invoke(null, [clearManifest, key, directory]);
+    Check("already decrypted manifests still work", clearManifest.Files![0].FileName == plainName);
+
+    void RejectManifest(string name, byte[] depotKey, bool encrypted, string message)
+    {
+        try
+        {
+            prepareManifest.Invoke(null, [Manifest(name, encrypted), depotKey, directory]);
+            Check(message, false);
+        }
+        catch (TargetInvocationException error) when (error.InnerException is InvalidDataException)
+        {
+            Check(message, true);
+        }
+    }
+
+    RejectManifest(cipherText, Enumerable.Repeat((byte)255, 32).ToArray(), true,
+        "wrong depot key is rejected before filesystem access");
+    RejectManifest("not valid base64!", key, true, "malformed encrypted names are rejected");
+    foreach (var invalidName in new[] { "../outside.pak", "data/../../outside.pak", "C:\\outside.pak", "\\\\host\\share\\file.pak", "/outside.pak", "data/bad:name.pak", "data/CON.txt", "data/file.", "data/file ", "data/bad\0name.pak" })
+        RejectManifest(invalidName, key, false, $"unsafe manifest path rejected: {invalidName.Replace("\0", "<NUL>")}");
+    Check("invalid manifests never create files outside the destination", !File.Exists(Path.Combine(Path.GetDirectoryName(directory)!, "outside.pak")));
+    Console.WriteLine($"{passed} worker tests passed.");
 }
 finally
 {

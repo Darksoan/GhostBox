@@ -1335,7 +1335,7 @@ p {
     @include mixins.truncate;
     min-height: 18px;
     color: inherit;
-    font-size: var(--type-size-body);
+    font-size: 15px;
     font-weight: var(--weight-regular);
     line-height: 1;
   }
@@ -1460,7 +1460,7 @@ p {
   &__collection-empty {
     padding: var(--space-3) var(--space-4);
     color: var(--text-tertiary);
-    font-size: var(--type-size-caption);
+    font-size: 15px;
     font-weight: var(--weight-regular);
 
     &--search {
@@ -9361,6 +9361,27 @@ html.no-animations {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  // Conclusao de download: arte de ponta a ponta ao lado do titulo e mensagem.
+  &--game {
+    width: 560px;
+
+    .toast__content {
+      grid-template-columns: minmax(0, 32%) minmax(0, 1fr) 32px;
+      padding: 0 var(--space-6) 0 0;
+      gap: var(--space-8);
+    }
+
+    .toast__media {
+      position: relative;
+      width: 100%;
+      min-height: 96px;
+      border-radius: 0;
+    }
+
+    .toast__capsule { position: absolute; inset: 0; }
+    .toast__body { padding-block: var(--space-8); }
   }
 
   // Estado vive no ícone e na barra de progresso. A borda tingida era decoração
